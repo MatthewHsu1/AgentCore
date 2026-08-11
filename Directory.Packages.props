@@ -22,9 +22,6 @@
     <PackageVersion Include="Microsoft.Extensions.VectorData.Abstractions" Version="10.8.2" />
   </ItemGroup>
   <ItemGroup>
-    <PackageVersion Include="Deepgram" Version="6.9.0" />
-  </ItemGroup>
-  <ItemGroup>
     <PackageVersion Include="Stateless" Version="5.20.1" />
   </ItemGroup>
   <ItemGroup>

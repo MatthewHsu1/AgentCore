@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <IsPackable>true</IsPackable>
-    <Description>Outbound adapters: OpenAI, Zilliz, Deepgram, Telnyx, Postgres, B2, Git.</Description>
+    <Description>Outbound adapters: OpenAI, Zilliz, Telnyx call control, Postgres, B2, Git.</Description>
   </PropertyGroup>
 
   <ItemGroup>
@@ -12,13 +12,11 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
     <PackageReference Include="OpenAI" />
-    <PackageReference Include="Deepgram" />
     <PackageReference Include="Npgsql" />
     <PackageReference Include="AWSSDK.S3" />
     <PackageReference Include="LibGit2Sharp" />
   </ItemGroup>
 
-  <!-- Rule 2, section 5.1: guard the public surface. -->
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
     <AdditionalFiles Include="PublicAPI.Shipped.txt" />
