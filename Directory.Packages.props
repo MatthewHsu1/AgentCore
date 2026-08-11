@@ -1,0 +1,62 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+  <ItemGroup>
+    <GlobalPackageReference Include="MinVer" Version="7.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.Extensions.AI" Version="10.8.3" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.8.3" />
+    <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.8.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.Agents.AI" Version="1.17.0" />
+    <PackageVersion Include="Microsoft.Agents.AI.Workflows" Version="1.17.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageVersion Include="OpenAI" Version="2.13.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.Extensions.VectorData.Abstractions" Version="10.8.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageVersion Include="Deepgram" Version="6.9.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageVersion Include="Stateless" Version="5.20.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageVersion Include="YamlDotNet" Version="18.1.0" />
+    <PackageVersion Include="JsonSchema.Net" Version="9.4.0" />
+    <PackageVersion Include="JsonLogic" Version="6.1.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageVersion Include="Npgsql" Version="10.0.3" />
+    <PackageVersion Include="AWSSDK.S3" Version="4.0.102" />
+    <PackageVersion Include="LibGit2Sharp" Version="0.32.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.17.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.17.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.Extensions.AI.Evaluation" Version="10.8.0" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Evaluation.Quality" Version="10.8.0" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Evaluation.NLP" Version="10.8.0-preview.1.26364.2" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Evaluation.Reporting" Version="10.8.0" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Evaluation.Console" Version="10.8.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="5.6.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageVersion Include="xunit.v3" Version="3.2.2" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+
+</Project>
