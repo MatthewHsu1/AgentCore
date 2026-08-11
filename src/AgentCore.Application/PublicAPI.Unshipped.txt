@@ -1,1 +1,631 @@
 #nullable enable
+AgentCore.Application.Configuration.Parsing.ConfigurationCheck
+AgentCore.Application.Configuration.Parsing.ConfigurationCheck.DelegationCycles = 8 -> AgentCore.Application.Configuration.Parsing.ConfigurationCheck
+AgentCore.Application.Configuration.Parsing.ConfigurationCheck.DocumentSchema = 1 -> AgentCore.Application.Configuration.Parsing.ConfigurationCheck
+AgentCore.Application.Configuration.Parsing.ConfigurationCheck.GraphWellFormedness = 7 -> AgentCore.Application.Configuration.Parsing.ConfigurationCheck
+AgentCore.Application.Configuration.Parsing.ConfigurationCheck.GuardExclusivity = 5 -> AgentCore.Application.Configuration.Parsing.ConfigurationCheck
+AgentCore.Application.Configuration.Parsing.ConfigurationCheck.GuardOperators = 4 -> AgentCore.Application.Configuration.Parsing.ConfigurationCheck
+AgentCore.Application.Configuration.Parsing.ConfigurationCheck.Reachability = 6 -> AgentCore.Application.Configuration.Parsing.ConfigurationCheck
+AgentCore.Application.Configuration.Parsing.ConfigurationCheck.ReferenceResolution = 2 -> AgentCore.Application.Configuration.Parsing.ConfigurationCheck
+AgentCore.Application.Configuration.Parsing.ConfigurationCheck.SlotWriters = 3 -> AgentCore.Application.Configuration.Parsing.ConfigurationCheck
+AgentCore.Application.Configuration.Parsing.ConfigurationCheck.Syntax = 0 -> AgentCore.Application.Configuration.Parsing.ConfigurationCheck
+AgentCore.Application.Configuration.Parsing.ConfigurationError
+AgentCore.Application.Configuration.Parsing.ConfigurationError.<Clone>$() -> AgentCore.Application.Configuration.Parsing.ConfigurationError!
+AgentCore.Application.Configuration.Parsing.ConfigurationError.Check.get -> AgentCore.Application.Configuration.Parsing.ConfigurationCheck
+AgentCore.Application.Configuration.Parsing.ConfigurationError.Check.init -> void
+AgentCore.Application.Configuration.Parsing.ConfigurationError.ConfigurationError() -> void
+AgentCore.Application.Configuration.Parsing.ConfigurationError.Equals(AgentCore.Application.Configuration.Parsing.ConfigurationError? other) -> bool
+AgentCore.Application.Configuration.Parsing.ConfigurationError.Message.get -> string!
+AgentCore.Application.Configuration.Parsing.ConfigurationError.Message.init -> void
+AgentCore.Application.Configuration.Parsing.ConfigurationError.Pointer.get -> string!
+AgentCore.Application.Configuration.Parsing.ConfigurationError.Pointer.init -> void
+AgentCore.Application.Configuration.Parsing.ConfigurationFormat
+AgentCore.Application.Configuration.Parsing.ConfigurationFormat.Json = 1 -> AgentCore.Application.Configuration.Parsing.ConfigurationFormat
+AgentCore.Application.Configuration.Parsing.ConfigurationFormat.Yaml = 0 -> AgentCore.Application.Configuration.Parsing.ConfigurationFormat
+AgentCore.Application.Configuration.Parsing.ConfigurationLoader
+AgentCore.Application.Configuration.Parsing.ConfigurationLoadException
+AgentCore.Application.Configuration.Parsing.ConfigurationLoadException.Check.get -> AgentCore.Application.Configuration.Parsing.ConfigurationCheck
+AgentCore.Application.Configuration.Parsing.ConfigurationLoadException.ConfigurationLoadException() -> void
+AgentCore.Application.Configuration.Parsing.ConfigurationLoadException.ConfigurationLoadException(AgentCore.Application.Configuration.Parsing.ConfigurationError! error) -> void
+AgentCore.Application.Configuration.Parsing.ConfigurationLoadException.ConfigurationLoadException(AgentCore.Application.Configuration.Parsing.ConfigurationError! error, System.Exception? innerException) -> void
+AgentCore.Application.Configuration.Parsing.ConfigurationLoadException.ConfigurationLoadException(string! message) -> void
+AgentCore.Application.Configuration.Parsing.ConfigurationLoadException.ConfigurationLoadException(string! message, System.Exception? innerException) -> void
+AgentCore.Application.Configuration.Parsing.ConfigurationLoadException.ConfigurationLoadException(System.Collections.Generic.IEnumerable<AgentCore.Application.Configuration.Parsing.ConfigurationError!>! errors) -> void
+AgentCore.Application.Configuration.Parsing.ConfigurationLoadException.ConfigurationLoadException(System.Collections.Generic.IEnumerable<AgentCore.Application.Configuration.Parsing.ConfigurationError!>! errors, System.Exception? innerException) -> void
+AgentCore.Application.Configuration.Parsing.ConfigurationLoadException.Errors.get -> AgentCore.Application.Configuration.Schema.EquatableList<AgentCore.Application.Configuration.Parsing.ConfigurationError!>!
+AgentCore.Application.Configuration.Parsing.ConfigurationLoadException.Pointer.get -> string!
+AgentCore.Application.Configuration.Parsing.ConfigurationSchemaValidator
+AgentCore.Application.Configuration.Parsing.SecretReference
+AgentCore.Application.Configuration.Parsing.SecretReference.<Clone>$() -> AgentCore.Application.Configuration.Parsing.SecretReference!
+AgentCore.Application.Configuration.Parsing.SecretReference.Deconstruct(out string! Name, out int Start, out int Length) -> void
+AgentCore.Application.Configuration.Parsing.SecretReference.Equals(AgentCore.Application.Configuration.Parsing.SecretReference? other) -> bool
+AgentCore.Application.Configuration.Parsing.SecretReference.Length.get -> int
+AgentCore.Application.Configuration.Parsing.SecretReference.Length.init -> void
+AgentCore.Application.Configuration.Parsing.SecretReference.Name.get -> string!
+AgentCore.Application.Configuration.Parsing.SecretReference.Name.init -> void
+AgentCore.Application.Configuration.Parsing.SecretReference.SecretReference(string! Name, int Start, int Length) -> void
+AgentCore.Application.Configuration.Parsing.SecretReference.Start.get -> int
+AgentCore.Application.Configuration.Parsing.SecretReference.Start.init -> void
+AgentCore.Application.Configuration.Parsing.SecretTemplate
+AgentCore.Application.Configuration.Parsing.SecretTemplate.<Clone>$() -> AgentCore.Application.Configuration.Parsing.SecretTemplate!
+AgentCore.Application.Configuration.Parsing.SecretTemplate.Equals(AgentCore.Application.Configuration.Parsing.SecretTemplate? other) -> bool
+AgentCore.Application.Configuration.Parsing.SecretTemplate.Format(System.Func<string!, string!>! resolve) -> string!
+AgentCore.Application.Configuration.Parsing.SecretTemplate.HasSecretReferences.get -> bool
+AgentCore.Application.Configuration.Parsing.SecretTemplate.Raw.get -> string!
+AgentCore.Application.Configuration.Parsing.SecretTemplate.References.get -> AgentCore.Application.Configuration.Schema.EquatableList<AgentCore.Application.Configuration.Parsing.SecretReference!>!
+AgentCore.Application.Configuration.Parsing.YamlToJson
+AgentCore.Application.Configuration.Schema.AgentConfiguration
+AgentCore.Application.Configuration.Schema.AgentConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.AgentConfiguration!
+AgentCore.Application.Configuration.Schema.AgentConfiguration.AgentConfiguration() -> void
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Equals(AgentCore.Application.Configuration.Schema.AgentConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Id.get -> string!
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Id.init -> void
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Instructions.get -> string?
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Instructions.init -> void
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Model.get -> AgentCore.Application.Configuration.Schema.ModelReference?
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Model.init -> void
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Tools.get -> AgentCore.Application.Configuration.Schema.EquatableList<string!>!
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Tools.init -> void
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.AgentCoreConfiguration!
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.AgentCoreConfiguration() -> void
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Agents.get -> AgentCore.Application.Configuration.Schema.AgentsConfiguration?
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Agents.init -> void
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.ApiVersion.get -> string!
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.ApiVersion.init -> void
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Equals(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Extractor.get -> AgentCore.Application.Configuration.Schema.ExtractorConfiguration?
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Extractor.init -> void
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Graph.get -> AgentCore.Application.Configuration.Schema.GraphConfiguration?
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Graph.init -> void
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Guards.get -> AgentCore.Application.Configuration.Schema.EquatableDictionary<System.Text.Json.Nodes.JsonNode!>!
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Guards.init -> void
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Name.get -> string!
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Name.init -> void
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Policy.get -> AgentCore.Application.Configuration.Schema.PolicyConfiguration?
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Policy.init -> void
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Providers.get -> AgentCore.Application.Configuration.Schema.ProvidersConfiguration?
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Providers.init -> void
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.State.get -> AgentCore.Application.Configuration.Schema.EquatableDictionary<AgentCore.Application.Configuration.Schema.StateSlotConfiguration!>!
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.State.init -> void
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Tools.get -> AgentCore.Application.Configuration.Schema.EquatableList<AgentCore.Application.Configuration.Schema.ToolConfiguration!>!
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Tools.init -> void
+AgentCore.Application.Configuration.Schema.AgentDefaults
+AgentCore.Application.Configuration.Schema.AgentDefaults.<Clone>$() -> AgentCore.Application.Configuration.Schema.AgentDefaults!
+AgentCore.Application.Configuration.Schema.AgentDefaults.AgentDefaults() -> void
+AgentCore.Application.Configuration.Schema.AgentDefaults.Equals(AgentCore.Application.Configuration.Schema.AgentDefaults? other) -> bool
+AgentCore.Application.Configuration.Schema.AgentDefaults.Instructions.get -> string?
+AgentCore.Application.Configuration.Schema.AgentDefaults.Instructions.init -> void
+AgentCore.Application.Configuration.Schema.AgentDefaults.Model.get -> AgentCore.Application.Configuration.Schema.ModelReference?
+AgentCore.Application.Configuration.Schema.AgentDefaults.Model.init -> void
+AgentCore.Application.Configuration.Schema.AgentsConfiguration
+AgentCore.Application.Configuration.Schema.AgentsConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.AgentsConfiguration!
+AgentCore.Application.Configuration.Schema.AgentsConfiguration.AgentsConfiguration() -> void
+AgentCore.Application.Configuration.Schema.AgentsConfiguration.Defaults.get -> AgentCore.Application.Configuration.Schema.AgentDefaults?
+AgentCore.Application.Configuration.Schema.AgentsConfiguration.Defaults.init -> void
+AgentCore.Application.Configuration.Schema.AgentsConfiguration.Equals(AgentCore.Application.Configuration.Schema.AgentsConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.AgentsConfiguration.Items.get -> AgentCore.Application.Configuration.Schema.EquatableList<AgentCore.Application.Configuration.Schema.AgentConfiguration!>!
+AgentCore.Application.Configuration.Schema.AgentsConfiguration.Items.init -> void
+AgentCore.Application.Configuration.Schema.EquatableDictionary<TValue>
+AgentCore.Application.Configuration.Schema.EquatableDictionary<TValue>.ContainsKey(string! key) -> bool
+AgentCore.Application.Configuration.Schema.EquatableDictionary<TValue>.Count.get -> int
+AgentCore.Application.Configuration.Schema.EquatableDictionary<TValue>.Equals(AgentCore.Application.Configuration.Schema.EquatableDictionary<TValue>? other) -> bool
+AgentCore.Application.Configuration.Schema.EquatableDictionary<TValue>.EquatableDictionary(System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string!, TValue>>! entries) -> void
+AgentCore.Application.Configuration.Schema.EquatableDictionary<TValue>.GetEnumerator() -> System.Collections.Generic.IEnumerator<System.Collections.Generic.KeyValuePair<string!, TValue>>!
+AgentCore.Application.Configuration.Schema.EquatableDictionary<TValue>.Keys.get -> System.Collections.Generic.IEnumerable<string!>!
+AgentCore.Application.Configuration.Schema.EquatableDictionary<TValue>.this[string! key].get -> TValue
+AgentCore.Application.Configuration.Schema.EquatableDictionary<TValue>.TryGetValue(string! key, out TValue value) -> bool
+AgentCore.Application.Configuration.Schema.EquatableDictionary<TValue>.Values.get -> System.Collections.Generic.IEnumerable<TValue>!
+AgentCore.Application.Configuration.Schema.EquatableList<T>
+AgentCore.Application.Configuration.Schema.EquatableList<T>.Count.get -> int
+AgentCore.Application.Configuration.Schema.EquatableList<T>.Equals(AgentCore.Application.Configuration.Schema.EquatableList<T>? other) -> bool
+AgentCore.Application.Configuration.Schema.EquatableList<T>.EquatableList(System.Collections.Generic.IEnumerable<T>! items) -> void
+AgentCore.Application.Configuration.Schema.EquatableList<T>.GetEnumerator() -> System.Collections.Generic.IEnumerator<T>!
+AgentCore.Application.Configuration.Schema.EquatableList<T>.this[int index].get -> T
+AgentCore.Application.Configuration.Schema.ExtractorConfiguration
+AgentCore.Application.Configuration.Schema.ExtractorConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.ExtractorConfiguration!
+AgentCore.Application.Configuration.Schema.ExtractorConfiguration.Equals(AgentCore.Application.Configuration.Schema.ExtractorConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.ExtractorConfiguration.ExtractorConfiguration() -> void
+AgentCore.Application.Configuration.Schema.ExtractorConfiguration.Model.get -> AgentCore.Application.Configuration.Schema.ModelReference!
+AgentCore.Application.Configuration.Schema.ExtractorConfiguration.Model.init -> void
+AgentCore.Application.Configuration.Schema.ExtractorConfiguration.When.get -> AgentCore.Application.Configuration.Schema.ExtractorTrigger
+AgentCore.Application.Configuration.Schema.ExtractorConfiguration.When.init -> void
+AgentCore.Application.Configuration.Schema.ExtractorTrigger
+AgentCore.Application.Configuration.Schema.ExtractorTrigger.AfterReply = 0 -> AgentCore.Application.Configuration.Schema.ExtractorTrigger
+AgentCore.Application.Configuration.Schema.GraphConfiguration
+AgentCore.Application.Configuration.Schema.GraphConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.GraphConfiguration!
+AgentCore.Application.Configuration.Schema.GraphConfiguration.Agents.get -> AgentCore.Application.Configuration.Schema.EquatableList<string!>!
+AgentCore.Application.Configuration.Schema.GraphConfiguration.Agents.init -> void
+AgentCore.Application.Configuration.Schema.GraphConfiguration.Edges.get -> AgentCore.Application.Configuration.Schema.EquatableList<AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration!>!
+AgentCore.Application.Configuration.Schema.GraphConfiguration.Edges.init -> void
+AgentCore.Application.Configuration.Schema.GraphConfiguration.Equals(AgentCore.Application.Configuration.Schema.GraphConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.GraphConfiguration.GraphConfiguration() -> void
+AgentCore.Application.Configuration.Schema.GraphConfiguration.Nodes.get -> AgentCore.Application.Configuration.Schema.EquatableList<AgentCore.Application.Configuration.Schema.GraphNodeConfiguration!>!
+AgentCore.Application.Configuration.Schema.GraphConfiguration.Nodes.init -> void
+AgentCore.Application.Configuration.Schema.GraphConfiguration.Pattern.get -> AgentCore.Application.Configuration.Schema.GraphPattern?
+AgentCore.Application.Configuration.Schema.GraphConfiguration.Pattern.init -> void
+AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration
+AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration!
+AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration.Equals(AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration.From.get -> string!
+AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration.From.init -> void
+AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration.GraphEdgeConfiguration() -> void
+AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration.To.get -> string!
+AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration.To.init -> void
+AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration.When.get -> AgentCore.Application.Configuration.Schema.GuardReference?
+AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration.When.init -> void
+AgentCore.Application.Configuration.Schema.GraphNodeConfiguration
+AgentCore.Application.Configuration.Schema.GraphNodeConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.GraphNodeConfiguration!
+AgentCore.Application.Configuration.Schema.GraphNodeConfiguration.Agent.get -> string?
+AgentCore.Application.Configuration.Schema.GraphNodeConfiguration.Agent.init -> void
+AgentCore.Application.Configuration.Schema.GraphNodeConfiguration.Equals(AgentCore.Application.Configuration.Schema.GraphNodeConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.GraphNodeConfiguration.GraphNodeConfiguration() -> void
+AgentCore.Application.Configuration.Schema.GraphNodeConfiguration.Id.get -> string!
+AgentCore.Application.Configuration.Schema.GraphNodeConfiguration.Id.init -> void
+AgentCore.Application.Configuration.Schema.GraphNodeConfiguration.Output.get -> bool
+AgentCore.Application.Configuration.Schema.GraphNodeConfiguration.Output.init -> void
+AgentCore.Application.Configuration.Schema.GraphNodeConfiguration.Start.get -> bool
+AgentCore.Application.Configuration.Schema.GraphNodeConfiguration.Start.init -> void
+AgentCore.Application.Configuration.Schema.GraphPattern
+AgentCore.Application.Configuration.Schema.GraphPattern.Concurrent = 1 -> AgentCore.Application.Configuration.Schema.GraphPattern
+AgentCore.Application.Configuration.Schema.GraphPattern.GroupChat = 3 -> AgentCore.Application.Configuration.Schema.GraphPattern
+AgentCore.Application.Configuration.Schema.GraphPattern.Handoff = 2 -> AgentCore.Application.Configuration.Schema.GraphPattern
+AgentCore.Application.Configuration.Schema.GraphPattern.Sequential = 0 -> AgentCore.Application.Configuration.Schema.GraphPattern
+AgentCore.Application.Configuration.Schema.GuardReference
+AgentCore.Application.Configuration.Schema.GuardReference.<Clone>$() -> AgentCore.Application.Configuration.Schema.GuardReference!
+AgentCore.Application.Configuration.Schema.GuardReference.Equals(AgentCore.Application.Configuration.Schema.GuardReference? other) -> bool
+AgentCore.Application.Configuration.Schema.GuardReference.IsNamed.get -> bool
+AgentCore.Application.Configuration.Schema.GuardReference.Name.get -> string?
+AgentCore.Application.Configuration.Schema.GuardReference.Rule.get -> System.Text.Json.Nodes.JsonNode?
+AgentCore.Application.Configuration.Schema.HttpRequestConfiguration
+AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.HttpRequestConfiguration!
+AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.Equals(AgentCore.Application.Configuration.Schema.HttpRequestConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.Headers.get -> AgentCore.Application.Configuration.Schema.EquatableDictionary<AgentCore.Application.Configuration.Parsing.SecretTemplate!>!
+AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.Headers.init -> void
+AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.HttpRequestConfiguration() -> void
+AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.Method.get -> string!
+AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.Method.init -> void
+AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.Url.get -> string!
+AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.Url.init -> void
+AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration
+AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration!
+AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Equals(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.KnowledgeProviderConfiguration() -> void
+AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Root.get -> string!
+AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Root.init -> void
+AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Store.get -> string!
+AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Store.init -> void
+AgentCore.Application.Configuration.Schema.LlmProviderConfiguration
+AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.LlmProviderConfiguration!
+AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.As.get -> string!
+AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.As.init -> void
+AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.Equals(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.Kind.get -> string!
+AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.Kind.init -> void
+AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.LlmProviderConfiguration() -> void
+AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.Model.get -> string!
+AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.Model.init -> void
+AgentCore.Application.Configuration.Schema.ModelReference
+AgentCore.Application.Configuration.Schema.ModelReference.<Clone>$() -> AgentCore.Application.Configuration.Schema.ModelReference!
+AgentCore.Application.Configuration.Schema.ModelReference.Equals(AgentCore.Application.Configuration.Schema.ModelReference? other) -> bool
+AgentCore.Application.Configuration.Schema.ModelReference.ModelReference() -> void
+AgentCore.Application.Configuration.Schema.ModelReference.Ref.get -> string!
+AgentCore.Application.Configuration.Schema.ModelReference.Ref.init -> void
+AgentCore.Application.Configuration.Schema.ModelReference.Temperature.get -> double?
+AgentCore.Application.Configuration.Schema.ModelReference.Temperature.init -> void
+AgentCore.Application.Configuration.Schema.PolicyConfiguration
+AgentCore.Application.Configuration.Schema.PolicyConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.PolicyConfiguration!
+AgentCore.Application.Configuration.Schema.PolicyConfiguration.Equals(AgentCore.Application.Configuration.Schema.PolicyConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.PolicyConfiguration.Initial.get -> string!
+AgentCore.Application.Configuration.Schema.PolicyConfiguration.Initial.init -> void
+AgentCore.Application.Configuration.Schema.PolicyConfiguration.PolicyConfiguration() -> void
+AgentCore.Application.Configuration.Schema.PolicyConfiguration.Stages.get -> AgentCore.Application.Configuration.Schema.EquatableList<AgentCore.Application.Configuration.Schema.StageConfiguration!>!
+AgentCore.Application.Configuration.Schema.PolicyConfiguration.Stages.init -> void
+AgentCore.Application.Configuration.Schema.ProvidersConfiguration
+AgentCore.Application.Configuration.Schema.ProvidersConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.ProvidersConfiguration!
+AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Equals(AgentCore.Application.Configuration.Schema.ProvidersConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Knowledge.get -> AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration?
+AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Knowledge.init -> void
+AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Llm.get -> AgentCore.Application.Configuration.Schema.EquatableList<AgentCore.Application.Configuration.Schema.LlmProviderConfiguration!>!
+AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Llm.init -> void
+AgentCore.Application.Configuration.Schema.ProvidersConfiguration.ProvidersConfiguration() -> void
+AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Speech.get -> AgentCore.Application.Configuration.Schema.VendorProviderConfiguration?
+AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Speech.init -> void
+AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Telephony.get -> AgentCore.Application.Configuration.Schema.VendorProviderConfiguration?
+AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Telephony.init -> void
+AgentCore.Application.Configuration.Schema.ReservedStateSlots
+AgentCore.Application.Configuration.Schema.StageConfiguration
+AgentCore.Application.Configuration.Schema.StageConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.StageConfiguration!
+AgentCore.Application.Configuration.Schema.StageConfiguration.Agent.get -> string?
+AgentCore.Application.Configuration.Schema.StageConfiguration.Agent.init -> void
+AgentCore.Application.Configuration.Schema.StageConfiguration.Equals(AgentCore.Application.Configuration.Schema.StageConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.StageConfiguration.Id.get -> string!
+AgentCore.Application.Configuration.Schema.StageConfiguration.Id.init -> void
+AgentCore.Application.Configuration.Schema.StageConfiguration.OnNoMatch.get -> AgentCore.Application.Configuration.Schema.StageNoMatch
+AgentCore.Application.Configuration.Schema.StageConfiguration.OnNoMatch.init -> void
+AgentCore.Application.Configuration.Schema.StageConfiguration.StageConfiguration() -> void
+AgentCore.Application.Configuration.Schema.StageConfiguration.Terminal.get -> bool
+AgentCore.Application.Configuration.Schema.StageConfiguration.Terminal.init -> void
+AgentCore.Application.Configuration.Schema.StageConfiguration.To.get -> AgentCore.Application.Configuration.Schema.EquatableList<AgentCore.Application.Configuration.Schema.StageTransition!>!
+AgentCore.Application.Configuration.Schema.StageConfiguration.To.init -> void
+AgentCore.Application.Configuration.Schema.StageNoMatch
+AgentCore.Application.Configuration.Schema.StageNoMatch.Error = 1 -> AgentCore.Application.Configuration.Schema.StageNoMatch
+AgentCore.Application.Configuration.Schema.StageNoMatch.Stay = 0 -> AgentCore.Application.Configuration.Schema.StageNoMatch
+AgentCore.Application.Configuration.Schema.StageTransition
+AgentCore.Application.Configuration.Schema.StageTransition.<Clone>$() -> AgentCore.Application.Configuration.Schema.StageTransition!
+AgentCore.Application.Configuration.Schema.StageTransition.Equals(AgentCore.Application.Configuration.Schema.StageTransition? other) -> bool
+AgentCore.Application.Configuration.Schema.StageTransition.Stage.get -> string!
+AgentCore.Application.Configuration.Schema.StageTransition.Stage.init -> void
+AgentCore.Application.Configuration.Schema.StageTransition.StageTransition() -> void
+AgentCore.Application.Configuration.Schema.StageTransition.When.get -> AgentCore.Application.Configuration.Schema.GuardReference?
+AgentCore.Application.Configuration.Schema.StageTransition.When.init -> void
+AgentCore.Application.Configuration.Schema.StateSlotConfiguration
+AgentCore.Application.Configuration.Schema.StateSlotConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.StateSlotConfiguration!
+AgentCore.Application.Configuration.Schema.StateSlotConfiguration.Default.get -> System.Text.Json.Nodes.JsonNode?
+AgentCore.Application.Configuration.Schema.StateSlotConfiguration.Default.init -> void
+AgentCore.Application.Configuration.Schema.StateSlotConfiguration.Description.get -> string?
+AgentCore.Application.Configuration.Schema.StateSlotConfiguration.Description.init -> void
+AgentCore.Application.Configuration.Schema.StateSlotConfiguration.EnumValues.get -> AgentCore.Application.Configuration.Schema.EquatableList<System.Text.Json.Nodes.JsonNode!>?
+AgentCore.Application.Configuration.Schema.StateSlotConfiguration.EnumValues.init -> void
+AgentCore.Application.Configuration.Schema.StateSlotConfiguration.Equals(AgentCore.Application.Configuration.Schema.StateSlotConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.StateSlotConfiguration.From.get -> AgentCore.Application.Configuration.Schema.ToolResultReference?
+AgentCore.Application.Configuration.Schema.StateSlotConfiguration.From.init -> void
+AgentCore.Application.Configuration.Schema.StateSlotConfiguration.Increment.get -> System.Text.Json.Nodes.JsonNode?
+AgentCore.Application.Configuration.Schema.StateSlotConfiguration.Increment.init -> void
+AgentCore.Application.Configuration.Schema.StateSlotConfiguration.StateSlotConfiguration() -> void
+AgentCore.Application.Configuration.Schema.StateSlotConfiguration.Type.get -> AgentCore.Application.Configuration.Schema.StateSlotType
+AgentCore.Application.Configuration.Schema.StateSlotConfiguration.Type.init -> void
+AgentCore.Application.Configuration.Schema.StateSlotConfiguration.Value.get -> System.Text.Json.Nodes.JsonNode?
+AgentCore.Application.Configuration.Schema.StateSlotConfiguration.Value.init -> void
+AgentCore.Application.Configuration.Schema.StateSlotConfiguration.Writer.get -> AgentCore.Application.Configuration.Schema.StateWriter
+AgentCore.Application.Configuration.Schema.StateSlotConfiguration.Writer.init -> void
+AgentCore.Application.Configuration.Schema.StateSlotType
+AgentCore.Application.Configuration.Schema.StateSlotType.Boolean = 0 -> AgentCore.Application.Configuration.Schema.StateSlotType
+AgentCore.Application.Configuration.Schema.StateSlotType.Integer = 1 -> AgentCore.Application.Configuration.Schema.StateSlotType
+AgentCore.Application.Configuration.Schema.StateSlotType.Number = 2 -> AgentCore.Application.Configuration.Schema.StateSlotType
+AgentCore.Application.Configuration.Schema.StateSlotType.String = 3 -> AgentCore.Application.Configuration.Schema.StateSlotType
+AgentCore.Application.Configuration.Schema.StateWriter
+AgentCore.Application.Configuration.Schema.StateWriter.Const = 3 -> AgentCore.Application.Configuration.Schema.StateWriter
+AgentCore.Application.Configuration.Schema.StateWriter.Counter = 2 -> AgentCore.Application.Configuration.Schema.StateWriter
+AgentCore.Application.Configuration.Schema.StateWriter.Extractor = 0 -> AgentCore.Application.Configuration.Schema.StateWriter
+AgentCore.Application.Configuration.Schema.StateWriter.Tool = 1 -> AgentCore.Application.Configuration.Schema.StateWriter
+AgentCore.Application.Configuration.Schema.ToolConfiguration
+AgentCore.Application.Configuration.Schema.ToolConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.ToolConfiguration!
+AgentCore.Application.Configuration.Schema.ToolConfiguration.Binds.get -> string?
+AgentCore.Application.Configuration.Schema.ToolConfiguration.Binds.init -> void
+AgentCore.Application.Configuration.Schema.ToolConfiguration.Description.get -> string?
+AgentCore.Application.Configuration.Schema.ToolConfiguration.Description.init -> void
+AgentCore.Application.Configuration.Schema.ToolConfiguration.Equals(AgentCore.Application.Configuration.Schema.ToolConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.ToolConfiguration.Id.get -> string!
+AgentCore.Application.Configuration.Schema.ToolConfiguration.Id.init -> void
+AgentCore.Application.Configuration.Schema.ToolConfiguration.Kind.get -> AgentCore.Application.Configuration.Schema.ToolKind
+AgentCore.Application.Configuration.Schema.ToolConfiguration.Kind.init -> void
+AgentCore.Application.Configuration.Schema.ToolConfiguration.Parameters.get -> System.Text.Json.Nodes.JsonNode?
+AgentCore.Application.Configuration.Schema.ToolConfiguration.Parameters.init -> void
+AgentCore.Application.Configuration.Schema.ToolConfiguration.Request.get -> AgentCore.Application.Configuration.Schema.HttpRequestConfiguration?
+AgentCore.Application.Configuration.Schema.ToolConfiguration.Request.init -> void
+AgentCore.Application.Configuration.Schema.ToolConfiguration.ToolConfiguration() -> void
+AgentCore.Application.Configuration.Schema.ToolConfiguration.Uses.get -> string?
+AgentCore.Application.Configuration.Schema.ToolConfiguration.Uses.init -> void
+AgentCore.Application.Configuration.Schema.ToolKind
+AgentCore.Application.Configuration.Schema.ToolKind.Binding = 2 -> AgentCore.Application.Configuration.Schema.ToolKind
+AgentCore.Application.Configuration.Schema.ToolKind.Builtin = 0 -> AgentCore.Application.Configuration.Schema.ToolKind
+AgentCore.Application.Configuration.Schema.ToolKind.Http = 1 -> AgentCore.Application.Configuration.Schema.ToolKind
+AgentCore.Application.Configuration.Schema.ToolResultReference
+AgentCore.Application.Configuration.Schema.ToolResultReference.<Clone>$() -> AgentCore.Application.Configuration.Schema.ToolResultReference!
+AgentCore.Application.Configuration.Schema.ToolResultReference.Deconstruct(out string! ToolId, out string! Path) -> void
+AgentCore.Application.Configuration.Schema.ToolResultReference.Equals(AgentCore.Application.Configuration.Schema.ToolResultReference? other) -> bool
+AgentCore.Application.Configuration.Schema.ToolResultReference.Path.get -> string!
+AgentCore.Application.Configuration.Schema.ToolResultReference.Path.init -> void
+AgentCore.Application.Configuration.Schema.ToolResultReference.ToolId.get -> string!
+AgentCore.Application.Configuration.Schema.ToolResultReference.ToolId.init -> void
+AgentCore.Application.Configuration.Schema.ToolResultReference.ToolResultReference(string! ToolId, string! Path) -> void
+AgentCore.Application.Configuration.Schema.VendorProviderConfiguration
+AgentCore.Application.Configuration.Schema.VendorProviderConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.VendorProviderConfiguration!
+AgentCore.Application.Configuration.Schema.VendorProviderConfiguration.Equals(AgentCore.Application.Configuration.Schema.VendorProviderConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.VendorProviderConfiguration.Kind.get -> string!
+AgentCore.Application.Configuration.Schema.VendorProviderConfiguration.Kind.init -> void
+AgentCore.Application.Configuration.Schema.VendorProviderConfiguration.VendorProviderConfiguration() -> void
+const AgentCore.Application.Configuration.Parsing.ConfigurationError.RootPointer = "" -> string!
+const AgentCore.Application.Configuration.Parsing.SecretReference.Prefix = "${secret:" -> string!
+const AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.SupportedApiVersion = "agentcore/v1" -> string!
+const AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.DefaultRoot = "./kb" -> string!
+const AgentCore.Application.Configuration.Schema.ReservedStateSlots.CallDurationSeconds = "callDurationSeconds" -> string!
+const AgentCore.Application.Configuration.Schema.ReservedStateSlots.Stage = "stage" -> string!
+const AgentCore.Application.Configuration.Schema.ReservedStateSlots.TurnIndex = "turnIndex" -> string!
+override AgentCore.Application.Configuration.Parsing.ConfigurationError.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Parsing.ConfigurationError.GetHashCode() -> int
+override AgentCore.Application.Configuration.Parsing.ConfigurationError.ToString() -> string!
+override AgentCore.Application.Configuration.Parsing.SecretReference.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Parsing.SecretReference.GetHashCode() -> int
+override AgentCore.Application.Configuration.Parsing.SecretReference.ToString() -> string!
+override AgentCore.Application.Configuration.Parsing.SecretTemplate.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Parsing.SecretTemplate.GetHashCode() -> int
+override AgentCore.Application.Configuration.Parsing.SecretTemplate.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.AgentConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.AgentConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.AgentConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.AgentDefaults.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.AgentDefaults.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.AgentDefaults.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.AgentsConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.AgentsConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.AgentsConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.EquatableDictionary<TValue>.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.EquatableDictionary<TValue>.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.EquatableList<T>.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.EquatableList<T>.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.ExtractorConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.ExtractorConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.ExtractorConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.GraphConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.GraphConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.GraphConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.GraphNodeConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.GraphNodeConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.GraphNodeConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.GuardReference.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.GuardReference.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.GuardReference.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.ModelReference.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.ModelReference.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.ModelReference.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.PolicyConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.PolicyConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.PolicyConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.ProvidersConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.ProvidersConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.StageConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.StageConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.StageConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.StageTransition.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.StageTransition.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.StageTransition.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.StateSlotConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.StateSlotConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.StateSlotConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.ToolConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.ToolConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.ToolConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.ToolResultReference.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.ToolResultReference.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.ToolResultReference.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.VendorProviderConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.VendorProviderConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.VendorProviderConfiguration.ToString() -> string!
+static AgentCore.Application.Configuration.Parsing.ConfigurationError.AppendPointer(string! pointer, int index) -> string!
+static AgentCore.Application.Configuration.Parsing.ConfigurationError.AppendPointer(string! pointer, string! segment) -> string!
+static AgentCore.Application.Configuration.Parsing.ConfigurationError.operator ==(AgentCore.Application.Configuration.Parsing.ConfigurationError? left, AgentCore.Application.Configuration.Parsing.ConfigurationError? right) -> bool
+static AgentCore.Application.Configuration.Parsing.ConfigurationError.operator !=(AgentCore.Application.Configuration.Parsing.ConfigurationError? left, AgentCore.Application.Configuration.Parsing.ConfigurationError? right) -> bool
+static AgentCore.Application.Configuration.Parsing.ConfigurationLoader.LoadDocument(System.Text.Json.Nodes.JsonNode! document) -> AgentCore.Application.Configuration.Schema.AgentCoreConfiguration!
+static AgentCore.Application.Configuration.Parsing.ConfigurationLoader.LoadFile(string! path) -> AgentCore.Application.Configuration.Schema.AgentCoreConfiguration!
+static AgentCore.Application.Configuration.Parsing.ConfigurationLoader.LoadJson(string! json) -> AgentCore.Application.Configuration.Schema.AgentCoreConfiguration!
+static AgentCore.Application.Configuration.Parsing.ConfigurationLoader.Load(string! text, AgentCore.Application.Configuration.Parsing.ConfigurationFormat format) -> AgentCore.Application.Configuration.Schema.AgentCoreConfiguration!
+static AgentCore.Application.Configuration.Parsing.ConfigurationLoader.LoadYaml(string! yaml) -> AgentCore.Application.Configuration.Schema.AgentCoreConfiguration!
+static AgentCore.Application.Configuration.Parsing.ConfigurationLoader.ReadDocument(string! text, AgentCore.Application.Configuration.Parsing.ConfigurationFormat format) -> System.Text.Json.Nodes.JsonNode!
+static AgentCore.Application.Configuration.Parsing.ConfigurationSchemaValidator.Evaluate(System.Text.Json.Nodes.JsonNode! document) -> AgentCore.Application.Configuration.Schema.EquatableList<AgentCore.Application.Configuration.Parsing.ConfigurationError!>!
+static AgentCore.Application.Configuration.Parsing.ConfigurationSchemaValidator.SchemaJson.get -> string!
+static AgentCore.Application.Configuration.Parsing.ConfigurationSchemaValidator.Validate(System.Text.Json.Nodes.JsonNode! document) -> void
+static AgentCore.Application.Configuration.Parsing.SecretReference.operator ==(AgentCore.Application.Configuration.Parsing.SecretReference? left, AgentCore.Application.Configuration.Parsing.SecretReference? right) -> bool
+static AgentCore.Application.Configuration.Parsing.SecretReference.operator !=(AgentCore.Application.Configuration.Parsing.SecretReference? left, AgentCore.Application.Configuration.Parsing.SecretReference? right) -> bool
+static AgentCore.Application.Configuration.Parsing.SecretTemplate.operator ==(AgentCore.Application.Configuration.Parsing.SecretTemplate? left, AgentCore.Application.Configuration.Parsing.SecretTemplate? right) -> bool
+static AgentCore.Application.Configuration.Parsing.SecretTemplate.operator !=(AgentCore.Application.Configuration.Parsing.SecretTemplate? left, AgentCore.Application.Configuration.Parsing.SecretTemplate? right) -> bool
+static AgentCore.Application.Configuration.Parsing.SecretTemplate.Parse(string! text) -> AgentCore.Application.Configuration.Parsing.SecretTemplate!
+static AgentCore.Application.Configuration.Parsing.YamlToJson.Parse(string! yaml) -> System.Text.Json.Nodes.JsonNode!
+static AgentCore.Application.Configuration.Schema.AgentConfiguration.operator ==(AgentCore.Application.Configuration.Schema.AgentConfiguration? left, AgentCore.Application.Configuration.Schema.AgentConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.AgentConfiguration.operator !=(AgentCore.Application.Configuration.Schema.AgentConfiguration? left, AgentCore.Application.Configuration.Schema.AgentConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.operator ==(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration? left, AgentCore.Application.Configuration.Schema.AgentCoreConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.operator !=(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration? left, AgentCore.Application.Configuration.Schema.AgentCoreConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.AgentDefaults.operator ==(AgentCore.Application.Configuration.Schema.AgentDefaults? left, AgentCore.Application.Configuration.Schema.AgentDefaults? right) -> bool
+static AgentCore.Application.Configuration.Schema.AgentDefaults.operator !=(AgentCore.Application.Configuration.Schema.AgentDefaults? left, AgentCore.Application.Configuration.Schema.AgentDefaults? right) -> bool
+static AgentCore.Application.Configuration.Schema.AgentsConfiguration.operator ==(AgentCore.Application.Configuration.Schema.AgentsConfiguration? left, AgentCore.Application.Configuration.Schema.AgentsConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.AgentsConfiguration.operator !=(AgentCore.Application.Configuration.Schema.AgentsConfiguration? left, AgentCore.Application.Configuration.Schema.AgentsConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.EquatableDictionary<TValue>.Empty.get -> AgentCore.Application.Configuration.Schema.EquatableDictionary<TValue>!
+static AgentCore.Application.Configuration.Schema.EquatableDictionary<TValue>.operator ==(AgentCore.Application.Configuration.Schema.EquatableDictionary<TValue>? left, AgentCore.Application.Configuration.Schema.EquatableDictionary<TValue>? right) -> bool
+static AgentCore.Application.Configuration.Schema.EquatableDictionary<TValue>.operator !=(AgentCore.Application.Configuration.Schema.EquatableDictionary<TValue>? left, AgentCore.Application.Configuration.Schema.EquatableDictionary<TValue>? right) -> bool
+static AgentCore.Application.Configuration.Schema.EquatableList<T>.Empty.get -> AgentCore.Application.Configuration.Schema.EquatableList<T>!
+static AgentCore.Application.Configuration.Schema.EquatableList<T>.operator ==(AgentCore.Application.Configuration.Schema.EquatableList<T>? left, AgentCore.Application.Configuration.Schema.EquatableList<T>? right) -> bool
+static AgentCore.Application.Configuration.Schema.EquatableList<T>.operator !=(AgentCore.Application.Configuration.Schema.EquatableList<T>? left, AgentCore.Application.Configuration.Schema.EquatableList<T>? right) -> bool
+static AgentCore.Application.Configuration.Schema.ExtractorConfiguration.operator ==(AgentCore.Application.Configuration.Schema.ExtractorConfiguration? left, AgentCore.Application.Configuration.Schema.ExtractorConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.ExtractorConfiguration.operator !=(AgentCore.Application.Configuration.Schema.ExtractorConfiguration? left, AgentCore.Application.Configuration.Schema.ExtractorConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.GraphConfiguration.operator ==(AgentCore.Application.Configuration.Schema.GraphConfiguration? left, AgentCore.Application.Configuration.Schema.GraphConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.GraphConfiguration.operator !=(AgentCore.Application.Configuration.Schema.GraphConfiguration? left, AgentCore.Application.Configuration.Schema.GraphConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration.operator ==(AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration? left, AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration.operator !=(AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration? left, AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.GraphNodeConfiguration.operator ==(AgentCore.Application.Configuration.Schema.GraphNodeConfiguration? left, AgentCore.Application.Configuration.Schema.GraphNodeConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.GraphNodeConfiguration.operator !=(AgentCore.Application.Configuration.Schema.GraphNodeConfiguration? left, AgentCore.Application.Configuration.Schema.GraphNodeConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.GuardReference.FromName(string! name) -> AgentCore.Application.Configuration.Schema.GuardReference!
+static AgentCore.Application.Configuration.Schema.GuardReference.FromRule(System.Text.Json.Nodes.JsonNode! rule) -> AgentCore.Application.Configuration.Schema.GuardReference!
+static AgentCore.Application.Configuration.Schema.GuardReference.operator ==(AgentCore.Application.Configuration.Schema.GuardReference? left, AgentCore.Application.Configuration.Schema.GuardReference? right) -> bool
+static AgentCore.Application.Configuration.Schema.GuardReference.operator !=(AgentCore.Application.Configuration.Schema.GuardReference? left, AgentCore.Application.Configuration.Schema.GuardReference? right) -> bool
+static AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.operator ==(AgentCore.Application.Configuration.Schema.HttpRequestConfiguration? left, AgentCore.Application.Configuration.Schema.HttpRequestConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.operator !=(AgentCore.Application.Configuration.Schema.HttpRequestConfiguration? left, AgentCore.Application.Configuration.Schema.HttpRequestConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.operator ==(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.operator !=(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.operator ==(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? left, AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.operator !=(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? left, AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.ModelReference.operator ==(AgentCore.Application.Configuration.Schema.ModelReference? left, AgentCore.Application.Configuration.Schema.ModelReference? right) -> bool
+static AgentCore.Application.Configuration.Schema.ModelReference.operator !=(AgentCore.Application.Configuration.Schema.ModelReference? left, AgentCore.Application.Configuration.Schema.ModelReference? right) -> bool
+static AgentCore.Application.Configuration.Schema.PolicyConfiguration.operator ==(AgentCore.Application.Configuration.Schema.PolicyConfiguration? left, AgentCore.Application.Configuration.Schema.PolicyConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.PolicyConfiguration.operator !=(AgentCore.Application.Configuration.Schema.PolicyConfiguration? left, AgentCore.Application.Configuration.Schema.PolicyConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.ProvidersConfiguration.operator ==(AgentCore.Application.Configuration.Schema.ProvidersConfiguration? left, AgentCore.Application.Configuration.Schema.ProvidersConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.ProvidersConfiguration.operator !=(AgentCore.Application.Configuration.Schema.ProvidersConfiguration? left, AgentCore.Application.Configuration.Schema.ProvidersConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.ReservedStateSlots.All.get -> AgentCore.Application.Configuration.Schema.EquatableList<string!>!
+static AgentCore.Application.Configuration.Schema.ReservedStateSlots.Contains(string! name) -> bool
+static AgentCore.Application.Configuration.Schema.StageConfiguration.operator ==(AgentCore.Application.Configuration.Schema.StageConfiguration? left, AgentCore.Application.Configuration.Schema.StageConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.StageConfiguration.operator !=(AgentCore.Application.Configuration.Schema.StageConfiguration? left, AgentCore.Application.Configuration.Schema.StageConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.StageTransition.operator ==(AgentCore.Application.Configuration.Schema.StageTransition? left, AgentCore.Application.Configuration.Schema.StageTransition? right) -> bool
+static AgentCore.Application.Configuration.Schema.StageTransition.operator !=(AgentCore.Application.Configuration.Schema.StageTransition? left, AgentCore.Application.Configuration.Schema.StageTransition? right) -> bool
+static AgentCore.Application.Configuration.Schema.StateSlotConfiguration.operator ==(AgentCore.Application.Configuration.Schema.StateSlotConfiguration? left, AgentCore.Application.Configuration.Schema.StateSlotConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.StateSlotConfiguration.operator !=(AgentCore.Application.Configuration.Schema.StateSlotConfiguration? left, AgentCore.Application.Configuration.Schema.StateSlotConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.ToolConfiguration.operator ==(AgentCore.Application.Configuration.Schema.ToolConfiguration? left, AgentCore.Application.Configuration.Schema.ToolConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.ToolConfiguration.operator !=(AgentCore.Application.Configuration.Schema.ToolConfiguration? left, AgentCore.Application.Configuration.Schema.ToolConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.ToolResultReference.operator ==(AgentCore.Application.Configuration.Schema.ToolResultReference? left, AgentCore.Application.Configuration.Schema.ToolResultReference? right) -> bool
+static AgentCore.Application.Configuration.Schema.ToolResultReference.operator !=(AgentCore.Application.Configuration.Schema.ToolResultReference? left, AgentCore.Application.Configuration.Schema.ToolResultReference? right) -> bool
+static AgentCore.Application.Configuration.Schema.ToolResultReference.TryParse(string? text, out AgentCore.Application.Configuration.Schema.ToolResultReference? reference) -> bool
+static AgentCore.Application.Configuration.Schema.VendorProviderConfiguration.operator ==(AgentCore.Application.Configuration.Schema.VendorProviderConfiguration? left, AgentCore.Application.Configuration.Schema.VendorProviderConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.VendorProviderConfiguration.operator !=(AgentCore.Application.Configuration.Schema.VendorProviderConfiguration? left, AgentCore.Application.Configuration.Schema.VendorProviderConfiguration? right) -> bool
+AgentCore.Application.Configuration.Validation.IGuardEvaluator
+AgentCore.Application.Configuration.Validation.IGuardEvaluator.Evaluate(AgentCore.Application.Configuration.Schema.GuardReference! guard, System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>! state) -> bool
+AgentCore.Application.Configuration.Validation.IGuardEvaluator.Evaluate(System.Text.Json.Nodes.JsonNode! rule, System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>! state) -> bool
+AgentCore.Application.Configuration.Validation.ConfigurationValidationResult
+AgentCore.Application.Configuration.Validation.ConfigurationValidationResult.<Clone>$() -> AgentCore.Application.Configuration.Validation.ConfigurationValidationResult!
+AgentCore.Application.Configuration.Validation.ConfigurationValidationResult.ConfigurationValidationResult() -> void
+AgentCore.Application.Configuration.Validation.ConfigurationValidationResult.Equals(AgentCore.Application.Configuration.Validation.ConfigurationValidationResult? other) -> bool
+AgentCore.Application.Configuration.Validation.ConfigurationValidationResult.Errors.get -> AgentCore.Application.Configuration.Schema.EquatableList<AgentCore.Application.Configuration.Parsing.ConfigurationError!>!
+AgentCore.Application.Configuration.Validation.ConfigurationValidationResult.Errors.init -> void
+AgentCore.Application.Configuration.Validation.ConfigurationValidationResult.IsValid.get -> bool
+AgentCore.Application.Configuration.Validation.ConfigurationValidationResult.Warnings.get -> AgentCore.Application.Configuration.Schema.EquatableList<AgentCore.Application.Configuration.Parsing.ConfigurationError!>!
+AgentCore.Application.Configuration.Validation.ConfigurationValidationResult.Warnings.init -> void
+AgentCore.Application.Configuration.Validation.ConfigurationValidator
+AgentCore.Application.Configuration.Validation.GuardEvaluator
+AgentCore.Application.Configuration.Validation.GuardEvaluator.Evaluate(AgentCore.Application.Configuration.Schema.GuardReference! guard, System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>! state) -> bool
+AgentCore.Application.Configuration.Validation.GuardEvaluator.Evaluate(System.Text.Json.Nodes.JsonNode! rule, System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>! state) -> bool
+AgentCore.Application.Configuration.Validation.GuardEvaluator.GuardEvaluator(System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode!>! guards) -> void
+AgentCore.Application.Configuration.Validation.GuardEvaluator.GuardEvaluator(System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode!>! guards, System.Action<string!, System.Exception!>? onFailure) -> void
+AgentCore.Application.Configuration.Validation.GuardEvaluator.Resolve(AgentCore.Application.Configuration.Schema.GuardReference? guard) -> System.Text.Json.Nodes.JsonNode?
+AgentCore.Application.Configuration.Validation.GuardEvaluator.TryGetGuard(string! name, out System.Text.Json.Nodes.JsonNode? rule) -> bool
+AgentCore.Application.Configuration.Validation.GuardOperators
+override AgentCore.Application.Configuration.Validation.ConfigurationValidationResult.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Validation.ConfigurationValidationResult.GetHashCode() -> int
+override AgentCore.Application.Configuration.Validation.ConfigurationValidationResult.ToString() -> string!
+static AgentCore.Application.Configuration.Validation.ConfigurationValidationResult.Clean.get -> AgentCore.Application.Configuration.Validation.ConfigurationValidationResult!
+static AgentCore.Application.Configuration.Validation.ConfigurationValidationResult.operator ==(AgentCore.Application.Configuration.Validation.ConfigurationValidationResult? left, AgentCore.Application.Configuration.Validation.ConfigurationValidationResult? right) -> bool
+static AgentCore.Application.Configuration.Validation.ConfigurationValidationResult.operator !=(AgentCore.Application.Configuration.Validation.ConfigurationValidationResult? left, AgentCore.Application.Configuration.Validation.ConfigurationValidationResult? right) -> bool
+static AgentCore.Application.Configuration.Validation.ConfigurationValidator.Evaluate(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration) -> AgentCore.Application.Configuration.Validation.ConfigurationValidationResult!
+static AgentCore.Application.Configuration.Validation.ConfigurationValidator.Validate(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration) -> AgentCore.Application.Configuration.Validation.ConfigurationValidationResult!
+static AgentCore.Application.Configuration.Validation.GuardEvaluator.BuildData(System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>! state) -> System.Text.Json.Nodes.JsonObject!
+static AgentCore.Application.Configuration.Validation.GuardOperators.Allowed.get -> System.Collections.Generic.IReadOnlyList<string!>!
+static AgentCore.Application.Configuration.Validation.GuardOperators.DescribeRejection(string! name) -> string!
+static AgentCore.Application.Configuration.Validation.GuardOperators.IsAllowed(string! name) -> bool
+static AgentCore.Application.Configuration.Validation.GuardOperators.IsNamedRejected(string! name) -> bool
+static AgentCore.Application.Configuration.Validation.GuardOperators.IsNumericComparison(string! name) -> bool
+static AgentCore.Application.Configuration.Validation.GuardOperators.Rejected.get -> System.Collections.Generic.IReadOnlyList<string!>!
+static AgentCore.Application.Configuration.Validation.GuardOperators.ReplacementFor(string! name) -> string?
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.AgentCompilationContext(AgentCore.Application.Configuration.Compilation.IChatClientFactory! chatClients) -> void
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.ChatClients.get -> AgentCore.Application.Configuration.Compilation.IChatClientFactory!
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Guards.get -> AgentCore.Application.Configuration.Validation.IGuardEvaluator?
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Guards.init -> void
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.StateSnapshot.get -> System.Func<System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>!>?
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.StateSnapshot.init -> void
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Tools.get -> AgentCore.Application.Configuration.Compilation.IAgentToolFactory?
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Tools.init -> void
+AgentCore.Application.Configuration.Compilation.AgentInstructions
+AgentCore.Application.Configuration.Compilation.CompiledAgent
+AgentCore.Application.Configuration.Compilation.CompiledAgent.Agent.get -> Microsoft.Agents.AI.AIAgent!
+AgentCore.Application.Configuration.Compilation.CompiledAgent.Agents.get -> System.Collections.Generic.IReadOnlyDictionary<string!, Microsoft.Agents.AI.AIAgent!>!
+AgentCore.Application.Configuration.Compilation.CompiledAgent.Configuration.get -> AgentCore.Application.Configuration.Schema.AgentCoreConfiguration!
+AgentCore.Application.Configuration.Compilation.CompiledAgent.CreatePolicy(AgentCore.Application.Configuration.Validation.IGuardEvaluator! guards) -> AgentCore.Application.Policy.StagePolicy!
+AgentCore.Application.Configuration.Compilation.CompiledAgent.ForStage(string! stageId) -> Microsoft.Agents.AI.AIAgent?
+AgentCore.Application.Configuration.Compilation.CompiledAgent.Name.get -> string!
+AgentCore.Application.Configuration.Compilation.CompiledAgent.Shape.get -> AgentCore.Application.Configuration.Compilation.CompiledAgentShape
+AgentCore.Application.Configuration.Compilation.CompiledAgentRegistry
+AgentCore.Application.Configuration.Compilation.CompiledAgentRegistry.CompileCount.get -> int
+AgentCore.Application.Configuration.Compilation.CompiledAgentRegistry.CompiledAgentRegistry() -> void
+AgentCore.Application.Configuration.Compilation.CompiledAgentRegistry.GetOrCompile(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Configuration.Compilation.AgentCompilationContext! context) -> AgentCore.Application.Configuration.Compilation.CompiledAgent!
+AgentCore.Application.Configuration.Compilation.CompiledAgentShape
+AgentCore.Application.Configuration.Compilation.CompiledAgentShape.ExplicitGraph = 3 -> AgentCore.Application.Configuration.Compilation.CompiledAgentShape
+AgentCore.Application.Configuration.Compilation.CompiledAgentShape.PatternGraph = 2 -> AgentCore.Application.Configuration.Compilation.CompiledAgentShape
+AgentCore.Application.Configuration.Compilation.CompiledAgentShape.Policy = 1 -> AgentCore.Application.Configuration.Compilation.CompiledAgentShape
+AgentCore.Application.Configuration.Compilation.CompiledAgentShape.SingleAgent = 0 -> AgentCore.Application.Configuration.Compilation.CompiledAgentShape
+AgentCore.Application.Configuration.Compilation.ConfigurationCompiler
+AgentCore.Application.Configuration.Compilation.IAgentToolFactory
+AgentCore.Application.Configuration.Compilation.IAgentToolFactory.Create(AgentCore.Application.Configuration.Schema.ToolConfiguration! tool) -> Microsoft.Extensions.AI.AITool?
+AgentCore.Application.Configuration.Compilation.IChatClientFactory
+AgentCore.Application.Configuration.Compilation.IChatClientFactory.GetChatClient(AgentCore.Application.Configuration.Schema.ModelReference? model) -> Microsoft.Extensions.AI.IChatClient!
+AgentCore.Application.Policy.StagePolicy
+AgentCore.Application.Policy.StagePolicy.Advance(System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>! state) -> string!
+AgentCore.Application.Policy.StagePolicy.Configuration.get -> AgentCore.Application.Configuration.Schema.PolicyConfiguration!
+AgentCore.Application.Policy.StagePolicy.CurrentAgentId.get -> string?
+AgentCore.Application.Policy.StagePolicy.CurrentStage.get -> AgentCore.Application.Configuration.Schema.StageConfiguration!
+AgentCore.Application.Policy.StagePolicy.IsTerminal.get -> bool
+AgentCore.Application.Policy.StagePolicy.Stage.get -> string!
+AgentCore.Application.Policy.StagePolicy.StagePolicy(AgentCore.Application.Configuration.Schema.PolicyConfiguration! policy, AgentCore.Application.Configuration.Validation.IGuardEvaluator! guards) -> void
+AgentCore.Application.Policy.StagePolicy.ToDot() -> string!
+AgentCore.Application.Policy.StagePolicy.ToMermaid() -> string!
+AgentCore.Application.State.ConstStateWriter
+AgentCore.Application.State.CounterStateWriter
+AgentCore.Application.State.CounterStateWriter.Apply(AgentCore.Application.State.StateDocument! state) -> int
+AgentCore.Application.State.CounterStateWriter.CounterStateWriter(AgentCore.Application.Configuration.Validation.IGuardEvaluator! rules) -> void
+AgentCore.Application.State.StateDocument
+AgentCore.Application.State.StateDocument.CallDurationSeconds.get -> double
+AgentCore.Application.State.StateDocument.CallDurationSeconds.set -> void
+AgentCore.Application.State.StateDocument.Configuration.get -> AgentCore.Application.Configuration.Schema.AgentCoreConfiguration!
+AgentCore.Application.State.StateDocument.IsUnfilled(string! slot) -> bool
+AgentCore.Application.State.StateDocument.Read(string! slot) -> System.Text.Json.Nodes.JsonNode?
+AgentCore.Application.State.StateDocument.SlotNames.get -> System.Collections.Generic.IEnumerable<string!>!
+AgentCore.Application.State.StateDocument.Snapshot() -> System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>!
+AgentCore.Application.State.StateDocument.Stage.get -> string!
+AgentCore.Application.State.StateDocument.Stage.set -> void
+AgentCore.Application.State.StateDocument.StateDocument(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, string? stage = null) -> void
+AgentCore.Application.State.StateDocument.TryWrite(string! slot, System.Text.Json.Nodes.JsonNode? value) -> bool
+AgentCore.Application.State.StateDocument.TurnIndex.get -> int
+AgentCore.Application.State.StateDocument.TurnIndex.set -> void
+AgentCore.Application.State.StateExtractionResult
+AgentCore.Application.State.StateExtractionResult.<Clone>$() -> AgentCore.Application.State.StateExtractionResult!
+AgentCore.Application.State.StateExtractionResult.Deconstruct(out bool Deserialized, out int Filled, out int LeftNull, out int Rejected, out string? Failure) -> void
+AgentCore.Application.State.StateExtractionResult.Deserialized.get -> bool
+AgentCore.Application.State.StateExtractionResult.Deserialized.init -> void
+AgentCore.Application.State.StateExtractionResult.Equals(AgentCore.Application.State.StateExtractionResult? other) -> bool
+AgentCore.Application.State.StateExtractionResult.Failure.get -> string?
+AgentCore.Application.State.StateExtractionResult.Failure.init -> void
+AgentCore.Application.State.StateExtractionResult.Filled.get -> int
+AgentCore.Application.State.StateExtractionResult.Filled.init -> void
+AgentCore.Application.State.StateExtractionResult.LeftNull.get -> int
+AgentCore.Application.State.StateExtractionResult.LeftNull.init -> void
+AgentCore.Application.State.StateExtractionResult.Rejected.get -> int
+AgentCore.Application.State.StateExtractionResult.Rejected.init -> void
+AgentCore.Application.State.StateExtractionResult.StateExtractionResult(bool Deserialized, int Filled, int LeftNull, int Rejected, string? Failure) -> void
+AgentCore.Application.State.StateExtractor
+AgentCore.Application.State.StateExtractor.Configuration.get -> AgentCore.Application.Configuration.Schema.AgentCoreConfiguration!
+AgentCore.Application.State.StateExtractor.ExtractAsync(AgentCore.Application.State.StateDocument! state, System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! transcript, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<AgentCore.Application.State.StateExtractionResult!>!
+AgentCore.Application.State.StateExtractor.Schema.get -> System.Text.Json.JsonElement
+AgentCore.Application.State.StateExtractor.SlotNames.get -> System.Collections.Generic.IReadOnlyList<string!>!
+AgentCore.Application.State.StateExtractor.StateExtractor(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, Microsoft.Extensions.AI.IChatClient! chatClient) -> void
+AgentCore.Application.State.StateExtractor.Write(AgentCore.Application.State.StateDocument! state, string? replyText) -> AgentCore.Application.State.StateExtractionResult!
+AgentCore.Application.State.StateValueCoercion
+AgentCore.Application.State.ToolStateWriter
+AgentCore.Application.State.UnfilledSlotReminder
+const AgentCore.Application.Configuration.Compilation.AgentInstructions.Separator = "\n\n" -> string!
+const AgentCore.Application.Policy.StagePolicy.TurnEndedTrigger = "TurnEnded" -> string!
+const AgentCore.Application.State.StateExtractor.SchemaName = "agentcore_state" -> string!
+const AgentCore.Application.State.UnfilledSlotReminder.CloseTag = "</system-reminder>" -> string!
+const AgentCore.Application.State.UnfilledSlotReminder.OpenTag = "<system-reminder>" -> string!
+override AgentCore.Application.State.StateExtractionResult.Equals(object? obj) -> bool
+override AgentCore.Application.State.StateExtractionResult.GetHashCode() -> int
+override AgentCore.Application.State.StateExtractionResult.ToString() -> string!
+static AgentCore.Application.Configuration.Compilation.AgentInstructions.Compose(AgentCore.Application.Configuration.Schema.AgentDefaults? defaults, AgentCore.Application.Configuration.Schema.AgentConfiguration! agent) -> string?
+static AgentCore.Application.Configuration.Compilation.ConfigurationCompiler.Compile(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Configuration.Compilation.AgentCompilationContext! context) -> AgentCore.Application.Configuration.Compilation.CompiledAgent!
+static AgentCore.Application.Configuration.Compilation.ConfigurationCompiler.SelectShape(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration) -> AgentCore.Application.Configuration.Compilation.CompiledAgentShape
+static AgentCore.Application.State.ConstStateWriter.Apply(AgentCore.Application.State.StateDocument! state) -> int
+static AgentCore.Application.State.StateExtractionResult.Failed(string! failure) -> AgentCore.Application.State.StateExtractionResult!
+static AgentCore.Application.State.StateExtractionResult.operator !=(AgentCore.Application.State.StateExtractionResult? left, AgentCore.Application.State.StateExtractionResult? right) -> bool
+static AgentCore.Application.State.StateExtractionResult.operator ==(AgentCore.Application.State.StateExtractionResult? left, AgentCore.Application.State.StateExtractionResult? right) -> bool
+static AgentCore.Application.State.StateExtractor.BuildSchema(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration) -> System.Text.Json.JsonElement
+static AgentCore.Application.State.StateValueCoercion.TryCoerce(System.Text.Json.Nodes.JsonNode? value, AgentCore.Application.Configuration.Schema.StateSlotType slotType, out System.Text.Json.Nodes.JsonNode? coerced) -> bool
+static AgentCore.Application.State.ToolStateWriter.Apply(AgentCore.Application.State.StateDocument! state, string! toolId, System.Text.Json.Nodes.JsonNode? result) -> int
+static AgentCore.Application.State.UnfilledSlotReminder.Build(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, System.Collections.Generic.IReadOnlyList<string!>! slots) -> string?
+static AgentCore.Application.State.UnfilledSlotReminder.Build(AgentCore.Application.State.StateDocument! state, AgentCore.Application.Configuration.Schema.StageConfiguration! stage) -> string?
+static AgentCore.Application.State.UnfilledSlotReminder.Prepend(string? reminder, string! input) -> string!
+static AgentCore.Application.State.UnfilledSlotReminder.UnfilledSlots(AgentCore.Application.State.StateDocument! state, AgentCore.Application.Configuration.Schema.StageConfiguration! stage) -> System.Collections.Generic.IReadOnlyList<string!>!
+AgentCore.Application.Configuration.Schema.ToolConfiguration.Agent.get -> string?
+AgentCore.Application.Configuration.Schema.ToolConfiguration.Agent.init -> void
+AgentCore.Application.Configuration.Schema.ToolKind.Agent = 3 -> AgentCore.Application.Configuration.Schema.ToolKind
+static AgentCore.Application.Configuration.Validation.GuardOperators.DoubleNegationSugarRejection.get -> string!

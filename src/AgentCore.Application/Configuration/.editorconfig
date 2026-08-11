@@ -1,0 +1,13 @@
+# The configuration layer speaks the vocabulary of the document it reads, so two naming rules are
+# off inside this folder only.
+
+[*.cs]
+
+# CA1720: "Identifier contains type name". The document vocabulary is fixed by section 8 and by
+# RFC 6901: a JSON Pointer is a pointer, and a state slot type is boolean, integer, number, or
+# string. Renaming them would break the tie between the record and the document it binds.
+dotnet_diagnostic.CA1720.severity = none
+
+# CA1000: "Do not declare static members on generic types". EquatableList<T>.Empty and
+# EquatableDictionary<T>.Empty read the same way as ImmutableArray<T>.Empty does.
+dotnet_diagnostic.CA1000.severity = none

@@ -496,3 +496,6 @@ src/AgentCore.Api/config/config.json
 
 # Fly.io local state
 .fly/
+
+# Harness-created agent worktrees. Never commit these.
+.claude/worktrees/

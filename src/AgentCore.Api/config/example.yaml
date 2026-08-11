@@ -1,0 +1,220 @@
+# AgentCore configuration, the worked example of section 8.1.
+#
+# One document carries the whole schema. This file parses, and it passes check 1 of section 8.5.
+# The real config.yaml belongs to the consuming project and is not committed here.
+#
+# The same document loads identically as YAML and as JSON. See rule 17 of section 11.
+
+# The document version. agentcore/v1 is the only value this release accepts.
+apiVersion: agentcore/v1
+
+# The name of this agent. One deployment serves one brand.
+name: service-voice
+
+# ---------------------------------------------------------------------------------------------
+# state: the slots the guards read.
+#
+# Every slot has exactly one writer, and section 8.3 lists the four writers. Three slots are
+# reserved, always present, and read-only: stage, turnIndex, and callDurationSeconds. A document
+# may read them in a rule and may not declare them here.
+# ---------------------------------------------------------------------------------------------
+state:
+  # writer: extractor. A model call fills these from the finished turn. Every extractor slot is
+  # nullable on the wire, and a null leaves the slot at its previous value.
+  callerAskedForHuman: { type: boolean, default: false, writer: extractor }
+  callerSaidGoodbye:   { type: boolean, default: false, writer: extractor }
+  machineIdentified:   { type: boolean, default: false, writer: extractor }
+  resolved:            { type: boolean, default: false, writer: extractor }
+
+  # writer: tool. The value comes from a named field of a named tool result. A tool result has no
+  # declared shape, so check 2 verifies only that the tool id exists. The declared type wins:
+  # AgentCore coerces the value, and leaves the slot at its default when coercion fails.
+  orderStatus:         { type: string,  writer: tool, from: lookup_order.status }
+
+  # writer: counter. The slot increments whenever the increment rule is true.
+  failedResolveTurns:
+    type: integer
+    default: 0
+    writer: counter
+    increment:
+      and:
+        - { "===": [ { var: stage }, "resolve" ] }
+        - { "!": { var: resolved } }
+
+# ---------------------------------------------------------------------------------------------
+# extractor: the bridge from prose to typed state.
+#
+# AgentCore builds one JSON Schema from every writer: extractor slot, all nullable, and asks the
+# model to fill what the turn shows. The extractor never speaks, holds no tools, and decides
+# nothing. The guards decide.
+# ---------------------------------------------------------------------------------------------
+extractor:
+  # The model this calls. The name points at providers.llm[].as.
+  model: { ref: fill }
+
+  # after_reply is the only value agentcore/v1 defines. The reply streams first, the turn ends,
+  # and the extractor runs while the caller speaks. This is D21.
+  when: after_reply
+
+# ---------------------------------------------------------------------------------------------
+# guards: a name mapped to a JSONLogic rule.
+#
+# A name renders in the live Stateless mermaid diagram; an inline rule renders as a blob. Section
+# 8.4 holds the operator allow-list, and check 4 enforces it. Use ===, never ==.
+# ---------------------------------------------------------------------------------------------
+guards:
+  saidGoodbye:
+    { var: callerSaidGoodbye }
+
+  wantsHuman:
+    and:
+      - { "!": { var: callerSaidGoodbye } }
+      - { var: callerAskedForHuman }
+
+  identified:
+    and:
+      - { "!": { var: callerSaidGoodbye } }
+      - { "!": { var: callerAskedForHuman } }
+      - { var: machineIdentified }
+
+  goodbyeOrFixed:
+    or:
+      - { var: callerSaidGoodbye }
+      - and:
+          - { "!": { var: callerAskedForHuman } }
+          - { var: resolved }
+
+  humanOrExhausted:
+    and:
+      - { "!": { var: callerSaidGoodbye } }
+      - or:
+          - { var: callerAskedForHuman }
+          - and:
+              - { "!": { var: resolved } }
+              - { ">=": [ { var: failedResolveTurns }, 3 ] }
+
+# ---------------------------------------------------------------------------------------------
+# tools: the four kinds.
+#
+#   builtin  a tool AgentCore ships. uses: names it.
+#   http     one HTTP call. request: describes it.
+#   binding  a host delegate. binds: names it.
+#   agent    another declared agent. agent: names it.
+#
+# A builtin tool returns an error result and does not throw. See section 8.7.
+# ---------------------------------------------------------------------------------------------
+tools:
+  - { id: search_chunks, kind: builtin, uses: knowledge.search }
+  - { id: read_doc,      kind: builtin, uses: knowledge.read }
+
+  - id: lookup_order
+    kind: http
+    description: Read one order by its identifier.
+    # The raw JSON Schema of the arguments. AgentCore passes it to the model unchanged.
+    parameters:
+      type: object
+      properties: { orderId: { type: string } }
+      required: [ orderId ]
+    request:
+      method: GET
+      # A {name} placeholder takes its value from the tool arguments.
+      url: "https://api.example.com/orders/{orderId}"
+      # ${secret:name} is a reference and never a value. The parser reads it, and
+      # ISecretResolverPort resolves it at startup through the four-step chain in D22.
+      headers: { Authorization: "Bearer ${secret:orders-api-key}" }
+
+  - id: create_case
+    kind: binding
+    binds: CreateCase
+    description: Open a service case for a human agent.
+    parameters:
+      type: object
+      properties: { summary: { type: string } }
+      required: [ summary ]
+
+  # kind: agent is agent-as-tool, and it is not handoff. The outer agent calls the inner agent,
+  # reads the reply, and keeps control. graph: with pattern: handoff transfers control instead,
+  # so the two do not overlap. The compiler wraps the inner agent with AsAIFunction(), and the
+  # inner agent is the same process singleton every other caller shares. See T44.
+  #
+  # description: and parameters: both matter here, because the calling model reads both to decide
+  # when to delegate. AgentCore hands the filled arguments to the inner agent as one JSON object.
+  # Check 8 of section 8.5 walks the agent: field and rejects a delegation cycle at load.
+  #
+  # - id: ask_specialist
+  #   kind: agent
+  #   agent: resolver
+  #   description: Ask the resolution specialist to answer one product question.
+  #   parameters:
+  #     type: object
+  #     properties: { question: { type: string } }
+  #     required: [ question ]
+
+# ---------------------------------------------------------------------------------------------
+# agents: one stable prefix, and one delta for each stage.
+#
+# defaults.instructions is the cached prefix. Anything that changes per turn must sit below it, or
+# it defeats the cache for every later turn. A cache miss is a billing bug and never a capacity
+# one, because a cached prompt still counts in full against the rate limit.
+# ---------------------------------------------------------------------------------------------
+agents:
+  defaults:
+    model: { ref: reply, temperature: 0.3 }
+    instructions: |
+      <the stable cached prefix: persona, safety, transfer rules, and tool etiquette>
+  items:
+    - { id: greeter,    instructions: "<stage delta>", tools: [] }
+    - { id: identifier, instructions: "<stage delta>", tools: [ lookup_order ] }
+    - { id: resolver,   instructions: "<stage delta>", tools: [ search_chunks, read_doc ] }
+    - { id: escalator,  instructions: "<stage delta>", tools: [ create_case ] }
+    - { id: closer,     instructions: "<stage delta>", tools: [] }
+
+# ---------------------------------------------------------------------------------------------
+# policy: the stage machine, run by Stateless over string stages.
+#
+# The machine picks a stage each turn, and the stage names one agent. Check 5 evaluates the exits
+# of one stage as siblings: two true at the same time is a startup error. Zero true is normal and
+# means the stage stays where it is; a stage may set onNoMatch: error to reject that.
+#
+# A document may hold policy: or graph:, never both.
+# ---------------------------------------------------------------------------------------------
+policy:
+  initial: greeting
+  stages:
+    - id: greeting
+      agent: greeter
+      to: [ { stage: identify } ]
+
+    - id: identify
+      agent: identifier
+      to:
+        - { stage: close,    when: saidGoodbye }
+        - { stage: escalate, when: wantsHuman }
+        - { stage: resolve,  when: identified }
+
+    - id: resolve
+      agent: resolver
+      to:
+        - { stage: close,    when: goodbyeOrFixed }
+        - { stage: escalate, when: humanOrExhausted }
+
+    - id: escalate
+      agent: escalator
+      to: [ { stage: close } ]
+
+    - id: close
+      agent: closer
+      terminal: true
+
+# ---------------------------------------------------------------------------------------------
+# providers: the seam where the ports of section 7 bind.
+#
+# This section configures adapters and never changes agent shape.
+# ---------------------------------------------------------------------------------------------
+providers:
+  llm:
+    - { kind: openai, model: gpt-4.1-mini, as: reply }      # the voice path, chosen on latency
+    - { kind: openai, model: gpt-5.4-nano, as: fill }       # the extractor, chosen on null discipline
+  speech:    { kind: telnyx-relay }        # one vendor: STT, turn detection, TTS, interruption
+  telephony: { kind: telnyx }
+  knowledge: { store: zilliz, root: ./kb }
