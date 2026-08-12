@@ -1,1 +1,25 @@
 #nullable enable
+AgentCore.Domain.TurnResult
+AgentCore.Domain.TurnResult.<Clone>$() -> AgentCore.Domain.TurnResult!
+AgentCore.Domain.TurnResult.CallId.get -> string!
+AgentCore.Domain.TurnResult.CallId.init -> void
+AgentCore.Domain.TurnResult.Deconstruct(out string! CallId, out int TurnIndex, out string! StageBefore, out string! StageAfter, out string! ReplyText, out bool IsTerminal, out string? ExtractionFailure) -> void
+AgentCore.Domain.TurnResult.Equals(AgentCore.Domain.TurnResult? other) -> bool
+AgentCore.Domain.TurnResult.ExtractionFailure.get -> string?
+AgentCore.Domain.TurnResult.ExtractionFailure.init -> void
+AgentCore.Domain.TurnResult.IsTerminal.get -> bool
+AgentCore.Domain.TurnResult.IsTerminal.init -> void
+AgentCore.Domain.TurnResult.ReplyText.get -> string!
+AgentCore.Domain.TurnResult.ReplyText.init -> void
+AgentCore.Domain.TurnResult.StageAfter.get -> string!
+AgentCore.Domain.TurnResult.StageAfter.init -> void
+AgentCore.Domain.TurnResult.StageBefore.get -> string!
+AgentCore.Domain.TurnResult.StageBefore.init -> void
+AgentCore.Domain.TurnResult.TurnIndex.get -> int
+AgentCore.Domain.TurnResult.TurnIndex.init -> void
+AgentCore.Domain.TurnResult.TurnResult(string! CallId, int TurnIndex, string! StageBefore, string! StageAfter, string! ReplyText, bool IsTerminal, string? ExtractionFailure) -> void
+override AgentCore.Domain.TurnResult.Equals(object? obj) -> bool
+override AgentCore.Domain.TurnResult.GetHashCode() -> int
+override AgentCore.Domain.TurnResult.ToString() -> string!
+static AgentCore.Domain.TurnResult.operator !=(AgentCore.Domain.TurnResult? left, AgentCore.Domain.TurnResult? right) -> bool
+static AgentCore.Domain.TurnResult.operator ==(AgentCore.Domain.TurnResult? left, AgentCore.Domain.TurnResult? right) -> bool

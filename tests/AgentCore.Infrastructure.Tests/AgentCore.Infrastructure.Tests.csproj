@@ -16,4 +16,9 @@
 
   </ItemGroup>
 
+  <!-- The knowledge tree the file-system adapter reads. It travels with the test binary. -->
+  <ItemGroup>
+    <Content Include="kb-example/**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

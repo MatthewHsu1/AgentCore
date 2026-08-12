@@ -629,3 +629,107 @@ AgentCore.Application.Configuration.Schema.ToolConfiguration.Agent.get -> string
 AgentCore.Application.Configuration.Schema.ToolConfiguration.Agent.init -> void
 AgentCore.Application.Configuration.Schema.ToolKind.Agent = 3 -> AgentCore.Application.Configuration.Schema.ToolKind
 static AgentCore.Application.Configuration.Validation.GuardOperators.DoubleNegationSugarRejection.get -> string!
+AgentCore.Application.Runtime.CallSession
+AgentCore.Application.Runtime.CallSession.CallId.get -> string!
+AgentCore.Application.Runtime.CallSession.Compiled.get -> AgentCore.Application.Configuration.Compilation.CompiledAgent!
+AgentCore.Application.Runtime.CallSessionFactory
+AgentCore.Application.Runtime.CallSessionFactory.CallSessionFactory(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Configuration.Validation.IGuardEvaluator! guards, AgentCore.Application.State.StateExtractor? extractor = null, System.TimeProvider? timeProvider = null) -> void
+AgentCore.Application.Runtime.CallSessionFactory.Create(string? callId = null) -> AgentCore.Application.Runtime.CallSession!
+AgentCore.Application.Runtime.CallSession.IsComplete.get -> bool
+AgentCore.Application.Runtime.CallSession.LastTurn.get -> AgentCore.Domain.TurnResult?
+AgentCore.Application.Runtime.CallSession.RunTurnAsync(string! userInput, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<AgentCore.Domain.TurnResult!>!
+AgentCore.Application.Runtime.CallSession.RunTurnStreamingAsync(string! userInput, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
+AgentCore.Application.Runtime.CallSession.Stage.get -> string!
+AgentCore.Application.Runtime.CallSession.State.get -> AgentCore.Application.State.StateDocument!
+AgentCore.Application.Runtime.CallSession.Transcript.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatMessage!>!
+AgentCore.Application.Runtime.ICallSessionFactory
+AgentCore.Application.Runtime.ICallSessionFactory.Create(string? callId = null) -> AgentCore.Application.Runtime.CallSession!
+static AgentCore.Application.Runtime.CallSessionFactory.CreateExtractor(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Configuration.Compilation.IChatClientFactory! chatClients) -> AgentCore.Application.State.StateExtractor?
+AgentCore.Application.Secrets.ISecretResolverPort
+AgentCore.Application.Secrets.ISecretResolverPort.TryResolveAsync(string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string?>
+AgentCore.Application.Secrets.ResolvedSecrets
+AgentCore.Application.Secrets.ResolvedSecrets.Contains(string! name) -> bool
+AgentCore.Application.Secrets.ResolvedSecrets.Count.get -> int
+AgentCore.Application.Secrets.ResolvedSecrets.Format(AgentCore.Application.Configuration.Parsing.SecretTemplate! template) -> string!
+AgentCore.Application.Secrets.ResolvedSecrets.Names.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
+AgentCore.Application.Secrets.SecretResolutionException
+AgentCore.Application.Secrets.SecretResolutionException.SecretName.get -> string!
+AgentCore.Application.Secrets.SecretResolutionException.SecretResolutionException() -> void
+AgentCore.Application.Secrets.SecretResolutionException.SecretResolutionException(string! message) -> void
+AgentCore.Application.Secrets.SecretResolutionException.SecretResolutionException(string! message, System.Exception? innerException) -> void
+override AgentCore.Application.Secrets.ResolvedSecrets.ToString() -> string!
+static AgentCore.Application.Secrets.ResolvedSecrets.Create(System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string!, string!>>! secrets) -> AgentCore.Application.Secrets.ResolvedSecrets!
+static AgentCore.Application.Secrets.ResolvedSecrets.Empty.get -> AgentCore.Application.Secrets.ResolvedSecrets!
+static AgentCore.Application.Secrets.ResolvedSecrets.ResolveAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Secrets.ISecretResolverPort! resolver, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Secrets.ResolvedSecrets!>
+static AgentCore.Application.Secrets.SecretResolutionException.Unresolved(string! secretName, string? documentPointer = null, System.Exception? innerException = null) -> AgentCore.Application.Secrets.SecretResolutionException!
+abstract AgentCore.Application.Tools.DeclaredTool.CallAsync(Microsoft.Extensions.AI.AIFunctionArguments! arguments, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<object?>
+AgentCore.Application.Tools.BindingToolFactory
+AgentCore.Application.Tools.BindingToolFactory.BindingToolFactory(AgentCore.Application.Tools.ToolBindingRegistry! registry) -> void
+AgentCore.Application.Tools.BindingToolFactory.Create(AgentCore.Application.Configuration.Schema.ToolConfiguration! tool) -> Microsoft.Extensions.AI.AITool?
+AgentCore.Application.Tools.BuiltinToolFactory
+AgentCore.Application.Tools.BuiltinToolFactory.BuiltinToolFactory(AgentCore.Application.Tools.IKnowledgePort! knowledge) -> void
+AgentCore.Application.Tools.BuiltinToolFactory.Create(AgentCore.Application.Configuration.Schema.ToolConfiguration! tool) -> Microsoft.Extensions.AI.AITool?
+AgentCore.Application.Tools.BuiltinToolNames
+AgentCore.Application.Tools.CompositeAgentToolFactory
+AgentCore.Application.Tools.CompositeAgentToolFactory.CompositeAgentToolFactory(System.Collections.Generic.IEnumerable<AgentCore.Application.Configuration.Compilation.IAgentToolFactory!>! links) -> void
+AgentCore.Application.Tools.CompositeAgentToolFactory.Count.get -> int
+AgentCore.Application.Tools.CompositeAgentToolFactory.Create(AgentCore.Application.Configuration.Schema.ToolConfiguration! tool) -> Microsoft.Extensions.AI.AITool?
+AgentCore.Application.Tools.DeclaredTool
+AgentCore.Application.Tools.DeclaredTool.Declaration.get -> AgentCore.Application.Configuration.Schema.ToolConfiguration!
+AgentCore.Application.Tools.DeclaredTool.DeclaredTool(AgentCore.Application.Configuration.Schema.ToolConfiguration! tool, string? defaultSchema = null) -> void
+AgentCore.Application.Tools.DeclaredTool.Failed(string! message) -> System.Text.Json.Nodes.JsonObject!
+AgentCore.Application.Tools.IKnowledgePort
+AgentCore.Application.Tools.IKnowledgePort.ReadAsync(string! documentId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Tools.KnowledgeDocument?>
+AgentCore.Application.Tools.IKnowledgePort.SearchAsync(string! query, int limit, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Application.Tools.KnowledgeChunk!>!>
+AgentCore.Application.Tools.KnowledgeChunk
+AgentCore.Application.Tools.KnowledgeChunk.<Clone>$() -> AgentCore.Application.Tools.KnowledgeChunk!
+AgentCore.Application.Tools.KnowledgeChunk.DocumentId.get -> string!
+AgentCore.Application.Tools.KnowledgeChunk.DocumentId.init -> void
+AgentCore.Application.Tools.KnowledgeChunk.Equals(AgentCore.Application.Tools.KnowledgeChunk? other) -> bool
+AgentCore.Application.Tools.KnowledgeChunk.KnowledgeChunk() -> void
+AgentCore.Application.Tools.KnowledgeChunk.Score.get -> double
+AgentCore.Application.Tools.KnowledgeChunk.Score.init -> void
+AgentCore.Application.Tools.KnowledgeChunk.Text.get -> string!
+AgentCore.Application.Tools.KnowledgeChunk.Text.init -> void
+AgentCore.Application.Tools.KnowledgeDocument
+AgentCore.Application.Tools.KnowledgeDocument.<Clone>$() -> AgentCore.Application.Tools.KnowledgeDocument!
+AgentCore.Application.Tools.KnowledgeDocument.DocumentId.get -> string!
+AgentCore.Application.Tools.KnowledgeDocument.DocumentId.init -> void
+AgentCore.Application.Tools.KnowledgeDocument.Equals(AgentCore.Application.Tools.KnowledgeDocument? other) -> bool
+AgentCore.Application.Tools.KnowledgeDocument.KnowledgeDocument() -> void
+AgentCore.Application.Tools.KnowledgeDocument.Text.get -> string!
+AgentCore.Application.Tools.KnowledgeDocument.Text.init -> void
+AgentCore.Application.Tools.ToolBinding
+AgentCore.Application.Tools.ToolBindingRegistry
+AgentCore.Application.Tools.ToolBindingRegistry.Contains(string! name) -> bool
+AgentCore.Application.Tools.ToolBindingRegistry.Count.get -> int
+AgentCore.Application.Tools.ToolBindingRegistry.Names.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
+AgentCore.Application.Tools.ToolBindingRegistry.Register(string! name, AgentCore.Application.Tools.ToolBinding! binding) -> AgentCore.Application.Tools.ToolBindingRegistry!
+AgentCore.Application.Tools.ToolBindingRegistry.ToolBindingRegistry() -> void
+AgentCore.Application.Tools.ToolBindingRegistry.TryGetBinding(string! name, out AgentCore.Application.Tools.ToolBinding? binding) -> bool
+AgentCore.Application.Tools.ToolErrorResult
+const AgentCore.Application.Tools.BuiltinToolNames.KnowledgeRead = "knowledge.read" -> string!
+const AgentCore.Application.Tools.BuiltinToolNames.KnowledgeSearch = "knowledge.search" -> string!
+const AgentCore.Application.Tools.ToolErrorResult.ErrorProperty = "error" -> string!
+const AgentCore.Application.Tools.ToolErrorResult.MessageProperty = "message" -> string!
+const AgentCore.Application.Tools.ToolErrorResult.ToolProperty = "tool" -> string!
+override AgentCore.Application.Tools.DeclaredTool.Description.get -> string!
+override AgentCore.Application.Tools.DeclaredTool.JsonSchema.get -> System.Text.Json.JsonElement
+override AgentCore.Application.Tools.DeclaredTool.Name.get -> string!
+override AgentCore.Application.Tools.KnowledgeChunk.Equals(object? obj) -> bool
+override AgentCore.Application.Tools.KnowledgeChunk.GetHashCode() -> int
+override AgentCore.Application.Tools.KnowledgeChunk.ToString() -> string!
+override AgentCore.Application.Tools.KnowledgeDocument.Equals(object? obj) -> bool
+override AgentCore.Application.Tools.KnowledgeDocument.GetHashCode() -> int
+override AgentCore.Application.Tools.KnowledgeDocument.ToString() -> string!
+override sealed AgentCore.Application.Tools.DeclaredTool.InvokeCoreAsync(Microsoft.Extensions.AI.AIFunctionArguments! arguments, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<object?>
+static AgentCore.Application.Tools.DeclaredTool.ArgumentInteger(Microsoft.Extensions.AI.AIFunctionArguments! arguments, string! name, int fallback) -> int
+static AgentCore.Application.Tools.DeclaredTool.ArgumentsAsJson(Microsoft.Extensions.AI.AIFunctionArguments! arguments) -> System.Text.Json.Nodes.JsonObject!
+static AgentCore.Application.Tools.DeclaredTool.ArgumentText(Microsoft.Extensions.AI.AIFunctionArguments! arguments, string! name) -> string?
+static AgentCore.Application.Tools.KnowledgeChunk.operator ==(AgentCore.Application.Tools.KnowledgeChunk? left, AgentCore.Application.Tools.KnowledgeChunk? right) -> bool
+static AgentCore.Application.Tools.KnowledgeChunk.operator !=(AgentCore.Application.Tools.KnowledgeChunk? left, AgentCore.Application.Tools.KnowledgeChunk? right) -> bool
+static AgentCore.Application.Tools.KnowledgeDocument.operator ==(AgentCore.Application.Tools.KnowledgeDocument? left, AgentCore.Application.Tools.KnowledgeDocument? right) -> bool
+static AgentCore.Application.Tools.KnowledgeDocument.operator !=(AgentCore.Application.Tools.KnowledgeDocument? left, AgentCore.Application.Tools.KnowledgeDocument? right) -> bool
+static AgentCore.Application.Tools.ToolErrorResult.Create(string! tool, string! message) -> System.Text.Json.Nodes.JsonObject!
+static AgentCore.Application.Tools.ToolErrorResult.IsError(System.Text.Json.Nodes.JsonNode? result) -> bool
+virtual AgentCore.Application.Tools.ToolBinding.Invoke(System.Text.Json.Nodes.JsonObject! arguments, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<object?>
