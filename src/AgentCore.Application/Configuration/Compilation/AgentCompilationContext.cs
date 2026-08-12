@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Ports;
 
 namespace AgentCore.Application.Configuration.Compilation;
 
@@ -34,5 +35,10 @@ public sealed class AgentCompilationContext
     public IGuardEvaluator? Guards { get; init; }
 
     /// <summary>Gets or sets the source of the state a guarded graph edge reads.</summary>
+    /// <remarks>
+    /// The compiled graph is a process singleton under T44, so this source must not close over the
+    /// state of one call. It answers the state of the call running on the current flow of execution.
+    /// <c>CallStateScope.Snapshot</c> is that source, and <c>AddAgentCore</c> binds it.
+    /// </remarks>
     public Func<IReadOnlyDictionary<string, JsonNode?>>? StateSnapshot { get; init; }
 }

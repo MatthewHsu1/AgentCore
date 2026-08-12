@@ -19,6 +19,12 @@
       "minLength": 1,
       "description": "The name of the configured agent."
     },
+    "fallbackReply": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Section 8.7: the line the caller hears when a turn fails. It sits at the root because every document shape speaks it. The default is the sentence AgentCore ships."
+    },
     "state": {
       "type": "object",
       "description": "The declared state slots. Guards read only these and the three reserved slots.",
@@ -59,6 +65,9 @@
     },
     "providers": {
       "$ref": "#/$defs/providers"
+    },
+    "evaluation": {
+      "$ref": "#/$defs/evaluation"
     }
   },
   "dependentSchemas": {
@@ -653,6 +662,20 @@
         "kind": {
           "type": "string",
           "minLength": 1
+        }
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "description": "Triage row T18: the share of finished turns a judge scores. D9 keeps the judge off the turn.",
+      "additionalProperties": false,
+      "properties": {
+        "sampleRate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0,
+          "description": "The share of finished turns to evaluate, from 0 through 1. The default of 0 evaluates none."
         }
       }
     },

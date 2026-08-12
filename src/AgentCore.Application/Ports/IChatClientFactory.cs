@@ -1,7 +1,7 @@
 using AgentCore.Application.Configuration.Schema;
 using Microsoft.Extensions.AI;
 
-namespace AgentCore.Application.Configuration.Compilation;
+namespace AgentCore.Application.Ports;
 
 /// <summary>
 /// Resolves a <c>{ ref: reply }</c> model reference to a chat client.

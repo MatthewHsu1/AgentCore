@@ -1,6 +1,7 @@
 using System.Globalization;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Tools;
+using AgentCore.Application.Ports;
+using AgentCore.Domain.Knowledge;
 
 namespace AgentCore.Infrastructure.Knowledge;
 
@@ -23,8 +24,13 @@ namespace AgentCore.Infrastructure.Knowledge;
 /// built-in tool turns any failure into an error result and an empty answer says the same thing more
 /// plainly.
 /// </para>
+/// <para>
+/// This one class answers both knowledge ports. It is the document store of section 7, and it also
+/// ranks until the Zilliz connector binds <see cref="IKnowledgeRetrievalPort"/>. On that day the
+/// host binds the two ports to two adapters and this class keeps only the reading half.
+/// </para>
 /// </remarks>
-public sealed class FileSystemKnowledgeStore : IKnowledgePort
+public sealed class FileSystemKnowledgeStore : IKnowledgeRetrievalPort, IDocumentStorePort
 {
     /// <summary>The file extensions the tree holds.</summary>
     private static readonly string[] Extensions = [".md", ".markdown", ".txt"];

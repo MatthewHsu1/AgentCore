@@ -1,7 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Diagnostics;
 using Json.Logic;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Application.Configuration.Validation;
 
@@ -50,8 +52,26 @@ public sealed class GuardEvaluator : IGuardEvaluator
 
     /// <summary>Creates an evaluator over a <c>guards:</c> table.</summary>
     /// <param name="guards">The named guards, keyed by guard name. Each value is a raw JSONLogic rule.</param>
+    /// <remarks>
+    /// The cast picks the handler overload. An <see cref="ILogger"/> overload sits beside it, and a
+    /// bare <see langword="null"/> would not choose between the two.
+    /// </remarks>
     public GuardEvaluator(IReadOnlyDictionary<string, JsonNode> guards)
-        : this(guards, null)
+        : this(guards, (Action<string, Exception>?)null)
+    {
+    }
+
+    /// <summary>Creates an evaluator over a <c>guards:</c> table that reports each failure to a logger.</summary>
+    /// <param name="guards">The named guards, keyed by guard name. Each value is a raw JSONLogic rule.</param>
+    /// <param name="logger">The logger the failure of each distinct guard is written to.</param>
+    /// <remarks>
+    /// This is the binding section 8.7 asks for: a guard that throws is logged once, treated as
+    /// false, and the call continues. The composition root uses it, so the report reaches a host
+    /// without the host writing the handler.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="logger"/> is <see langword="null"/>.</exception>
+    public GuardEvaluator(IReadOnlyDictionary<string, JsonNode> guards, ILogger logger)
+        : this(guards, BindLogger(logger))
     {
     }
 
@@ -166,6 +186,16 @@ public sealed class GuardEvaluator : IGuardEvaluator
         }
 
         return data;
+    }
+
+    /// <summary>Turns one logger into the handler the failure path calls.</summary>
+    /// <param name="logger">The logger.</param>
+    /// <returns>The handler.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="logger"/> is <see langword="null"/>.</exception>
+    private static Action<string, Exception> BindLogger(ILogger logger)
+    {
+        ArgumentNullException.ThrowIfNull(logger);
+        return (guard, cause) => Log.GuardFailed(logger, guard, cause);
     }
 
     private CompiledGuard? ResolveCompiled(GuardReference guard)

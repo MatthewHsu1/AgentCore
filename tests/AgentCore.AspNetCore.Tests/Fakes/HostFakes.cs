@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
-using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Secrets;
+using AgentCore.Application.Ports;
+using AgentCore.Domain.Knowledge;
 using Microsoft.Extensions.AI;
 
 namespace AgentCore.AspNetCore.Tests.Fakes;
@@ -113,6 +113,26 @@ internal sealed class RoutingChatClientFactory : IChatClientFactory
 
     public IChatClient GetChatClient(ModelReference? model)
         => model is not null && _byName.TryGetValue(model.Ref, out var client) ? client : _fallback;
+}
+
+/// <summary>
+/// An offline knowledge adapter that answers both knowledge ports and holds nothing.
+/// </summary>
+/// <remarks>
+/// The file store of section 7 answers both ports the same way, so this fake stands in for it and
+/// this test project keeps its reference list short. A test that binds one port passes this object
+/// as one argument and leaves the other unbound.
+/// </remarks>
+internal sealed class EmptyKnowledgeStore : IKnowledgeRetrievalPort, IDocumentStorePort
+{
+    public ValueTask<IReadOnlyList<KnowledgeChunk>> SearchAsync(
+        string query,
+        int limit,
+        CancellationToken cancellationToken = default)
+        => ValueTask.FromResult<IReadOnlyList<KnowledgeChunk>>([]);
+
+    public ValueTask<KnowledgeDocument?> ReadAsync(string documentId, CancellationToken cancellationToken = default)
+        => ValueTask.FromResult<KnowledgeDocument?>(null);
 }
 
 /// <summary>

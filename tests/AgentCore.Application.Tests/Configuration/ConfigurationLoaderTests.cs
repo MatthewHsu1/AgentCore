@@ -153,6 +153,73 @@ public sealed class ConfigurationLoaderTests
     }
 
     [Fact]
+    public void Example_BindsTheSpokenFallbackAndTheSampleRate()
+    {
+        // Both keys are optional, and the worked example writes both at their default.
+        Assert.Equal(AgentCoreConfiguration.DefaultFallbackReply, Example.FallbackReply);
+        Assert.NotNull(Example.Evaluation);
+        Assert.Equal(EvaluationConfiguration.DefaultSampleRate, Example.Evaluation!.SampleRate);
+    }
+
+    [Fact]
+    public void ADocumentThatSetsBothTunableKeys_BindsThem()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: tuned
+            fallbackReply: "One moment please. I will try that again."
+            evaluation:
+              sampleRate: 0.25
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+
+        Assert.Equal("One moment please. I will try that again.", configuration.FallbackReply);
+        Assert.Equal(0.25, configuration.Evaluation!.SampleRate);
+    }
+
+    [Fact]
+    public void ADocumentThatOmitsBothTunableKeys_TakesTheDefaults()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: plain
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+
+        // Section 8.7 still speaks a fallback, and T18 still evaluates no turn.
+        Assert.Equal(AgentCoreConfiguration.DefaultFallbackReply, configuration.FallbackReply);
+        Assert.Null(configuration.Evaluation);
+    }
+
+    [Fact]
+    public void AnEvaluationSectionWithNoRate_TakesTheDefaultRate()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: plain
+            evaluation: {}
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+
+        Assert.Equal(EvaluationConfiguration.DefaultSampleRate, configuration.Evaluation!.SampleRate);
+    }
+
+    [Theory]
+    [InlineData("0", 0.0)]
+    [InlineData("1", 1.0)]
+    [InlineData("0.05", 0.05)]
+    public void ASampleRateInsideTheRange_Binds(string written, double expected)
+    {
+        var configuration = ConfigurationLoader.LoadYaml(
+            $"apiVersion: agentcore/v1\nname: plain\nevaluation:\n  sampleRate: {written}\n");
+
+        Assert.Equal(expected, configuration.Evaluation!.SampleRate);
+    }
+
+    [Fact]
     public void ShippedExampleFile_Loads()
     {
         var path = Path.Combine(RepositoryRoot(), "src", "AgentCore.Api", "config", "example.yaml");

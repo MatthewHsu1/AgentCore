@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Ports;
 using AgentCore.Application.Tests.Configuration;
 using AgentCore.Application.Tests.Tools.Fakes;
 using AgentCore.Application.Tools;
@@ -13,8 +14,10 @@ namespace AgentCore.Application.Tests.Tools;
 /// The first tool kind of section 8.1: <c>kind: builtin</c>, which AgentCore ships.
 /// </summary>
 /// <remarks>
-/// The worked example names two of them, <c>knowledge.search</c> and <c>knowledge.read</c>, and both
-/// call <see cref="IKnowledgePort"/>. A built-in tool returns an error result and does not throw.
+/// The worked example names two of them. <c>knowledge.search</c> calls
+/// <see cref="IKnowledgeRetrievalPort"/> and <c>knowledge.read</c> calls
+/// <see cref="IDocumentStorePort"/>, so each one binds apart. A built-in tool returns an error
+/// result and does not throw.
 /// </remarks>
 public sealed class BuiltinToolTests
 {
@@ -167,6 +170,60 @@ public sealed class BuiltinToolTests
         Assert.Contains("knowledge.summarise", failure.Message, StringComparison.Ordinal);
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // One port bound and one not. A vendor that supplies only search must not have to read files.
+    // ---------------------------------------------------------------------------------------------
+    [Fact]
+    public async Task AHostThatBindsOnlyTheDocumentStore_StillGetsKnowledgeRead()
+    {
+        MapKnowledgePort documents = new();
+        documents.With("returns.md", "A refund takes five days.");
+        BuiltinToolFactory factory = new(retrieval: null, documents);
+
+        var result = await CallAsync(factory.Create(Read), ("documentId", "returns.md"));
+
+        Assert.Equal("returns.md", Assert.IsType<JsonObject>(result)["documentId"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void AHostThatBindsOnlyTheDocumentStore_FailsTheLoadOnKnowledgeSearch()
+    {
+        // The failure lands while the document loads, and it names the port nothing binds. A tool
+        // that went missing here would take a whole access path with it.
+        BuiltinToolFactory factory = new(retrieval: null, new MapKnowledgePort());
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => factory.Create(Search));
+
+        Assert.Equal(ConfigurationCheck.ReferenceResolution, failure.Check);
+        Assert.Contains("search_chunks", failure.Message, StringComparison.Ordinal);
+        Assert.Contains(nameof(IKnowledgeRetrievalPort), failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AHostThatBindsOnlyRetrieval_StillGetsKnowledgeSearch()
+    {
+        MapKnowledgePort retrieval = new();
+        retrieval.With("returns.md", "A refund takes five days.");
+        BuiltinToolFactory factory = new(retrieval, documents: null);
+
+        var result = await CallAsync(factory.Create(Search), ("query", "refund"));
+
+        var chunks = Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(result)["chunks"]);
+        Assert.Equal("returns.md", chunks[0]!["documentId"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void AHostThatBindsOnlyRetrieval_FailsTheLoadOnKnowledgeRead()
+    {
+        BuiltinToolFactory factory = new(new MapKnowledgePort(), documents: null);
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => factory.Create(Read));
+
+        Assert.Equal(ConfigurationCheck.ReferenceResolution, failure.Check);
+        Assert.Contains("read_doc", failure.Message, StringComparison.Ordinal);
+        Assert.Contains(nameof(IDocumentStorePort), failure.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void TheBuiltinFactory_ServesNoOtherKind()
     {
@@ -177,8 +234,11 @@ public sealed class BuiltinToolTests
     // ---------------------------------------------------------------------------------------------
     // Helpers.
     // ---------------------------------------------------------------------------------------------
-    private static BuiltinToolFactory Factory(IKnowledgePort? knowledge = null)
-        => new(knowledge ?? new MapKnowledgePort());
+    private static BuiltinToolFactory Factory(MapKnowledgePort? knowledge = null)
+    {
+        var store = knowledge ?? new MapKnowledgePort();
+        return new BuiltinToolFactory(store, store);
+    }
 
     private static AIFunctionArguments Arguments(params (string Name, object? Value)[] arguments)
     {

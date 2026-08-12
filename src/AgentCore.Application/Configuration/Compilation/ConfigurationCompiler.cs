@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using Microsoft.Agents.AI;
@@ -431,6 +432,7 @@ public static class ConfigurationCompiler
         }
 
         WorkflowBuilder builder = new(nodes[starts[0].Id]);
+        Func<IReadOnlyDictionary<string, JsonNode?>>? guardedState = null;
 
         for (var index = 0; index < graph.Edges.Count; index++)
         {
@@ -457,14 +459,20 @@ public static class ConfigurationCompiler
             {
                 throw Fail(
                     ConfigurationError.AppendPointer(pointer, "when"),
-                    "the edge carries a guard, and the compilation context binds no guard evaluator and no "
-                    + "state source. A guarded edge that silently became unconditional is exactly the silent "
-                    + "graph failure section 8.2 refuses to ship.");
+                    $"the edge carries a guard, and the compilation context binds {Missing(context)}. Bind "
+                    + "both: AgentCompilationContext.Guards runs the rule, and "
+                    + "AgentCompilationContext.StateSnapshot reads the state of the call that runs now. "
+                    + "AddAgentCore binds them to GuardEvaluator and to CallStateScope.Snapshot. A guarded "
+                    + "edge that silently became unconditional is exactly the silent graph failure "
+                    + "section 8.2 refuses to ship.");
             }
 
-            // object, not List<ChatMessage>: the guard reads state, so every message on the edge
-            // takes the same answer and the turn token is not filtered out.
+            // The predicate captures no state of its own. The compiled graph is a process singleton
+            // under T44, so it asks the context for the state of the call that runs now. object, not
+            // List<ChatMessage>: the guard reads state, so every message on the edge takes the same
+            // answer and the turn token is not filtered out.
             builder = builder.AddEdge<object>(from, to, _ => evaluator.Evaluate(guard, snapshot()));
+            guardedState = snapshot;
         }
 
         if (outputs.Count > 0)
@@ -472,8 +480,53 @@ public static class ConfigurationCompiler
             builder = builder.WithOutputFrom([.. outputs]);
         }
 
-        return builder.WithName(configuration.Name).Build().AsAIAgent(name: configuration.Name);
+        var compiled = builder.WithName(configuration.Name).Build().AsAIAgent(name: configuration.Name);
+        return guardedState is null ? compiled : RequireState(compiled, guardedState);
     }
+
+    /// <summary>Wraps a guarded graph so a run with no state behind it fails before the graph starts.</summary>
+    /// <param name="graph">The workflow of row 4, already wrapped by <c>AsAIAgent()</c>.</param>
+    /// <param name="state">The state source the guarded edges read.</param>
+    /// <returns>The agent a caller runs.</returns>
+    /// <remarks>
+    /// <para>
+    /// A predicate that throws is not loud enough by itself. Measured on
+    /// <c>Microsoft.Agents.AI.Workflows</c> 1.17.0: <c>InProcessRunner</c> catches every superstep
+    /// fault and raises a <c>WorkflowErrorEvent</c> instead of throwing, and the <c>AsAIAgent()</c>
+    /// wrapper turns no such event into an update. A guarded edge whose state source failed would
+    /// therefore end the run at idle with no output and no error, which is the silent graph failure
+    /// section 8.2 refuses to ship.
+    /// </para>
+    /// <para>
+    /// The check runs once, before the graph does, where a throw still reaches the caller. It asks
+    /// the same source the edges ask, so it needs no second seam and it knows nothing about how the
+    /// host finds the state.
+    /// </para>
+    /// </remarks>
+    private static AIAgent RequireState(AIAgent graph, Func<IReadOnlyDictionary<string, JsonNode?>> state)
+        => new AIAgentBuilder(graph)
+            .Use(
+                (messages, session, options, inner, cancellationToken) =>
+                {
+                    _ = state();
+                    return inner.RunAsync(messages, session, options, cancellationToken);
+                },
+                (messages, session, options, inner, cancellationToken) =>
+                {
+                    _ = state();
+                    return inner.RunStreamingAsync(messages, session, options, cancellationToken);
+                })
+            .Build();
+
+    /// <summary>Names the seams a guarded edge needs and the context left unbound.</summary>
+    /// <param name="context">The seams the document names.</param>
+    /// <returns>The phrase the failure message carries.</returns>
+    private static string Missing(AgentCompilationContext context) => (context.Guards, context.StateSnapshot) switch
+    {
+        (null, null) => "no guard evaluator and no state source",
+        (null, _) => "no guard evaluator",
+        _ => "no state source",
+    };
 
     private static Dictionary<string, string> NoStages() => new(StringComparer.Ordinal);
 

@@ -1,7 +1,7 @@
 using AgentCore.Application.Configuration.Schema;
 using Microsoft.Extensions.AI;
 
-namespace AgentCore.Application.Configuration.Compilation;
+namespace AgentCore.Application.Ports;
 
 /// <summary>
 /// Turns one declared tool into the <see cref="AITool"/> an agent advertises.

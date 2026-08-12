@@ -1,4 +1,6 @@
-namespace AgentCore.Application.Secrets;
+using AgentCore.Application.Secrets;
+
+namespace AgentCore.Application.Ports;
 
 /// <summary>
 /// Reads the value behind one <c>${secret:name}</c> reference.

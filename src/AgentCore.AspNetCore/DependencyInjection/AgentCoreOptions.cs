@@ -1,7 +1,7 @@
-using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Secrets;
+using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.AspNetCore.DependencyInjection;
 
@@ -48,6 +48,28 @@ public sealed class AgentCoreOptions
     /// <summary>Gets or sets the clock the reserved <c>callDurationSeconds</c> slot reads.</summary>
     public TimeProvider? TimeProvider { get; set; }
 
+    /// <summary>Gets or sets the sink the audit chain of D23 is appended to.</summary>
+    /// <remarks>
+    /// A host that binds none still runs, and every event it produces is dropped. Section 7 names the
+    /// adapter this holds in production: <c>Infrastructure/Audit/Postgres</c>, behind a bounded
+    /// <c>Channel</c> and a background writer, so the append never sits on the turn.
+    /// </remarks>
+    public IAuditSinkPort? AuditSink { get; set; }
+
+    /// <summary>Gets or sets the factory the library takes its loggers from.</summary>
+    /// <remarks>
+    /// <para>
+    /// A host that binds none still runs, and every line the library writes goes nowhere. Section 8.7
+    /// says "log once" for three rows, and each of them writes here.
+    /// </para>
+    /// <para>
+    /// This is a factory and not a resolved service, because <c>AddAgentCore</c> loads, validates,
+    /// compiles, and binds the guard evaluator while the host starts. There is no service provider to
+    /// read at that moment.
+    /// </para>
+    /// </remarks>
+    public ILoggerFactory? LoggerFactory { get; set; }
+
     /// <summary>Gets the map from a <c>binds:</c> name to the host delegate behind it.</summary>
     /// <remarks>
     /// The document writes <c>kind: binding</c> with <c>binds: CreateCase</c> and knows nothing else.
@@ -58,8 +80,11 @@ public sealed class AgentCoreOptions
     /// <summary>Gets the seam that resolves a model reference, or <see langword="null"/>.</summary>
     internal Func<AgentCoreStartup, IChatClientFactory>? ChatClients { get; private set; }
 
-    /// <summary>Gets the seam the two built-in tools read, or <see langword="null"/>.</summary>
-    internal Func<AgentCoreStartup, IKnowledgePort>? Knowledge { get; private set; }
+    /// <summary>Gets the seam <c>knowledge.search</c> ranks with, or <see langword="null"/>.</summary>
+    internal Func<AgentCoreStartup, IKnowledgeRetrievalPort>? KnowledgeRetrieval { get; private set; }
+
+    /// <summary>Gets the seam <c>knowledge.read</c> opens, or <see langword="null"/>.</summary>
+    internal Func<AgentCoreStartup, IDocumentStorePort>? DocumentStore { get; private set; }
 
     /// <summary>Gets the extra tool factory links, in the order the composite asks them.</summary>
     internal IReadOnlyList<Func<AgentCoreStartup, IAgentToolFactory>> ToolFactories => _toolFactories;
@@ -78,17 +103,60 @@ public sealed class AgentCoreOptions
         return this;
     }
 
-    /// <summary>Binds the knowledge base the <c>kind: builtin</c> tools read.</summary>
+    /// <summary>Binds one adapter that answers both halves of the knowledge base.</summary>
+    /// <typeparam name="TKnowledge">The adapter type, which implements both knowledge ports.</typeparam>
     /// <param name="knowledge">Builds the adapter from the loaded document.</param>
     /// <returns>These options, so a host chains its calls.</returns>
     /// <remarks>
-    /// A document that declares no <c>kind: builtin</c> tool needs none. A document that declares one
-    /// and finds no store fails at startup, because the composite serves no kind it holds no link for.
+    /// <para>
+    /// A host whose store both ranks and reads writes this one line, and the file store is such a
+    /// store. A host with two adapters calls <see cref="UseKnowledgeRetrieval"/> and
+    /// <see cref="UseDocumentStore"/> instead, which is what the Zilliz connector beside a file
+    /// document store needs.
+    /// </para>
+    /// <para>
+    /// The factory runs once and the one object it returns answers both ports, so a host never opens
+    /// its store twice.
+    /// </para>
     /// </remarks>
-    public AgentCoreOptions UseKnowledge(Func<AgentCoreStartup, IKnowledgePort> knowledge)
+    public AgentCoreOptions UseKnowledge<TKnowledge>(Func<AgentCoreStartup, TKnowledge> knowledge)
+        where TKnowledge : class, IKnowledgeRetrievalPort, IDocumentStorePort
     {
         ArgumentNullException.ThrowIfNull(knowledge);
-        Knowledge = knowledge;
+
+        TKnowledge? built = null;
+        TKnowledge Once(AgentCoreStartup startup) => built ??= knowledge(startup);
+
+        KnowledgeRetrieval = Once;
+        DocumentStore = Once;
+        return this;
+    }
+
+    /// <summary>Binds the adapter <c>knowledge.search</c> ranks with.</summary>
+    /// <param name="retrieval">Builds the adapter from the loaded document.</param>
+    /// <returns>These options, so a host chains its calls.</returns>
+    /// <remarks>
+    /// A document that declares no <c>knowledge.search</c> tool needs none. A document that declares
+    /// one and finds no adapter fails at startup, and the message names this port.
+    /// </remarks>
+    public AgentCoreOptions UseKnowledgeRetrieval(Func<AgentCoreStartup, IKnowledgeRetrievalPort> retrieval)
+    {
+        ArgumentNullException.ThrowIfNull(retrieval);
+        KnowledgeRetrieval = retrieval;
+        return this;
+    }
+
+    /// <summary>Binds the adapter <c>knowledge.read</c> opens.</summary>
+    /// <param name="documents">Builds the adapter from the loaded document.</param>
+    /// <returns>These options, so a host chains its calls.</returns>
+    /// <remarks>
+    /// A document that declares no <c>knowledge.read</c> tool needs none. A document that declares
+    /// one and finds no adapter fails at startup, and the message names this port.
+    /// </remarks>
+    public AgentCoreOptions UseDocumentStore(Func<AgentCoreStartup, IDocumentStorePort> documents)
+    {
+        ArgumentNullException.ThrowIfNull(documents);
+        DocumentStore = documents;
         return this;
     }
 

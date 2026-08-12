@@ -4,7 +4,9 @@ namespace AgentCore.Application.Tests.Configuration;
 /// The worked example of section 8.1, in both forms.
 /// </summary>
 /// <remarks>
-/// The YAML is the document exactly as the design writes it. The JSON is the same document, and it
+/// The YAML is the document as the design writes it, plus the two optional keys section 8.1 does
+/// not print: <c>fallbackReply</c> and <c>evaluation</c>. Both hold their default, and the shipped
+/// <c>config/example.yaml</c> holds the same document. The JSON is the same document again, and it
 /// was produced by a different YAML reader so that rule 17 of section 11 tests something real.
 /// </remarks>
 internal static class ExampleDocument
@@ -14,6 +16,7 @@ internal static class ExampleDocument
         """
         apiVersion: agentcore/v1
         name: service-voice
+        fallbackReply: "I am sorry. I could not finish that. Please say it again."
 
         state:
           callerAskedForHuman: { type: boolean, default: false, writer: extractor }
@@ -127,6 +130,9 @@ internal static class ExampleDocument
           speech:    { kind: telnyx-relay }        # one vendor: STT, turn detection, TTS, interruption
           telephony: { kind: telnyx }
           knowledge: { store: zilliz, root: ./kb }
+
+        evaluation:
+          sampleRate: 0
         """;
 
     /// <summary>The same document as JSON.</summary>
@@ -135,6 +141,7 @@ internal static class ExampleDocument
         {
           "apiVersion": "agentcore/v1",
           "name": "service-voice",
+          "fallbackReply": "I am sorry. I could not finish that. Please say it again.",
           "state": {
             "callerAskedForHuman": {
               "type": "boolean",
@@ -454,6 +461,9 @@ internal static class ExampleDocument
               "store": "zilliz",
               "root": "./kb"
             }
+          },
+          "evaluation": {
+            "sampleRate": 0
           }
         }
         """;

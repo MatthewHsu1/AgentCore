@@ -11,6 +11,14 @@ apiVersion: agentcore/v1
 # The name of this agent. One deployment serves one brand.
 name: service-voice
 
+# The line the caller hears when a turn fails. Section 8.7 names the two failures that reach it: a
+# run that returns no text after 40 tool rounds, and a tool that fails four times in a row. The key
+# sits at the root because every shape speaks it, and a document with agents:, policy:, or graph:
+# reads the same line. The key is optional. The default is:
+#   "I am sorry. I could not finish that. Please say it again."
+# An empty line is silence on a voice call, so a blank value is a load error.
+fallbackReply: "I am sorry. I could not finish that. Please say it again."
+
 # ---------------------------------------------------------------------------------------------
 # state: the slots the guards read.
 #
@@ -218,3 +226,14 @@ providers:
   speech:    { kind: telnyx-relay }        # one vendor: STT, turn detection, TTS, interruption
   telephony: { kind: telnyx }
   knowledge: { store: zilliz, root: ./kb }
+
+# ---------------------------------------------------------------------------------------------
+# evaluation: the share of finished turns a judge scores.
+#
+# Triage row T18 says the sample rate comes from configuration. A judge never blocks a turn, which
+# is D9, so the rate selects a turn that already ended.
+# ---------------------------------------------------------------------------------------------
+evaluation:
+  # The share of finished turns to evaluate, from 0 through 1. The key is optional and the default
+  # is 0, which evaluates no turn. A value outside 0 through 1 is a load error.
+  sampleRate: 0

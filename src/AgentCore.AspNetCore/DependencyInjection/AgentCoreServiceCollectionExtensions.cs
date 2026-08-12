@@ -2,12 +2,16 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Evaluation;
+using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Secrets;
 using AgentCore.Application.Tools;
 using AgentCore.AspNetCore.Sessions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AgentCore.AspNetCore.DependencyInjection;
 
@@ -26,6 +30,20 @@ namespace AgentCore.AspNetCore.DependencyInjection;
 /// <see cref="CompiledAgent"/> is a process singleton by design, and it is registered as one.
 /// <see cref="CallSession"/> is not, and it is registered nowhere: one call gets one session from
 /// <see cref="ICallSessionFactory"/>, and <see cref="ICallSessionStore"/> holds it between requests.
+/// </para>
+/// <para>
+/// <b><c>providers.speech</c> and <c>providers.telephony</c> bind and this method reads neither, on
+/// purpose.</b> D28 buys the whole speech layer inside Telnyx Conversation Relay, so
+/// <c>providers.speech</c> names the relay and no speech adapter exists to bind: the code that reads
+/// it is <c>AgentCore.AspNetCore/Vendors/TelnyxRelay/</c>, an inbound <c>Map*</c> extension that
+/// turns relay frames into <see cref="IConversationPort"/> calls, and this scaffold does not ship it.
+/// <c>providers.telephony</c> names the vendor behind <c>ITelephonyControlPort</c> —
+/// answer, start, conference transfer, hang up — whose adapter is
+/// <c>AgentCore.Infrastructure/Telephony/Telnyx/</c>, and that port is not declared yet either.
+/// <b>Both are inbound or outbound transports and neither changes agent shape</b>, so binding them
+/// here before their adapters exist would register a name that resolves to nothing. Read them in the
+/// <c>Map*</c> extension that owns each transport, not in this method. Item 6c also forbids any
+/// audio in this solution, and neither adapter will hold one.
 /// </para>
 /// </remarks>
 public static class AgentCoreServiceCollectionExtensions
@@ -46,6 +64,11 @@ public static class AgentCoreServiceCollectionExtensions
 
         AgentCoreOptions options = new();
         configure(options);
+
+        // Step 0: take the loggers. Every seam below is bound while the host starts, so nothing can
+        // be resolved from a provider yet. A host that bound no factory gets loggers that write
+        // nowhere, and the library never throws for want of one.
+        ILoggerFactory loggers = options.LoggerFactory ?? NullLoggerFactory.Instance;
 
         // Step 1: load.
         var configuration = LoadDocument(options);
@@ -74,20 +97,36 @@ public static class AgentCoreServiceCollectionExtensions
                 + "compile table asks it for every agent and for the extractor."))
             .Invoke(startup);
 
-        GuardEvaluator guards = new(configuration.Guards);
+        // Section 8.7, row five: a guard that throws at run time is not a defect. The evaluator
+        // already reports each distinct guard exactly once, and this is where that report finds a
+        // logger. Nothing else binds it, so an unbound evaluator would report into nothing.
+        GuardEvaluator guards = new(configuration.Guards, loggers.CreateLogger<GuardEvaluator>());
         CompiledAgentRegistry registry = new();
 
-        // Guards and StateSnapshot stay unbound. Both belong to a guarded graph edge, and a guarded
-        // edge reads the state of one call, which this composition holds inside the session and not
-        // here. The compile table refuses such an edge rather than making it unconditional.
-        var compiled = registry.GetOrCompile(configuration, new AgentCompilationContext(chatClients) { Tools = tools });
+        // Row 4 of the compile table needs both seams, so both are bound here. The evaluator is
+        // shared and holds no state of its own. The state source is CallStateScope, which finds the
+        // state of the call running on the current flow of execution, and CallSession opens that
+        // scope for the turn. One compiled graph therefore serves every call, exactly as T44 asks,
+        // and two calls that run at the same time take different edges.
+        var compiled = registry.GetOrCompile(
+            configuration,
+            new AgentCompilationContext(chatClients)
+            {
+                Tools = tools,
+                Guards = guards,
+                StateSnapshot = CallStateScope.Snapshot,
+            });
 
         // Step 6: register. Everything above is shared and read-only for the life of the process.
+        // The audit sink and the logger are both optional and both have a working default, so a host
+        // that binds neither still answers a call and still produces the events of D23.
         CallSessionFactory sessions = new(
             compiled,
             guards,
             CallSessionFactory.CreateExtractor(compiled, chatClients),
-            options.TimeProvider);
+            options.TimeProvider,
+            options.AuditSink,
+            loggers.CreateLogger<CallSession>());
 
         services.AddSingleton(configuration);
         services.AddSingleton(secrets);
@@ -99,11 +138,51 @@ public static class AgentCoreServiceCollectionExtensions
         services.AddSingleton<IGuardEvaluator>(guards);
         services.AddSingleton<ICallSessionFactory>(sessions);
 
+        if (options.AuditSink is { } audit)
+        {
+            // Only what the host bound is registered. Nothing stands in for the PostgreSQL sink of
+            // section 7, because a list in this process holds none of the three defences of D23.
+            services.AddSingleton(audit);
+        }
+
         // The default store holds every call in this process. A host that registered another one
         // before this call keeps it.
         services.TryAddSingleton<ICallSessionStore, InMemoryCallSessionStore>();
 
+        AddEvaluation(services, configuration);
+
         return services;
+    }
+
+    /// <summary>Registers the evaluation seam of D13, at the rate the document sets.</summary>
+    /// <param name="services">The service collection of the host.</param>
+    /// <param name="configuration">The loaded document. It carries <c>evaluation.sampleRate</c>.</param>
+    /// <remarks>
+    /// <para>
+    /// Each registration is a <c>TryAdd</c>, so a host that registered its own registry, its own
+    /// sampler, or its own publisher keeps it. That matches how <see cref="ICallSessionStore"/>
+    /// is registered above, and it matters most for the publisher: the in-memory one keeps every
+    /// score in a list that grows without a bound, so a long-running host replaces it.
+    /// </para>
+    /// <para>
+    /// <b>The sample rate comes from the document, and it defaults to 0.</b> Triage row T18 says the
+    /// rate comes from configuration and defers the online path until the offline gate proves the
+    /// evaluators, and D9 says a judge must never block a turn. A document that sets no rate
+    /// therefore draws no number and calls no evaluator, so the seam is reachable and costs nothing.
+    /// The range is checked at load, so the value read here is already good.
+    /// </para>
+    /// <para>
+    /// <c>fault_code</c> is registered because D13 names it and because it calls no model: the
+    /// measurement is a set comparison over the reply text. It is the one evaluator that is safe to
+    /// register by default.
+    /// </para>
+    /// </remarks>
+    private static void AddEvaluation(IServiceCollection services, AgentCoreConfiguration configuration)
+    {
+        services.TryAddSingleton(new EvaluatorRegistry().Register("fault_code", new FaultCodeEvaluator()));
+        services.TryAddSingleton(new EvaluationSampler(
+            configuration.Evaluation?.SampleRate ?? EvaluationConfiguration.DefaultSampleRate));
+        services.TryAddSingleton<IEvaluationScorePublisher, InMemoryEvaluationScorePublisher>();
     }
 
     /// <summary>Reads the one document the options name.</summary>
@@ -143,9 +222,14 @@ public static class AgentCoreServiceCollectionExtensions
     {
         List<IAgentToolFactory> links = [];
 
-        if (options.Knowledge is { } knowledge)
+        // The two knowledge ports bind apart, so one of the two is enough for the link to be worth
+        // adding. The link then serves the built-in whose port is bound and fails the load on the
+        // built-in whose port is not.
+        if (options.KnowledgeRetrieval is not null || options.DocumentStore is not null)
         {
-            links.Add(new BuiltinToolFactory(knowledge(startup)));
+            links.Add(new BuiltinToolFactory(
+                options.KnowledgeRetrieval?.Invoke(startup),
+                options.DocumentStore?.Invoke(startup)));
         }
 
         // The binding link needs no adapter. The registry is the seam the host already filled.

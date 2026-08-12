@@ -1,4 +1,5 @@
 using System.Text;
+using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
 
 namespace AgentCore.Infrastructure.Secrets;

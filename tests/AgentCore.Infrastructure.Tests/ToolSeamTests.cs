@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
 using AgentCore.Application.Tools;
 using AgentCore.Infrastructure.Knowledge;
@@ -85,9 +86,13 @@ public sealed class ToolSeamTests
         bindings.Register("CreateCase", (arguments, cancellationToken)
             => ValueTask.FromResult<object?>(JsonNode.Parse("""{"caseId":"C-1"}""")));
 
+        // One file store answers both knowledge ports, so it binds to both halves of the built-in
+        // link. A Zilliz retrieval adapter would take the first argument and leave this one reading.
+        FileSystemKnowledgeStore store = new(document.Providers?.Knowledge);
+
         CompositeAgentToolFactory tools = new(
         [
-            new BuiltinToolFactory(new FileSystemKnowledgeStore(document.Providers?.Knowledge)),
+            new BuiltinToolFactory(store, store),
             new HttpToolFactory(client, secrets),
             new BindingToolFactory(bindings),
         ]);

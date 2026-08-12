@@ -22,6 +22,7 @@ internal static class ConfigurationBinder
         {
             ApiVersion = RequiredString(root, "apiVersion", ConfigurationError.RootPointer),
             Name = RequiredString(root, "name", ConfigurationError.RootPointer),
+            FallbackReply = BindFallbackReply(root, ConfigurationError.RootPointer),
             State = BindState(root, ConfigurationError.RootPointer),
             Extractor = BindExtractor(root, ConfigurationError.RootPointer),
             Guards = BindGuards(root, ConfigurationError.RootPointer),
@@ -30,7 +31,46 @@ internal static class ConfigurationBinder
             Policy = BindPolicy(root, ConfigurationError.RootPointer),
             Graph = BindGraph(root, ConfigurationError.RootPointer),
             Providers = BindProviders(root, ConfigurationError.RootPointer),
+            Evaluation = BindEvaluation(root, ConfigurationError.RootPointer),
         };
+    }
+
+    private static string BindFallbackReply(JsonObject root, string pointer)
+    {
+        if (OptionalString(root, "fallbackReply", pointer) is not { } text)
+        {
+            return AgentCoreConfiguration.DefaultFallbackReply;
+        }
+
+        // Section 8.7 asks for a spoken fallback, and a line with no words is silence on a voice
+        // call. That is the failure the fallback exists to prevent, so it is a load error.
+        return string.IsNullOrWhiteSpace(text)
+            ? throw Error(
+                ConfigurationError.AppendPointer(pointer, "fallbackReply"),
+                "the fallback reply holds no words. The caller hears it, so it must say something.")
+            : text;
+    }
+
+    private static EvaluationConfiguration? BindEvaluation(JsonObject root, string pointer)
+    {
+        if (Property(root, "evaluation") is not { } node)
+        {
+            return null;
+        }
+
+        var evaluationPointer = ConfigurationError.AppendPointer(pointer, "evaluation");
+        var evaluation = AsObject(node, evaluationPointer);
+        var rate = OptionalDouble(evaluation, "sampleRate", evaluationPointer)
+            ?? EvaluationConfiguration.DefaultSampleRate;
+
+        if (double.IsNaN(rate) || rate < 0 || rate > 1)
+        {
+            throw Error(
+                ConfigurationError.AppendPointer(evaluationPointer, "sampleRate"),
+                string.Create(CultureInfo.InvariantCulture, $"the sample rate is {rate}, and it runs from 0 through 1"));
+        }
+
+        return new EvaluationConfiguration { SampleRate = rate };
     }
 
     private static EquatableDictionary<StateSlotConfiguration> BindState(JsonObject root, string pointer)

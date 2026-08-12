@@ -14,11 +14,28 @@ public sealed record AgentCoreConfiguration
     /// <summary>The only <c>apiVersion</c> value this release accepts.</summary>
     public const string SupportedApiVersion = "agentcore/v1";
 
+    /// <summary>The spoken fallback used when the document names none.</summary>
+    /// <remarks>
+    /// Section 8.7 asks for a spoken fallback and names no text. This sentence is short, it is
+    /// speakable, and it asks the caller to go on, so the call survives the turn that failed.
+    /// </remarks>
+    public const string DefaultFallbackReply = "I am sorry. I could not finish that. Please say it again.";
+
     /// <summary>Gets the document version. It is always <see cref="SupportedApiVersion"/>.</summary>
     public required string ApiVersion { get; init; }
 
     /// <summary>Gets the name of the configured agent.</summary>
     public required string Name { get; init; }
+
+    /// <summary>Gets the line the caller hears when a turn fails.</summary>
+    /// <remarks>
+    /// Section 8.7 names two failures that end a turn with a spoken fallback: a run that returns no
+    /// text after 40 tool rounds, and a tool that fails four times in a row. The key sits at the root
+    /// of the document because every shape speaks it: a single agent, a <c>policy:</c> document, and
+    /// a <c>graph:</c> document all end a failed turn the same way. It defaults to
+    /// <see cref="DefaultFallbackReply"/>, and a document may not set an empty line.
+    /// </remarks>
+    public string FallbackReply { get; init; } = DefaultFallbackReply;
 
     /// <summary>Gets the declared state slots, keyed by slot name.</summary>
     public EquatableDictionary<StateSlotConfiguration> State { get; init; } = EquatableDictionary<StateSlotConfiguration>.Empty;
@@ -43,4 +60,7 @@ public sealed record AgentCoreConfiguration
 
     /// <summary>Gets the adapter settings, or <see langword="null"/> when the document declares none.</summary>
     public ProvidersConfiguration? Providers { get; init; }
+
+    /// <summary>Gets the evaluation settings, or <see langword="null"/> when the document declares none.</summary>
+    public EvaluationConfiguration? Evaluation { get; init; }
 }

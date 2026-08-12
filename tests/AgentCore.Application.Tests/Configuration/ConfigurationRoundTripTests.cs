@@ -50,6 +50,49 @@ public sealed class ConfigurationRoundTripTests
     }
 
     [Fact]
+    public void TheTwoTunableKeys_ReadTheSameFromYamlAndFromJson()
+    {
+        var fromYaml = ConfigurationLoader.LoadYaml("""
+            apiVersion: agentcore/v1
+            name: tuned
+            fallbackReply: "One moment please. I will try that again."
+            evaluation:
+              sampleRate: 0.25
+            """);
+        var fromJson = ConfigurationLoader.LoadJson("""
+            {
+              "apiVersion": "agentcore/v1",
+              "name": "tuned",
+              "fallbackReply": "One moment please. I will try that again.",
+              "evaluation": { "sampleRate": 0.25 }
+            }
+            """);
+
+        Assert.Equal(fromYaml, fromJson);
+        Assert.Equal(fromYaml.GetHashCode(), fromJson.GetHashCode());
+    }
+
+    [Fact]
+    public void AChangedSampleRate_DoesNotBindToEqualRecords()
+    {
+        var fromYaml = ConfigurationLoader.LoadYaml(ExampleDocument.Yaml);
+        var changed = ConfigurationLoader.LoadYaml(
+            ExampleDocument.Yaml.Replace("sampleRate: 0", "sampleRate: 0.5", StringComparison.Ordinal));
+
+        Assert.NotEqual(fromYaml, changed);
+    }
+
+    [Fact]
+    public void AChangedFallbackReply_DoesNotBindToEqualRecords()
+    {
+        var fromYaml = ConfigurationLoader.LoadYaml(ExampleDocument.Yaml);
+        var changed = ConfigurationLoader.LoadYaml(
+            ExampleDocument.Yaml.Replace("Please say it again.", "Please try once more.", StringComparison.Ordinal));
+
+        Assert.NotEqual(fromYaml, changed);
+    }
+
+    [Fact]
     public void ADuplicateJsonKey_Fails()
     {
         var failure = Assert.Throws<ConfigurationLoadException>(

@@ -1,7 +1,7 @@
 using System.Text.Json.Nodes;
-using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Ports;
 using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Tools;
@@ -20,26 +20,47 @@ public static class BuiltinToolNames
 /// Builds the <c>kind: builtin</c> tools.
 /// </summary>
 /// <remarks>
-/// Two names ship in this release, and both bind to <see cref="IKnowledgePort"/>. A <c>uses:</c>
-/// name nothing answers is a startup failure: the document names a tool AgentCore does not have, and
-/// an agent that quietly loses a tool is the silent failure the checks exist to stop.
+/// <para>
+/// Two names ship in this release, and each one binds to a different port:
+/// <c>knowledge.search</c> reads <see cref="IKnowledgeRetrievalPort"/> and <c>knowledge.read</c>
+/// reads <see cref="IDocumentStorePort"/>. A host binds one port, the other, or both, so a host with
+/// a document store and no retrieval adapter still gets <c>knowledge.read</c>.
+/// </para>
+/// <para>
+/// A <c>uses:</c> name nothing answers is a startup failure, and so is a <c>uses:</c> name whose
+/// port no adapter binds. Both stop the load and both name what is missing, because an agent that
+/// quietly loses a tool is the silent failure the checks exist to stop.
+/// </para>
 /// </remarks>
 public sealed class BuiltinToolFactory : IAgentToolFactory
 {
-    private readonly IKnowledgePort _knowledge;
+    private readonly IKnowledgeRetrievalPort? _retrieval;
+    private readonly IDocumentStorePort? _documents;
 
     /// <summary>Creates the factory.</summary>
-    /// <param name="knowledge">The knowledge base both built-in tools read.</param>
-    public BuiltinToolFactory(IKnowledgePort knowledge)
+    /// <param name="retrieval">
+    /// The adapter <c>knowledge.search</c> ranks with, or <see langword="null"/> when the host bound
+    /// none.
+    /// </param>
+    /// <param name="documents">
+    /// The adapter <c>knowledge.read</c> opens, or <see langword="null"/> when the host bound none.
+    /// </param>
+    /// <remarks>
+    /// One object that answers both ports passes as both arguments. That is what the file store
+    /// does today, and what a Zilliz retrieval adapter beside a file document store will not do.
+    /// </remarks>
+    public BuiltinToolFactory(IKnowledgeRetrievalPort? retrieval, IDocumentStorePort? documents)
     {
-        ArgumentNullException.ThrowIfNull(knowledge);
-        _knowledge = knowledge;
+        _retrieval = retrieval;
+        _documents = documents;
     }
 
     /// <summary>Builds one built-in tool.</summary>
     /// <param name="tool">The declared tool.</param>
     /// <returns>The tool, or <see langword="null"/> when the kind is not <see cref="ToolKind.Builtin"/>.</returns>
-    /// <exception cref="ConfigurationLoadException">The <c>uses:</c> name is not one AgentCore ships.</exception>
+    /// <exception cref="ConfigurationLoadException">
+    /// The <c>uses:</c> name is not one AgentCore ships, or no adapter binds the port that name reads.
+    /// </exception>
     public AITool? Create(ToolConfiguration tool)
     {
         ArgumentNullException.ThrowIfNull(tool);
@@ -51,8 +72,12 @@ public sealed class BuiltinToolFactory : IAgentToolFactory
 
         return tool.Uses switch
         {
-            BuiltinToolNames.KnowledgeSearch => new KnowledgeSearchTool(tool, _knowledge),
-            BuiltinToolNames.KnowledgeRead => new KnowledgeReadTool(tool, _knowledge),
+            BuiltinToolNames.KnowledgeSearch => new KnowledgeSearchTool(
+                tool,
+                _retrieval ?? throw Unbound(tool, BuiltinToolNames.KnowledgeSearch, nameof(IKnowledgeRetrievalPort))),
+            BuiltinToolNames.KnowledgeRead => new KnowledgeReadTool(
+                tool,
+                _documents ?? throw Unbound(tool, BuiltinToolNames.KnowledgeRead, nameof(IDocumentStorePort))),
             _ => throw new ConfigurationLoadException(new ConfigurationError
             {
                 Pointer = "/tools",
@@ -63,6 +88,20 @@ public sealed class BuiltinToolFactory : IAgentToolFactory
             }),
         };
     }
+
+    /// <summary>Reports the built-in tool whose port no adapter binds.</summary>
+    /// <param name="tool">The declared tool.</param>
+    /// <param name="uses">The <c>uses:</c> name the document wrote.</param>
+    /// <param name="port">The port that name reads.</param>
+    /// <returns>The failure the load throws.</returns>
+    private static ConfigurationLoadException Unbound(ToolConfiguration tool, string uses, string port)
+        => new(new ConfigurationError
+        {
+            Pointer = "/tools",
+            Message = $"the tool '{tool.Id}' is kind: builtin and uses: '{uses}', which reads {port}, and no "
+                      + "adapter binds that port. Bind one, or take the tool out of the document.",
+            Check = ConfigurationCheck.ReferenceResolution,
+        });
 }
 
 /// <summary>The <c>knowledge.search</c> built-in.</summary>
@@ -75,10 +114,10 @@ internal sealed class KnowledgeSearchTool : DeclaredTool
     /// <summary>The number of passages a call returns when the model asks for no limit.</summary>
     private const int DefaultLimit = 5;
 
-    private readonly IKnowledgePort _knowledge;
+    private readonly IKnowledgeRetrievalPort _retrieval;
 
-    internal KnowledgeSearchTool(ToolConfiguration tool, IKnowledgePort knowledge)
-        : base(tool, DefaultSchema) => _knowledge = knowledge;
+    internal KnowledgeSearchTool(ToolConfiguration tool, IKnowledgeRetrievalPort retrieval)
+        : base(tool, DefaultSchema) => _retrieval = retrieval;
 
     protected override async ValueTask<object?> CallAsync(
         AIFunctionArguments arguments,
@@ -90,7 +129,7 @@ internal sealed class KnowledgeSearchTool : DeclaredTool
         }
 
         var limit = Math.Clamp(ArgumentInteger(arguments, "limit", DefaultLimit), 1, 50);
-        var chunks = await _knowledge.SearchAsync(query, limit, cancellationToken).ConfigureAwait(false);
+        var chunks = await _retrieval.SearchAsync(query, limit, cancellationToken).ConfigureAwait(false);
 
         JsonArray results = [];
         foreach (var chunk in chunks)
@@ -114,10 +153,10 @@ internal sealed class KnowledgeReadTool : DeclaredTool
     private const string DefaultSchema =
         """{"type":"object","properties":{"documentId":{"type":"string","description":"The id a search result named."}},"required":["documentId"]}""";
 
-    private readonly IKnowledgePort _knowledge;
+    private readonly IDocumentStorePort _documents;
 
-    internal KnowledgeReadTool(ToolConfiguration tool, IKnowledgePort knowledge)
-        : base(tool, DefaultSchema) => _knowledge = knowledge;
+    internal KnowledgeReadTool(ToolConfiguration tool, IDocumentStorePort documents)
+        : base(tool, DefaultSchema) => _documents = documents;
 
     protected override async ValueTask<object?> CallAsync(
         AIFunctionArguments arguments,
@@ -128,7 +167,7 @@ internal sealed class KnowledgeReadTool : DeclaredTool
             return Failed("the call filled no 'documentId', so there is nothing to read.");
         }
 
-        var document = await _knowledge.ReadAsync(documentId, cancellationToken).ConfigureAwait(false);
+        var document = await _documents.ReadAsync(documentId, cancellationToken).ConfigureAwait(false);
         if (document is null)
         {
             return Failed($"the knowledge base holds no document '{documentId}'. Search for one first.");

@@ -92,6 +92,63 @@ public sealed class ConfigurationSchemaValidatorTests
         Assert.Contains(failure.Errors, error => error.Pointer == "/state/orderStatus");
     }
 
+    [Theory]
+    [InlineData("\"\"")]
+    [InlineData("\"   \"")]
+    public void AFallbackReplyWithNoWords_FailsWithThePointerOfTheField(string written)
+    {
+        // Section 8.7 asks for a spoken fallback, and a line with no words is silence on a call.
+        var failure = Assert.Throws<ConfigurationLoadException>(
+            () => ConfigurationLoader.LoadYaml($"apiVersion: agentcore/v1\nname: broken\nfallbackReply: {written}\n"));
+
+        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+        Assert.Contains(failure.Errors, error => error.Pointer == "/fallbackReply");
+    }
+
+    [Theory]
+    [InlineData("-0.1")]
+    [InlineData("1.1")]
+    public void ASampleRateOutsideTheRange_FailsWithThePointerOfTheField(string written)
+    {
+        var failure = Assert.Throws<ConfigurationLoadException>(
+            () => ConfigurationLoader.LoadYaml(
+                $"apiVersion: agentcore/v1\nname: broken\nevaluation:\n  sampleRate: {written}\n"));
+
+        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+        Assert.Contains(failure.Errors, error => error.Pointer == "/evaluation/sampleRate");
+        Assert.Contains("/evaluation/sampleRate", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ASampleRateThatIsNotANumber_FailsWithThePointerOfTheField()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            evaluation:
+              sampleRate: "half"
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Contains(failure.Errors, error => error.Pointer == "/evaluation/sampleRate");
+    }
+
+    [Fact]
+    public void AnUnknownEvaluationKey_Fails()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            evaluation:
+              sampleRatio: 0.5
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Contains("sampleRatio", failure.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void AnUnknownProperty_Fails()
     {

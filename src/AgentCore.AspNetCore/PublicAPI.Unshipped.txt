@@ -1,6 +1,6 @@
 #nullable enable
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions
-AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.AddToolFactory(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Configuration.Compilation.IAgentToolFactory!>! toolFactory) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.AddToolFactory(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Ports.IAgentToolFactory!>! toolFactory) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.AgentCoreOptions() -> void
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Bindings.get -> AgentCore.Application.Tools.ToolBindingRegistry!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Bind(string! name, AgentCore.Application.Tools.ToolBinding! binding) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
@@ -8,12 +8,14 @@ AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Configuration.get -> A
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.ConfigurationPath.get -> string?
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.ConfigurationPath.set -> void
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Configuration.set -> void
-AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.SecretResolver.get -> AgentCore.Application.Secrets.ISecretResolverPort?
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.SecretResolver.get -> AgentCore.Application.Ports.ISecretResolverPort?
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.SecretResolver.set -> void
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.TimeProvider.get -> System.TimeProvider?
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.TimeProvider.set -> void
-AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseChatClients(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Configuration.Compilation.IChatClientFactory!>! chatClients) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
-AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseKnowledge(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Tools.IKnowledgePort!>! knowledge) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseChatClients(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Ports.IChatClientFactory!>! chatClients) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseDocumentStore(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Ports.IDocumentStorePort!>! documents) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseKnowledge<TKnowledge>(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, TKnowledge!>! knowledge) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseKnowledgeRetrieval(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Ports.IKnowledgeRetrievalPort!>! retrieval) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreServiceCollectionExtensions
 AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup
 AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup.Configuration.get -> AgentCore.Application.Configuration.Schema.AgentCoreConfiguration!
@@ -35,3 +37,7 @@ const AgentCore.AspNetCore.Endpoints.ChatCompletionsEndpointRouteBuilderExtensio
 static AgentCore.AspNetCore.DependencyInjection.AgentCoreServiceCollectionExtensions.AddAgentCore(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 static AgentCore.AspNetCore.Endpoints.ChatCompletionsEndpointRouteBuilderExtensions.MapChatCompletions(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
 static AgentCore.AspNetCore.Endpoints.ChatCompletionsEndpointRouteBuilderExtensions.MapChatCompletions(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints, string! pattern) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.AuditSink.get -> AgentCore.Application.Ports.IAuditSinkPort?
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.AuditSink.set -> void
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.LoggerFactory.get -> Microsoft.Extensions.Logging.ILoggerFactory?
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.LoggerFactory.set -> void

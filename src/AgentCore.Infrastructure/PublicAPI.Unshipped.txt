@@ -2,15 +2,15 @@
 AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore
 AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.FileSystemKnowledgeStore(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration? knowledge) -> void
 AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.FileSystemKnowledgeStore(string! root) -> void
-AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.ReadAsync(string! documentId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Tools.KnowledgeDocument?>
+AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.ReadAsync(string! documentId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Domain.Knowledge.KnowledgeDocument?>
 AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.Root.get -> string!
-AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.SearchAsync(string! query, int limit, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Application.Tools.KnowledgeChunk!>!>
+AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.SearchAsync(string! query, int limit, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Domain.Knowledge.KnowledgeChunk!>!>
 AgentCore.Infrastructure.Llm.OpenAiChatClientFactory
 AgentCore.Infrastructure.Llm.OpenAiChatClientFactory.Dispose() -> void
 AgentCore.Infrastructure.Llm.OpenAiChatClientFactory.GetChatClient(AgentCore.Application.Configuration.Schema.ModelReference? model) -> Microsoft.Extensions.AI.IChatClient!
 AgentCore.Infrastructure.Llm.OpenAiChatClientFactory.OpenAiChatClientFactory(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, string! apiKey) -> void
 AgentCore.Infrastructure.Secrets.ChainedSecretResolver
-AgentCore.Infrastructure.Secrets.ChainedSecretResolver.ChainedSecretResolver(System.Collections.Generic.IEnumerable<AgentCore.Application.Secrets.ISecretResolverPort!>! links) -> void
+AgentCore.Infrastructure.Secrets.ChainedSecretResolver.ChainedSecretResolver(System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ISecretResolverPort!>! links) -> void
 AgentCore.Infrastructure.Secrets.ChainedSecretResolver.Count.get -> int
 AgentCore.Infrastructure.Secrets.ChainedSecretResolver.TryResolveAsync(string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string?>
 AgentCore.Infrastructure.Secrets.EnvironmentSecretResolver
@@ -28,5 +28,5 @@ const AgentCore.Infrastructure.Llm.OpenAiChatClientFactory.ApiKeySecretName = "o
 const AgentCore.Infrastructure.Llm.OpenAiChatClientFactory.ApiKeyVariableName = "OPENAI_API_KEY" -> string!
 const AgentCore.Infrastructure.Llm.OpenAiChatClientFactory.ProviderKind = "openai" -> string!
 const AgentCore.Infrastructure.Secrets.FileSecretResolver.DefaultDirectory = "/run/secrets" -> string!
-static AgentCore.Infrastructure.Llm.OpenAiChatClientFactory.CreateAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Secrets.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Infrastructure.Llm.OpenAiChatClientFactory!>
+static AgentCore.Infrastructure.Llm.OpenAiChatClientFactory.CreateAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Infrastructure.Llm.OpenAiChatClientFactory!>
 static AgentCore.Infrastructure.Secrets.EnvironmentSecretResolver.ToVariableName(string! name) -> string!

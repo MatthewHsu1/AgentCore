@@ -2,6 +2,7 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.State;
 using AgentCore.Application.Tests.Fakes;
@@ -517,6 +518,310 @@ public sealed class CallSessionTests
         }
 
         Assert.NotNull(session.LastTurn);
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Section 8.7, last row: the run returns quietly with no text.
+    // -------------------------------------------------------------------------------------------
+    [Fact]
+    public async Task AnEmptyReply_SpeaksTheFallbackAndReportsWhyTheTurnFailed()
+    {
+        using SequencedChatClient reply = new("   ");
+        using SequencedChatClient fill = new(StayingNull);
+        var session = Build(PolicyYaml, reply, fill).Create();
+
+        var turn = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+
+        // Request 41 goes out with no tools and the run returns with no exception. On a voice call
+        // that is silence, so the turn loop reads the reply rather than trusting the absence of a
+        // failure.
+        Assert.Equal(CallSession.FallbackReply, turn.ReplyText);
+        Assert.Equal(CallSession.EmptyReplyReason, turn.Failure);
+        Assert.Null(turn.InterruptedAfter);
+
+        // The writers still ran, and the transcript holds what the caller heard.
+        Assert.Equal(1, session.State.TurnIndex);
+        Assert.Equal(1, session.State.Read("greetingTurns")!.GetValue<long>());
+        Assert.Equal(CallSession.FallbackReply, session.Transcript[^1].Text);
+    }
+
+    [Fact]
+    public async Task AnEmptyReply_LeavesTheSessionReadyForTheNextTurn()
+    {
+        using SequencedChatClient reply = new("", "I am back.");
+        using SequencedChatClient fill = new(StayingNull);
+        var session = Build(PolicyYaml, reply, fill).Create();
+
+        var first = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+        var second = await session.RunTurnAsync("still there?", TestContext.Current.CancellationToken);
+
+        Assert.Equal(CallSession.FallbackReply, first.ReplyText);
+        Assert.Equal("I am back.", second.ReplyText);
+        Assert.Null(second.Failure);
+        Assert.Equal(1, second.TurnIndex);
+    }
+
+    [Fact]
+    public async Task Streaming_SpeaksTheFallbackWhenTheRunProducesNoText()
+    {
+        using LifecycleChatClient reply = new();
+        var session = Build(TwoStagesYaml, reply, null).Create();
+
+        List<ChatResponseUpdate> updates = [];
+        await foreach (var update in session.RunTurnStreamingAsync("hi", TestContext.Current.CancellationToken))
+        {
+            updates.Add(update);
+        }
+
+        Assert.Empty(updates);
+        Assert.NotNull(session.LastTurn);
+        Assert.Equal(CallSession.FallbackReply, session.LastTurn.ReplyText);
+        Assert.Equal(CallSession.EmptyReplyReason, session.LastTurn.Failure);
+        Assert.Equal("close", session.Stage);
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Section 8.7, sixth row: the 4th consecutive tool failure.
+    // -------------------------------------------------------------------------------------------
+    [Fact]
+    public async Task TheFourthConsecutiveToolFailure_EndsTheTurnAndNeverKillsTheCall()
+    {
+        using LoopingToolCallingChatClient reply = new();
+        using SequencedChatClient fill = new(StayingNull);
+        ThrowingToolFactory tools = new();
+        var session = Build(ToolYaml, reply, fill, tools).Create();
+
+        var turn = await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
+
+        // MaximumConsecutiveErrorsPerRequest is 3, so the 4th failure throws out of the run.
+        Assert.Equal(4, tools.Calls);
+        Assert.Equal(CallSession.FallbackReply, turn.ReplyText);
+        Assert.NotNull(turn.Failure);
+        Assert.StartsWith(CallSession.ToolFailureReason, turn.Failure, StringComparison.Ordinal);
+        Assert.Contains(ThrowingToolFactory.Message, turn.Failure, StringComparison.Ordinal);
+
+        // The writers ran in their fixed order, and the machine picked the stage of the next turn.
+        Assert.Equal(1, session.State.TurnIndex);
+        Assert.Equal("greeting", turn.StageAfter);
+        Assert.False(session.IsComplete);
+
+        // The transcript holds the spoken line alone. A half-finished tool round would otherwise
+        // leave a call with no result behind, and the next turn would send it.
+        Assert.Equal(2, session.Transcript.Count);
+        Assert.Equal(CallSession.FallbackReply, session.Transcript[^1].Text);
+    }
+
+    [Fact]
+    public async Task TheFourthConsecutiveToolFailure_LeavesTheSessionUnlocked()
+    {
+        using LoopingToolCallingChatClient reply = new();
+        using SequencedChatClient fill = new(StayingNull);
+        var session = Build(ToolYaml, reply, fill, new ThrowingToolFactory()).Create();
+
+        await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
+
+        // The _running flag went back to zero, so the next turn starts rather than throwing.
+        var second = await session.RunTurnAsync("try again", TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, second.TurnIndex);
+        Assert.Equal(CallSession.FallbackReply, second.ReplyText);
+    }
+
+    [Fact]
+    public async Task Streaming_EndsTheTurnWhenTheFourthConsecutiveToolFailureThrows()
+    {
+        using LoopingToolCallingChatClient reply = new();
+        using SequencedChatClient fill = new(StayingNull);
+        ThrowingToolFactory tools = new();
+        var session = Build(ToolYaml, reply, fill, tools).Create();
+
+        List<ChatResponseUpdate> updates = [];
+        await foreach (var update in session.RunTurnStreamingAsync(
+            "where is my order", TestContext.Current.CancellationToken))
+        {
+            updates.Add(update);
+        }
+
+        // The enumeration ends rather than throwing, so the host never sees the fault.
+        Assert.Equal(4, tools.Calls);
+        Assert.NotNull(session.LastTurn);
+        Assert.Equal(CallSession.FallbackReply, session.LastTurn.ReplyText);
+        Assert.StartsWith(CallSession.ToolFailureReason, session.LastTurn.Failure!, StringComparison.Ordinal);
+        Assert.Equal(1, session.State.TurnIndex);
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Item 6a: barge-in. The record holds what the caller heard.
+    // -------------------------------------------------------------------------------------------
+    [Fact]
+    public async Task AnInterruption_RecordsTheHeardTextAndTheDurationTheRelayReported()
+    {
+        using ScriptedChatClient reply = new("I can help with that,", " and here is the long part.")
+        {
+            GateAfterFirstFragment = true,
+        };
+        using SequencedChatClient fill = new(StayingNull);
+        var session = Build(PolicyYaml, reply, fill).Create();
+
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(30));
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
+            timeout.Token, TestContext.Current.CancellationToken);
+
+        await using var updates = session.RunTurnStreamingAsync("hi", linked.Token).GetAsyncEnumerator(linked.Token);
+        Assert.True(await updates.MoveNextAsync());
+        Assert.Equal("I can help with that,", updates.Current.Text);
+
+        // Section 7.1 reports both values on the interrupt frame, at 1 ms. Nothing estimates either.
+        Assert.True(session.Interrupt("I can help", TimeSpan.FromMilliseconds(740)));
+        Assert.False(await updates.MoveNextAsync());
+
+        Assert.NotNull(session.LastTurn);
+        Assert.Equal("I can help", session.LastTurn.ReplyText);
+        Assert.Equal(TimeSpan.FromMilliseconds(740), session.LastTurn.InterruptedAfter);
+        Assert.Null(session.LastTurn.Failure);
+
+        // The transcript holds the text the caller heard, not the text the model produced.
+        Assert.Equal("I can help", session.Transcript[^1].Text);
+        Assert.DoesNotContain(session.Transcript, message => Contains(message, "long part"));
+    }
+
+    [Fact]
+    public async Task AnInterruption_RunsEveryWriterAndLeavesTheSessionReady()
+    {
+        using ScriptedChatClient reply = new("hello", " there.") { GateAfterFirstFragment = true };
+        using SequencedChatClient fill = new(StayingNull);
+        var session = Build(PolicyYaml, reply, fill).Create();
+
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(30));
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
+            timeout.Token, TestContext.Current.CancellationToken);
+
+        await using (var updates = session.RunTurnStreamingAsync("hi", linked.Token).GetAsyncEnumerator(linked.Token))
+        {
+            Assert.True(await updates.MoveNextAsync());
+            Assert.True(session.Interrupt("hel", TimeSpan.FromMilliseconds(120)));
+
+            while (await updates.MoveNextAsync())
+            {
+                // The stream ends on the interruption, so nothing arrives here.
+            }
+        }
+
+        // The writers ran in their fixed order, and the counter read the stage the turn spoke in.
+        Assert.Equal(1, session.State.TurnIndex);
+        Assert.Equal(1, session.State.Read("greetingTurns")!.GetValue<long>());
+        Assert.Equal("greeting", session.Stage);
+
+        // The session is not locked, so the caller who interrupted can speak next.
+        reply.OpenGate();
+        var next = await session.RunTurnAsync("go on", linked.Token);
+        Assert.Equal(1, next.TurnIndex);
+        Assert.Null(next.InterruptedAfter);
+    }
+
+    [Fact]
+    public async Task AnInterruption_EndsATurnThatDoesNotStream()
+    {
+        using ScriptedChatClient reply = new("hello", " there.") { GateAfterFirstFragment = true };
+        using SequencedChatClient fill = new(StayingNull);
+        var session = Build(PolicyYaml, reply, fill).Create();
+
+        // The turn takes the session before its first await, so the frame always reaches it.
+        var running = session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+        Assert.True(session.Interrupt("hel", TimeSpan.FromMilliseconds(90)));
+
+        var turn = await running;
+
+        Assert.Equal("hel", turn.ReplyText);
+        Assert.Equal(TimeSpan.FromMilliseconds(90), turn.InterruptedAfter);
+        Assert.Null(turn.Failure);
+        Assert.Equal(1, session.State.TurnIndex);
+    }
+
+    [Fact]
+    public void AnInterruptionWithNoRunningTurn_ReportsFalseAndChangesNothing()
+    {
+        using SequencedChatClient reply = new("hello there.");
+        using SequencedChatClient fill = new(StayingNull);
+        var session = Build(PolicyYaml, reply, fill).Create();
+
+        // A frame that arrives after the turn ended must not drop the call, so it answers false.
+        Assert.False(session.Interrupt("nothing played", TimeSpan.FromMilliseconds(5)));
+
+        Assert.Null(session.LastTurn);
+        Assert.Equal(0, session.State.TurnIndex);
+        Assert.Empty(session.Transcript);
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Section 8.6: the update stream carries content only.
+    // -------------------------------------------------------------------------------------------
+    [Fact]
+    public async Task Streaming_DropsEveryUpdateThatCarriesNoContent()
+    {
+        using LifecycleChatClient reply = new("hello", " there.");
+        var session = Build(TwoStagesYaml, reply, null).Create();
+
+        List<ChatResponseUpdate> updates = [];
+        await foreach (var update in session.RunTurnStreamingAsync("hi", TestContext.Current.CancellationToken))
+        {
+            updates.Add(update);
+        }
+
+        // AsAIAgent() yields 47 updates for 40 text fragments, and seven carry no content. The seam
+        // filters them once, so no host writes the filter again.
+        Assert.Equal(6, reply.Yielded);
+        Assert.Equal(["hello", " there."], updates.Select(update => update.Text).ToArray());
+        Assert.NotNull(session.LastTurn);
+        Assert.Equal("hello there.", session.LastTurn.ReplyText);
+    }
+
+    [Fact]
+    public async Task Streaming_KeepsTheUpdateThatCarriesAToolCall()
+    {
+        using ToolCallingChatClient reply = new("your order is on the way.");
+        using SequencedChatClient fill = new(StayingNull);
+        var session = Build(ToolYaml, reply, fill, new StubToolFactory("""{ "status": "shipped" }""")).Create();
+
+        List<ChatResponseUpdate> updates = [];
+        await foreach (var update in session.RunTurnStreamingAsync(
+            "where is my order", TestContext.Current.CancellationToken))
+        {
+            updates.Add(update);
+        }
+
+        // A tool call and a tool result are content a host may show, so the filter keeps them.
+        Assert.Contains(updates, update => update.Contents.OfType<FunctionCallContent>().Any());
+        Assert.Contains(updates, update => update.Text.Length > 0);
+        Assert.DoesNotContain(updates, update => update.Contents.Count == 0);
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // D4: the inbound port.
+    // -------------------------------------------------------------------------------------------
+    [Fact]
+    public async Task TheSession_SatisfiesTheInboundPort()
+    {
+        using SequencedChatClient reply = new("hello there.", "still here.");
+        using SequencedChatClient fill = new(StayingNull);
+        var port = Assert.IsAssignableFrom<IConversationPort>(Build(PolicyYaml, reply, fill).Create("call-9"));
+
+        var turn = await port.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+
+        // The relay shim and the SSE endpoint both drive this contract and reach past it for nothing.
+        Assert.Equal("call-9", port.CallId);
+        Assert.Equal("greeting", port.Stage);
+        Assert.False(port.IsComplete);
+        Assert.Same(turn, port.LastTurn);
+        Assert.False(port.Interrupt("nothing played", TimeSpan.Zero));
+
+        List<ChatResponseUpdate> updates = [];
+        await foreach (var update in port.RunTurnStreamingAsync("still there?", TestContext.Current.CancellationToken))
+        {
+            updates.Add(update);
+        }
+
+        Assert.Equal("still here.", string.Concat(updates.Select(update => update.Text)));
     }
 
     // -------------------------------------------------------------------------------------------

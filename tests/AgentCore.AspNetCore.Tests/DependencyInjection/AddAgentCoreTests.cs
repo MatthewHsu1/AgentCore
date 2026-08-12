@@ -1,12 +1,16 @@
 using System.Text.Json.Nodes;
+using AgentCore.Application.Audit;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
+using AgentCore.Application.Evaluation;
+using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Secrets;
 using AgentCore.Application.Tools;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Sessions;
 using AgentCore.AspNetCore.Tests.Fakes;
+using AgentCore.Domain.Audit;
 using AgentCore.Infrastructure.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -26,6 +30,22 @@ public sealed class AddAgentCoreTests
         """
         apiVersion: agentcore/v1
         name: composed
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything" }
+        providers:
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        """;
+
+    // The same agent, with both tunable keys of the document set away from their default.
+    private const string TunedYaml =
+        """
+        apiVersion: agentcore/v1
+        name: tuned
+        fallbackReply: "One moment please. I will try that again."
+        evaluation:
+          sampleRate: 1
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
@@ -55,6 +75,37 @@ public sealed class AddAgentCoreTests
             - { kind: openai, model: gpt-4.1-mini, as: reply }
         """;
 
+    // Both built-in tools, so one document reaches both knowledge ports.
+    private const string KnowledgeYaml =
+        """
+        apiVersion: agentcore/v1
+        name: with-knowledge
+        tools:
+          - { id: search_chunks, kind: builtin, uses: knowledge.search }
+          - { id: read_doc,      kind: builtin, uses: knowledge.read }
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything", tools: [ search_chunks, read_doc ] }
+        providers:
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        """;
+
+    // Only the tool the document store answers, so a host that binds no retrieval adapter starts.
+    private const string ReadOnlyKnowledgeYaml =
+        """
+        apiVersion: agentcore/v1
+        name: with-document-store
+        tools:
+          - { id: read_doc, kind: builtin, uses: knowledge.read }
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything", tools: [ read_doc ] }
+        providers:
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        """;
+
     private const string SecretYaml =
         """
         apiVersion: agentcore/v1
@@ -77,6 +128,37 @@ public sealed class AddAgentCoreTests
         providers:
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
+        """;
+
+    // Row 4 of the section 8.2 compile table, with a guarded edge on each exit of the start node.
+    // Check 5 proves the two guards exclusive, so exactly one edge fires for each call.
+    private const string GuardedGraphYaml =
+        """
+        apiVersion: agentcore/v1
+        name: guarded-composed
+        state:
+          escalate: { type: boolean, writer: extractor, default: false }
+        guards:
+          wants_human: { "===": [ { var: escalate }, true ] }
+          stays_with_bot: { "===": [ { var: escalate }, false ] }
+        agents:
+          items:
+            - { id: router, model: { ref: router } }
+            - { id: human, model: { ref: human } }
+            - { id: bot, model: { ref: bot } }
+        graph:
+          nodes:
+            - { id: route, agent: router, start: true }
+            - { id: escalated, agent: human, output: true }
+            - { id: handled, agent: bot, output: true }
+          edges:
+            - { from: route, to: escalated, when: wants_human }
+            - { from: route, to: handled, when: stays_with_bot }
+        providers:
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: router }
+            - { kind: openai, model: gpt-4.1-mini, as: human }
+            - { kind: openai, model: gpt-4.1-mini, as: bot }
         """;
 
     // A stage names a target that policy.stages does not declare, so check 2 fails the load.
@@ -180,6 +262,59 @@ public sealed class AddAgentCoreTests
     }
 
     [Fact]
+    public void OneStoreThatAnswersBothPorts_BindsInOneLineAndIsBuiltOnce()
+    {
+        var built = 0;
+
+        using var provider = Build(KnowledgeYaml, options => options.UseKnowledge(_ =>
+        {
+            built++;
+            return new EmptyKnowledgeStore();
+        }));
+
+        // Both built-in tools compiled, and the one adapter behind them was opened once.
+        Assert.NotNull(provider.GetRequiredService<CompiledAgent>());
+        Assert.Equal(1, built);
+    }
+
+    [Fact]
+    public void AHostThatBindsOnlyTheDocumentStore_Starts()
+    {
+        // Section 7 splits the two ports so a vendor that supplies only one is enough. This host has
+        // the reading half and no retrieval adapter, and knowledge.read still reaches the model.
+        using var provider = Build(
+            ReadOnlyKnowledgeYaml,
+            options => options.UseDocumentStore(_ => new EmptyKnowledgeStore()));
+
+        Assert.NotNull(provider.GetRequiredService<CompiledAgent>());
+    }
+
+    [Fact]
+    public void AHostThatBindsOnlyTheDocumentStore_FailsTheStartAndNamesTheUnboundPort()
+    {
+        var failure = Assert.Throws<ConfigurationLoadException>(() => Build(
+            KnowledgeYaml,
+            options => options.UseDocumentStore(_ => new EmptyKnowledgeStore())));
+
+        Assert.Contains("search_chunks", failure.Message, StringComparison.Ordinal);
+        Assert.Contains(nameof(IKnowledgeRetrievalPort), failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TwoAdapters_BindToTheTwoPortsApart()
+    {
+        EmptyKnowledgeStore retrieval = new();
+        EmptyKnowledgeStore documents = new();
+
+        using var provider = Build(KnowledgeYaml, options => options
+            .UseKnowledgeRetrieval(_ => retrieval)
+            .UseDocumentStore(_ => documents));
+
+        // This is the shape the Zilliz connector arrives in: one adapter ranks and another reads.
+        Assert.NotNull(provider.GetRequiredService<CompiledAgent>());
+    }
+
+    [Fact]
     public void ASecretReference_ResolvesOnceAtStartup()
     {
         using HttpClient client = new();
@@ -212,6 +347,173 @@ public sealed class AddAgentCoreTests
             options => options.AddToolFactory(startup => new HttpToolFactory(client, startup.Secrets))));
 
         Assert.Equal("orders-api-key", failure.SecretName);
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Row 4 of the compile table, through the only supported composition root.
+    // -------------------------------------------------------------------------------------------
+    [Fact]
+    public void AGuardedGraph_Starts()
+    {
+        using var provider = BuildGuardedGraph();
+
+        var compiled = provider.GetRequiredService<CompiledAgent>();
+
+        // The document passes all eight checks and now compiles too. AddAgentCore binds the guard
+        // evaluator and CallStateScope, so a guarded edge is reachable from here.
+        Assert.Equal(CompiledAgentShape.ExplicitGraph, compiled.Shape);
+        Assert.Equal("guarded-composed", compiled.Name);
+    }
+
+    [Theory]
+    [InlineData(true, "ESCALATED", "HANDLED")]
+    [InlineData(false, "HANDLED", "ESCALATED")]
+    public async Task AGuardedGraph_TakesTheEdgeTheStateOfTheCallNames(bool escalate, string taken, string refused)
+    {
+        using var provider = BuildGuardedGraph();
+        var session = provider.GetRequiredService<ICallSessionFactory>().Create();
+        session.State.TryWrite("escalate", escalate);
+
+        var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
+
+        Assert.Contains(taken, turn.ReplyText, StringComparison.Ordinal);
+        Assert.DoesNotContain(refused, turn.ReplyText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AGuardedGraph_KeepsTwoCallsApartWhenTheyRunAtTheSameTime()
+    {
+        using var provider = BuildGuardedGraph();
+        var sessions = provider.GetRequiredService<ICallSessionFactory>();
+        var token = TestContext.Current.CancellationToken;
+
+        var escalated = sessions.Create();
+        escalated.State.TryWrite("escalate", true);
+        var handled = sessions.Create();
+        handled.State.TryWrite("escalate", false);
+
+        // One compiled graph, two calls, two edges. Neither call reads the state of the other.
+        var turns = await Task.WhenAll(
+            escalated.RunTurnAsync("hello", token),
+            handled.RunTurnAsync("hello", token));
+
+        Assert.Contains("ESCALATED", turns[0].ReplyText, StringComparison.Ordinal);
+        Assert.Contains("HANDLED", turns[1].ReplyText, StringComparison.Ordinal);
+        Assert.Equal(1, provider.GetRequiredService<CompiledAgentRegistry>().CompileCount);
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // The evaluation seam of D13. Triage row T18 defers the online path, so the rate is 0.
+    // -------------------------------------------------------------------------------------------
+    [Fact]
+    public void AddAgentCore_RegistersTheEvaluationSeamWithTheOnlinePathClosed()
+    {
+        using var provider = Build(OneAgentYaml);
+
+        var registry = provider.GetRequiredService<EvaluatorRegistry>();
+        var sampler = provider.GetRequiredService<EvaluationSampler>();
+
+        // D13 names fault_code, and it calls no model, so it is the one evaluator that is safe by
+        // default.
+        Assert.True(registry.Contains("fault_code"));
+
+        // T18: a judge must never block a turn, and the offline gate has not proved the evaluators
+        // yet. A rate of 0 draws no number and calls nothing.
+        Assert.Equal(0, sampler.Rate);
+        Assert.False(sampler.ShouldSample());
+
+        Assert.IsType<InMemoryEvaluationScorePublisher>(provider.GetRequiredService<IEvaluationScorePublisher>());
+    }
+
+    [Fact]
+    public void AddAgentCore_TakesTheSampleRateTheDocumentSets()
+    {
+        using var provider = Build(TunedYaml);
+
+        var sampler = provider.GetRequiredService<EvaluationSampler>();
+
+        // T18: the rate comes from evaluation.sampleRate, and the composition root reads it.
+        Assert.Equal(1, sampler.Rate);
+        Assert.True(sampler.ShouldSample());
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // The spoken fallback of section 8.7, from the document to the caller.
+    // -------------------------------------------------------------------------------------------
+    [Fact]
+    public async Task AQuietTurn_SpeaksTheFallbackTheDocumentNames()
+    {
+        using var provider = Build(TunedYaml, options => options.UseChatClients(
+            _ => new RoutingChatClientFactory(new SequencedChatClient(string.Empty))));
+        var session = provider.GetRequiredService<ICallSessionFactory>().Create();
+
+        var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
+
+        Assert.Equal("One moment please. I will try that again.", turn.ReplyText);
+        Assert.NotEqual(CallSession.FallbackReply, turn.ReplyText);
+    }
+
+    [Fact]
+    public async Task AQuietTurn_SpeaksTheDefaultFallbackWhenTheDocumentNamesNone()
+    {
+        using var provider = Build(OneAgentYaml, options => options.UseChatClients(
+            _ => new RoutingChatClientFactory(new SequencedChatClient(string.Empty))));
+        var session = provider.GetRequiredService<ICallSessionFactory>().Create();
+
+        var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
+
+        Assert.Equal(CallSession.FallbackReply, turn.ReplyText);
+    }
+
+    [Fact]
+    public void AddAgentCore_KeepsAnEvaluationServiceTheHostRegisteredFirst()
+    {
+        EvaluationSampler mine = new(rate: 1);
+        ServiceCollection services = new();
+        services.AddSingleton(mine);
+        Configure(services, OneAgentYaml, null);
+
+        using var provider = services.BuildServiceProvider();
+
+        // The in-memory publisher grows without a bound, and a long-running host replaces it. Every
+        // registration therefore steps aside, exactly as the session store does.
+        Assert.Same(mine, provider.GetRequiredService<EvaluationSampler>());
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // The audit sink and the logger: both optional, both with a working default.
+    // -------------------------------------------------------------------------------------------
+    [Fact]
+    public async Task AnAuditSink_ReachesTheTurnLoopAndTheChainVerifies()
+    {
+        InMemoryAuditSink sink = new();
+        using var provider = Build(OneAgentYaml, options => options.AuditSink = sink);
+
+        var session = provider.GetRequiredService<ICallSessionFactory>().Create("call-1");
+        await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+
+        var events = sink.EventsOf("call-1");
+        Assert.Equal(
+            [AuditEventKind.CallStarted, AuditEventKind.TurnCompleted],
+            events.Select(item => item.Kind).ToArray());
+        Assert.True(AuditChain.Verify(AuditChain.LinkAll(events)).IsIntact);
+
+        // The host bound one, so the host can resolve it back.
+        Assert.Same(sink, provider.GetRequiredService<IAuditSinkPort>());
+    }
+
+    [Fact]
+    public async Task NoAuditSinkAndNoLogger_StillRunsATurn()
+    {
+        using var provider = Build(OneAgentYaml);
+
+        var session = provider.GetRequiredService<ICallSessionFactory>().Create();
+        var turn = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+
+        Assert.Equal("hello", turn.ReplyText);
+
+        // Nothing stands in for the PostgreSQL sink of section 7, so nothing is registered either.
+        Assert.Null(provider.GetService<IAuditSinkPort>());
     }
 
     // -------------------------------------------------------------------------------------------
@@ -282,6 +584,17 @@ public sealed class AddAgentCoreTests
     // -------------------------------------------------------------------------------------------
     // Helpers.
     // -------------------------------------------------------------------------------------------
+    /// <summary>Composes the guarded graph over one offline model for each node.</summary>
+    /// <returns>The provider a test resolves from.</returns>
+    private static ServiceProvider BuildGuardedGraph()
+    {
+        RoutingChatClientFactory models = new(new SequencedChatClient("ROUTED"));
+        models.Route("human", new SequencedChatClient("ESCALATED"));
+        models.Route("bot", new SequencedChatClient("HANDLED"));
+
+        return Build(GuardedGraphYaml, options => options.UseChatClients(_ => models));
+    }
+
     private static ServiceProvider Build(string yaml, Action<AgentCoreOptions>? configure = null)
     {
         ServiceCollection services = new();

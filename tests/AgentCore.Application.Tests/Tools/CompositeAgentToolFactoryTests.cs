@@ -1,6 +1,7 @@
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Ports;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Tools.Fakes;
 using AgentCore.Application.Tools;
@@ -114,7 +115,7 @@ public sealed class CompositeAgentToolFactoryTests
 
         return new CompositeAgentToolFactory(
         [
-            new BuiltinToolFactory(new MapKnowledgePort()),
+            new BuiltinToolFactory(new MapKnowledgePort(), new MapKnowledgePort()),
             new BindingToolFactory(registry),
         ]);
     }

@@ -1,6 +1,8 @@
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Ports;
 using AgentCore.Application.State;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Application.Runtime;
 
@@ -25,6 +27,8 @@ public sealed class CallSessionFactory : ICallSessionFactory
     private readonly IGuardEvaluator _guards;
     private readonly StateExtractor? _extractor;
     private readonly TimeProvider _time;
+    private readonly IAuditSinkPort? _audit;
+    private readonly ILogger? _logger;
 
     /// <summary>Creates the factory.</summary>
     /// <param name="compiled">The compiled agent. Every call shares it.</param>
@@ -37,11 +41,21 @@ public sealed class CallSessionFactory : ICallSessionFactory
     /// The clock the reserved <c>callDurationSeconds</c> slot reads, or <see langword="null"/> for
     /// <see cref="TimeProvider.System"/>.
     /// </param>
+    /// <param name="auditSink">
+    /// The sink the chain of D23 is appended to, or <see langword="null"/> for a sink that writes
+    /// nowhere. One sink serves every call, because a session names itself on every event.
+    /// </param>
+    /// <param name="logger">
+    /// The logger the three "log once" rows of section 8.7 write to, or <see langword="null"/> for a
+    /// logger that writes nowhere. The library never throws for want of one.
+    /// </param>
     public CallSessionFactory(
         CompiledAgent compiled,
         IGuardEvaluator guards,
         StateExtractor? extractor = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        IAuditSinkPort? auditSink = null,
+        ILogger? logger = null)
     {
         ArgumentNullException.ThrowIfNull(compiled);
         ArgumentNullException.ThrowIfNull(guards);
@@ -50,6 +64,8 @@ public sealed class CallSessionFactory : ICallSessionFactory
         _guards = guards;
         _extractor = extractor;
         _time = timeProvider ?? TimeProvider.System;
+        _audit = auditSink;
+        _logger = logger;
     }
 
     /// <summary>Builds the extractor one document declares.</summary>
@@ -77,5 +93,7 @@ public sealed class CallSessionFactory : ICallSessionFactory
             _compiled,
             _guards,
             _extractor,
-            _time);
+            _time,
+            _audit,
+            _logger);
 }

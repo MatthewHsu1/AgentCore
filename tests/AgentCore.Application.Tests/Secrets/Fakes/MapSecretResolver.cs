@@ -1,4 +1,4 @@
-using AgentCore.Application.Secrets;
+using AgentCore.Application.Ports;
 
 namespace AgentCore.Application.Tests.Secrets.Fakes;
 

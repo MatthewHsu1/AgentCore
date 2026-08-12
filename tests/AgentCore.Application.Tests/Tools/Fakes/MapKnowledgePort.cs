@@ -1,16 +1,18 @@
-using AgentCore.Application.Tools;
+using AgentCore.Application.Ports;
+using AgentCore.Domain.Knowledge;
 
 namespace AgentCore.Application.Tests.Tools.Fakes;
 
 /// <summary>
-/// An offline knowledge port that answers from a map, and can fail on demand.
+/// An offline knowledge adapter that answers from a map, and can fail on demand.
 /// </summary>
 /// <remarks>
-/// The built-in tools own the failure rule of section 8.7: an adapter that throws still produces an
-/// error result. This fake throws when <see cref="Failure"/> is set, so the rule has something to
-/// test against.
+/// It answers both knowledge ports, exactly as the file store does, so one instance serves a test
+/// that binds one port and a test that binds both. The built-in tools own the failure rule of
+/// section 8.7: an adapter that throws still produces an error result. This fake throws when
+/// <see cref="Failure"/> is set, so the rule has something to test against.
 /// </remarks>
-internal sealed class MapKnowledgePort : IKnowledgePort
+internal sealed class MapKnowledgePort : IKnowledgeRetrievalPort, IDocumentStorePort
 {
     private readonly Dictionary<string, string> _documents = new(StringComparer.Ordinal);
 

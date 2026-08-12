@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Ports;
 using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Tests.Runtime;
@@ -102,6 +102,188 @@ internal sealed class SequencedChatClient : IChatClient
     public void Dispose()
     {
         // Nothing to release.
+    }
+}
+
+/// <summary>
+/// A model that yields lifecycle updates between its text fragments.
+/// </summary>
+/// <remarks>
+/// Section 8.6 measured <c>AsAIAgent()</c>: 47 updates for 40 text fragments, and seven of them carry
+/// no content. This client reproduces both empty shapes, an update with no content at all and an
+/// update whose only content is empty text, so a test proves the seam drops them.
+/// </remarks>
+internal sealed class LifecycleChatClient : IChatClient
+{
+    private readonly string[] _fragments;
+
+    public LifecycleChatClient(params string[] fragments) => _fragments = fragments;
+
+    /// <summary>Gets how many updates this client yields, content and lifecycle together.</summary>
+    public int Yielded { get; private set; }
+
+    public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        await Task.Yield();
+
+        var responseId = Guid.NewGuid().ToString("N");
+        Yielded = 0;
+
+        foreach (var fragment in _fragments)
+        {
+            // A lifecycle event. It carries nothing at all.
+            Yielded++;
+            yield return new ChatResponseUpdate { ResponseId = responseId, MessageId = responseId };
+
+            Yielded++;
+            yield return new ChatResponseUpdate(ChatRole.Assistant, fragment)
+            {
+                ResponseId = responseId,
+                MessageId = responseId,
+            };
+
+            // The other empty shape: one content, and it holds no text.
+            Yielded++;
+            yield return new ChatResponseUpdate(ChatRole.Assistant, string.Empty)
+            {
+                ResponseId = responseId,
+                MessageId = responseId,
+            };
+        }
+    }
+
+    public async Task<ChatResponse> GetResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        List<ChatResponseUpdate> updates = [];
+        await foreach (var update in GetStreamingResponseAsync(messages, options, cancellationToken)
+            .ConfigureAwait(false))
+        {
+            updates.Add(update);
+        }
+
+        return updates.ToChatResponse();
+    }
+
+    public object? GetService(Type serviceType, object? serviceKey = null)
+    {
+        ArgumentNullException.ThrowIfNull(serviceType);
+        return serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
+    }
+
+    public void Dispose()
+    {
+        // Nothing to release.
+    }
+}
+
+/// <summary>
+/// A model that calls the first tool it is offered on every request, and never answers with text.
+/// </summary>
+/// <remarks>
+/// <see cref="ToolCallingChatClient"/> calls one tool once, which keeps a healthy run finite. Section
+/// 8.7 needs the other case: a tool that keeps failing. This client never stops calling, so the run
+/// spends the error budget of <c>MaximumConsecutiveErrorsPerRequest</c> and the 4th failure throws.
+/// </remarks>
+internal sealed class LoopingToolCallingChatClient : IChatClient
+{
+    private int _calls;
+
+    /// <summary>Gets how many requests this client answered.</summary>
+    public int Calls => Volatile.Read(ref _calls);
+
+    public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        var index = Interlocked.Increment(ref _calls);
+        await Task.Yield();
+
+        var responseId = Guid.NewGuid().ToString("N");
+        if (options?.Tools?.OfType<AIFunction>().FirstOrDefault() is not { } tool)
+        {
+            // The extractor is offered no tool, so it still answers.
+            yield return new ChatResponseUpdate(ChatRole.Assistant, "{}")
+            {
+                ResponseId = responseId,
+                MessageId = responseId,
+            };
+            yield break;
+        }
+
+        yield return new ChatResponseUpdate(
+            ChatRole.Assistant,
+            [new FunctionCallContent($"call_{index}", tool.Name, new Dictionary<string, object?>(StringComparer.Ordinal))])
+        {
+            ResponseId = responseId,
+            MessageId = responseId,
+        };
+    }
+
+    public async Task<ChatResponse> GetResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        List<ChatResponseUpdate> updates = [];
+        await foreach (var update in GetStreamingResponseAsync(messages, options, cancellationToken)
+            .ConfigureAwait(false))
+        {
+            updates.Add(update);
+        }
+
+        return updates.ToChatResponse();
+    }
+
+    public object? GetService(Type serviceType, object? serviceKey = null)
+    {
+        ArgumentNullException.ThrowIfNull(serviceType);
+        return serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
+    }
+
+    public void Dispose()
+    {
+        // Nothing to release.
+    }
+}
+
+/// <summary>
+/// Builds one function for each declared tool, and every one of them throws.
+/// </summary>
+/// <remarks>
+/// A <c>builtin</c> tool returns an error result rather than throwing, so this factory stands for the
+/// case section 8.7 keeps for a defect: the function faults, the framework feeds the error back, and
+/// the 4th consecutive fault throws out of the run.
+/// </remarks>
+internal sealed class ThrowingToolFactory : IAgentToolFactory
+{
+    /// <summary>The message every fault carries.</summary>
+    public const string Message = "the tool is down.";
+
+    private int _calls;
+
+    /// <summary>Gets how many times a tool of this factory ran.</summary>
+    public int Calls => Volatile.Read(ref _calls);
+
+    public AITool? Create(ToolConfiguration tool)
+    {
+        ArgumentNullException.ThrowIfNull(tool);
+        return AIFunctionFactory.Create(Fail, tool.Id, tool.Description ?? tool.Id);
+    }
+
+    private string Fail()
+    {
+        Interlocked.Increment(ref _calls);
+        throw new InvalidOperationException(Message);
     }
 }
 
