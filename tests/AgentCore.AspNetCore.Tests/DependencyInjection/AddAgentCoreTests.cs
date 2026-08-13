@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using AgentCore.Application.Audit;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
+using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
@@ -12,6 +13,7 @@ using AgentCore.AspNetCore.Sessions;
 using AgentCore.AspNetCore.Tests.Fakes;
 using AgentCore.Domain.Audit;
 using AgentCore.Infrastructure.Tools;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -117,6 +119,63 @@ public sealed class AddAgentCoreTests
         providers:
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
+        """;
+
+    // Both built-in tools, with a different vendor named for each knowledge port.
+    private const string TwoKnowledgeVendorsYaml =
+        """
+        apiVersion: agentcore/v1
+        name: with-two-knowledge-vendors
+        tools:
+          - { id: search_chunks, kind: builtin, uses: knowledge.search }
+          - { id: read_doc,      kind: builtin, uses: knowledge.read }
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything", tools: [ search_chunks, read_doc ] }
+        providers:
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: reply }
+          knowledge:
+            search: fake-ranker
+            documents: fake-reader
+        """;
+
+    // Both built-in tools, with one vendor behind both knowledge ports.
+    private const string OneKnowledgeVendorYaml =
+        """
+        apiVersion: agentcore/v1
+        name: with-one-knowledge-vendor
+        tools:
+          - { id: search_chunks, kind: builtin, uses: knowledge.search }
+          - { id: read_doc,      kind: builtin, uses: knowledge.read }
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything", tools: [ search_chunks, read_doc ] }
+        providers:
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: reply }
+          knowledge:
+            search: fake-store
+            documents: fake-store
+        """;
+
+    // Both built-in tools, with a ranking vendor the host registers and a document kind it does not.
+    private const string RankerOnlyKnowledgeYaml =
+        """
+        apiVersion: agentcore/v1
+        name: with-a-ranker-only
+        tools:
+          - { id: search_chunks, kind: builtin, uses: knowledge.search }
+          - { id: read_doc,      kind: builtin, uses: knowledge.read }
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything", tools: [ search_chunks, read_doc ] }
+        providers:
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: reply }
+          knowledge:
+            search: fake-ranker
+            documents: filesystem
         """;
 
     private const string SecretYaml =
@@ -373,6 +432,73 @@ public sealed class AddAgentCoreTests
 
         // This is the shape the Zilliz connector arrives in: one adapter ranks and another reads.
         Assert.NotNull(provider.GetRequiredService<CompiledAgent>());
+    }
+
+    [Fact]
+    public async Task TheKnowledgeRegistry_LetsTheDocumentPickTheStoreOfEachPort()
+    {
+        // The host lists what it supports, once. providers.knowledge.search and
+        // providers.knowledge.documents then bind the two ports apart, with no code named here.
+        FakeKnowledgeStoreAdapter ranker = new("fake-ranker") { CanServeDocuments = false };
+        FakeKnowledgeStoreAdapter reader = new("fake-reader") { CanServeSearch = false };
+
+        using var provider = await BuildAsync(
+            TwoKnowledgeVendorsYaml,
+            options => options.UseKnowledgeStores(ranker, reader));
+
+        await CallToolAsync(provider, "search_chunks", "query", "shipping");
+        await CallToolAsync(provider, "read_doc", "documentId", "policies/shipping.md");
+
+        Assert.Equal(["shipping"], ranker.Store.Queries);
+        Assert.Equal(["policies/shipping.md"], reader.Store.Reads);
+        Assert.Empty(ranker.Store.Reads);
+        Assert.Empty(reader.Store.Queries);
+    }
+
+    [Fact]
+    public async Task AnExplicitKnowledgeSeam_BeatsTheRegistryForThePortItSets()
+    {
+        FakeKnowledgeStoreAdapter registry = new("fake-store");
+        RecordingKnowledgeStore mine = new();
+
+        using var provider = await BuildAsync(OneKnowledgeVendorYaml, options => options
+            .UseKnowledgeStores(registry)
+            .UseKnowledgeRetrieval(_ => mine));
+
+        await CallToolAsync(provider, "search_chunks", "query", "shipping");
+        await CallToolAsync(provider, "read_doc", "documentId", "policies/shipping.md");
+
+        // The explicit call wins the port it sets, and the registry keeps the port it does not.
+        Assert.Equal(["shipping"], mine.Queries);
+        Assert.Empty(registry.Store.Queries);
+        Assert.Equal(["policies/shipping.md"], registry.Store.Reads);
+
+        // The shadowed port is not built either. A vendor that opens a client on its search build
+        // must not open one this host then throws away.
+        Assert.Equal(0, registry.SearchBuilds);
+        Assert.Equal(1, registry.DocumentBuilds);
+    }
+
+    [Fact]
+    public async Task AnExplicitKnowledgeSeam_SparesTheRegistryAKindItCannotServe()
+    {
+        // The document reads from 'filesystem' and this host registers only the ranker, exactly as a
+        // host with the Zilliz connector and a document store of its own does. The explicit call
+        // answers the document port, so the registry never looks that kind up and the start holds.
+        FakeKnowledgeStoreAdapter ranker = new("fake-ranker") { CanServeDocuments = false };
+        RecordingKnowledgeStore mine = new();
+
+        using var provider = await BuildAsync(RankerOnlyKnowledgeYaml, options => options
+            .UseKnowledgeStores(ranker)
+            .UseDocumentStore(_ => mine));
+
+        await CallToolAsync(provider, "search_chunks", "query", "shipping");
+        await CallToolAsync(provider, "read_doc", "documentId", "policies/shipping.md");
+
+        Assert.Equal(["shipping"], ranker.Store.Queries);
+        Assert.Equal(["policies/shipping.md"], mine.Reads);
+        Assert.Equal(1, ranker.SearchBuilds);
+        Assert.Equal(0, ranker.DocumentBuilds);
     }
 
     [Fact]
@@ -660,6 +786,26 @@ public sealed class AddAgentCoreTests
         models.Route("bot", new SequencedChatClient("HANDLED"));
 
         return BuildAsync(GuardedGraphYaml, options => options.UseChatClients(_ => models));
+    }
+
+    /// <summary>Calls one declared tool, so a test reads which port the built-in holds.</summary>
+    /// <param name="provider">The composed container.</param>
+    /// <param name="toolId">The tool id the document declares.</param>
+    /// <param name="argument">The one argument name the built-in fills.</param>
+    /// <param name="value">The value that argument carries.</param>
+    private static async Task CallToolAsync(ServiceProvider provider, string toolId, string argument, string value)
+    {
+        var declaration = provider
+            .GetRequiredService<AgentCoreConfiguration>()
+            .Tools
+            .Single(tool => string.Equals(tool.Id, toolId, StringComparison.Ordinal));
+
+        var function = Assert.IsAssignableFrom<AIFunction>(
+            provider.GetRequiredService<IAgentToolFactory>().Create(declaration));
+
+        await function.InvokeAsync(
+            new AIFunctionArguments { [argument] = value },
+            TestContext.Current.CancellationToken);
     }
 
     private static async Task<ServiceProvider> BuildAsync(string yaml, Action<AgentCoreOptions>? configure = null)

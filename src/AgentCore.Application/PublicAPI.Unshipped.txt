@@ -812,3 +812,11 @@ static AgentCore.Application.Llm.CompositeChatClientFactory.CreateAsync(AgentCor
 AgentCore.Application.Ports.IChatClientAdapter
 AgentCore.Application.Ports.IChatClientAdapter.Kind.get -> string!
 AgentCore.Application.Ports.IChatClientAdapter.CreateClientAsync(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.IChatClient!>
+AgentCore.Application.Knowledge.CompositeKnowledgeStoreFactory
+AgentCore.Application.Ports.IKnowledgeStoreAdapter
+AgentCore.Application.Ports.IKnowledgeStoreAdapter.CanServeDocuments.get -> bool
+AgentCore.Application.Ports.IKnowledgeStoreAdapter.CanServeSearch.get -> bool
+AgentCore.Application.Ports.IKnowledgeStoreAdapter.Kind.get -> string!
+AgentCore.Application.Ports.IKnowledgeStoreAdapter.CreateDocumentsAsync(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IDocumentStorePort!>
+AgentCore.Application.Ports.IKnowledgeStoreAdapter.CreateSearchAsync(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IKnowledgeRetrievalPort!>
+static AgentCore.Application.Knowledge.CompositeKnowledgeStoreFactory.CreateAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.IKnowledgeStoreAdapter!>! adapters, bool includeSearch, bool includeDocuments, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<(AgentCore.Application.Ports.IKnowledgeRetrievalPort? Search, AgentCore.Application.Ports.IDocumentStorePort? Documents)>

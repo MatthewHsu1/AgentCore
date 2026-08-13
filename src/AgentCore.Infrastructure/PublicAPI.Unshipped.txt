@@ -31,3 +31,11 @@ const AgentCore.Infrastructure.Llm.OpenAiChatClientAdapter.ApiKeyVariableName = 
 const AgentCore.Infrastructure.Llm.OpenAiChatClientAdapter.ProviderKind = "openai" -> string!
 const AgentCore.Infrastructure.Secrets.FileSecretResolver.DefaultDirectory = "/run/secrets" -> string!
 static AgentCore.Infrastructure.Secrets.EnvironmentSecretResolver.ToVariableName(string! name) -> string!
+AgentCore.Infrastructure.Knowledge.FileStore.FileSystemKnowledgeAdapter
+AgentCore.Infrastructure.Knowledge.FileStore.FileSystemKnowledgeAdapter.FileSystemKnowledgeAdapter() -> void
+AgentCore.Infrastructure.Knowledge.FileStore.FileSystemKnowledgeAdapter.CanServeDocuments.get -> bool
+AgentCore.Infrastructure.Knowledge.FileStore.FileSystemKnowledgeAdapter.CanServeSearch.get -> bool
+AgentCore.Infrastructure.Knowledge.FileStore.FileSystemKnowledgeAdapter.Kind.get -> string!
+AgentCore.Infrastructure.Knowledge.FileStore.FileSystemKnowledgeAdapter.CreateDocumentsAsync(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IDocumentStorePort!>
+AgentCore.Infrastructure.Knowledge.FileStore.FileSystemKnowledgeAdapter.CreateSearchAsync(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IKnowledgeRetrievalPort!>
+const AgentCore.Infrastructure.Knowledge.FileStore.FileSystemKnowledgeAdapter.ProviderKind = "filesystem" -> string!

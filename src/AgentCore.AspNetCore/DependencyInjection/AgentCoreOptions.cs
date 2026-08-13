@@ -88,6 +88,9 @@ public sealed class AgentCoreOptions
     /// <summary>Gets the seam that resolves a model reference, or <see langword="null"/>.</summary>
     internal Func<AgentCoreStartup, CancellationToken, ValueTask<IChatClientFactory>>? ChatClients { get; private set; }
 
+    /// <summary>Gets the knowledge vendors the host registered, or <see langword="null"/>.</summary>
+    internal IReadOnlyList<IKnowledgeStoreAdapter>? KnowledgeStores { get; private set; }
+
     /// <summary>Gets the seam <c>knowledge.search</c> ranks with, or <see langword="null"/>.</summary>
     internal Func<AgentCoreStartup, IKnowledgeRetrievalPort>? KnowledgeRetrieval { get; private set; }
 
@@ -141,6 +144,37 @@ public sealed class AgentCoreOptions
     {
         ArgumentNullException.ThrowIfNull(chatClients);
         ChatClients = chatClients;
+        return this;
+    }
+
+    /// <summary>Binds the knowledge vendors, and the document picks one for each knowledge port.</summary>
+    /// <param name="adapters">One adapter for each knowledge vendor this host supports.</param>
+    /// <returns>These options, so a host chains its calls.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is the config-driven seam, and it is the knowledge mirror of
+    /// <see cref="UseChatClients(IChatClientAdapter[])"/>. The host lists what it supports, once, and
+    /// <c>providers.knowledge.search</c> and <c>providers.knowledge.documents</c> route each port to
+    /// the adapter its <c>kind</c> names. Both fields default to <c>filesystem</c>, so a document
+    /// with no <c>knowledge:</c> block still binds both ports. A kind no adapter serves, and a kind
+    /// whose adapter does not serve the port that named it, fail the start, and the message names
+    /// both sides. The adapters read <see cref="SecretResolver"/> for their credentials.
+    /// </para>
+    /// <para>
+    /// <b>An explicit <see cref="UseKnowledgeRetrieval"/>, <see cref="UseDocumentStore"/>, or
+    /// <see cref="UseKnowledge{TKnowledge}"/> call wins over this registry, for the port or ports it
+    /// sets.</b> A host therefore replaces one half of a document-driven pair with an object of its
+    /// own and leaves the other half to the document. <b>A port an explicit call sets is neither
+    /// resolved nor built here:</b> the field that names it is not read, no adapter of that kind is
+    /// looked for, and no vendor is opened. So an override costs no thrown-away build, and a
+    /// document that names a kind this host does not register still starts when the explicit call
+    /// was going to answer that port anyway.
+    /// </para>
+    /// </remarks>
+    public AgentCoreOptions UseKnowledgeStores(params IKnowledgeStoreAdapter[] adapters)
+    {
+        ArgumentNullException.ThrowIfNull(adapters);
+        KnowledgeStores = adapters;
         return this;
     }
 
