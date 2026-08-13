@@ -708,6 +708,8 @@ AgentCore.Application.Tools.DeclaredTool.Declaration.get -> AgentCore.Applicatio
 AgentCore.Application.Tools.DeclaredTool.DeclaredTool(AgentCore.Application.Configuration.Schema.ToolConfiguration! tool, string? defaultSchema = null) -> void
 AgentCore.Application.Tools.DeclaredTool.Failed(string! message) -> System.Text.Json.Nodes.JsonObject!
 AgentCore.Application.Ports.IDocumentStorePort
+AgentCore.Application.Ports.IDocumentStorePort.GrepAsync(string! pattern, string? glob = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Domain.Knowledge.GrepResult!>
+AgentCore.Application.Ports.IDocumentStorePort.ListAsync(string? pattern = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Domain.Knowledge.DocumentListing!>
 AgentCore.Application.Ports.IDocumentStorePort.ReadAsync(string! documentId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Domain.Knowledge.KnowledgeDocument?>
 AgentCore.Application.Ports.IKnowledgeRetrievalPort
 AgentCore.Application.Ports.IKnowledgeRetrievalPort.SearchAsync(string! query, int limit, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Domain.Knowledge.KnowledgeChunk!>!>

@@ -392,6 +392,15 @@ internal sealed class EmptyKnowledgeStore : IKnowledgeRetrievalPort, IDocumentSt
 
     public ValueTask<KnowledgeDocument?> ReadAsync(string documentId, CancellationToken cancellationToken = default)
         => ValueTask.FromResult<KnowledgeDocument?>(null);
+
+    public ValueTask<DocumentListing> ListAsync(string? pattern = null, CancellationToken cancellationToken = default)
+        => ValueTask.FromResult(new DocumentListing { DocumentIds = [], Truncated = false });
+
+    public ValueTask<GrepResult> GrepAsync(
+        string pattern,
+        string? glob = null,
+        CancellationToken cancellationToken = default)
+        => ValueTask.FromResult(new GrepResult { Matches = [], Truncated = false });
 }
 
 /// <summary>

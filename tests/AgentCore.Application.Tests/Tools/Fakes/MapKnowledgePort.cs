@@ -1,5 +1,8 @@
+using System.Text.RegularExpressions;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Knowledge;
+using Microsoft.Extensions.FileSystemGlobbing;
+using Microsoft.Extensions.FileSystemGlobbing.Abstractions;
 
 namespace AgentCore.Application.Tests.Tools.Fakes;
 
@@ -14,6 +17,14 @@ namespace AgentCore.Application.Tests.Tools.Fakes;
 /// </remarks>
 internal sealed class MapKnowledgePort : IKnowledgeRetrievalPort, IDocumentStorePort
 {
+    /// <summary>The caps the file store keeps, so the fake answers the same shape.</summary>
+    private const int MaxListResults = 200;
+
+    private const int MaxGrepMatches = 100;
+
+    /// <summary>A root the glob matcher needs. No such directory is read.</summary>
+    private static readonly string GlobRoot = Path.GetFullPath("map-knowledge-port");
+
     private readonly Dictionary<string, string> _documents = new(StringComparer.Ordinal);
 
     /// <summary>Gets or sets the failure every call raises, or null when the port answers.</summary>
@@ -67,5 +78,94 @@ internal sealed class MapKnowledgePort : IKnowledgeRetrievalPort, IDocumentStore
         return ValueTask.FromResult(_documents.TryGetValue(documentId, out var text)
             ? new KnowledgeDocument { DocumentId = documentId, Text = text }
             : null);
+    }
+
+    public ValueTask<DocumentListing> ListAsync(string? pattern = null, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (Failure is { } failure)
+        {
+            throw failure;
+        }
+
+        var ids = Matching(pattern);
+        var truncated = ids.Count > MaxListResults;
+
+        return ValueTask.FromResult(new DocumentListing
+        {
+            DocumentIds = truncated ? [.. ids.Take(MaxListResults)] : ids,
+            Truncated = truncated,
+        });
+    }
+
+    public ValueTask<GrepResult> GrepAsync(
+        string pattern,
+        string? glob = null,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (Failure is { } failure)
+        {
+            throw failure;
+        }
+
+        Regex regex = new(pattern, RegexOptions.None, TimeSpan.FromSeconds(1));
+        List<GrepMatch> matches = [];
+        var truncated = false;
+
+        foreach (var documentId in Matching(glob))
+        {
+            // The file store reads lines with File.ReadAllLines, which drops the empty line a final
+            // line ending would otherwise add. The fake counts lines the same way.
+            var text = _documents[documentId].ReplaceLineEndings("\n");
+            var lines = (text.EndsWith('\n') ? text[..^1] : text).Split('\n');
+            for (var line = 0; line < lines.Length && !truncated; line++)
+            {
+                if (!regex.IsMatch(lines[line]))
+                {
+                    continue;
+                }
+
+                truncated = matches.Count == MaxGrepMatches;
+                if (!truncated)
+                {
+                    matches.Add(new GrepMatch
+                    {
+                        DocumentId = documentId,
+                        LineNumber = line + 1,
+                        Line = lines[line],
+                    });
+                }
+            }
+
+            if (truncated)
+            {
+                break;
+            }
+        }
+
+        return ValueTask.FromResult(new GrepResult { Matches = matches, Truncated = truncated });
+    }
+
+    /// <summary>Names the documents a glob keeps, in the ordinal order the port promises.</summary>
+    private List<string> Matching(string? glob)
+    {
+        List<string> ids = [.. _documents.Keys.OrderBy(id => id, StringComparer.Ordinal)];
+        if (glob is not { Length: > 0 })
+        {
+            return ids;
+        }
+
+        Matcher matcher = new();
+        matcher.AddInclude(glob);
+        var kept = matcher
+            .Execute(new InMemoryDirectoryInfo(GlobRoot, ids))
+            .Files
+            .Select(match => match.Path)
+            .ToHashSet(StringComparer.Ordinal);
+
+        return [.. ids.Where(kept.Contains)];
     }
 }

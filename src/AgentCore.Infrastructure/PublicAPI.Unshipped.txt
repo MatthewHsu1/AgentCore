@@ -2,6 +2,8 @@
 AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore
 AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.FileSystemKnowledgeStore(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration? knowledge) -> void
 AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.FileSystemKnowledgeStore(string! root) -> void
+AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.GrepAsync(string! pattern, string? glob = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Domain.Knowledge.GrepResult!>
+AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.ListAsync(string? pattern = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Domain.Knowledge.DocumentListing!>
 AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.ReadAsync(string! documentId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Domain.Knowledge.KnowledgeDocument?>
 AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.Root.get -> string!
 AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.SearchAsync(string! query, int limit, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Domain.Knowledge.KnowledgeChunk!>!>
