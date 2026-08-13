@@ -6,6 +6,7 @@ using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Endpoints;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
 using AgentCore.Infrastructure.Knowledge.FileStore;
+using AgentCore.Infrastructure.Knowledge.VectorData.Zilliz;
 using AgentCore.Infrastructure.Llm;
 using AgentCore.Infrastructure.Secrets;
 using AgentCore.Infrastructure.Tools;
@@ -82,8 +83,10 @@ await builder.Services.AddAgentCoreAsync(options =>
 
     // The host lists the knowledge vendors it supports, once, exactly as the llm seam above.
     // providers.knowledge.search and providers.knowledge.documents pick the adapter for each port,
-    // so a document that changes stores changes no code here.
-    options.UseKnowledgeStores(new FileSystemKnowledgeAdapter());
+    // so a document that changes stores changes no code here. Registering zilliz costs nothing until
+    // a document names it: an adapter no field names is never asked to build anything, so this host
+    // still starts with no cluster and no key.
+    options.UseKnowledgeStores(new FileSystemKnowledgeAdapter(), new ZillizKnowledgeAdapter());
 
     // kind: http. Every header resolved above, so no tool call costs a lookup.
     options.AddToolFactory(startup => new HttpToolFactory(toolClient, startup.Secrets));
