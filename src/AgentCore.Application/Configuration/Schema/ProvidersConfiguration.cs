@@ -25,18 +25,40 @@ public sealed record VendorProviderConfiguration
 }
 
 /// <summary>
-/// The knowledge provider: the vector store and the root of the document tree.
+/// The knowledge provider: one adapter for each knowledge port, and what those adapters read.
 /// </summary>
+/// <remarks>
+/// The two ports pick their adapter one at a time, so a document can search a vector store and
+/// still read the documents from disk.
+/// </remarks>
 public sealed record KnowledgeProviderConfiguration
 {
+    /// <summary>The search adapter used when the document names none.</summary>
+    public const string DefaultSearch = "filesystem";
+
+    /// <summary>The document adapter used when the document names none.</summary>
+    public const string DefaultDocuments = "filesystem";
+
     /// <summary>The root used when the document sets none.</summary>
     public const string DefaultRoot = "./kb";
 
-    /// <summary>Gets the vector store, such as <c>zilliz</c>.</summary>
-    public required string Store { get; init; }
+    /// <summary>The collection used when the document names none.</summary>
+    public const string DefaultCollection = "kb_chunks";
+
+    /// <summary>Gets the adapter that answers <c>IKnowledgeRetrievalPort</c>, such as <c>zilliz</c>.</summary>
+    public string Search { get; init; } = DefaultSearch;
+
+    /// <summary>Gets the adapter that answers <c>IDocumentStorePort</c>, such as <c>filesystem</c>.</summary>
+    public string Documents { get; init; } = DefaultDocuments;
 
     /// <summary>Gets the root of the knowledge-base tree. The tree is its own Git repository.</summary>
     public string Root { get; init; } = DefaultRoot;
+
+    /// <summary>Gets the cluster URL the <c>zilliz</c> adapter reads, or <see langword="null"/>.</summary>
+    public string? Endpoint { get; init; }
+
+    /// <summary>Gets the collection the <c>zilliz</c> adapter reads.</summary>
+    public string Collection { get; init; } = DefaultCollection;
 }
 
 /// <summary>

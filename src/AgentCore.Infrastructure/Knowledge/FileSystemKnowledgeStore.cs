@@ -1,7 +1,10 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Knowledge;
+using Microsoft.Extensions.FileSystemGlobbing;
+using Microsoft.Extensions.FileSystemGlobbing.Abstractions;
 
 namespace AgentCore.Infrastructure.Knowledge;
 
@@ -32,8 +35,17 @@ namespace AgentCore.Infrastructure.Knowledge;
 /// </remarks>
 public sealed class FileSystemKnowledgeStore : IKnowledgeRetrievalPort, IDocumentStorePort
 {
+    /// <summary>The largest number of ids one listing names.</summary>
+    internal const int MaxListResults = 200;
+
+    /// <summary>The largest number of lines one grep returns.</summary>
+    internal const int MaxGrepMatches = 100;
+
     /// <summary>The file extensions the tree holds.</summary>
     private static readonly string[] Extensions = [".md", ".markdown", ".txt"];
+
+    /// <summary>How long one line may take to match before the pattern gives up.</summary>
+    private static readonly TimeSpan GrepTimeout = TimeSpan.FromSeconds(1);
 
     /// <summary>The characters that end one word of a query or a passage.</summary>
     private static readonly char[] WordBreaks =
@@ -121,12 +133,119 @@ public sealed class FileSystemKnowledgeStore : IKnowledgeRetrievalPort, IDocumen
         return new KnowledgeDocument { DocumentId = documentId, Text = text };
     }
 
+    /// <summary>Names the documents the tree holds.</summary>
+    /// <param name="pattern">A glob over document ids, or <see langword="null"/> for every document.</param>
+    /// <param name="cancellationToken">Cancels the listing.</param>
+    /// <returns>The ids, in ordinal order, capped at <see cref="MaxListResults"/>.</returns>
+    public ValueTask<DocumentListing> ListAsync(
+        string? pattern = null,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var ids = MatchingIds(pattern);
+        var truncated = ids.Count > MaxListResults;
+
+        return ValueTask.FromResult(new DocumentListing
+        {
+            DocumentIds = truncated ? [.. ids.Take(MaxListResults)] : ids,
+            Truncated = truncated,
+        });
+    }
+
+    /// <summary>Finds the lines that match one pattern.</summary>
+    /// <param name="pattern">The regular expression each line is matched against.</param>
+    /// <param name="glob">A glob over document ids, or <see langword="null"/> for every document.</param>
+    /// <param name="cancellationToken">Cancels the search.</param>
+    /// <returns>The matches, in ordinal order, capped at <see cref="MaxGrepMatches"/>.</returns>
+    public async ValueTask<GrepResult> GrepAsync(
+        string pattern,
+        string? glob = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(pattern);
+
+        // A pattern the model wrote badly, and a pattern that runs past the timeout, both throw. The
+        // built-in tool turns either one into an error result, so the store says nothing about them.
+        Regex regex = new(pattern, RegexOptions.None, GrepTimeout);
+        List<GrepMatch> matches = [];
+        var truncated = false;
+
+        foreach (var documentId in MatchingIds(glob))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (!TryResolvePath(documentId, out var path))
+            {
+                continue;
+            }
+
+            var lines = await File.ReadAllLinesAsync(path, cancellationToken).ConfigureAwait(false);
+            for (var line = 0; line < lines.Length && !truncated; line++)
+            {
+                if (!regex.IsMatch(lines[line]))
+                {
+                    continue;
+                }
+
+                truncated = matches.Count == MaxGrepMatches;
+                if (!truncated)
+                {
+                    matches.Add(new GrepMatch
+                    {
+                        DocumentId = documentId,
+                        LineNumber = line + 1,
+                        Line = lines[line],
+                    });
+                }
+            }
+
+            if (truncated)
+            {
+                break;
+            }
+        }
+
+        return new GrepResult { Matches = matches, Truncated = truncated };
+    }
+
     /// <summary>Walks every file of the tree, in a stable order.</summary>
     private IEnumerable<string> Files()
         => Directory
             .EnumerateFiles(Root, "*", SearchOption.AllDirectories)
             .Where(path => Extensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
             .OrderBy(path => path, StringComparer.Ordinal);
+
+    /// <summary>
+    /// Names the documents a glob keeps, in ordinal order, and never one outside the tree.
+    /// </summary>
+    /// <remarks>
+    /// The glob runs over the ids the tree already holds, so a pattern that climbs out of the root
+    /// with <c>../</c> matches nothing rather than reads a file the knowledge base does not own.
+    /// </remarks>
+    private List<string> MatchingIds(string? glob)
+    {
+        if (!Directory.Exists(Root))
+        {
+            return [];
+        }
+
+        List<string> ids = [.. Files().Select(DocumentId).OrderBy(id => id, StringComparer.Ordinal)];
+        if (glob is not { Length: > 0 })
+        {
+            return ids;
+        }
+
+        Matcher matcher = new();
+        matcher.AddInclude(glob);
+        var kept = matcher
+            .Execute(new InMemoryDirectoryInfo(Root, ids))
+            .Files
+            .Select(match => match.Path)
+            .ToHashSet(StringComparer.Ordinal);
+
+        return [.. ids.Where(kept.Contains)];
+    }
 
     /// <summary>Turns a file path into the id a search result carries.</summary>
     private string DocumentId(string path)

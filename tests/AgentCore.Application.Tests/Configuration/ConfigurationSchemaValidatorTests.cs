@@ -150,6 +150,55 @@ public sealed class ConfigurationSchemaValidatorTests
     }
 
     [Fact]
+    public void AnUnknownKnowledgeKey_Fails()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            providers:
+              knowledge: { vectors: zilliz }
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+        Assert.Contains(failure.Errors, error => error.Pointer == "/providers/knowledge");
+        Assert.Contains("vectors", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheOldKnowledgeStoreKey_Fails()
+    {
+        // The store field went away. Each knowledge port now names its own adapter.
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            providers:
+              knowledge: { store: zilliz, root: ./kb }
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+        Assert.Contains("store", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AKnowledgeProviderWithNoFields_PassesCheckOne()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: plain
+            providers:
+              knowledge: {}
+            """;
+
+        var parsed = ConfigurationLoader.ReadDocument(document, ConfigurationFormat.Yaml);
+
+        Assert.Empty(ConfigurationSchemaValidator.Evaluate(parsed));
+    }
+
+    [Fact]
     public void AnUnknownProperty_Fails()
     {
         const string document = """

@@ -67,6 +67,8 @@ internal static class ExampleDocument
         tools:
           - { id: search_chunks, kind: builtin, uses: knowledge.search }
           - { id: read_doc,      kind: builtin, uses: knowledge.read }
+          - { id: list_docs,     kind: builtin, uses: knowledge.list }
+          - { id: grep_docs,     kind: builtin, uses: knowledge.grep }
           - id: lookup_order
             kind: http
             description: Read one order by its identifier.
@@ -95,7 +97,7 @@ internal static class ExampleDocument
           items:
             - { id: greeter,    instructions: "<stage delta>", tools: [] }
             - { id: identifier, instructions: "<stage delta>", tools: [ lookup_order ] }
-            - { id: resolver,   instructions: "<stage delta>", tools: [ search_chunks, read_doc ] }
+            - { id: resolver,   instructions: "<stage delta>", tools: [ search_chunks, read_doc, list_docs, grep_docs ] }
             - { id: escalator,  instructions: "<stage delta>", tools: [ create_case ] }
             - { id: closer,     instructions: "<stage delta>", tools: [] }
 
@@ -129,7 +131,7 @@ internal static class ExampleDocument
             - { kind: openai, model: gpt-5.4-nano, as: fill }       # the extractor, chosen on null discipline
           speech:    { kind: telnyx-relay }        # one vendor: STT, turn detection, TTS, interruption
           telephony: { kind: telnyx }
-          knowledge: { store: zilliz, root: ./kb }
+          knowledge: { search: filesystem, documents: filesystem, root: ./kb }
 
         evaluation:
           sampleRate: 0
@@ -295,6 +297,16 @@ internal static class ExampleDocument
               "uses": "knowledge.read"
             },
             {
+              "id": "list_docs",
+              "kind": "builtin",
+              "uses": "knowledge.list"
+            },
+            {
+              "id": "grep_docs",
+              "kind": "builtin",
+              "uses": "knowledge.grep"
+            },
+            {
               "id": "lookup_order",
               "kind": "http",
               "description": "Read one order by its identifier.",
@@ -361,7 +373,9 @@ internal static class ExampleDocument
                 "instructions": "<stage delta>",
                 "tools": [
                   "search_chunks",
-                  "read_doc"
+                  "read_doc",
+                  "list_docs",
+                  "grep_docs"
                 ]
               },
               {
@@ -458,7 +472,8 @@ internal static class ExampleDocument
               "kind": "telnyx"
             },
             "knowledge": {
-              "store": "zilliz",
+              "search": "filesystem",
+              "documents": "filesystem",
               "root": "./kb"
             }
           },

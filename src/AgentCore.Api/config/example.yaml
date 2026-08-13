@@ -114,6 +114,8 @@ guards:
 tools:
   - { id: search_chunks, kind: builtin, uses: knowledge.search }
   - { id: read_doc,      kind: builtin, uses: knowledge.read }
+  - { id: list_docs,     kind: builtin, uses: knowledge.list }
+  - { id: grep_docs,     kind: builtin, uses: knowledge.grep }
 
   - id: lookup_order
     kind: http
@@ -173,7 +175,7 @@ agents:
   items:
     - { id: greeter,    instructions: "<stage delta>", tools: [] }
     - { id: identifier, instructions: "<stage delta>", tools: [ lookup_order ] }
-    - { id: resolver,   instructions: "<stage delta>", tools: [ search_chunks, read_doc ] }
+    - { id: resolver,   instructions: "<stage delta>", tools: [ search_chunks, read_doc, list_docs, grep_docs ] }
     - { id: escalator,  instructions: "<stage delta>", tools: [ create_case ] }
     - { id: closer,     instructions: "<stage delta>", tools: [] }
 
@@ -225,7 +227,9 @@ providers:
     - { kind: openai, model: gpt-5.4-nano, as: fill }       # the extractor, chosen on null discipline
   speech:    { kind: telnyx-relay }        # one vendor: STT, turn detection, TTS, interruption
   telephony: { kind: telnyx }
-  knowledge: { store: zilliz, root: ./kb }
+  knowledge: { search: filesystem, documents: filesystem, root: ./kb }
+  # search: zilliz needs endpoint (cluster URL) and the zilliz-api-key secret; collection defaults to kb_chunks
+  # it also embeds every query, so it needs the openai-api-key secret as well; documents stays filesystem
 
 # ---------------------------------------------------------------------------------------------
 # evaluation: the share of finished turns a judge scores.

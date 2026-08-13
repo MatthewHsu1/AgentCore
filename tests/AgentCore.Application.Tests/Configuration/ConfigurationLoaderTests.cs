@@ -69,12 +69,12 @@ public sealed class ConfigurationLoaderTests
     [Fact]
     public void Example_BindsEveryToolKind()
     {
-        Assert.Equal(4, Example.Tools.Count);
+        Assert.Equal(6, Example.Tools.Count);
 
         Assert.Equal(ToolKind.Builtin, Example.Tools[0].Kind);
         Assert.Equal("knowledge.search", Example.Tools[0].Uses);
 
-        var binding = Example.Tools[3];
+        var binding = Example.Tools[5];
         Assert.Equal(ToolKind.Binding, binding.Kind);
         Assert.Equal("CreateCase", binding.Binds);
         Assert.NotNull(binding.Parameters);
@@ -84,7 +84,7 @@ public sealed class ConfigurationLoaderTests
     [Fact]
     public void Example_ReadsTheSecretReferenceAndResolvesNothing()
     {
-        var http = Example.Tools[2];
+        var http = Example.Tools[4];
 
         Assert.Equal(ToolKind.Http, http.Kind);
         Assert.NotNull(http.Request);
@@ -108,7 +108,7 @@ public sealed class ConfigurationLoaderTests
 
         Assert.Equal(5, Example.Agents.Items.Count);
         Assert.Equal("resolver", Example.Agents.Items[2].Id);
-        Assert.Equal(["search_chunks", "read_doc"], Example.Agents.Items[2].Tools);
+        Assert.Equal(["search_chunks", "read_doc", "list_docs", "grep_docs"], Example.Agents.Items[2].Tools);
         Assert.Empty(Example.Agents.Items[0].Tools);
     }
 
@@ -148,8 +148,56 @@ public sealed class ConfigurationLoaderTests
         Assert.Equal("fill", Example.Providers.Llm[1].As);
         Assert.Equal("telnyx-relay", Example.Providers.Speech!.Kind);
         Assert.Equal("telnyx", Example.Providers.Telephony!.Kind);
-        Assert.Equal("zilliz", Example.Providers.Knowledge!.Store);
+        Assert.Equal("filesystem", Example.Providers.Knowledge!.Search);
+        Assert.Equal("filesystem", Example.Providers.Knowledge.Documents);
         Assert.Equal("./kb", Example.Providers.Knowledge.Root);
+        Assert.Null(Example.Providers.Knowledge.Endpoint);
+        Assert.Equal(KnowledgeProviderConfiguration.DefaultCollection, Example.Providers.Knowledge.Collection);
+    }
+
+    [Fact]
+    public void AKnowledgeProviderWithNoFields_TakesTheDefaults()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: plain
+            providers:
+              knowledge: {}
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+
+        var knowledge = configuration.Providers!.Knowledge!;
+        Assert.Equal(KnowledgeProviderConfiguration.DefaultSearch, knowledge.Search);
+        Assert.Equal(KnowledgeProviderConfiguration.DefaultDocuments, knowledge.Documents);
+        Assert.Equal(KnowledgeProviderConfiguration.DefaultRoot, knowledge.Root);
+        Assert.Null(knowledge.Endpoint);
+        Assert.Equal(KnowledgeProviderConfiguration.DefaultCollection, knowledge.Collection);
+    }
+
+    [Fact]
+    public void AKnowledgeProviderThatWritesEveryField_BindsThem()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: split
+            providers:
+              knowledge:
+                search: zilliz
+                documents: filesystem
+                root: ./docs
+                endpoint: https://cluster.example.com
+                collection: manuals
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+
+        var knowledge = configuration.Providers!.Knowledge!;
+        Assert.Equal("zilliz", knowledge.Search);
+        Assert.Equal("filesystem", knowledge.Documents);
+        Assert.Equal("./docs", knowledge.Root);
+        Assert.Equal("https://cluster.example.com", knowledge.Endpoint);
+        Assert.Equal("manuals", knowledge.Collection);
     }
 
     [Fact]

@@ -1,4 +1,30 @@
 #nullable enable
+AgentCore.Domain.Knowledge.DocumentListing
+AgentCore.Domain.Knowledge.DocumentListing.<Clone>$() -> AgentCore.Domain.Knowledge.DocumentListing!
+AgentCore.Domain.Knowledge.DocumentListing.DocumentIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+AgentCore.Domain.Knowledge.DocumentListing.DocumentIds.init -> void
+AgentCore.Domain.Knowledge.DocumentListing.DocumentListing() -> void
+AgentCore.Domain.Knowledge.DocumentListing.Equals(AgentCore.Domain.Knowledge.DocumentListing? other) -> bool
+AgentCore.Domain.Knowledge.DocumentListing.Truncated.get -> bool
+AgentCore.Domain.Knowledge.DocumentListing.Truncated.init -> void
+AgentCore.Domain.Knowledge.GrepMatch
+AgentCore.Domain.Knowledge.GrepMatch.<Clone>$() -> AgentCore.Domain.Knowledge.GrepMatch!
+AgentCore.Domain.Knowledge.GrepMatch.DocumentId.get -> string!
+AgentCore.Domain.Knowledge.GrepMatch.DocumentId.init -> void
+AgentCore.Domain.Knowledge.GrepMatch.Equals(AgentCore.Domain.Knowledge.GrepMatch? other) -> bool
+AgentCore.Domain.Knowledge.GrepMatch.GrepMatch() -> void
+AgentCore.Domain.Knowledge.GrepMatch.Line.get -> string!
+AgentCore.Domain.Knowledge.GrepMatch.Line.init -> void
+AgentCore.Domain.Knowledge.GrepMatch.LineNumber.get -> int
+AgentCore.Domain.Knowledge.GrepMatch.LineNumber.init -> void
+AgentCore.Domain.Knowledge.GrepResult
+AgentCore.Domain.Knowledge.GrepResult.<Clone>$() -> AgentCore.Domain.Knowledge.GrepResult!
+AgentCore.Domain.Knowledge.GrepResult.Equals(AgentCore.Domain.Knowledge.GrepResult? other) -> bool
+AgentCore.Domain.Knowledge.GrepResult.GrepResult() -> void
+AgentCore.Domain.Knowledge.GrepResult.Matches.get -> System.Collections.Generic.IReadOnlyList<AgentCore.Domain.Knowledge.GrepMatch!>!
+AgentCore.Domain.Knowledge.GrepResult.Matches.init -> void
+AgentCore.Domain.Knowledge.GrepResult.Truncated.get -> bool
+AgentCore.Domain.Knowledge.GrepResult.Truncated.init -> void
 AgentCore.Domain.Knowledge.KnowledgeChunk
 AgentCore.Domain.Knowledge.KnowledgeChunk.<Clone>$() -> AgentCore.Domain.Knowledge.KnowledgeChunk!
 AgentCore.Domain.Knowledge.KnowledgeChunk.DocumentId.get -> string!
@@ -42,6 +68,15 @@ AgentCore.Domain.TurnResult.StageBefore.init -> void
 AgentCore.Domain.TurnResult.TurnIndex.get -> int
 AgentCore.Domain.TurnResult.TurnIndex.init -> void
 AgentCore.Domain.TurnResult.TurnResult(string! CallId, int TurnIndex, string! StageBefore, string! StageAfter, string! ReplyText, bool IsTerminal, string? ExtractionFailure, string? Failure = null, System.TimeSpan? InterruptedAfter = null, System.DateTimeOffset EndedAt = default(System.DateTimeOffset)) -> void
+override AgentCore.Domain.Knowledge.DocumentListing.Equals(object? obj) -> bool
+override AgentCore.Domain.Knowledge.DocumentListing.GetHashCode() -> int
+override AgentCore.Domain.Knowledge.DocumentListing.ToString() -> string!
+override AgentCore.Domain.Knowledge.GrepMatch.Equals(object? obj) -> bool
+override AgentCore.Domain.Knowledge.GrepMatch.GetHashCode() -> int
+override AgentCore.Domain.Knowledge.GrepMatch.ToString() -> string!
+override AgentCore.Domain.Knowledge.GrepResult.Equals(object? obj) -> bool
+override AgentCore.Domain.Knowledge.GrepResult.GetHashCode() -> int
+override AgentCore.Domain.Knowledge.GrepResult.ToString() -> string!
 override AgentCore.Domain.Knowledge.KnowledgeChunk.Equals(object? obj) -> bool
 override AgentCore.Domain.Knowledge.KnowledgeChunk.GetHashCode() -> int
 override AgentCore.Domain.Knowledge.KnowledgeChunk.ToString() -> string!
@@ -51,6 +86,12 @@ override AgentCore.Domain.Knowledge.KnowledgeDocument.ToString() -> string!
 override AgentCore.Domain.TurnResult.Equals(object? obj) -> bool
 override AgentCore.Domain.TurnResult.GetHashCode() -> int
 override AgentCore.Domain.TurnResult.ToString() -> string!
+static AgentCore.Domain.Knowledge.DocumentListing.operator !=(AgentCore.Domain.Knowledge.DocumentListing? left, AgentCore.Domain.Knowledge.DocumentListing? right) -> bool
+static AgentCore.Domain.Knowledge.DocumentListing.operator ==(AgentCore.Domain.Knowledge.DocumentListing? left, AgentCore.Domain.Knowledge.DocumentListing? right) -> bool
+static AgentCore.Domain.Knowledge.GrepMatch.operator !=(AgentCore.Domain.Knowledge.GrepMatch? left, AgentCore.Domain.Knowledge.GrepMatch? right) -> bool
+static AgentCore.Domain.Knowledge.GrepMatch.operator ==(AgentCore.Domain.Knowledge.GrepMatch? left, AgentCore.Domain.Knowledge.GrepMatch? right) -> bool
+static AgentCore.Domain.Knowledge.GrepResult.operator !=(AgentCore.Domain.Knowledge.GrepResult? left, AgentCore.Domain.Knowledge.GrepResult? right) -> bool
+static AgentCore.Domain.Knowledge.GrepResult.operator ==(AgentCore.Domain.Knowledge.GrepResult? left, AgentCore.Domain.Knowledge.GrepResult? right) -> bool
 static AgentCore.Domain.Knowledge.KnowledgeChunk.operator !=(AgentCore.Domain.Knowledge.KnowledgeChunk? left, AgentCore.Domain.Knowledge.KnowledgeChunk? right) -> bool
 static AgentCore.Domain.Knowledge.KnowledgeChunk.operator ==(AgentCore.Domain.Knowledge.KnowledgeChunk? left, AgentCore.Domain.Knowledge.KnowledgeChunk? right) -> bool
 static AgentCore.Domain.Knowledge.KnowledgeDocument.operator !=(AgentCore.Domain.Knowledge.KnowledgeDocument? left, AgentCore.Domain.Knowledge.KnowledgeDocument? right) -> bool

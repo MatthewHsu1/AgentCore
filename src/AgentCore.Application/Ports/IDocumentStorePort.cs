@@ -28,4 +28,30 @@ public interface IDocumentStorePort
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The document, or <see langword="null"/> when the store holds no such id.</returns>
     ValueTask<KnowledgeDocument?> ReadAsync(string documentId, CancellationToken cancellationToken = default);
+
+    /// <summary>Names the documents the store holds.</summary>
+    /// <param name="pattern">
+    /// A glob expression over document ids, such as <c>policies/**/*.md</c>, or
+    /// <see langword="null"/> to name every document.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the listing.</param>
+    /// <returns>
+    /// The ids in ordinal order, so two calls answer the same. An implementation names at most 200
+    /// ids and sets <see cref="DocumentListing.Truncated"/> when the cap cut the answer.
+    /// </returns>
+    ValueTask<DocumentListing> ListAsync(string? pattern = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Finds the lines that match one pattern.</summary>
+    /// <param name="pattern">The regular expression each line is matched against.</param>
+    /// <param name="glob">
+    /// A glob expression over document ids, such as <c>policies/**/*.md</c>, that says which
+    /// documents to read, or <see langword="null"/> to read every document.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the search.</param>
+    /// <returns>
+    /// The matches in ordinal order of document id and then by line, so two calls answer the same.
+    /// An implementation returns at most 100 matches and sets <see cref="GrepResult.Truncated"/>
+    /// when the cap cut the answer.
+    /// </returns>
+    ValueTask<GrepResult> GrepAsync(string pattern, string? glob = null, CancellationToken cancellationToken = default);
 }

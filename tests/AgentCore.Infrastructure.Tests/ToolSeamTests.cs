@@ -64,7 +64,7 @@ public sealed class ToolSeamTests
             - { id: resolve,  agent: resolver,   to: [ { stage: escalate } ] }
             - { id: escalate, agent: escalator,  terminal: true }
         providers:
-          knowledge: { store: zilliz, root: ./kb }
+          knowledge: { search: filesystem, documents: filesystem, root: ./kb }
         """;
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;

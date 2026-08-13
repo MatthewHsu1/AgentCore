@@ -3,6 +3,7 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Evaluation;
+using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Secrets;
@@ -22,7 +23,8 @@ namespace AgentCore.AspNetCore.DependencyInjection;
 /// <remarks>
 /// <para>
 /// Everything happens while the host starts, in one order: load the document, run checks 2 to 8,
-/// resolve every <c>${secret:name}</c> once, build the tool factory chain, compile through
+/// resolve every <c>${secret:name}</c> once, open the knowledge base the document names, build the
+/// tool factory chain, compile through
 /// <see cref="CompiledAgentRegistry"/>, and register the seam a call arrives on. A configuration
 /// defect therefore stops the process with a message that names the fault and points into the
 /// document. Nothing is deferred to the first call.
@@ -66,12 +68,15 @@ public static class AgentCoreServiceCollectionExtensions
     /// <exception cref="InvalidOperationException">
     /// The options name no document, name two, or bind no chat client adapter.
     /// </exception>
-    /// <exception cref="ConfigurationLoadException">The document fails one of the eight checks, or does not compile.</exception>
+    /// <exception cref="ConfigurationLoadException">
+    /// The document fails one of the eight checks, names a knowledge <c>kind</c> no registered
+    /// adapter serves, or does not compile.
+    /// </exception>
     /// <exception cref="SecretResolutionException">One <c>${secret:name}</c> reference resolves to nothing.</exception>
     /// <remarks>
-    /// This method is async because two of its steps wait: the secret resolution of step 3 and the
-    /// chat client seam of step 5. A top-level <c>Program.cs</c> awaits it before
-    /// <c>builder.Build()</c>, and no thread blocks while the host starts.
+    /// This method is async because three of its steps wait: the secret resolution of step 3, the
+    /// knowledge seam of step 3b, and the chat client seam of step 5. A top-level <c>Program.cs</c>
+    /// awaits it before <c>builder.Build()</c>, and no thread blocks while the host starts.
     /// </remarks>
     public static async ValueTask<IServiceCollection> AddAgentCoreAsync(
         this IServiceCollection services,
@@ -103,9 +108,29 @@ public static class AgentCoreServiceCollectionExtensions
 
         AgentCoreStartup startup = new(configuration, secrets);
 
+        // Step 3b: open the knowledge base the document names. The host listed its knowledge vendors
+        // once and providers.knowledge picks one for each port, so both ports are open before any
+        // tool is built. A host that registered no vendor keeps two null ports and binds whatever
+        // its explicit seams hold.
+        //
+        // A port an explicit seam already sets is not asked for here at all. The registry then reads
+        // neither that field's kind nor its vendor, so an override costs no vendor build and a kind
+        // this host does not register cannot fail a start that was never going to use it.
+        var knowledge = options.KnowledgeStores is { } stores
+            ? await CompositeKnowledgeStoreFactory
+                .CreateAsync(
+                    configuration,
+                    options.SecretResolver,
+                    stores,
+                    includeSearch: options.KnowledgeRetrieval is null,
+                    includeDocuments: options.DocumentStore is null,
+                    cancellationToken)
+                .ConfigureAwait(false)
+            : default;
+
         // Step 4: build the tool factory chain. A link answers null for a kind it does not serve, and
         // the composite fails the start when no link serves a kind the document declares.
-        var tools = BuildToolFactory(options, startup);
+        var tools = BuildToolFactory(options, startup, knowledge);
 
         // Step 5: compile. The registry compiles once and every call shares the result.
         var chatClients = await (options.ChatClients
@@ -276,19 +301,29 @@ public static class AgentCoreServiceCollectionExtensions
     /// <summary>Builds the one tool factory the compile table asks.</summary>
     /// <param name="options">The options the host filled.</param>
     /// <param name="startup">The loaded document and the resolved secrets.</param>
+    /// <param name="knowledge">The two ports the knowledge registry opened, each one or <see langword="null"/>.</param>
     /// <returns>The composite, over every link the host bound.</returns>
-    private static CompositeAgentToolFactory BuildToolFactory(AgentCoreOptions options, AgentCoreStartup startup)
+    private static CompositeAgentToolFactory BuildToolFactory(
+        AgentCoreOptions options,
+        AgentCoreStartup startup,
+        (IKnowledgeRetrievalPort? Search, IDocumentStorePort? Documents) knowledge)
     {
         List<IAgentToolFactory> links = [];
+
+        // An explicit UseKnowledgeRetrieval, UseDocumentStore, or UseKnowledge call wins over the
+        // UseKnowledgeStores registry, for the port it sets. A host that wants one half of its own
+        // and one half from the document writes both calls, and neither one hides the other. Step 3b
+        // already left the shadowed half unresolved and unbuilt, so the half it did open is the only
+        // one this reads.
+        var retrieval = options.KnowledgeRetrieval is { } bound ? bound(startup) : knowledge.Search;
+        var documents = options.DocumentStore is { } boundDocuments ? boundDocuments(startup) : knowledge.Documents;
 
         // The two knowledge ports bind apart, so one of the two is enough for the link to be worth
         // adding. The link then serves the built-in whose port is bound and fails the load on the
         // built-in whose port is not.
-        if (options.KnowledgeRetrieval is not null || options.DocumentStore is not null)
+        if (retrieval is not null || documents is not null)
         {
-            links.Add(new BuiltinToolFactory(
-                options.KnowledgeRetrieval?.Invoke(startup),
-                options.DocumentStore?.Invoke(startup)));
+            links.Add(new BuiltinToolFactory(retrieval, documents));
         }
 
         // The binding link needs no adapter. The registry is the seam the host already filled.
