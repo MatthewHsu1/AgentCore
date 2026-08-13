@@ -69,12 +69,12 @@ public sealed class ConfigurationLoaderTests
     [Fact]
     public void Example_BindsEveryToolKind()
     {
-        Assert.Equal(4, Example.Tools.Count);
+        Assert.Equal(6, Example.Tools.Count);
 
         Assert.Equal(ToolKind.Builtin, Example.Tools[0].Kind);
         Assert.Equal("knowledge.search", Example.Tools[0].Uses);
 
-        var binding = Example.Tools[3];
+        var binding = Example.Tools[5];
         Assert.Equal(ToolKind.Binding, binding.Kind);
         Assert.Equal("CreateCase", binding.Binds);
         Assert.NotNull(binding.Parameters);
@@ -84,7 +84,7 @@ public sealed class ConfigurationLoaderTests
     [Fact]
     public void Example_ReadsTheSecretReferenceAndResolvesNothing()
     {
-        var http = Example.Tools[2];
+        var http = Example.Tools[4];
 
         Assert.Equal(ToolKind.Http, http.Kind);
         Assert.NotNull(http.Request);
@@ -108,7 +108,7 @@ public sealed class ConfigurationLoaderTests
 
         Assert.Equal(5, Example.Agents.Items.Count);
         Assert.Equal("resolver", Example.Agents.Items[2].Id);
-        Assert.Equal(["search_chunks", "read_doc"], Example.Agents.Items[2].Tools);
+        Assert.Equal(["search_chunks", "read_doc", "list_docs", "grep_docs"], Example.Agents.Items[2].Tools);
         Assert.Empty(Example.Agents.Items[0].Tools);
     }
 

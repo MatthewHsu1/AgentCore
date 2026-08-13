@@ -14,10 +14,10 @@ namespace AgentCore.Application.Tests.Tools;
 /// The first tool kind of section 8.1: <c>kind: builtin</c>, which AgentCore ships.
 /// </summary>
 /// <remarks>
-/// The worked example names two of them. <c>knowledge.search</c> calls
-/// <see cref="IKnowledgeRetrievalPort"/> and <c>knowledge.read</c> calls
-/// <see cref="IDocumentStorePort"/>, so each one binds apart. A built-in tool returns an error
-/// result and does not throw.
+/// The worked example names four of them. <c>knowledge.search</c> calls
+/// <see cref="IKnowledgeRetrievalPort"/>, and <c>knowledge.read</c>, <c>knowledge.list</c> and
+/// <c>knowledge.grep</c> call <see cref="IDocumentStorePort"/>, so the two ports bind apart. A
+/// built-in tool returns an error result and does not throw.
 /// </remarks>
 public sealed class BuiltinToolTests
 {
@@ -33,6 +33,20 @@ public sealed class BuiltinToolTests
         Id = "read_doc",
         Kind = ToolKind.Builtin,
         Uses = BuiltinToolNames.KnowledgeRead,
+    };
+
+    private static readonly ToolConfiguration ListDocs = new()
+    {
+        Id = "list_docs",
+        Kind = ToolKind.Builtin,
+        Uses = BuiltinToolNames.KnowledgeList,
+    };
+
+    private static readonly ToolConfiguration GrepDocs = new()
+    {
+        Id = "grep_docs",
+        Kind = ToolKind.Builtin,
+        Uses = BuiltinToolNames.KnowledgeGrep,
     };
 
     // ---------------------------------------------------------------------------------------------
@@ -60,6 +74,26 @@ public sealed class BuiltinToolTests
         var function = Assert.IsAssignableFrom<AIFunction>(Factory().Create(Search));
 
         Assert.Contains("query", function.JsonSchema.GetRawText(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void KnowledgeList_ThatDeclaresNoSchema_PublishesItsOwnPattern()
+    {
+        var function = Assert.IsAssignableFrom<AIFunction>(Factory().Create(ListDocs));
+
+        Assert.Contains("pattern", function.JsonSchema.GetRawText(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void KnowledgeGrep_ThatDeclaresNoSchema_PublishesItsOwnPatternAndGlob()
+    {
+        // The pattern is the one argument the model must fill, so the schema also says so.
+        var function = Assert.IsAssignableFrom<AIFunction>(Factory().Create(GrepDocs));
+
+        var schema = function.JsonSchema.GetRawText();
+        Assert.Contains("pattern", schema, StringComparison.Ordinal);
+        Assert.Contains("glob", schema, StringComparison.Ordinal);
+        Assert.Contains("required", schema, StringComparison.Ordinal);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -110,6 +144,97 @@ public sealed class BuiltinToolTests
         Assert.Equal("A refund takes five days.", document["text"]!.GetValue<string>());
     }
 
+    [Fact]
+    public async Task KnowledgeList_NamesEveryDocument()
+    {
+        MapKnowledgePort knowledge = new();
+        knowledge.With("policies/returns.md", "A refund takes five days.");
+        knowledge.With("faq.md", "We open at nine.");
+
+        var result = await CallAsync(Factory(knowledge).Create(ListDocs));
+
+        var listing = Assert.IsType<JsonObject>(result);
+        string[] expected = ["faq.md", "policies/returns.md"];
+        Assert.Equal(expected, DocumentIds(listing));
+        Assert.False(listing["truncated"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task KnowledgeList_KeepsOnlyThePatternTheModelAsksFor()
+    {
+        MapKnowledgePort knowledge = new();
+        knowledge.With("policies/returns.md", "A refund takes five days.");
+        knowledge.With("faq.md", "We open at nine.");
+
+        var result = await CallAsync(Factory(knowledge).Create(ListDocs), ("pattern", "policies/**/*.md"));
+
+        string[] expected = ["policies/returns.md"];
+        Assert.Equal(expected, DocumentIds(Assert.IsType<JsonObject>(result)));
+    }
+
+    [Fact]
+    public async Task KnowledgeList_ThatTheCapCut_SaysSo()
+    {
+        // The store caps the answer, and the flag is what stops the model from reading a short list
+        // as the whole tree. The tool carries the flag through and never invents it.
+        MapKnowledgePort knowledge = new();
+        for (var index = 0; index < 201; index++)
+        {
+            knowledge.With($"doc-{index:D3}.md", "A refund takes five days.");
+        }
+
+        var result = await CallAsync(Factory(knowledge).Create(ListDocs));
+
+        var listing = Assert.IsType<JsonObject>(result);
+        Assert.Equal(200, DocumentIds(listing).Count);
+        Assert.True(listing["truncated"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task KnowledgeGrep_ReturnsTheMatchingLines()
+    {
+        MapKnowledgePort knowledge = new();
+        knowledge.With("returns.md", "We take returns.\nA refund takes five days.");
+
+        var result = await CallAsync(Factory(knowledge).Create(GrepDocs), ("pattern", "refund"));
+
+        var found = Assert.IsType<JsonObject>(result);
+        var match = Assert.Single(Assert.IsType<JsonArray>(found["matches"])!);
+        Assert.Equal("returns.md", match!["documentId"]!.GetValue<string>());
+        Assert.Equal(2, match["lineNumber"]!.GetValue<int>());
+        Assert.Equal("A refund takes five days.", match["line"]!.GetValue<string>());
+        Assert.False(found["truncated"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task KnowledgeGrep_ReadsOnlyTheGlobTheModelAsksFor()
+    {
+        MapKnowledgePort knowledge = new();
+        knowledge.With("policies/returns.md", "A refund takes five days.");
+        knowledge.With("faq.md", "A refund takes five days.");
+
+        var result = await CallAsync(
+            Factory(knowledge).Create(GrepDocs),
+            ("pattern", "refund"),
+            ("glob", "policies/**/*.md"));
+
+        var match = Assert.Single(Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(result)["matches"])!);
+        Assert.Equal("policies/returns.md", match!["documentId"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task KnowledgeGrep_ThatTheCapCut_SaysSo()
+    {
+        MapKnowledgePort knowledge = new();
+        knowledge.With("returns.md", string.Join('\n', Enumerable.Repeat("A refund takes five days.", 101)));
+
+        var result = await CallAsync(Factory(knowledge).Create(GrepDocs), ("pattern", "refund"));
+
+        var found = Assert.IsType<JsonObject>(result);
+        Assert.Equal(100, Assert.IsType<JsonArray>(found["matches"])!.Count);
+        Assert.True(found["truncated"]!.GetValue<bool>());
+    }
+
     // ---------------------------------------------------------------------------------------------
     // Section 8.7: a tool returns an error result and does not throw.
     // ---------------------------------------------------------------------------------------------
@@ -119,6 +244,25 @@ public sealed class BuiltinToolTests
         var result = await CallAsync(Factory().Create(Read), ("documentId", "missing.md"));
 
         AssertError(result, "read_doc", "missing.md");
+    }
+
+    [Fact]
+    public async Task KnowledgeGrep_WithNoPattern_ReturnsAnErrorResult()
+    {
+        // Row T46: a required argument the model leaves out arrives as a silent default, so the tool
+        // checks the pattern itself. An empty pattern would otherwise match every line of every
+        // document.
+        var result = await CallAsync(Factory().Create(GrepDocs));
+
+        AssertError(result, "grep_docs", "pattern");
+    }
+
+    [Fact]
+    public async Task KnowledgeGrep_WithAnEmptyPattern_ReturnsAnErrorResult()
+    {
+        var result = await CallAsync(Factory().Create(GrepDocs), ("pattern", string.Empty));
+
+        AssertError(result, "grep_docs", "pattern");
     }
 
     [Fact]
@@ -148,7 +292,7 @@ public sealed class BuiltinToolTests
     // Binding the name.
     // ---------------------------------------------------------------------------------------------
     [Fact]
-    public void TheWorkedExample_BindsBothBuiltInNames()
+    public void TheWorkedExample_BindsEveryBuiltInName()
     {
         var document = ConfigurationLoader.LoadYaml(ExampleDocument.Yaml);
         var factory = Factory();
@@ -225,6 +369,44 @@ public sealed class BuiltinToolTests
     }
 
     [Fact]
+    public void AHostThatBindsOnlyRetrieval_FailsTheLoadOnKnowledgeList()
+    {
+        BuiltinToolFactory factory = new(new MapKnowledgePort(), documents: null);
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => factory.Create(ListDocs));
+
+        Assert.Equal(ConfigurationCheck.ReferenceResolution, failure.Check);
+        Assert.Contains("list_docs", failure.Message, StringComparison.Ordinal);
+        Assert.Contains(nameof(IDocumentStorePort), failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AHostThatBindsOnlyRetrieval_FailsTheLoadOnKnowledgeGrep()
+    {
+        BuiltinToolFactory factory = new(new MapKnowledgePort(), documents: null);
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => factory.Create(GrepDocs));
+
+        Assert.Equal(ConfigurationCheck.ReferenceResolution, failure.Check);
+        Assert.Contains("grep_docs", failure.Message, StringComparison.Ordinal);
+        Assert.Contains(nameof(IDocumentStorePort), failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AHostThatBindsOnlyTheDocumentStore_StillGetsKnowledgeListAndKnowledgeGrep()
+    {
+        MapKnowledgePort documents = new();
+        documents.With("returns.md", "A refund takes five days.");
+        BuiltinToolFactory factory = new(retrieval: null, documents);
+
+        var listing = Assert.IsType<JsonObject>(await CallAsync(factory.Create(ListDocs)));
+        var found = Assert.IsType<JsonObject>(await CallAsync(factory.Create(GrepDocs), ("pattern", "refund")));
+
+        Assert.Equal("returns.md", Assert.Single(DocumentIds(listing)));
+        Assert.Single(Assert.IsType<JsonArray>(found["matches"])!);
+    }
+
+    [Fact]
     public void TheBuiltinFactory_ServesNoOtherKind()
     {
         Assert.Null(Factory().Create(new ToolConfiguration { Id = "other", Kind = ToolKind.Binding, Binds = "X" }));
@@ -256,6 +438,10 @@ public sealed class BuiltinToolTests
         var function = Assert.IsAssignableFrom<AIFunction>(tool);
         return await function.InvokeAsync(Arguments(arguments), TestContext.Current.CancellationToken);
     }
+
+    /// <summary>Reads the ids one <c>knowledge.list</c> result names.</summary>
+    private static IReadOnlyList<string> DocumentIds(JsonObject listing)
+        => [.. Assert.IsType<JsonArray>(listing["documentIds"])!.Select(id => id!.GetValue<string>())];
 
     private static void AssertError(object? result, string toolId, string fragment)
     {

@@ -123,7 +123,7 @@ public sealed class ResolvedSecretsTests
 
         Assert.Equal(ApiKeyName, failure.SecretName);
         Assert.Contains(ApiKeyName, failure.Message, StringComparison.Ordinal);
-        Assert.Contains("/tools/2/request/headers/Authorization", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("/tools/4/request/headers/Authorization", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]

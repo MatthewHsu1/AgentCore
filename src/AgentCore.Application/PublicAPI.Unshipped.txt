@@ -731,6 +731,8 @@ AgentCore.Application.Tools.ToolBindingRegistry.Register(string! name, AgentCore
 AgentCore.Application.Tools.ToolBindingRegistry.ToolBindingRegistry() -> void
 AgentCore.Application.Tools.ToolBindingRegistry.TryGetBinding(string! name, out AgentCore.Application.Tools.ToolBinding? binding) -> bool
 AgentCore.Application.Tools.ToolErrorResult
+const AgentCore.Application.Tools.BuiltinToolNames.KnowledgeGrep = "knowledge.grep" -> string!
+const AgentCore.Application.Tools.BuiltinToolNames.KnowledgeList = "knowledge.list" -> string!
 const AgentCore.Application.Tools.BuiltinToolNames.KnowledgeRead = "knowledge.read" -> string!
 const AgentCore.Application.Tools.BuiltinToolNames.KnowledgeSearch = "knowledge.search" -> string!
 const AgentCore.Application.Tools.ToolErrorResult.ErrorProperty = "error" -> string!
