@@ -12,9 +12,19 @@ public enum GraphPattern
     Concurrent,
 
     /// <summary><c>AgentWorkflowBuilder.CreateHandoffBuilderWith</c>.</summary>
+    /// <remarks>
+    /// The first agent in <c>graph.agents</c> starts the handoff, and every other agent is a target it
+    /// hands to. That is fixed, and no document key moves it. D15 makes a new public key a permanent
+    /// obligation, so the order of <c>graph.agents</c> carries the decision instead.
+    /// </remarks>
     Handoff,
 
     /// <summary><c>AgentWorkflowBuilder.CreateGroupChatBuilderWith</c>.</summary>
+    /// <remarks>
+    /// The group chat is round-robin, through <c>RoundRobinGroupChatManager</c>. That is fixed, and no
+    /// document key selects another manager. D15 makes a new public key a permanent obligation, so a
+    /// document that needs another turn order builds an explicit graph of row 4 instead.
+    /// </remarks>
     GroupChat,
 }
 

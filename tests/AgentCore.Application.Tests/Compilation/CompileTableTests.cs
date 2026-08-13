@@ -43,6 +43,27 @@ public sealed class CompileTableTests
           agents: [ first, second ]
         """;
 
+    /// <summary>The <c>agents.defaults.instructions</c> of <see cref="SharedPrefixYaml"/>.</summary>
+    private const string SharedPrefix = "the stable cached prefix";
+
+    /// <summary>Two agents, one shared prefix, and a delta on each of them.</summary>
+    private const string SharedPrefixYaml =
+        """
+        apiVersion: agentcore/v1
+        name: shared-prefix
+        agents:
+          defaults:
+            model: { ref: reply }
+            instructions: |
+              the stable cached prefix
+          items:
+            - { id: greeter, instructions: "the greeter delta" }
+            - { id: closer, instructions: "the closer delta" }
+        graph:
+          pattern: sequential
+          agents: [ greeter, closer ]
+        """;
+
     private const string PatternYaml =
         """
         apiVersion: agentcore/v1
@@ -307,6 +328,23 @@ public sealed class CompileTableTests
         Assert.Equal("prefix", AgentInstructions.Compose(defaults, agent));
         Assert.Equal("delta", AgentInstructions.Compose(null, agent with { Instructions = "delta" }));
         Assert.Null(AgentInstructions.Compose(null, agent));
+    }
+
+    [Fact]
+    public void EveryCompiledAgent_CarriesTheCachedPrefixAboveItsOwnDelta()
+    {
+        var compiled = Compile(SharedPrefixYaml);
+
+        var greeter = Assert.IsType<ChatClientAgent>(compiled.Agents["greeter"]);
+        var closer = Assert.IsType<ChatClientAgent>(compiled.Agents["closer"]);
+
+        // Section 8.1 makes agents.defaults.instructions a cached prefix, and the compiler has one
+        // build path for every agent. This asserts that path and not AgentInstructions.Compose: an
+        // agent the compiler built without the prefix would defeat the cache for every later turn.
+        Assert.Equal(SharedPrefix + AgentInstructions.Separator + "the greeter delta", greeter.Instructions);
+        Assert.Equal(SharedPrefix + AgentInstructions.Separator + "the closer delta", closer.Instructions);
+        Assert.StartsWith(SharedPrefix, greeter.Instructions, StringComparison.Ordinal);
+        Assert.StartsWith(SharedPrefix, closer.Instructions, StringComparison.Ordinal);
     }
 
     [Fact]
