@@ -813,7 +813,11 @@ public sealed class CallSessionTests
         Assert.Equal("greeting", port.Stage);
         Assert.False(port.IsComplete);
         Assert.Same(turn, port.LastTurn);
-        Assert.False(port.Interrupt("nothing played", TimeSpan.Zero));
+
+        // A frame that lands after the turn ended is recorded, not ignored. The vendor paces the
+        // audio, so the caller was still hearing this reply long after the model stopped producing
+        // it, and the port amends the finished turn. See the remarks on CallSession.Interrupt.
+        Assert.True(port.Interrupt("nothing played", TimeSpan.Zero));
 
         List<ChatResponseUpdate> updates = [];
         await foreach (var update in port.RunTurnStreamingAsync("still there?", TestContext.Current.CancellationToken))

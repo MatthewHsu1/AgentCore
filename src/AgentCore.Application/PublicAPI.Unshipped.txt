@@ -794,3 +794,10 @@ AgentCore.Application.Runtime.CallSession.EndCall(AgentCore.Domain.Audit.CallEnd
 const AgentCore.Application.Diagnostics.AgentCoreTelemetry.ActivitySourceName = "AgentCore" -> string!
 const AgentCore.Application.Diagnostics.AgentCoreTelemetry.MeterName = "AgentCore" -> string!
 const AgentCore.Application.Diagnostics.AgentCoreTelemetry.TurnActivityName = "agentcore.turn" -> string!
+AgentCore.Application.Llm.CompositeChatClientFactory
+AgentCore.Application.Llm.CompositeChatClientFactory.Dispose() -> void
+AgentCore.Application.Llm.CompositeChatClientFactory.GetChatClient(AgentCore.Application.Configuration.Schema.ModelReference? model) -> Microsoft.Extensions.AI.IChatClient!
+static AgentCore.Application.Llm.CompositeChatClientFactory.CreateAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.IChatClientAdapter!>! adapters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Llm.CompositeChatClientFactory!>
+AgentCore.Application.Ports.IChatClientAdapter
+AgentCore.Application.Ports.IChatClientAdapter.Kind.get -> string!
+AgentCore.Application.Ports.IChatClientAdapter.CreateClientAsync(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.IChatClient!>

@@ -22,7 +22,7 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection;
 /// </summary>
 /// <remarks>
 /// A configuration defect stops the host here and never on the first call. Every test proves that by
-/// calling AddAgentCore alone, with no request anywhere.
+/// calling AddAgentCoreAsync alone, with no request anywhere.
 /// </remarks>
 public sealed class AddAgentCoreTests
 {
@@ -36,6 +36,19 @@ public sealed class AddAgentCoreTests
         providers:
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
+        """;
+
+    // The same agent, served by a vendor this host's fake adapter does not answer to.
+    private const string OtherVendorYaml =
+        """
+        apiVersion: agentcore/v1
+        name: other-vendor
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything" }
+        providers:
+          llm:
+            - { kind: anthropic, model: claude-sonnet-5, as: reply }
         """;
 
     // The same agent, with both tunable keys of the document set away from their default.
@@ -182,9 +195,9 @@ public sealed class AddAgentCoreTests
     // What it registers.
     // -------------------------------------------------------------------------------------------
     [Fact]
-    public void AddAgentCore_RegistersTheCompiledAgentAsAProcessSingleton()
+    public async Task AddAgentCore_RegistersTheCompiledAgentAsAProcessSingleton()
     {
-        using var provider = Build(OneAgentYaml);
+        using var provider = await BuildAsync(OneAgentYaml);
 
         var first = provider.GetRequiredService<CompiledAgent>();
         var second = provider.GetRequiredService<CompiledAgent>();
@@ -197,9 +210,9 @@ public sealed class AddAgentCoreTests
     }
 
     [Fact]
-    public void AddAgentCore_RegistersOneSessionFactoryThatBuildsANewSessionForEachCall()
+    public async Task AddAgentCore_RegistersOneSessionFactoryThatBuildsANewSessionForEachCall()
     {
-        using var provider = Build(OneAgentYaml);
+        using var provider = await BuildAsync(OneAgentYaml);
         var factory = provider.GetRequiredService<ICallSessionFactory>();
 
         Assert.Same(factory, provider.GetRequiredService<ICallSessionFactory>());
@@ -212,9 +225,9 @@ public sealed class AddAgentCoreTests
     }
 
     [Fact]
-    public void AddAgentCore_RegistersTheInMemorySessionStoreByDefault()
+    public async Task AddAgentCore_RegistersTheInMemorySessionStoreByDefault()
     {
-        using var provider = Build(OneAgentYaml);
+        using var provider = await BuildAsync(OneAgentYaml);
 
         var store = provider.GetRequiredService<ICallSessionStore>();
 
@@ -223,12 +236,12 @@ public sealed class AddAgentCoreTests
     }
 
     [Fact]
-    public void AddAgentCore_KeepsASessionStoreTheHostRegisteredFirst()
+    public async Task AddAgentCore_KeepsASessionStoreTheHostRegisteredFirst()
     {
         CountingCallSessionStore mine = new();
         ServiceCollection services = new();
         services.AddSingleton<ICallSessionStore>(mine);
-        Configure(services, OneAgentYaml, null);
+        await ConfigureAsync(services, OneAgentYaml, null);
 
         using var provider = services.BuildServiceProvider();
 
@@ -237,12 +250,60 @@ public sealed class AddAgentCoreTests
     }
 
     // -------------------------------------------------------------------------------------------
+    // The document picks the vendor, and no code names one: the point of the adapter seam.
+    // -------------------------------------------------------------------------------------------
+    [Fact]
+    public async Task TheAdapterOverload_LetsTheDocumentPickTheVendorByItsKind()
+    {
+        // 'kind: openai' selects the adapter registered under that kind. The host lists what it
+        // supports, once, and the document decides which entry runs.
+        using var provider = await BuildAsync(OneAgentYaml, options => options.UseChatClients(
+            new FakeChatClientAdapter("openai", () => new SequencedChatClient("routed")),
+            new FakeChatClientAdapter("anthropic", () => new SequencedChatClient("wrong vendor"))));
+
+        var session = provider.GetRequiredService<ICallSessionFactory>().Create();
+        var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
+
+        Assert.Equal("routed", turn.ReplyText);
+    }
+
+    [Fact]
+    public async Task AKindNoRegisteredAdapterServes_FailsTheStartAndNamesBothSides()
+    {
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(() => BuildAsync(
+            OtherVendorYaml,
+            options => options.UseChatClients(
+                new FakeChatClientAdapter("openai", () => new SequencedChatClient("hello")))));
+
+        // The message names the kind the document wrote and the kinds the host registers, so the
+        // reader knows which side to change.
+        Assert.Contains("anthropic", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("'openai'", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnAsyncSeam_BuildsItsFactoryWithNoBlockedThread()
+    {
+        using var provider = await BuildAsync(OneAgentYaml, options => options.UseChatClients(
+            async (startup, cancellationToken) =>
+            {
+                await Task.Yield();
+                return new RoutingChatClientFactory(new SequencedChatClient("awaited"));
+            }));
+
+        var session = provider.GetRequiredService<ICallSessionFactory>().Create();
+        var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
+
+        Assert.Equal("awaited", turn.ReplyText);
+    }
+
+    // -------------------------------------------------------------------------------------------
     // The seams the host binds.
     // -------------------------------------------------------------------------------------------
     [Fact]
-    public void ABindingTool_ReachesTheDelegateTheHostRegistered()
+    public async Task ABindingTool_ReachesTheDelegateTheHostRegistered()
     {
-        using var provider = Build(
+        using var provider = await BuildAsync(
             BindingYaml,
             options => options.Bind("CreateCase", (_, _) => ValueTask.FromResult<object?>(new JsonObject())));
 
@@ -253,20 +314,20 @@ public sealed class AddAgentCoreTests
     }
 
     [Fact]
-    public void ABindingToolWithNoDelegate_FailsTheStartAndNamesTheBinding()
+    public async Task ABindingToolWithNoDelegate_FailsTheStartAndNamesTheBinding()
     {
-        var failure = Assert.Throws<ConfigurationLoadException>(() => Build(BindingYaml));
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(() => BuildAsync(BindingYaml));
 
         Assert.Contains("CreateCase", failure.Message, StringComparison.Ordinal);
         Assert.Contains("did not register", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void OneStoreThatAnswersBothPorts_BindsInOneLineAndIsBuiltOnce()
+    public async Task OneStoreThatAnswersBothPorts_BindsInOneLineAndIsBuiltOnce()
     {
         var built = 0;
 
-        using var provider = Build(KnowledgeYaml, options => options.UseKnowledge(_ =>
+        using var provider = await BuildAsync(KnowledgeYaml, options => options.UseKnowledge(_ =>
         {
             built++;
             return new EmptyKnowledgeStore();
@@ -278,11 +339,11 @@ public sealed class AddAgentCoreTests
     }
 
     [Fact]
-    public void AHostThatBindsOnlyTheDocumentStore_Starts()
+    public async Task AHostThatBindsOnlyTheDocumentStore_Starts()
     {
         // Section 7 splits the two ports so a vendor that supplies only one is enough. This host has
         // the reading half and no retrieval adapter, and knowledge.read still reaches the model.
-        using var provider = Build(
+        using var provider = await BuildAsync(
             ReadOnlyKnowledgeYaml,
             options => options.UseDocumentStore(_ => new EmptyKnowledgeStore()));
 
@@ -290,9 +351,9 @@ public sealed class AddAgentCoreTests
     }
 
     [Fact]
-    public void AHostThatBindsOnlyTheDocumentStore_FailsTheStartAndNamesTheUnboundPort()
+    public async Task AHostThatBindsOnlyTheDocumentStore_FailsTheStartAndNamesTheUnboundPort()
     {
-        var failure = Assert.Throws<ConfigurationLoadException>(() => Build(
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(() => BuildAsync(
             KnowledgeYaml,
             options => options.UseDocumentStore(_ => new EmptyKnowledgeStore())));
 
@@ -301,12 +362,12 @@ public sealed class AddAgentCoreTests
     }
 
     [Fact]
-    public void TwoAdapters_BindToTheTwoPortsApart()
+    public async Task TwoAdapters_BindToTheTwoPortsApart()
     {
         EmptyKnowledgeStore retrieval = new();
         EmptyKnowledgeStore documents = new();
 
-        using var provider = Build(KnowledgeYaml, options => options
+        using var provider = await BuildAsync(KnowledgeYaml, options => options
             .UseKnowledgeRetrieval(_ => retrieval)
             .UseDocumentStore(_ => documents));
 
@@ -315,13 +376,13 @@ public sealed class AddAgentCoreTests
     }
 
     [Fact]
-    public void ASecretReference_ResolvesOnceAtStartup()
+    public async Task ASecretReference_ResolvesOnceAtStartup()
     {
         using HttpClient client = new();
         MapSecretResolver resolver = new();
         resolver.With("orders-api-key", "a-value-no-message-repeats");
 
-        using var provider = Build(
+        using var provider = await BuildAsync(
             SecretYaml,
             options =>
             {
@@ -338,11 +399,11 @@ public sealed class AddAgentCoreTests
     }
 
     [Fact]
-    public void ASecretReferenceWithNoResolver_FailsTheStartAndNamesTheSecret()
+    public async Task ASecretReferenceWithNoResolver_FailsTheStartAndNamesTheSecret()
     {
         using HttpClient client = new();
 
-        var failure = Assert.Throws<SecretResolutionException>(() => Build(
+        var failure = await Assert.ThrowsAsync<SecretResolutionException>(() => BuildAsync(
             SecretYaml,
             options => options.AddToolFactory(startup => new HttpToolFactory(client, startup.Secrets))));
 
@@ -353,9 +414,9 @@ public sealed class AddAgentCoreTests
     // Row 4 of the compile table, through the only supported composition root.
     // -------------------------------------------------------------------------------------------
     [Fact]
-    public void AGuardedGraph_Starts()
+    public async Task AGuardedGraph_Starts()
     {
-        using var provider = BuildGuardedGraph();
+        using var provider = await BuildGuardedGraphAsync();
 
         var compiled = provider.GetRequiredService<CompiledAgent>();
 
@@ -370,7 +431,7 @@ public sealed class AddAgentCoreTests
     [InlineData(false, "HANDLED", "ESCALATED")]
     public async Task AGuardedGraph_TakesTheEdgeTheStateOfTheCallNames(bool escalate, string taken, string refused)
     {
-        using var provider = BuildGuardedGraph();
+        using var provider = await BuildGuardedGraphAsync();
         var session = provider.GetRequiredService<ICallSessionFactory>().Create();
         session.State.TryWrite("escalate", escalate);
 
@@ -383,7 +444,7 @@ public sealed class AddAgentCoreTests
     [Fact]
     public async Task AGuardedGraph_KeepsTwoCallsApartWhenTheyRunAtTheSameTime()
     {
-        using var provider = BuildGuardedGraph();
+        using var provider = await BuildGuardedGraphAsync();
         var sessions = provider.GetRequiredService<ICallSessionFactory>();
         var token = TestContext.Current.CancellationToken;
 
@@ -406,9 +467,9 @@ public sealed class AddAgentCoreTests
     // The evaluation seam of D13. Triage row T18 defers the online path, so the rate is 0.
     // -------------------------------------------------------------------------------------------
     [Fact]
-    public void AddAgentCore_RegistersTheEvaluationSeamWithTheOnlinePathClosed()
+    public async Task AddAgentCore_RegistersTheEvaluationSeamWithTheOnlinePathClosed()
     {
-        using var provider = Build(OneAgentYaml);
+        using var provider = await BuildAsync(OneAgentYaml);
 
         var registry = provider.GetRequiredService<EvaluatorRegistry>();
         var sampler = provider.GetRequiredService<EvaluationSampler>();
@@ -426,9 +487,9 @@ public sealed class AddAgentCoreTests
     }
 
     [Fact]
-    public void AddAgentCore_TakesTheSampleRateTheDocumentSets()
+    public async Task AddAgentCore_TakesTheSampleRateTheDocumentSets()
     {
-        using var provider = Build(TunedYaml);
+        using var provider = await BuildAsync(TunedYaml);
 
         var sampler = provider.GetRequiredService<EvaluationSampler>();
 
@@ -443,7 +504,7 @@ public sealed class AddAgentCoreTests
     [Fact]
     public async Task AQuietTurn_SpeaksTheFallbackTheDocumentNames()
     {
-        using var provider = Build(TunedYaml, options => options.UseChatClients(
+        using var provider = await BuildAsync(TunedYaml, options => options.UseChatClients(
             _ => new RoutingChatClientFactory(new SequencedChatClient(string.Empty))));
         var session = provider.GetRequiredService<ICallSessionFactory>().Create();
 
@@ -456,7 +517,7 @@ public sealed class AddAgentCoreTests
     [Fact]
     public async Task AQuietTurn_SpeaksTheDefaultFallbackWhenTheDocumentNamesNone()
     {
-        using var provider = Build(OneAgentYaml, options => options.UseChatClients(
+        using var provider = await BuildAsync(OneAgentYaml, options => options.UseChatClients(
             _ => new RoutingChatClientFactory(new SequencedChatClient(string.Empty))));
         var session = provider.GetRequiredService<ICallSessionFactory>().Create();
 
@@ -466,12 +527,12 @@ public sealed class AddAgentCoreTests
     }
 
     [Fact]
-    public void AddAgentCore_KeepsAnEvaluationServiceTheHostRegisteredFirst()
+    public async Task AddAgentCore_KeepsAnEvaluationServiceTheHostRegisteredFirst()
     {
         EvaluationSampler mine = new(rate: 1);
         ServiceCollection services = new();
         services.AddSingleton(mine);
-        Configure(services, OneAgentYaml, null);
+        await ConfigureAsync(services, OneAgentYaml, null);
 
         using var provider = services.BuildServiceProvider();
 
@@ -487,7 +548,7 @@ public sealed class AddAgentCoreTests
     public async Task AnAuditSink_ReachesTheTurnLoopAndTheChainVerifies()
     {
         InMemoryAuditSink sink = new();
-        using var provider = Build(OneAgentYaml, options => options.AuditSink = sink);
+        using var provider = await BuildAsync(OneAgentYaml, options => options.AuditSink = sink);
 
         var session = provider.GetRequiredService<ICallSessionFactory>().Create("call-1");
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
@@ -505,7 +566,7 @@ public sealed class AddAgentCoreTests
     [Fact]
     public async Task NoAuditSinkAndNoLogger_StillRunsATurn()
     {
-        using var provider = Build(OneAgentYaml);
+        using var provider = await BuildAsync(OneAgentYaml);
 
         var session = provider.GetRequiredService<ICallSessionFactory>().Create();
         var turn = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
@@ -520,9 +581,9 @@ public sealed class AddAgentCoreTests
     // What it refuses.
     // -------------------------------------------------------------------------------------------
     [Fact]
-    public void ABadDocument_FailsTheStartAndNamesTheFault()
+    public async Task ABadDocument_FailsTheStartAndNamesTheFault()
     {
-        var failure = Assert.Throws<ConfigurationLoadException>(() => Build(BrokenYaml));
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(() => BuildAsync(BrokenYaml));
 
         var error = Assert.Single(failure.Errors);
         Assert.Equal(ConfigurationCheck.ReferenceResolution, error.Check);
@@ -531,52 +592,58 @@ public sealed class AddAgentCoreTests
     }
 
     [Fact]
-    public void ADocumentThatDoesNotParse_FailsTheStart()
+    public async Task ADocumentThatDoesNotParse_FailsTheStart()
     {
         ServiceCollection services = new();
 
-        var failure = Assert.Throws<ConfigurationLoadException>(() => services.AddAgentCore(options =>
-        {
-            options.ConfigurationPath = "no-such-extension.txt";
-            options.UseChatClients(_ => new RoutingChatClientFactory(new SequencedChatClient("hello")));
-        }));
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+            async () => await services.AddAgentCoreAsync(options =>
+            {
+                options.ConfigurationPath = "no-such-extension.txt";
+                options.UseChatClients(_ => new RoutingChatClientFactory(new SequencedChatClient("hello")));
+            }, TestContext.Current.CancellationToken));
 
         Assert.Equal(ConfigurationCheck.Syntax, failure.Check);
     }
 
     [Fact]
-    public void NoDocumentAtAll_FailsTheStartAndSaysWhatToSet()
+    public async Task NoDocumentAtAll_FailsTheStartAndSaysWhatToSet()
     {
         ServiceCollection services = new();
 
-        var failure = Assert.Throws<InvalidOperationException>(() => services.AddAgentCore(
-            options => options.UseChatClients(_ => new RoutingChatClientFactory(new SequencedChatClient("hello")))));
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await services.AddAgentCoreAsync(
+                options => options.UseChatClients(_ => new RoutingChatClientFactory(new SequencedChatClient("hello"))),
+                TestContext.Current.CancellationToken));
 
         Assert.Contains("names no document", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void TwoDocuments_FailTheStart()
+    public async Task TwoDocuments_FailTheStart()
     {
         ServiceCollection services = new();
 
-        var failure = Assert.Throws<InvalidOperationException>(() => services.AddAgentCore(options =>
-        {
-            options.Configuration = ConfigurationLoader.LoadYaml(OneAgentYaml);
-            options.ConfigurationPath = "config/example.yaml";
-            options.UseChatClients(_ => new RoutingChatClientFactory(new SequencedChatClient("hello")));
-        }));
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await services.AddAgentCoreAsync(options =>
+            {
+                options.Configuration = ConfigurationLoader.LoadYaml(OneAgentYaml);
+                options.ConfigurationPath = "config/example.yaml";
+                options.UseChatClients(_ => new RoutingChatClientFactory(new SequencedChatClient("hello")));
+            }, TestContext.Current.CancellationToken));
 
         Assert.Contains("names two documents", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void NoChatClientAdapter_FailsTheStart()
+    public async Task NoChatClientAdapter_FailsTheStart()
     {
         ServiceCollection services = new();
 
-        var failure = Assert.Throws<InvalidOperationException>(() => services.AddAgentCore(
-            options => options.Configuration = ConfigurationLoader.LoadYaml(OneAgentYaml)));
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await services.AddAgentCoreAsync(
+                options => options.Configuration = ConfigurationLoader.LoadYaml(OneAgentYaml),
+                TestContext.Current.CancellationToken));
 
         Assert.Contains("UseChatClients", failure.Message, StringComparison.Ordinal);
     }
@@ -586,24 +653,24 @@ public sealed class AddAgentCoreTests
     // -------------------------------------------------------------------------------------------
     /// <summary>Composes the guarded graph over one offline model for each node.</summary>
     /// <returns>The provider a test resolves from.</returns>
-    private static ServiceProvider BuildGuardedGraph()
+    private static Task<ServiceProvider> BuildGuardedGraphAsync()
     {
         RoutingChatClientFactory models = new(new SequencedChatClient("ROUTED"));
         models.Route("human", new SequencedChatClient("ESCALATED"));
         models.Route("bot", new SequencedChatClient("HANDLED"));
 
-        return Build(GuardedGraphYaml, options => options.UseChatClients(_ => models));
+        return BuildAsync(GuardedGraphYaml, options => options.UseChatClients(_ => models));
     }
 
-    private static ServiceProvider Build(string yaml, Action<AgentCoreOptions>? configure = null)
+    private static async Task<ServiceProvider> BuildAsync(string yaml, Action<AgentCoreOptions>? configure = null)
     {
         ServiceCollection services = new();
-        Configure(services, yaml, configure);
+        await ConfigureAsync(services, yaml, configure);
         return services.BuildServiceProvider();
     }
 
-    private static void Configure(ServiceCollection services, string yaml, Action<AgentCoreOptions>? configure)
-        => services.AddAgentCore(options =>
+    private static async Task ConfigureAsync(ServiceCollection services, string yaml, Action<AgentCoreOptions>? configure)
+        => await services.AddAgentCoreAsync(options =>
         {
             options.Configuration = ConfigurationLoader.LoadYaml(yaml);
             options.UseChatClients(_ => new RoutingChatClientFactory(new SequencedChatClient("hello")));

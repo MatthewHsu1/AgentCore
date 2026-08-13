@@ -499,3 +499,6 @@ src/AgentCore.Api/config/config.json
 
 # Harness-created agent worktrees. Never commit these.
 .claude/worktrees/
+
+docs/
+.superpowers/

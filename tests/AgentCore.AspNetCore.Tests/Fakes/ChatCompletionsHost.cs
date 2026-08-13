@@ -55,7 +55,7 @@ internal sealed class ChatCompletionsHost : IAsyncDisposable
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Logging.ClearProviders();
 
-        builder.Services.AddAgentCore(options =>
+        await builder.Services.AddAgentCoreAsync(options =>
         {
             options.Configuration = ConfigurationLoader.LoadYaml(yaml);
             options.UseChatClients(_ =>

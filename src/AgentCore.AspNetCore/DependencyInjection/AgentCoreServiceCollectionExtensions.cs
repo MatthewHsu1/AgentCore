@@ -8,6 +8,7 @@ using AgentCore.Application.Runtime;
 using AgentCore.Application.Secrets;
 using AgentCore.Application.Tools;
 using AgentCore.AspNetCore.Sessions;
+using Microsoft.AspNetCore.WebSockets;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -32,6 +33,15 @@ namespace AgentCore.AspNetCore.DependencyInjection;
 /// <see cref="ICallSessionFactory"/>, and <see cref="ICallSessionStore"/> holds it between requests.
 /// </para>
 /// <para>
+/// This also registers a <see cref="TimeProvider"/> for the whole container —
+/// <see cref="AgentCoreOptions.TimeProvider"/> when the host bound one, otherwise
+/// <see cref="TimeProvider.System"/> — unless a host already registered its own before calling
+/// this method, which it keeps. <see cref="CallSessionFactory"/> reads the same clock
+/// directly off <see cref="AgentCoreOptions.TimeProvider"/>, and the relay's idle deadline in
+/// <c>AgentCore.AspNetCore/Vendors/TelnyxRelay/</c> resolves this registration, so the two always
+/// agree on what time it is.
+/// </para>
+/// <para>
 /// <b><c>providers.speech</c> and <c>providers.telephony</c> bind and this method reads neither, on
 /// purpose.</b> D28 buys the whole speech layer inside Telnyx Conversation Relay, so
 /// <c>providers.speech</c> names the relay and no speech adapter exists to bind: the code that reads
@@ -51,13 +61,22 @@ public static class AgentCoreServiceCollectionExtensions
     /// <summary>Loads one document and registers everything a call needs to run on it.</summary>
     /// <param name="services">The service collection of the host.</param>
     /// <param name="configure">Binds the document and the adapters the document names.</param>
+    /// <param name="cancellationToken">Cancels the start: the secret reads and the adapter builds.</param>
     /// <returns>The same collection, so a host chains its calls.</returns>
     /// <exception cref="InvalidOperationException">
     /// The options name no document, name two, or bind no chat client adapter.
     /// </exception>
     /// <exception cref="ConfigurationLoadException">The document fails one of the eight checks, or does not compile.</exception>
     /// <exception cref="SecretResolutionException">One <c>${secret:name}</c> reference resolves to nothing.</exception>
-    public static IServiceCollection AddAgentCore(this IServiceCollection services, Action<AgentCoreOptions> configure)
+    /// <remarks>
+    /// This method is async because two of its steps wait: the secret resolution of step 3 and the
+    /// chat client seam of step 5. A top-level <c>Program.cs</c> awaits it before
+    /// <c>builder.Build()</c>, and no thread blocks while the host starts.
+    /// </remarks>
+    public static async ValueTask<IServiceCollection> AddAgentCoreAsync(
+        this IServiceCollection services,
+        Action<AgentCoreOptions> configure,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configure);
@@ -78,11 +97,9 @@ public static class AgentCoreServiceCollectionExtensions
 
         // Step 3: resolve every secret once. A tool call then costs no lookup, and a missing
         // credential stops the host rather than one turn.
-        var secrets = ResolvedSecrets
-            .ResolveAsync(configuration, options.SecretResolver ?? NoSecretResolver.Instance)
-            .AsTask()
-            .GetAwaiter()
-            .GetResult();
+        var secrets = await ResolvedSecrets
+            .ResolveAsync(configuration, options.SecretResolver ?? NoSecretResolver.Instance, cancellationToken)
+            .ConfigureAwait(false);
 
         AgentCoreStartup startup = new(configuration, secrets);
 
@@ -91,11 +108,12 @@ public static class AgentCoreServiceCollectionExtensions
         var tools = BuildToolFactory(options, startup);
 
         // Step 5: compile. The registry compiles once and every call shares the result.
-        var chatClients = (options.ChatClients
+        var chatClients = await (options.ChatClients
             ?? throw new InvalidOperationException(
-                "AddAgentCore binds no chat client adapter. Call options.UseChatClients(...), because the "
+                "AddAgentCoreAsync binds no chat client adapter. Call options.UseChatClients(...), because the "
                 + "compile table asks it for every agent and for the extractor."))
-            .Invoke(startup);
+            .Invoke(startup, cancellationToken)
+            .ConfigureAwait(false);
 
         // Section 8.7, row five: a guard that throws at run time is not a defect. The evaluator
         // already reports each distinct guard exactly once, and this is where that report finds a
@@ -138,6 +156,15 @@ public static class AgentCoreServiceCollectionExtensions
         services.AddSingleton<IGuardEvaluator>(guards);
         services.AddSingleton<ICallSessionFactory>(sessions);
 
+        // The same clock CallSessionFactory already reads off options.TimeProvider, now resolvable
+        // from the request's own service provider too. TelnyxRelayConnection reads it here for its
+        // idle deadline, so a test that owns options.TimeProvider owns that deadline as well.
+        // TryAdd, matching ICallSessionStore below: a host that registered its own TimeProvider
+        // before calling AddAgentCore keeps it, rather than this line silently overriding it —
+        // AddSingleton would have made the last registration win regardless of which one a
+        // GetRequiredService<TimeProvider>() caller actually wanted.
+        services.TryAddSingleton(options.TimeProvider ?? TimeProvider.System);
+
         if (options.AuditSink is { } audit)
         {
             // Only what the host bound is registered. Nothing stands in for the PostgreSQL sink of
@@ -152,6 +179,38 @@ public static class AgentCoreServiceCollectionExtensions
         AddEvaluation(services, configuration);
 
         return services;
+    }
+
+    /// <summary>Registers WebSocket options that suit a phone call rather than a browser tab.</summary>
+    /// <param name="services">The service collection of the host.</param>
+    /// <returns>The same collection, so a host chains its calls.</returns>
+    /// <remarks>
+    /// <para>
+    /// The shipped default is a two-minute <c>KeepAliveInterval</c> and no <c>KeepAliveTimeout</c>
+    /// at all, so a peer that stopped answering can hold a Kestrel connection, and the call session
+    /// behind it, for two minutes before anything notices. A phone call needs a dead peer caught in
+    /// seconds, not minutes, so this sets both to about twenty seconds. This is a convenience for
+    /// <c>UseWebSockets</c>, not <see cref="Vendors.TelnyxRelay.TelnyxRelayOptions.IdleTimeout"/>: the keep-alive ping
+    /// only catches a peer the network itself stopped answering, and only <c>IdleTimeout</c> catches
+    /// a peer that still answers pings but sends no relay frame. A host that wants different numbers
+    /// calls <c>services.AddWebSockets(...)</c> itself and skips this method.
+    /// </para>
+    /// <para>
+    /// The host must still call the no-argument <c>app.UseWebSockets()</c>. The overload that takes
+    /// a <c>WebSocketOptions</c> instance directly — <c>app.UseWebSockets(new WebSocketOptions())</c>
+    /// — never reads this registration at all, so a host that calls this method and then that
+    /// overload gets the shipped two-minute defaults back, with no error or warning either way.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddAgentCoreWebSockets(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        return services.AddWebSockets(options =>
+        {
+            options.KeepAliveInterval = TimeSpan.FromSeconds(20);
+            options.KeepAliveTimeout = TimeSpan.FromSeconds(20);
+        });
     }
 
     /// <summary>Registers the evaluation seam of D13, at the rate the document sets.</summary>
@@ -197,7 +256,7 @@ public static class AgentCoreServiceCollectionExtensions
             if (hasPath)
             {
                 throw new InvalidOperationException(
-                    "AddAgentCore names two documents: options.Configuration holds one and "
+                    "AddAgentCoreAsync names two documents: options.Configuration holds one and "
                     + "options.ConfigurationPath names another. Set one of the two.");
             }
 
@@ -207,7 +266,7 @@ public static class AgentCoreServiceCollectionExtensions
         if (!hasPath)
         {
             throw new InvalidOperationException(
-                "AddAgentCore names no document. Set options.ConfigurationPath to a .yaml, .yml, or .json "
+                "AddAgentCoreAsync names no document. Set options.ConfigurationPath to a .yaml, .yml, or .json "
                 + "file, or set options.Configuration to a document the host already loaded.");
         }
 

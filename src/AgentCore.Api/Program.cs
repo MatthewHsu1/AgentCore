@@ -4,6 +4,7 @@ using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Secrets;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Endpoints;
+using AgentCore.AspNetCore.Vendors.TelnyxRelay;
 using AgentCore.Infrastructure.Knowledge;
 using AgentCore.Infrastructure.Llm;
 using AgentCore.Infrastructure.Secrets;
@@ -68,18 +69,16 @@ var agentCoreLoggers = LoggerFactory.Create(logging => logging
 // events in this process, so chain_check has something to read and no event is silently lost.
 InMemoryAuditSink auditSink = new();
 
-builder.Services.AddAgentCore(options =>
+await builder.Services.AddAgentCoreAsync(options =>
 {
     options.ConfigurationPath = documentPath;
     options.SecretResolver = secrets;
     options.LoggerFactory = agentCoreLoggers;
     options.AuditSink = auditSink;
 
-    options.UseChatClients(startup => OpenAiChatClientFactory
-        .CreateAsync(startup.Configuration, secrets)
-        .AsTask()
-        .GetAwaiter()
-        .GetResult());
+    // The host lists the vendors it supports, once. providers.llm[].kind picks the adapter for each
+    // entry, so a document that changes vendors changes no code here.
+    options.UseChatClients(new OpenAiChatClientAdapter());
 
     // providers.knowledge names the store. This release ships the file-system one, and it reads the
     // root the document sets.
@@ -99,10 +98,20 @@ builder.Services.AddAgentCore(options =>
     }));
 });
 
+// The relay socket is the inbound path of a real call, and a dead peer must not hold a session for
+// the shipped two-minute default. This sets the twenty-second keep-alive numbers a call needs.
+builder.Services.AddAgentCoreWebSockets();
+
 var app = builder.Build();
 
 app.MapGet("/health", () => Results.Ok("ok"));
 
+// The WebSocket middleware is the host's job, not the library's, so it runs before any endpoint
+// that upgrades a request. The no-argument overload is required: the overload that takes a
+// WebSocketOptions instance ignores the AddAgentCoreWebSockets registration entirely.
+app.UseWebSockets();
+
 app.MapChatCompletions();
+app.MapTelnyxRelay();
 
 app.Run();

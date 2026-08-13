@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <IsPackable>true</IsPackable>
-    <Description>Inbound adapters as Map* extensions: Telnyx media, Telnyx webhooks, chat completions.</Description>
+    <Description>Inbound adapters as Map* extensions: Telnyx Conversation Relay, Telnyx webhooks, chat completions.</Description>
   </PropertyGroup>
 
   <ItemGroup>
