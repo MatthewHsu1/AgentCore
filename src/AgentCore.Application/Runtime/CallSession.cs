@@ -117,6 +117,31 @@ public sealed class CallSession : IConversationPort
     /// </remarks>
     public const string ToolFailureReason = "a tool failed four times in a row, so the turn spoke the fallback.";
 
+    /// <summary>The failure the turn records when the completion work passes its deadline.</summary>
+    /// <remarks>
+    /// This is a safety net against a hung extractor, not a value a document or a host reads by
+    /// name, so it stays internal. <c>InternalsVisibleTo</c> already gives the test project the
+    /// reach it needs, and D15 makes a public member on <see cref="CallSession"/> a permanent
+    /// promise, which this string is not meant to be.
+    /// </remarks>
+    internal const string ExtractionTimedOutReason = "the turn completion passed its deadline.";
+
+    /// <summary>How long the work after the reply may take before it is abandoned.</summary>
+    /// <remarks>
+    /// <para>
+    /// Section 8.7 keeps a call alive through a failure, and the work after the reply runs on the
+    /// host token so a barge-in never cancels it. That is deliberate, and it means nothing else
+    /// bounds it. This deadline does.
+    /// </para>
+    /// <para>
+    /// It stays private rather than a document setting. It guards against a hung model call, and it
+    /// is not a product knob a document should tune, so it carries no JSON Schema field and no
+    /// configuration key. D15 makes a public member here a permanent promise; a private one can
+    /// still be promoted later, and a public one could not be taken back.
+    /// </para>
+    /// </remarks>
+    private static readonly TimeSpan TurnCompletionTimeout = TimeSpan.FromSeconds(5);
+
     private readonly CompiledAgent _compiled;
     private readonly StagePolicy? _policy;
     private readonly StateExtractor? _extractor;
@@ -129,9 +154,18 @@ public sealed class CallSession : IConversationPort
     private readonly Lock _interruptLock = new();
     private CancellationTokenSource? _runCancellation;
     private Interruption? _interruption;
+    private AmendableTurn? _amendable;
     private long _sequence;
     private int _running;
     private int _ended;
+
+    // Whether the running turn has already handed the host something to speak. A streaming turn
+    // that has yielded nothing cannot be the turn the caller was hearing, so a barge-in in that
+    // window belongs to the turn that finished before it. See the remarks on <see cref="Interrupt"/>.
+    // It is raised by the run, and dropped twice: once in CompleteTurnAsync's commit lock, the
+    // moment the turn's own record exists for a late barge-in to amend, and again in EndRun, which
+    // is the only clear a turn that never reached that commit gets.
+    private volatile bool _runIsAudible;
 
     /// <summary>Creates the session of one call.</summary>
     /// <param name="callId">The id of the call.</param>
@@ -198,7 +232,24 @@ public sealed class CallSession : IConversationPort
     public StateDocument State { get; }
 
     /// <summary>Gets the conversation, oldest first. The session owns it, and every stage reads it.</summary>
-    public IReadOnlyList<ChatMessage> Transcript => _transcript;
+    /// <remarks>
+    /// A copy, and never the list itself. Three writers reach that list — <c>BeginTurn</c>, the
+    /// commit of <c>CompleteTurnAsync</c>, and <c>AmendLastTurn</c> — and a held prompt puts two of
+    /// them on two threads at once. A live view handed out here would let a reader enumerate the
+    /// list while an amendment splices it, which throws rather than returning a torn conversation.
+    /// The copy is taken under the same lock those three writers hold, so what comes back is one
+    /// whole conversation as it stood at one instant.
+    /// </remarks>
+    public IReadOnlyList<ChatMessage> Transcript
+    {
+        get
+        {
+            lock (_interruptLock)
+            {
+                return _transcript.ToArray();
+            }
+        }
+    }
 
     /// <summary>Gets the turn that finished last, or <see langword="null"/> before the first turn ends.</summary>
     public TurnResult? LastTurn { get; private set; }
@@ -224,7 +275,11 @@ public sealed class CallSession : IConversationPort
         ArgumentNullException.ThrowIfNull(userInput);
 
         var turn = BeginTurn(userInput);
-        var cancellation = StartRun(cancellationToken);
+
+        // A run that never streams hands the whole reply over at once, so there is no window in
+        // which it has produced nothing the caller could have heard. An interrupt during it
+        // therefore always belongs to it.
+        var cancellation = StartRun(audibleFromTheStart: true, cancellationToken);
         try
         {
             // Row 4 of the compile table. The compiled graph is a process singleton, so a guarded
@@ -254,8 +309,10 @@ public sealed class CallSession : IConversationPort
                 response = new AgentResponse();
             }
 
-            LastTurn = await CompleteTurnAsync(turn, response, toolFault, cancellationToken).ConfigureAwait(false);
-            return LastTurn;
+            // CompleteTurnAsync publishes LastTurn itself, under the same lock that records what a
+            // late barge-in may still amend. Assigning it a second time here could overwrite an
+            // amendment that landed in between.
+            return await CompleteTurnAsync(turn, response, toolFault, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -299,7 +356,10 @@ public sealed class CallSession : IConversationPort
         ArgumentNullException.ThrowIfNull(userInput);
 
         var turn = BeginTurn(userInput);
-        var cancellation = StartRun(cancellationToken);
+
+        // A streaming turn becomes audible only once it hands the host its first piece of content.
+        // Until then nothing of it has reached the caller, and a barge-in belongs elsewhere.
+        var cancellation = StartRun(audibleFromTheStart: false, cancellationToken);
         try
         {
             List<AgentResponseUpdate> updates = [];
@@ -355,6 +415,11 @@ public sealed class CallSession : IConversationPort
                     var content = update.AsChatResponseUpdate();
                     if (CarriesContent(content))
                     {
+                        // Marked before the yield, not after it: an async iterator only resumes past
+                        // a yield once the host comes back for the next update, and by then the host
+                        // has already queued this piece for the caller.
+                        _runIsAudible = true;
+
                         // The host speaks this, so it leaves the seam as fast as the model produced it.
                         yield return content;
                     }
@@ -365,7 +430,8 @@ public sealed class CallSession : IConversationPort
                 await stream.DisposeAsync().ConfigureAwait(false);
             }
 
-            LastTurn = await CompleteTurnAsync(turn, updates.ToAgentResponse(), toolFault, cancellationToken)
+            // CompleteTurnAsync publishes LastTurn itself. See the same note in RunTurnAsync.
+            _ = await CompleteTurnAsync(turn, updates.ToAgentResponse(), toolFault, cancellationToken)
                 .ConfigureAwait(false);
         }
         finally
@@ -378,9 +444,18 @@ public sealed class CallSession : IConversationPort
     /// <summary>Ends the running turn where the caller cut the reply off.</summary>
     /// <param name="utteranceUntilInterrupt">The text the caller actually heard.</param>
     /// <param name="durationUntilInterrupt">How much of the reply played, as the relay reported it.</param>
+    /// <param name="cutsRunningTurn">
+    /// Whether the turn running now is the turn the caller was hearing. An adapter that tracks which
+    /// turn's output actually reached the vendor answers that question itself and says so here;
+    /// <see langword="false"/> sends the frame straight to the amendment path, whatever the running
+    /// turn has produced. The default is <see langword="true"/>, which leaves the decision to this
+    /// session alone, and that is the right answer for a caller that speaks over a reply it is
+    /// itself streaming.
+    /// </param>
     /// <returns>
-    /// <see langword="true"/> when a turn was running and now ends, and <see langword="false"/> when
-    /// no turn was running.
+    /// <see langword="true"/> when this call recorded the barge-in, either by ending the running
+    /// turn or by amending the turn that finished last, and <see langword="false"/> when there was
+    /// nothing to record it against.
     /// </returns>
     /// <remarks>
     /// <para>
@@ -389,35 +464,71 @@ public sealed class CallSession : IConversationPort
     /// Nothing behind this call estimates the duration, which is what item 6c asks for.
     /// </para>
     /// <para>
-    /// The running turn stops, and it ends the way a finished turn ends. The transcript keeps
-    /// <paramref name="utteranceUntilInterrupt"/> rather than the reply the model produced, the
-    /// writers run in their fixed order, and <see cref="TurnResult.ReplyText"/> holds the same heard
-    /// text while <see cref="TurnResult.InterruptedAfter"/> holds the played duration.
+    /// The frame reaches one of two paths, and which one depends on whether the running turn is
+    /// the turn the caller was hearing. This session answers that from its own side — a run that has
+    /// handed the host nothing cannot be the turn anyone heard — and that answer is right whenever
+    /// the caller of this method is also the one speaking the reply. A vendor that paces the audio
+    /// itself knows better: it alone can tell that the turn it is still speaking is not the turn now
+    /// running, because a held prompt already started the next one. <paramref name="cutsRunningTurn"/>
+    /// is how it says so. That is a fact about the call and not a frame schema, so D8 still holds:
+    /// nothing of section 7.1's wire format crosses this seam.
+    /// </para>
+    /// <list type="number">
+    /// <item><description>
+    /// <b>The running turn is audible, and it is the turn the caller was hearing.</b> It stops, and
+    /// it ends the way a finished turn ends. The
+    /// transcript keeps <paramref name="utteranceUntilInterrupt"/> rather than the reply the model
+    /// produced, the writers run in their fixed order, and <see cref="TurnResult.ReplyText"/> holds
+    /// the same heard text while <see cref="TurnResult.InterruptedAfter"/> holds the played duration.
+    /// </description></item>
+    /// <item><description>
+    /// <b>No turn is running, the one that is has produced nothing yet, or
+    /// <paramref name="cutsRunningTurn"/> is <see langword="false"/>.</b> The vendor paces the
+    /// audio, so a reply is still playing long after the model finished streaming it, and a
+    /// held prompt can already have started the next turn inside the finished turn's own ending. The
+    /// caller was therefore hearing the turn that finished last, and that turn is amended:
+    /// <see cref="LastTurn"/> takes the heard text and the played duration, the transcript span of
+    /// that turn is rewritten to hold what the caller heard, and the chain takes a second event. A
+    /// turn that has produced nothing is never cut short, because nobody has heard it.
+    /// </description></item>
+    /// </list>
+    /// <para>
+    /// The amendment is an event and never an edit. T23: the chain is append-only, so
+    /// <see cref="AuditEventKind.ReplyInterrupted"/> names the sequence of the
+    /// <see cref="AuditEventKind.TurnCompleted"/> event it corrects through
+    /// <see cref="AuditEvent.AmendsSequence"/>.
     /// </para>
     /// <para>
-    /// A frame that arrives after the turn already ended answers <see langword="false"/> and changes
-    /// nothing. A late frame must not drop a call, which is the same rule section 7.1 gives an
-    /// unknown frame.
+    /// A frame that arrives when no turn has ever run answers <see langword="false"/> and changes
+    /// nothing, and so does a second frame against a turn one barge-in already cut. A late frame
+    /// must not drop a call, which is the same rule section 7.1 gives an unknown frame.
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="durationUntilInterrupt"/> is negative.
     /// </exception>
-    public bool Interrupt(string utteranceUntilInterrupt, TimeSpan durationUntilInterrupt)
+    public bool Interrupt(
+        string utteranceUntilInterrupt,
+        TimeSpan durationUntilInterrupt,
+        bool cutsRunningTurn = true)
     {
         ArgumentNullException.ThrowIfNull(utteranceUntilInterrupt);
         ArgumentOutOfRangeException.ThrowIfLessThan(durationUntilInterrupt, TimeSpan.Zero);
 
         lock (_interruptLock)
         {
-            if (_runCancellation is not { } cancellation)
+            // Both conditions, and in this order. The adapter's answer only ever removes the
+            // in-flight path: an adapter that knows the caller was hearing an earlier turn skips it
+            // outright, and one that says nothing leaves this session's own audibility test to
+            // decide, exactly as before.
+            if (cutsRunningTurn && _runCancellation is { } cancellation && _runIsAudible)
             {
-                return false;
+                _interruption = new Interruption(utteranceUntilInterrupt, durationUntilInterrupt);
+                cancellation.Cancel();
+                return true;
             }
 
-            _interruption = new Interruption(utteranceUntilInterrupt, durationUntilInterrupt);
-            cancellation.Cancel();
-            return true;
+            return AmendLastTurn(utteranceUntilInterrupt, durationUntilInterrupt);
         }
     }
 
@@ -479,13 +590,28 @@ public sealed class CallSession : IConversationPort
         }
 
         // The reminder rides a request that happens anyway, and it rides exactly one. The transcript
-        // keeps what the caller said, so a stale reminder never repeats in a later turn.
+        // keeps what the caller said, so a stale reminder never repeats in a later turn. It reads
+        // the state document and never the transcript, so it is built before the lock below.
         var reminder = _policy is null ? null : UnfilledSlotReminder.Build(State, _policy.CurrentStage);
         ChatMessage spoken = new(ChatRole.User, userInput);
-        List<ChatMessage> request =
-            [.. _transcript, new ChatMessage(ChatRole.User, UnfilledSlotReminder.Prepend(reminder, userInput))];
 
-        _transcript.Add(spoken);
+        // The lock guards <see cref="_transcript"/>, and this is the only place a turn's own start
+        // touches it. One session runs one turn at a time, but a held prompt puts this method and
+        // <see cref="AmendLastTurn"/> on two threads at once: the relay starts the next turn from
+        // inside the finished turn's own finally, on that turn's thread, while the read loop can be
+        // inside the amendment rewriting the finished turn's span from the other. AmendLastTurn is
+        // that other writer, and CompleteTurnAsync's own commit is the third; both already hold
+        // this same lock. List<T> is not safe for two writers, so the read that builds the request
+        // and the append of the spoken message are one step under it — a request built from a list
+        // an amendment is halfway through splicing would otherwise hold a torn conversation.
+        List<ChatMessage> request;
+        lock (_interruptLock)
+        {
+            request =
+                [.. _transcript, new ChatMessage(ChatRole.User, UnfilledSlotReminder.Prepend(reminder, userInput))];
+
+            _transcript.Add(spoken);
+        }
 
         // One turn is one span. The call id rides here, on a span attribute, because T61 refuses it
         // on a metric. The span is disposed in the finally of whichever run method opened the turn.
@@ -494,9 +620,14 @@ public sealed class CallSession : IConversationPort
     }
 
     /// <summary>Opens the window in which <see cref="Interrupt"/> reaches this turn.</summary>
+    /// <param name="audibleFromTheStart">
+    /// Whether a barge-in belongs to this run from its first instant. A run that never streams
+    /// answers <see langword="true"/>, because it hands the whole reply over at once. A streaming
+    /// run answers <see langword="false"/> and becomes audible at its first piece of content.
+    /// </param>
     /// <param name="cancellationToken">The token of the host.</param>
     /// <returns>The source the run reads. The caller ends it with <see cref="EndRun"/>.</returns>
-    private CancellationTokenSource StartRun(CancellationToken cancellationToken)
+    private CancellationTokenSource StartRun(bool audibleFromTheStart, CancellationToken cancellationToken)
     {
         CancellationTokenSource cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
@@ -504,6 +635,7 @@ public sealed class CallSession : IConversationPort
         {
             _interruption = null;
             _runCancellation = cancellation;
+            _runIsAudible = audibleFromTheStart;
         }
 
         return cancellation;
@@ -513,15 +645,82 @@ public sealed class CallSession : IConversationPort
     /// <param name="cancellation">The source <see cref="StartRun"/> returned.</param>
     private void EndRun(CancellationTokenSource cancellation)
     {
-        // The field drops first. A frame that arrives now answers false rather than meeting a
-        // disposed source.
+        // The field drops first. A frame that arrives now meets no source to cancel, so it reaches
+        // the amendment path rather than a disposed one.
         lock (_interruptLock)
         {
             _runCancellation = null;
+            _runIsAudible = false;
         }
 
         cancellation.Dispose();
         Volatile.Write(ref _running, 0);
+    }
+
+    /// <summary>Records a barge-in against the turn that finished last, and corrects its record.</summary>
+    /// <param name="utteranceUntilInterrupt">The text the caller actually heard.</param>
+    /// <param name="durationUntilInterrupt">How much of the reply played, as the relay reported it.</param>
+    /// <returns>
+    /// <see langword="true"/> when the turn was amended, and <see langword="false"/> when there was
+    /// no turn to amend.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// The caller holds <see cref="_interruptLock"/>. That is what keeps this rewrite of the
+    /// transcript apart from the one <see cref="CompleteTurnAsync"/> makes: a held prompt can have
+    /// the next turn already running when this lands, and the two would otherwise write the same
+    /// list at once.
+    /// </para>
+    /// <para>
+    /// The span is replaced rather than truncated, because the next turn's own spoken message may
+    /// already sit behind it. What replaces it is exactly what the in-flight path of
+    /// <see cref="CompleteTurnAsync"/> would have written: the tool pairs that finished, then one
+    /// assistant message holding the heard text, and none at all when the caller heard nothing.
+    /// </para>
+    /// <para>
+    /// Neither vendor value is touched beyond the trim of correction 2 of section 10, which pipecat
+    /// pins in a test of its own. Nothing here estimates, rounds, or clamps either one: that is D28.
+    /// </para>
+    /// </remarks>
+    private bool AmendLastTurn(string utteranceUntilInterrupt, TimeSpan durationUntilInterrupt)
+    {
+        // The chain has already closed, so nothing may be appended behind call.ended.
+        if (Volatile.Read(ref _ended) == 1
+            || _amendable is not { } amendable
+            || LastTurn is not { InterruptedAfter: null } finished)
+        {
+            return false;
+        }
+
+        var heard = utteranceUntilInterrupt.Trim();
+
+        List<ChatMessage> corrected = [.. FinishedToolMessages(amendable.Messages)];
+        if (heard.Length > 0)
+        {
+            // A barge-in inside the first 100 ms leaves no heard text, and an empty assistant
+            // message teaches the model nothing. pipecat and livekit both guard this.
+            corrected.Add(new ChatMessage(ChatRole.Assistant, heard));
+        }
+
+        _transcript.RemoveRange(amendable.TranscriptStart, amendable.TranscriptLength);
+        _transcript.InsertRange(amendable.TranscriptStart, corrected);
+        _amendable = amendable with { TranscriptLength = corrected.Count };
+
+        LastTurn = finished with { ReplyText = heard, InterruptedAfter = durationUntilInterrupt };
+
+        Append(NewEvent(
+            AuditEventKind.ReplyInterrupted,
+            _time.GetUtcNow(),
+            finished.TurnIndex,
+            amends: amendable.CompletedSequence,
+            payload: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [AuditPayloadKeys.UtteranceUntilInterrupt] = heard,
+                [AuditPayloadKeys.DurationUntilInterruptMs] =
+                    ((long)durationUntilInterrupt.TotalMilliseconds).ToString(CultureInfo.InvariantCulture),
+            }));
+
+        return true;
     }
 
     /// <summary>Reads the interruption the relay reported for the running turn.</summary>
@@ -555,9 +754,19 @@ public sealed class CallSession : IConversationPort
     /// <param name="cancellationToken">Cancels the extractor call.</param>
     /// <returns>The finished turn.</returns>
     /// <remarks>
+    /// <para>
     /// This is where the chain of D23 is written, because this is where the turn index, both stages,
     /// and the moment the turn ended are all known at once. The clock is read exactly once, so every
     /// event of the turn carries the same instant.
+    /// </para>
+    /// <para>
+    /// The interruption is read twice, at the two moments it can be answered. The first read decides
+    /// what this turn records for itself. The second, in the commit lock at the end, catches a
+    /// barge-in that landed while the extractor was still running: <see cref="EndRun"/> does not run
+    /// until this method has returned, so <see cref="Interrupt"/> in that window still finds a live
+    /// run and answers <see langword="true"/>, and only the second read makes that answer true. The
+    /// same lock then closes the window behind it, so the tail of this method needs no third read.
+    /// </para>
     /// </remarks>
     private async Task<TurnResult> CompleteTurnAsync(
         Turn turn,
@@ -574,7 +783,9 @@ public sealed class CallSession : IConversationPort
         if (interruption is { } cut)
         {
             // Item 6a. The record holds the text the caller heard, not the text the model produced.
-            reply = cut.HeardText;
+            // A trailing space is not speech, so it is trimmed: pipecat pins the same rule in its
+            // aggregator test, where the model sent "Hello " and the record holds "Hello".
+            reply = cut.HeardText.Trim();
             interruptedAfter = cut.PlayedDuration;
         }
         else if (failure is not null || string.IsNullOrWhiteSpace(reply))
@@ -598,22 +809,50 @@ public sealed class CallSession : IConversationPort
             AgentCoreTelemetry.RecordFailure(AgentCoreTelemetry.FailureEmptyReply);
         }
 
+        // What this turn adds to the transcript. It is built here and written at the end of the
+        // method, in one lock with the rest of what a late barge-in may still amend: the transcript
+        // span, the sequence the amendment must reference, and LastTurn itself. Nothing between here
+        // and there reads the transcript — the extractor reads the finished turn, and the writers
+        // read the state document — so building it now and committing it once costs nothing.
+        List<ChatMessage> written;
         if (interruptedAfter is not null || failure is not null)
         {
-            // The transcript holds what the caller heard. A run that stopped mid-round would
-            // otherwise leave a tool call with no result behind, and the next turn would send it.
-            _transcript.Add(new ChatMessage(ChatRole.Assistant, reply));
+            // The transcript holds what the caller heard. A run that stopped mid-round would otherwise
+            // leave a tool call with no result behind, and the next turn would send it. So the pairs
+            // that finished are kept and only an unpaired call is dropped: a side effect that ran must
+            // stay visible to the next turn. livekit/agents fixed the same defect in issue 3702.
+            written = [.. FinishedToolMessages(response.Messages)];
+
+            // A barge-in inside the first 100 ms leaves no heard text, and an empty assistant message
+            // teaches the model nothing. pipecat and livekit both guard this.
+            if (reply.Length > 0)
+            {
+                written.Add(new ChatMessage(ChatRole.Assistant, reply));
+            }
         }
         else
         {
-            _transcript.AddRange(response.Messages);
+            written = [.. response.Messages];
         }
 
         // Writer order, step 2.
         ApplyToolResults(response.Messages);
 
-        // Writer order, step 3.
-        var extractionFailure = await ExtractAsync(turn, response, cancellationToken).ConfigureAwait(false);
+        // Writer order, step 3. The deadline is here and not on the whole method, because the audit
+        // append and the stage advance must always run.
+        string? extractionFailure;
+        using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+        {
+            deadline.CancelAfter(TurnCompletionTimeout);
+            try
+            {
+                extractionFailure = await ExtractAsync(turn, response, deadline.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                extractionFailure = ExtractionTimedOutReason;
+            }
+        }
 
         if (extractionFailure is not null)
         {
@@ -640,7 +879,73 @@ public sealed class CallSession : IConversationPort
             IsComplete = _policy.IsTerminal;
         }
 
-        WriteTurnEvents(turn, endedAt, stageAfter, reply, spokenReply, toolFault, interruptedAfter);
+        var completedSequence = WriteTurnEvents(
+            turn, endedAt, stageAfter, reply, spokenReply, toolFault, interruptedAfter);
+
+        TurnResult result = new(
+            CallId,
+            turn.Index,
+            turn.StageBefore,
+            stageAfter,
+            reply,
+            IsComplete,
+            extractionFailure,
+            failure,
+            interruptedAfter,
+            endedAt);
+
+        // One lock, one moment. A late barge-in reads all four of these together, so a window in
+        // which LastTurn already names this turn while the span or the sequence still names the one
+        // before it would let an amendment rewrite the wrong part of the transcript.
+        lock (_interruptLock)
+        {
+            var start = _transcript.Count;
+            _transcript.AddRange(written);
+
+            // A turn one barge-in already cut is not amendable again, so it is not published here.
+            _amendable = interruptedAfter is null
+                ? new AmendableTurn(completedSequence, response.Messages, start, written.Count)
+                : null;
+            LastTurn = result;
+
+            // The second read. The first one happened before the extractor await, and that await is
+            // bounded only by TurnCompletionTimeout, so a barge-in has five whole seconds in which
+            // to land after this turn already decided it was not interrupted. It finds
+            // _runCancellation still set and the run still audible, because EndRun does not run
+            // until this method has returned, so it takes the in-flight path, cancels a run that has
+            // already stopped, and answers true — and true, on the contract of Interrupt, means the
+            // barge-in is recorded. Nothing recorded it. Reading _interruption again here, one
+            // statement after _amendable and LastTurn were published, hands that frame to the very
+            // path a frame arriving one instant later would have taken: the tested amendment, which
+            // writes the TurnCompleted then ReplyInterrupted pair T23 asks for. The _amendable guard
+            // above already fits: it is published exactly when interruptedAfter is null, which is
+            // the only state this window can be reached in.
+            if (interruption is null
+                && _interruption is { } late
+                && AmendLastTurn(late.HeardText, late.PlayedDuration)
+                && LastTurn is { } amended)
+            {
+                // The amendment republished LastTurn, so the turn this method returns and the
+                // duration the metric below reads must both come from it and not from the record
+                // built before the frame landed.
+                result = amended;
+                interruptedAfter = amended.InterruptedAfter;
+            }
+
+            // Consumed, on whichever path recorded it: the in-flight read at the top of this method
+            // fed WriteTurnEvents, and the amendment above wrote its own pair. Nothing downstream
+            // may handle one frame twice.
+            _interruption = null;
+
+            // The turn is committed, so the run is no longer what the caller is hearing. This is the
+            // tail of the same defect the read above fixes: a barge-in landing between this lock and
+            // EndRun would otherwise still find the run audible, take the in-flight path, and be
+            // recorded nowhere at all. Cleared here, under the lock that just published LastTurn, it
+            // reaches AmendLastTurn against this turn instead. EndRun still runs and still owns
+            // disposing the source; clearing the field twice costs nothing.
+            _runCancellation = null;
+            _runIsAudible = false;
+        }
 
         AgentCoreTelemetry.EndTurn(
             turn.Activity,
@@ -657,17 +962,7 @@ public sealed class CallSession : IConversationPort
             EndCall(CallEndReason.AgentCompleted, endedAt, stageAfter);
         }
 
-        return new TurnResult(
-            CallId,
-            turn.Index,
-            turn.StageBefore,
-            stageAfter,
-            reply,
-            IsComplete,
-            extractionFailure,
-            failure,
-            interruptedAfter,
-            endedAt);
+        return result;
     }
 
     /// <summary>Reads the closed outcome value of one finished turn.</summary>
@@ -689,13 +984,18 @@ public sealed class CallSession : IConversationPort
     /// <param name="spokenReply">The whole reply the model produced.</param>
     /// <param name="toolFault">The message of the fault, or <see langword="null"/>.</param>
     /// <param name="interruptedAfter">The played duration, or <see langword="null"/>.</param>
+    /// <returns>
+    /// The sequence of the <c>turn.completed</c> event, so a barge-in that arrives after this turn
+    /// already ended can name it through <see cref="AuditEvent.AmendsSequence"/>.
+    /// </returns>
     /// <remarks>
     /// A barge-in writes two events and not one. T23: the chain is append-only, so an amendment is a
     /// second event that references the first, and <c>reply.interrupted</c> names the sequence of the
     /// <c>turn.completed</c> event it corrects. It carries the text the caller ACTUALLY HEARD, which
-    /// the relay reported and nothing here estimated. See item 6a.
+    /// the relay reported and nothing here estimated. See item 6a. A barge-in the vendor reports
+    /// only after this turn ended writes the very same pair, from <see cref="AmendLastTurn"/>.
     /// </remarks>
-    private void WriteTurnEvents(
+    private long WriteTurnEvents(
         Turn turn,
         DateTimeOffset endedAt,
         string stageAfter,
@@ -733,7 +1033,7 @@ public sealed class CallSession : IConversationPort
 
         if (interruptedAfter is not { } played)
         {
-            return;
+            return completed.Sequence;
         }
 
         Append(NewEvent(
@@ -747,6 +1047,8 @@ public sealed class CallSession : IConversationPort
                 [AuditPayloadKeys.DurationUntilInterruptMs] =
                     ((long)played.TotalMilliseconds).ToString(CultureInfo.InvariantCulture),
             }));
+
+        return completed.Sequence;
     }
 
     /// <summary>Builds one event of this call, and takes the next sequence.</summary>
@@ -917,6 +1219,73 @@ public sealed class CallSession : IConversationPort
         }
     }
 
+    /// <summary>Keeps the tool calls whose results arrived, and drops every unpaired call and every word.</summary>
+    /// <param name="messages">Every message the round produced.</param>
+    /// <returns>The tool content that carries a complete call-and-result pair, in its original order.</returns>
+    /// <remarks>
+    /// <para>
+    /// A model refuses a history that holds a tool call with no result, so an interrupted round
+    /// cannot simply keep everything. It must not silently forget a side effect either. The rule is
+    /// therefore per call id: keep the call when its result is present.
+    /// </para>
+    /// <para>
+    /// No prose survives, wherever it sits. A real model routinely writes a line and puts the tool
+    /// call it announces on the same assistant message — "Let me check that for you", then the call
+    /// — and the caller heard only as much of that line as the vendor played. The heard text is
+    /// added as its own assistant message afterwards, so keeping the prose here would put the reply
+    /// in the transcript twice: once as the model wrote it, once as the caller heard it.
+    /// </para>
+    /// </remarks>
+    private static List<ChatMessage> FinishedToolMessages(IList<ChatMessage> messages)
+    {
+        HashSet<string> answered = [];
+        foreach (var message in messages)
+        {
+            foreach (var result in message.Contents.OfType<FunctionResultContent>())
+            {
+                answered.Add(result.CallId);
+            }
+        }
+
+        List<ChatMessage> kept = [];
+        foreach (var message in messages)
+        {
+            // A parallel round can finish one call and leave a sibling call in the same message
+            // mid-flight. The rule is per call id and not per message, so only the unfinished call
+            // is stripped out; the finished one, whose side effect already ran, stays in place.
+            List<AIContent> tools =
+            [
+                .. message.Contents.Where(content => content switch
+                {
+                    TextContent => false,
+                    FunctionCallContent call => answered.Contains(call.CallId),
+                    _ => true,
+                }),
+            ];
+
+            if (!tools.Any(content => content is FunctionCallContent or FunctionResultContent))
+            {
+                // Plain prose, or a message whose every call is still in flight. Neither belongs in
+                // the next turn.
+                continue;
+            }
+
+            if (tools.Count == message.Contents.Count)
+            {
+                // Nothing was stripped, so the message is already the finished shape. Keep it whole,
+                // contents and order unchanged.
+                kept.Add(message);
+                continue;
+            }
+
+            var trimmed = message.Clone();
+            trimmed.Contents = tools;
+            kept.Add(trimmed);
+        }
+
+        return kept;
+    }
+
     /// <summary>Picks the agent that speaks this turn.</summary>
     /// <returns>The agent.</returns>
     private AIAgent ResolveAgent()
@@ -995,6 +1364,29 @@ public sealed class CallSession : IConversationPort
         int Index,
         Activity? Activity,
         long StartedAt);
+
+    /// <summary>Everything a barge-in that arrives after a turn ended needs to correct that turn.</summary>
+    /// <param name="CompletedSequence">
+    /// The sequence of that turn's <c>turn.completed</c> event, which the amendment names through
+    /// <see cref="AuditEvent.AmendsSequence"/>. T23 makes the chain append-only, so nothing is
+    /// rewritten and the correction is a second event.
+    /// </param>
+    /// <param name="Messages">
+    /// What the model produced. The amendment rebuilds the transcript span from these, so the tool
+    /// pairs that finished survive the correction exactly as they survive an in-flight barge-in.
+    /// </param>
+    /// <param name="TranscriptStart">Where that turn's own messages begin in the transcript.</param>
+    /// <param name="TranscriptLength">How many of them there are.</param>
+    /// <remarks>
+    /// The span is a position and a length rather than a truncation point, because the next turn's
+    /// spoken message can already sit behind it: a held prompt starts the next turn while the vendor
+    /// is still speaking this one, and that turn's own words must survive the correction.
+    /// </remarks>
+    private sealed record AmendableTurn(
+        long CompletedSequence,
+        IList<ChatMessage> Messages,
+        int TranscriptStart,
+        int TranscriptLength);
 
     /// <summary>What the relay reported when the caller spoke over the reply.</summary>
     /// <param name="HeardText">The text the caller actually heard.</param>

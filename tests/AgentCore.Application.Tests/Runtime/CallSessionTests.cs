@@ -170,6 +170,26 @@ public sealed class CallSessionTests
         Assert.Equal("hello there.", session.Transcript[1].Text);
     }
 
+    [Fact]
+    public async Task TheTranscript_HandsOutACopyAndNeverTheListTheSessionWritesTo()
+    {
+        using SequencedChatClient reply = new("hello there.", "and again.");
+        using SequencedChatClient fill = new(StayingNull, StayingNull);
+        var session = Build(PolicyYaml, reply, fill).Create();
+
+        await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+        var taken = session.Transcript;
+
+        await session.RunTurnAsync("still there?", TestContext.Current.CancellationToken);
+
+        // A live view would grow behind the reader's back, and an amendment splicing the list under
+        // an enumeration would throw rather than return a torn conversation. What was handed out is
+        // one whole conversation as it stood at one instant, and the session went on without it.
+        Assert.Equal(2, taken.Count);
+        Assert.Equal(4, session.Transcript.Count);
+        Assert.NotSame(taken, session.Transcript);
+    }
+
     // -------------------------------------------------------------------------------------------
     // The reminder rides one request.
     // -------------------------------------------------------------------------------------------
@@ -813,7 +833,11 @@ public sealed class CallSessionTests
         Assert.Equal("greeting", port.Stage);
         Assert.False(port.IsComplete);
         Assert.Same(turn, port.LastTurn);
-        Assert.False(port.Interrupt("nothing played", TimeSpan.Zero));
+
+        // A frame that lands after the turn ended is recorded, not ignored. The vendor paces the
+        // audio, so the caller was still hearing this reply long after the model stopped producing
+        // it, and the port amends the finished turn. See the remarks on CallSession.Interrupt.
+        Assert.True(port.Interrupt("nothing played", TimeSpan.Zero));
 
         List<ChatResponseUpdate> updates = [];
         await foreach (var update in port.RunTurnStreamingAsync("still there?", TestContext.Current.CancellationToken))

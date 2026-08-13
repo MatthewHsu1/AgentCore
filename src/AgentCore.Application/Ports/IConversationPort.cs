@@ -72,15 +72,29 @@ public interface IConversationPort
     /// <summary>Ends the running turn where the caller cut the reply off.</summary>
     /// <param name="utteranceUntilInterrupt">The text the caller actually heard.</param>
     /// <param name="durationUntilInterrupt">How much of the reply played, as the relay reported it.</param>
+    /// <param name="cutsRunningTurn">
+    /// Whether the turn running now is the turn the caller was hearing. An adapter that paces no
+    /// audio of its own leaves this at <see langword="true"/> and lets the implementation decide.
+    /// </param>
     /// <returns>
-    /// <see langword="true"/> when a turn was running and now ends, and <see langword="false"/> when
-    /// no turn was running.
+    /// <see langword="true"/> when the barge-in was recorded, either against the running turn or
+    /// against the turn that finished last, and <see langword="false"/> when there was nothing to
+    /// record it against.
     /// </returns>
     /// <remarks>
+    /// <para>
     /// Item 6a of section 11 asks the record to hold what the caller heard, not what the model
     /// produced. Section 7.1 reports both values on the <c>interrupt</c> frame, at 1 ms, so an
     /// adapter passes them through and never computes them. Item 6c forbids the estimator that would
     /// otherwise stand here.
+    /// </para>
+    /// <para>
+    /// <paramref name="cutsRunningTurn"/> carries one domain fact and no frame schema, so D8 holds.
+    /// A vendor that paces the audio itself is still speaking one turn while the next one already
+    /// runs — a held prompt starts it inside the finished turn's own ending — and only that adapter
+    /// can tell the two apart. It answers <see langword="false"/> there, and the turn the caller was
+    /// actually hearing is the one the record corrects.
+    /// </para>
     /// </remarks>
-    bool Interrupt(string utteranceUntilInterrupt, TimeSpan durationUntilInterrupt);
+    bool Interrupt(string utteranceUntilInterrupt, TimeSpan durationUntilInterrupt, bool cutsRunningTurn = true);
 }

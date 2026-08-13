@@ -8,6 +8,7 @@ using AgentCore.Application.Runtime;
 using AgentCore.Application.Secrets;
 using AgentCore.Application.Tools;
 using AgentCore.AspNetCore.Sessions;
+using Microsoft.AspNetCore.WebSockets;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -30,6 +31,15 @@ namespace AgentCore.AspNetCore.DependencyInjection;
 /// <see cref="CompiledAgent"/> is a process singleton by design, and it is registered as one.
 /// <see cref="CallSession"/> is not, and it is registered nowhere: one call gets one session from
 /// <see cref="ICallSessionFactory"/>, and <see cref="ICallSessionStore"/> holds it between requests.
+/// </para>
+/// <para>
+/// This also registers a <see cref="TimeProvider"/> for the whole container —
+/// <see cref="AgentCoreOptions.TimeProvider"/> when the host bound one, otherwise
+/// <see cref="TimeProvider.System"/> — unless a host already registered its own before calling
+/// this method, which it keeps. <see cref="CallSessionFactory"/> reads the same clock
+/// directly off <see cref="AgentCoreOptions.TimeProvider"/>, and the relay's idle deadline in
+/// <c>AgentCore.AspNetCore/Vendors/TelnyxRelay/</c> resolves this registration, so the two always
+/// agree on what time it is.
 /// </para>
 /// <para>
 /// <b><c>providers.speech</c> and <c>providers.telephony</c> bind and this method reads neither, on
@@ -138,6 +148,15 @@ public static class AgentCoreServiceCollectionExtensions
         services.AddSingleton<IGuardEvaluator>(guards);
         services.AddSingleton<ICallSessionFactory>(sessions);
 
+        // The same clock CallSessionFactory already reads off options.TimeProvider, now resolvable
+        // from the request's own service provider too. TelnyxRelayConnection reads it here for its
+        // idle deadline, so a test that owns options.TimeProvider owns that deadline as well.
+        // TryAdd, matching ICallSessionStore below: a host that registered its own TimeProvider
+        // before calling AddAgentCore keeps it, rather than this line silently overriding it —
+        // AddSingleton would have made the last registration win regardless of which one a
+        // GetRequiredService<TimeProvider>() caller actually wanted.
+        services.TryAddSingleton(options.TimeProvider ?? TimeProvider.System);
+
         if (options.AuditSink is { } audit)
         {
             // Only what the host bound is registered. Nothing stands in for the PostgreSQL sink of
@@ -152,6 +171,38 @@ public static class AgentCoreServiceCollectionExtensions
         AddEvaluation(services, configuration);
 
         return services;
+    }
+
+    /// <summary>Registers WebSocket options that suit a phone call rather than a browser tab.</summary>
+    /// <param name="services">The service collection of the host.</param>
+    /// <returns>The same collection, so a host chains its calls.</returns>
+    /// <remarks>
+    /// <para>
+    /// The shipped default is a two-minute <c>KeepAliveInterval</c> and no <c>KeepAliveTimeout</c>
+    /// at all, so a peer that stopped answering can hold a Kestrel connection, and the call session
+    /// behind it, for two minutes before anything notices. A phone call needs a dead peer caught in
+    /// seconds, not minutes, so this sets both to about twenty seconds. This is a convenience for
+    /// <c>UseWebSockets</c>, not <see cref="Vendors.TelnyxRelay.TelnyxRelayOptions.IdleTimeout"/>: the keep-alive ping
+    /// only catches a peer the network itself stopped answering, and only <c>IdleTimeout</c> catches
+    /// a peer that still answers pings but sends no relay frame. A host that wants different numbers
+    /// calls <c>services.AddWebSockets(...)</c> itself and skips this method.
+    /// </para>
+    /// <para>
+    /// The host must still call the no-argument <c>app.UseWebSockets()</c>. The overload that takes
+    /// a <c>WebSocketOptions</c> instance directly — <c>app.UseWebSockets(new WebSocketOptions())</c>
+    /// — never reads this registration at all, so a host that calls this method and then that
+    /// overload gets the shipped two-minute defaults back, with no error or warning either way.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddAgentCoreWebSockets(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        return services.AddWebSockets(options =>
+        {
+            options.KeepAliveInterval = TimeSpan.FromSeconds(20);
+            options.KeepAliveTimeout = TimeSpan.FromSeconds(20);
+        });
     }
 
     /// <summary>Registers the evaluation seam of D13, at the rate the document sets.</summary>

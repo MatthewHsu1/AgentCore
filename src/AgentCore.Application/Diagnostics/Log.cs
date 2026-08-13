@@ -14,7 +14,9 @@ namespace AgentCore.Application.Diagnostics;
 /// <para>
 /// A line carries the call id and the turn index as fields. That is a log and not a metric, so T61
 /// does not apply: Grafana Cloud bills logs by volume and the library writes once for each turn, not
-/// once for each audio frame (§3.1).
+/// once for each relay frame (§3.1). The unit is a frame of text and never a frame of audio: D28
+/// moved the vendor boundary to text, and item 6c of section 11 keeps every audio unit — a buffer, a
+/// codec, a sample rate, a playback clock — out of this solution entirely.
 /// </para>
 /// <para>
 /// No line carries what the caller said or what the agent replied. The audit chain of D23 is the

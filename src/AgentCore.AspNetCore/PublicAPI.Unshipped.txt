@@ -35,9 +35,23 @@ const AgentCore.AspNetCore.Endpoints.ChatCompletionsEndpointRouteBuilderExtensio
 const AgentCore.AspNetCore.Endpoints.ChatCompletionsEndpointRouteBuilderExtensions.SessionHeaderName = "X-AgentCore-Session" -> string!
 const AgentCore.AspNetCore.Endpoints.ChatCompletionsEndpointRouteBuilderExtensions.StageHeaderName = "X-AgentCore-Stage" -> string!
 static AgentCore.AspNetCore.DependencyInjection.AgentCoreServiceCollectionExtensions.AddAgentCore(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static AgentCore.AspNetCore.DependencyInjection.AgentCoreServiceCollectionExtensions.AddAgentCoreWebSockets(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 static AgentCore.AspNetCore.Endpoints.ChatCompletionsEndpointRouteBuilderExtensions.MapChatCompletions(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
 static AgentCore.AspNetCore.Endpoints.ChatCompletionsEndpointRouteBuilderExtensions.MapChatCompletions(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints, string! pattern) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.AuditSink.get -> AgentCore.Application.Ports.IAuditSinkPort?
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.AuditSink.set -> void
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.LoggerFactory.get -> Microsoft.Extensions.Logging.ILoggerFactory?
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.LoggerFactory.set -> void
+AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayEndpointRouteBuilderExtensions
+AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayOptions
+AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayOptions.TelnyxRelayOptions() -> void
+AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayOptions.MaxFrameBytes.get -> int
+AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayOptions.MaxFrameBytes.set -> void
+AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayOptions.CloseTimeout.get -> System.TimeSpan
+AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayOptions.CloseTimeout.set -> void
+AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayOptions.IdleTimeout.get -> System.TimeSpan
+AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayOptions.IdleTimeout.set -> void
+static AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayEndpointRouteBuilderExtensions.MapTelnyxRelay(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
+static AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayEndpointRouteBuilderExtensions.MapTelnyxRelay(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints, string! pattern) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
+static AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayEndpointRouteBuilderExtensions.MapTelnyxRelay(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints, string! pattern, AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayOptions! options) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
+const AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayEndpointRouteBuilderExtensions.DefaultPattern = "/v1/telnyx/relay" -> string!

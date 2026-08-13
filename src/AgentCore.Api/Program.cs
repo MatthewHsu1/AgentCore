@@ -4,6 +4,7 @@ using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Secrets;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Endpoints;
+using AgentCore.AspNetCore.Vendors.TelnyxRelay;
 using AgentCore.Infrastructure.Knowledge;
 using AgentCore.Infrastructure.Llm;
 using AgentCore.Infrastructure.Secrets;
@@ -99,10 +100,20 @@ builder.Services.AddAgentCore(options =>
     }));
 });
 
+// The relay socket is the inbound path of a real call, and a dead peer must not hold a session for
+// the shipped two-minute default. This sets the twenty-second keep-alive numbers a call needs.
+builder.Services.AddAgentCoreWebSockets();
+
 var app = builder.Build();
 
 app.MapGet("/health", () => Results.Ok("ok"));
 
+// The WebSocket middleware is the host's job, not the library's, so it runs before any endpoint
+// that upgrades a request. The no-argument overload is required: the overload that takes a
+// WebSocketOptions instance ignores the AddAgentCoreWebSockets registration entirely.
+app.UseWebSockets();
+
 app.MapChatCompletions();
+app.MapTelnyxRelay();
 
 app.Run();

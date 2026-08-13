@@ -45,7 +45,14 @@ public sealed class AgentCoreOptions
     /// </remarks>
     public ISecretResolverPort? SecretResolver { get; set; }
 
-    /// <summary>Gets or sets the clock the reserved <c>callDurationSeconds</c> slot reads.</summary>
+    /// <summary>Gets or sets the clock this container runs on, or <see langword="null"/> for <see cref="System.TimeProvider.System"/>.</summary>
+    /// <remarks>
+    /// Three things read this one clock: the reserved <c>callDurationSeconds</c> slot, the relay's
+    /// idle deadline in <c>AgentCore.AspNetCore/Vendors/TelnyxRelay/</c>, and — once
+    /// <c>AddAgentCore</c> registers it as a container-wide <see cref="System.TimeProvider"/> — any
+    /// host code that resolves one. A test that wants a deterministic idle deadline binds a fake
+    /// clock here, once, rather than to each reader separately.
+    /// </remarks>
     public TimeProvider? TimeProvider { get; set; }
 
     /// <summary>Gets or sets the sink the audit chain of D23 is appended to.</summary>

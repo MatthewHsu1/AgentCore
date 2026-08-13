@@ -666,13 +666,13 @@ AgentCore.Application.Ports.ISecretResolverPort
 AgentCore.Application.Ports.ISecretResolverPort.TryResolveAsync(string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string?>
 AgentCore.Application.Ports.IConversationPort
 AgentCore.Application.Ports.IConversationPort.CallId.get -> string!
-AgentCore.Application.Ports.IConversationPort.Interrupt(string! utteranceUntilInterrupt, System.TimeSpan durationUntilInterrupt) -> bool
+AgentCore.Application.Ports.IConversationPort.Interrupt(string! utteranceUntilInterrupt, System.TimeSpan durationUntilInterrupt, bool cutsRunningTurn = true) -> bool
 AgentCore.Application.Ports.IConversationPort.IsComplete.get -> bool
 AgentCore.Application.Ports.IConversationPort.LastTurn.get -> AgentCore.Domain.TurnResult?
 AgentCore.Application.Ports.IConversationPort.RunTurnAsync(string! userInput, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<AgentCore.Domain.TurnResult!>!
 AgentCore.Application.Ports.IConversationPort.RunTurnStreamingAsync(string! userInput, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
 AgentCore.Application.Ports.IConversationPort.Stage.get -> string!
-AgentCore.Application.Runtime.CallSession.Interrupt(string! utteranceUntilInterrupt, System.TimeSpan durationUntilInterrupt) -> bool
+AgentCore.Application.Runtime.CallSession.Interrupt(string! utteranceUntilInterrupt, System.TimeSpan durationUntilInterrupt, bool cutsRunningTurn = true) -> bool
 const AgentCore.Application.Runtime.CallSession.EmptyReplyReason = "the run returned an empty reply, so the turn spoke the fallback." -> string!
 const AgentCore.Application.Runtime.CallSession.FallbackReply = "I am sorry. I could not finish that. Please say it again." -> string!
 const AgentCore.Application.Runtime.CallSession.ToolFailureReason = "a tool failed four times in a row, so the turn spoke the fallback." -> string!
