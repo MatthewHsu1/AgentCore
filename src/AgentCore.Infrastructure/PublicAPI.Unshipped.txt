@@ -26,6 +26,7 @@ AgentCore.Infrastructure.Secrets.FileSecretResolver.TryResolveAsync(string! name
 AgentCore.Infrastructure.Tools.HttpToolFactory
 AgentCore.Infrastructure.Tools.HttpToolFactory.Create(AgentCore.Application.Configuration.Schema.ToolConfiguration! tool) -> Microsoft.Extensions.AI.AITool?
 AgentCore.Infrastructure.Tools.HttpToolFactory.HttpToolFactory(System.Net.Http.HttpClient! client, AgentCore.Application.Secrets.ResolvedSecrets! secrets) -> void
+const AgentCore.Infrastructure.Tools.HttpToolFactory.HttpClientName = "agentcore.tools" -> string!
 const AgentCore.Infrastructure.Llm.OpenAiChatClientAdapter.ApiKeySecretName = "openai-api-key" -> string!
 const AgentCore.Infrastructure.Llm.OpenAiChatClientAdapter.ApiKeyVariableName = "OPENAI_API_KEY" -> string!
 const AgentCore.Infrastructure.Llm.OpenAiChatClientAdapter.ProviderKind = "openai" -> string!
@@ -50,14 +51,15 @@ AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord.Text.get 
 AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord.Text.init -> void
 AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord.ZillizChunkRecord() -> void
 AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizCollection
-AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizCollection.ZillizCollection(System.Net.Http.HttpClient! client, string! collection, string! apiKey) -> void
+AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizCollection.ZillizCollection(System.Net.Http.HttpClient! client, string! collection) -> void
 AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter
 AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.CanServeDocuments.get -> bool
 AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.CanServeSearch.get -> bool
 AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.CreateDocumentsAsync(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IDocumentStorePort!>
 AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.CreateSearchAsync(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IKnowledgeRetrievalPort!>
 AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.Kind.get -> string!
-AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.ZillizKnowledgeAdapter(Microsoft.Extensions.AI.IEmbeddingGenerator<string!, Microsoft.Extensions.AI.Embedding<float>!>? embeddings = null, System.Net.Http.HttpMessageHandler? handler = null) -> void
+AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.ZillizKnowledgeAdapter(System.Net.Http.IHttpMessageHandlerFactory! handlers, Microsoft.Extensions.AI.IEmbeddingGenerator<string!, Microsoft.Extensions.AI.Embedding<float>!>? embeddings = null) -> void
+static readonly AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.SearchDeadline -> System.TimeSpan
 AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizRetrievalStore
 AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizRetrievalStore.SearchAsync(string! query, int limit, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Domain.Knowledge.KnowledgeChunk!>!>
 AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizRetrievalStore.ZillizRetrievalStore(Microsoft.Extensions.VectorData.VectorStoreCollection<string!, AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord!>! collection, Microsoft.Extensions.AI.IEmbeddingGenerator<string!, Microsoft.Extensions.AI.Embedding<float>!>! embeddings) -> void
@@ -70,6 +72,7 @@ const AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapte
 const AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.EmbeddingDimensions = 1024 -> int
 const AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.EmbeddingModel = "text-embedding-3-small" -> string!
 const AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.EndpointPointer = "/providers/knowledge/endpoint" -> string!
+const AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.HttpClientName = "agentcore.zilliz" -> string!
 const AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.ProviderKind = "zilliz" -> string!
 override AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord.Equals(object? obj) -> bool
 override AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord.GetHashCode() -> int

@@ -58,3 +58,13 @@ static AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayEndpointRouteBuilderE
 static AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayEndpointRouteBuilderExtensions.MapTelnyxRelay(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints, string! pattern, AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayOptions! options) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
 const AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayEndpointRouteBuilderExtensions.DefaultPattern = "/v1/telnyx/relay" -> string!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseKnowledgeStores(params AgentCore.Application.Ports.IKnowledgeStoreAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients
+AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.AgentCoreHttpClients(System.Net.Http.HttpMessageHandler? primaryHandler = null, Microsoft.Extensions.Logging.ILoggerFactory? loggers = null) -> void
+AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.CreateClient(string! name) -> System.Net.Http.HttpClient!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.CreateHandler(string! name) -> System.Net.Http.HttpMessageHandler!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.Dispose() -> void
+const AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.MaxAttempts = 3 -> int
+const AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.PipelineName = "agentcore-http" -> string!
+static readonly AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.ConnectionLifetime -> System.TimeSpan
+static readonly AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.FirstRetryDelay -> System.TimeSpan
+static readonly AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.RequestDeadline -> System.TimeSpan

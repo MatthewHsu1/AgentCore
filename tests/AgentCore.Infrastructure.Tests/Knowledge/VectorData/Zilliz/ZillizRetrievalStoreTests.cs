@@ -37,7 +37,7 @@ public sealed class ZillizRetrievalStoreTests
         List<string> bodies = [];
         using var handler = Answering(HttpStatusCode.OK, TwoHits, bodies);
         using HttpClient client = new(handler) { BaseAddress = new Uri("https://cluster.test", UriKind.Absolute) };
-        using ZillizCollection collection = new(client, "kb_chunks", "zilliz-test-not-a-real-key");
+        using ZillizCollection collection = new(client, "kb_chunks");
         FakeEmbeddingGenerator embeddings = new(0.5f, 0.25f);
         ZillizRetrievalStore store = new(collection, embeddings);
 
@@ -65,7 +65,7 @@ public sealed class ZillizRetrievalStoreTests
         List<string> bodies = [];
         using var handler = Answering(HttpStatusCode.OK, TwoHits, bodies);
         using HttpClient client = new(handler) { BaseAddress = new Uri("https://cluster.test", UriKind.Absolute) };
-        using ZillizCollection collection = new(client, "kb_chunks", "zilliz-test-not-a-real-key");
+        using ZillizCollection collection = new(client, "kb_chunks");
         FakeEmbeddingGenerator embeddings = new(0.5f);
         ZillizRetrievalStore store = new(collection, embeddings);
 

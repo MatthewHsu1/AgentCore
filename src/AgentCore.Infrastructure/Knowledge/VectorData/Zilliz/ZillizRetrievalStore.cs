@@ -40,6 +40,13 @@ public sealed class ZillizRetrievalStore : IKnowledgeRetrievalPort
         _embeddings = embeddings;
     }
 
+    /// <summary>Gets the collection this store ranks in.</summary>
+    /// <remarks>
+    /// The adapter opens the collection and binds it here, and a test reads back what it opened it
+    /// over. It is internal, so it adds nothing to the public surface.
+    /// </remarks>
+    internal VectorStoreCollection<string, ZillizChunkRecord> Collection => _collection;
+
     /// <summary>Gets the generator this store embeds every query with.</summary>
     /// <remarks>
     /// The adapter builds this generator from the two constants of section 3.1, and a test reads the

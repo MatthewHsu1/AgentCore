@@ -26,6 +26,12 @@ namespace AgentCore.Infrastructure.Knowledge.VectorData.Zilliz;
 /// are the same shape. Both are constants and neither is a document field.
 /// </para>
 /// <para>
+/// The adapter builds the client, and nothing above it builds one. It asks the pipeline of the host
+/// for <see cref="HttpClientName"/>, which is where the connection lifetime and the retry live, and
+/// it binds the key into <see cref="ZillizAuthHeaderHandler"/>. <see cref="ZillizCollection"/>
+/// therefore holds a client and a collection name, and no credential and no policy of its own.
+/// </para>
+/// <para>
 /// No key appears in this file, and building costs no request. The chain is asked for
 /// <see cref="ApiKeySecretName"/> and the <see cref="ApiKeyVariableName"/> variable answers when the
 /// chain holds nothing, exactly as <c>OpenAiChatClientAdapter</c> reads its own key. A bad key
@@ -52,26 +58,53 @@ public sealed class ZillizKnowledgeAdapter : IKnowledgeStoreAdapter
     /// <summary>The JSON Pointer a missing or unreadable cluster URL reports.</summary>
     public const string EndpointPointer = "/providers/knowledge/endpoint";
 
-    private readonly IEmbeddingGenerator<string, Embedding<float>>? _embeddings;
-    private readonly HttpMessageHandler? _handler;
+    /// <summary>The name this adapter opens its client under, on the pipeline of the host.</summary>
+    /// <remarks>
+    /// The pipeline serves any name and gives each one the same defaults, so this name is chosen
+    /// here, beside the vendor it belongs to, and no host registers it in advance.
+    /// </remarks>
+    public const string HttpClientName = "agentcore.zilliz";
 
-    /// <summary>Creates the adapter, and takes its two seams from a test when a test supplies them.</summary>
+    /// <summary>The deadline of one search, over every attempt the pipeline makes.</summary>
+    /// <remarks>
+    /// A vector search is a fast operation, and a caller is waiting on the telephone while it runs.
+    /// The shipped default of 100 seconds is longer than the call would survive.
+    /// </remarks>
+    public static readonly TimeSpan SearchDeadline = TimeSpan.FromSeconds(10);
+
+    private readonly IHttpMessageHandlerFactory _handlers;
+    
+    private readonly IEmbeddingGenerator<string, Embedding<float>>? _embeddings;
+
+    /// <summary>Creates the adapter, over the pipeline the host built.</summary>
+    /// <param name="handlers">
+    /// The outbound HTTP pipeline. This adapter asks it for <see cref="HttpClientName"/>.
+    /// </param>
     /// <param name="embeddings">
     /// The generator to embed a query with, or <see langword="null"/> to build the OpenAI generator
     /// section 3.1 names.
     /// </param>
-    /// <param name="handler">
-    /// The handler the cluster is reached over, or <see langword="null"/> for the default one.
-    /// </param>
+    /// <exception cref="ArgumentNullException"><paramref name="handlers"/> is <see langword="null"/>.</exception>
     /// <remarks>
-    /// Both parameters exist so a test reaches no network. A host passes neither.
+    /// <para>
+    /// A host passes <c>AgentCoreHttpClients</c>, and every request of this vendor then carries the
+    /// connection lifetime and the retry that pipeline holds. A test passes a pipeline that answers
+    /// offline, so it reaches no network.
+    /// </para>
+    /// <para>
+    /// <b>The pipeline is required rather than optional.</b> A handler built here instead would send
+    /// with no retry and no rate limit answer, and nothing would say so. This vendor refuses a search
+    /// option it cannot honour for the same reason.
+    /// </para>
     /// </remarks>
     public ZillizKnowledgeAdapter(
-        IEmbeddingGenerator<string, Embedding<float>>? embeddings = null,
-        HttpMessageHandler? handler = null)
+        IHttpMessageHandlerFactory handlers,
+        IEmbeddingGenerator<string, Embedding<float>>? embeddings = null)
     {
+        ArgumentNullException.ThrowIfNull(handlers);
+
+        _handlers = handlers;
         _embeddings = embeddings;
-        _handler = handler;
     }
 
     /// <summary>Gets the one <c>kind</c> value this adapter serves.</summary>
@@ -112,15 +145,20 @@ public sealed class ZillizKnowledgeAdapter : IKnowledgeStoreAdapter
         var apiKey = await ResolveKeyAsync(secrets, cancellationToken).ConfigureAwait(false);
         var embeddings = _embeddings ?? await OpenAiEmbeddingsAsync(secrets, cancellationToken).ConfigureAwait(false);
 
+        // The key is written onto the request one layer below the connector, so no class that builds
+        // a body or reads an answer holds a credential.
+        var inner = _handlers.CreateHandler(HttpClientName);
+
         // The client lives as long as the process, which is what the composite promises every port it
-        // builds. A test hands in its own handler, and disposing this client must not dispose it.
-        HttpClient client = _handler is null
-            ? new HttpClient()
-            : new HttpClient(_handler, disposeHandler: false);
+        // builds. The pipeline owns the chain below this handler, and other clients send on the same
+        // chain, so this client disposes nothing.
+        HttpClient client = new(new ZillizAuthHeaderHandler(apiKey) { InnerHandler = inner }, disposeHandler: false)
+        {
+            BaseAddress = endpoint,
+            Timeout = SearchDeadline,
+        };
 
-        client.BaseAddress = endpoint;
-
-        return new ZillizRetrievalStore(new ZillizCollection(client, collection, apiKey), embeddings);
+        return new ZillizRetrievalStore(new ZillizCollection(client, collection), embeddings);
     }
 
     /// <summary>Refuses the document half.</summary>

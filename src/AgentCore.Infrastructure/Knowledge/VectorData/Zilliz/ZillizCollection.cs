@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Linq.Expressions;
-using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
@@ -14,9 +13,10 @@ namespace AgentCore.Infrastructure.Knowledge.VectorData.Zilliz;
 /// </summary>
 /// <remarks>
 /// <para>
-/// D14 gives this connector the vector store: it holds the cluster, the collection, and the key, and
-/// it speaks Milvus. It sits behind <see cref="ZillizRetrievalStore"/>, which is the port the rest of
-/// AgentCore sees, so nothing above this class knows the wire format.
+/// D14 gives this connector the vector store: it holds the cluster and the collection, and it speaks
+/// Milvus. It sits behind <see cref="ZillizRetrievalStore"/>, which is the port the rest of AgentCore
+/// sees, so nothing above this class knows the wire format. The key is not here either:
+/// <see cref="ZillizAuthHeaderHandler"/> writes it onto the request, one layer below.
 /// </para>
 /// <para>
 /// Only <see cref="SearchAsync"/> is implemented. D14 also assigns the write half of the collection
@@ -55,30 +55,37 @@ public sealed class ZillizCollection : VectorStoreCollection<string, ZillizChunk
     private const string SystemName = "zilliz";
 
     private readonly HttpClient _client;
+    
     private readonly string _collection;
-    private readonly string _apiKey;
 
     /// <summary>Opens one collection of one cluster.</summary>
-    /// <param name="client">The client. Its <c>BaseAddress</c> is the cluster endpoint.</param>
+    /// <param name="client">
+    /// The client. Its <c>BaseAddress</c> is the cluster endpoint, and its handler chain carries the
+    /// key: <see cref="ZillizAuthHeaderHandler"/> writes the bearer token, and this class writes none.
+    /// </param>
     /// <param name="collection">The collection this object reads, such as <c>kb_chunks</c>.</param>
-    /// <param name="apiKey">The Zilliz key, sent as a bearer token on every request.</param>
     /// <remarks>
     /// Opening costs no request. The first search is the first time this object reaches the cluster,
     /// which is what lets a host start with no network.
     /// </remarks>
-    public ZillizCollection(HttpClient client, string collection, string apiKey)
+    public ZillizCollection(HttpClient client, string collection)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentException.ThrowIfNullOrWhiteSpace(collection);
-        ArgumentException.ThrowIfNullOrWhiteSpace(apiKey);
 
         _client = client;
         _collection = collection;
-        _apiKey = apiKey;
     }
 
     /// <summary>Gets the collection this object reads.</summary>
     public override string Name => _collection;
+
+    /// <summary>Gets the deadline of one search, which the adapter set on the client.</summary>
+    /// <remarks>
+    /// The adapter builds the client and this connector sends on it, so a test reads the deadline
+    /// back here. It is internal, so it adds nothing to the public surface.
+    /// </remarks>
+    internal TimeSpan Deadline => _client.Timeout;
 
     /// <summary>Ranks the rows of the collection nearest one query vector.</summary>
     /// <typeparam name="TInput">The input type. This connector takes a vector only.</typeparam>
@@ -334,9 +341,7 @@ public sealed class ZillizCollection : VectorStoreCollection<string, ZillizChunk
             Content = new StringContent(Body(vector, top), Encoding.UTF8, "application/json"),
         };
 
-        // The key is a bearer token on every request. It is never written to a log or a message.
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
-
+        // The key rides on the handler chain of this client, so no credential passes through here.
         using var response = await _client.SendAsync(request, cancellationToken).ConfigureAwait(false);
         var payload = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
 

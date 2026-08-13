@@ -31,22 +31,37 @@ public sealed class ZillizKnowledgeAdapterTests
         { "code": 0, "data": [ { "distance": 0.5, "path": "policies/shipping.md", "text": "Two days." } ] }
         """;
 
+    /// <summary>A pipeline for the tests that read a property or fail before any request.</summary>
+    private static readonly StubHandlerFactory Offline =
+        new(new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)));
+
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     [Fact]
     public void ItServesTheZillizKindAndTheRankingPortOnly()
     {
-        ZillizKnowledgeAdapter adapter = new();
+        ZillizKnowledgeAdapter adapter = new(Offline);
 
         Assert.Equal("zilliz", adapter.Kind);
         Assert.True(adapter.CanServeSearch);
         Assert.False(adapter.CanServeDocuments);
     }
 
+    /// <summary>
+    /// The pipeline is required, so no adapter of this vendor sends without the retry.
+    /// </summary>
+    /// <remarks>
+    /// A default pipeline built here would carry no retry and no rate limit answer, and nothing would
+    /// say so. This connector refuses a search option it cannot honour for the same reason.
+    /// </remarks>
+    [Fact]
+    public void APipelineThatIsNothingIsRefusedWhereItIsBound()
+        => Assert.Throws<ArgumentNullException>(() => new ZillizKnowledgeAdapter(null!));
+
     [Fact]
     public async Task TheDocumentHalfIsNotSupported()
     {
-        ZillizKnowledgeAdapter adapter = new();
+        ZillizKnowledgeAdapter adapter = new(Offline);
         KnowledgeProviderConfiguration entry = new() { Endpoint = Endpoint };
 
         await Assert.ThrowsAsync<NotSupportedException>(
@@ -57,7 +72,7 @@ public sealed class ZillizKnowledgeAdapterTests
     [Fact]
     public async Task NoEndpointFailsTheLoadAndPointsAtTheField()
     {
-        ZillizKnowledgeAdapter adapter = new();
+        ZillizKnowledgeAdapter adapter = new(Offline);
 
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
             async () => await adapter.CreateSearchAsync(new KnowledgeProviderConfiguration(), null, Token));
@@ -68,7 +83,7 @@ public sealed class ZillizKnowledgeAdapterTests
     [Fact]
     public async Task AnEndpointThatIsNotAUrlFailsTheLoadAndPointsAtTheSameField()
     {
-        ZillizKnowledgeAdapter adapter = new();
+        ZillizKnowledgeAdapter adapter = new(Offline);
         KnowledgeProviderConfiguration entry = new() { Endpoint = "not a url" };
 
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
@@ -82,7 +97,7 @@ public sealed class ZillizKnowledgeAdapterTests
     {
         List<string> bodies = [];
         using var handler = Answering(bodies);
-        ZillizKnowledgeAdapter adapter = new(new FakeEmbeddingGenerator(0.5f), handler);
+        ZillizKnowledgeAdapter adapter = new(new StubHandlerFactory(handler), new FakeEmbeddingGenerator(0.5f));
         KnowledgeProviderConfiguration entry = new() { Endpoint = Endpoint };
         MapSecretResolver resolver = new();
         resolver.With(ZillizKnowledgeAdapter.ApiKeySecretName, ApiKey);
@@ -105,12 +120,62 @@ public sealed class ZillizKnowledgeAdapterTests
             body.RootElement.GetProperty("collectionName").GetString());
     }
 
+    /// <summary>
+    /// The adapter opens its client on the one pipeline the host built, by name.
+    /// </summary>
+    /// <remarks>
+    /// That pipeline owns the connection lifetime, the retry, and the rate limit answer. This
+    /// adapter owns the cluster URL, the key, and the collection, and no policy at all.
+    /// </remarks>
+    [Fact]
+    public async Task ItOpensItsClientOnThePipelineTheHostBuilt()
+    {
+        List<string> bodies = [];
+        using var handler = Answering(bodies);
+        StubHandlerFactory pipeline = new(handler);
+        ZillizKnowledgeAdapter adapter = new(pipeline, new FakeEmbeddingGenerator(0.5f));
+        KnowledgeProviderConfiguration entry = new() { Endpoint = Endpoint };
+        MapSecretResolver resolver = new();
+        resolver.With(ZillizKnowledgeAdapter.ApiKeySecretName, ApiKey);
+
+        var search = await adapter.CreateSearchAsync(entry, resolver, Token);
+        await search.SearchAsync("shipping", 3, Token);
+
+        Assert.Equal([ZillizKnowledgeAdapter.HttpClientName], pipeline.Names);
+        Assert.Equal("Bearer " + ApiKey, Assert.Single(handler.Requests).Headers.Authorization!.ToString());
+    }
+
+    /// <summary>
+    /// A search that says nothing gives the call back, rather than holding it for the default 100 seconds.
+    /// </summary>
+    /// <remarks>
+    /// The pipeline sets this deadline on the clients it hands out, and this adapter builds its own
+    /// client over the handler chain, so the deadline is set here as well.
+    /// </remarks>
+    [Fact]
+    public async Task ItGivesTheSearchClientADeadlineTheShippedDefaultDoesNotHave()
+    {
+        List<string> bodies = [];
+        using var handler = Answering(bodies);
+        ZillizKnowledgeAdapter adapter = new(new StubHandlerFactory(handler), new FakeEmbeddingGenerator(0.5f));
+        KnowledgeProviderConfiguration entry = new() { Endpoint = Endpoint };
+        MapSecretResolver resolver = new();
+        resolver.With(ZillizKnowledgeAdapter.ApiKeySecretName, ApiKey);
+
+        var search = await adapter.CreateSearchAsync(entry, resolver, Token);
+
+        var store = Assert.IsType<ZillizRetrievalStore>(search);
+        var connector = Assert.IsType<ZillizCollection>(store.Collection);
+        Assert.Equal(ZillizKnowledgeAdapter.SearchDeadline, connector.Deadline);
+        Assert.True(ZillizKnowledgeAdapter.SearchDeadline < TimeSpan.FromSeconds(100));
+    }
+
     [Fact]
     public async Task ItOpensTheCollectionTheDocumentNames()
     {
         List<string> bodies = [];
         using var handler = Answering(bodies);
-        ZillizKnowledgeAdapter adapter = new(new FakeEmbeddingGenerator(0.5f), handler);
+        ZillizKnowledgeAdapter adapter = new(new StubHandlerFactory(handler), new FakeEmbeddingGenerator(0.5f));
         KnowledgeProviderConfiguration entry = new() { Endpoint = Endpoint, Collection = "support_chunks" };
         MapSecretResolver resolver = new();
         resolver.With(ZillizKnowledgeAdapter.ApiKeySecretName, ApiKey);
@@ -132,7 +197,7 @@ public sealed class ZillizKnowledgeAdapterTests
         {
             List<string> bodies = [];
             using var handler = Answering(bodies);
-            ZillizKnowledgeAdapter adapter = new(new FakeEmbeddingGenerator(0.5f), handler);
+            ZillizKnowledgeAdapter adapter = new(new StubHandlerFactory(handler), new FakeEmbeddingGenerator(0.5f));
             KnowledgeProviderConfiguration entry = new() { Endpoint = Endpoint };
             MapSecretResolver resolver = new();
 
@@ -159,7 +224,7 @@ public sealed class ZillizKnowledgeAdapterTests
         {
             List<string> bodies = [];
             using var handler = Answering(bodies);
-            ZillizKnowledgeAdapter adapter = new(new FakeEmbeddingGenerator(0.5f), handler);
+            ZillizKnowledgeAdapter adapter = new(new StubHandlerFactory(handler), new FakeEmbeddingGenerator(0.5f));
             KnowledgeProviderConfiguration entry = new() { Endpoint = Endpoint };
 
             var failure = await Assert.ThrowsAsync<SecretResolutionException>(
@@ -186,7 +251,7 @@ public sealed class ZillizKnowledgeAdapterTests
     {
         List<string> bodies = [];
         using var handler = Answering(bodies);
-        ZillizKnowledgeAdapter adapter = new(handler: handler);
+        ZillizKnowledgeAdapter adapter = new(new StubHandlerFactory(handler));
         KnowledgeProviderConfiguration entry = new() { Endpoint = Endpoint };
         MapSecretResolver resolver = new();
         resolver.With(ZillizKnowledgeAdapter.ApiKeySecretName, ApiKey);
@@ -222,7 +287,7 @@ public sealed class ZillizKnowledgeAdapterTests
         {
             List<string> bodies = [];
             using var handler = Answering(bodies);
-            ZillizKnowledgeAdapter adapter = new(handler: handler);
+            ZillizKnowledgeAdapter adapter = new(new StubHandlerFactory(handler));
             KnowledgeProviderConfiguration entry = new() { Endpoint = Endpoint };
             MapSecretResolver resolver = new();
             resolver.With(ZillizKnowledgeAdapter.ApiKeySecretName, ApiKey);
@@ -259,7 +324,7 @@ public sealed class ZillizKnowledgeAdapterTests
         {
             List<string> bodies = [];
             using var handler = Answering(bodies);
-            ZillizKnowledgeAdapter adapter = new(handler: handler);
+            ZillizKnowledgeAdapter adapter = new(new StubHandlerFactory(handler));
             KnowledgeProviderConfiguration entry = new() { Endpoint = Endpoint };
             MapSecretResolver resolver = new();
             resolver.With(ZillizKnowledgeAdapter.ApiKeySecretName, ApiKey);

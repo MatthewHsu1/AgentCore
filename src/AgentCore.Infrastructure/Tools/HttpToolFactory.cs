@@ -16,8 +16,9 @@ namespace AgentCore.Infrastructure.Tools;
 /// <remarks>
 /// <para>
 /// The factory holds the one <see cref="HttpClient"/> the host gives it, and never builds one. The
-/// host owns the handler, the pool, and the timeout, and a test owns the whole endpoint by handing
-/// over a client on its own <see cref="HttpMessageHandler"/>.
+/// host owns the handler, the pool, the deadline, and the retry — it opens the client under
+/// <see cref="HttpClientName"/> on its pipeline — and a test owns the whole endpoint by handing over
+/// a client on its own <see cref="HttpMessageHandler"/>.
 /// </para>
 /// <para>
 /// Each header resolves once, here, when the document compiles. A tool that carried an unresolved
@@ -26,6 +27,13 @@ namespace AgentCore.Infrastructure.Tools;
 /// </remarks>
 public sealed class HttpToolFactory : IAgentToolFactory
 {
+    /// <summary>The name a host opens the client of these tools under, on its HTTP pipeline.</summary>
+    /// <remarks>
+    /// The pipeline serves any name and gives each one the same defaults, so this name is chosen
+    /// here, beside the tools it belongs to, and no host registers it in advance.
+    /// </remarks>
+    public const string HttpClientName = "agentcore.tools";
+
     private readonly HttpClient _client;
     private readonly ResolvedSecrets _secrets;
 

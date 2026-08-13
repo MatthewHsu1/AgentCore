@@ -68,6 +68,29 @@ public sealed class ZillizCollectionTests
             data[0].EnumerateArray().Select(value => value.GetSingle()));
     }
 
+    /// <summary>
+    /// The connector holds no credential, and <see cref="ZillizAuthHeaderHandler"/> holds the only one.
+    /// </summary>
+    /// <remarks>
+    /// A class that builds a body and reads an answer cannot put a key in a message or a log when it
+    /// has none. This searches over a chain with no authorization handler in it, so what arrives at
+    /// the cluster is what the connector itself wrote.
+    /// </remarks>
+    [Fact]
+    public async Task TheConnectorWritesNoCredentialOfItsOwn()
+    {
+        using var cluster = StubHttpMessageHandler.Answering(HttpStatusCode.OK, TwoHits);
+        using HttpClient bare = new(cluster, disposeHandler: false)
+        {
+            BaseAddress = new Uri("https://in03-test.serverless.gcp-us-west1.cloud.zilliz.com", UriKind.Absolute),
+        };
+        using ZillizCollection collection = new(bare, CollectionName);
+
+        await ReadAsync(collection.SearchAsync(new ReadOnlyMemory<float>([1f]), 1, cancellationToken: Token));
+
+        Assert.Null(Assert.Single(cluster.Requests).Headers.Authorization);
+    }
+
     [Fact]
     public async Task ItMapsEveryHitInTheOrderTheClusterReportsThem()
     {
@@ -266,10 +289,15 @@ public sealed class ZillizCollectionTests
     }
 
     /// <summary>One collection over a handler that answers one scripted response.</summary>
+    /// <remarks>
+    /// The chain is the one the adapter builds: the authorization handler of this vendor over the
+    /// handler the host owns. The collection itself writes no header.
+    /// </remarks>
     private sealed class FakeCluster : IDisposable
     {
         private readonly HttpClient _client;
         private readonly StubHttpMessageHandler _handler;
+        private readonly ZillizAuthHeaderHandler _auth;
 
         public FakeCluster(HttpStatusCode status, string body)
         {
@@ -286,12 +314,13 @@ public sealed class ZillizCollectionTests
                 };
             });
 
-            _client = new HttpClient(_handler)
+            _auth = new ZillizAuthHeaderHandler(ApiKey) { InnerHandler = _handler };
+            _client = new HttpClient(_auth, disposeHandler: false)
             {
                 BaseAddress = new Uri("https://in03-test.serverless.gcp-us-west1.cloud.zilliz.com", UriKind.Absolute),
             };
 
-            Collection = new ZillizCollection(_client, CollectionName, ApiKey);
+            Collection = new ZillizCollection(_client, CollectionName);
         }
 
         public ZillizCollection Collection { get; }
@@ -305,6 +334,7 @@ public sealed class ZillizCollectionTests
         {
             Collection.Dispose();
             _client.Dispose();
+            _auth.Dispose();
             _handler.Dispose();
         }
     }

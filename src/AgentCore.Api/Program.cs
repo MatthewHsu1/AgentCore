@@ -20,9 +20,6 @@ var documentPath = builder.Configuration["AgentCore:ConfigurationPath"] ?? "conf
 
 ChainedSecretResolver secrets = new([new EnvironmentSecretResolver(), new FileSecretResolver()]);
 
-// One client for the life of the process.
-HttpClient toolClient = new(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(2) });
-
 // D26: observability is OTLP to Grafana Cloud. The exporter reads OTEL_EXPORTER_OTLP_ENDPOINT and
 // OTEL_EXPORTER_OTLP_HEADERS, so it is registered only when the endpoint is set: a host with no
 // collector must not retry into a socket that answers nothing.
@@ -66,6 +63,14 @@ var agentCoreLoggers = LoggerFactory.Create(logging => logging
     .AddConfiguration(builder.Configuration.GetSection("Logging"))
     .AddConsole());
 
+// One outbound HTTP pipeline for the life of the process. It holds the connection lifetime, the
+// deadline, and the retry, so no vendor adapter holds a policy of its own. It is built here rather
+// than registered, because AddAgentCoreAsync builds every adapter before builder.Build() runs and
+// there is no provider to resolve a client from at that moment. Registering it is what closes it
+// when the host stops.
+AgentCoreHttpClients httpClients = new(loggers: agentCoreLoggers);
+builder.Services.AddSingleton(httpClients);
+
 // The audit chain of D23 belongs in PostgreSQL, and that adapter is not written. This one keeps the
 // events in this process, so chain_check has something to read and no event is silently lost.
 InMemoryAuditSink auditSink = new();
@@ -86,10 +91,10 @@ await builder.Services.AddAgentCoreAsync(options =>
     // so a document that changes stores changes no code here. Registering zilliz costs nothing until
     // a document names it: an adapter no field names is never asked to build anything, so this host
     // still starts with no cluster and no key.
-    options.UseKnowledgeStores(new FileSystemKnowledgeAdapter(), new ZillizKnowledgeAdapter());
+    options.UseKnowledgeStores(new FileSystemKnowledgeAdapter(), new ZillizKnowledgeAdapter(httpClients));
 
     // kind: http. Every header resolved above, so no tool call costs a lookup.
-    options.AddToolFactory(startup => new HttpToolFactory(toolClient, startup.Secrets));
+    options.AddToolFactory(startup => new HttpToolFactory(httpClients.CreateClient(HttpToolFactory.HttpClientName), startup.Secrets));
 
     // kind: binding. The document writes binds: CreateCase and knows nothing else, so the host owns
     // what that name does. This one records the request and opens no case: there is no case system
