@@ -98,4 +98,40 @@ internal static partial class Log
         Message = "The audit sink did not accept the {Kind} event of call {CallId}. "
             + "The turn continues and the chain has a gap.")]
     public static partial void AuditAppendFailed(ILogger logger, string callId, string kind, Exception exception);
+
+    /// <summary>The moderation endpoint flagged what the caller said, so the agent refused the turn.</summary>
+    /// <param name="logger">The logger of the session.</param>
+    /// <param name="callId">The id of the call.</param>
+    /// <param name="turnIndex">The zero-based index of the turn.</param>
+    /// <param name="categories">The categories the endpoint flagged, comma-separated, in its order.</param>
+    /// <remarks>
+    /// The words the caller spoke are NOT logged. They are the text that was flagged, so a log line
+    /// carrying them would copy the content out of the audit chain and into a log store that D23 does
+    /// not protect. The audit chain records the categories, and this line reports the same fact where
+    /// an operator watches.
+    /// </remarks>
+    [LoggerMessage(
+        EventId = 6,
+        Level = LogLevel.Warning,
+        Message = "Moderation flagged turn {TurnIndex} of call {CallId} for {Categories}, "
+            + "so the agent refused it and spoke the refusal line.")]
+    public static partial void PromptRefused(ILogger logger, string callId, int turnIndex, string categories);
+
+    /// <summary>The moderation endpoint did not answer, so the turn ran unchecked.</summary>
+    /// <param name="logger">The logger of the session.</param>
+    /// <param name="callId">The id of the call.</param>
+    /// <param name="turnIndex">The zero-based index of the turn.</param>
+    /// <param name="reason">What went wrong.</param>
+    /// <remarks>
+    /// Moderation fails OPEN, and that is deliberate: a vendor outage must not refuse every caller on
+    /// a support line. The turn goes on, and this line plus the <c>unavailable</c> metric outcome are
+    /// the only record that it went unchecked. It is a warning and not an error, because a vendor
+    /// that did not answer is not a defect in this library.
+    /// </remarks>
+    [LoggerMessage(
+        EventId = 7,
+        Level = LogLevel.Warning,
+        Message = "Moderation did not answer for turn {TurnIndex} of call {CallId} ({Reason}). "
+            + "The turn ran unchecked, because moderation fails open.")]
+    public static partial void ModerationUnavailable(ILogger logger, string callId, int turnIndex, string reason);
 }

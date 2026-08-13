@@ -25,6 +25,12 @@
       "pattern": "\\S",
       "description": "Section 8.7: the line the caller hears when a turn fails. It sits at the root because every document shape speaks it. The default is the sentence AgentCore ships."
     },
+    "refusalReply": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "The line the caller hears when the agent refuses to answer. Content moderation reads the caller's spoken input before the model runs, and the agent refuses the turn when the endpoint flags it. It sits at the root beside fallbackReply because every document shape speaks it. The key is optional, and the default is the sentence AgentCore ships. fallbackReply cannot serve here: its default asks the caller to say it again, which invites the harmful request a second time, and section 8.7 gives fallbackReply to a turn that failed, while a refusal never asks the model at all."
+    },
     "state": {
       "type": "object",
       "description": "The declared state slots. Guards read only these and the three reserved slots.",
@@ -623,6 +629,10 @@
         },
         "telephony": {
           "$ref": "#/$defs/vendorProvider"
+        },
+        "moderation": {
+          "$ref": "#/$defs/vendorProvider",
+          "description": "The adapter that reads what the caller said through a moderation endpoint, such as openai. A document that names none moderates nothing."
         },
         "knowledge": {
           "$ref": "#/$defs/knowledgeProvider"

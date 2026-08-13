@@ -14,6 +14,7 @@ using AgentCore.AspNetCore.Tests.Fakes;
 using AgentCore.Domain.Audit;
 using AgentCore.Infrastructure.Tools;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.AI.Evaluation;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -38,6 +39,20 @@ public sealed class AddAgentCoreTests
         providers:
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
+        """;
+
+    // The same agent, and a document that names a moderation vendor.
+    private const string ModeratedYaml =
+        """
+        apiVersion: agentcore/v1
+        name: composed
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything" }
+        providers:
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: reply }
+          moderation: { kind: test }
         """;
 
     // The same agent, served by a vendor this host's fake adapter does not answer to.
@@ -613,6 +628,88 @@ public sealed class AddAgentCoreTests
     }
 
     [Fact]
+    public async Task AddAgentCore_RegistersNoModeratorWhenTheHostBindsNoVendor()
+    {
+        using var provider = await BuildAsync(OneAgentYaml);
+
+        var registry = provider.GetRequiredService<EvaluatorRegistry>();
+
+        // A host that registers no moderation vendor moderates nothing, and every turn reaches the
+        // model. Moderation needs a vendor account, and a library that refused to start without one
+        // could not be used in a test.
+        Assert.False(registry.Contains(PromptModerator.ModerationEvaluatorName));
+        Assert.Null(PromptModerator.FromRegistry(registry));
+    }
+
+    [Fact]
+    public async Task AddAgentCore_BuildsNoModeratorWhenTheDocumentNamesNoProvider()
+    {
+        var adapter = new FakeModerationAdapter("test", new AlwaysFlagsEvaluator());
+
+        // The vendor is registered and the document names none, so the adapter is never asked to
+        // build anything. Registering a vendor costs nothing until a document names it.
+        using var provider = await BuildAsync(OneAgentYaml, options => options.UseModeration(adapter));
+
+        Assert.False(provider.GetRequiredService<EvaluatorRegistry>()
+            .Contains(PromptModerator.ModerationEvaluatorName));
+        Assert.Equal(0, adapter.Builds);
+    }
+
+    [Fact]
+    public async Task AddAgentCore_BuildsTheModerationVendorTheDocumentNames()
+    {
+        var adapter = new FakeModerationAdapter("test", new AlwaysFlagsEvaluator());
+
+        using var provider = await BuildAsync(ModeratedYaml, options => options.UseModeration(adapter));
+
+        var registry = provider.GetRequiredService<EvaluatorRegistry>();
+
+        // The same object serves the turn loop and the offline golden set, which is what D13 means
+        // by an evaluator written once and used twice.
+        Assert.Equal(1, adapter.Builds);
+        Assert.True(registry.Contains(PromptModerator.ModerationEvaluatorName));
+        Assert.True(registry.Contains("fault_code"));
+    }
+
+    [Fact]
+    public async Task AddAgentCore_MatchesTheModerationKindWithoutRegardToCase()
+    {
+        // A vendor name is written by a human, exactly as the knowledge kinds are matched.
+        var adapter = new FakeModerationAdapter("TEST", new AlwaysFlagsEvaluator());
+
+        using var provider = await BuildAsync(ModeratedYaml, options => options.UseModeration(adapter));
+
+        Assert.Equal(1, adapter.Builds);
+    }
+
+    [Fact]
+    public async Task AddAgentCore_FailsWhenTheDocumentNamesAModerationKindThisHostDoesNotRegister()
+    {
+        var error = await Assert.ThrowsAsync<ConfigurationLoadException>(
+            async () => await BuildAsync(
+                ModeratedYaml,
+                options => options.UseModeration(new FakeModerationAdapter("other", new AlwaysFlagsEvaluator()))));
+
+        // The message names what this host does register, so the fix is obvious from the failure.
+        Assert.Contains("test", error.Message, StringComparison.Ordinal);
+        Assert.Contains("'other'", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AddAgentCore_RefusesATurnTheDocumentsModerationVendorFlags()
+    {
+        using var provider = await BuildAsync(
+            ModeratedYaml,
+            options => options.UseModeration(new FakeModerationAdapter("test", new AlwaysFlagsEvaluator())));
+
+        var session = provider.GetRequiredService<ICallSessionFactory>().Create("call-1");
+        var result = await session.RunTurnAsync("...", TestContext.Current.CancellationToken);
+
+        // The wiring reaches the turn loop, and not only the registry.
+        Assert.Equal(AgentCoreConfiguration.DefaultRefusalReply, result.ReplyText);
+    }
+
+    [Fact]
     public async Task AddAgentCore_TakesTheSampleRateTheDocumentSets()
     {
         using var provider = await BuildAsync(TunedYaml);
@@ -822,6 +919,42 @@ public sealed class AddAgentCoreTests
             options.UseChatClients(_ => new RoutingChatClientFactory(new SequencedChatClient("hello")));
             configure?.Invoke(options);
         });
+
+    /// <summary>A moderation vendor a test registers, which counts the times it was asked to build.</summary>
+    private sealed class FakeModerationAdapter(string kind, IEvaluator evaluator) : IModerationAdapter
+    {
+        public string Kind => kind;
+
+        /// <summary>Gets the number of times the composition root asked this vendor to build.</summary>
+        public int Builds { get; private set; }
+
+        public ValueTask<IEvaluator> CreateAsync(
+            VendorProviderConfiguration entry,
+            ISecretResolverPort? secrets,
+            CancellationToken cancellationToken = default)
+        {
+            Builds++;
+            return ValueTask.FromResult(evaluator);
+        }
+    }
+
+    /// <summary>A moderation evaluator that flags every text, so the wiring is observable.</summary>
+    private sealed class AlwaysFlagsEvaluator : IEvaluator
+    {
+        public IReadOnlyCollection<string> EvaluationMetricNames => ["Content Safety"];
+
+        public ValueTask<EvaluationResult> EvaluateAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatResponse modelResponse,
+            ChatConfiguration? chatConfiguration = null,
+            IEnumerable<EvaluationContext>? additionalContext = null,
+            CancellationToken cancellationToken = default)
+        {
+            BooleanMetric metric = new("Content Safety", value: false);
+            metric.AddOrUpdateContext(new ModerationVerdict(flagged: true, ["harassment"]));
+            return ValueTask.FromResult(new EvaluationResult(metric));
+        }
+    }
 
     /// <summary>A store a host registers in place of the default one.</summary>
     private sealed class CountingCallSessionStore : ICallSessionStore

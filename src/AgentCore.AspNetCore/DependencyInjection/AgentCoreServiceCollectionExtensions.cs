@@ -163,13 +163,30 @@ public static class AgentCoreServiceCollectionExtensions
         // Step 6: register. Everything above is shared and read-only for the life of the process.
         // The audit sink and the logger are both optional and both have a working default, so a host
         // that binds neither still answers a call and still produces the events of D23.
+        // The evaluator registry is built before the session factory, because the moderator the turn
+        // loop reads comes out of it. D13 asks for one evaluator used twice: the same object serves
+        // the turn loop here and the offline golden set through the registry below.
+        EvaluatorRegistry evaluators = new();
+        evaluators.Register("fault_code", new FaultCodeEvaluator());
+
+        // providers.moderation.kind picks one of the vendors the host registered. A document that
+        // names none moderates nothing, and no adapter is asked to build anything.
+        if (options.Moderation is { } moderationAdapters
+            && await ModerationEvaluatorFactory
+                .CreateAsync(configuration, options.SecretResolver, moderationAdapters, cancellationToken)
+                .ConfigureAwait(false) is { } moderation)
+        {
+            evaluators.Register(PromptModerator.ModerationEvaluatorName, moderation);
+        }
+
         CallSessionFactory sessions = new(
             compiled,
             guards,
             CallSessionFactory.CreateExtractor(compiled, chatClients),
             options.TimeProvider,
             options.AuditSink,
-            loggers.CreateLogger<CallSession>());
+            loggers.CreateLogger<CallSession>(),
+            PromptModerator.FromRegistry(evaluators));
 
         services.AddSingleton(configuration);
         services.AddSingleton(secrets);
@@ -201,7 +218,7 @@ public static class AgentCoreServiceCollectionExtensions
         // before this call keeps it.
         services.TryAddSingleton<ICallSessionStore, InMemoryCallSessionStore>();
 
-        AddEvaluation(services, configuration);
+        AddEvaluation(services, configuration, evaluators);
 
         return services;
     }
@@ -241,6 +258,11 @@ public static class AgentCoreServiceCollectionExtensions
     /// <summary>Registers the evaluation seam of D13, at the rate the document sets.</summary>
     /// <param name="services">The service collection of the host.</param>
     /// <param name="configuration">The loaded document. It carries <c>evaluation.sampleRate</c>.</param>
+    /// <param name="evaluators">
+    /// The registry built above, which already holds <c>fault_code</c> and, when the host bound one,
+    /// the moderation evaluator. It is built there and not here because the turn loop reads the
+    /// moderator out of it, and the session factory is constructed before this method runs.
+    /// </param>
     /// <remarks>
     /// <para>
     /// Each registration is a <c>TryAdd</c>, so a host that registered its own registry, its own
@@ -260,12 +282,20 @@ public static class AgentCoreServiceCollectionExtensions
     /// measurement is a set comparison over the reply text. It is the one evaluator that is safe to
     /// register by default.
     /// </para>
+    /// <para>
+    /// <b>Moderation does not pass through <see cref="EvaluationSampler"/>.</b> D13 says the endpoint
+    /// is free at any volume and counts against no usage limit, so every turn is checked and
+    /// "sampling buys nothing when the call is free". The sampler here governs the judge of T18, and
+    /// nothing else.
+    /// </para>
     /// </remarks>
-    private static void AddEvaluation(IServiceCollection services, AgentCoreConfiguration configuration)
+    private static void AddEvaluation(
+        IServiceCollection services,
+        AgentCoreConfiguration configuration,
+        EvaluatorRegistry evaluators)
     {
-        services.TryAddSingleton(new EvaluatorRegistry().Register("fault_code", new FaultCodeEvaluator()));
-        services.TryAddSingleton(new EvaluationSampler(
-            configuration.Evaluation?.SampleRate ?? EvaluationConfiguration.DefaultSampleRate));
+        services.TryAddSingleton(evaluators);
+        services.TryAddSingleton(new EvaluationSampler(configuration.Evaluation?.SampleRate ?? EvaluationConfiguration.DefaultSampleRate));
         services.TryAddSingleton<IEvaluationScorePublisher, InMemoryEvaluationScorePublisher>();
     }
 

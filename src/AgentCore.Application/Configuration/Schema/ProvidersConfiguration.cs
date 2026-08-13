@@ -78,6 +78,14 @@ public sealed record ProvidersConfiguration
     /// <summary>Gets the telephony provider, or <see langword="null"/>.</summary>
     public VendorProviderConfiguration? Telephony { get; init; }
 
+    /// <summary>Gets the moderation provider, or <see langword="null"/>.</summary>
+    /// <remarks>
+    /// <c>AgentCore.Application.Ports.IModerationAdapter</c> reads it, and the host registers one
+    /// adapter for each vendor it supports. A document that names none moderates nothing, and every
+    /// turn reaches the model.
+    /// </remarks>
+    public VendorProviderConfiguration? Moderation { get; init; }
+
     /// <summary>Gets the knowledge provider, or <see langword="null"/>.</summary>
     public KnowledgeProviderConfiguration? Knowledge { get; init; }
 }

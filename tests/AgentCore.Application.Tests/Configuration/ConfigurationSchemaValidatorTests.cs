@@ -106,6 +106,35 @@ public sealed class ConfigurationSchemaValidatorTests
     }
 
     [Theory]
+    [InlineData("\"\"")]
+    [InlineData("\"   \"")]
+    public void ARefusalReplyWithNoWords_FailsWithThePointerOfTheField(string written)
+    {
+        // The refusal is spoken too, and a line with no words is silence on a call.
+        var failure = Assert.Throws<ConfigurationLoadException>(
+            () => ConfigurationLoader.LoadYaml($"apiVersion: agentcore/v1\nname: broken\nrefusalReply: {written}\n"));
+
+        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+        Assert.Contains(failure.Errors, error => error.Pointer == "/refusalReply");
+    }
+
+    [Fact]
+    public void ARefusalReplyThatIsNotAString_FailsWithThePointerOfTheField()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            refusalReply: 7
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+        Assert.Contains(failure.Errors, error => error.Pointer == "/refusalReply");
+        Assert.Contains("/refusalReply", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData("-0.1")]
     [InlineData("1.1")]
     public void ASampleRateOutsideTheRange_FailsWithThePointerOfTheField(string written)

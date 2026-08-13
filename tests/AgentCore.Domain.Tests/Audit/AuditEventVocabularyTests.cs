@@ -17,6 +17,7 @@ public sealed class AuditEventVocabularyTests
     [InlineData(AuditEventKind.ReplyInterrupted, "reply.interrupted")]
     [InlineData(AuditEventKind.ToolFailed, "tool.failed")]
     [InlineData(AuditEventKind.ReplyFlagged, "reply.flagged")]
+    [InlineData(AuditEventKind.PromptFlagged, "prompt.flagged")]
     [InlineData(AuditEventKind.CallEnded, "call.ended")]
     public void EachKind_HasItsToken(AuditEventKind kind, string token)
     {
@@ -31,7 +32,7 @@ public sealed class AuditEventVocabularyTests
     {
         AuditEventKind[] declared = Enum.GetValues<AuditEventKind>();
 
-        Assert.Equal(6, declared.Length);
+        Assert.Equal(7, declared.Length);
         foreach (AuditEventKind kind in declared)
         {
             Assert.NotEmpty(AuditEventKinds.ToToken(kind));
@@ -194,6 +195,136 @@ public sealed class AuditEventVocabularyTests
         Assert.Equal(new string('0', AuditHash.Length), AuditHash.Genesis.Value);
     }
 
+    /// <summary>
+    /// The moderation verdict is known BEFORE the model runs, so the event amends nothing. This is
+    /// the rule that differs from <c>reply.interrupted</c>, and it is the reason the two kinds are
+    /// two kinds.
+    /// </summary>
+    [Fact]
+    public void AFlaggedPrompt_NeedsNoAmendment()
+    {
+        AuditEvent flagged = FlaggedPrompt(sequence: 1, turnIndex: 1);
+
+        Assert.Null(flagged.AmendsSequence);
+        Assert.Equal(1, flagged.TurnIndex);
+
+        IReadOnlyList<AuditChainLink> links = AuditChain.LinkAll([flagged]);
+
+        Assert.True(AuditChain.Verify(links).IsIntact);
+    }
+
+    /// <summary>
+    /// The agent refuses the turn, so the flag is written before the turn event that closes it.
+    /// <c>TurnIndex</c> names the turn, and no amendment is involved.
+    /// </summary>
+    [Fact]
+    public void AFlaggedPrompt_SitsBeforeTheTurnItBelongsTo()
+    {
+        AuditEvent flagged = FlaggedPrompt(sequence: 3, turnIndex: 1);
+        AuditEvent turn = Turn(sequence: 4, turnIndex: 1);
+
+        IReadOnlyList<AuditChainLink> links = AuditChain.LinkAll([flagged, turn]);
+
+        Assert.True(AuditChain.Verify(links).IsIntact);
+        Assert.Equal(AuditEventKind.PromptFlagged, links[0].Event.Kind);
+        Assert.Equal(AuditEventKind.TurnCompleted, links[1].Event.Kind);
+        Assert.Equal(links[0].Event.TurnIndex, links[1].Event.TurnIndex);
+        Assert.Null(links[0].Event.AmendsSequence);
+    }
+
+    /// <summary>
+    /// The kind alone says something flagged the caller. The categories are the only other fact the
+    /// event holds, and §9 makes the chain the only long-term record.
+    /// </summary>
+    [Fact]
+    public void AFlaggedPromptWithoutTheCategories_IsRefused()
+    {
+        AuditEvent silent = FlaggedPrompt(sequence: 1, turnIndex: 1) with
+        {
+            Payload = new Dictionary<string, string>(StringComparer.Ordinal),
+        };
+
+        ArgumentException failure = Assert.Throws<ArgumentException>(
+            () => AuditChain.Link(silent, AuditHash.Genesis));
+
+        Assert.Contains(AuditPayloadKeys.ModerationCategories, failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AFlaggedPromptWithAnEmptyCategoryList_IsRefused()
+    {
+        AuditEvent empty = FlaggedPrompt(sequence: 1, turnIndex: 1, categories: string.Empty);
+
+        ArgumentException failure = Assert.Throws<ArgumentException>(
+            () => AuditChain.Link(empty, AuditHash.Genesis));
+
+        Assert.Contains(AuditPayloadKeys.ModerationCategories, failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A reader splits on a comma and counts, and a blank member makes the count wrong.</summary>
+    [Theory]
+    [InlineData("harassment,,violence")]
+    [InlineData("harassment,")]
+    [InlineData(",harassment")]
+    public void AFlaggedPromptWithABlankCategory_IsRefused(string categories)
+    {
+        AuditEvent blank = FlaggedPrompt(sequence: 1, turnIndex: 1, categories: categories);
+
+        ArgumentException failure = Assert.Throws<ArgumentException>(
+            () => AuditChain.Link(blank, AuditHash.Genesis));
+
+        Assert.Contains(AuditPayloadKeys.ModerationCategories, failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The chain sorts payload KEYS and never a payload VALUE, so the order the endpoint returned
+    /// survives in the hash.
+    /// </summary>
+    [Fact]
+    public void AFlaggedPromptKeepsTheOrderTheEndpointReturned()
+    {
+        AuditEvent first = FlaggedPrompt(sequence: 1, turnIndex: 1, categories: "harassment,violence");
+        AuditEvent second = FlaggedPrompt(sequence: 1, turnIndex: 1, categories: "violence,harassment");
+
+        Assert.NotEqual(
+            AuditChain.ComputeHash(first, AuditHash.Genesis),
+            AuditChain.ComputeHash(second, AuditHash.Genesis));
+    }
+
+    /// <summary>
+    /// The taxonomy belongs to the moderation endpoint and it is open, unlike
+    /// <see cref="CallEndReason"/>. A closed set would make <see cref="AuditChain.Link"/> throw on a
+    /// category OpenAI added, and destroy the record the chain exists to protect.
+    /// </summary>
+    [Fact]
+    public void ACategoryTheLibraryNeverNamed_IsAccepted()
+    {
+        AuditEvent novel = FlaggedPrompt(
+            sequence: 1,
+            turnIndex: 1,
+            categories: "illicit/violent,some-category-openai-added-last-tuesday");
+
+        IReadOnlyList<AuditChainLink> links = AuditChain.LinkAll([novel]);
+
+        Assert.True(AuditChain.Verify(links).IsIntact);
+        Assert.Equal(
+            "illicit/violent,some-category-openai-added-last-tuesday",
+            links[0].Event.Payload[AuditPayloadKeys.ModerationCategories]);
+    }
+
+    /// <summary>The rule requires no amendment, and it forbids none either.</summary>
+    [Fact]
+    public void AFlaggedPrompt_MayStillCarryAnAmendment()
+    {
+        AuditEvent turn = Turn(sequence: 4, turnIndex: 1);
+        AuditEvent flagged = FlaggedPrompt(sequence: 5, turnIndex: 1) with { AmendsSequence = turn.Sequence };
+
+        IReadOnlyList<AuditChainLink> links = AuditChain.LinkAll([turn, flagged]);
+
+        Assert.True(AuditChain.Verify(links).IsIntact);
+        Assert.Equal(turn.Sequence, links[1].Event.AmendsSequence);
+    }
+
     private static AuditEvent Turn(long sequence, int turnIndex) => new()
     {
         CallId = "call-1",
@@ -221,6 +352,19 @@ public sealed class AuditEventVocabularyTests
         {
             [AuditPayloadKeys.UtteranceUntilInterrupt] = "Welcome to Sole, how can I",
             [AuditPayloadKeys.DurationUntilInterruptMs] = "1820",
+        },
+    };
+
+    private static AuditEvent FlaggedPrompt(long sequence, int turnIndex, string categories = "harassment") => new()
+    {
+        CallId = "call-1",
+        Sequence = sequence,
+        Kind = AuditEventKind.PromptFlagged,
+        OccurredAt = Start.AddMilliseconds(2_400),
+        TurnIndex = turnIndex,
+        Payload = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [AuditPayloadKeys.ModerationCategories] = categories,
         },
     };
 

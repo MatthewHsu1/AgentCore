@@ -234,6 +234,32 @@ public static class AuditChain
     /// <summary>Writes one number the way both C# and PostgreSQL write it.</summary>
     private static string Number(long value) => value.ToString(CultureInfo.InvariantCulture);
 
+    /// <summary>Reads whether a value is a comma-separated list in which no member is empty.</summary>
+    /// <remarks>
+    /// It checks the SHAPE of the list and NEVER the names in it. A reader splits this value on a
+    /// comma and counts the members, so <c>""</c>, <c>"a,,b"</c>, <c>"a,"</c>, and <c>",a"</c> all
+    /// make the count wrong. The names stay unchecked on purpose: the moderation taxonomy belongs to
+    /// the endpoint and it grows, and a closed set here would refuse the record the chain exists to
+    /// keep. See <see cref="AuditEventKind.PromptFlagged"/>.
+    /// </remarks>
+    private static bool IsCommaSeparatedListWithNoEmptyMember(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return false;
+        }
+
+        foreach (string member in value.Split(','))
+        {
+            if (member.Length == 0)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /// <summary>Refuses an event the vocabulary does not permit.</summary>
     private static void Validate(AuditEvent auditEvent)
     {
@@ -276,6 +302,23 @@ public static class AuditChain
             {
                 throw new ArgumentException(
                     $"A reply.interrupted event carries '{AuditPayloadKeys.UtteranceUntilInterrupt}', the text the caller actually heard. See section 11, item 6a.",
+                    nameof(auditEvent));
+            }
+        }
+
+        if (auditEvent.Kind == AuditEventKind.PromptFlagged)
+        {
+            // §9 makes this chain the only long-term record. The kind alone says something flagged
+            // the caller, and the categories are the only other fact the event carries, so the fact
+            // goes in with the event or it is lost. This is the argument the chain already makes for
+            // utteranceUntilInterrupt above. No AmendsSequence rule stands here: the verdict is known
+            // BEFORE the model runs, so the event is written before the turn.completed event of the
+            // same turn and amends nothing. TurnIndex names the turn.
+            if (!auditEvent.Payload.TryGetValue(AuditPayloadKeys.ModerationCategories, out string? categories)
+                || !IsCommaSeparatedListWithNoEmptyMember(categories))
+            {
+                throw new ArgumentException(
+                    $"A prompt.flagged event carries '{AuditPayloadKeys.ModerationCategories}', a comma-separated list with no empty member. See section 11, item 11.",
                     nameof(auditEvent));
             }
         }

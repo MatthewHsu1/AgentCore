@@ -1,5 +1,6 @@
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Evaluation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.State;
 using Microsoft.Extensions.Logging;
@@ -29,6 +30,7 @@ public sealed class CallSessionFactory : ICallSessionFactory
     private readonly TimeProvider _time;
     private readonly IAuditSinkPort? _audit;
     private readonly ILogger? _logger;
+    private readonly PromptModerator? _moderation;
 
     /// <summary>Creates the factory.</summary>
     /// <param name="compiled">The compiled agent. Every call shares it.</param>
@@ -49,13 +51,20 @@ public sealed class CallSessionFactory : ICallSessionFactory
     /// The logger the three "log once" rows of section 8.7 write to, or <see langword="null"/> for a
     /// logger that writes nowhere. The library never throws for want of one.
     /// </param>
+    /// <param name="moderation">
+    /// The moderator that reads what the caller said before the model runs, or
+    /// <see langword="null"/> for a host that moderates nothing.
+    /// <see cref="PromptModerator.FromRegistry"/> builds it from the evaluator registry. It holds no
+    /// per-call state, so one instance serves every call.
+    /// </param>
     public CallSessionFactory(
         CompiledAgent compiled,
         IGuardEvaluator guards,
         StateExtractor? extractor = null,
         TimeProvider? timeProvider = null,
         IAuditSinkPort? auditSink = null,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        PromptModerator? moderation = null)
     {
         ArgumentNullException.ThrowIfNull(compiled);
         ArgumentNullException.ThrowIfNull(guards);
@@ -66,6 +75,7 @@ public sealed class CallSessionFactory : ICallSessionFactory
         _time = timeProvider ?? TimeProvider.System;
         _audit = auditSink;
         _logger = logger;
+        _moderation = moderation;
     }
 
     /// <summary>Builds the extractor one document declares.</summary>
@@ -95,5 +105,6 @@ public sealed class CallSessionFactory : ICallSessionFactory
             _extractor,
             _time,
             _audit,
-            _logger);
+            _logger,
+            _moderation);
 }

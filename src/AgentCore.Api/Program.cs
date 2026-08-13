@@ -5,6 +5,7 @@ using AgentCore.Application.Secrets;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Endpoints;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
+using AgentCore.Infrastructure.Evaluation.OpenAiModeration;
 using AgentCore.Infrastructure.Knowledge.FileStore;
 using AgentCore.Infrastructure.Knowledge.VectorData.Zilliz;
 using AgentCore.Infrastructure.Llm.OpenAI;
@@ -92,6 +93,13 @@ await builder.Services.AddAgentCoreAsync(options =>
     // a document names it: an adapter no field names is never asked to build anything, so this host
     // still starts with no cluster and no key.
     options.UseKnowledgeStores(new FileSystemKnowledgeAdapter(), new ZillizKnowledgeAdapter(httpClients));
+
+    // The host lists the moderation vendors it supports, once, exactly as the two seams above.
+    // providers.moderation.kind picks the adapter, so a document that changes vendors changes no code
+    // here, and a document that names none moderates nothing and reads no key. Moderation reads what
+    // the caller said BEFORE the model runs: a flagged turn speaks refusalReply and never reaches the
+    // model. That is the owner's decision of 2026-08-13, and it departs from section 11 item 11.
+    options.UseModeration(new OpenAiModerationAdapter(httpClients));
 
     // kind: http. Every header resolved above, so no tool call costs a lookup.
     options.AddToolFactory(startup => new HttpToolFactory(httpClients.CreateClient(HttpToolFactory.HttpClientName), startup.Secrets));

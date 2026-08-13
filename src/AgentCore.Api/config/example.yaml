@@ -19,6 +19,16 @@ name: service-voice
 # An empty line is silence on a voice call, so a blank value is a load error.
 fallbackReply: "I am sorry. I could not finish that. Please say it again."
 
+# The line the caller hears when the agent refuses. Content moderation reads the caller's spoken
+# input before the model runs, and the agent refuses the turn when the endpoint flags it. The key
+# is optional. The default is:
+#   "I am sorry. I cannot help with that request."
+# fallbackReply cannot serve here. Its default asks the caller to say it again, and after a refusal
+# that invites the harmful request a second time. Section 8.7 also gives fallbackReply to a turn
+# that FAILED, and a refusal is not a failure: the model was never asked.
+# An empty line is silence on a voice call, so a blank value is a load error.
+refusalReply: "I am sorry. I cannot help with that request."
+
 # ---------------------------------------------------------------------------------------------
 # state: the slots the guards read.
 #
@@ -227,6 +237,10 @@ providers:
     - { kind: openai, model: gpt-5.4-nano, as: fill }       # the extractor, chosen on null discipline
   speech:    { kind: telnyx-relay }        # one vendor: STT, turn detection, TTS, interruption
   telephony: { kind: telnyx }
+  moderation: { kind: openai }             # reads what the CALLER said, before the model runs
+  # a flagged turn never reaches the model and speaks refusalReply instead. It needs the
+  # openai-api-key secret, the same one the llm entries above read. Remove this line to moderate
+  # nothing: the adapter is then never asked to build, and no key is read for it.
   knowledge: { search: filesystem, documents: filesystem, root: ./kb }
   # search: zilliz needs endpoint (cluster URL) and the zilliz-api-key secret; collection defaults to kb_chunks
   # it also embeds every query, so it needs the openai-api-key secret as well; documents stays filesystem

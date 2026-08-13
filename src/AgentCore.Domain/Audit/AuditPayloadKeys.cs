@@ -46,7 +46,24 @@ public static class AuditPayloadKeys
     /// <summary>Why the tool failed, in the words the tool gave.</summary>
     public const string ToolError = "toolError";
 
-    /// <summary>The moderation categories that flagged the reply, comma-separated and in the order the endpoint returned.</summary>
+    /// <summary>
+    /// The moderation categories that flagged the caller's spoken input, comma-separated and in the
+    /// order the endpoint returned.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// It is required on <see cref="AuditEventKind.PromptFlagged"/>, and
+    /// <see cref="AuditChain.Link"/> refuses the event without it. No member of the list is empty, so
+    /// a reader splits on a comma and counts. The order is the endpoint's, and the canonical form
+    /// keeps it, because the chain sorts payload keys and never a payload value.
+    /// </para>
+    /// <para>
+    /// The taxonomy is the endpoint's and it is open. The chain checks the shape of the list and
+    /// never the names in it, because <c>omni-moderation-latest</c> is a moving pointer and OpenAI
+    /// adds categories to it. See <see cref="AuditEventKind.PromptFlagged"/> for why this differs
+    /// from <see cref="EndReason"/>.
+    /// </para>
+    /// </remarks>
     public const string ModerationCategories = "moderationCategories";
 
     /// <summary>Why the call ended.</summary>

@@ -27,6 +27,10 @@ public sealed class TurnObservabilityTests
         "agentcore.turn.outcome",
         "agentcore.failure.kind",
         "agentcore.audit.kind",
+
+        // Three values: clean, flagged, unavailable. Three series for each replica, against the
+        // 10,000 ceiling of item 12. No call id rides on it, so T61 holds.
+        "agentcore.moderation.outcome",
     ];
 
     private const string PolicyYaml =

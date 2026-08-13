@@ -8,6 +8,7 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Diagnostics;
+using AgentCore.Application.Evaluation;
 using AgentCore.Application.Policy;
 using AgentCore.Application.Ports;
 using AgentCore.Application.State;
@@ -126,6 +127,14 @@ public sealed class CallSession : IConversationPort
     /// </remarks>
     internal const string ExtractionTimedOutReason = "the turn completion passed its deadline.";
 
+    /// <summary>What the log records when the moderation endpoint runs out of time.</summary>
+    /// <remarks>It stays internal for the reason <see cref="ExtractionTimedOutReason"/> gives.</remarks>
+    internal const string ModerationTimedOutReason = "the moderation endpoint passed its deadline.";
+
+    /// <summary>What the log records when the moderation endpoint throws.</summary>
+    /// <remarks>It stays internal for the reason <see cref="ExtractionTimedOutReason"/> gives.</remarks>
+    internal const string ModerationFaultedReason = "the moderation endpoint threw.";
+
     /// <summary>How long the work after the reply may take before it is abandoned.</summary>
     /// <remarks>
     /// <para>
@@ -142,9 +151,31 @@ public sealed class CallSession : IConversationPort
     /// </remarks>
     private static readonly TimeSpan TurnCompletionTimeout = TimeSpan.FromSeconds(5);
 
+    /// <summary>How long a turn waits for the moderation endpoint before it answers anyway.</summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This one bound sits in front of the caller, so it is far tighter than
+    /// <see cref="TurnCompletionTimeout"/>.</b> Moderation reads what the caller said before the
+    /// model runs, so the caller hears silence for as long as it takes. Two seconds is already long
+    /// on a voice call. The endpoint answers in a fraction of that, and a wait this long means it is
+    /// not answering at all.
+    /// </para>
+    /// <para>
+    /// The design permits this wait where it would refuse a judge. Section 12 says "moderation is not
+    /// a judge, it is one free HTTP POST", which exempts it from the D9 rule that keeps a judge off
+    /// the turn.
+    /// </para>
+    /// <para>
+    /// It is private, and not a document setting, for the reason <see cref="TurnCompletionTimeout"/>
+    /// gives: D15 makes a public member here a permanent promise.
+    /// </para>
+    /// </remarks>
+    private static readonly TimeSpan ModerationTimeout = TimeSpan.FromSeconds(2);
+
     private readonly CompiledAgent _compiled;
     private readonly StagePolicy? _policy;
     private readonly StateExtractor? _extractor;
+    private readonly PromptModerator? _moderation;
     private readonly CounterStateWriter _counters;
     private readonly TimeProvider _time;
     private readonly IAuditSinkPort _audit;
@@ -181,6 +212,10 @@ public sealed class CallSession : IConversationPort
     /// The logger the three "log once" rows of section 8.7 write to, or <see langword="null"/> for
     /// <see cref="NullLogger.Instance"/>.
     /// </param>
+    /// <param name="moderation">
+    /// The moderator that reads what the caller said before the model runs, or
+    /// <see langword="null"/> for a session that moderates nothing.
+    /// </param>
     internal CallSession(
         string callId,
         CompiledAgent compiled,
@@ -188,7 +223,8 @@ public sealed class CallSession : IConversationPort
         StateExtractor? extractor,
         TimeProvider timeProvider,
         IAuditSinkPort? auditSink = null,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        PromptModerator? moderation = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(callId);
         ArgumentNullException.ThrowIfNull(compiled);
@@ -198,6 +234,7 @@ public sealed class CallSession : IConversationPort
         CallId = callId;
         _compiled = compiled;
         _extractor = extractor;
+        _moderation = moderation;
         _counters = new CounterStateWriter(guards);
         _time = timeProvider;
 
@@ -288,6 +325,15 @@ public sealed class CallSession : IConversationPort
             // cancelled.
             using var scope = CallStateScope.Enter(State);
 
+            // Moderation reads what the caller said before the model runs. A flagged turn never
+            // reaches the model, so nothing of it is generated and nothing of it is extracted.
+            if (await RefuseFlaggedPromptAsync(turn, userInput, cancellation.Token).ConfigureAwait(false)
+                is { } refusal)
+            {
+                return await CompleteTurnAsync(turn, refusal, toolFault: null, cancellationToken, refused: true)
+                    .ConfigureAwait(false);
+            }
+
             AgentResponse response;
             string? toolFault = null;
 
@@ -369,6 +415,20 @@ public sealed class CallSession : IConversationPort
             // the wrapper builds the stream, and again inside each round below. This scope covers the
             // first crossing and everything up to the first yield.
             using var opening = CallStateScope.Enter(State);
+
+            // Moderation reads what the caller said before the model runs, so a flagged turn opens no
+            // stream at all. The host receives the refusal as one update, the same shape it would
+            // receive a one-chunk reply in, so nothing downstream learns that this turn was refused.
+            if (await RefuseFlaggedPromptAsync(turn, userInput, cancellation.Token).ConfigureAwait(false)
+                is { } refusal)
+            {
+                _runIsAudible = true;
+                yield return new ChatResponseUpdate(ChatRole.Assistant, refusal.Text);
+
+                _ = await CompleteTurnAsync(turn, refusal, toolFault: null, cancellationToken, refused: true)
+                    .ConfigureAwait(false);
+                yield break;
+            }
 
             var stream = turn.Agent
                 .RunStreamingAsync(turn.Request, cancellationToken: cancellation.Token)
@@ -768,11 +828,18 @@ public sealed class CallSession : IConversationPort
     /// same lock then closes the window behind it, so the tail of this method needs no third read.
     /// </para>
     /// </remarks>
+    /// <param name="refused">
+    /// Whether moderation flagged what the caller said, so the model never ran. A refused turn skips
+    /// the extractor: see <see cref="RefuseFlaggedPromptAsync"/>. Everything else about the turn is
+    /// ordinary, so the refusal enters the transcript, the stage machine advances, and
+    /// <c>turn.completed</c> records the refusal under <see cref="AuditPayloadKeys.ReplyText"/>.
+    /// </param>
     private async Task<TurnResult> CompleteTurnAsync(
         Turn turn,
         AgentResponse response,
         string? toolFault,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool refused = false)
     {
         var interruption = CurrentInterruption();
         var reply = response.Text;
@@ -840,9 +907,15 @@ public sealed class CallSession : IConversationPort
 
         // Writer order, step 3. The deadline is here and not on the whole method, because the audit
         // append and the stage advance must always run.
-        string? extractionFailure;
-        using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+        string? extractionFailure = null;
+
+        // A refused turn runs no extractor. The words moderation flagged are the extractor's only
+        // input, so a slot filled from them would carry the flagged content into the state document
+        // and into every later prompt. The refusal itself says nothing worth extracting either, and
+        // the extractor costs a model call, so this also spends nothing on a turn nobody answered.
+        if (!refused)
         {
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             deadline.CancelAfter(TurnCompletionTimeout);
             try
             {
@@ -1168,6 +1241,103 @@ public sealed class CallSession : IConversationPort
         Append(NewEvent(AuditEventKind.CallEnded, endedAt, turnIndex: null, payload: payload));
 
         return true;
+    }
+
+    /// <summary>Reads what the caller said through moderation, and refuses the turn when it is flagged.</summary>
+    /// <param name="turn">The turn that just began.</param>
+    /// <param name="userInput">The words the caller spoke.</param>
+    /// <param name="cancellationToken">The token of the run.</param>
+    /// <returns>
+    /// The refusal to answer with, or <see langword="null"/> when the turn may reach the model.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <b>This runs before the model, and the caller waits for it.</b> The owner decided on
+    /// 2026-08-13 that moderation reads what the CALLER said and refuses the turn, rather than
+    /// reading the agent's reply and recording it as section 11 item 11 asks. Recording a harmful
+    /// reply protects nobody, because the caller already heard it. The design permits the wait:
+    /// section 12 says "moderation is not a judge", which exempts it from the D9 rule that keeps a
+    /// judge off the turn. <see cref="ModerationTimeout"/> bounds it.
+    /// </para>
+    /// <para>
+    /// <b>It fails open.</b> An endpoint that does not answer, times out, or throws lets the turn go
+    /// on. A vendor outage must not refuse every caller on a support line. The <c>unavailable</c>
+    /// metric outcome is the only record that a turn went unchecked, so an operator alerts on it.
+    /// </para>
+    /// <para>
+    /// The flag is appended BEFORE the <c>turn.completed</c> event of this turn, because the verdict
+    /// is known before the model runs. It amends nothing, and
+    /// <see cref="AuditEvent.TurnIndex"/> names the turn it belongs to. That is the one rule that
+    /// separates <see cref="AuditEventKind.PromptFlagged"/> from
+    /// <see cref="AuditEventKind.ReplyInterrupted"/>, which must amend under T23.
+    /// </para>
+    /// <para>
+    /// A refused turn speaks <see cref="AgentCoreConfiguration.RefusalReply"/> and NOT
+    /// <see cref="AgentCoreConfiguration.FallbackReply"/>. The fallback is the section 8.7 line for a
+    /// turn that failed, and it asks the caller to say it again, which would invite the flagged words
+    /// back. A refusal is not a failure: nothing broke, and the model was never asked.
+    /// </para>
+    /// </remarks>
+    private async ValueTask<AgentResponse?> RefuseFlaggedPromptAsync(
+        Turn turn,
+        string userInput,
+        CancellationToken cancellationToken)
+    {
+        if (_moderation is null)
+        {
+            return null;
+        }
+
+        IReadOnlyList<string> categories;
+        using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+        {
+            deadline.CancelAfter(ModerationTimeout);
+            try
+            {
+                categories = await _moderation
+                    .FlaggedCategoriesAsync(userInput, deadline.Token)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                // The deadline passed, and not the caller's own token. A cancel the host asked for
+                // still propagates, because that is the host ending the turn and not a slow vendor.
+                Log.ModerationUnavailable(_logger, CallId, turn.Index, ModerationTimedOutReason);
+                AgentCoreTelemetry.RecordModeration(AgentCoreTelemetry.ModerationUnavailable);
+                return null;
+            }
+#pragma warning disable CA1031 // Moderation guards the turn. It must never be the thing that drops it.
+            catch (Exception exception) when (exception is not OperationCanceledException)
+#pragma warning restore CA1031
+            {
+                Log.ModerationUnavailable(_logger, CallId, turn.Index, ModerationFaultedReason);
+                AgentCoreTelemetry.RecordModeration(AgentCoreTelemetry.ModerationUnavailable);
+                return null;
+            }
+        }
+
+        if (categories.Count == 0)
+        {
+            AgentCoreTelemetry.RecordModeration(AgentCoreTelemetry.ModerationClean);
+            return null;
+        }
+
+        // The order is the endpoint's, because AuditPayloadKeys.ModerationCategories promises it.
+        var flagged = string.Join(',', categories);
+
+        Append(NewEvent(
+            AuditEventKind.PromptFlagged,
+            _time.GetUtcNow(),
+            turn.Index,
+            payload: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [AuditPayloadKeys.ModerationCategories] = flagged,
+            }));
+
+        Log.PromptRefused(_logger, CallId, turn.Index, flagged);
+        AgentCoreTelemetry.RecordModeration(AgentCoreTelemetry.ModerationFlagged);
+
+        return new AgentResponse(new ChatMessage(ChatRole.Assistant, _compiled.Configuration.RefusalReply));
     }
 
     /// <summary>Runs the extractor against the finished turn.</summary>

@@ -1,7 +1,9 @@
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Evaluation;
 using AgentCore.Application.Llm;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
+using Microsoft.Extensions.AI.Evaluation;
 using Microsoft.Extensions.Logging;
 
 namespace AgentCore.AspNetCore.DependencyInjection;
@@ -96,6 +98,9 @@ public sealed class AgentCoreOptions
 
     /// <summary>Gets the seam <c>knowledge.read</c> opens, or <see langword="null"/>.</summary>
     internal Func<AgentCoreStartup, IDocumentStorePort>? DocumentStore { get; private set; }
+
+    /// <summary>Gets the moderation vendors the host registered, or <see langword="null"/>.</summary>
+    internal IReadOnlyList<IModerationAdapter>? Moderation { get; private set; }
 
     /// <summary>Gets the extra tool factory links, in the order the composite asks them.</summary>
     internal IReadOnlyList<Func<AgentCoreStartup, IAgentToolFactory>> ToolFactories => _toolFactories;
@@ -232,6 +237,41 @@ public sealed class AgentCoreOptions
     {
         ArgumentNullException.ThrowIfNull(documents);
         DocumentStore = documents;
+        return this;
+    }
+
+    /// <summary>Binds the moderation vendors, and the document picks one by <c>kind</c>.</summary>
+    /// <param name="adapters">The vendors this host supports.</param>
+    /// <returns>These options, so a host chains its calls.</returns>
+    /// <remarks>
+    /// <para>
+    /// The host lists the vendors it supports, once, exactly as the llm and knowledge seams above.
+    /// <c>providers.moderation.kind</c> picks the adapter, so a document that changes vendors changes
+    /// no code here. Registering a vendor costs nothing until a document names it: an adapter no
+    /// field names is never asked to build anything, so a host still starts with no key.
+    /// </para>
+    /// <para>
+    /// <b>A document that names no <c>providers.moderation</c> moderates nothing.</b> Every turn then
+    /// reaches the model, and no turn is refused. A document that names a kind this host does not
+    /// register fails the start, and the message names what the host does register.
+    /// </para>
+    /// <para>
+    /// The evaluator joins <see cref="EvaluatorRegistry"/> under
+    /// <see cref="PromptModerator.ModerationEvaluatorName"/>, so the offline golden set reaches the
+    /// same object the turn loop does. D13 asks for exactly that: an evaluator is written once and
+    /// used twice.
+    /// </para>
+    /// <para>
+    /// The words the caller speaks are moderated BEFORE the model runs, and a flagged turn speaks
+    /// <see cref="AgentCoreConfiguration.RefusalReply"/> instead of reaching the model. That is the
+    /// owner's decision of 2026-08-13, and it departs from section 11 item 11, which asked for the
+    /// agent's reply to be moderated and recorded.
+    /// </para>
+    /// </remarks>
+    public AgentCoreOptions UseModeration(params IModerationAdapter[] adapters)
+    {
+        ArgumentNullException.ThrowIfNull(adapters);
+        Moderation = adapters;
         return this;
     }
 

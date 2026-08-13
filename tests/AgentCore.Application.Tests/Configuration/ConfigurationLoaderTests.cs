@@ -242,6 +242,77 @@ public sealed class ConfigurationLoaderTests
     }
 
     [Fact]
+    public void Example_BindsTheSpokenRefusal()
+    {
+        // The key is optional, and the worked example writes it at its default.
+        Assert.Equal(AgentCoreConfiguration.DefaultRefusalReply, Example.RefusalReply);
+    }
+
+    [Fact]
+    public void ADocumentThatSetsTheRefusalReply_BindsIt()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: guarded
+            refusalReply: "I am not able to answer that."
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+
+        Assert.Equal("I am not able to answer that.", configuration.RefusalReply);
+    }
+
+    [Fact]
+    public void ADocumentThatOmitsTheRefusalReply_TakesTheDefault()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: plain
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+
+        // A document written before the key existed behaves the same way.
+        Assert.Equal(AgentCoreConfiguration.DefaultRefusalReply, configuration.RefusalReply);
+    }
+
+    [Fact]
+    public void ADocumentThatSetsOnlyOneSpokenLine_LeavesTheOtherAtItsDefault()
+    {
+        var withFallback = ConfigurationLoader.LoadYaml("""
+            apiVersion: agentcore/v1
+            name: tuned
+            fallbackReply: "One moment please. I will try that again."
+            """);
+        var withRefusal = ConfigurationLoader.LoadYaml("""
+            apiVersion: agentcore/v1
+            name: tuned
+            refusalReply: "I am not able to answer that."
+            """);
+
+        Assert.Equal("One moment please. I will try that again.", withFallback.FallbackReply);
+        Assert.Equal(AgentCoreConfiguration.DefaultRefusalReply, withFallback.RefusalReply);
+        Assert.Equal(AgentCoreConfiguration.DefaultFallbackReply, withRefusal.FallbackReply);
+        Assert.Equal("I am not able to answer that.", withRefusal.RefusalReply);
+    }
+
+    [Fact]
+    public void ADocumentThatSetsBothSpokenLines_BindsThemIndependently()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: tuned
+            fallbackReply: "One moment please. I will try that again."
+            refusalReply: "I am not able to answer that."
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+
+        Assert.Equal("One moment please. I will try that again.", configuration.FallbackReply);
+        Assert.Equal("I am not able to answer that.", configuration.RefusalReply);
+    }
+
+    [Fact]
     public void AnEvaluationSectionWithNoRate_TakesTheDefaultRate()
     {
         const string document = """

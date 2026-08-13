@@ -4,8 +4,9 @@ namespace AgentCore.Application.Tests.Configuration;
 /// The worked example of section 8.1, in both forms.
 /// </summary>
 /// <remarks>
-/// The YAML is the document as the design writes it, plus the two optional keys section 8.1 does
-/// not print: <c>fallbackReply</c> and <c>evaluation</c>. Both hold their default, and the shipped
+/// The YAML is the document as the design writes it, plus the three optional keys section 8.1 does
+/// not print: <c>fallbackReply</c>, <c>refusalReply</c>, and <c>evaluation</c>. All three hold their
+/// default, and the shipped
 /// <c>config/example.yaml</c> holds the same document. The JSON is the same document again, and it
 /// was produced by a different YAML reader so that rule 17 of section 11 tests something real.
 /// </remarks>
@@ -17,6 +18,7 @@ internal static class ExampleDocument
         apiVersion: agentcore/v1
         name: service-voice
         fallbackReply: "I am sorry. I could not finish that. Please say it again."
+        refusalReply: "I am sorry. I cannot help with that request."
 
         state:
           callerAskedForHuman: { type: boolean, default: false, writer: extractor }
@@ -131,6 +133,7 @@ internal static class ExampleDocument
             - { kind: openai, model: gpt-5.4-nano, as: fill }       # the extractor, chosen on null discipline
           speech:    { kind: telnyx-relay }        # one vendor: STT, turn detection, TTS, interruption
           telephony: { kind: telnyx }
+          moderation: { kind: openai }             # reads what the CALLER said, before the model runs
           knowledge: { search: filesystem, documents: filesystem, root: ./kb }
 
         evaluation:
@@ -144,6 +147,7 @@ internal static class ExampleDocument
           "apiVersion": "agentcore/v1",
           "name": "service-voice",
           "fallbackReply": "I am sorry. I could not finish that. Please say it again.",
+          "refusalReply": "I am sorry. I cannot help with that request.",
           "state": {
             "callerAskedForHuman": {
               "type": "boolean",
@@ -470,6 +474,9 @@ internal static class ExampleDocument
             },
             "telephony": {
               "kind": "telnyx"
+            },
+            "moderation": {
+              "kind": "openai"
             },
             "knowledge": {
               "search": "filesystem",

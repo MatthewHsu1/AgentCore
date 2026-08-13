@@ -28,6 +28,7 @@ public static class AuditEventKinds
         AuditEventKind.ToolFailed => "tool.failed",
         AuditEventKind.ReplyFlagged => "reply.flagged",
         AuditEventKind.CallEnded => "call.ended",
+        AuditEventKind.PromptFlagged => "prompt.flagged",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "The audit event vocabulary is closed, and this value is not in it."),
     };
 
@@ -45,6 +46,7 @@ public static class AuditEventKinds
             case "tool.failed": kind = AuditEventKind.ToolFailed; return true;
             case "reply.flagged": kind = AuditEventKind.ReplyFlagged; return true;
             case "call.ended": kind = AuditEventKind.CallEnded; return true;
+            case "prompt.flagged": kind = AuditEventKind.PromptFlagged; return true;
             default: kind = default; return false;
         }
     }

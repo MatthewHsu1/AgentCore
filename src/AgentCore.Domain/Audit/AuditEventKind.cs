@@ -51,10 +51,55 @@ public enum AuditEventKind
     ToolFailed = 3,
 
     /// <summary>Moderation flagged a reply.</summary>
-    /// <remarks>Section 11, item 11: every turn passes the moderation endpoint, and a flagged reply is recorded here.</remarks>
+    /// <remarks>
+    /// <para>
+    /// Section 11, item 11: every turn passes the moderation endpoint, and a flagged reply is
+    /// recorded here.
+    /// </para>
+    /// <para>
+    /// No code produces this kind today, because the owner moved the check to the caller's side, and
+    /// <see cref="PromptFlagged"/> records that fact. The kind stays in the vocabulary anyway: a kind
+    /// is stable forever, so a stored row keeps its meaning.
+    /// </para>
+    /// </remarks>
     ReplyFlagged = 4,
 
     /// <summary>The call ended. It is the last event of every call.</summary>
     /// <remarks>One call writes exactly one of these, and it carries no turn index.</remarks>
     CallEnded = 5,
+
+    /// <summary>Moderation flagged what the CALLER said, so the agent refused to answer that turn.</summary>
+    /// <remarks>
+    /// <para>
+    /// The owner moved the check to the caller's spoken input, ahead of the model, and this differs
+    /// from section 11, item 11, which asked for the reply. The owner made that call knowingly.
+    /// <see cref="ReplyFlagged"/> keeps its meaning and keeps its number.
+    /// </para>
+    /// <para>
+    /// <b>It amends nothing.</b> The moderation verdict is known BEFORE the model runs, so
+    /// <c>prompt.flagged</c> is written BEFORE the <see cref="TurnCompleted"/> event of the same
+    /// turn. There is no earlier event to correct, so this kind does not carry
+    /// <see cref="AuditEvent.AmendsSequence"/> the way <see cref="ReplyInterrupted"/> must.
+    /// <see cref="AuditEvent.TurnIndex"/> names the turn the fact belongs to. The chain requires no
+    /// amendment here, and it forbids none either.
+    /// </para>
+    /// <para>
+    /// It carries <see cref="AuditPayloadKeys.ModerationCategories"/>, and
+    /// <see cref="AuditChain.Link"/> refuses the event without it. The kind alone says something
+    /// flagged the caller, and the categories are the only other fact the event holds. Section 9
+    /// makes this chain the only long-term record, so the fact goes in with the event or it is lost.
+    /// This is the argument the chain already makes for <c>utteranceUntilInterrupt</c> on
+    /// <see cref="ReplyInterrupted"/>.
+    /// </para>
+    /// <para>
+    /// <b>The category names are open, and the chain never checks them.</b> The taxonomy belongs to
+    /// the moderation endpoint: <c>omni-moderation-latest</c> is a moving pointer, and OpenAI adds
+    /// categories to it. A closed set here would make <see cref="AuditChain.Link"/> throw the first
+    /// time a new category arrives, and destroy the exact record the chain exists to protect. This is
+    /// the opposite of the <see cref="CallEndReason"/> decision, and the two differ for one reason:
+    /// our own code produces an end reason from an enum it owns, and a category arrives off a vendor
+    /// wire. The chain checks the SHAPE of the list and never the names in it.
+    /// </para>
+    /// </remarks>
+    PromptFlagged = 6,
 }

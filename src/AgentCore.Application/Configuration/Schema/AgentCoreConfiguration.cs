@@ -21,6 +21,14 @@ public sealed record AgentCoreConfiguration
     /// </remarks>
     public const string DefaultFallbackReply = "I am sorry. I could not finish that. Please say it again.";
 
+    /// <summary>The spoken refusal used when the document names none.</summary>
+    /// <remarks>
+    /// The sentence is short and it is speakable, and it does not ask the caller to say the request
+    /// again. <see cref="DefaultFallbackReply"/> does ask, and after a refusal that invites the
+    /// harmful request a second time.
+    /// </remarks>
+    public const string DefaultRefusalReply = "I am sorry. I cannot help with that request.";
+
     /// <summary>Gets the document version. It is always <see cref="SupportedApiVersion"/>.</summary>
     public required string ApiVersion { get; init; }
 
@@ -36,6 +44,26 @@ public sealed record AgentCoreConfiguration
     /// <see cref="DefaultFallbackReply"/>, and a document may not set an empty line.
     /// </remarks>
     public string FallbackReply { get; init; } = DefaultFallbackReply;
+
+    /// <summary>Gets the line the caller hears when the agent refuses to answer.</summary>
+    /// <remarks>
+    /// <para>
+    /// Content moderation reads the caller's spoken input before the model runs, and the agent
+    /// refuses the turn when the endpoint flags it. The key sits at the root of the document beside
+    /// <see cref="FallbackReply"/>, because every shape speaks it: a single agent, a
+    /// <c>policy:</c> document, and a <c>graph:</c> document all refuse the same way. It defaults to
+    /// <see cref="DefaultRefusalReply"/>, and a document may not set an empty line.
+    /// </para>
+    /// <para>
+    /// <see cref="FallbackReply"/> cannot serve here, for two reasons. First, its default text is
+    /// "I am sorry. I could not finish that. Please say it again." Spoken after a refusal, that line
+    /// invites the caller to repeat the harmful request. Second, section 8.7 makes
+    /// <see cref="FallbackReply"/> the line for a turn that FAILED: a run that returns no text after
+    /// 40 tool rounds, or a tool that failed four times. A refusal is not a failure, because the
+    /// model was never asked.
+    /// </para>
+    /// </remarks>
+    public string RefusalReply { get; init; } = DefaultRefusalReply;
 
     /// <summary>Gets the declared state slots, keyed by slot name.</summary>
     public EquatableDictionary<StateSlotConfiguration> State { get; init; } = EquatableDictionary<StateSlotConfiguration>.Empty;

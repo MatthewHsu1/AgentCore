@@ -74,6 +74,20 @@ public static class AgentCoreTelemetry
     /// <summary>The failure kind of section 8.7, row two: the extractor returned an invalid object.</summary>
     internal const string FailureExtraction = "extraction";
 
+    /// <summary>The moderation outcome of a turn the endpoint checked and flagged nothing in.</summary>
+    internal const string ModerationClean = "clean";
+
+    /// <summary>The moderation outcome of a turn the endpoint flagged, so the agent refused it.</summary>
+    internal const string ModerationFlagged = "flagged";
+
+    /// <summary>The moderation outcome of a turn the endpoint did not answer for.</summary>
+    /// <remarks>
+    /// The turn went on and the caller was answered, because moderation fails open: a vendor outage
+    /// must not refuse every caller. This value is the only record that the turn went unchecked, so
+    /// an operator alerts on it rather than on a log line.
+    /// </remarks>
+    internal const string ModerationUnavailable = "unavailable";
+
     private static readonly ActivitySource Source = new(ActivitySourceName);
     private static readonly Meter Instruments = new(MeterName);
 
@@ -91,6 +105,11 @@ public static class AgentCoreTelemetry
         "agentcore.audit.events",
         unit: "{event}",
         description: "Audit events the turn loop handed to the sink, by kind.");
+
+    private static readonly Counter<long> ModerationVerdicts = Instruments.CreateCounter<long>(
+        "agentcore.moderation.verdicts",
+        unit: "{verdict}",
+        description: "Turns the moderation endpoint checked, by outcome.");
 
     /// <summary>Opens the span of one turn.</summary>
     /// <param name="callId">The id of the call. It goes on the span, and never on a metric.</param>
@@ -164,7 +183,16 @@ public static class AgentCoreTelemetry
         => TurnFailures.Add(1, new KeyValuePair<string, object?>("agentcore.failure.kind", kind));
 
     /// <summary>Counts one audit event the turn loop handed to the sink.</summary>
-    /// <param name="kindToken">The wire token of the event kind. The vocabulary is closed at six.</param>
+    /// <param name="kindToken">The wire token of the event kind. The vocabulary is closed at seven.</param>
     internal static void RecordAuditEvent(string kindToken)
         => AuditEvents.Add(1, new KeyValuePair<string, object?>("agentcore.audit.kind", kindToken));
+
+    /// <summary>Counts one turn the moderation endpoint was asked about.</summary>
+    /// <param name="outcome">One of the three closed moderation outcomes.</param>
+    /// <remarks>
+    /// Three values, so three series for each replica, against the 10,000 ceiling of item 12. T61
+    /// holds: the key is closed, and no call id rides on it.
+    /// </remarks>
+    internal static void RecordModeration(string outcome)
+        => ModerationVerdicts.Add(1, new KeyValuePair<string, object?>("agentcore.moderation.outcome", outcome));
 }

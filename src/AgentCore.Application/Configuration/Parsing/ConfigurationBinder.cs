@@ -23,6 +23,7 @@ internal static class ConfigurationBinder
             ApiVersion = RequiredString(root, "apiVersion", ConfigurationError.RootPointer),
             Name = RequiredString(root, "name", ConfigurationError.RootPointer),
             FallbackReply = BindFallbackReply(root, ConfigurationError.RootPointer),
+            RefusalReply = BindRefusalReply(root, ConfigurationError.RootPointer),
             State = BindState(root, ConfigurationError.RootPointer),
             Extractor = BindExtractor(root, ConfigurationError.RootPointer),
             Guards = BindGuards(root, ConfigurationError.RootPointer),
@@ -48,6 +49,22 @@ internal static class ConfigurationBinder
             ? throw Error(
                 ConfigurationError.AppendPointer(pointer, "fallbackReply"),
                 "the fallback reply holds no words. The caller hears it, so it must say something.")
+            : text;
+    }
+
+    private static string BindRefusalReply(JsonObject root, string pointer)
+    {
+        if (OptionalString(root, "refusalReply", pointer) is not { } text)
+        {
+            return AgentCoreConfiguration.DefaultRefusalReply;
+        }
+
+        // The agent speaks this line when moderation flags the caller, and a line with no words is
+        // silence on a voice call. The caller then hears nothing at all, so it is a load error.
+        return string.IsNullOrWhiteSpace(text)
+            ? throw Error(
+                ConfigurationError.AppendPointer(pointer, "refusalReply"),
+                "the refusal reply holds no words. The caller hears it, so it must say something.")
             : text;
     }
 
@@ -464,6 +481,7 @@ internal static class ConfigurationBinder
             Llm = llm.Count == 0 ? EquatableList<LlmProviderConfiguration>.Empty : new EquatableList<LlmProviderConfiguration>(llm),
             Speech = BindVendorProvider(providers, "speech", providersPointer),
             Telephony = BindVendorProvider(providers, "telephony", providersPointer),
+            Moderation = BindVendorProvider(providers, "moderation", providersPointer),
             Knowledge = BindKnowledgeProvider(providers, providersPointer),
         };
     }

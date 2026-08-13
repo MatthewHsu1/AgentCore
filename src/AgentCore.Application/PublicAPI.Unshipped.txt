@@ -88,6 +88,8 @@ AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Name.get -> st
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Name.init -> void
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Policy.get -> AgentCore.Application.Configuration.Schema.PolicyConfiguration?
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Policy.init -> void
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.RefusalReply.get -> string!
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.RefusalReply.init -> void
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Providers.get -> AgentCore.Application.Configuration.Schema.ProvidersConfiguration?
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Providers.init -> void
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.State.get -> AgentCore.Application.Configuration.Schema.EquatableDictionary<AgentCore.Application.Configuration.Schema.StateSlotConfiguration!>!
@@ -249,6 +251,8 @@ AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Speech.get -> 
 AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Speech.init -> void
 AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Telephony.get -> AgentCore.Application.Configuration.Schema.VendorProviderConfiguration?
 AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Telephony.init -> void
+AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Moderation.get -> AgentCore.Application.Configuration.Schema.VendorProviderConfiguration?
+AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Moderation.init -> void
 AgentCore.Application.Configuration.Schema.ReservedStateSlots
 AgentCore.Application.Configuration.Schema.StageConfiguration
 AgentCore.Application.Configuration.Schema.StageConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.StageConfiguration!
@@ -345,6 +349,7 @@ AgentCore.Application.Configuration.Schema.VendorProviderConfiguration.VendorPro
 const AgentCore.Application.Configuration.Parsing.ConfigurationError.RootPointer = "" -> string!
 const AgentCore.Application.Configuration.Parsing.SecretReference.Prefix = "${secret:" -> string!
 const AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.DefaultFallbackReply = "I am sorry. I could not finish that. Please say it again." -> string!
+const AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.DefaultRefusalReply = "I am sorry. I cannot help with that request." -> string!
 const AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.SupportedApiVersion = "agentcore/v1" -> string!
 const AgentCore.Application.Configuration.Schema.EvaluationConfiguration.DefaultSampleRate = 0 -> double
 const AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.DefaultCollection = "kb_chunks" -> string!
@@ -659,7 +664,7 @@ AgentCore.Application.Runtime.CallSession
 AgentCore.Application.Runtime.CallSession.CallId.get -> string!
 AgentCore.Application.Runtime.CallSession.Compiled.get -> AgentCore.Application.Configuration.Compilation.CompiledAgent!
 AgentCore.Application.Runtime.CallSessionFactory
-AgentCore.Application.Runtime.CallSessionFactory.CallSessionFactory(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Configuration.Validation.IGuardEvaluator! guards, AgentCore.Application.State.StateExtractor? extractor = null, System.TimeProvider? timeProvider = null, AgentCore.Application.Ports.IAuditSinkPort? auditSink = null, Microsoft.Extensions.Logging.ILogger? logger = null) -> void
+AgentCore.Application.Runtime.CallSessionFactory.CallSessionFactory(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Configuration.Validation.IGuardEvaluator! guards, AgentCore.Application.State.StateExtractor? extractor = null, System.TimeProvider? timeProvider = null, AgentCore.Application.Ports.IAuditSinkPort? auditSink = null, Microsoft.Extensions.Logging.ILogger? logger = null, AgentCore.Application.Evaluation.PromptModerator? moderation = null) -> void
 AgentCore.Application.Runtime.CallSessionFactory.Create(string? callId = null) -> AgentCore.Application.Runtime.CallSession!
 AgentCore.Application.Runtime.CallSession.IsComplete.get -> bool
 AgentCore.Application.Runtime.CallSession.LastTurn.get -> AgentCore.Domain.TurnResult?
@@ -785,9 +790,23 @@ AgentCore.Application.Evaluation.InMemoryEvaluationScorePublisher
 AgentCore.Application.Evaluation.InMemoryEvaluationScorePublisher.InMemoryEvaluationScorePublisher() -> void
 AgentCore.Application.Evaluation.InMemoryEvaluationScorePublisher.PublishAsync(AgentCore.Application.Evaluation.EvaluationScore! score, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Evaluation.InMemoryEvaluationScorePublisher.Scores.get -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Evaluation.EvaluationScore!>!
+AgentCore.Application.Evaluation.ModerationEvaluatorFactory
+AgentCore.Application.Evaluation.ModerationVerdict
+AgentCore.Application.Evaluation.ModerationVerdict.Categories.get -> System.Collections.Generic.IReadOnlyList<string!>!
+AgentCore.Application.Evaluation.ModerationVerdict.Flagged.get -> bool
+AgentCore.Application.Evaluation.ModerationVerdict.ModerationVerdict(bool flagged, System.Collections.Generic.IEnumerable<string!>! categories) -> void
+AgentCore.Application.Evaluation.PromptModerator
+AgentCore.Application.Evaluation.PromptModerator.FlaggedCategoriesAsync(string! callerText, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<string!>!>
+AgentCore.Application.Evaluation.PromptModerator.PromptModerator(Microsoft.Extensions.AI.Evaluation.IEvaluator! evaluator) -> void
 const AgentCore.Application.Evaluation.FaultCodeContext.FaultCodeContextName = "Fault Codes" -> string!
 const AgentCore.Application.Evaluation.FaultCodeEvaluator.DefaultCodePattern = "\\b[A-Z]{1,3}-?[0-9]{1,3}\\b" -> string!
 const AgentCore.Application.Evaluation.FaultCodeEvaluator.FaultCodeAccuracyMetricName = "Fault Code Accuracy" -> string!
+const AgentCore.Application.Evaluation.ModerationVerdict.ModerationVerdictName = "Moderation Verdict" -> string!
+const AgentCore.Application.Evaluation.ModerationVerdict.NothingFlagged = "the endpoint flagged no category." -> string!
+const AgentCore.Application.Evaluation.PromptModerator.ModerationEvaluatorName = "moderation" -> string!
+static AgentCore.Application.Evaluation.ModerationVerdict.TryRead(Microsoft.Extensions.AI.Evaluation.EvaluationResult! result, out AgentCore.Application.Evaluation.ModerationVerdict? verdict) -> bool
+static AgentCore.Application.Evaluation.ModerationEvaluatorFactory.CreateAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.IModerationAdapter!>! adapters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.Evaluation.IEvaluator?>
+static AgentCore.Application.Evaluation.PromptModerator.FromRegistry(AgentCore.Application.Evaluation.EvaluatorRegistry! registry) -> AgentCore.Application.Evaluation.PromptModerator?
 override AgentCore.Application.Evaluation.EvaluationScore.Equals(object? obj) -> bool
 override AgentCore.Application.Evaluation.EvaluationScore.GetHashCode() -> int
 override AgentCore.Application.Evaluation.EvaluationScore.ToString() -> string!
@@ -819,6 +838,9 @@ AgentCore.Application.Ports.IKnowledgeStoreAdapter
 AgentCore.Application.Ports.IKnowledgeStoreAdapter.CanServeDocuments.get -> bool
 AgentCore.Application.Ports.IKnowledgeStoreAdapter.CanServeSearch.get -> bool
 AgentCore.Application.Ports.IKnowledgeStoreAdapter.Kind.get -> string!
+AgentCore.Application.Ports.IModerationAdapter
+AgentCore.Application.Ports.IModerationAdapter.CreateAsync(AgentCore.Application.Configuration.Schema.VendorProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.Evaluation.IEvaluator!>
+AgentCore.Application.Ports.IModerationAdapter.Kind.get -> string!
 AgentCore.Application.Ports.IKnowledgeStoreAdapter.CreateDocumentsAsync(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IDocumentStorePort!>
 AgentCore.Application.Ports.IKnowledgeStoreAdapter.CreateSearchAsync(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IKnowledgeRetrievalPort!>
 static AgentCore.Application.Knowledge.CompositeKnowledgeStoreFactory.CreateAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.IKnowledgeStoreAdapter!>! adapters, bool includeSearch, bool includeDocuments, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<(AgentCore.Application.Ports.IKnowledgeRetrievalPort? Search, AgentCore.Application.Ports.IDocumentStorePort? Documents)>

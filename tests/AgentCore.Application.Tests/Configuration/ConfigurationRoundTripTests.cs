@@ -93,6 +93,41 @@ public sealed class ConfigurationRoundTripTests
     }
 
     [Fact]
+    public void TheTwoSpokenLines_ReadTheSameFromYamlAndFromJson()
+    {
+        var fromYaml = ConfigurationLoader.LoadYaml("""
+            apiVersion: agentcore/v1
+            name: tuned
+            fallbackReply: "One moment please. I will try that again."
+            refusalReply: "I am not able to answer that."
+            """);
+        var fromJson = ConfigurationLoader.LoadJson("""
+            {
+              "apiVersion": "agentcore/v1",
+              "name": "tuned",
+              "fallbackReply": "One moment please. I will try that again.",
+              "refusalReply": "I am not able to answer that."
+            }
+            """);
+
+        Assert.Equal(fromYaml, fromJson);
+        Assert.Equal(fromYaml.GetHashCode(), fromJson.GetHashCode());
+    }
+
+    [Fact]
+    public void AChangedRefusalReply_DoesNotBindToEqualRecords()
+    {
+        var fromYaml = ConfigurationLoader.LoadYaml(ExampleDocument.Yaml);
+        var changed = ConfigurationLoader.LoadYaml(
+            ExampleDocument.Yaml.Replace(
+                "I cannot help with that request.",
+                "I am not able to answer that.",
+                StringComparison.Ordinal));
+
+        Assert.NotEqual(fromYaml, changed);
+    }
+
+    [Fact]
     public void ADuplicateJsonKey_Fails()
     {
         var failure = Assert.Throws<ConfigurationLoadException>(
