@@ -148,8 +148,56 @@ public sealed class ConfigurationLoaderTests
         Assert.Equal("fill", Example.Providers.Llm[1].As);
         Assert.Equal("telnyx-relay", Example.Providers.Speech!.Kind);
         Assert.Equal("telnyx", Example.Providers.Telephony!.Kind);
-        Assert.Equal("zilliz", Example.Providers.Knowledge!.Store);
+        Assert.Equal("filesystem", Example.Providers.Knowledge!.Search);
+        Assert.Equal("filesystem", Example.Providers.Knowledge.Documents);
         Assert.Equal("./kb", Example.Providers.Knowledge.Root);
+        Assert.Null(Example.Providers.Knowledge.Endpoint);
+        Assert.Equal(KnowledgeProviderConfiguration.DefaultCollection, Example.Providers.Knowledge.Collection);
+    }
+
+    [Fact]
+    public void AKnowledgeProviderWithNoFields_TakesTheDefaults()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: plain
+            providers:
+              knowledge: {}
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+
+        var knowledge = configuration.Providers!.Knowledge!;
+        Assert.Equal(KnowledgeProviderConfiguration.DefaultSearch, knowledge.Search);
+        Assert.Equal(KnowledgeProviderConfiguration.DefaultDocuments, knowledge.Documents);
+        Assert.Equal(KnowledgeProviderConfiguration.DefaultRoot, knowledge.Root);
+        Assert.Null(knowledge.Endpoint);
+        Assert.Equal(KnowledgeProviderConfiguration.DefaultCollection, knowledge.Collection);
+    }
+
+    [Fact]
+    public void AKnowledgeProviderThatWritesEveryField_BindsThem()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: split
+            providers:
+              knowledge:
+                search: zilliz
+                documents: filesystem
+                root: ./docs
+                endpoint: https://cluster.example.com
+                collection: manuals
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+
+        var knowledge = configuration.Providers!.Knowledge!;
+        Assert.Equal("zilliz", knowledge.Search);
+        Assert.Equal("filesystem", knowledge.Documents);
+        Assert.Equal("./docs", knowledge.Root);
+        Assert.Equal("https://cluster.example.com", knowledge.Endpoint);
+        Assert.Equal("manuals", knowledge.Collection);
     }
 
     [Fact]

@@ -681,19 +681,37 @@
     },
     "knowledgeProvider": {
       "type": "object",
-      "required": [
-        "store"
-      ],
+      "description": "One adapter for each knowledge port, and what those adapters read.",
       "additionalProperties": false,
       "properties": {
-        "store": {
+        "search": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "default": "filesystem",
+          "description": "The adapter that answers IKnowledgeRetrievalPort, such as filesystem or zilliz."
+        },
+        "documents": {
+          "type": "string",
+          "minLength": 1,
+          "default": "filesystem",
+          "description": "The adapter that answers IDocumentStorePort, such as filesystem."
         },
         "root": {
           "type": "string",
           "minLength": 1,
-          "default": "./kb"
+          "default": "./kb",
+          "description": "The root of the knowledge-base tree. The tree is its own Git repository."
+        },
+        "endpoint": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The cluster URL the zilliz adapter reads."
+        },
+        "collection": {
+          "type": "string",
+          "minLength": 1,
+          "default": "kb_chunks",
+          "description": "The collection the zilliz adapter reads."
         }
       }
     }

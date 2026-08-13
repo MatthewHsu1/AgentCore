@@ -129,7 +129,7 @@ internal static class ExampleDocument
             - { kind: openai, model: gpt-5.4-nano, as: fill }       # the extractor, chosen on null discipline
           speech:    { kind: telnyx-relay }        # one vendor: STT, turn detection, TTS, interruption
           telephony: { kind: telnyx }
-          knowledge: { store: zilliz, root: ./kb }
+          knowledge: { search: filesystem, documents: filesystem, root: ./kb }
 
         evaluation:
           sampleRate: 0
@@ -458,7 +458,8 @@ internal static class ExampleDocument
               "kind": "telnyx"
             },
             "knowledge": {
-              "store": "zilliz",
+              "search": "filesystem",
+              "documents": "filesystem",
               "root": "./kb"
             }
           },

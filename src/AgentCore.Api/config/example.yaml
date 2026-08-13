@@ -225,7 +225,8 @@ providers:
     - { kind: openai, model: gpt-5.4-nano, as: fill }       # the extractor, chosen on null discipline
   speech:    { kind: telnyx-relay }        # one vendor: STT, turn detection, TTS, interruption
   telephony: { kind: telnyx }
-  knowledge: { store: zilliz, root: ./kb }
+  knowledge: { search: filesystem, documents: filesystem, root: ./kb }
+  # search: zilliz needs endpoint (cluster URL) and the zilliz-api-key secret; collection defaults to kb_chunks
 
 # ---------------------------------------------------------------------------------------------
 # evaluation: the share of finished turns a judge scores.

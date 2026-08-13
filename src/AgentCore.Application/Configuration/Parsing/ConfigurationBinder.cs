@@ -494,8 +494,11 @@ internal static class ConfigurationBinder
 
         return new KnowledgeProviderConfiguration
         {
-            Store = RequiredString(knowledge, "store", knowledgePointer),
+            Search = OptionalString(knowledge, "search", knowledgePointer) ?? KnowledgeProviderConfiguration.DefaultSearch,
+            Documents = OptionalString(knowledge, "documents", knowledgePointer) ?? KnowledgeProviderConfiguration.DefaultDocuments,
             Root = OptionalString(knowledge, "root", knowledgePointer) ?? KnowledgeProviderConfiguration.DefaultRoot,
+            Endpoint = OptionalString(knowledge, "endpoint", knowledgePointer),
+            Collection = OptionalString(knowledge, "collection", knowledgePointer) ?? KnowledgeProviderConfiguration.DefaultCollection,
         };
     }
 

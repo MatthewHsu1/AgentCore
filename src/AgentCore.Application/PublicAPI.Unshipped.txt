@@ -199,12 +199,18 @@ AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.Url.get -> s
 AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.Url.init -> void
 AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration
 AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration!
+AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Collection.get -> string!
+AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Collection.init -> void
+AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Documents.get -> string!
+AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Documents.init -> void
+AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Endpoint.get -> string?
+AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Endpoint.init -> void
 AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Equals(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration? other) -> bool
 AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.KnowledgeProviderConfiguration() -> void
 AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Root.get -> string!
 AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Root.init -> void
-AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Store.get -> string!
-AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Store.init -> void
+AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Search.get -> string!
+AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Search.init -> void
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.LlmProviderConfiguration!
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.As.get -> string!
@@ -341,7 +347,10 @@ const AgentCore.Application.Configuration.Parsing.SecretReference.Prefix = "${se
 const AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.DefaultFallbackReply = "I am sorry. I could not finish that. Please say it again." -> string!
 const AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.SupportedApiVersion = "agentcore/v1" -> string!
 const AgentCore.Application.Configuration.Schema.EvaluationConfiguration.DefaultSampleRate = 0 -> double
+const AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.DefaultCollection = "kb_chunks" -> string!
+const AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.DefaultDocuments = "filesystem" -> string!
 const AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.DefaultRoot = "./kb" -> string!
+const AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.DefaultSearch = "filesystem" -> string!
 const AgentCore.Application.Configuration.Schema.ReservedStateSlots.CallDurationSeconds = "callDurationSeconds" -> string!
 const AgentCore.Application.Configuration.Schema.ReservedStateSlots.Stage = "stage" -> string!
 const AgentCore.Application.Configuration.Schema.ReservedStateSlots.TurnIndex = "turnIndex" -> string!

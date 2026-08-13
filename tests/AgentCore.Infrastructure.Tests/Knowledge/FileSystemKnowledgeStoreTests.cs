@@ -20,7 +20,7 @@ public sealed class FileSystemKnowledgeStoreTests
     [Fact]
     public void ItTakesTheRootTheProvidersSectionNames()
     {
-        FileSystemKnowledgeStore store = new(new KnowledgeProviderConfiguration { Store = "zilliz", Root = "./kb" });
+        FileSystemKnowledgeStore store = new(new KnowledgeProviderConfiguration { Documents = "filesystem", Root = "./kb" });
 
         Assert.Equal(Path.GetFullPath("./kb"), store.Root);
     }
