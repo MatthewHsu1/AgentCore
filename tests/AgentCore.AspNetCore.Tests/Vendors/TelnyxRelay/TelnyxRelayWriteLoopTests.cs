@@ -25,7 +25,7 @@ public sealed class TelnyxRelayWriteLoopTests
         // the gate can stop it, so deleting the gate must turn this test red.
         using BlockingChatClient reply = new("first second third");
         EventObservedLoggerProvider interrupted = new("InterruptReceived");
-        await using var harness = RelayConnectionHarness.Start(
+        await using var harness = await RelayConnectionHarness.StartAsync(
             TelnyxRelayTurnTests.PolicyYaml,
             reply,
             logging => logging.AddProvider(interrupted));
@@ -90,7 +90,7 @@ public sealed class TelnyxRelayWriteLoopTests
         // A real socket aborts before this status can be observed on the wire, so the assertion is
         // made on the arguments CloseOutputAsync was called with instead.
         using SequencedChatClient reply = new("hello");
-        await using var harness = RelayConnectionHarness.Start(TelnyxRelayTurnTests.PolicyYaml, reply);
+        await using var harness = await RelayConnectionHarness.StartAsync(TelnyxRelayTurnTests.PolicyYaml, reply);
 
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
         using var bounded = CancellationTokenSource.CreateLinkedTokenSource(
@@ -119,7 +119,7 @@ public sealed class TelnyxRelayWriteLoopTests
         // Nothing on a healthy loopback socket makes a send throw, so the fault is injected here.
         // The status is this endpoint's own report of its own defect, and a real call would see it.
         using SequencedChatClient reply = new("hello there caller");
-        await using var harness = RelayConnectionHarness.Start(TelnyxRelayTurnTests.PolicyYaml, reply);
+        await using var harness = await RelayConnectionHarness.StartAsync(TelnyxRelayTurnTests.PolicyYaml, reply);
 
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
         using var bounded = CancellationTokenSource.CreateLinkedTokenSource(

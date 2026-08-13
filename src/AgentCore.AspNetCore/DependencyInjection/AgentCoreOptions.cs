@@ -1,4 +1,5 @@
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Llm;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using Microsoft.Extensions.Logging;
@@ -85,7 +86,7 @@ public sealed class AgentCoreOptions
     public ToolBindingRegistry Bindings { get; } = new();
 
     /// <summary>Gets the seam that resolves a model reference, or <see langword="null"/>.</summary>
-    internal Func<AgentCoreStartup, IChatClientFactory>? ChatClients { get; private set; }
+    internal Func<AgentCoreStartup, CancellationToken, ValueTask<IChatClientFactory>>? ChatClients { get; private set; }
 
     /// <summary>Gets the seam <c>knowledge.search</c> ranks with, or <see langword="null"/>.</summary>
     internal Func<AgentCoreStartup, IKnowledgeRetrievalPort>? KnowledgeRetrieval { get; private set; }
@@ -96,14 +97,47 @@ public sealed class AgentCoreOptions
     /// <summary>Gets the extra tool factory links, in the order the composite asks them.</summary>
     internal IReadOnlyList<Func<AgentCoreStartup, IAgentToolFactory>> ToolFactories => _toolFactories;
 
+    /// <summary>Binds the vendor adapters, and the document picks one by each entry's <c>kind</c>.</summary>
+    /// <param name="adapters">One adapter for each vendor this host supports.</param>
+    /// <returns>These options, so a host chains its calls.</returns>
+    /// <remarks>
+    /// This is the config-driven overload. The host lists what it supports, once, and every
+    /// <c>providers.llm[]</c> entry routes to the adapter its <c>kind</c> names. A kind no adapter
+    /// serves fails the start, and the message names both sides. The adapters read
+    /// <see cref="SecretResolver"/> for their credentials, so bind that first or in any order —
+    /// nothing is read until <c>AddAgentCoreAsync</c> runs.
+    /// </remarks>
+    public AgentCoreOptions UseChatClients(params IChatClientAdapter[] adapters)
+    {
+        ArgumentNullException.ThrowIfNull(adapters);
+        return UseChatClients(async (startup, cancellationToken) => await CompositeChatClientFactory
+            .CreateAsync(startup.Configuration, SecretResolver, adapters, cancellationToken)
+            .ConfigureAwait(false));
+    }
+
     /// <summary>Binds the adapter that turns a model reference into a chat client.</summary>
+    /// <param name="chatClients">Builds the adapter from the loaded document, without a wait.</param>
+    /// <returns>These options, so a host chains its calls.</returns>
+    /// <remarks>
+    /// This seam is required, through one of the three overloads. The compile table asks it for
+    /// every agent and for the extractor, so a host that binds none has no model and
+    /// <c>AddAgentCoreAsync</c> says so.
+    /// </remarks>
+    public AgentCoreOptions UseChatClients(Func<AgentCoreStartup, IChatClientFactory> chatClients)
+    {
+        ArgumentNullException.ThrowIfNull(chatClients);
+        return UseChatClients((startup, _) => ValueTask.FromResult(chatClients(startup)));
+    }
+
+    /// <summary>Binds the adapter that turns a model reference into a chat client, with a wait.</summary>
     /// <param name="chatClients">Builds the adapter from the loaded document.</param>
     /// <returns>These options, so a host chains its calls.</returns>
     /// <remarks>
-    /// This seam is required. The compile table asks it for every agent and for the extractor, so a
-    /// host that binds none has no model and <c>AddAgentCore</c> says so.
+    /// A factory that reads a credential or opens a connection awaits here, and no thread blocks:
+    /// <c>AddAgentCoreAsync</c> awaits this seam while the host starts. The token is the one the
+    /// host passed to <c>AddAgentCoreAsync</c>, so a cancelled start cancels the build too.
     /// </remarks>
-    public AgentCoreOptions UseChatClients(Func<AgentCoreStartup, IChatClientFactory> chatClients)
+    public AgentCoreOptions UseChatClients(Func<AgentCoreStartup, CancellationToken, ValueTask<IChatClientFactory>> chatClients)
     {
         ArgumentNullException.ThrowIfNull(chatClients);
         ChatClients = chatClients;

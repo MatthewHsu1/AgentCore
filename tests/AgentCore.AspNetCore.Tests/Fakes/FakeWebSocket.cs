@@ -324,7 +324,7 @@ internal sealed class RelayConnectionHarness : IAsyncDisposable
     /// <param name="logging">Anything a test adds to the logging pipeline.</param>
     /// <param name="relay">Anything a test binds on the relay endpoint's own options.</param>
     /// <returns>The running harness.</returns>
-    public static RelayConnectionHarness Start(
+    public static async Task<RelayConnectionHarness> StartAsync(
         string yaml,
         IChatClient reply,
         Action<ILoggingBuilder>? logging = null,
@@ -339,7 +339,7 @@ internal sealed class RelayConnectionHarness : IAsyncDisposable
 
         TestHostLifetime lifetime = new();
         services.AddSingleton<IHostApplicationLifetime>(lifetime);
-        services.AddAgentCore(options =>
+        await services.AddAgentCoreAsync(options =>
         {
             options.Configuration = ConfigurationLoader.LoadYaml(yaml);
             options.UseChatClients(_ => new RoutingChatClientFactory(reply));

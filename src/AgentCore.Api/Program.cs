@@ -69,18 +69,16 @@ var agentCoreLoggers = LoggerFactory.Create(logging => logging
 // events in this process, so chain_check has something to read and no event is silently lost.
 InMemoryAuditSink auditSink = new();
 
-builder.Services.AddAgentCore(options =>
+await builder.Services.AddAgentCoreAsync(options =>
 {
     options.ConfigurationPath = documentPath;
     options.SecretResolver = secrets;
     options.LoggerFactory = agentCoreLoggers;
     options.AuditSink = auditSink;
 
-    options.UseChatClients(startup => OpenAiChatClientFactory
-        .CreateAsync(startup.Configuration, secrets)
-        .AsTask()
-        .GetAwaiter()
-        .GetResult());
+    // The host lists the vendors it supports, once. providers.llm[].kind picks the adapter for each
+    // entry, so a document that changes vendors changes no code here.
+    options.UseChatClients(new OpenAiChatClientAdapter());
 
     // providers.knowledge names the store. This release ships the file-system one, and it reads the
     // root the document sets.

@@ -61,13 +61,22 @@ public static class AgentCoreServiceCollectionExtensions
     /// <summary>Loads one document and registers everything a call needs to run on it.</summary>
     /// <param name="services">The service collection of the host.</param>
     /// <param name="configure">Binds the document and the adapters the document names.</param>
+    /// <param name="cancellationToken">Cancels the start: the secret reads and the adapter builds.</param>
     /// <returns>The same collection, so a host chains its calls.</returns>
     /// <exception cref="InvalidOperationException">
     /// The options name no document, name two, or bind no chat client adapter.
     /// </exception>
     /// <exception cref="ConfigurationLoadException">The document fails one of the eight checks, or does not compile.</exception>
     /// <exception cref="SecretResolutionException">One <c>${secret:name}</c> reference resolves to nothing.</exception>
-    public static IServiceCollection AddAgentCore(this IServiceCollection services, Action<AgentCoreOptions> configure)
+    /// <remarks>
+    /// This method is async because two of its steps wait: the secret resolution of step 3 and the
+    /// chat client seam of step 5. A top-level <c>Program.cs</c> awaits it before
+    /// <c>builder.Build()</c>, and no thread blocks while the host starts.
+    /// </remarks>
+    public static async ValueTask<IServiceCollection> AddAgentCoreAsync(
+        this IServiceCollection services,
+        Action<AgentCoreOptions> configure,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configure);
@@ -88,11 +97,9 @@ public static class AgentCoreServiceCollectionExtensions
 
         // Step 3: resolve every secret once. A tool call then costs no lookup, and a missing
         // credential stops the host rather than one turn.
-        var secrets = ResolvedSecrets
-            .ResolveAsync(configuration, options.SecretResolver ?? NoSecretResolver.Instance)
-            .AsTask()
-            .GetAwaiter()
-            .GetResult();
+        var secrets = await ResolvedSecrets
+            .ResolveAsync(configuration, options.SecretResolver ?? NoSecretResolver.Instance, cancellationToken)
+            .ConfigureAwait(false);
 
         AgentCoreStartup startup = new(configuration, secrets);
 
@@ -101,11 +108,12 @@ public static class AgentCoreServiceCollectionExtensions
         var tools = BuildToolFactory(options, startup);
 
         // Step 5: compile. The registry compiles once and every call shares the result.
-        var chatClients = (options.ChatClients
+        var chatClients = await (options.ChatClients
             ?? throw new InvalidOperationException(
-                "AddAgentCore binds no chat client adapter. Call options.UseChatClients(...), because the "
+                "AddAgentCoreAsync binds no chat client adapter. Call options.UseChatClients(...), because the "
                 + "compile table asks it for every agent and for the extractor."))
-            .Invoke(startup);
+            .Invoke(startup, cancellationToken)
+            .ConfigureAwait(false);
 
         // Section 8.7, row five: a guard that throws at run time is not a defect. The evaluator
         // already reports each distinct guard exactly once, and this is where that report finds a
@@ -248,7 +256,7 @@ public static class AgentCoreServiceCollectionExtensions
             if (hasPath)
             {
                 throw new InvalidOperationException(
-                    "AddAgentCore names two documents: options.Configuration holds one and "
+                    "AddAgentCoreAsync names two documents: options.Configuration holds one and "
                     + "options.ConfigurationPath names another. Set one of the two.");
             }
 
@@ -258,7 +266,7 @@ public static class AgentCoreServiceCollectionExtensions
         if (!hasPath)
         {
             throw new InvalidOperationException(
-                "AddAgentCore names no document. Set options.ConfigurationPath to a .yaml, .yml, or .json "
+                "AddAgentCoreAsync names no document. Set options.ConfigurationPath to a .yaml, .yml, or .json "
                 + "file, or set options.Configuration to a document the host already loaded.");
         }
 
