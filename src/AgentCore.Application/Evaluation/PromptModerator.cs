@@ -10,9 +10,10 @@ namespace AgentCore.Application.Evaluation;
 /// <para>
 /// The agent moderates the caller's words BEFORE the model runs, and refuses the turn when the
 /// endpoint flags them. That is a decision of the owner, taken on 2026-08-13, and it departs from
-/// section 11 item 11, which asked for the agent's reply to be moderated and recorded instead. The
-/// reply side is not built: <see cref="Domain.Audit.AuditEventKind.ReplyFlagged"/> still has no
-/// producer.
+/// section 11 item 11, which asked for the agent's reply to be moderated and recorded instead.
+/// <b>Reply moderation is withdrawn, not deferred:</b> the reply comes from a model that already
+/// carries safety training, so a second check of its own output buys little. The caller's words are
+/// the text nothing else has filtered.
 /// </para>
 /// <para>
 /// D13 makes <see cref="IEvaluator"/> the moderation port and refuses a second one, so this type is

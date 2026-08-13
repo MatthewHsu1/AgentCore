@@ -23,8 +23,8 @@ namespace AgentCore.Application.Tests.Audit;
 /// <para>
 /// The owner decided this on 2026-08-13. It departs from section 11 item 11, which asked for the
 /// agent's REPLY to be moderated and recorded. Recording a harmful reply protects nobody, because
-/// the caller already heard it. <c>reply.flagged</c> therefore still has no producer, and
-/// <c>prompt.flagged</c> is the kind these tests exercise.
+/// the caller already heard it. Reply moderation is withdrawn, because the model carries its own
+/// safety training, so <c>prompt.flagged</c> is the only moderation kind the chain has.
 /// </para>
 /// <para>
 /// The one rule that separates <c>prompt.flagged</c> from <c>reply.interrupted</c> is here: the

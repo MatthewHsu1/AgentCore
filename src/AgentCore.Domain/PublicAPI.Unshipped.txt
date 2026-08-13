@@ -130,7 +130,6 @@ AgentCore.Domain.Audit.AuditEventKind.CallStarted = 0 -> AgentCore.Domain.Audit.
 AgentCore.Domain.Audit.AuditEvent.Kind.get -> AgentCore.Domain.Audit.AuditEventKind
 AgentCore.Domain.Audit.AuditEvent.Kind.init -> void
 AgentCore.Domain.Audit.AuditEventKind.PromptFlagged = 6 -> AgentCore.Domain.Audit.AuditEventKind
-AgentCore.Domain.Audit.AuditEventKind.ReplyFlagged = 4 -> AgentCore.Domain.Audit.AuditEventKind
 AgentCore.Domain.Audit.AuditEventKind.ReplyInterrupted = 2 -> AgentCore.Domain.Audit.AuditEventKind
 AgentCore.Domain.Audit.AuditEventKinds
 AgentCore.Domain.Audit.AuditEventKind.ToolFailed = 3 -> AgentCore.Domain.Audit.AuditEventKind

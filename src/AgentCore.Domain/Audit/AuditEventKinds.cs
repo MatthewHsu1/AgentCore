@@ -26,7 +26,6 @@ public static class AuditEventKinds
         AuditEventKind.TurnCompleted => "turn.completed",
         AuditEventKind.ReplyInterrupted => "reply.interrupted",
         AuditEventKind.ToolFailed => "tool.failed",
-        AuditEventKind.ReplyFlagged => "reply.flagged",
         AuditEventKind.CallEnded => "call.ended",
         AuditEventKind.PromptFlagged => "prompt.flagged",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "The audit event vocabulary is closed, and this value is not in it."),
@@ -44,7 +43,6 @@ public static class AuditEventKinds
             case "turn.completed": kind = AuditEventKind.TurnCompleted; return true;
             case "reply.interrupted": kind = AuditEventKind.ReplyInterrupted; return true;
             case "tool.failed": kind = AuditEventKind.ToolFailed; return true;
-            case "reply.flagged": kind = AuditEventKind.ReplyFlagged; return true;
             case "call.ended": kind = AuditEventKind.CallEnded; return true;
             case "prompt.flagged": kind = AuditEventKind.PromptFlagged; return true;
             default: kind = default; return false;

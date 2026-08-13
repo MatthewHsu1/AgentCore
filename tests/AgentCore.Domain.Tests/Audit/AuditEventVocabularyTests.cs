@@ -16,7 +16,6 @@ public sealed class AuditEventVocabularyTests
     [InlineData(AuditEventKind.TurnCompleted, "turn.completed")]
     [InlineData(AuditEventKind.ReplyInterrupted, "reply.interrupted")]
     [InlineData(AuditEventKind.ToolFailed, "tool.failed")]
-    [InlineData(AuditEventKind.ReplyFlagged, "reply.flagged")]
     [InlineData(AuditEventKind.PromptFlagged, "prompt.flagged")]
     [InlineData(AuditEventKind.CallEnded, "call.ended")]
     public void EachKind_HasItsToken(AuditEventKind kind, string token)
@@ -32,7 +31,11 @@ public sealed class AuditEventVocabularyTests
     {
         AuditEventKind[] declared = Enum.GetValues<AuditEventKind>();
 
-        Assert.Equal(7, declared.Length);
+        // Six kinds, and the numbers run 0 to 6 with 4 missing. Value 4 was reply.flagged, retired
+        // on 2026-08-13 when reply moderation was withdrawn. A number is never reused, so a stored
+        // row can never come to mean something else.
+        Assert.Equal(6, declared.Length);
+        Assert.DoesNotContain(declared, kind => (int)kind == 4);
         foreach (AuditEventKind kind in declared)
         {
             Assert.NotEmpty(AuditEventKinds.ToToken(kind));

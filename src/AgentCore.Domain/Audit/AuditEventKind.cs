@@ -50,19 +50,11 @@ public enum AuditEventKind
     /// <remarks>A failing tool never ends a call, so this event sits beside the turn and not instead of it.</remarks>
     ToolFailed = 3,
 
-    /// <summary>Moderation flagged a reply.</summary>
-    /// <remarks>
-    /// <para>
-    /// Section 11, item 11: every turn passes the moderation endpoint, and a flagged reply is
-    /// recorded here.
-    /// </para>
-    /// <para>
-    /// No code produces this kind today, because the owner moved the check to the caller's side, and
-    /// <see cref="PromptFlagged"/> records that fact. The kind stays in the vocabulary anyway: a kind
-    /// is stable forever, so a stored row keeps its meaning.
-    /// </para>
-    /// </remarks>
-    ReplyFlagged = 4,
+    // 4 was ReplyFlagged, and it is retired. Reply moderation was withdrawn on 2026-08-13: the
+    // reply comes from a model that already carries safety training, so a second check of its own
+    // output buys little. The caller's words are what nothing else has filtered, and PromptFlagged
+    // records those. The number is never reused, because a wire token is stable forever and a
+    // stored 4 must not come to mean something else.
 
     /// <summary>The call ended. It is the last event of every call.</summary>
     /// <remarks>One call writes exactly one of these, and it carries no turn index.</remarks>
@@ -72,8 +64,10 @@ public enum AuditEventKind
     /// <remarks>
     /// <para>
     /// The owner moved the check to the caller's spoken input, ahead of the model, and this differs
-    /// from section 11, item 11, which asked for the reply. The owner made that call knowingly.
-    /// <see cref="ReplyFlagged"/> keeps its meaning and keeps its number.
+    /// from section 11, item 11, which asked for the reply. The owner made that call knowingly, and
+    /// withdrew reply moderation entirely on 2026-08-13: the reply comes from a model that already
+    /// carries safety training, so a second check of its own output buys little. This kind is
+    /// therefore the only moderation fact the chain records.
     /// </para>
     /// <para>
     /// <b>It amends nothing.</b> The moderation verdict is known BEFORE the model runs, so

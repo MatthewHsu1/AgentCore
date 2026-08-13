@@ -161,7 +161,7 @@ public sealed class CallSession : IConversationPort
     /// not answering at all.
     /// </para>
     /// <para>
-    /// The design permits this wait where it would refuse a judge. Section 12 says "moderation is not
+    /// The design permits this wait where it would refuse a judge. Section 9 says "moderation is not
     /// a judge, it is one free HTTP POST", which exempts it from the D9 rule that keeps a judge off
     /// the turn.
     /// </para>
@@ -1256,7 +1256,7 @@ public sealed class CallSession : IConversationPort
     /// 2026-08-13 that moderation reads what the CALLER said and refuses the turn, rather than
     /// reading the agent's reply and recording it as section 11 item 11 asks. Recording a harmful
     /// reply protects nobody, because the caller already heard it. The design permits the wait:
-    /// section 12 says "moderation is not a judge", which exempts it from the D9 rule that keeps a
+    /// section 9 says "moderation is not a judge", which exempts it from the D9 rule that keeps a
     /// judge off the turn. <see cref="ModerationTimeout"/> bounds it.
     /// </para>
     /// <para>

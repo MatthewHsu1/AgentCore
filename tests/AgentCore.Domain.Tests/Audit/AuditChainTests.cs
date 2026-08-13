@@ -279,13 +279,16 @@ public sealed class AuditChainTests
                 [AuditPayloadKeys.ToolError] = "the endpoint answered 503",
             },
         },
+        // Turn 2 never reached the model: moderation flagged what the caller said, the agent spoke
+        // the refusal line, and the call ended. The flag amends nothing, because the verdict is
+        // known before the model runs.
         new AuditEvent
         {
             CallId = "call-1",
             Sequence = 4,
-            Kind = AuditEventKind.ReplyFlagged,
+            Kind = AuditEventKind.PromptFlagged,
             OccurredAt = Start.AddMilliseconds(6_100),
-            TurnIndex = 1,
+            TurnIndex = 2,
             Payload = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [AuditPayloadKeys.ModerationCategories] = "harassment",
