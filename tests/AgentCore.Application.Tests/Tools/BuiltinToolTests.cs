@@ -266,6 +266,19 @@ public sealed class BuiltinToolTests
     }
 
     [Fact]
+    public async Task KnowledgeGrep_WithAPatternThatIsNotARegex_ReturnsAnErrorResult()
+    {
+        // The model writes the pattern, so a pattern that will not parse is an ordinary bad argument
+        // and not a defect. Section 8.7 says the model reads the failure and tries again.
+        MapKnowledgePort knowledge = new();
+        knowledge.With("returns.md", "A refund takes five days.");
+
+        var result = await CallAsync(Factory(knowledge).Create(GrepDocs), ("pattern", "[unclosed"));
+
+        AssertError(result, "grep_docs", "RegexParseException");
+    }
+
+    [Fact]
     public async Task AnAdapterThatThrows_BecomesAnErrorResult()
     {
         MapKnowledgePort knowledge = new() { Failure = new InvalidOperationException("the store is down") };

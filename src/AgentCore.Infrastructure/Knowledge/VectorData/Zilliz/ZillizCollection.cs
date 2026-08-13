@@ -84,10 +84,16 @@ public sealed class ZillizCollection : VectorStoreCollection<string, ZillizChunk
     /// <typeparam name="TInput">The input type. This connector takes a vector only.</typeparam>
     /// <param name="searchValue">The query vector, as <see cref="ReadOnlyMemory{T}"/> or <c>float[]</c>.</param>
     /// <param name="top">The largest number of rows to return.</param>
-    /// <param name="options">Unread: this connector filters nothing yet.</param>
+    /// <param name="options">
+    /// The options. This connector honours none of them, so every option that is not its default is
+    /// refused rather than ignored. <see langword="null"/> and an untouched instance both pass.
+    /// </param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>The rows, in the order the cluster reported them.</returns>
-    /// <exception cref="NotSupportedException"><paramref name="searchValue"/> is not a vector.</exception>
+    /// <exception cref="NotSupportedException">
+    /// <paramref name="searchValue"/> is not a vector, or <paramref name="options"/> asks for
+    /// something this connector does not do.
+    /// </exception>
     /// <exception cref="VectorStoreException">The cluster failed, or answered something this connector cannot read.</exception>
     /// <remarks>
     /// The request is made when the result is read and not when this method returns, so the cancel
@@ -100,6 +106,7 @@ public sealed class ZillizCollection : VectorStoreCollection<string, ZillizChunk
         CancellationToken cancellationToken = default)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(top);
+        Refuse(options);
 
         // The refusal is decided now rather than on the first read, so a caller that passes text
         // learns it at the call and not somewhere inside a foreach.
@@ -231,6 +238,61 @@ public sealed class ZillizCollection : VectorStoreCollection<string, ZillizChunk
                 "ZillizCollection searches by vector. Pass ReadOnlyMemory<float> or float[]: this "
                 + "connector holds no embedding generator, and ZillizRetrievalStore embeds the query."),
         };
+
+    /// <summary>Refuses every search option this connector does not honour.</summary>
+    /// <param name="options">The options, or <see langword="null"/>.</param>
+    /// <exception cref="NotSupportedException">One option is not its default.</exception>
+    /// <remarks>
+    /// Ignoring an option is worse than refusing it. A caller that filters and gets every row back
+    /// reads a wrong answer as a right one, and nothing says so. D14 keeps the unwritten half of this
+    /// connector loud for the same reason, so an option it cannot honour is loud too.
+    /// </remarks>
+    private static void Refuse(VectorSearchOptions<ZillizChunkRecord>? options)
+    {
+        if (options is null)
+        {
+            return;
+        }
+
+        if (options.Filter is not null)
+        {
+            throw Unhonoured(nameof(options.Filter), "this connector sends no filter to Milvus");
+        }
+
+        if (options.VectorProperty is not null)
+        {
+            throw Unhonoured(
+                nameof(options.VectorProperty),
+                "this connector always ranks by the '" + VectorFieldName + "' field");
+        }
+
+        if (options.Skip != 0)
+        {
+            throw Unhonoured(nameof(options.Skip), "this connector reads the first rows and no offset");
+        }
+
+        if (options.IncludeVectors)
+        {
+            throw Unhonoured(
+                nameof(options.IncludeVectors),
+                "this connector asks for the '" + PathFieldName + "' and '" + TextFieldName
+                + "' fields only, so no vector comes back");
+        }
+
+        if (options.ScoreThreshold is not null)
+        {
+            throw Unhonoured(nameof(options.ScoreThreshold), "this connector cuts nothing by distance");
+        }
+    }
+
+    /// <summary>Builds the refusal one unhonoured search option throws.</summary>
+    /// <param name="option">The option the caller set.</param>
+    /// <param name="why">What this connector does instead.</param>
+    /// <returns>The exception.</returns>
+    private static NotSupportedException Unhonoured(string option, string why)
+        => new(
+            "VectorSearchOptions." + option + " is not honoured by ZillizCollection: " + why
+            + ". Leave the option at its default rather than reading an answer that ignored it.");
 
     /// <summary>Builds the refusal every unimplemented member of this connector throws.</summary>
     /// <param name="member">The member that was called.</param>

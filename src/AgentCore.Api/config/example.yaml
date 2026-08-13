@@ -229,6 +229,7 @@ providers:
   telephony: { kind: telnyx }
   knowledge: { search: filesystem, documents: filesystem, root: ./kb }
   # search: zilliz needs endpoint (cluster URL) and the zilliz-api-key secret; collection defaults to kb_chunks
+  # it also embeds every query, so it needs the openai-api-key secret as well; documents stays filesystem
 
 # ---------------------------------------------------------------------------------------------
 # evaluation: the share of finished turns a judge scores.

@@ -183,6 +183,47 @@ public sealed class ZillizCollectionTests
     }
 
     /// <summary>
+    /// Every search option this connector does not honour is refused rather than ignored.
+    /// </summary>
+    /// <remarks>
+    /// A caller that filters and gets every row back reads a wrong answer as a right one. This is
+    /// the same principle as the sweep above: an unwritten feature says so.
+    /// </remarks>
+    [Fact]
+    public void EverySearchOptionThisConnectorDoesNotHonourIsRefused()
+    {
+        using FakeCluster cluster = new(HttpStatusCode.OK, TwoHits);
+        var collection = cluster.Collection;
+        ReadOnlyMemory<float> vector = new([1f]);
+
+        Assert.Throws<NotSupportedException>(() => collection.SearchAsync(
+            vector, 3, new VectorSearchOptions<ZillizChunkRecord> { Filter = chunk => chunk.Path == "a.md" }, Token));
+        Assert.Throws<NotSupportedException>(() => collection.SearchAsync(
+            vector, 3, new VectorSearchOptions<ZillizChunkRecord> { VectorProperty = chunk => chunk.Text }, Token));
+        Assert.Throws<NotSupportedException>(() => collection.SearchAsync(
+            vector, 3, new VectorSearchOptions<ZillizChunkRecord> { Skip = 5 }, Token));
+        Assert.Throws<NotSupportedException>(() => collection.SearchAsync(
+            vector, 3, new VectorSearchOptions<ZillizChunkRecord> { IncludeVectors = true }, Token));
+        Assert.Throws<NotSupportedException>(() => collection.SearchAsync(
+            vector, 3, new VectorSearchOptions<ZillizChunkRecord> { ScoreThreshold = 0.5 }, Token));
+
+        // Each refusal happened at the call, so none of them reached the cluster.
+        Assert.Empty(cluster.Handler.Requests);
+    }
+
+    [Fact]
+    public async Task AnUntouchedOptionsInstancePassesAndSearchesTheSameWay()
+    {
+        using FakeCluster cluster = new(HttpStatusCode.OK, TwoHits);
+
+        var hits = await ReadAsync(cluster.Collection.SearchAsync(
+            new ReadOnlyMemory<float>([1f]), 2, new VectorSearchOptions<ZillizChunkRecord>(), Token));
+
+        Assert.Equal(2, hits.Count);
+        Assert.Single(cluster.Handler.Requests);
+    }
+
+    /// <summary>
     /// <c>GetService</c> is a probe, and it is outside the sweep above.
     /// </summary>
     /// <remarks>
