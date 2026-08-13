@@ -5,7 +5,7 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Secrets;
 using AgentCore.Infrastructure.Knowledge.VectorData.Zilliz;
-using AgentCore.Infrastructure.Llm;
+using AgentCore.Infrastructure.Llm.OpenAI;
 using AgentCore.Infrastructure.Tests.Fakes;
 using AgentCore.Infrastructure.Tests.Tools;
 using Microsoft.Extensions.AI;

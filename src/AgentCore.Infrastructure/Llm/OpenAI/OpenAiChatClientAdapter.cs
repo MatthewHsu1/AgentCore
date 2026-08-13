@@ -5,7 +5,7 @@ using AgentCore.Application.Secrets;
 using Microsoft.Extensions.AI;
 using OpenAI;
 
-namespace AgentCore.Infrastructure.Llm;
+namespace AgentCore.Infrastructure.Llm.OpenAI;
 
 /// <summary>
 /// The OpenAI adapter behind <see cref="IChatClientAdapter"/>.

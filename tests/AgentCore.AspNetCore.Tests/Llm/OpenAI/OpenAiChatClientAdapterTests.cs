@@ -4,10 +4,10 @@ using AgentCore.Application.Llm;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
 using AgentCore.AspNetCore.Tests.Fakes;
-using AgentCore.Infrastructure.Llm;
+using AgentCore.Infrastructure.Llm.OpenAI;
 using Xunit;
 
-namespace AgentCore.AspNetCore.Tests.Llm;
+namespace AgentCore.AspNetCore.Tests.Llm.OpenAI;
 
 /// <summary>
 /// The OpenAI adapter. It owns the vendor only: the SDK client, the key, the model name.

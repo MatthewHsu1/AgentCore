@@ -7,7 +7,7 @@ using AgentCore.AspNetCore.Endpoints;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
 using AgentCore.Infrastructure.Knowledge.FileStore;
 using AgentCore.Infrastructure.Knowledge.VectorData.Zilliz;
-using AgentCore.Infrastructure.Llm;
+using AgentCore.Infrastructure.Llm.OpenAI;
 using AgentCore.Infrastructure.Secrets;
 using AgentCore.Infrastructure.Tools;
 using OpenTelemetry.Metrics;

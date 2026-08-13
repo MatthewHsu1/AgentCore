@@ -253,18 +253,18 @@ public sealed class ZillizKnowledgeAdapter : IKnowledgeStoreAdapter
         if (secrets is not null)
         {
             key = await secrets
-                .TryResolveAsync(Llm.OpenAiChatClientAdapter.ApiKeySecretName, cancellationToken)
+                .TryResolveAsync(Llm.OpenAI.OpenAiChatClientAdapter.ApiKeySecretName, cancellationToken)
                 .ConfigureAwait(false);
         }
 
-        key ??= Environment.GetEnvironmentVariable(Llm.OpenAiChatClientAdapter.ApiKeyVariableName);
+        key ??= Environment.GetEnvironmentVariable(Llm.OpenAI.OpenAiChatClientAdapter.ApiKeyVariableName);
         if (key is not { Length: > 0 })
         {
             throw new SecretResolutionException(
                 "the OpenAI API key did not resolve, and the zilliz store embeds every query with "
                 + EmbeddingModel + ". Bind a resolver that holds '"
-                + Llm.OpenAiChatClientAdapter.ApiKeySecretName + "', or set the "
-                + Llm.OpenAiChatClientAdapter.ApiKeyVariableName + " variable.");
+                + Llm.OpenAI.OpenAiChatClientAdapter.ApiKeySecretName + "', or set the "
+                + Llm.OpenAI.OpenAiChatClientAdapter.ApiKeyVariableName + " variable.");
         }
 
         return new OpenAIClient(new ApiKeyCredential(key))

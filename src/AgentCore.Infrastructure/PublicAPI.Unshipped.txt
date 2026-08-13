@@ -7,10 +7,10 @@ AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.ListAsync(string? pa
 AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.ReadAsync(string! documentId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Domain.Knowledge.KnowledgeDocument?>
 AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.Root.get -> string!
 AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.SearchAsync(string! query, int limit, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Domain.Knowledge.KnowledgeChunk!>!>
-AgentCore.Infrastructure.Llm.OpenAiChatClientAdapter
-AgentCore.Infrastructure.Llm.OpenAiChatClientAdapter.CreateClientAsync(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.IChatClient!>
-AgentCore.Infrastructure.Llm.OpenAiChatClientAdapter.Kind.get -> string!
-AgentCore.Infrastructure.Llm.OpenAiChatClientAdapter.OpenAiChatClientAdapter() -> void
+AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter
+AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.CreateClientAsync(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.IChatClient!>
+AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.Kind.get -> string!
+AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.OpenAiChatClientAdapter() -> void
 AgentCore.Infrastructure.Secrets.ChainedSecretResolver
 AgentCore.Infrastructure.Secrets.ChainedSecretResolver.ChainedSecretResolver(System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ISecretResolverPort!>! links) -> void
 AgentCore.Infrastructure.Secrets.ChainedSecretResolver.Count.get -> int
@@ -27,9 +27,9 @@ AgentCore.Infrastructure.Tools.HttpToolFactory
 AgentCore.Infrastructure.Tools.HttpToolFactory.Create(AgentCore.Application.Configuration.Schema.ToolConfiguration! tool) -> Microsoft.Extensions.AI.AITool?
 AgentCore.Infrastructure.Tools.HttpToolFactory.HttpToolFactory(System.Net.Http.HttpClient! client, AgentCore.Application.Secrets.ResolvedSecrets! secrets) -> void
 const AgentCore.Infrastructure.Tools.HttpToolFactory.HttpClientName = "agentcore.tools" -> string!
-const AgentCore.Infrastructure.Llm.OpenAiChatClientAdapter.ApiKeySecretName = "openai-api-key" -> string!
-const AgentCore.Infrastructure.Llm.OpenAiChatClientAdapter.ApiKeyVariableName = "OPENAI_API_KEY" -> string!
-const AgentCore.Infrastructure.Llm.OpenAiChatClientAdapter.ProviderKind = "openai" -> string!
+const AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.ApiKeySecretName = "openai-api-key" -> string!
+const AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.ApiKeyVariableName = "OPENAI_API_KEY" -> string!
+const AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.ProviderKind = "openai" -> string!
 const AgentCore.Infrastructure.Secrets.FileSecretResolver.DefaultDirectory = "/run/secrets" -> string!
 static AgentCore.Infrastructure.Secrets.EnvironmentSecretResolver.ToVariableName(string! name) -> string!
 AgentCore.Infrastructure.Knowledge.FileStore.FileSystemKnowledgeAdapter
