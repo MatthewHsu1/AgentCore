@@ -19,11 +19,11 @@ namespace AgentCore.Infrastructure.Llm.OpenAI;
 /// by registering another adapter, and no code changes.
 /// </para>
 /// <para>
-/// The API key never appears in this file. The first build asks the
-/// <see cref="ISecretResolverPort"/> chain for <see cref="ApiKeySecretName"/>, then falls back to
-/// the <see cref="ApiKeyVariableName"/> variable every OpenAI tool already reads. No message and no
-/// exception of this class carries the value. One vendor client serves every entry, so the key
-/// resolves once and a call costs one connection pool.
+/// The API key never appears in this file. The first build hands
+/// <see cref="KnownSecrets.OpenAi"/> to <see cref="SecretResolverExtensions.RequireAsync"/>, which
+/// asks the <see cref="ISecretResolverPort"/> chain and then falls back to the variable every OpenAI
+/// tool already reads. No message and no exception of this class carries the value. One vendor
+/// client serves every entry, so the key resolves once and a call costs one connection pool.
 /// </para>
 /// </remarks>
 public sealed class OpenAiChatClientAdapter : IChatClientAdapter
@@ -32,10 +32,16 @@ public sealed class OpenAiChatClientAdapter : IChatClientAdapter
     public const string ProviderKind = "openai";
 
     /// <summary>The <c>${secret:name}</c> name the resolver chain is asked for.</summary>
-    public const string ApiKeySecretName = "openai-api-key";
+    /// <remarks>
+    /// It forwards to <see cref="KnownSecrets.OpenAiApiKeyName"/>, which is where the name now lives.
+    /// This constant stays because callers already read it, and because an adapter publishing the
+    /// name of the credential it needs is worth keeping.
+    /// </remarks>
+    public const string ApiKeySecretName = KnownSecrets.OpenAiApiKeyName;
 
     /// <summary>The standard OpenAI environment variable, read when the chain holds no name.</summary>
-    public const string ApiKeyVariableName = "OPENAI_API_KEY";
+    /// <remarks>It forwards to <see cref="KnownSecrets.OpenAiApiKeyVariable"/>.</remarks>
+    public const string ApiKeyVariableName = KnownSecrets.OpenAiApiKeyVariable;
 
     private OpenAIClient? _client;
 
@@ -60,34 +66,10 @@ public sealed class OpenAiChatClientAdapter : IChatClientAdapter
         ArgumentNullException.ThrowIfNull(entry);
 
         _client ??= new OpenAIClient(new ApiKeyCredential(
-            await ResolveKeyAsync(secrets, cancellationToken).ConfigureAwait(false)));
+            await secrets
+                .RequireAsync(KnownSecrets.OpenAi, cancellationToken: cancellationToken)
+                .ConfigureAwait(false)));
 
         return _client.GetChatClient(entry.Model).AsIChatClient();
-    }
-
-    /// <summary>Reads the key through the chain and then the environment.</summary>
-    /// <param name="secrets">The resolver chain, or <see langword="null"/>.</param>
-    /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The key.</returns>
-    /// <exception cref="SecretResolutionException">Neither place holds one.</exception>
-    private static async ValueTask<string> ResolveKeyAsync(
-        ISecretResolverPort? secrets,
-        CancellationToken cancellationToken)
-    {
-        string? key = null;
-        if (secrets is not null)
-        {
-            key = await secrets.TryResolveAsync(ApiKeySecretName, cancellationToken).ConfigureAwait(false);
-        }
-
-        key ??= Environment.GetEnvironmentVariable(ApiKeyVariableName);
-        if (key is not { Length: > 0 })
-        {
-            throw new SecretResolutionException(
-                "the OpenAI API key did not resolve. Bind a resolver that holds '" + ApiKeySecretName
-                + "', or set the " + ApiKeyVariableName + " variable. This adapter holds no key of its own.");
-        }
-
-        return key;
     }
 }

@@ -32,10 +32,11 @@ namespace AgentCore.Infrastructure.Knowledge.VectorData.Zilliz;
 /// therefore holds a client and a collection name, and no credential and no policy of its own.
 /// </para>
 /// <para>
-/// No key appears in this file, and building costs no request. The chain is asked for
-/// <see cref="ApiKeySecretName"/> and the <see cref="ApiKeyVariableName"/> variable answers when the
-/// chain holds nothing, exactly as <c>OpenAiChatClientAdapter</c> reads its own key. A bad key
-/// therefore stops the first search and not the start, and the start reaches no network at all.
+/// No key appears in this file, and building costs no request. Both credentials go through
+/// <see cref="SecretResolverExtensions.RequireAsync"/>, which asks the chain and then falls back to
+/// the variable of that vendor: <see cref="KnownSecrets.Zilliz"/> opens the cluster, and
+/// <see cref="KnownSecrets.OpenAi"/> embeds the query. A bad key therefore stops the first search
+/// and not the start, and the start reaches no network at all.
 /// </para>
 /// </remarks>
 public sealed class ZillizKnowledgeAdapter : IKnowledgeStoreAdapter
@@ -44,10 +45,16 @@ public sealed class ZillizKnowledgeAdapter : IKnowledgeStoreAdapter
     public const string ProviderKind = "zilliz";
 
     /// <summary>The <c>${secret:name}</c> name the resolver chain is asked for.</summary>
-    public const string ApiKeySecretName = "zilliz-api-key";
+    /// <remarks>
+    /// It forwards to <see cref="KnownSecrets.ZillizApiKeyName"/>, which is where the name now lives.
+    /// This constant stays because callers already read it, and because an adapter publishing the
+    /// name of the credential it needs is worth keeping.
+    /// </remarks>
+    public const string ApiKeySecretName = KnownSecrets.ZillizApiKeyName;
 
     /// <summary>The standard Zilliz environment variable, read when the chain holds no name.</summary>
-    public const string ApiKeyVariableName = "ZILLIZ_API_KEY";
+    /// <remarks>It forwards to <see cref="KnownSecrets.ZillizApiKeyVariable"/>.</remarks>
+    public const string ApiKeyVariableName = KnownSecrets.ZillizApiKeyVariable;
 
     /// <summary>The embedding model of section 3.1. It is not a document field.</summary>
     public const string EmbeddingModel = "text-embedding-3-small";
@@ -142,7 +149,9 @@ public sealed class ZillizKnowledgeAdapter : IKnowledgeStoreAdapter
             ? named
             : KnowledgeProviderConfiguration.DefaultCollection;
 
-        var apiKey = await ResolveKeyAsync(secrets, cancellationToken).ConfigureAwait(false);
+        var apiKey = await secrets
+            .RequireAsync(KnownSecrets.Zilliz, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
         var embeddings = _embeddings ?? await OpenAiEmbeddingsAsync(secrets, cancellationToken).ConfigureAwait(false);
 
         // The key is written onto the request one layer below the connector, so no class that builds
@@ -210,62 +219,27 @@ public sealed class ZillizKnowledgeAdapter : IKnowledgeStoreAdapter
             Check = ConfigurationCheck.ReferenceResolution,
         });
 
-    /// <summary>Reads the Zilliz key through the chain and then the environment.</summary>
-    /// <param name="secrets">The resolver chain, or <see langword="null"/>.</param>
-    /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The key.</returns>
-    /// <exception cref="SecretResolutionException">Neither place holds one.</exception>
-    private static async ValueTask<string> ResolveKeyAsync(
-        ISecretResolverPort? secrets,
-        CancellationToken cancellationToken)
-    {
-        string? key = null;
-        if (secrets is not null)
-        {
-            key = await secrets.TryResolveAsync(ApiKeySecretName, cancellationToken).ConfigureAwait(false);
-        }
-
-        key ??= Environment.GetEnvironmentVariable(ApiKeyVariableName);
-        if (key is not { Length: > 0 })
-        {
-            throw new SecretResolutionException(
-                "the Zilliz API key did not resolve. Bind a resolver that holds '" + ApiKeySecretName
-                + "', or set the " + ApiKeyVariableName + " variable. This adapter holds no key of its own.");
-        }
-
-        return key;
-    }
-
     /// <summary>Builds the OpenAI generator that embeds a query, at the width of section 3.1.</summary>
     /// <param name="secrets">The resolver chain, or <see langword="null"/>.</param>
     /// <param name="cancellationToken">Cancels the key read.</param>
     /// <returns>The generator.</returns>
     /// <exception cref="SecretResolutionException">Neither place holds an OpenAI key.</exception>
     /// <remarks>
-    /// The OpenAI key is the one <c>OpenAiChatClientAdapter</c> already reads, so a host that talks
-    /// to a model holds nothing new to run this store. Building the client opens no socket.
+    /// The OpenAI key is <see cref="KnownSecrets.OpenAi"/>, the one every OpenAI call of this host
+    /// reads, so a host that talks to a model holds nothing new to run this store. This adapter asks
+    /// the catalog for it and knows nothing about the chat adapter that reads the same name.
+    /// Building the client opens no socket.
     /// </remarks>
     private static async ValueTask<IEmbeddingGenerator<string, Embedding<float>>> OpenAiEmbeddingsAsync(
         ISecretResolverPort? secrets,
         CancellationToken cancellationToken)
     {
-        string? key = null;
-        if (secrets is not null)
-        {
-            key = await secrets
-                .TryResolveAsync(Llm.OpenAI.OpenAiChatClientAdapter.ApiKeySecretName, cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        key ??= Environment.GetEnvironmentVariable(Llm.OpenAI.OpenAiChatClientAdapter.ApiKeyVariableName);
-        if (key is not { Length: > 0 })
-        {
-            throw new SecretResolutionException(
-                "the OpenAI API key did not resolve, and the zilliz store embeds every query with "
-                + EmbeddingModel + ". Bind a resolver that holds '"
-                + Llm.OpenAI.OpenAiChatClientAdapter.ApiKeySecretName + "', or set the "
-                + Llm.OpenAI.OpenAiChatClientAdapter.ApiKeyVariableName + " variable.");
-        }
+        var key = await secrets
+            .RequireAsync(
+                KnownSecrets.OpenAi,
+                "The zilliz store embeds every query with " + EmbeddingModel + ".",
+                cancellationToken)
+            .ConfigureAwait(false);
 
         return new OpenAIClient(new ApiKeyCredential(key))
             .GetEmbeddingClient(EmbeddingModel)

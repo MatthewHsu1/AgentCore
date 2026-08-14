@@ -43,12 +43,12 @@ namespace AgentCore.Infrastructure.Evaluation.OpenAiModeration;
 /// the name of this metric is a safety name rather than a harm name.
 /// </para>
 /// <para>
-/// No key appears in this file. The chain is asked for
-/// <see cref="Llm.OpenAI.OpenAiChatClientAdapter.ApiKeySecretName"/>, the
-/// <see cref="Llm.OpenAI.OpenAiChatClientAdapter.ApiKeyVariableName"/> variable answers when the
-/// chain holds nothing, and <see cref="OpenAiModerationAuthHandler"/> writes it. D13 gives one key to
-/// all four OpenAI calls, so this class declares no name of its own. The read happens once, in
-/// <see cref="CreateAsync"/>, while the host starts, and it opens no socket.
+/// No key appears in this file. <see cref="SecretResolverExtensions.RequireAsync"/> reads
+/// <see cref="KnownSecrets.OpenAi"/> through the chain and then through the variable of that vendor,
+/// and <see cref="OpenAiModerationAuthHandler"/> writes it. D13 gives one key to all four OpenAI
+/// calls, so this class declares no name of its own and asks the catalog rather than another
+/// adapter. The read happens once, in <see cref="CreateAsync"/>, while the host starts, and it opens
+/// no socket.
 /// </para>
 /// </remarks>
 public sealed class OpenAiModerationEvaluator : IEvaluator
@@ -181,7 +181,12 @@ public sealed class OpenAiModerationEvaluator : IEvaluator
     {
         ArgumentNullException.ThrowIfNull(handlers);
 
-        var apiKey = await ResolveKeyAsync(secrets, cancellationToken).ConfigureAwait(false);
+        var apiKey = await secrets
+            .RequireAsync(
+                KnownSecrets.OpenAi,
+                "The moderation evaluator checks every turn against " + ModerationModel + ".",
+                cancellationToken)
+            .ConfigureAwait(false);
 
         // The key is written onto the request one layer below this class, so no class that builds a
         // body or reads an answer holds a credential.
@@ -444,36 +449,5 @@ public sealed class OpenAiModerationEvaluator : IEvaluator
             reason: UncheckedReason);
 
         return metric;
-    }
-
-    /// <summary>Reads the OpenAI key through the chain and then the environment.</summary>
-    /// <param name="secrets">The resolver chain, or <see langword="null"/>.</param>
-    /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The key.</returns>
-    /// <exception cref="SecretResolutionException">Neither place holds one.</exception>
-    private static async ValueTask<string> ResolveKeyAsync(
-        ISecretResolverPort? secrets,
-        CancellationToken cancellationToken)
-    {
-        string? key = null;
-        if (secrets is not null)
-        {
-            key = await secrets
-                .TryResolveAsync(Llm.OpenAI.OpenAiChatClientAdapter.ApiKeySecretName, cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        key ??= Environment.GetEnvironmentVariable(Llm.OpenAI.OpenAiChatClientAdapter.ApiKeyVariableName);
-        if (key is not { Length: > 0 })
-        {
-            throw new SecretResolutionException(
-                "the OpenAI API key did not resolve, and the moderation evaluator checks every turn "
-                + "against " + ModerationModel + ". Bind a resolver that holds '"
-                + Llm.OpenAI.OpenAiChatClientAdapter.ApiKeySecretName + "', or set the "
-                + Llm.OpenAI.OpenAiChatClientAdapter.ApiKeyVariableName
-                + " variable. This evaluator holds no key of its own.");
-        }
-
-        return key;
     }
 }

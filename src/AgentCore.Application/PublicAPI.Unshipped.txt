@@ -692,6 +692,7 @@ AgentCore.Application.Runtime.CallSession.Interrupt(string! utteranceUntilInterr
 const AgentCore.Application.Runtime.CallSession.EmptyReplyReason = "the run returned an empty reply, so the turn spoke the fallback." -> string!
 const AgentCore.Application.Runtime.CallSession.FallbackReply = "I am sorry. I could not finish that. Please say it again." -> string!
 const AgentCore.Application.Runtime.CallSession.ToolFailureReason = "a tool failed four times in a row, so the turn spoke the fallback." -> string!
+AgentCore.Application.Secrets.KnownSecrets
 AgentCore.Application.Secrets.ResolvedSecrets
 AgentCore.Application.Secrets.ResolvedSecrets.Contains(string! name) -> bool
 AgentCore.Application.Secrets.ResolvedSecrets.Count.get -> int
@@ -702,7 +703,27 @@ AgentCore.Application.Secrets.SecretResolutionException.SecretName.get -> string
 AgentCore.Application.Secrets.SecretResolutionException.SecretResolutionException() -> void
 AgentCore.Application.Secrets.SecretResolutionException.SecretResolutionException(string! message) -> void
 AgentCore.Application.Secrets.SecretResolutionException.SecretResolutionException(string! message, System.Exception? innerException) -> void
+AgentCore.Application.Secrets.SecretName
+AgentCore.Application.Secrets.SecretName.<Clone>$() -> AgentCore.Application.Secrets.SecretName!
+AgentCore.Application.Secrets.SecretName.Deconstruct(out string! Name, out string! VariableName) -> void
+AgentCore.Application.Secrets.SecretName.Equals(AgentCore.Application.Secrets.SecretName? other) -> bool
+AgentCore.Application.Secrets.SecretName.Name.get -> string!
+AgentCore.Application.Secrets.SecretName.SecretName(string! Name, string! VariableName) -> void
+AgentCore.Application.Secrets.SecretName.VariableName.get -> string!
+AgentCore.Application.Secrets.SecretResolverExtensions
+const AgentCore.Application.Secrets.KnownSecrets.OpenAiApiKeyName = "openai-api-key" -> string!
+const AgentCore.Application.Secrets.KnownSecrets.OpenAiApiKeyVariable = "OPENAI_API_KEY" -> string!
+const AgentCore.Application.Secrets.KnownSecrets.ZillizApiKeyName = "zilliz-api-key" -> string!
+const AgentCore.Application.Secrets.KnownSecrets.ZillizApiKeyVariable = "ZILLIZ_API_KEY" -> string!
 override AgentCore.Application.Secrets.ResolvedSecrets.ToString() -> string!
+override AgentCore.Application.Secrets.SecretName.Equals(object? obj) -> bool
+override AgentCore.Application.Secrets.SecretName.GetHashCode() -> int
+override AgentCore.Application.Secrets.SecretName.ToString() -> string!
+static readonly AgentCore.Application.Secrets.KnownSecrets.OpenAi -> AgentCore.Application.Secrets.SecretName!
+static readonly AgentCore.Application.Secrets.KnownSecrets.Zilliz -> AgentCore.Application.Secrets.SecretName!
+static AgentCore.Application.Secrets.SecretName.operator !=(AgentCore.Application.Secrets.SecretName? left, AgentCore.Application.Secrets.SecretName? right) -> bool
+static AgentCore.Application.Secrets.SecretName.operator ==(AgentCore.Application.Secrets.SecretName? left, AgentCore.Application.Secrets.SecretName? right) -> bool
+static AgentCore.Application.Secrets.SecretResolverExtensions.RequireAsync(this AgentCore.Application.Ports.ISecretResolverPort? secrets, AgentCore.Application.Secrets.SecretName! secret, string? because = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string!>
 static AgentCore.Application.Secrets.ResolvedSecrets.Create(System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string!, string!>>! secrets) -> AgentCore.Application.Secrets.ResolvedSecrets!
 static AgentCore.Application.Secrets.ResolvedSecrets.Empty.get -> AgentCore.Application.Secrets.ResolvedSecrets!
 static AgentCore.Application.Secrets.ResolvedSecrets.ResolveAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort! resolver, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Secrets.ResolvedSecrets!>
