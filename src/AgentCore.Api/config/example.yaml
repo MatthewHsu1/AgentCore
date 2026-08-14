@@ -235,6 +235,7 @@ providers:
   llm:
     - { kind: openai, model: gpt-4.1-mini, as: reply }      # the voice path, chosen on latency
     - { kind: openai, model: gpt-5.4-nano, as: fill }       # the extractor, chosen on null discipline
+    - { kind: openai, model: gpt-4.1,      as: judge }      # evaluation only, chosen on judgement
   speech:    { kind: telnyx-relay }        # one vendor: STT, turn detection, TTS, interruption
   telephony: { kind: telnyx }
   moderation: { kind: openai }             # reads what the CALLER said, before the model runs
@@ -255,3 +256,15 @@ evaluation:
   # The share of finished turns to evaluate, from 0 through 1. The key is optional and the default
   # is 0, which evaluates no turn. A value outside 0 through 1 is a load error.
   sampleRate: 0
+
+  # The model that scores a turn. It points at an `as` name of providers.llm, exactly as every other
+  # model reference does, so the judge reads the same vendor adapter and the same secret. The key is
+  # optional: a document that omits it still runs every evaluator that calls no model, and an
+  # evaluator that needs a judge returns no value instead of a score.
+  #
+  # The offline golden set of tests/AgentCore.Evals reads this same key, so one document tunes the
+  # online path and the offline gate together.
+  #
+  # temperature: 0 is the setting a judge needs. A score that moves for the same input cannot gate a
+  # merge.
+  judge: { ref: judge, temperature: 0 }

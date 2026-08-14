@@ -131,6 +131,7 @@ internal static class ExampleDocument
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }      # the voice path, chosen on latency
             - { kind: openai, model: gpt-5.4-nano, as: fill }       # the extractor, chosen on null discipline
+            - { kind: openai, model: gpt-4.1,      as: judge }      # evaluation only, chosen on judgement
           speech:    { kind: telnyx-relay }        # one vendor: STT, turn detection, TTS, interruption
           telephony: { kind: telnyx }
           moderation: { kind: openai }             # reads what the CALLER said, before the model runs
@@ -138,6 +139,7 @@ internal static class ExampleDocument
 
         evaluation:
           sampleRate: 0
+          judge: { ref: judge, temperature: 0 }
         """;
 
     /// <summary>The same document as JSON.</summary>
@@ -467,6 +469,11 @@ internal static class ExampleDocument
                 "kind": "openai",
                 "model": "gpt-5.4-nano",
                 "as": "fill"
+              },
+              {
+                "kind": "openai",
+                "model": "gpt-4.1",
+                "as": "judge"
               }
             ],
             "speech": {
@@ -485,7 +492,11 @@ internal static class ExampleDocument
             }
           },
           "evaluation": {
-            "sampleRate": 0
+            "sampleRate": 0,
+            "judge": {
+              "ref": "judge",
+              "temperature": 0
+            }
           }
         }
         """;

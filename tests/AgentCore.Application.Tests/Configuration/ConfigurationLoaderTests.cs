@@ -142,10 +142,11 @@ public sealed class ConfigurationLoaderTests
     public void Example_BindsProviders()
     {
         Assert.NotNull(Example.Providers);
-        Assert.Equal(2, Example.Providers!.Llm.Count);
+        Assert.Equal(3, Example.Providers!.Llm.Count);
         Assert.Equal("gpt-4.1-mini", Example.Providers.Llm[0].Model);
         Assert.Equal("reply", Example.Providers.Llm[0].As);
         Assert.Equal("fill", Example.Providers.Llm[1].As);
+        Assert.Equal("judge", Example.Providers.Llm[2].As);
         Assert.Equal("telnyx-relay", Example.Providers.Speech!.Kind);
         Assert.Equal("telnyx", Example.Providers.Telephony!.Kind);
         Assert.Equal("filesystem", Example.Providers.Knowledge!.Search);
@@ -207,6 +208,44 @@ public sealed class ConfigurationLoaderTests
         Assert.Equal(AgentCoreConfiguration.DefaultFallbackReply, Example.FallbackReply);
         Assert.NotNull(Example.Evaluation);
         Assert.Equal(EvaluationConfiguration.DefaultSampleRate, Example.Evaluation!.SampleRate);
+    }
+
+    [Fact]
+    public void Example_BindsTheJudgeModelReference()
+    {
+        Assert.NotNull(Example.Evaluation!.Judge);
+        Assert.Equal("judge", Example.Evaluation.Judge!.Ref);
+        Assert.Equal(0, Example.Evaluation.Judge.Temperature);
+    }
+
+    [Fact]
+    public void AnEvaluationSectionWithNoJudge_LeavesTheReferenceNull()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: quiet
+            evaluation:
+              sampleRate: 0.25
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+
+        Assert.Null(configuration.Evaluation!.Judge);
+    }
+
+    [Fact]
+    public void AJudgeWithNoRef_FailsTheLoad()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            evaluation:
+              judge: { temperature: 0 }
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Contains(failure.Errors, error => error.Pointer == "/evaluation/judge");
     }
 
     [Fact]

@@ -686,6 +686,10 @@
           "maximum": 1,
           "default": 0,
           "description": "The share of finished turns to evaluate, from 0 through 1. The default of 0 evaluates none."
+        },
+        "judge": {
+          "$ref": "#/$defs/modelRef",
+          "description": "The model that scores a turn. The online sampled path and the offline golden set both read it. The key is optional, and a document that omits it runs only the evaluators that call no model."
         }
       }
     },

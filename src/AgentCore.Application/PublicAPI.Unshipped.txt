@@ -132,6 +132,8 @@ AgentCore.Application.Configuration.Schema.EvaluationConfiguration
 AgentCore.Application.Configuration.Schema.EvaluationConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.EvaluationConfiguration!
 AgentCore.Application.Configuration.Schema.EvaluationConfiguration.Equals(AgentCore.Application.Configuration.Schema.EvaluationConfiguration? other) -> bool
 AgentCore.Application.Configuration.Schema.EvaluationConfiguration.EvaluationConfiguration() -> void
+AgentCore.Application.Configuration.Schema.EvaluationConfiguration.Judge.get -> AgentCore.Application.Configuration.Schema.ModelReference?
+AgentCore.Application.Configuration.Schema.EvaluationConfiguration.Judge.init -> void
 AgentCore.Application.Configuration.Schema.EvaluationConfiguration.SampleRate.get -> double
 AgentCore.Application.Configuration.Schema.EvaluationConfiguration.SampleRate.init -> void
 AgentCore.Application.Configuration.Schema.ExtractorConfiguration
@@ -755,6 +757,10 @@ static AgentCore.Application.Tools.ToolErrorResult.IsError(System.Text.Json.Node
 virtual AgentCore.Application.Tools.ToolBinding.Invoke(System.Text.Json.Nodes.JsonObject! arguments, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<object?>
 AgentCore.Application.Ports.IAuditSinkPort
 AgentCore.Application.Ports.IAuditSinkPort.AppendAsync(AgentCore.Domain.Audit.AuditEvent! auditEvent, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Evaluation.DocumentRecallEvaluator
+AgentCore.Application.Evaluation.DocumentRecallEvaluator.DocumentRecallEvaluator() -> void
+AgentCore.Application.Evaluation.DocumentRecallEvaluator.EvaluateAsync(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages, Microsoft.Extensions.AI.ChatResponse! modelResponse, Microsoft.Extensions.AI.Evaluation.ChatConfiguration? chatConfiguration = null, System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.Evaluation.EvaluationContext!>? additionalContext = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.Evaluation.EvaluationResult!>
+AgentCore.Application.Evaluation.DocumentRecallEvaluator.EvaluationMetricNames.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
 AgentCore.Application.Evaluation.EvaluationSampler
 AgentCore.Application.Evaluation.EvaluationSampler.EvaluationSampler(double rate) -> void
 AgentCore.Application.Evaluation.EvaluationSampler.EvaluationSampler(double rate, System.Func<double>! draw) -> void
@@ -798,12 +804,18 @@ AgentCore.Application.Evaluation.ModerationVerdict.ModerationVerdict(bool flagge
 AgentCore.Application.Evaluation.PromptModerator
 AgentCore.Application.Evaluation.PromptModerator.FlaggedCategoriesAsync(string! callerText, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<string!>!>
 AgentCore.Application.Evaluation.PromptModerator.PromptModerator(Microsoft.Extensions.AI.Evaluation.IEvaluator! evaluator) -> void
+AgentCore.Application.Evaluation.RetrievedDocumentsContext
+AgentCore.Application.Evaluation.RetrievedDocumentsContext.Expected.get -> System.Collections.Generic.IReadOnlyList<string!>!
+AgentCore.Application.Evaluation.RetrievedDocumentsContext.RetrievedDocumentsContext(System.Collections.Generic.IEnumerable<string!>! expected, System.Collections.Generic.IEnumerable<string!>! retrieved) -> void
+AgentCore.Application.Evaluation.RetrievedDocumentsContext.Retrieved.get -> System.Collections.Generic.IReadOnlyList<string!>!
+const AgentCore.Application.Evaluation.DocumentRecallEvaluator.DocumentRecallMetricName = "Document Recall" -> string!
 const AgentCore.Application.Evaluation.FaultCodeContext.FaultCodeContextName = "Fault Codes" -> string!
 const AgentCore.Application.Evaluation.FaultCodeEvaluator.DefaultCodePattern = "\\b[A-Z]{1,3}-?[0-9]{1,3}\\b" -> string!
 const AgentCore.Application.Evaluation.FaultCodeEvaluator.FaultCodeAccuracyMetricName = "Fault Code Accuracy" -> string!
 const AgentCore.Application.Evaluation.ModerationVerdict.ModerationVerdictName = "Moderation Verdict" -> string!
 const AgentCore.Application.Evaluation.ModerationVerdict.NothingFlagged = "the endpoint flagged no category." -> string!
 const AgentCore.Application.Evaluation.PromptModerator.ModerationEvaluatorName = "moderation" -> string!
+const AgentCore.Application.Evaluation.RetrievedDocumentsContext.RetrievedDocumentsContextName = "Retrieved Documents" -> string!
 static AgentCore.Application.Evaluation.ModerationVerdict.TryRead(Microsoft.Extensions.AI.Evaluation.EvaluationResult! result, out AgentCore.Application.Evaluation.ModerationVerdict? verdict) -> bool
 static AgentCore.Application.Evaluation.ModerationEvaluatorFactory.CreateAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.IModerationAdapter!>! adapters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.Evaluation.IEvaluator?>
 static AgentCore.Application.Evaluation.PromptModerator.FromRegistry(AgentCore.Application.Evaluation.EvaluatorRegistry! registry) -> AgentCore.Application.Evaluation.PromptModerator?

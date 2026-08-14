@@ -99,6 +99,11 @@ public static class ConfigurationValidator
             AddUnknownModel(extractor.Model, "/extractor/model/ref", names, errors);
         }
 
+        if (configuration.Evaluation is { } evaluation)
+        {
+            AddUnknownModel(evaluation.Judge, "/evaluation/judge/ref", names, errors);
+        }
+
         var items = configuration.Agents?.Items ?? EquatableList<AgentConfiguration>.Empty;
         if (configuration.Agents?.Defaults is { } defaults)
         {

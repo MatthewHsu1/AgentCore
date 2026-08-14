@@ -132,6 +132,41 @@ public sealed class ConfigurationValidatorTests
     }
 
     [Fact]
+    public void AnUnknownJudgeModel_FailsCheckTwoWithThePointerOfTheReference()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            evaluation:
+              judge: { ref: ghost }
+            providers:
+              llm:
+                - { kind: openai, model: gpt-4.1-mini, as: reply }
+            """;
+
+        var error = Assert.Single(Evaluate(document, ConfigurationCheck.ReferenceResolution));
+
+        Assert.Equal("/evaluation/judge/ref", error.Pointer);
+        Assert.Equal("the model 'ghost' is not declared in providers.llm", error.Message);
+    }
+
+    [Fact]
+    public void AnEvaluationSectionWithNoJudge_PassesCheckTwo()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: quiet
+            evaluation:
+              sampleRate: 0
+            providers:
+              llm:
+                - { kind: openai, model: gpt-4.1-mini, as: reply }
+            """;
+
+        Assert.Empty(Evaluate(document, ConfigurationCheck.ReferenceResolution));
+    }
+
+    [Fact]
     public void AnUnknownAgentModel_FailsCheckTwoWithThePointerOfThatAgent()
     {
         const string document = """

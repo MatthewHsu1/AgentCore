@@ -87,7 +87,13 @@ internal static class ConfigurationBinder
                 string.Create(CultureInfo.InvariantCulture, $"the sample rate is {rate}, and it runs from 0 through 1"));
         }
 
-        return new EvaluationConfiguration { SampleRate = rate };
+        // The judge is optional. A document that names none still runs every evaluator that calls no
+        // model, so an absent key is a quieter suite and never a load error.
+        var judge = Property(evaluation, "judge") is { } judgeNode
+            ? BindModelReference(judgeNode, ConfigurationError.AppendPointer(evaluationPointer, "judge"))
+            : null;
+
+        return new EvaluationConfiguration { SampleRate = rate, Judge = judge };
     }
 
     private static EquatableDictionary<StateSlotConfiguration> BindState(JsonObject root, string pointer)
