@@ -877,3 +877,45 @@ AgentCore.Application.Ports.IModerationAdapter.Kind.get -> string!
 AgentCore.Application.Ports.IKnowledgeStoreAdapter.CreateDocumentsAsync(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IDocumentStorePort!>
 AgentCore.Application.Ports.IKnowledgeStoreAdapter.CreateSearchAsync(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IKnowledgeRetrievalPort!>
 static AgentCore.Application.Knowledge.CompositeKnowledgeStoreFactory.CreateAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.IKnowledgeStoreAdapter!>! adapters, bool includeSearch, bool includeDocuments, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<(AgentCore.Application.Ports.IKnowledgeRetrievalPort? Search, AgentCore.Application.Ports.IDocumentStorePort? Documents)>
+const AgentCore.Application.Secrets.KnownSecrets.GrafanaCloudApiTokenName = "grafana-cloud-api-token" -> string!
+const AgentCore.Application.Secrets.KnownSecrets.GrafanaCloudApiTokenVariable = "GRAFANA_CLOUD_API_TOKEN" -> string!
+const AgentCore.Application.Secrets.KnownSecrets.GrafanaCloudInstanceIdName = "grafana-cloud-instance-id" -> string!
+const AgentCore.Application.Secrets.KnownSecrets.GrafanaCloudInstanceIdVariable = "GRAFANA_CLOUD_INSTANCE_ID" -> string!
+static readonly AgentCore.Application.Secrets.KnownSecrets.GrafanaCloudApiToken -> AgentCore.Application.Secrets.SecretName!
+static readonly AgentCore.Application.Secrets.KnownSecrets.GrafanaCloudInstanceId -> AgentCore.Application.Secrets.SecretName!
+static AgentCore.Application.Secrets.SecretResolverExtensions.TryReadAsync(this AgentCore.Application.Ports.ISecretResolverPort? secrets, AgentCore.Application.Secrets.SecretName! secret, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string?>
+AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Telemetry.get -> AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration?
+AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Telemetry.init -> void
+AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration
+AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration!
+AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.Endpoint.get -> string?
+AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.Endpoint.init -> void
+AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.Equals(AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.ExportIntervalMilliseconds.get -> int
+AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.ExportIntervalMilliseconds.init -> void
+AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.Kind.get -> string!
+AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.Kind.init -> void
+AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.Meters.get -> AgentCore.Application.Configuration.Schema.EquatableList<string!>!
+AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.Meters.init -> void
+AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.ServiceName.get -> string!
+AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.ServiceName.init -> void
+AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.Sources.get -> AgentCore.Application.Configuration.Schema.EquatableList<string!>!
+AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.Sources.init -> void
+AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.TelemetryProviderConfiguration() -> void
+AgentCore.Application.Diagnostics.TelemetrySessionFactory
+AgentCore.Application.Ports.ITelemetryAdapter
+AgentCore.Application.Ports.ITelemetryAdapter.Kind.get -> string!
+AgentCore.Application.Ports.ITelemetryAdapter.StartAsync(AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.ITelemetrySession!>
+AgentCore.Application.Ports.ITelemetrySession
+AgentCore.Application.Ports.ITelemetrySession.Logs.get -> Microsoft.Extensions.Logging.ILoggerProvider?
+const AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.DefaultExportIntervalMilliseconds = 60000 -> int
+const AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.DefaultServiceName = "agentcore" -> string!
+const AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.MinimumExportIntervalMilliseconds = 60000 -> int
+override AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.ToString() -> string!
+static AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.operator !=(AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration? left, AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.operator ==(AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration? left, AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration? right) -> bool
+static AgentCore.Application.Diagnostics.TelemetrySessionFactory.StartAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.ITelemetryAdapter!>! adapters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.ITelemetrySession?>
+static readonly AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.DefaultMeters -> AgentCore.Application.Configuration.Schema.EquatableList<string!>!
+static readonly AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.DefaultSources -> AgentCore.Application.Configuration.Schema.EquatableList<string!>!

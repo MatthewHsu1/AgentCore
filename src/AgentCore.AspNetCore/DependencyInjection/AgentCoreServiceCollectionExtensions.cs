@@ -2,6 +2,7 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
@@ -99,6 +100,32 @@ public static class AgentCoreServiceCollectionExtensions
 
         // Step 2: validate. Checks 2 to 8 report every defect at once, so one start names them all.
         ConfigurationValidator.Validate(configuration);
+
+        // Step 2b: start the telemetry export, before anything below writes a line worth keeping.
+        // providers.telemetry.kind picks one of the vendors the host registered, and a document that
+        // names none exports nothing.
+        //
+        // The session is ADDED to the host's factory rather than replacing anything: a deployment
+        // reading its console keeps reading its console, and the same line also reaches the
+        // collector. AddProvider refreshes the loggers the factory already handed out, so a category
+        // created before this line is exported too.
+        ITelemetrySession? telemetry = options.Telemetry is { } telemetryAdapters
+            ? await TelemetrySessionFactory
+                .StartAsync(configuration, options.SecretResolver, telemetryAdapters, cancellationToken)
+                .ConfigureAwait(false)
+            : null;
+
+        if (telemetry?.Logs is { } telemetryLogs)
+        {
+            loggers.AddProvider(telemetryLogs);
+        }
+
+        if (telemetry is not null)
+        {
+            // The container owns the shutdown. Disposal is what flushes the batch a stopping process
+            // is still holding, so a session nobody disposed would drop it.
+            services.AddSingleton(telemetry);
+        }
 
         // Step 3: resolve every secret once. A tool call then costs no lookup, and a missing
         // credential stops the host rather than one turn.

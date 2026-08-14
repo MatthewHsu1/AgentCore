@@ -1,6 +1,5 @@
 using System.Text.Json.Nodes;
 using AgentCore.Application.Audit;
-using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Secrets;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Endpoints;
@@ -10,10 +9,8 @@ using AgentCore.Infrastructure.Knowledge.FileStore;
 using AgentCore.Infrastructure.Knowledge.VectorData.Zilliz;
 using AgentCore.Infrastructure.Llm.OpenAI;
 using AgentCore.Infrastructure.Secrets;
+using AgentCore.Infrastructure.Telemetry.Grafana;
 using AgentCore.Infrastructure.Tools;
-using OpenTelemetry.Metrics;
-using OpenTelemetry.Resources;
-using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,45 +18,10 @@ var documentPath = builder.Configuration["AgentCore:ConfigurationPath"] ?? "conf
 
 ChainedSecretResolver secrets = new([new EnvironmentSecretResolver(), new FileSecretResolver()]);
 
-// D26: observability is OTLP to Grafana Cloud. The exporter reads OTEL_EXPORTER_OTLP_ENDPOINT and
-// OTEL_EXPORTER_OTLP_HEADERS, so it is registered only when the endpoint is set: a host with no
-// collector must not retry into a socket that answers nothing.
-//
-// T61 binds the free tier at 10,000 active metric series, and two settings break it. Keep
-// OTEL_METRIC_EXPORT_INTERVAL at 60000 ms or above, and put no call id on a metric attribute. The
-// library keeps its own half of that rule; see AgentCoreTelemetry.
-var exportsOtlp = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT"));
-
-builder.Services.AddOpenTelemetry()
-    .ConfigureResource(resource => resource.AddService("AgentCore.Api"))
-    .WithTracing(tracing =>
-    {
-        // Item 7: the turn span carries gen_ai.* attributes, and the call id rides here rather than
-        // on a metric, where cardinality is free.
-        tracing.AddSource(AgentCoreTelemetry.ActivitySourceName)
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation();
-
-        if (exportsOtlp)
-        {
-            tracing.AddOtlpExporter();
-        }
-    })
-    .WithMetrics(metrics =>
-    {
-        metrics.AddMeter(AgentCoreTelemetry.MeterName)
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation();
-
-        if (exportsOtlp)
-        {
-            metrics.AddOtlpExporter();
-        }
-    });
-
 // The composition root binds the guard evaluator and the turn loop while the host starts, so it
 // cannot resolve a logger from the container. This factory is built once and lives as long as the
-// process does.
+// process does. The telemetry seam below adds its own provider to it, so a line reaches the console
+// and the collector both.
 var agentCoreLoggers = LoggerFactory.Create(logging => logging
     .AddConfiguration(builder.Configuration.GetSection("Logging"))
     .AddConsole());
@@ -100,6 +62,14 @@ await builder.Services.AddAgentCoreAsync(options =>
     // the caller said BEFORE the model runs: a flagged turn speaks refusalReply and never reaches the
     // model. That is the owner's decision of 2026-08-13, and it departs from section 11 item 11.
     options.UseModeration(new OpenAiModerationAdapter(httpClients));
+
+    // The host lists the telemetry vendors it supports, once, exactly as the three seams above.
+    // providers.telemetry.kind picks the adapter, so a document that changes collectors changes no
+    // code here. A document that names none exports nothing and reads no key: spans and measurements
+    // are still written, where they cost almost nothing with nobody listening, and log lines keep
+    // going to the console alone. D26 makes Grafana Cloud the destination, and that vendor's basic
+    // credential resolves through the chain above under the two grafana-cloud-* names.
+    options.UseTelemetry(new GrafanaOtlpTelemetryAdapter());
 
     // kind: http. Every header resolved above, so no tool call costs a lookup.
     options.AddToolFactory(startup => new HttpToolFactory(httpClients.CreateClient(HttpToolFactory.HttpClientName), startup.Secrets));

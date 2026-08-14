@@ -636,6 +636,10 @@
         },
         "knowledge": {
           "$ref": "#/$defs/knowledgeProvider"
+        },
+        "telemetry": {
+          "$ref": "#/$defs/telemetryProvider",
+          "description": "Where traces, metrics, and logs are exported to. A document that names none exports nothing."
         }
       }
     },
@@ -726,6 +730,50 @@
           "minLength": 1,
           "default": "kb_chunks",
           "description": "The collection the zilliz adapter reads."
+        }
+      }
+    },
+    "telemetryProvider": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The vendor that exports the signals, such as grafana."
+        },
+        "endpoint": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The collector URL. Left out, the OTEL_EXPORTER_OTLP_ENDPOINT variable answers instead."
+        },
+        "serviceName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The service.name every exported signal carries. Defaults to agentcore."
+        },
+        "exportIntervalMs": {
+          "type": "integer",
+          "description": "How often metrics are sent. T61 puts a floor of 60000 under it, and a smaller number is raised to that floor."
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Extra ActivitySource names listened to, beside the one AgentCore owns. An empty array listens to AgentCore alone."
+        },
+        "meters": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Extra Meter names listened to, beside the one AgentCore owns. These are the bulk of the active series item 12 caps at 10,000."
         }
       }
     }

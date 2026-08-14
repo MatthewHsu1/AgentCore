@@ -7,6 +7,7 @@
     <GlobalPackageReference Include="MinVer" Version="7.0.0" />
   </ItemGroup>
   <ItemGroup>
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.FileSystemGlobbing" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.2" />
@@ -41,10 +42,8 @@
     <PackageVersion Include="LibGit2Sharp" Version="0.32.0" />
   </ItemGroup>
   <ItemGroup>
-    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />
+    <PackageVersion Include="OpenTelemetry" Version="1.17.0" />
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.17.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.17.0" />
   </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="Microsoft.Extensions.AI.Evaluation" Version="10.8.0" />

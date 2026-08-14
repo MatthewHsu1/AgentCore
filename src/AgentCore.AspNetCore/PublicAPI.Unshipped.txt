@@ -69,3 +69,4 @@ const AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.PipelineName
 static readonly AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.ConnectionLifetime -> System.TimeSpan
 static readonly AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.FirstRetryDelay -> System.TimeSpan
 static readonly AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.RequestDeadline -> System.TimeSpan
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseTelemetry(params AgentCore.Application.Ports.ITelemetryAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!

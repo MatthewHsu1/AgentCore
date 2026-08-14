@@ -246,6 +246,33 @@ providers:
   # search: zilliz needs endpoint (cluster URL) and the zilliz-api-key secret; collection defaults to kb_chunks
   # it also embeds every query, so it needs the openai-api-key secret as well; documents stays filesystem
 
+  # telemetry is absent here on purpose, and this host therefore exports nothing. Spans and
+  # measurements are still written, where they cost almost nothing with nobody listening, and log
+  # lines go to the console alone. Uncomment to send all three signals to Grafana Cloud (D26):
+  #
+  # telemetry:
+  #   kind: grafana
+  #   endpoint: https://otlp-gateway-prod-us-east-0.grafana.net/otlp
+  #   serviceName: service-voice
+  #   exportIntervalMs: 60000    # T61 floor. A smaller number is raised to 60000, never refused.
+  #   sources: [Microsoft.AspNetCore, System.Net.Http]
+  #   meters:  [Microsoft.AspNetCore.Hosting, Microsoft.AspNetCore.Server.Kestrel, System.Net.Http]
+  #
+  # That one endpoint is the OTLP gateway, and it is why there is ONE credential here rather than
+  # three. Grafana Cloud's native path gives Loki, Tempo and Mimir an endpoint and a numeric user id
+  # each; the gateway takes all three signals at one URL under one basic credential and fans them
+  # out on its side. It speaks HTTP with protobuf bodies and does not answer gRPC, which the adapter
+  # sets for you because the OpenTelemetry .NET default on net10.0 is gRPC.
+  #
+  # It reads two secrets, and both are optional together. grafana-cloud-instance-id is the switch:
+  # naming one makes grafana-cloud-api-token required, and a missing token then stops the host at
+  # startup rather than sending telemetry Grafana answers 401 to. Naming neither exports with no
+  # credential at all, which is what a collector running beside this process wants.
+  #
+  # sources and meters are the built-in .NET names, so no instrumentation package is involved. An
+  # EMPTY list is not an absent one: [] listens to AgentCore alone, which is how a deployment buys
+  # back the ~1,750 active series a normal replica spends against the 10,000 ceiling of item 12.
+
 # ---------------------------------------------------------------------------------------------
 # evaluation: the share of finished turns a judge scores.
 #

@@ -489,7 +489,70 @@ internal static class ConfigurationBinder
             Telephony = BindVendorProvider(providers, "telephony", providersPointer),
             Moderation = BindVendorProvider(providers, "moderation", providersPointer),
             Knowledge = BindKnowledgeProvider(providers, providersPointer),
+            Telemetry = BindTelemetryProvider(providers, providersPointer),
         };
+    }
+
+    private static TelemetryProviderConfiguration? BindTelemetryProvider(JsonObject providers, string pointer)
+    {
+        if (Property(providers, "telemetry") is not { } node)
+        {
+            return null;
+        }
+
+        var telemetryPointer = ConfigurationError.AppendPointer(pointer, "telemetry");
+        var telemetry = AsObject(node, telemetryPointer);
+
+        return new TelemetryProviderConfiguration
+        {
+            Kind = RequiredString(telemetry, "kind", telemetryPointer),
+            Endpoint = OptionalString(telemetry, "endpoint", telemetryPointer),
+            ServiceName = OptionalString(telemetry, "serviceName", telemetryPointer)
+                ?? TelemetryProviderConfiguration.DefaultServiceName,
+
+            // The setter puts the T61 floor under whatever the document wrote, so a number too small
+            // is corrected here rather than refused. See TelemetryProviderConfiguration.
+            ExportIntervalMilliseconds = OptionalInteger(telemetry, "exportIntervalMs", telemetryPointer)
+                ?? TelemetryProviderConfiguration.DefaultExportIntervalMilliseconds,
+            Sources = BindNameList(telemetry, "sources", telemetryPointer)
+                ?? TelemetryProviderConfiguration.DefaultSources,
+            Meters = BindNameList(telemetry, "meters", telemetryPointer)
+                ?? TelemetryProviderConfiguration.DefaultMeters,
+        };
+    }
+
+    /// <summary>Binds one array of plain names, or null when the document writes none.</summary>
+    /// <remarks>
+    /// An empty array is not the same as an absent one. Absent means "use the defaults", and empty
+    /// means "listen to nothing but AgentCore", which is how a deployment buys back metric series.
+    /// </remarks>
+    private static EquatableList<string>? BindNameList(JsonObject owner, string name, string pointer)
+    {
+        if (Property(owner, name) is not { } node)
+        {
+            return null;
+        }
+
+        var listPointer = ConfigurationError.AppendPointer(pointer, name);
+        var array = AsArray(node, listPointer);
+        List<string> names = [];
+        var index = 0;
+
+        foreach (var item in array)
+        {
+            var itemPointer = ConfigurationError.AppendPointer(listPointer, index.ToString(CultureInfo.InvariantCulture));
+            var value = item?.GetValue<string>();
+
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                throw Error(itemPointer, "the name holds no text, so it listens to nothing.");
+            }
+
+            names.Add(value);
+            index++;
+        }
+
+        return names.Count == 0 ? EquatableList<string>.Empty : new EquatableList<string>(names);
     }
 
     private static VendorProviderConfiguration? BindVendorProvider(JsonObject providers, string name, string pointer)
@@ -668,6 +731,24 @@ internal static class ConfigurationBinder
         return node is JsonValue value && value.GetValueKind() == JsonValueKind.Number
             ? value.GetValue<double>()
             : throw Error(valuePointer, "a number is expected");
+    }
+
+    private static int? OptionalInteger(JsonObject parent, string name, string pointer)
+    {
+        if (Property(parent, name) is not { } node)
+        {
+            return null;
+        }
+
+        var valuePointer = ConfigurationError.AppendPointer(pointer, name);
+
+        // TryGetValue rather than GetValue, because a number the document wrote with a fraction or
+        // past int.MaxValue is a document defect and not an exception from the JSON reader.
+        return node is JsonValue value
+            && value.GetValueKind() == JsonValueKind.Number
+            && value.TryGetValue(out int number)
+            ? number
+            : throw Error(valuePointer, "a whole number is expected");
     }
 
     private static ConfigurationLoadException Missing(string pointer, string name)

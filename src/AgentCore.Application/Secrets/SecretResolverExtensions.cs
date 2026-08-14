@@ -34,6 +34,49 @@ namespace AgentCore.Application.Secrets;
 /// </remarks>
 public static class SecretResolverExtensions
 {
+    /// <summary>Reads one credential through the chain, then the environment, without failing.</summary>
+    /// <param name="secrets">
+    /// The resolver chain, or <see langword="null"/> to read the environment alone.
+    /// </param>
+    /// <param name="secret">The credential, named both ways.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>
+    /// The value, or <see langword="null"/> when neither the chain nor the environment holds the
+    /// name. An empty string is not a miss: it means a store held the name and answered nothing,
+    /// which is a deployment defect the caller decides what to do about.
+    /// </returns>
+    /// <exception cref="ArgumentNullException"><paramref name="secret"/> is <see langword="null"/>.</exception>
+    /// <remarks>
+    /// <para>
+    /// This is for a credential a host may legitimately not have, where the absence selects a
+    /// different path rather than failing one. <see cref="KnownSecrets.GrafanaCloudInstanceId"/> is
+    /// the case that asked for it: no instance id means export to a local collector with no
+    /// credential, and an instance id means the token beside it is then mandatory.
+    /// </para>
+    /// <para>
+    /// <see cref="RequireAsync"/> is this read plus the failure, so the chain-then-environment order
+    /// is written once and the two paths cannot drift.
+    /// </para>
+    /// </remarks>
+    public static async ValueTask<string?> TryReadAsync(
+        this ISecretResolverPort? secrets,
+        SecretName secret,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(secret);
+
+        string? value = null;
+        if (secrets is not null)
+        {
+            value = await secrets.TryResolveAsync(secret.Name, cancellationToken).ConfigureAwait(false);
+        }
+
+        // Only a null moves on. A chain that answered a blank string held the name, and a held name
+        // that is empty is a broken store rather than a miss: falling back would swap in a key the
+        // deployment never named.
+        return value ?? Environment.GetEnvironmentVariable(secret.VariableName);
+    }
+
     /// <summary>Reads one credential through the chain, then the environment, or fails.</summary>
     /// <param name="secrets">
     /// The resolver chain, or <see langword="null"/> to read the environment alone. A host that binds
@@ -57,18 +100,7 @@ public static class SecretResolverExtensions
         string? because = null,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(secret);
-
-        string? value = null;
-        if (secrets is not null)
-        {
-            value = await secrets.TryResolveAsync(secret.Name, cancellationToken).ConfigureAwait(false);
-        }
-
-        // Only a null moves on. A chain that answered a blank string held the name, and a held name
-        // that is empty is a broken store rather than a miss: falling back would swap in a key the
-        // deployment never named.
-        value ??= Environment.GetEnvironmentVariable(secret.VariableName);
+        string? value = await secrets.TryReadAsync(secret, cancellationToken).ConfigureAwait(false);
 
         return value is { Length: > 0 } ? value : throw Missing(secret, because);
     }

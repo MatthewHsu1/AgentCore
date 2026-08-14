@@ -62,6 +62,88 @@ public sealed record KnowledgeProviderConfiguration
 }
 
 /// <summary>
+/// The telemetry provider: where the signals go, and what is listened to on the way.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A document that names none exports nothing. See <c>AgentCore.Application.Ports.ITelemetryAdapter</c>.
+/// </para>
+/// <para>
+/// The two name lists are here rather than inside an adapter because they are not a vendor's
+/// business. A deployment decides how much of its own process it pays to watch, and the adapter only
+/// carries what it is told to.
+/// </para>
+/// </remarks>
+public sealed record TelemetryProviderConfiguration
+{
+    /// <summary>The service name used when the document sets none.</summary>
+    public const string DefaultServiceName = "agentcore";
+
+    /// <summary>
+    /// The metric export interval used when the document sets none, in milliseconds.
+    /// </summary>
+    /// <remarks>
+    /// T61 puts a floor under this, and <see cref="ExportIntervalMilliseconds"/> is where the floor is
+    /// enforced. Grafana Cloud bills the greater of active series and data points a minute, so
+    /// sending four times a minute costs four times as much as sending once, for the same series.
+    /// </remarks>
+    public const int DefaultExportIntervalMilliseconds = 60_000;
+
+    /// <summary>The lowest interval T61 allows, in milliseconds.</summary>
+    public const int MinimumExportIntervalMilliseconds = 60_000;
+
+    /// <summary>The extra <c>ActivitySource</c> names listened to when the document lists none.</summary>
+    public static readonly EquatableList<string> DefaultSources =
+        new(["Microsoft.AspNetCore", "System.Net.Http"]);
+
+    /// <summary>The extra <c>Meter</c> names listened to when the document lists none.</summary>
+    public static readonly EquatableList<string> DefaultMeters =
+        new(["Microsoft.AspNetCore.Hosting", "Microsoft.AspNetCore.Server.Kestrel", "System.Net.Http"]);
+
+    /// <summary>Gets the vendor, such as <c>grafana</c>.</summary>
+    public required string Kind { get; init; }
+
+    /// <summary>Gets the collector URL, or <see langword="null"/> to read it from the environment.</summary>
+    /// <remarks>
+    /// An endpoint is not a credential, so it belongs in the document. Leaving it out lets the
+    /// standard <c>OTEL_EXPORTER_OTLP_ENDPOINT</c> variable answer instead, which is what a
+    /// deployment that runs a collector beside the process already sets.
+    /// </remarks>
+    public string? Endpoint { get; init; }
+
+    /// <summary>Gets the <c>service.name</c> every exported signal carries.</summary>
+    public string ServiceName { get; init; } = DefaultServiceName;
+
+    /// <summary>Gets how often metrics are sent, in milliseconds, never below the T61 floor.</summary>
+    /// <remarks>
+    /// A document that writes a smaller number gets <see cref="MinimumExportIntervalMilliseconds"/>
+    /// instead. This is a floor and not a validation failure: a number too small costs money quietly
+    /// rather than breaking anything, and refusing to start over it would be worse than correcting it.
+    /// </remarks>
+    public int ExportIntervalMilliseconds
+    {
+        get => field;
+        init => field = Math.Max(value, MinimumExportIntervalMilliseconds);
+    } = DefaultExportIntervalMilliseconds;
+
+    /// <summary>Gets the extra <c>ActivitySource</c> names listened to, beside the one AgentCore owns.</summary>
+    /// <remarks>
+    /// .NET emits these itself, so listening costs a name and no instrumentation package.
+    /// <c>Microsoft.AspNetCore</c> is the request span and <c>System.Net.Http</c> is the outbound
+    /// call. A document that wants the AgentCore turn span alone writes an empty list.
+    /// </remarks>
+    public EquatableList<string> Sources { get; init; } = DefaultSources;
+
+    /// <summary>Gets the extra <c>Meter</c> names listened to, beside the one AgentCore owns.</summary>
+    /// <remarks>
+    /// These are the built-in .NET meters. They are the bulk of the roughly 1,750 active series a
+    /// normal ASP.NET Core replica spends against the 10,000 ceiling of item 12, so a deployment that
+    /// needs the room takes names off this list.
+    /// </remarks>
+    public EquatableList<string> Meters { get; init; } = DefaultMeters;
+}
+
+/// <summary>
 /// The <c>providers:</c> section. It configures adapters and never changes agent shape.
 /// </summary>
 /// <remarks>
@@ -88,4 +170,12 @@ public sealed record ProvidersConfiguration
 
     /// <summary>Gets the knowledge provider, or <see langword="null"/>.</summary>
     public KnowledgeProviderConfiguration? Knowledge { get; init; }
+
+    /// <summary>Gets the telemetry provider, or <see langword="null"/>.</summary>
+    /// <remarks>
+    /// <c>AgentCore.Application.Ports.ITelemetryAdapter</c> reads it, and the host registers one
+    /// adapter for each vendor it supports. A document that names none exports nothing, and log lines
+    /// go wherever the host already sends them.
+    /// </remarks>
+    public TelemetryProviderConfiguration? Telemetry { get; init; }
 }

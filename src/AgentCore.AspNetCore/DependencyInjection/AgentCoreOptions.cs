@@ -102,6 +102,9 @@ public sealed class AgentCoreOptions
     /// <summary>Gets the moderation vendors the host registered, or <see langword="null"/>.</summary>
     internal IReadOnlyList<IModerationAdapter>? Moderation { get; private set; }
 
+    /// <summary>Gets the telemetry vendors the host registered, or <see langword="null"/>.</summary>
+    internal IReadOnlyList<ITelemetryAdapter>? Telemetry { get; private set; }
+
     /// <summary>Gets the extra tool factory links, in the order the composite asks them.</summary>
     internal IReadOnlyList<Func<AgentCoreStartup, IAgentToolFactory>> ToolFactories => _toolFactories;
 
@@ -272,6 +275,36 @@ public sealed class AgentCoreOptions
     {
         ArgumentNullException.ThrowIfNull(adapters);
         Moderation = adapters;
+        return this;
+    }
+
+    /// <summary>Binds the telemetry vendors, and the document picks one by <c>kind</c>.</summary>
+    /// <param name="adapters">The vendors this host supports.</param>
+    /// <returns>These options, so a host chains its calls.</returns>
+    /// <remarks>
+    /// <para>
+    /// The host lists the vendors it supports, once, exactly as the three seams above.
+    /// <c>providers.telemetry.kind</c> picks the adapter, so a document that changes collectors
+    /// changes no code here. Registering a vendor costs nothing until a document names it: an adapter
+    /// no field names is never asked to start anything, so a host still starts with no key.
+    /// </para>
+    /// <para>
+    /// <b>A document that names no <c>providers.telemetry</c> exports nothing.</b> Spans and
+    /// measurements are still written, where they cost almost nothing with no listener attached, and
+    /// log lines go wherever <see cref="LoggerFactory"/> already sends them. A document that names a
+    /// kind this host does not register fails the start, and the message names what the host does
+    /// register.
+    /// </para>
+    /// <para>
+    /// The session that starts is added to <see cref="LoggerFactory"/> as one more provider, so a
+    /// deployment reading its console keeps reading its console and the same line also reaches the
+    /// collector. It is registered in the container too, so the host flushes it on the way out.
+    /// </para>
+    /// </remarks>
+    public AgentCoreOptions UseTelemetry(params ITelemetryAdapter[] adapters)
+    {
+        ArgumentNullException.ThrowIfNull(adapters);
+        Telemetry = adapters;
         return this;
     }
 

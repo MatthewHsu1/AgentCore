@@ -109,3 +109,8 @@ static AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEval
 static readonly AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator.ApiEndpoint -> System.Uri!
 static readonly AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator.Categories -> System.Collections.Generic.IReadOnlyList<string!>!
 static readonly AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator.ModerationDeadline -> System.TimeSpan
+AgentCore.Infrastructure.Telemetry.Grafana.GrafanaOtlpTelemetryAdapter
+AgentCore.Infrastructure.Telemetry.Grafana.GrafanaOtlpTelemetryAdapter.GrafanaOtlpTelemetryAdapter() -> void
+AgentCore.Infrastructure.Telemetry.Grafana.GrafanaOtlpTelemetryAdapter.Kind.get -> string!
+AgentCore.Infrastructure.Telemetry.Grafana.GrafanaOtlpTelemetryAdapter.StartAsync(AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.ITelemetrySession!>
+const AgentCore.Infrastructure.Telemetry.Grafana.GrafanaOtlpTelemetryAdapter.GrafanaKind = "grafana" -> string!
