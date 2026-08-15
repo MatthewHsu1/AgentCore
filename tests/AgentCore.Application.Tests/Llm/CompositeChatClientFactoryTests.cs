@@ -30,7 +30,9 @@ public sealed class CompositeChatClientFactoryTests
             - { id: only, instructions: "I answer everything" }
         providers:
           call:   { kind: telnyx-relay }
-          speech: { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
             - { kind: anthropic, model: claude-sonnet-5, as: fill }
@@ -45,7 +47,9 @@ public sealed class CompositeChatClientFactoryTests
             - { id: only, instructions: "I answer everything" }
         providers:
           call:   { kind: telnyx-relay }
-          speech: { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
             - { kind: openai, model: gpt-5.4-nano, as: fill }
@@ -60,7 +64,9 @@ public sealed class CompositeChatClientFactoryTests
             - { id: only, instructions: "I answer everything" }
         providers:
           call:   { kind: telnyx-relay }
-          speech: { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
           llm:
             - { kind: OpenAI, model: gpt-4.1-mini, as: reply }
         """;
@@ -74,7 +80,9 @@ public sealed class CompositeChatClientFactoryTests
             - { id: only, instructions: "I answer everything" }
         providers:
           call:   { kind: telnyx-relay }
-          speech: { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
             - { kind: openai, model: gpt-5.4-nano, as: reply }

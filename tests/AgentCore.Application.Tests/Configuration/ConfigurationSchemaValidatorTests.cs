@@ -186,7 +186,9 @@ public sealed class ConfigurationSchemaValidatorTests
             name: broken
             providers:
               call:   { kind: telnyx-relay }
-              speech: { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
               knowledge: { vectors: zilliz }
             """;
 
@@ -206,7 +208,9 @@ public sealed class ConfigurationSchemaValidatorTests
             name: broken
             providers:
               call:   { kind: telnyx-relay }
-              speech: { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
               knowledge: { store: zilliz, root: ./kb }
             """;
 
@@ -224,7 +228,9 @@ public sealed class ConfigurationSchemaValidatorTests
             name: plain
             providers:
               call:   { kind: telnyx-relay }
-              speech: { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
               knowledge: {}
             """;
 

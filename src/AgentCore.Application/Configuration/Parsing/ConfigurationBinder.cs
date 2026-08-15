@@ -486,7 +486,7 @@ internal static class ConfigurationBinder
         {
             Llm = llm.Count == 0 ? EquatableList<LlmProviderConfiguration>.Empty : new EquatableList<LlmProviderConfiguration>(llm),
             Call = BindCallProvider(providers, providersPointer),
-            Speech = BindVendorProvider(providers, "speech", providersPointer),
+            Speech = BindSpeechProvider(providers, providersPointer),
             Telephony = BindVendorProvider(providers, "telephony", providersPointer),
             Moderation = BindVendorProvider(providers, "moderation", providersPointer),
             Knowledge = BindKnowledgeProvider(providers, providersPointer),
@@ -573,6 +573,31 @@ internal static class ConfigurationBinder
             IdleTimeoutSeconds = OptionalInteger(call, "idleTimeoutSeconds", callPointer),
             CloseTimeoutSeconds = OptionalInteger(call, "closeTimeoutSeconds", callPointer),
             MaxFrameBytes = OptionalInteger(call, "maxFrameBytes", callPointer),
+        };
+    }
+
+    /// <summary>Binds the <c>speech</c> block, or null when the document writes none.</summary>
+    /// <remarks>
+    /// Each role is one vendor block, so this binds through <see cref="BindVendorProvider"/> twice
+    /// rather than reading <c>kind</c> itself: whatever a vendor block is allowed to say, it says the
+    /// same thing under either role.
+    /// </remarks>
+    private static SpeechProviderConfiguration? BindSpeechProvider(JsonObject providers, string pointer)
+    {
+        if (Property(providers, "speech") is not { } node)
+        {
+            return null;
+        }
+
+        var speechPointer = ConfigurationError.AppendPointer(pointer, "speech");
+        var speech = AsObject(node, speechPointer);
+
+        return new SpeechProviderConfiguration
+        {
+            Stt = BindVendorProvider(speech, "stt", speechPointer)
+                ?? throw Missing(ConfigurationError.AppendPointer(speechPointer, "stt"), "stt"),
+            Tts = BindVendorProvider(speech, "tts", speechPointer)
+                ?? throw Missing(ConfigurationError.AppendPointer(speechPointer, "tts"), "tts"),
         };
     }
 

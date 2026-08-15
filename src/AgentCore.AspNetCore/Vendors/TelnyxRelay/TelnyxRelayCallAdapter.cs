@@ -12,8 +12,8 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay;
 /// <remarks>
 /// <para>
 /// D28 buys the whole speech layer — recognition, turn detection, synthesis, and interruption —
-/// inside the relay, so <see cref="CarriesText"/> is <see langword="true"/> and
-/// <c>providers.speech.kind</c> must name this same vendor.
+/// inside the relay, so <see cref="CarriesText"/> is <see langword="true"/> and both speech roles,
+/// <c>providers.speech.stt</c> and <c>providers.speech.tts</c>, must name this same vendor.
 /// </para>
 /// <para>
 /// This owns only the route. <c>TelnyxRelayConnection</c> is still what a call runs on, and

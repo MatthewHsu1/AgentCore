@@ -632,7 +632,7 @@
           "$ref": "#/$defs/callProvider"
         },
         "speech": {
-          "$ref": "#/$defs/vendorProvider"
+          "$ref": "#/$defs/speechProvider"
         },
         "telephony": {
           "$ref": "#/$defs/vendorProvider"
@@ -683,6 +683,23 @@
         "kind": {
           "type": "string",
           "minLength": 1
+        }
+      }
+    },
+    "speechProvider": {
+      "type": "object",
+      "description": "The two speech roles: stt is recognition, what the caller said turned into text, and tts is synthesis, text turned into what the caller hears. Both are always written out. A transport that carries text is both, and names itself twice.",
+      "required": [
+        "stt",
+        "tts"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "stt": {
+          "$ref": "#/$defs/vendorProvider"
+        },
+        "tts": {
+          "$ref": "#/$defs/vendorProvider"
         }
       }
     },

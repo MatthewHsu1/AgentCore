@@ -65,7 +65,9 @@ public sealed class ToolSeamTests
             - { id: escalate, agent: escalator,  terminal: true }
         providers:
           call:   { kind: telnyx-relay }
-          speech: { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
           knowledge: { search: filesystem, documents: filesystem, root: ./kb }
         """;
 

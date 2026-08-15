@@ -24,7 +24,8 @@ namespace AgentCore.Application.Ports;
 /// transport whose socket carries audio runs recognition inside its own adapter and emits text
 /// here. Audio stops at the adapter's edge and never enters this assembly, which is D28 and
 /// section 11 item 6c. That is also why this port is named for the call and not for speech:
-/// <see cref="ISpeechAdapter"/> names the recognition and synthesis vendor, and this does not.
+/// <see cref="ISpeechAdapter"/> names the vendor behind each speech role — one vendor, or two —
+/// and this does not.
 /// </para>
 /// </remarks>
 public interface ICallInputPort : IAsyncDisposable

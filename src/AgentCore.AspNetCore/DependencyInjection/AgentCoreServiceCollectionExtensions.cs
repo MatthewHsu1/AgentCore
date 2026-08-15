@@ -68,7 +68,8 @@ namespace AgentCore.AspNetCore.DependencyInjection;
 /// <c>providers.speech</c> are now required of one another, and whether they agree is a fact about
 /// the document rather than about any route: a transport whose frames already carry text performs
 /// recognition and synthesis itself, so a document that names it for the pipe and something else
-/// for the ears describes a deployment that cannot exist. That is true or false before anything is
+/// for the ears or the mouth describes a deployment that cannot exist. Each role is checked on its
+/// own, so a document that gets both wrong hears about both. That is true or false before anything is
 /// mapped. So when <see cref="AgentCoreOptions.UseCall"/> registered a transport, this method
 /// selects the one <c>providers.call.kind</c> names and runs
 /// <see cref="Application.Call.CallSpeechPairing"/> over the pair — precisely so a host that forgets
@@ -238,14 +239,14 @@ public static class AgentCoreServiceCollectionExtensions
 
         if (options.Speech is { } speechAdapters)
         {
-            // Registered here, and selected by nothing. providers.speech names the recognition and
-            // synthesis vendor, but no code in this solution turns that name into a constructed
-            // adapter: the one transport shipped today carries text, so it is itself the recognizer
+            // Registered here, and selected by nothing. providers.speech names the recognition
+            // vendor and the synthesis vendor, but no code in this solution turns either name into a
+            // constructed adapter: the one transport shipped today carries text, so it is itself both
             // and there is nothing to build. The list goes in the container beside the document
             // above so that a vendor which does need constructing has somewhere to be found.
             //
-            // The call seam below reads providers.speech.kind all the same, and that is not a
-            // contradiction: it never selects a speech vendor, it only checks that the two blocks
+            // The call seam below reads both providers.speech roles all the same, and that is not a
+            // contradiction: it never selects a speech vendor, it only checks that the blocks
             // agree — see this type's own remarks.
             services.AddSingleton<IReadOnlyList<ISpeechAdapter>>(speechAdapters);
         }
@@ -458,7 +459,7 @@ public static class AgentCoreServiceCollectionExtensions
                 + "document that writes a providers section names both, because the schema requires "
                 + "them there; a document that writes no providers section at all is valid, and so "
                 + "is a configuration a host built in code, which passes through no schema. Write "
-                + "providers.speech: { kind: ... }.",
+                + "providers.speech with both of its roles: stt: { kind: ... } and tts: { kind: ... }.",
             Check = ConfigurationCheck.ReferenceResolution,
         });
 

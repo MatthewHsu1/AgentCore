@@ -240,7 +240,9 @@ providers:
   # speech is recognition and synthesis. telephony is call control, which must outlive any one
   # media leg because a warm transfer creates a second one.
   call:      { kind: telnyx-relay }        # the pipe: who carries the call and owns /v1/call
-  speech:    { kind: telnyx-relay }        # the ears and mouth. Bundled here, so it matches call
+  speech:                                  # the ears and the mouth, named one role at a time
+    stt: { kind: telnyx-relay }            # recognition. Bundled here, so it matches call
+    tts: { kind: telnyx-relay }            # synthesis. Bundled here, so it matches call
   telephony: { kind: telnyx }              # dial, transfer, hang up. Not the pipe — that is call
   moderation: { kind: openai }             # reads what the CALLER said, before the model runs
   # a flagged turn never reaches the model and speaks refusalReply instead. It needs the

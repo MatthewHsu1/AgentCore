@@ -37,7 +37,9 @@ public sealed class CompositeKnowledgeStoreFactoryTests
             - { id: only, instructions: "I answer everything" }
         providers:
           call:   { kind: telnyx-relay }
-          speech: { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
           knowledge:
             search: filesystem
             documents: filesystem
@@ -53,7 +55,9 @@ public sealed class CompositeKnowledgeStoreFactoryTests
             - { id: only, instructions: "I answer everything" }
         providers:
           call:   { kind: telnyx-relay }
-          speech: { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
           knowledge:
             search: zilliz
             documents: filesystem
@@ -70,7 +74,9 @@ public sealed class CompositeKnowledgeStoreFactoryTests
             - { id: only, instructions: "I answer everything" }
         providers:
           call:   { kind: telnyx-relay }
-          speech: { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
           knowledge:
             search: FileSystem
             documents: FILESYSTEM
@@ -309,7 +315,9 @@ public sealed class CompositeKnowledgeStoreFactoryTests
                 - { id: only, instructions: "I answer everything" }
             providers:
               call:   { kind: telnyx-relay }
-              speech: { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
               knowledge:
                 search: {{kind}}
                 documents: {{kind}}

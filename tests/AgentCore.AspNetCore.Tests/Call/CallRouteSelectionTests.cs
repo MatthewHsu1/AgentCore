@@ -214,7 +214,9 @@ public sealed class CallRouteSelectionTests
                - { id: only, instructions: "I answer everything" }
            providers:
              call:   { kind: {{callKind}} }
-             speech: { kind: {{callKind}} }
+             speech:
+               stt: { kind: {{callKind}} }
+               tts: { kind: {{callKind}} }
              llm:
                - { kind: openai, model: gpt-4.1-mini, as: reply }
            """;

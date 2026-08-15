@@ -75,8 +75,8 @@ await builder.Services.AddAgentCoreAsync(options =>
     // The host lists the call transports it supports, once, exactly as the seams above.
     // providers.call.kind picks one, and app.MapCall() below maps its socket. This vendor carries
     // text rather than audio — D28 buys recognition, turn detection, synthesis, and interruption
-    // inside the relay — so providers.speech.kind must name it too, and AddAgentCoreAsync refuses
-    // a document where the two disagree.
+    // inside the relay — so both providers.speech roles, stt and tts, must name it too, and
+    // AddAgentCoreAsync refuses a document where any of them disagree.
     options.UseCall(new TelnyxRelayCallAdapter());
 
     // The speech vendor. Bundled today, so this opens nothing and reads no key: it is a name, and

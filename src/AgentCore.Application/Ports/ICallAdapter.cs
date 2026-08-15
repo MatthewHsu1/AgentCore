@@ -22,7 +22,8 @@ public interface ICallAdapter : IVendorAdapter
     /// <remarks>
     /// <para>
     /// <see langword="true"/> means the vendor performs recognition and synthesis itself — the
-    /// Telnyx Conversation Relay does — so <c>providers.speech.kind</c> must name that same
+    /// Telnyx Conversation Relay does — so <b>both</b> speech roles,
+    /// <c>providers.speech.stt.kind</c> and <c>providers.speech.tts.kind</c>, must name that same
     /// vendor, and <see cref="Call.CallSpeechPairing"/> enforces it.
     /// </para>
     /// <para>

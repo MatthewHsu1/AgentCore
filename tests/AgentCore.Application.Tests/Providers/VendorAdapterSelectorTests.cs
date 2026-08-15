@@ -17,7 +17,7 @@ namespace AgentCore.Application.Tests.Providers;
 public sealed class VendorAdapterSelectorTests
 {
     private static readonly VendorSeam SpeechSeam =
-        new("providers.speech", "/providers/speech/kind", "options.UseSpeech(...)");
+        new("providers.speech", "/providers/speech/stt/kind", "options.UseSpeech(...)");
 
     private sealed class FakeAdapter(string kind) : IVendorAdapter
     {
@@ -54,7 +54,7 @@ public sealed class VendorAdapterSelectorTests
 
         Assert.Contains("deepgram", failure.Message, StringComparison.Ordinal);
         Assert.Contains("'telnyx-relay'", failure.Message, StringComparison.Ordinal);
-        Assert.Equal("/providers/speech/kind", failure.Errors[0].Pointer);
+        Assert.Equal("/providers/speech/stt/kind", failure.Errors[0].Pointer);
         Assert.Equal(ConfigurationCheck.ReferenceResolution, failure.Errors[0].Check);
     }
 
@@ -79,7 +79,7 @@ public sealed class VendorAdapterSelectorTests
                 SpeechSeam));
 
         Assert.Contains("two adapters", failure.Message, StringComparison.Ordinal);
-        Assert.Equal("/providers/speech/kind", failure.Errors[0].Pointer);
+        Assert.Equal("/providers/speech/stt/kind", failure.Errors[0].Pointer);
     }
 
     [Fact]

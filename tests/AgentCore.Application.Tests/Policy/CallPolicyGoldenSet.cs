@@ -309,7 +309,9 @@ internal static class GoldenSet
 
         providers:
           call:   { kind: telnyx-relay }
-          speech: { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
             - { kind: openai, model: gpt-5.4-nano, as: fill }

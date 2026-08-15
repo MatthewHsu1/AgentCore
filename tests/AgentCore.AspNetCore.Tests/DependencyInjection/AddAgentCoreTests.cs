@@ -38,7 +38,9 @@ public sealed class AddAgentCoreTests
             - { id: only, instructions: "I answer everything" }
         providers:
           call:   { kind: telnyx-relay }
-          speech: { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
         """;
@@ -53,7 +55,9 @@ public sealed class AddAgentCoreTests
             - { id: only, instructions: "I answer everything" }
         providers:
           call:   { kind: telnyx-relay }
-          speech: { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
           moderation: { kind: test }
@@ -69,7 +73,9 @@ public sealed class AddAgentCoreTests
             - { id: only, instructions: "I answer everything" }
         providers:
           call:   { kind: telnyx-relay }
-          speech: { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
           llm:
             - { kind: anthropic, model: claude-sonnet-5, as: reply }
         """;
@@ -87,7 +93,9 @@ public sealed class AddAgentCoreTests
             - { id: only, instructions: "I answer everything" }
         providers:
           call:   { kind: telnyx-relay }
-          speech: { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
         """;
@@ -110,7 +118,9 @@ public sealed class AddAgentCoreTests
             - { id: only, instructions: "I answer everything", tools: [ create_case ] }
         providers:
           call:   { kind: telnyx-relay }
-          speech: { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
         """;
@@ -128,7 +138,9 @@ public sealed class AddAgentCoreTests
             - { id: only, instructions: "I answer everything", tools: [ search_chunks, read_doc ] }
         providers:
           call:   { kind: telnyx-relay }
-          speech: { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
         """;
@@ -145,7 +157,9 @@ public sealed class AddAgentCoreTests
             - { id: only, instructions: "I answer everything", tools: [ read_doc ] }
         providers:
           call:   { kind: telnyx-relay }
-          speech: { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
         """;
@@ -163,7 +177,9 @@ public sealed class AddAgentCoreTests
             - { id: only, instructions: "I answer everything", tools: [ search_chunks, read_doc ] }
         providers:
           call:   { kind: telnyx-relay }
-          speech: { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
           knowledge:
@@ -184,7 +200,9 @@ public sealed class AddAgentCoreTests
             - { id: only, instructions: "I answer everything", tools: [ search_chunks, read_doc ] }
         providers:
           call:   { kind: telnyx-relay }
-          speech: { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
           knowledge:
@@ -205,7 +223,9 @@ public sealed class AddAgentCoreTests
             - { id: only, instructions: "I answer everything", tools: [ search_chunks, read_doc ] }
         providers:
           call:   { kind: telnyx-relay }
-          speech: { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
           knowledge:
@@ -234,7 +254,9 @@ public sealed class AddAgentCoreTests
             - { id: only, instructions: "I answer everything", tools: [ lookup_order ] }
         providers:
           call:   { kind: telnyx-relay }
-          speech: { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
         """;
@@ -265,7 +287,9 @@ public sealed class AddAgentCoreTests
             - { from: route, to: handled, when: stays_with_bot }
         providers:
           call:   { kind: telnyx-relay }
-          speech: { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: router }
             - { kind: openai, model: gpt-4.1-mini, as: human }
@@ -286,7 +310,9 @@ public sealed class AddAgentCoreTests
             - { id: start, agent: only, to: [ { stage: nowhere } ] }
         providers:
           call:   { kind: telnyx-relay }
-          speech: { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
         """;

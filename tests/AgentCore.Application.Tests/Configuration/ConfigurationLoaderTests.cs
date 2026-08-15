@@ -147,7 +147,8 @@ public sealed class ConfigurationLoaderTests
         Assert.Equal("reply", Example.Providers.Llm[0].As);
         Assert.Equal("fill", Example.Providers.Llm[1].As);
         Assert.Equal("judge", Example.Providers.Llm[2].As);
-        Assert.Equal("telnyx-relay", Example.Providers.Speech!.Kind);
+        Assert.Equal("telnyx-relay", Example.Providers.Speech!.Stt.Kind);
+        Assert.Equal("telnyx-relay", Example.Providers.Speech.Tts.Kind);
         Assert.Equal("telnyx", Example.Providers.Telephony!.Kind);
         Assert.Equal("filesystem", Example.Providers.Knowledge!.Search);
         Assert.Equal("filesystem", Example.Providers.Knowledge.Documents);
@@ -164,7 +165,9 @@ public sealed class ConfigurationLoaderTests
             name: plain
             providers:
               call:   { kind: telnyx-relay }
-              speech: { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
               knowledge: {}
             """;
 
@@ -186,7 +189,9 @@ public sealed class ConfigurationLoaderTests
             name: split
             providers:
               call:   { kind: telnyx-relay }
-              speech: { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
               knowledge:
                 search: zilliz
                 documents: filesystem

@@ -133,7 +133,9 @@ internal static class ExampleDocument
             - { kind: openai, model: gpt-5.4-nano, as: fill }       # the extractor, chosen on null discipline
             - { kind: openai, model: gpt-4.1,      as: judge }      # evaluation only, chosen on judgement
           call:      { kind: telnyx-relay }        # the pipe: who carries the call and owns /v1/call
-          speech:    { kind: telnyx-relay }        # the ears and mouth. Bundled here, so it matches call
+          speech:                                  # the ears and the mouth, named one role at a time
+            stt: { kind: telnyx-relay }            # recognition. Bundled here, so it matches call
+            tts: { kind: telnyx-relay }            # synthesis. Bundled here, so it matches call
           telephony: { kind: telnyx }              # dial, transfer, hang up. Not the pipe — that is call
           moderation: { kind: openai }             # reads what the CALLER said, before the model runs
           knowledge: { search: filesystem, documents: filesystem, root: ./kb }
@@ -481,7 +483,12 @@ internal static class ExampleDocument
               "kind": "telnyx-relay"
             },
             "speech": {
-              "kind": "telnyx-relay"
+              "stt": {
+                "kind": "telnyx-relay"
+              },
+              "tts": {
+                "kind": "telnyx-relay"
+              }
             },
             "telephony": {
               "kind": "telnyx"

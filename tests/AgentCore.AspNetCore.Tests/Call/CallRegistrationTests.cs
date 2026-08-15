@@ -54,7 +54,7 @@ public sealed class CallRegistrationTests
                 speechKind: "deepgram",
                 new FakeCallAdapter("telnyx-relay", carriesText: true)));
 
-        Assert.Equal("/providers/speech/kind", failure.Errors[0].Pointer);
+        Assert.Equal("/providers/speech/stt/kind", failure.Errors[0].Pointer);
     }
 
     [Fact]
@@ -94,7 +94,11 @@ public sealed class CallRegistrationTests
                 InCode(new ProvidersConfiguration
                 {
                     Llm = OneModel,
-                    Speech = new VendorProviderConfiguration { Kind = "telnyx-relay" },
+                    Speech = new SpeechProviderConfiguration
+                    {
+                        Stt = new VendorProviderConfiguration { Kind = "telnyx-relay" },
+                        Tts = new VendorProviderConfiguration { Kind = "telnyx-relay" },
+                    },
                 }),
                 new FakeCallAdapter("telnyx-relay", carriesText: true)));
 
@@ -126,7 +130,7 @@ public sealed class CallRegistrationTests
 
     /// <summary>Writes one document that names both required blocks.</summary>
     /// <param name="callKind">The value <c>providers.call.kind</c> carries.</param>
-    /// <param name="speechKind">The value <c>providers.speech.kind</c> carries.</param>
+    /// <param name="speechKind">The value both speech roles carry, <c>stt</c> and <c>tts</c> alike.</param>
     /// <returns>The document text.</returns>
     private static string Document(string callKind, string speechKind)
         => $$"""
@@ -137,7 +141,9 @@ public sealed class CallRegistrationTests
                - { id: only, instructions: "I answer everything" }
            providers:
              call:   { kind: {{callKind}} }
-             speech: { kind: {{speechKind}} }
+             speech:
+               stt: { kind: {{speechKind}} }
+               tts: { kind: {{speechKind}} }
              llm:
                - { kind: openai, model: gpt-4.1-mini, as: reply }
            """;
@@ -159,7 +165,7 @@ public sealed class CallRegistrationTests
 
     /// <summary>Starts a host on a document that names both kinds.</summary>
     /// <param name="callKind">The value <c>providers.call.kind</c> carries.</param>
-    /// <param name="speechKind">The value <c>providers.speech.kind</c> carries.</param>
+    /// <param name="speechKind">The value both speech roles carry, <c>stt</c> and <c>tts</c> alike.</param>
     /// <param name="adapters">The call transports this host registers, if any.</param>
     /// <returns>The composed container.</returns>
     private static Task<ServiceProvider> BuildAsync(

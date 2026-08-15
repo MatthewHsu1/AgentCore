@@ -345,13 +345,21 @@ AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Llm.init -> vo
 AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Moderation.get -> AgentCore.Application.Configuration.Schema.VendorProviderConfiguration?
 AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Moderation.init -> void
 AgentCore.Application.Configuration.Schema.ProvidersConfiguration.ProvidersConfiguration() -> void
-AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Speech.get -> AgentCore.Application.Configuration.Schema.VendorProviderConfiguration?
+AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Speech.get -> AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration?
 AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Speech.init -> void
 AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Telemetry.get -> AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration?
 AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Telemetry.init -> void
 AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Telephony.get -> AgentCore.Application.Configuration.Schema.VendorProviderConfiguration?
 AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Telephony.init -> void
 AgentCore.Application.Configuration.Schema.ReservedStateSlots
+AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration
+AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration!
+AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.Equals(AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.SpeechProviderConfiguration() -> void
+AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.Stt.get -> AgentCore.Application.Configuration.Schema.VendorProviderConfiguration!
+AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.Stt.init -> void
+AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.Tts.get -> AgentCore.Application.Configuration.Schema.VendorProviderConfiguration!
+AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.Tts.init -> void
 AgentCore.Application.Configuration.Schema.StageConfiguration
 AgentCore.Application.Configuration.Schema.StageConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.StageConfiguration!
 AgentCore.Application.Configuration.Schema.StageConfiguration.Agent.get -> string?
@@ -852,6 +860,9 @@ override AgentCore.Application.Configuration.Schema.PolicyConfiguration.ToString
 override AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.ProvidersConfiguration.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.ProvidersConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.ToString() -> string!
 override AgentCore.Application.Configuration.Schema.StageConfiguration.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.StageConfiguration.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.StageConfiguration.ToString() -> string!
@@ -974,6 +985,8 @@ static AgentCore.Application.Configuration.Schema.ProvidersConfiguration.operato
 static AgentCore.Application.Configuration.Schema.ProvidersConfiguration.operator !=(AgentCore.Application.Configuration.Schema.ProvidersConfiguration? left, AgentCore.Application.Configuration.Schema.ProvidersConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.ReservedStateSlots.All.get -> AgentCore.Application.Configuration.Schema.EquatableList<string!>!
 static AgentCore.Application.Configuration.Schema.ReservedStateSlots.Contains(string! name) -> bool
+static AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.operator ==(AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration? left, AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.operator !=(AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration? left, AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.StageConfiguration.operator ==(AgentCore.Application.Configuration.Schema.StageConfiguration? left, AgentCore.Application.Configuration.Schema.StageConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.StageConfiguration.operator !=(AgentCore.Application.Configuration.Schema.StageConfiguration? left, AgentCore.Application.Configuration.Schema.StageConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.StageTransition.operator ==(AgentCore.Application.Configuration.Schema.StageTransition? left, AgentCore.Application.Configuration.Schema.StageTransition? right) -> bool
@@ -1054,4 +1067,4 @@ virtual AgentCore.Application.Tools.ToolBinding.Invoke(System.Text.Json.Nodes.Js
 AgentCore.Application.Call.CallSpeechPairing
 AgentCore.Application.Ports.ICallAdapter
 AgentCore.Application.Ports.ICallAdapter.CarriesText.get -> bool
-static AgentCore.Application.Call.CallSpeechPairing.Validate(AgentCore.Application.Configuration.Schema.CallProviderConfiguration! call, AgentCore.Application.Configuration.Schema.VendorProviderConfiguration! speech, AgentCore.Application.Ports.ICallAdapter! selectedCall) -> void
+static AgentCore.Application.Call.CallSpeechPairing.Validate(AgentCore.Application.Configuration.Schema.CallProviderConfiguration! call, AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration! speech, AgentCore.Application.Ports.ICallAdapter! selectedCall) -> void

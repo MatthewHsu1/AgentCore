@@ -122,7 +122,9 @@ public sealed class ConfigurationValidatorTests
               model: { ref: ghost }
             providers:
               call:   { kind: telnyx-relay }
-              speech: { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
               llm:
                 - { kind: openai, model: gpt-4.1-mini, as: reply }
             """;
@@ -143,7 +145,9 @@ public sealed class ConfigurationValidatorTests
               judge: { ref: ghost }
             providers:
               call:   { kind: telnyx-relay }
-              speech: { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
               llm:
                 - { kind: openai, model: gpt-4.1-mini, as: reply }
             """;
@@ -164,7 +168,9 @@ public sealed class ConfigurationValidatorTests
               sampleRate: 0
             providers:
               call:   { kind: telnyx-relay }
-              speech: { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
               llm:
                 - { kind: openai, model: gpt-4.1-mini, as: reply }
             """;
@@ -183,7 +189,9 @@ public sealed class ConfigurationValidatorTests
                 - { id: greeter, model: { ref: ghost } }
             providers:
               call:   { kind: telnyx-relay }
-              speech: { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
               llm:
                 - { kind: openai, model: gpt-4.1-mini, as: reply }
             """;
@@ -207,7 +215,9 @@ public sealed class ConfigurationValidatorTests
                 - { id: greeter }
             providers:
               call:   { kind: telnyx-relay }
-              speech: { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
               llm:
                 - { kind: openai, model: gpt-4.1-mini, as: reply }
             """;

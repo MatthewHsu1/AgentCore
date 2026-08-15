@@ -25,6 +25,30 @@ public sealed record VendorProviderConfiguration
 }
 
 /// <summary>
+/// The two speech roles: who turns sound into text, and who turns text back into sound.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Recognition and synthesis are two jobs, which a deployment whose transport carries audio may buy
+/// from one vendor or from two. One name covering both only ever described the bundled case, where
+/// a single transport happens to sell them together; naming the roles separately describes both
+/// shapes, and the bundled case simply writes the same vendor twice.
+/// </para>
+/// <para>
+/// There is no shorthand. One shape is read, bound, and validated, so a document is never two
+/// documents in disguise.
+/// </para>
+/// </remarks>
+public sealed record SpeechProviderConfiguration
+{
+    /// <summary>Gets the recognition vendor: what the caller said, turned into text.</summary>
+    public required VendorProviderConfiguration Stt { get; init; }
+
+    /// <summary>Gets the synthesis vendor: text, turned into what the caller hears.</summary>
+    public required VendorProviderConfiguration Tts { get; init; }
+}
+
+/// <summary>
 /// The vendor that carries the call, and the limits of the socket it opens.
 /// </summary>
 /// <remarks>
@@ -194,11 +218,11 @@ public sealed record ProvidersConfiguration
     /// </remarks>
     public CallProviderConfiguration? Call { get; init; }
 
-    /// <summary>Gets the speech provider, or <see langword="null"/>.</summary>
+    /// <summary>Gets the two speech roles, or <see langword="null"/>.</summary>
     /// <remarks>
-    /// Recognition and synthesis. Not the pipe — see <see cref="Call"/>.
+    /// Recognition and synthesis, named one at a time. Not the pipe — see <see cref="Call"/>.
     /// </remarks>
-    public VendorProviderConfiguration? Speech { get; init; }
+    public SpeechProviderConfiguration? Speech { get; init; }
 
     /// <summary>Gets the telephony provider, or <see langword="null"/>.</summary>
     /// <remarks>

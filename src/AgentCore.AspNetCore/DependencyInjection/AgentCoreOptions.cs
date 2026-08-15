@@ -320,20 +320,21 @@ public sealed class AgentCoreOptions
     /// <remarks>
     /// <para>
     /// The host lists the vendors it supports, once, exactly as the four seams above, and
-    /// <c>providers.speech.kind</c> is the field a document names one of them with — so changing
-    /// vendors is a document edit and no code edit here. Registering a vendor costs nothing: nothing
-    /// is opened while the host starts, whatever the document says.
+    /// <c>providers.speech.stt.kind</c> and <c>providers.speech.tts.kind</c> are the fields a
+    /// document names them with, one per role — so changing vendors is a document edit and no code
+    /// edit here. Registering a vendor costs nothing until a document names it: nothing is opened
+    /// while the host starts, whatever the document says.
     /// </para>
     /// <para>
     /// <b>This method selects nothing.</b> It only puts the list in the container, beside the
-    /// document, for whatever asks the selector later. <c>AddAgentCoreAsync</c> does read
-    /// <c>providers.speech.kind</c>, but only to check that it agrees with <c>providers.call.kind</c>
+    /// document, for whatever asks the selector later. <c>AddAgentCoreAsync</c> does read both
+    /// speech roles, but only to check that each agrees with <c>providers.call.kind</c>
     /// when the call vendor carries text; it never picks a speech vendor out of this list.
     /// </para>
     /// <para>
     /// How the two blocks constrain each other — that <c>providers.call</c> and
     /// <c>providers.speech</c> are required of one another, and that a transport whose frames carry
-    /// text must be named in both — is written in <see cref="UseCall"/>'s remarks.
+    /// text must be named by both speech roles — is written in <see cref="UseCall"/>'s remarks.
     /// </para>
     /// </remarks>
     public AgentCoreOptions UseSpeech(params ISpeechAdapter[] adapters)
@@ -354,8 +355,8 @@ public sealed class AgentCoreOptions
     /// </para>
     /// <para>
     /// <b>Unlike <see cref="UseSpeech"/>, <c>AddAgentCoreAsync</c> does read the document for this
-    /// seam.</b> It selects the transport <c>providers.call.kind</c> names and then checks that
-    /// <c>providers.speech.kind</c> can coexist with it, because a transport whose frames already
+    /// seam.</b> It selects the transport <c>providers.call.kind</c> names and then checks that both
+    /// speech roles can coexist with it, because a transport whose frames already
     /// carry text performs recognition and synthesis itself. That agreement is a fact about the
     /// document, so it holds or fails whether or not a route is ever mapped.
     /// </para>

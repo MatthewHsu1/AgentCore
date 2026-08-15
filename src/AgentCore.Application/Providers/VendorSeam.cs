@@ -7,7 +7,7 @@ namespace AgentCore.Application.Providers;
 /// The dotted path a reader would find in the document, such as <c>providers.speech</c>.
 /// </param>
 /// <param name="Pointer">
-/// The JSON pointer the failure carries, such as <c>/providers/speech/kind</c>. This is what a
+/// The JSON pointer the failure carries, such as <c>/providers/telemetry/kind</c>. This is what a
 /// tool uses to underline the offending line, so it must address the <c>kind</c> itself.
 /// </param>
 /// <param name="RegistrationHint">
