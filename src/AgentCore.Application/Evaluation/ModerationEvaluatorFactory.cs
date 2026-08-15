@@ -1,6 +1,7 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Providers;
 using Microsoft.Extensions.AI.Evaluation;
 
 namespace AgentCore.Application.Evaluation;
@@ -23,6 +24,10 @@ namespace AgentCore.Application.Evaluation;
 /// </remarks>
 public static class ModerationEvaluatorFactory
 {
+    /// <summary>What this seam calls itself, so the shared selector writes its failures.</summary>
+    private static readonly VendorSeam Seam =
+        new("providers.moderation", "/providers/moderation/kind", "options.UseModeration(...)", "endpoints");
+
     /// <summary>Builds the evaluator <c>providers.moderation</c> names, or none.</summary>
     /// <param name="configuration">The loaded document.</param>
     /// <param name="secrets">The chain a credential resolves through, or <see langword="null"/>.</param>
@@ -51,45 +56,7 @@ public static class ModerationEvaluatorFactory
             return null;
         }
 
-        Dictionary<string, List<IModerationAdapter>> byKind = new(StringComparer.OrdinalIgnoreCase);
-        foreach (var adapter in adapters)
-        {
-            if (!byKind.TryGetValue(adapter.Kind, out var same))
-            {
-                same = [];
-                byKind[adapter.Kind] = same;
-            }
-
-            same.Add(adapter);
-        }
-
-        if (!byKind.TryGetValue(entry.Kind, out var matching))
-        {
-            throw Fail(
-                $"providers.moderation is kind: {entry.Kind}, and this host registers "
-                + $"{Registered(byKind)}. Register an adapter for that kind, or change the document.");
-        }
-
-        if (matching.Count > 1)
-        {
-            throw Fail(
-                $"two adapters answer to the kind '{entry.Kind}', so providers.moderation names two "
-                + "endpoints. Register one adapter for each kind.");
-        }
-
-        return await matching[0].CreateAsync(entry, secrets, cancellationToken).ConfigureAwait(false);
+        var adapter = VendorAdapterSelector.Select(entry.Kind, adapters, Seam);
+        return await adapter.CreateAsync(entry, secrets, cancellationToken).ConfigureAwait(false);
     }
-
-    /// <summary>Writes the registered kinds, so a failure names what the host does register.</summary>
-    private static string Registered(Dictionary<string, List<IModerationAdapter>> byKind)
-        => byKind.Count == 0 ? "no adapter" : string.Join(", ", byKind.Keys.Select(kind => "'" + kind + "'"));
-
-    /// <summary>Builds the one exception every failure of this factory uses.</summary>
-    private static ConfigurationLoadException Fail(string message)
-        => new(new ConfigurationError
-        {
-            Pointer = "/providers/moderation/kind",
-            Message = message,
-            Check = ConfigurationCheck.ReferenceResolution,
-        });
 }

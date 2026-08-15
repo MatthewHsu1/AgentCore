@@ -154,7 +154,7 @@ internal static partial class TelnyxRelayLog
     /// <param name="callId">The id of the call.</param>
     /// <remarks>
     /// Item 6a of section 11 holds one pending prompt so a caller's second sentence is not lost.
-    /// A third would queue speech behind a question the caller has already moved past, so it is
+    /// A third would queue a prompt behind a question the caller has already moved past, so it is
     /// dropped, and this line says so without repeating the words dropped.
     /// </remarks>
     [LoggerMessage(

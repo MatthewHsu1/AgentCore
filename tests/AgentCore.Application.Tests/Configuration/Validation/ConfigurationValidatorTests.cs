@@ -121,6 +121,8 @@ public sealed class ConfigurationValidatorTests
             extractor:
               model: { ref: ghost }
             providers:
+              call:   { kind: telnyx-relay }
+              speech: { kind: telnyx-relay }
               llm:
                 - { kind: openai, model: gpt-4.1-mini, as: reply }
             """;
@@ -140,6 +142,8 @@ public sealed class ConfigurationValidatorTests
             evaluation:
               judge: { ref: ghost }
             providers:
+              call:   { kind: telnyx-relay }
+              speech: { kind: telnyx-relay }
               llm:
                 - { kind: openai, model: gpt-4.1-mini, as: reply }
             """;
@@ -159,6 +163,8 @@ public sealed class ConfigurationValidatorTests
             evaluation:
               sampleRate: 0
             providers:
+              call:   { kind: telnyx-relay }
+              speech: { kind: telnyx-relay }
               llm:
                 - { kind: openai, model: gpt-4.1-mini, as: reply }
             """;
@@ -176,6 +182,8 @@ public sealed class ConfigurationValidatorTests
               items:
                 - { id: greeter, model: { ref: ghost } }
             providers:
+              call:   { kind: telnyx-relay }
+              speech: { kind: telnyx-relay }
               llm:
                 - { kind: openai, model: gpt-4.1-mini, as: reply }
             """;
@@ -198,6 +206,8 @@ public sealed class ConfigurationValidatorTests
               items:
                 - { id: greeter }
             providers:
+              call:   { kind: telnyx-relay }
+              speech: { kind: telnyx-relay }
               llm:
                 - { kind: openai, model: gpt-4.1-mini, as: reply }
             """;

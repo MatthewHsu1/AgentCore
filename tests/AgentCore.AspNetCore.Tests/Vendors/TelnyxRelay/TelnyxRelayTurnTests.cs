@@ -23,6 +23,8 @@ public sealed class TelnyxRelayTurnTests
           items:
             - { id: greeter, instructions: "greet the caller" }
         providers:
+          call:   { kind: telnyx-relay }
+          speech: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
         """;

@@ -615,6 +615,10 @@
     },
     "providers": {
       "type": "object",
+      "required": [
+        "call",
+        "speech"
+      ],
       "additionalProperties": false,
       "properties": {
         "llm": {
@@ -623,6 +627,9 @@
           "items": {
             "$ref": "#/$defs/llmProvider"
           }
+        },
+        "call": {
+          "$ref": "#/$defs/callProvider"
         },
         "speech": {
           "$ref": "#/$defs/vendorProvider"
@@ -676,6 +683,37 @@
         "kind": {
           "type": "string",
           "minLength": 1
+        }
+      }
+    },
+    "callProvider": {
+      "type": "object",
+      "description": "The media plane: who carries the call and owns its inbound route. Not providers.speech, which is recognition and synthesis, and not providers.telephony, which is call control.",
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "idleTimeoutSeconds": {
+          "type": "integer",
+          "minimum": -1,
+          "maximum": 4294967,
+          "description": "How long the socket waits with no inbound frame before ending the call. -1 means never."
+        },
+        "closeTimeoutSeconds": {
+          "type": "integer",
+          "minimum": -1,
+          "maximum": 4294967,
+          "description": "How long teardown gives a stuck task before moving on. -1 means never."
+        },
+        "maxFrameBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The largest inbound frame the socket accepts."
         }
       }
     },

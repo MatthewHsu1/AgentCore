@@ -308,6 +308,8 @@ internal static class GoldenSet
               terminal: true
 
         providers:
+          call:   { kind: telnyx-relay }
+          speech: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
             - { kind: openai, model: gpt-5.4-nano, as: fill }

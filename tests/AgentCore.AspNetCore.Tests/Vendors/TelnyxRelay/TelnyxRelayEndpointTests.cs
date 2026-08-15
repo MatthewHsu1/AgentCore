@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.WebSockets;
 using AgentCore.AspNetCore.Tests.Fakes;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
-using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
@@ -46,50 +45,13 @@ public sealed class TelnyxRelayEndpointTests
         Assert.Contains("UseWebSockets", host.LastError, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void AnOutOfRangeIdleTimeout_FailsAtMapTimeWithAClearMessage()
-    {
-        // Round 2, item 1: Task.Delay validates IdleTimeout and throws ArgumentOutOfRangeException
-        // synchronously for a value like this one — the read loop is now ordered so that throw can
-        // never strand a live receive, but a host that sets a bad value should still learn at
-        // startup, with a message naming the option, rather than on whichever live call happens to
-        // need the deadline first.
-        var app = WebApplication.CreateSlimBuilder().Build();
-        var options = new TelnyxRelayOptions { IdleTimeout = TimeSpan.FromDays(60) };
-
-        var exception = Assert.Throws<ArgumentOutOfRangeException>(
-            () => app.MapTelnyxRelay(TelnyxRelayEndpointRouteBuilderExtensions.DefaultPattern, options));
-
-        Assert.Contains("IdleTimeout", exception.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void AnOutOfRangeCloseTimeout_FailsAtMapTimeWithAClearMessage()
-    {
-        // CloseTimeout feeds CancelAfter and Task.WaitAsync, not Task.Delay, but net10 confirmed
-        // the same accepted range for all three, so it needs the same guard.
-        var app = WebApplication.CreateSlimBuilder().Build();
-        var options = new TelnyxRelayOptions { CloseTimeout = TimeSpan.FromMilliseconds(-2) };
-
-        var exception = Assert.Throws<ArgumentOutOfRangeException>(
-            () => app.MapTelnyxRelay(TelnyxRelayEndpointRouteBuilderExtensions.DefaultPattern, options));
-
-        Assert.Contains("CloseTimeout", exception.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void ANonPositiveMaxFrameBytes_FailsAtMapTimeWithAClearMessage()
-    {
-        // A limit of zero or less would refuse the very first byte of every message forever,
-        // which is not a limit a call could ever actually run under.
-        var app = WebApplication.CreateSlimBuilder().Build();
-        var options = new TelnyxRelayOptions { MaxFrameBytes = 0 };
-
-        var exception = Assert.Throws<ArgumentOutOfRangeException>(
-            () => app.MapTelnyxRelay(TelnyxRelayEndpointRouteBuilderExtensions.DefaultPattern, options));
-
-        Assert.Contains("MaxFrameBytes", exception.Message, StringComparison.Ordinal);
-    }
+    // ---------------------------------------------------------------------------------------------
+    // The three option-range facts that stood here are now in
+    // AgentCore.AspNetCore.Tests/Call/CallOptionsFromDocumentTests. The limits come out of
+    // providers.call rather than out of a C# argument, so the same three ranges are refused by a
+    // ConfigurationLoadException carrying the pointer of the offending field, and there is no
+    // longer a map-time ArgumentOutOfRangeException for this file to assert. Spec §12.
+    // ---------------------------------------------------------------------------------------------
 
     [Fact(Timeout = 30_000)]
     public async Task MalformedJson_ClosesWithInvalidPayloadData()

@@ -29,6 +29,8 @@ public sealed class CompositeChatClientFactoryTests
           items:
             - { id: only, instructions: "I answer everything" }
         providers:
+          call:   { kind: telnyx-relay }
+          speech: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
             - { kind: anthropic, model: claude-sonnet-5, as: fill }
@@ -42,6 +44,8 @@ public sealed class CompositeChatClientFactoryTests
           items:
             - { id: only, instructions: "I answer everything" }
         providers:
+          call:   { kind: telnyx-relay }
+          speech: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
             - { kind: openai, model: gpt-5.4-nano, as: fill }
@@ -55,6 +59,8 @@ public sealed class CompositeChatClientFactoryTests
           items:
             - { id: only, instructions: "I answer everything" }
         providers:
+          call:   { kind: telnyx-relay }
+          speech: { kind: telnyx-relay }
           llm:
             - { kind: OpenAI, model: gpt-4.1-mini, as: reply }
         """;
@@ -67,6 +73,8 @@ public sealed class CompositeChatClientFactoryTests
           items:
             - { id: only, instructions: "I answer everything" }
         providers:
+          call:   { kind: telnyx-relay }
+          speech: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
             - { kind: openai, model: gpt-5.4-nano, as: reply }
@@ -208,6 +216,19 @@ public sealed class CompositeChatClientFactoryTests
         Assert.Equal("/providers/llm/1/kind", error.Pointer);
         Assert.Contains("anthropic", error.Message, StringComparison.Ordinal);
         Assert.Contains("'openai'", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TwoAdaptersForOneKindFailTheStart()
+    {
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+            async () => await Create(
+                OneVendorYaml,
+                new FakeChatClientAdapter("openai"),
+                new FakeChatClientAdapter("openai")));
+
+        Assert.Contains("two adapters", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("providers.llm", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]

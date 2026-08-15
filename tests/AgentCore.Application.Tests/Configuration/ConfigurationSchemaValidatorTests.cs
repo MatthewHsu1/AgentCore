@@ -185,6 +185,8 @@ public sealed class ConfigurationSchemaValidatorTests
             apiVersion: agentcore/v1
             name: broken
             providers:
+              call:   { kind: telnyx-relay }
+              speech: { kind: telnyx-relay }
               knowledge: { vectors: zilliz }
             """;
 
@@ -203,6 +205,8 @@ public sealed class ConfigurationSchemaValidatorTests
             apiVersion: agentcore/v1
             name: broken
             providers:
+              call:   { kind: telnyx-relay }
+              speech: { kind: telnyx-relay }
               knowledge: { store: zilliz, root: ./kb }
             """;
 
@@ -219,6 +223,8 @@ public sealed class ConfigurationSchemaValidatorTests
             apiVersion: agentcore/v1
             name: plain
             providers:
+              call:   { kind: telnyx-relay }
+              speech: { kind: telnyx-relay }
               knowledge: {}
             """;
 

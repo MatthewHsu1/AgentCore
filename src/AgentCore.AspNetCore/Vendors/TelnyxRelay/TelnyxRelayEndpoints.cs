@@ -1,4 +1,3 @@
-using System.Net.WebSockets;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
@@ -16,42 +15,45 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay;
 /// read the same contract, so D8 holds and the core never learns a vendor frame schema.
 /// </para>
 /// <para>
+/// <b>Nothing here decides whether this transport is in use.</b> That belongs to
+/// <see cref="Call.CallEndpointRouteBuilderExtensions.MapCall(IEndpointRouteBuilder, string)"/>,
+/// which reads <c>providers.call</c>, picks the one transport it names, and calls
+/// <see cref="TelnyxRelayCallAdapter.Map"/>. This type maps whatever it is handed, and it is
+/// <see langword="internal"/> so that <see cref="TelnyxRelayCallAdapter"/> is the only thing that
+/// hands it anything, apart from the test host, through <c>InternalsVisibleTo</c>: a host names its
+/// route once and changes vendors in the document.
+/// </para>
+/// <para>
 /// The host owns the WebSocket middleware, and its defaults suit a browser rather than a call.
 /// Call <c>app.UseWebSockets</c> with a <c>KeepAliveInterval</c> and a <c>KeepAliveTimeout</c> of
 /// about 20 seconds. The shipped default is two minutes with no timeout, which lets a dead call
 /// hold a session for two minutes.
 /// </para>
 /// </remarks>
-public static class TelnyxRelayEndpointRouteBuilderExtensions
+internal static class TelnyxRelayEndpointRouteBuilderExtensions
 {
-    /// <summary>The route this endpoint answers on when the host names none.</summary>
+    /// <summary>The route the test host maps this endpoint on.</summary>
+    /// <remarks>
+    /// It is no longer a fallback: <c>MapCall</c> always supplies a pattern, so no production path
+    /// reaches this value. It is kept because the relay suite maps its host through
+    /// <see cref="MapTelnyxRelay"/> directly and needs one route string both sides agree on.
+    /// </remarks>
     public const string DefaultPattern = "/v1/telnyx/relay";
-
-    /// <summary>Maps the socket on <see cref="DefaultPattern"/>.</summary>
-    /// <param name="endpoints">The route builder of the host.</param>
-    /// <returns>The mapped endpoint, so a host adds its own conventions.</returns>
-    public static IEndpointConventionBuilder MapTelnyxRelay(this IEndpointRouteBuilder endpoints)
-        => endpoints.MapTelnyxRelay(DefaultPattern, new TelnyxRelayOptions());
-
-    /// <summary>Maps the socket on one route.</summary>
-    /// <param name="endpoints">The route builder of the host.</param>
-    /// <param name="pattern">The route to answer on.</param>
-    /// <returns>The mapped endpoint, so a host adds its own conventions.</returns>
-    public static IEndpointConventionBuilder MapTelnyxRelay(this IEndpointRouteBuilder endpoints, string pattern)
-        => endpoints.MapTelnyxRelay(pattern, new TelnyxRelayOptions());
 
     /// <summary>Maps the socket on one route, with the limits the host chose.</summary>
     /// <param name="endpoints">The route builder of the host.</param>
     /// <param name="pattern">The route to answer on.</param>
     /// <param name="options">What the endpoint may do, and for how long.</param>
     /// <returns>The mapped endpoint, so a host adds its own conventions.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <see cref="TelnyxRelayOptions.MaxFrameBytes"/> is not positive, or
-    /// <see cref="TelnyxRelayOptions.IdleTimeout"/> or <see cref="TelnyxRelayOptions.CloseTimeout"/>
-    /// is a value <c>Task.Delay</c>, <c>CancelAfter</c>, or <c>Task.WaitAsync</c> would refuse at
-    /// run time. Checked here, at startup, rather than left to surface only once a live call
-    /// reaches the read loop or the close handshake.
-    /// </exception>
+    /// <remarks>
+    /// The options are not checked here. <see cref="TelnyxRelayCallAdapter.BuildOptions"/> is what
+    /// builds them out of <c>providers.call</c>, and it refuses a value <c>Task.Delay</c>,
+    /// <c>CancelAfter</c>, or <c>Task.WaitAsync</c> would reject before that value is ever written
+    /// into a <see cref="TelnyxRelayOptions"/> — with a
+    /// <see cref="Application.Configuration.Parsing.ConfigurationLoadException"/> naming the field of
+    /// the document rather than a C# property. Checking again here would only repeat that work in
+    /// the wrong vocabulary.
+    /// </remarks>
     public static IEndpointConventionBuilder MapTelnyxRelay(
         this IEndpointRouteBuilder endpoints,
         string pattern,
@@ -60,76 +62,10 @@ public static class TelnyxRelayEndpointRouteBuilderExtensions
         ArgumentNullException.ThrowIfNull(endpoints);
         ArgumentException.ThrowIfNullOrEmpty(pattern);
         ArgumentNullException.ThrowIfNull(options);
-        ValidateOptions(options);
 
         // Map, and not MapGet. An HTTP/2 WebSocket arrives as CONNECT rather than GET, and MapGet
         // would answer 405 to it.
         return endpoints.Map(pattern, (HttpContext http) => HandleAsync(http, options));
-    }
-
-    /// <summary>The longest delay <c>Task.Delay</c>, <c>CancelAfter</c>, and <c>Task.WaitAsync</c> will all accept.</summary>
-    /// <remarks>
-    /// One millisecond short of <see cref="uint.MaxValue"/> — about 49.7 days — confirmed on net10
-    /// for all three: each throws <see cref="ArgumentOutOfRangeException"/> synchronously for
-    /// anything past this, for <see cref="TimeSpan.MaxValue"/>, and for any negative span other
-    /// than <see cref="Timeout.InfiniteTimeSpan"/> itself.
-    /// </remarks>
-    private static readonly TimeSpan MaximumBoundedDelay = TimeSpan.FromMilliseconds(uint.MaxValue - 1);
-
-    /// <summary>Rejects a <see cref="TelnyxRelayOptions"/> a live call would fail on, before any call ever reaches it.</summary>
-    /// <param name="options">What the endpoint may do, and for how long.</param>
-    /// <remarks>
-    /// <see cref="TelnyxRelayConnection"/>'s own read loop now orders its idle deadline so an
-    /// out-of-range <see cref="TelnyxRelayOptions.IdleTimeout"/> can no longer strand a live
-    /// receive against a buffer the pool already reclaimed — that guard holds regardless of what
-    /// runs here. This check exists for the host, not for that guard: a value <c>Task.Delay</c>
-    /// would refuse should fail the process at startup, with a message naming the option and the
-    /// range it needs, not surface for the first time as an unexplained fault on whichever call
-    /// happens to need the deadline first.
-    /// </remarks>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="options"/> carries a value described in the type's own
-    /// <see cref="MapTelnyxRelay(IEndpointRouteBuilder, string, TelnyxRelayOptions)"/> exception doc.
-    /// </exception>
-    private static void ValidateOptions(TelnyxRelayOptions options)
-    {
-        // Every frame this endpoint ever reads is measured against this bound before it is
-        // written into the message buffer. Zero or negative would refuse the very first byte of
-        // every message forever, which is not a limit — it is a call nobody could ever place.
-        if (options.MaxFrameBytes <= 0)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(options),
-                options.MaxFrameBytes,
-                "TelnyxRelayOptions.MaxFrameBytes must be positive: it bounds one inbound frame, and "
-                + "zero or less would refuse every one of them.");
-        }
-
-        ValidateBoundedDelay(nameof(options.IdleTimeout), options.IdleTimeout);
-        ValidateBoundedDelay(nameof(options.CloseTimeout), options.CloseTimeout);
-    }
-
-    /// <summary>Rejects a <see cref="TimeSpan"/> option outside what a bounded wait built on it will accept.</summary>
-    /// <param name="optionName">The property this value came from, for the message.</param>
-    /// <param name="value">The value the host set.</param>
-    private static void ValidateBoundedDelay(string optionName, TimeSpan value)
-    {
-        if (value == Timeout.InfiniteTimeSpan)
-        {
-            return;
-        }
-
-        if (value < TimeSpan.Zero || value > MaximumBoundedDelay)
-        {
-            // optionName, never nameof(value). A host reading ParamName off this exception needs
-            // the option it set, and "value" names a local of this method that no caller can see.
-            throw new ArgumentOutOfRangeException(
-                optionName,
-                value,
-                $"TelnyxRelayOptions.{optionName} is {value}, which Task.Delay, CancelAfter, and "
-                + $"Task.WaitAsync all refuse at run time: it must be Timeout.InfiniteTimeSpan, or "
-                + $"between TimeSpan.Zero and {MaximumBoundedDelay} — the longest delay a timer can hold.");
-        }
     }
 
     private static async Task HandleAsync(HttpContext http, TelnyxRelayOptions options)
@@ -138,7 +74,7 @@ public static class TelnyxRelayEndpointRouteBuilderExtensions
         {
             throw new InvalidOperationException(
                 "the relay endpoint needs the WebSocket middleware. Call app.UseWebSockets() before "
-                + "app.MapTelnyxRelay().");
+                + "app.MapCall().");
         }
 
         if (!http.WebSockets.IsWebSocketRequest)

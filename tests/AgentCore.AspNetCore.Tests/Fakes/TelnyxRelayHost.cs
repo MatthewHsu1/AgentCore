@@ -1,5 +1,6 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Runtime;
+using AgentCore.AspNetCore.Call;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Sessions;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
@@ -78,7 +79,30 @@ internal sealed class TelnyxRelayHost : IAsyncDisposable
         Action<AgentCoreOptions>? configure = null,
         Action<ILoggingBuilder>? logging = null,
         Action<TelnyxRelayOptions>? relay = null)
-        => StartCoreAsync(yaml, reply, configure, logging, relay, useWebSockets: true);
+        => StartCoreAsync(yaml, reply, configure, logging, relay, useWebSockets: true, useCallSeam: false);
+
+    /// <summary>Starts one host that maps its route through <c>app.MapCall()</c> rather than the vendor extension.</summary>
+    /// <param name="yaml">The document, as YAML. It must name <c>providers.call</c> and <c>providers.speech</c>.</param>
+    /// <param name="reply">The model behind every agent.</param>
+    /// <param name="configure">
+    /// Anything else the test binds on the options. A test using this overload calls
+    /// <c>options.UseCall(new TelnyxRelayCallAdapter())</c> here, because nothing else registers the
+    /// transport the seam is meant to pick.
+    /// </param>
+    /// <param name="logging">Anything a test adds to the logging pipeline.</param>
+    /// <returns>The started host, answering on <c>CallEndpointRouteBuilderExtensions.DefaultPattern</c>.</returns>
+    /// <remarks>
+    /// <see cref="StartAsync"/> maps the relay through the internal <c>MapTelnyxRelay</c> and so
+    /// bypasses the seam entirely, which is right for the several dozen frame-level tests that use
+    /// it and wrong for proving that the shipped vendor is reachable from the vendor-neutral route.
+    /// This overload is the one that joins the two.
+    /// </remarks>
+    public static Task<TelnyxRelayHost> StartThroughCallSeamAsync(
+        string yaml,
+        IChatClient reply,
+        Action<AgentCoreOptions>? configure = null,
+        Action<ILoggingBuilder>? logging = null)
+        => StartCoreAsync(yaml, reply, configure, logging, relay: null, useWebSockets: true, useCallSeam: true);
 
     /// <summary>Starts one host the same way <see cref="StartAsync"/> does, but never calls <c>app.UseWebSockets()</c>.</summary>
     /// <param name="yaml">The document, as YAML.</param>
@@ -95,7 +119,7 @@ internal sealed class TelnyxRelayHost : IAsyncDisposable
         IChatClient reply,
         Action<AgentCoreOptions>? configure = null,
         Action<ILoggingBuilder>? logging = null)
-        => StartCoreAsync(yaml, reply, configure, logging, relay: null, useWebSockets: false);
+        => StartCoreAsync(yaml, reply, configure, logging, relay: null, useWebSockets: false, useCallSeam: false);
 
     private static async Task<TelnyxRelayHost> StartCoreAsync(
         string yaml,
@@ -103,7 +127,8 @@ internal sealed class TelnyxRelayHost : IAsyncDisposable
         Action<AgentCoreOptions>? configure,
         Action<ILoggingBuilder>? logging,
         Action<TelnyxRelayOptions>? relay,
-        bool useWebSockets)
+        bool useWebSockets,
+        bool useCallSeam)
     {
         var builder = WebApplication.CreateSlimBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
@@ -135,9 +160,21 @@ internal sealed class TelnyxRelayHost : IAsyncDisposable
             });
         }
 
-        var relayOptions = new TelnyxRelayOptions();
-        relay?.Invoke(relayOptions);
-        app.MapTelnyxRelay(TelnyxRelayEndpointRouteBuilderExtensions.DefaultPattern, relayOptions);
+        string route;
+        if (useCallSeam)
+        {
+            // The vendor-neutral seam picks the transport out of providers.call and the adapter the
+            // test registered. Nothing here names a route or a vendor.
+            route = CallEndpointRouteBuilderExtensions.DefaultPattern;
+            app.MapCall();
+        }
+        else
+        {
+            route = TelnyxRelayEndpointRouteBuilderExtensions.DefaultPattern;
+            var relayOptions = new TelnyxRelayOptions();
+            relay?.Invoke(relayOptions);
+            app.MapTelnyxRelay(route, relayOptions);
+        }
 
         await app.StartAsync();
 
@@ -150,8 +187,7 @@ internal sealed class TelnyxRelayHost : IAsyncDisposable
 
         var httpAddress = new Uri(address, UriKind.Absolute);
         var socket = new Uri(
-            address.Replace("http://", "ws://", StringComparison.Ordinal)
-            + TelnyxRelayEndpointRouteBuilderExtensions.DefaultPattern);
+            address.Replace("http://", "ws://", StringComparison.Ordinal) + route);
 
         HttpClient client = new() { BaseAddress = httpAddress };
 

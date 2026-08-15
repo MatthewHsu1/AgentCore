@@ -1,6 +1,7 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Providers;
 
 namespace AgentCore.Application.Diagnostics;
 
@@ -23,6 +24,10 @@ namespace AgentCore.Application.Diagnostics;
 /// </remarks>
 public static class TelemetrySessionFactory
 {
+    /// <summary>What this seam calls itself, so the shared selector writes its failures.</summary>
+    private static readonly VendorSeam Seam =
+        new("providers.telemetry", "/providers/telemetry/kind", "options.UseTelemetry(...)", "collectors");
+
     /// <summary>Starts the session <c>providers.telemetry</c> names, or none.</summary>
     /// <param name="configuration">The loaded document.</param>
     /// <param name="secrets">The chain a credential resolves through, or <see langword="null"/>.</param>
@@ -52,45 +57,7 @@ public static class TelemetrySessionFactory
             return null;
         }
 
-        Dictionary<string, List<ITelemetryAdapter>> byKind = new(StringComparer.OrdinalIgnoreCase);
-        foreach (var adapter in adapters)
-        {
-            if (!byKind.TryGetValue(adapter.Kind, out var same))
-            {
-                same = [];
-                byKind[adapter.Kind] = same;
-            }
-
-            same.Add(adapter);
-        }
-
-        if (!byKind.TryGetValue(entry.Kind, out var matching))
-        {
-            throw Fail(
-                $"providers.telemetry is kind: {entry.Kind}, and this host registers "
-                + $"{Registered(byKind)}. Register an adapter for that kind, or change the document.");
-        }
-
-        if (matching.Count > 1)
-        {
-            throw Fail(
-                $"two adapters answer to the kind '{entry.Kind}', so providers.telemetry names two "
-                + "collectors. Register one adapter for each kind.");
-        }
-
-        return await matching[0].StartAsync(entry, secrets, cancellationToken).ConfigureAwait(false);
+        var adapter = VendorAdapterSelector.Select(entry.Kind, adapters, Seam);
+        return await adapter.StartAsync(entry, secrets, cancellationToken).ConfigureAwait(false);
     }
-
-    /// <summary>Writes the registered kinds, so a failure names what the host does register.</summary>
-    private static string Registered(Dictionary<string, List<ITelemetryAdapter>> byKind)
-        => byKind.Count == 0 ? "no adapter" : string.Join(", ", byKind.Keys.Select(kind => "'" + kind + "'"));
-
-    /// <summary>Builds the one exception every failure of this factory uses.</summary>
-    private static ConfigurationLoadException Fail(string message)
-        => new(new ConfigurationError
-        {
-            Pointer = "/providers/telemetry/kind",
-            Message = message,
-            Check = ConfigurationCheck.ReferenceResolution,
-        });
 }

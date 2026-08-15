@@ -3,6 +3,7 @@ using System.Globalization;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Providers;
 using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Llm;
@@ -62,14 +63,6 @@ public sealed class CompositeChatClientFactory : IChatClientFactory, IDisposable
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(adapters);
 
-        // The kind is a vendor name, and a vendor name is written by a human. It matches without
-        // regard to case, and every other name in the document stays ordinal.
-        Dictionary<string, IChatClientAdapter> byKind = new(StringComparer.OrdinalIgnoreCase);
-        foreach (var adapter in adapters)
-        {
-            byKind[adapter.Kind] = adapter;
-        }
-
         CompositeChatClientFactory factory = new();
 
         var llm = configuration.Providers?.Llm ?? EquatableList<LlmProviderConfiguration>.Empty;
@@ -78,13 +71,11 @@ public sealed class CompositeChatClientFactory : IChatClientFactory, IDisposable
             var entry = llm[index];
             var pointer = ConfigurationError.AppendPointer("/providers/llm", index);
 
-            if (!byKind.TryGetValue(entry.Kind, out var adapter))
-            {
-                throw Fail(
-                    ConfigurationError.AppendPointer(pointer, "kind"),
-                    $"the entry '{entry.As}' is kind: {entry.Kind}, and this host registers "
-                    + $"{Registered(byKind)}. Register an adapter for that kind, or change the entry.");
-            }
+            var seam = new VendorSeam(
+                $"providers.llm entry '{entry.As}'",
+                ConfigurationError.AppendPointer(pointer, "kind"),
+                "options.UseChatClients(...)");
+            var adapter = VendorAdapterSelector.Select(entry.Kind, adapters, seam);
 
             if (!factory._entries.TryAdd(entry.As, entry))
             {
@@ -174,12 +165,6 @@ public sealed class CompositeChatClientFactory : IChatClientFactory, IDisposable
     /// <returns>The names, or a phrase for an empty section.</returns>
     private string Declared()
         => _entries.Count == 0 ? "no model" : string.Join(", ", _entries.Keys.Select(name => "'" + name + "'"));
-
-    /// <summary>Writes the registered kinds, so a failure names what the host does register.</summary>
-    /// <param name="byKind">The adapters, by the kind each serves.</param>
-    /// <returns>The kinds, or a phrase for a host with none.</returns>
-    private static string Registered(Dictionary<string, IChatClientAdapter> byKind)
-        => byKind.Count == 0 ? "no adapter" : string.Join(", ", byKind.Keys.Select(kind => "'" + kind + "'"));
 
     /// <summary>Builds the one exception every failure of this factory uses.</summary>
     /// <param name="pointer">The JSON Pointer into the document.</param>

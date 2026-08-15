@@ -123,6 +123,11 @@ public sealed class TelemetrySeamTests
         // One kind names one collector. Two adapters answering to it means the document silently
         // picked whichever was registered first.
         Assert.Contains("two adapters", failure.Message, StringComparison.Ordinal);
+
+        // And the noun is this seam's own. VendorSeam.Plural exists to keep four seams' wording
+        // through one shared selector, so telemetry's "collectors" is pinned here — without this,
+        // the argument could be dropped and nothing would fail.
+        Assert.Contains("collectors", failure.Message, StringComparison.Ordinal);
     }
 
     // ---------------------------------------------------------------------------------------------

@@ -31,12 +31,8 @@ namespace AgentCore.Application.Ports;
 /// test.
 /// </para>
 /// </remarks>
-public interface IModerationAdapter
+public interface IModerationAdapter : IVendorAdapter
 {
-    /// <summary>Gets the one <c>kind</c> value this adapter serves, such as <c>openai</c>.</summary>
-    /// <remarks>A vendor name is written by a human, so it matches without regard to case.</remarks>
-    string Kind { get; }
-
     /// <summary>Builds the evaluator that reads text through this vendor's endpoint.</summary>
     /// <param name="entry">The <c>providers.moderation</c> block, whose <c>kind</c> named this adapter.</param>
     /// <param name="secrets">The chain a credential resolves through, or <see langword="null"/>.</param>

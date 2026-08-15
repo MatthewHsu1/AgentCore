@@ -485,6 +485,7 @@ internal static class ConfigurationBinder
         return new ProvidersConfiguration
         {
             Llm = llm.Count == 0 ? EquatableList<LlmProviderConfiguration>.Empty : new EquatableList<LlmProviderConfiguration>(llm),
+            Call = BindCallProvider(providers, providersPointer),
             Speech = BindVendorProvider(providers, "speech", providersPointer),
             Telephony = BindVendorProvider(providers, "telephony", providersPointer),
             Moderation = BindVendorProvider(providers, "moderation", providersPointer),
@@ -553,6 +554,26 @@ internal static class ConfigurationBinder
         }
 
         return names.Count == 0 ? EquatableList<string>.Empty : new EquatableList<string>(names);
+    }
+
+    /// <summary>Binds the <c>call</c> block, or null when the document writes none.</summary>
+    private static CallProviderConfiguration? BindCallProvider(JsonObject providers, string pointer)
+    {
+        if (Property(providers, "call") is not { } node)
+        {
+            return null;
+        }
+
+        var callPointer = ConfigurationError.AppendPointer(pointer, "call");
+        var call = AsObject(node, callPointer);
+
+        return new CallProviderConfiguration
+        {
+            Kind = RequiredString(call, "kind", callPointer),
+            IdleTimeoutSeconds = OptionalInteger(call, "idleTimeoutSeconds", callPointer),
+            CloseTimeoutSeconds = OptionalInteger(call, "closeTimeoutSeconds", callPointer),
+            MaxFrameBytes = OptionalInteger(call, "maxFrameBytes", callPointer),
+        };
     }
 
     private static VendorProviderConfiguration? BindVendorProvider(JsonObject providers, string name, string pointer)

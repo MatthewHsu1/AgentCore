@@ -61,6 +61,8 @@ public sealed class GuardedGraphEdgeTests
             - { from: route, to: escalated, when: wants_human }
             - { from: route, to: handled, when: stays_with_bot }
         providers:
+          call:   { kind: telnyx-relay }
+          speech: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: router }
             - { kind: openai, model: gpt-4.1-mini, as: human }

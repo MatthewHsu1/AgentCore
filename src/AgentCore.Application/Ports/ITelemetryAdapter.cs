@@ -26,12 +26,8 @@ namespace AgentCore.Application.Ports;
 /// library that refused to start without one could not be used in a test.
 /// </para>
 /// </remarks>
-public interface ITelemetryAdapter
+public interface ITelemetryAdapter : IVendorAdapter
 {
-    /// <summary>Gets the one <c>kind</c> value this adapter serves, such as <c>grafana</c>.</summary>
-    /// <remarks>A vendor name is written by a human, so it matches without regard to case.</remarks>
-    string Kind { get; }
-
     /// <summary>Starts the export this vendor needs, and holds it.</summary>
     /// <param name="entry">The <c>providers.telemetry</c> block, whose <c>kind</c> named this adapter.</param>
     /// <param name="secrets">The chain a credential resolves through, or <see langword="null"/>.</param>

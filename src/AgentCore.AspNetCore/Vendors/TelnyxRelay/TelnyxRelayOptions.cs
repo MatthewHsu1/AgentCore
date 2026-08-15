@@ -7,7 +7,7 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay;
 /// Every default here is chosen for a phone call. A call is short, it is quiet in bytes, and a
 /// dead one must be noticed in seconds rather than minutes.
 /// </remarks>
-public sealed class TelnyxRelayOptions
+internal sealed class TelnyxRelayOptions
 {
     /// <summary>Gets or sets the largest inbound frame the endpoint accepts, in bytes.</summary>
     /// <remarks>

@@ -1,6 +1,7 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Providers;
 
 namespace AgentCore.Application.Knowledge;
 
@@ -39,11 +40,13 @@ namespace AgentCore.Application.Knowledge;
 /// </remarks>
 public static class CompositeKnowledgeStoreFactory
 {
-    /// <summary>The field that names the ranking adapter.</summary>
-    private const string SearchField = "search";
+    /// <summary>What the ranking field calls itself, so the shared selector writes its failures.</summary>
+    private static readonly VendorSeam SearchSeam =
+        new("providers.knowledge.search", "/providers/knowledge/search", "options.UseKnowledge(...)", "stores");
 
-    /// <summary>The field that names the document adapter.</summary>
-    private const string DocumentsField = "documents";
+    /// <summary>What the document field calls itself, so the shared selector writes its failures.</summary>
+    private static readonly VendorSeam DocumentsSeam =
+        new("providers.knowledge.documents", "/providers/knowledge/documents", "options.UseKnowledge(...)", "stores");
 
     /// <summary>Builds the knowledge ports of one document that the caller asks for, now.</summary>
     /// <param name="configuration">The loaded document.</param>
@@ -86,21 +89,6 @@ public static class CompositeKnowledgeStoreFactory
             return (null, null);
         }
 
-        // The kind is a vendor name, and a vendor name is written by a human. It matches without
-        // regard to case, and every other name in the document stays ordinal. Two adapters may land
-        // on one key, and the field that names that key is the one that reports it.
-        Dictionary<string, List<IKnowledgeStoreAdapter>> byKind = new(StringComparer.OrdinalIgnoreCase);
-        foreach (var adapter in adapters)
-        {
-            if (!byKind.TryGetValue(adapter.Kind, out var same))
-            {
-                same = [];
-                byKind[adapter.Kind] = same;
-            }
-
-            same.Add(adapter);
-        }
-
         // A document with no knowledge block still binds both ports, because both fields default to
         // the file store. Section 7 says the knowledge base is always there.
         var entry = configuration.Providers?.Knowledge ?? new KnowledgeProviderConfiguration();
@@ -108,10 +96,10 @@ public static class CompositeKnowledgeStoreFactory
         // Every asked-for lookup runs before any build, so a document that names one good kind and
         // one bad one opens nothing at all. A field nobody asked for is read nowhere.
         var searchAdapter = includeSearch
-            ? Resolve(byKind, entry.Search, SearchField, nameof(IKnowledgeRetrievalPort), documents: false)
+            ? Resolve(adapters, entry.Search, SearchSeam, nameof(IKnowledgeRetrievalPort), documents: false)
             : null;
         var documentsAdapter = includeDocuments
-            ? Resolve(byKind, entry.Documents, DocumentsField, nameof(IDocumentStorePort), documents: true)
+            ? Resolve(adapters, entry.Documents, DocumentsSeam, nameof(IDocumentStorePort), documents: true)
             : null;
 
         IKnowledgeRetrievalPort? search = null;
@@ -141,52 +129,63 @@ public static class CompositeKnowledgeStoreFactory
     }
 
     /// <summary>Finds the one adapter a field names, and proves it serves that port.</summary>
-    /// <param name="byKind">The adapters, by the kind each serves.</param>
+    /// <param name="adapters">The adapters the host registers, one for each vendor it supports.</param>
     /// <param name="kind">The kind the field names.</param>
-    /// <param name="field">The field of <c>providers.knowledge</c> that named it.</param>
+    /// <param name="seam">
+    /// What this field calls itself, for the two failures the selector writes and for the third
+    /// below: <see cref="VendorSeam.DocumentPath"/> is already the dotted path of this very field,
+    /// so there is no second way to spell it.
+    /// </param>
     /// <param name="port">The port that field binds, named for the message.</param>
     /// <param name="documents">Whether the field is <c>documents</c> rather than <c>search</c>.</param>
     /// <returns>The adapter.</returns>
+    /// <remarks>
+    /// Two of the three failures here are the ones every vendor seam has, and
+    /// <see cref="VendorAdapterSelector"/> writes both: a kind no adapter serves, and a kind two
+    /// answer to. The third is this seam's alone, because it is about a <b>port</b> and not a kind —
+    /// one <c>providers.knowledge</c> block names two adapters, and a store that ranks need not also
+    /// read. No selector can express that, so it stays here.
+    /// </remarks>
     private static IKnowledgeStoreAdapter Resolve(
-        Dictionary<string, List<IKnowledgeStoreAdapter>> byKind,
+        IReadOnlyList<IKnowledgeStoreAdapter> adapters,
         string kind,
-        string field,
+        VendorSeam seam,
         string port,
         bool documents)
     {
-        var pointer = "/providers/knowledge/" + field;
+        var adapter = VendorAdapterSelector.Select(kind, adapters, seam);
 
-        if (!byKind.TryGetValue(kind, out var same))
-        {
-            throw Fail(
-                pointer,
-                $"providers.knowledge.{field} is kind: {kind}, and this host registers "
-                + $"{Registered(byKind)}. Register an adapter for that kind, or change the document.");
-        }
-
-        if (same.Count > 1)
-        {
-            throw Fail(
-                pointer,
-                $"two adapters answer to the kind '{kind}', so providers.knowledge.{field} names two "
-                + "stores. Register one adapter for each kind.");
-        }
-
-        var adapter = same[0];
         var serves = documents ? adapter.CanServeDocuments : adapter.CanServeSearch;
         return serves
             ? adapter
             : throw Fail(
-                pointer,
-                $"providers.knowledge.{field} names kind '{kind}', and that adapter does not serve "
-                + $"{port}. This host registers {Registered(byKind)}. Name a kind that serves this port.");
+                seam.Pointer,
+                $"{seam.DocumentPath} names kind '{kind}', and that adapter does not serve "
+                + $"{port}. This host registers {Registered(adapters)}. Name a kind that serves this port.");
     }
 
     /// <summary>Writes the registered kinds, so a failure names what the host does register.</summary>
-    /// <param name="byKind">The adapters, by the kind each serves.</param>
+    /// <param name="adapters">The adapters the host registers, one for each vendor it supports.</param>
     /// <returns>The kinds, or a phrase for a host with none.</returns>
-    private static string Registered(Dictionary<string, List<IKnowledgeStoreAdapter>> byKind)
-        => byKind.Count == 0 ? "no adapter" : string.Join(", ", byKind.Keys.Select(kind => "'" + kind + "'"));
+    /// <remarks>
+    /// Two adapters of one kind are named once. The kind is a vendor name, and a vendor name is
+    /// written by a human, so it is deduplicated without regard to case — the same rule the selector
+    /// matches by, and every other name in the document stays ordinal.
+    /// </remarks>
+    private static string Registered(IReadOnlyList<IKnowledgeStoreAdapter> adapters)
+    {
+        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+        List<string> kinds = [];
+        foreach (var adapter in adapters)
+        {
+            if (seen.Add(adapter.Kind))
+            {
+                kinds.Add("'" + adapter.Kind + "'");
+            }
+        }
+
+        return kinds.Count == 0 ? "no adapter" : string.Join(", ", kinds);
+    }
 
     /// <summary>Builds the one exception every failure of this factory uses.</summary>
     /// <param name="pointer">The JSON Pointer into the document.</param>

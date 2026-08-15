@@ -37,6 +37,8 @@ public sealed class AddAgentCoreTests
           items:
             - { id: only, instructions: "I answer everything" }
         providers:
+          call:   { kind: telnyx-relay }
+          speech: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
         """;
@@ -50,6 +52,8 @@ public sealed class AddAgentCoreTests
           items:
             - { id: only, instructions: "I answer everything" }
         providers:
+          call:   { kind: telnyx-relay }
+          speech: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
           moderation: { kind: test }
@@ -64,6 +68,8 @@ public sealed class AddAgentCoreTests
           items:
             - { id: only, instructions: "I answer everything" }
         providers:
+          call:   { kind: telnyx-relay }
+          speech: { kind: telnyx-relay }
           llm:
             - { kind: anthropic, model: claude-sonnet-5, as: reply }
         """;
@@ -80,6 +86,8 @@ public sealed class AddAgentCoreTests
           items:
             - { id: only, instructions: "I answer everything" }
         providers:
+          call:   { kind: telnyx-relay }
+          speech: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
         """;
@@ -101,6 +109,8 @@ public sealed class AddAgentCoreTests
           items:
             - { id: only, instructions: "I answer everything", tools: [ create_case ] }
         providers:
+          call:   { kind: telnyx-relay }
+          speech: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
         """;
@@ -117,6 +127,8 @@ public sealed class AddAgentCoreTests
           items:
             - { id: only, instructions: "I answer everything", tools: [ search_chunks, read_doc ] }
         providers:
+          call:   { kind: telnyx-relay }
+          speech: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
         """;
@@ -132,6 +144,8 @@ public sealed class AddAgentCoreTests
           items:
             - { id: only, instructions: "I answer everything", tools: [ read_doc ] }
         providers:
+          call:   { kind: telnyx-relay }
+          speech: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
         """;
@@ -148,6 +162,8 @@ public sealed class AddAgentCoreTests
           items:
             - { id: only, instructions: "I answer everything", tools: [ search_chunks, read_doc ] }
         providers:
+          call:   { kind: telnyx-relay }
+          speech: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
           knowledge:
@@ -167,6 +183,8 @@ public sealed class AddAgentCoreTests
           items:
             - { id: only, instructions: "I answer everything", tools: [ search_chunks, read_doc ] }
         providers:
+          call:   { kind: telnyx-relay }
+          speech: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
           knowledge:
@@ -186,6 +204,8 @@ public sealed class AddAgentCoreTests
           items:
             - { id: only, instructions: "I answer everything", tools: [ search_chunks, read_doc ] }
         providers:
+          call:   { kind: telnyx-relay }
+          speech: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
           knowledge:
@@ -213,6 +233,8 @@ public sealed class AddAgentCoreTests
           items:
             - { id: only, instructions: "I answer everything", tools: [ lookup_order ] }
         providers:
+          call:   { kind: telnyx-relay }
+          speech: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
         """;
@@ -242,6 +264,8 @@ public sealed class AddAgentCoreTests
             - { from: route, to: escalated, when: wants_human }
             - { from: route, to: handled, when: stays_with_bot }
         providers:
+          call:   { kind: telnyx-relay }
+          speech: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: router }
             - { kind: openai, model: gpt-4.1-mini, as: human }
@@ -261,6 +285,8 @@ public sealed class AddAgentCoreTests
           stages:
             - { id: start, agent: only, to: [ { stage: nowhere } ] }
         providers:
+          call:   { kind: telnyx-relay }
+          speech: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
         """;
@@ -693,6 +719,26 @@ public sealed class AddAgentCoreTests
         // The message names what this host does register, so the fix is obvious from the failure.
         Assert.Contains("test", error.Message, StringComparison.Ordinal);
         Assert.Contains("'other'", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AddAgentCore_FailsWhenTwoModerationAdaptersAnswerToOneKind()
+    {
+        var error = await Assert.ThrowsAsync<ConfigurationLoadException>(
+            async () => await BuildAsync(
+                ModeratedYaml,
+                options => options.UseModeration(
+                    new FakeModerationAdapter("test", new AlwaysFlagsEvaluator()),
+                    new FakeModerationAdapter("test", new AlwaysFlagsEvaluator()))));
+
+        // Two adapters for one kind means the document silently picked whichever was registered
+        // first, and every seam refuses that.
+        Assert.Contains("two adapters", error.Message, StringComparison.Ordinal);
+
+        // And the noun is this seam's own. VendorSeam.Plural exists to keep four seams' wording
+        // through one shared selector, so moderation's "endpoints" is pinned here — without this,
+        // the argument could be dropped and nothing would fail.
+        Assert.Contains("endpoints", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]

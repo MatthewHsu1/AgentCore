@@ -163,6 +163,8 @@ public sealed class ConfigurationLoaderTests
             apiVersion: agentcore/v1
             name: plain
             providers:
+              call:   { kind: telnyx-relay }
+              speech: { kind: telnyx-relay }
               knowledge: {}
             """;
 
@@ -183,6 +185,8 @@ public sealed class ConfigurationLoaderTests
             apiVersion: agentcore/v1
             name: split
             providers:
+              call:   { kind: telnyx-relay }
+              speech: { kind: telnyx-relay }
               knowledge:
                 search: zilliz
                 documents: filesystem

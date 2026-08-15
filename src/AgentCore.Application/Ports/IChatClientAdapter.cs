@@ -10,7 +10,7 @@ namespace AgentCore.Application.Ports;
 /// <para>
 /// The document names a vendor in <c>kind</c> and the host registers one adapter for each vendor it
 /// supports. <c>CompositeChatClientFactory</c> routes each entry to the adapter whose
-/// <see cref="Kind"/> matches, so a document that changes vendors changes no code.
+/// <see cref="IVendorAdapter.Kind"/> matches, so a document that changes vendors changes no code.
 /// </para>
 /// <para>
 /// An adapter owns its vendor only: the SDK client, the credential, the model name. Everything
@@ -18,12 +18,8 @@ namespace AgentCore.Application.Ports;
 /// in the composite, so no adapter repeats it.
 /// </para>
 /// </remarks>
-public interface IChatClientAdapter
+public interface IChatClientAdapter : IVendorAdapter
 {
-    /// <summary>Gets the one <c>kind</c> value this adapter serves, such as <c>openai</c>.</summary>
-    /// <remarks>A vendor name is written by a human, so it matches without regard to case.</remarks>
-    string Kind { get; }
-
     /// <summary>Builds the vendor client of one entry.</summary>
     /// <param name="entry">The <c>providers.llm[]</c> entry, whose <c>kind</c> named this adapter.</param>
     /// <param name="secrets">The chain a credential resolves through, or <see langword="null"/>.</param>

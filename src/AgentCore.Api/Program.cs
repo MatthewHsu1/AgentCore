@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AgentCore.Application.Audit;
 using AgentCore.Application.Secrets;
+using AgentCore.AspNetCore.Call;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Endpoints;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
@@ -71,6 +72,17 @@ await builder.Services.AddAgentCoreAsync(options =>
     // credential resolves through the chain above under the two grafana-cloud-* names.
     options.UseTelemetry(new GrafanaOtlpTelemetryAdapter());
 
+    // The host lists the call transports it supports, once, exactly as the seams above.
+    // providers.call.kind picks one, and app.MapCall() below maps its socket. This vendor carries
+    // text rather than audio — D28 buys recognition, turn detection, synthesis, and interruption
+    // inside the relay — so providers.speech.kind must name it too, and AddAgentCoreAsync refuses
+    // a document where the two disagree.
+    options.UseCall(new TelnyxRelayCallAdapter());
+
+    // The speech vendor. Bundled today, so this opens nothing and reads no key: it is a name, and
+    // the socket is the channel. A SIP transport is what makes this seam do real work.
+    options.UseSpeech(new TelnyxRelaySpeechAdapter());
+
     // kind: http. Every header resolved above, so no tool call costs a lookup.
     options.AddToolFactory(startup => new HttpToolFactory(httpClients.CreateClient(HttpToolFactory.HttpClientName), startup.Secrets));
 
@@ -99,6 +111,10 @@ app.MapGet("/health", () => Results.Ok("ok"));
 app.UseWebSockets();
 
 app.MapChatCompletions();
-app.MapTelnyxRelay();
+
+// One inbound call route, and this line names no vendor. It reads providers.call, picks the
+// transport the document names, and hands it the socket limits from the same block. Changing
+// vendors is a document edit.
+app.MapCall();
 
 app.Run();

@@ -105,6 +105,12 @@ public sealed class AgentCoreOptions
     /// <summary>Gets the telemetry vendors the host registered, or <see langword="null"/>.</summary>
     internal IReadOnlyList<ITelemetryAdapter>? Telemetry { get; private set; }
 
+    /// <summary>Gets the speech vendors the host registered, or <see langword="null"/>.</summary>
+    internal IReadOnlyList<ISpeechAdapter>? Speech { get; private set; }
+
+    /// <summary>Gets the call transports this host supports, or <see langword="null"/>.</summary>
+    internal IReadOnlyList<ICallAdapter>? Call { get; private set; }
+
     /// <summary>Gets the extra tool factory links, in the order the composite asks them.</summary>
     internal IReadOnlyList<Func<AgentCoreStartup, IAgentToolFactory>> ToolFactories => _toolFactories;
 
@@ -305,6 +311,67 @@ public sealed class AgentCoreOptions
     {
         ArgumentNullException.ThrowIfNull(adapters);
         Telemetry = adapters;
+        return this;
+    }
+
+    /// <summary>Binds the speech vendors, and the document picks one by <c>kind</c>.</summary>
+    /// <param name="adapters">The vendors this host supports.</param>
+    /// <returns>These options, so a host chains its calls.</returns>
+    /// <remarks>
+    /// <para>
+    /// The host lists the vendors it supports, once, exactly as the four seams above, and
+    /// <c>providers.speech.kind</c> is the field a document names one of them with — so changing
+    /// vendors is a document edit and no code edit here. Registering a vendor costs nothing: nothing
+    /// is opened while the host starts, whatever the document says.
+    /// </para>
+    /// <para>
+    /// <b>This method selects nothing.</b> It only puts the list in the container, beside the
+    /// document, for whatever asks the selector later. <c>AddAgentCoreAsync</c> does read
+    /// <c>providers.speech.kind</c>, but only to check that it agrees with <c>providers.call.kind</c>
+    /// when the call vendor carries text; it never picks a speech vendor out of this list.
+    /// </para>
+    /// <para>
+    /// How the two blocks constrain each other — that <c>providers.call</c> and
+    /// <c>providers.speech</c> are required of one another, and that a transport whose frames carry
+    /// text must be named in both — is written in <see cref="UseCall"/>'s remarks.
+    /// </para>
+    /// </remarks>
+    public AgentCoreOptions UseSpeech(params ISpeechAdapter[] adapters)
+    {
+        ArgumentNullException.ThrowIfNull(adapters);
+        Speech = adapters;
+        return this;
+    }
+
+    /// <summary>Lists the vendors that may carry a call, so <c>providers.call.kind</c> can pick one.</summary>
+    /// <param name="adapters">The transports this host supports.</param>
+    /// <returns>These options, so a host chains its calls.</returns>
+    /// <remarks>
+    /// <para>
+    /// Registering a vendor is what turns this seam on, exactly as it is for telemetry, knowledge,
+    /// moderation, and speech. A host that calls this and a document that names a kind none of
+    /// these serves fails the start; a host that never calls it is not asked what its document says.
+    /// </para>
+    /// <para>
+    /// <b>Unlike <see cref="UseSpeech"/>, <c>AddAgentCoreAsync</c> does read the document for this
+    /// seam.</b> It selects the transport <c>providers.call.kind</c> names and then checks that
+    /// <c>providers.speech.kind</c> can coexist with it, because a transport whose frames already
+    /// carry text performs recognition and synthesis itself. That agreement is a fact about the
+    /// document, so it holds or fails whether or not a route is ever mapped.
+    /// </para>
+    /// <para>
+    /// <b>The two blocks are required of one another.</b> The schema writes
+    /// <c>required: ["call", "speech"]</c> on the <c>providers</c> object, so a document that writes
+    /// a <c>providers</c> section writes both; and a configuration that registered a transport here
+    /// and is missing either block is refused while the host starts, with a pointer at the block that
+    /// is missing. A transport whose frames carry text must further name the same vendor in both,
+    /// which is what the pairing above checks.
+    /// </para>
+    /// </remarks>
+    public AgentCoreOptions UseCall(params ICallAdapter[] adapters)
+    {
+        ArgumentNullException.ThrowIfNull(adapters);
+        Call = adapters;
         return this;
     }
 

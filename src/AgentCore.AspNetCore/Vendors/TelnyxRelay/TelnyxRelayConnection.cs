@@ -4,9 +4,9 @@ using System.Text.Json;
 using System.Threading.Channels;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
-using AgentCore.Application.Speech;
+using AgentCore.Application.Call;
 using AgentCore.AspNetCore.Sessions;
-using AgentCore.AspNetCore.Speech;
+using AgentCore.AspNetCore.Call;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -38,12 +38,12 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay;
 /// frames onto <see cref="IConversationPort"/> and nothing else.
 /// </para>
 /// <para>
-/// One object fills both halves of the call's <see cref="SpeechChannel"/>, because one socket
+/// One object fills both halves of the call's <see cref="CallChannel"/>, because one socket
 /// carries both directions for this vendor. Nothing above the ports can tell, and nothing may ask.
-/// The speaking side is <see cref="ISpeechOutputPort"/> below: every reply reaches the write loop
+/// The speaking side is <see cref="ICallOutputPort"/> below: every reply reaches the write loop
 /// through <see cref="SpeakAsync"/>. The last of the two barge-in gates is this class's business
-/// and nobody else's — <see cref="SpeechTurnArbiter"/> speaks in turn ids and never hands one over,
-/// so this class keeps a monotonic speech generation instead, stamps every item it queues with the
+/// and nobody else's — <see cref="CallTurnArbiter"/> speaks in turn ids and never hands one over,
+/// so this class keeps a monotonic reply generation instead, stamps every item it queues with the
 /// generation it was queued under, and raises that generation in <see cref="StopAsync"/>. The write
 /// loop then drops any item at or below the raised one, which is the same comparison the turn ids
 /// used to answer, asked in the transport's own vocabulary.
@@ -56,7 +56,7 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay;
 /// next reply, and the window is the few instructions between the arbiter's own check and that call.
 /// </para>
 /// </remarks>
-internal sealed class TelnyxRelayConnection : ISpeechInputPort, ISpeechOutputPort
+internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
 {
     private readonly HttpContext _http;
     private readonly TelnyxRelayOptions _options;
@@ -78,7 +78,7 @@ internal sealed class TelnyxRelayConnection : ISpeechInputPort, ISpeechOutputPor
     // barge-in stops the reply; the write loop then drops anything at or below it. It lives on the
     // connection, alongside the channel the write loop reads, because the write loop is the one that
     // reads it and a second setup frame must not reset what a barge-in already cut off.
-    private long _speechGeneration;
+    private long _replyGeneration;
 
     // Zero until something takes the inbound stream, and one afterwards, forever. ListenAsync
     // promises one consumer for the life of the port, and this is what a second call trips over.
@@ -88,7 +88,7 @@ internal sealed class TelnyxRelayConnection : ISpeechInputPort, ISpeechOutputPor
 
     // volatile for the same reason _session is: the read loop assigns it when the setup frame
     // arrives, and teardown reads it from another task to find the last turn.
-    private volatile SpeechTurnArbiter? _arbiter;
+    private volatile CallTurnArbiter? _arbiter;
     private bool _loggedPromptBeforeSetup;
     private bool _loggedMalformedInterrupt;
     private bool _loggedSecondSetup;
@@ -220,7 +220,7 @@ internal sealed class TelnyxRelayConnection : ISpeechInputPort, ISpeechOutputPor
                 // chat client that ignores its token altogether, such as BlockingChatClient in the test
                 // fakes — must not be able to wedge teardown forever.
                 //
-                // The last turn is read through SpeechTurnArbiter.CurrentTurn, which takes the same
+                // The last turn is read through CallTurnArbiter.CurrentTurn, which takes the same
                 // lock every writer of it takes, and never off a field directly: the arbiter's own
                 // RunPendingPrompt can reassign it from a turn's own task, off the read loop, so
                 // teardown here is no longer the only writer's own reader. That property's remarks
@@ -445,7 +445,7 @@ internal sealed class TelnyxRelayConnection : ISpeechInputPort, ISpeechOutputPor
     }
 
     /// <summary>Writes one queued item as the frame to send, or drops it.</summary>
-    /// <param name="item">What a reply queued, and the speech generation it was queued under.</param>
+    /// <param name="item">What a reply queued, and the generation it was queued under.</param>
     /// <param name="writer">The write loop's own writer, already reset for this frame.</param>
     /// <returns>
     /// <see langword="true"/> when a whole frame was written, and <see langword="false"/> to drop
@@ -461,8 +461,8 @@ internal sealed class TelnyxRelayConnection : ISpeechInputPort, ISpeechOutputPor
     private bool EncodeOutbound(OutboundItem item, Utf8JsonWriter writer)
     {
         // The write loop is the last gate, immediately before the one SendAsync call the pump
-        // makes for this connection. SpeechTurnArbiter's own check only narrows the race — it cannot
-        // stop a token already past it at the moment a barge-in raises the speech generation:
+        // makes for this connection. CallTurnArbiter's own check only narrows the race — it cannot
+        // stop a token already past it at the moment a barge-in raises the reply generation:
         // one already queued, one a bounded channel's backpressure was about to release into the gap
         // StopAsync's own drain just made, or one this loop had already dequeued and was about to
         // send. All three carry the generation they were queued under, the same counter that drain
@@ -472,19 +472,19 @@ internal sealed class TelnyxRelayConnection : ISpeechInputPort, ISpeechOutputPor
         // a turn id alone cannot tell the two apart — a generation only ever moves when a barge-in
         // actually stopped the audio.
         //
-        // >=, not ==. _speechGeneration and every item's own Generation both only ever increase,
+        // >=, not ==. _replyGeneration and every item's own Generation both only ever increase,
         // so "the highest generation a barge-in has cut off is at or above this item's own" is
         // the question that actually matches a call across two barge-ins: with == alone, an item of
         // generation N already dequeued here, then gated after a second, later barge-in raises
         // the mark to N+1, would compare N+1 != N, pass, and reach the caller — exactly the
-        // straggler this gate exists to stop. With no interrupt at all _speechGeneration stays
+        // straggler this gate exists to stop. With no interrupt at all _replyGeneration stays
         // 0, and a queued item's generation is always at least 1, so nothing is dropped that
         // this comparison would not already drop with ==. The one behaviour change is a prior
         // turn's trailing last: true frame, still queued when a later barge-in lands: it now
         // drops instead of reaching the caller, which is exactly what StopAsync's own
         // unconditional drain already does to that same frame whenever it is still queued at the
         // moment of the interrupt rather than sent moments later.
-        if (item.Generation is { } generation && Interlocked.Read(ref _speechGeneration) >= generation)
+        if (item.Generation is { } generation && Interlocked.Read(ref _replyGeneration) >= generation)
         {
             return false;
         }
@@ -577,7 +577,7 @@ internal sealed class TelnyxRelayConnection : ISpeechInputPort, ISpeechOutputPor
         // port belonging to a separate synthesizer, which is the whole of D8.
         // The two log callbacks are this vendor's own lines, bound here: the arbiter decides when a
         // prompt is held and when a further one is dropped, and names no log event of its own.
-        _arbiter = new SpeechTurnArbiter(
+        _arbiter = new CallTurnArbiter(
             _session,
             this,
             _observer,
@@ -641,7 +641,7 @@ internal sealed class TelnyxRelayConnection : ISpeechInputPort, ISpeechOutputPor
             TimeSpan.FromMilliseconds(interrupt.DurationUntilInterruptMs));
 
         // Logged last, once the raised id, the call to Interrupt, and the drain behind
-        // ISpeechOutputPort.StopAsync have all already happened, so this line is proof the whole
+        // ICallOutputPort.StopAsync have all already happened, so this line is proof the whole
         // guard is in place — never the words the caller said or heard.
         TelnyxRelayLog.InterruptReceived(_logger, session.CallId);
     }
@@ -667,7 +667,7 @@ internal sealed class TelnyxRelayConnection : ISpeechInputPort, ISpeechOutputPor
         // already stopped its own audio. Conversation Relay carries no clear frame, so anything
         // still queued here is the only audio left that could start it playing again, and this
         // queue is the only thing this process still controls.
-        Interlocked.Increment(ref _speechGeneration);
+        Interlocked.Increment(ref _replyGeneration);
 
         while (_outbound.Reader.TryRead(out _))
         {
@@ -686,7 +686,7 @@ internal sealed class TelnyxRelayConnection : ISpeechInputPort, ISpeechOutputPor
     /// honest — one object really does fill both slots — and it completes when the connection does,
     /// so an <c>await foreach</c> over it ends with the call rather than at once. A consumer that
     /// cancels its own read gets <see cref="OperationCanceledException"/> instead, which is the rule
-    /// <see cref="ISpeechInputPort.ListenAsync"/> sets for every implementation of this port.
+    /// <see cref="ICallInputPort.ListenAsync"/> sets for every implementation of this port.
     /// </para>
     /// <para>
     /// One consumer for the life of the port, and the guard is here rather than inside the iterator
@@ -694,7 +694,7 @@ internal sealed class TelnyxRelayConnection : ISpeechInputPort, ISpeechOutputPor
     /// otherwise hand back a stream that throws late, or never at all if nobody enumerates it.
     /// </para>
     /// </remarks>
-    public IAsyncEnumerable<SpeechInput> ListenAsync(CancellationToken cancellationToken = default)
+    public IAsyncEnumerable<CallInput> ListenAsync(CancellationToken cancellationToken = default)
     {
         if (Interlocked.CompareExchange(ref _listening, 1, 0) != 0)
         {
@@ -710,14 +710,14 @@ internal sealed class TelnyxRelayConnection : ISpeechInputPort, ISpeechOutputPor
     /// channel, the linked cancellation source, and the socket all belong to <c>RunAsync</c>, which
     /// releases them in its own teardown once the last turn has stopped writing — and for this
     /// vendor the call ends when that method returns, not when whoever holds the
-    /// <see cref="SpeechChannel"/> lets go of it.
+    /// <see cref="CallChannel"/> lets go of it.
     /// </remarks>
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
     /// <summary>Yields nothing, and completes when this connection ends.</summary>
     /// <param name="cancellationToken">Ends the stream early, ahead of the connection itself.</param>
     /// <returns>An empty stream, deliberately. <see cref="ListenAsync"/>'s remarks say why.</returns>
-    private async IAsyncEnumerable<SpeechInput> ListenCoreAsync(
+    private async IAsyncEnumerable<CallInput> ListenCoreAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         // Linked, so the caller's own token ends the stream too, and built from the captured
@@ -730,7 +730,7 @@ internal sealed class TelnyxRelayConnection : ISpeechInputPort, ISpeechOutputPor
         }
         catch (OperationCanceledException)
         {
-            // Which token fired is the whole difference, and ISpeechInputPort.ListenAsync settles
+            // Which token fired is the whole difference, and ICallInputPort.ListenAsync settles
             // it: the connection ending is the ordinary end of the call and completes this stream,
             // while the consumer's own cancellation throws, as any cancelled await does. Rethrown
             // through the caller's token rather than by letting the linked one out, so the exception
@@ -742,9 +742,9 @@ internal sealed class TelnyxRelayConnection : ISpeechInputPort, ISpeechOutputPor
         yield break;
     }
 
-    /// <summary>Reads the newest speech generation a barge-in has cut off, or 0 when none has.</summary>
+    /// <summary>Reads the newest reply generation a barge-in has cut off, or 0 when none has.</summary>
     /// <returns>The counter, read the same way the write loop's own gate reads it.</returns>
-    private long CurrentGeneration() => Interlocked.Read(ref _speechGeneration);
+    private long CurrentGeneration() => Interlocked.Read(ref _replyGeneration);
 }
 
 /// <summary>The relay broke the contract, and the socket must close with a reason.</summary>
@@ -757,9 +757,9 @@ internal sealed class RelayProtocolException(WebSocketCloseStatus status, string
     public WebSocketCloseStatus Status { get; } = status;
 }
 
-/// <summary>One item queued for the write loop, carrying the speech generation it was written under.</summary>
+/// <summary>One item queued for the write loop, carrying the reply generation it was written under.</summary>
 /// <param name="Generation">
-/// The speech generation <see cref="Frame"/> was queued under, or <see langword="null"/> for a
+/// The reply generation <see cref="Frame"/> was queued under, or <see langword="null"/> for a
 /// frame no reply owns — nothing writes one of those yet, but the write loop's gate only applies
 /// when a generation is present, so a future frame outside the reply lifecycle (a close handoff,
 /// for one) can opt out by carrying none. This type never reaches <see cref="TelnyxRelayJson"/>:

@@ -54,6 +54,8 @@ public sealed class GraphNoMatchTests
           edges:
             - { from: route, to: escalated, when: wants_human }
         providers:
+          call:   { kind: telnyx-relay }
+          speech: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: router }
             - { kind: openai, model: gpt-4.1-mini, as: human }

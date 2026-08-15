@@ -10,7 +10,7 @@ namespace AgentCore.Application.Ports;
 /// <para>
 /// This is the knowledge mirror of <see cref="IChatClientAdapter"/>. The document names a vendor and
 /// the host registers one adapter for each vendor it supports. <c>CompositeKnowledgeStoreFactory</c>
-/// routes each of the two fields to the adapter whose <see cref="Kind"/> matches, so a document that
+/// routes each of the two fields to the adapter whose <see cref="IVendorAdapter.Kind"/> matches, so a document that
 /// changes stores changes no code.
 /// </para>
 /// <para>
@@ -26,12 +26,8 @@ namespace AgentCore.Application.Ports;
 /// lives in the composite, so no adapter repeats it.
 /// </para>
 /// </remarks>
-public interface IKnowledgeStoreAdapter
+public interface IKnowledgeStoreAdapter : IVendorAdapter
 {
-    /// <summary>Gets the one <c>kind</c> value this adapter serves, such as <c>filesystem</c>.</summary>
-    /// <remarks>A vendor name is written by a human, so it matches without regard to case.</remarks>
-    string Kind { get; }
-
     /// <summary>Gets whether this adapter answers <see cref="IKnowledgeRetrievalPort"/>.</summary>
     bool CanServeSearch { get; }
 

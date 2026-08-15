@@ -25,6 +25,39 @@ public sealed record VendorProviderConfiguration
 }
 
 /// <summary>
+/// The vendor that carries the call, and the limits of the socket it opens.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This is the <b>media</b> plane: who carries the call and what route they dial. It is not
+/// <c>providers.speech</c>, which is recognition and synthesis, and it is not
+/// <c>providers.telephony</c>, which dials, transfers, and hangs up. A warm transfer creates a
+/// second media leg, so the control identity in <c>telephony</c> must outlive any one call's
+/// socket; this block is per-socket and cannot serve that.
+/// </para>
+/// <para>
+/// The three limits are written in whole seconds and bytes rather than as duration strings. The
+/// document carries no other duration, so there was no convention to follow, and integers need no
+/// parser and validate with a plain <c>minimum</c>. Each name carries its unit so nothing is
+/// guessed. <c>-1</c> on either timeout means <see cref="System.Threading.Timeout.InfiniteTimeSpan"/>.
+/// </para>
+/// </remarks>
+public sealed record CallProviderConfiguration
+{
+    /// <summary>Gets the vendor that carries the call, such as <c>telnyx-relay</c>.</summary>
+    public required string Kind { get; init; }
+
+    /// <summary>Gets how long the socket waits with no inbound frame before ending the call, or null for the adapter's default.</summary>
+    public int? IdleTimeoutSeconds { get; init; }
+
+    /// <summary>Gets how long teardown gives a stuck task before moving on, or null for the adapter's default.</summary>
+    public int? CloseTimeoutSeconds { get; init; }
+
+    /// <summary>Gets the largest inbound frame the socket accepts, in bytes, or null for the adapter's default.</summary>
+    public int? MaxFrameBytes { get; init; }
+}
+
+/// <summary>
 /// The knowledge provider: one adapter for each knowledge port, and what those adapters read.
 /// </summary>
 /// <remarks>
@@ -154,10 +187,24 @@ public sealed record ProvidersConfiguration
     /// <summary>Gets the language models, in document order.</summary>
     public EquatableList<LlmProviderConfiguration> Llm { get; init; } = EquatableList<LlmProviderConfiguration>.Empty;
 
+    /// <summary>Gets the vendor that carries the call and owns its inbound route, or <see langword="null"/>.</summary>
+    /// <remarks>
+    /// The media plane. This is the pipe the audio travels down, and the one seam of the three that
+    /// owns an inbound HTTP route.
+    /// </remarks>
+    public CallProviderConfiguration? Call { get; init; }
+
     /// <summary>Gets the speech provider, or <see langword="null"/>.</summary>
+    /// <remarks>
+    /// Recognition and synthesis. Not the pipe — see <see cref="Call"/>.
+    /// </remarks>
     public VendorProviderConfiguration? Speech { get; init; }
 
     /// <summary>Gets the telephony provider, or <see langword="null"/>.</summary>
+    /// <remarks>
+    /// Dial, transfer, and hang up. Not the pipe — see <see cref="Call"/>. A warm transfer creates a
+    /// second media leg, so this identity outlives any one of them.
+    /// </remarks>
     public VendorProviderConfiguration? Telephony { get; init; }
 
     /// <summary>Gets the moderation provider, or <see langword="null"/>.</summary>
