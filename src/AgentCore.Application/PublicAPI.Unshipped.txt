@@ -919,3 +919,96 @@ static AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration
 static AgentCore.Application.Diagnostics.TelemetrySessionFactory.StartAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.ITelemetryAdapter!>! adapters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.ITelemetrySession?>
 static readonly AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.DefaultMeters -> AgentCore.Application.Configuration.Schema.EquatableList<string!>!
 static readonly AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.DefaultSources -> AgentCore.Application.Configuration.Schema.EquatableList<string!>!
+abstract AgentCore.Application.Speech.SpeechInput.<Clone>$() -> AgentCore.Application.Speech.SpeechInput!
+AgentCore.Application.Ports.ISpeechChannelFactory
+AgentCore.Application.Ports.ISpeechChannelFactory.OpenAsync(AgentCore.Application.Speech.SpeechChannelContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Speech.SpeechChannel!>
+AgentCore.Application.Ports.ISpeechInputPort
+AgentCore.Application.Ports.ISpeechInputPort.ListenAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<AgentCore.Application.Speech.SpeechInput!>!
+AgentCore.Application.Ports.ISpeechOutputPort
+AgentCore.Application.Ports.ISpeechOutputPort.CompleteAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Ports.ISpeechOutputPort.SpeakAsync(string! fragment, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Ports.ISpeechOutputPort.StopAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Speech.SpeechChannel
+AgentCore.Application.Speech.SpeechChannel.<Clone>$() -> AgentCore.Application.Speech.SpeechChannel!
+AgentCore.Application.Speech.SpeechChannel.Deconstruct(out AgentCore.Application.Ports.ISpeechInputPort! Input, out AgentCore.Application.Ports.ISpeechOutputPort! Output) -> void
+AgentCore.Application.Speech.SpeechChannel.DisposeAsync() -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Speech.SpeechChannel.Equals(AgentCore.Application.Speech.SpeechChannel? other) -> bool
+AgentCore.Application.Speech.SpeechChannel.Input.get -> AgentCore.Application.Ports.ISpeechInputPort!
+AgentCore.Application.Speech.SpeechChannel.Input.init -> void
+AgentCore.Application.Speech.SpeechChannel.Output.get -> AgentCore.Application.Ports.ISpeechOutputPort!
+AgentCore.Application.Speech.SpeechChannel.Output.init -> void
+AgentCore.Application.Speech.SpeechChannel.SpeechChannel(AgentCore.Application.Ports.ISpeechInputPort! Input, AgentCore.Application.Ports.ISpeechOutputPort! Output) -> void
+AgentCore.Application.Speech.SpeechChannelContext
+AgentCore.Application.Speech.SpeechChannelContext.<Clone>$() -> AgentCore.Application.Speech.SpeechChannelContext!
+AgentCore.Application.Speech.SpeechChannelContext.CallId.get -> string!
+AgentCore.Application.Speech.SpeechChannelContext.CallId.init -> void
+AgentCore.Application.Speech.SpeechChannelContext.CustomParameters.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>?
+AgentCore.Application.Speech.SpeechChannelContext.CustomParameters.init -> void
+AgentCore.Application.Speech.SpeechChannelContext.Deconstruct(out string! CallId, out System.Collections.Generic.IReadOnlyDictionary<string!, string!>? CustomParameters) -> void
+AgentCore.Application.Speech.SpeechChannelContext.Equals(AgentCore.Application.Speech.SpeechChannelContext? other) -> bool
+AgentCore.Application.Speech.SpeechChannelContext.SpeechChannelContext(string! CallId, System.Collections.Generic.IReadOnlyDictionary<string!, string!>? CustomParameters) -> void
+AgentCore.Application.Speech.SpeechInput
+AgentCore.Application.Speech.SpeechInput.Barge
+AgentCore.Application.Speech.SpeechInput.Barge.Barge(string! HeardText, System.TimeSpan PlayedDuration) -> void
+AgentCore.Application.Speech.SpeechInput.Barge.Deconstruct(out string! HeardText, out System.TimeSpan PlayedDuration) -> void
+AgentCore.Application.Speech.SpeechInput.Barge.Equals(AgentCore.Application.Speech.SpeechInput.Barge? other) -> bool
+AgentCore.Application.Speech.SpeechInput.Barge.HeardText.get -> string!
+AgentCore.Application.Speech.SpeechInput.Barge.HeardText.init -> void
+AgentCore.Application.Speech.SpeechInput.Barge.PlayedDuration.get -> System.TimeSpan
+AgentCore.Application.Speech.SpeechInput.Barge.PlayedDuration.init -> void
+AgentCore.Application.Speech.SpeechInput.Keypress
+AgentCore.Application.Speech.SpeechInput.Keypress.Deconstruct(out string! Key) -> void
+AgentCore.Application.Speech.SpeechInput.Keypress.Equals(AgentCore.Application.Speech.SpeechInput.Keypress? other) -> bool
+AgentCore.Application.Speech.SpeechInput.Keypress.Key.get -> string!
+AgentCore.Application.Speech.SpeechInput.Keypress.Key.init -> void
+AgentCore.Application.Speech.SpeechInput.Keypress.Keypress(string! Key) -> void
+AgentCore.Application.Speech.SpeechInput.SpeechInput(AgentCore.Application.Speech.SpeechInput! original) -> void
+AgentCore.Application.Speech.SpeechInput.Utterance
+AgentCore.Application.Speech.SpeechInput.Utterance.Deconstruct(out string! Text, out string! Language, out bool IsFinal) -> void
+AgentCore.Application.Speech.SpeechInput.Utterance.Equals(AgentCore.Application.Speech.SpeechInput.Utterance? other) -> bool
+AgentCore.Application.Speech.SpeechInput.Utterance.IsFinal.get -> bool
+AgentCore.Application.Speech.SpeechInput.Utterance.IsFinal.init -> void
+AgentCore.Application.Speech.SpeechInput.Utterance.Language.get -> string!
+AgentCore.Application.Speech.SpeechInput.Utterance.Language.init -> void
+AgentCore.Application.Speech.SpeechInput.Utterance.Text.get -> string!
+AgentCore.Application.Speech.SpeechInput.Utterance.Text.init -> void
+AgentCore.Application.Speech.SpeechInput.Utterance.Utterance(string! Text, string! Language, bool IsFinal) -> void
+override AgentCore.Application.Speech.SpeechChannel.Equals(object? obj) -> bool
+override AgentCore.Application.Speech.SpeechChannel.GetHashCode() -> int
+override AgentCore.Application.Speech.SpeechChannel.ToString() -> string!
+override AgentCore.Application.Speech.SpeechChannelContext.Equals(object? obj) -> bool
+override AgentCore.Application.Speech.SpeechChannelContext.GetHashCode() -> int
+override AgentCore.Application.Speech.SpeechChannelContext.ToString() -> string!
+override AgentCore.Application.Speech.SpeechInput.Barge.<Clone>$() -> AgentCore.Application.Speech.SpeechInput.Barge!
+override AgentCore.Application.Speech.SpeechInput.Barge.Equals(object? obj) -> bool
+override AgentCore.Application.Speech.SpeechInput.Barge.GetHashCode() -> int
+override AgentCore.Application.Speech.SpeechInput.Barge.ToString() -> string!
+override AgentCore.Application.Speech.SpeechInput.Equals(object? obj) -> bool
+override AgentCore.Application.Speech.SpeechInput.GetHashCode() -> int
+override AgentCore.Application.Speech.SpeechInput.Keypress.<Clone>$() -> AgentCore.Application.Speech.SpeechInput.Keypress!
+override AgentCore.Application.Speech.SpeechInput.Keypress.Equals(object? obj) -> bool
+override AgentCore.Application.Speech.SpeechInput.Keypress.GetHashCode() -> int
+override AgentCore.Application.Speech.SpeechInput.Keypress.ToString() -> string!
+override AgentCore.Application.Speech.SpeechInput.ToString() -> string!
+override AgentCore.Application.Speech.SpeechInput.Utterance.<Clone>$() -> AgentCore.Application.Speech.SpeechInput.Utterance!
+override AgentCore.Application.Speech.SpeechInput.Utterance.Equals(object? obj) -> bool
+override AgentCore.Application.Speech.SpeechInput.Utterance.GetHashCode() -> int
+override AgentCore.Application.Speech.SpeechInput.Utterance.ToString() -> string!
+override sealed AgentCore.Application.Speech.SpeechInput.Barge.Equals(AgentCore.Application.Speech.SpeechInput? other) -> bool
+override sealed AgentCore.Application.Speech.SpeechInput.Keypress.Equals(AgentCore.Application.Speech.SpeechInput? other) -> bool
+override sealed AgentCore.Application.Speech.SpeechInput.Utterance.Equals(AgentCore.Application.Speech.SpeechInput? other) -> bool
+static AgentCore.Application.Speech.SpeechChannel.operator !=(AgentCore.Application.Speech.SpeechChannel? left, AgentCore.Application.Speech.SpeechChannel? right) -> bool
+static AgentCore.Application.Speech.SpeechChannel.operator ==(AgentCore.Application.Speech.SpeechChannel? left, AgentCore.Application.Speech.SpeechChannel? right) -> bool
+static AgentCore.Application.Speech.SpeechChannelContext.operator !=(AgentCore.Application.Speech.SpeechChannelContext? left, AgentCore.Application.Speech.SpeechChannelContext? right) -> bool
+static AgentCore.Application.Speech.SpeechChannelContext.operator ==(AgentCore.Application.Speech.SpeechChannelContext? left, AgentCore.Application.Speech.SpeechChannelContext? right) -> bool
+static AgentCore.Application.Speech.SpeechInput.Barge.operator !=(AgentCore.Application.Speech.SpeechInput.Barge? left, AgentCore.Application.Speech.SpeechInput.Barge? right) -> bool
+static AgentCore.Application.Speech.SpeechInput.Barge.operator ==(AgentCore.Application.Speech.SpeechInput.Barge? left, AgentCore.Application.Speech.SpeechInput.Barge? right) -> bool
+static AgentCore.Application.Speech.SpeechInput.Keypress.operator !=(AgentCore.Application.Speech.SpeechInput.Keypress? left, AgentCore.Application.Speech.SpeechInput.Keypress? right) -> bool
+static AgentCore.Application.Speech.SpeechInput.Keypress.operator ==(AgentCore.Application.Speech.SpeechInput.Keypress? left, AgentCore.Application.Speech.SpeechInput.Keypress? right) -> bool
+static AgentCore.Application.Speech.SpeechInput.operator !=(AgentCore.Application.Speech.SpeechInput? left, AgentCore.Application.Speech.SpeechInput? right) -> bool
+static AgentCore.Application.Speech.SpeechInput.operator ==(AgentCore.Application.Speech.SpeechInput? left, AgentCore.Application.Speech.SpeechInput? right) -> bool
+static AgentCore.Application.Speech.SpeechInput.Utterance.operator !=(AgentCore.Application.Speech.SpeechInput.Utterance? left, AgentCore.Application.Speech.SpeechInput.Utterance? right) -> bool
+static AgentCore.Application.Speech.SpeechInput.Utterance.operator ==(AgentCore.Application.Speech.SpeechInput.Utterance? left, AgentCore.Application.Speech.SpeechInput.Utterance? right) -> bool
+virtual AgentCore.Application.Speech.SpeechInput.EqualityContract.get -> System.Type!
+virtual AgentCore.Application.Speech.SpeechInput.Equals(AgentCore.Application.Speech.SpeechInput? other) -> bool
+virtual AgentCore.Application.Speech.SpeechInput.PrintMembers(System.Text.StringBuilder! builder) -> bool

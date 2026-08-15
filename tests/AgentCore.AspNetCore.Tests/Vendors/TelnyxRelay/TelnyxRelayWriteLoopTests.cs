@@ -1,4 +1,5 @@
 using System.Net.WebSockets;
+using System.Text.Json;
 using AgentCore.AspNetCore.Tests.Fakes;
 using Microsoft.Extensions.Logging;
 using Xunit;
@@ -141,5 +142,67 @@ public sealed class TelnyxRelayWriteLoopTests
         var close = harness.Socket.CloseSent;
         Assert.NotNull(close);
         Assert.Equal(WebSocketCloseStatus.InternalServerError, close!.Value.Status);
+    }
+
+    [Fact(Timeout = 30_000)]
+    public async Task ManyFragmentsInOneTurn_EachArriveIntactWhenTheWriterIsReused()
+    {
+        // A guard, not a red-first test: the behaviour it pins already holds and must keep holding.
+        // The write loop serializes every frame through one buffer and one JSON writer it resets
+        // between frames, and the only defect that reuse could introduce is a frame carrying
+        // another frame's bytes — a leftover tail after a short frame, a truncation, or two
+        // documents in one message. Three spoken fragments in one turn is the smallest reply that
+        // would show any of the three, and the assertions below read each frame back as JSON rather
+        // than counting sends, so a corrupted frame fails here instead of passing as "four sends".
+        using SequencedChatClient reply = new("alpha bravo charlie");
+        await using var harness = await RelayConnectionHarness.StartAsync(TelnyxRelayTurnTests.PolicyYaml, reply);
+
+        using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(
+            deadline.Token, TestContext.Current.CancellationToken);
+
+        harness.Socket.Queue(RelayFrames.Setup(callSessionId: "call-reused-writer"));
+        harness.Socket.Queue(RelayFrames.Prompt("hi", last: true));
+
+        try
+        {
+            // The reply closes on the empty last: true frame CompleteAsync queues, so waiting for a
+            // fourth send waits for the whole turn rather than timing it. Queueing the close before
+            // that frame arrived would cancel the turn mid-stream and cut the reply short.
+            while (harness.Socket.Sent.Count < 4)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(10), bounded.Token);
+            }
+        }
+        catch (OperationCanceledException) when (deadline.IsCancellationRequested)
+        {
+            Assert.Fail("the reply never reached its last frame within ten seconds.");
+        }
+
+        var sent = harness.Socket.Sent;
+        Assert.Equal(4, sent.Count);
+
+        List<string> tokens = [];
+        List<bool> lasts = [];
+
+        foreach (var frame in sent)
+        {
+            // Parsed, never substring-matched. A buffer whose written count survived a reset would
+            // put a leftover tail after the document, which JsonDocument.Parse refuses outright,
+            // and a writer reset out of order would leave the document incomplete.
+            using var document = JsonDocument.Parse(frame);
+            var root = document.RootElement;
+
+            Assert.Equal("text", root.GetProperty("type").GetString());
+            tokens.Add(root.GetProperty("token").GetString()!);
+            lasts.Add(root.GetProperty("last").GetBoolean());
+        }
+
+        // Distinct tokens, in the order the model streamed them, then the empty closing frame.
+        string[] expectedTokens = ["alpha", " bravo", " charlie", string.Empty];
+        bool[] expectedLast = [false, false, false, true];
+
+        Assert.Equal(expectedTokens, tokens);
+        Assert.Equal(expectedLast, lasts);
     }
 }
