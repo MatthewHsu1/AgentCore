@@ -21,6 +21,7 @@ namespace AgentCore.Evals;
 /// </para>
 /// </remarks>
 [Trait("Category", "Gate")]
+[Collection(EvalStoreCollection.Name)]
 public sealed class BaselineGateTests
 {
     private const string MeasuredPath = "eval-results/measured.json";

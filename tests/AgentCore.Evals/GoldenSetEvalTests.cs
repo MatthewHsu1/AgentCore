@@ -25,6 +25,7 @@ namespace AgentCore.Evals;
 /// renamed document, a re-chunked knowledge base, a new embedding model, and a lower search limit.
 /// </para>
 /// </remarks>
+[Collection(EvalStoreCollection.Name)]
 public sealed class GoldenSetEvalTests(DatasetFixture fixture) : IClassFixture<DatasetFixture>
 {
     private const string GroundedInstruction =
