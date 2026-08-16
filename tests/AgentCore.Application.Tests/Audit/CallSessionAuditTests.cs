@@ -370,7 +370,8 @@ public sealed class CallSessionAuditTests
             new GuardEvaluator(compiled.Configuration.Guards),
             CallSessionFactory.CreateExtractor(compiled, chatClients),
             timeProvider,
-            auditSink,
-            logger);
+            logger,
+            moderation: null,
+            CallObservers.Standard(auditSink, logger));
     }
 }

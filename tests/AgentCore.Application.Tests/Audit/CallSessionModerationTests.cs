@@ -349,8 +349,8 @@ public sealed class CallSessionModerationTests
             new GuardEvaluator(compiled.Configuration.Guards),
             CallSessionFactory.CreateExtractor(compiled, chatClients),
             timeProvider: null,
-            sink,
             logger,
-            moderation is null ? null : new PromptModerator(moderation));
+            moderation is null ? null : new PromptModerator(moderation),
+            CallObservers.Standard(sink, logger));
     }
 }

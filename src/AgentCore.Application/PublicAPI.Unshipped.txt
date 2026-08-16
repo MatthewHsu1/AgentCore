@@ -661,12 +661,13 @@ AgentCore.Application.Runtime.CallEventKind.PromptFlagged = 1 -> AgentCore.Appli
 AgentCore.Application.Runtime.CallEventKind.ReplyInterrupted = 8 -> AgentCore.Application.Runtime.CallEventKind
 AgentCore.Application.Runtime.CallEventKind.ToolFailed = 4 -> AgentCore.Application.Runtime.CallEventKind
 AgentCore.Application.Runtime.CallEventKind.TurnCompleted = 7 -> AgentCore.Application.Runtime.CallEventKind
+AgentCore.Application.Runtime.CallObservers
 AgentCore.Application.Runtime.CallSession
 AgentCore.Application.Runtime.CallSession.CallId.get -> string!
 AgentCore.Application.Runtime.CallSession.Compiled.get -> AgentCore.Application.Configuration.Compilation.CompiledAgent!
 AgentCore.Application.Runtime.CallSession.EndCall(AgentCore.Domain.Audit.CallEndReason reason) -> bool
 AgentCore.Application.Runtime.CallSessionFactory
-AgentCore.Application.Runtime.CallSessionFactory.CallSessionFactory(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Configuration.Validation.IGuardEvaluator! guards, AgentCore.Application.State.StateExtractor? extractor = null, System.TimeProvider? timeProvider = null, AgentCore.Application.Ports.IAuditSinkPort? auditSink = null, Microsoft.Extensions.Logging.ILogger? logger = null, AgentCore.Application.Evaluation.PromptModerator? moderation = null, System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ICallObserver!>? observers = null) -> void
+AgentCore.Application.Runtime.CallSessionFactory.CallSessionFactory(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Configuration.Validation.IGuardEvaluator! guards, AgentCore.Application.State.StateExtractor? extractor = null, System.TimeProvider? timeProvider = null, Microsoft.Extensions.Logging.ILogger? logger = null, AgentCore.Application.Evaluation.PromptModerator? moderation = null, System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ICallObserver!>? observers = null) -> void
 AgentCore.Application.Runtime.CallSessionFactory.Create(string? callId = null) -> AgentCore.Application.Runtime.CallSession!
 AgentCore.Application.Runtime.CallSession.Interrupt(string! utteranceUntilInterrupt, System.TimeSpan durationUntilInterrupt, bool cutsRunningTurn = true) -> bool
 AgentCore.Application.Runtime.CallSession.IsComplete.get -> bool
@@ -1072,6 +1073,7 @@ static AgentCore.Application.Llm.CompositeChatClientFactory.CreateAsync(AgentCor
 static AgentCore.Application.Providers.VendorAdapterSelector.Select<TAdapter>(string! kind, System.Collections.Generic.IReadOnlyList<TAdapter>! adapters, AgentCore.Application.Providers.VendorSeam seam) -> TAdapter
 static AgentCore.Application.Providers.VendorSeam.operator ==(AgentCore.Application.Providers.VendorSeam left, AgentCore.Application.Providers.VendorSeam right) -> bool
 static AgentCore.Application.Providers.VendorSeam.operator !=(AgentCore.Application.Providers.VendorSeam left, AgentCore.Application.Providers.VendorSeam right) -> bool
+static AgentCore.Application.Runtime.CallObservers.Standard(AgentCore.Application.Ports.IAuditSinkPort? auditSink, Microsoft.Extensions.Logging.ILogger? logger, System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ICallObserver!>? hostObservers = null) -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.ICallObserver!>!
 static AgentCore.Application.Runtime.CallSessionFactory.CreateExtractor(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Ports.IChatClientFactory! chatClients) -> AgentCore.Application.State.StateExtractor?
 static AgentCore.Application.Runtime.CallStateScope.Enter(AgentCore.Application.State.StateDocument! state) -> System.IDisposable!
 static AgentCore.Application.Runtime.CallStateScope.Snapshot() -> System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>!

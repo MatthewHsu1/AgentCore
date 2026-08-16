@@ -1,7 +1,5 @@
-using AgentCore.Application.Audit;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.State;
@@ -24,12 +22,11 @@ namespace AgentCore.Application.Runtime;
 /// so the host owns the registration and this class owns nothing but the seam.
 /// </para>
 /// <para>
-/// It is also where the observers of a call are assembled. The host still binds an
-/// <see cref="IAuditSinkPort"/> and an <see cref="ILogger"/> and knows nothing of
-/// <see cref="ICallObserver"/>; this factory turns them into the audit, telemetry, and logging
-/// readings of one fact. The observers themselves are shared and hold no per-call state, but each
-/// session gets a <see cref="CallObserverDispatcher"/> of its own, because the dispatcher's ordering
-/// guarantee is per instance and a shared one would make every call queue behind every other.
+/// It does not assemble the observers of a call. <see cref="CallObservers.Standard"/> does, and the
+/// finished list is handed in, so this factory holds no opinion about which readings exist or in
+/// what order. The observers are shared and hold no per-call state, but each session gets a
+/// <see cref="CallObserverDispatcher"/> of its own, because the dispatcher's ordering guarantee is
+/// per instance and a shared one would make every call queue behind every other.
 /// </para>
 /// </remarks>
 public sealed class CallSessionFactory : ICallSessionFactory
@@ -53,13 +50,10 @@ public sealed class CallSessionFactory : ICallSessionFactory
     /// The clock the reserved <c>callDurationSeconds</c> slot reads, or <see langword="null"/> for
     /// <see cref="TimeProvider.System"/>.
     /// </param>
-    /// <param name="auditSink">
-    /// The sink the chain of D23 is appended to, or <see langword="null"/> for a sink that writes
-    /// nowhere. One sink serves every call, because a session names itself on every event.
-    /// </param>
     /// <param name="logger">
-    /// The logger the three "log once" rows of section 8.7 write to, or <see langword="null"/> for a
-    /// logger that writes nowhere. The library never throws for want of one.
+    /// The logger the <see cref="CallObserverDispatcher"/> of each session reports a failed observer
+    /// to, or <see langword="null"/> for a logger that writes nowhere. The library never throws for
+    /// want of one.
     /// </param>
     /// <param name="moderation">
     /// The moderator that reads what the caller said before the model runs, or
@@ -68,16 +62,16 @@ public sealed class CallSessionFactory : ICallSessionFactory
     /// per-call state, so one instance serves every call.
     /// </param>
     /// <param name="observers">
-    /// The host's own readings of a call, or <see langword="null"/> for a host that adds none. They
-    /// are offered every fact after the three this library keeps, and each one holds no per-call
-    /// state, so one instance serves every call.
+    /// The readings of a call, in the order the dispatcher offers each fact to them, or
+    /// <see langword="null"/> for a host that wants none at all.
+    /// <see cref="CallObservers.Standard"/> builds the list this library expects. Each observer
+    /// holds no per-call state, so one instance serves every call.
     /// </param>
     public CallSessionFactory(
         CompiledAgent compiled,
         IGuardEvaluator guards,
         StateExtractor? extractor = null,
         TimeProvider? timeProvider = null,
-        IAuditSinkPort? auditSink = null,
         ILogger? logger = null,
         PromptModerator? moderation = null,
         IEnumerable<ICallObserver>? observers = null)
@@ -92,35 +86,10 @@ public sealed class CallSessionFactory : ICallSessionFactory
         _logger = logger;
         _moderation = moderation;
 
-        // <b>The sink goes LAST.</b> The dispatcher offers one fact to each observer in turn, in
-        // this order, and that order is what a reading of the same fact costs the turn: the counters
-        // of section 8.6 and the rows of section 8.7 are taken above the enqueue, exactly as the old
-        // turn loop took them. The counter and the line always answer at once; a sink is the one that
-        // may not, and a durable insert is measured at 13 ms p50 and 32 ms p99 in section 7.
-        //
-        // What the order no longer decides is what a LATER fact costs. Each observer has a tail of
-        // its own inside the dispatcher, so a sink still writing an earlier row holds up nothing but
-        // its own next row: telemetry and logging keep their old synchronous cost on every event
-        // whatever the sink is doing, and the remarks on TelemetryCallObserver still hold that a kind
-        // is counted whatever the sink then does with it. Order is guaranteed per observer, which is
-        // all the chain of D23 needs, and the slow one pays for itself alone, off the turn.
-        //
-        // A host that bound no sink gets no audit observer at all: there is nothing to write to, so
-        // nothing is built rather than a sink that drops what it is handed. Both other readings are
-        // always present, because the counters and the rows are this library's own and no host opts
-        // out of them.
-        //
-        // <b>The host's own observers go after all three.</b> An observer bound through
-        // AgentCoreOptions.UseObservers is code this library did not write and cannot measure, and
-        // the head of a delivery — the work before the first await — is the one part every observer
-        // still runs one after another. Putting the host last is what keeps the counters, the rows,
-        // and the enqueue at exactly the cost they had before any host bound anything. Past that head
-        // the order buys nothing and costs nothing: each observer has a tail of its own.
-        ICallObserver[] library = auditSink is null
-            ? [new TelemetryCallObserver(), new LoggingCallObserver(logger)]
-            : [new TelemetryCallObserver(), new LoggingCallObserver(logger), new AuditCallObserver(auditSink)];
-
-        _observers = observers is null ? library : [.. library, .. observers];
+        // Copied, not held: the list is the caller's, and a caller that keeps adding to it after this
+        // must not change what a session already built. The order is the caller's too — see
+        // CallObservers.Standard, which is where the cost of that order is argued.
+        _observers = observers is null ? [] : [.. observers];
     }
 
     /// <summary>Builds the extractor one document declares.</summary>

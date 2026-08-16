@@ -358,7 +358,7 @@ public sealed class CallSessionInterruptionTests
             compiled,
             new GuardEvaluator(compiled.Configuration.Guards),
             CallSessionFactory.CreateExtractor(compiled, chatClients),
-            auditSink: sink).Create();
+            observers: CallObservers.Standard(sink, logger: null)).Create();
 
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
         using var bounded = CancellationTokenSource.CreateLinkedTokenSource(
@@ -451,7 +451,7 @@ public sealed class CallSessionInterruptionTests
             compiled,
             new GuardEvaluator(compiled.Configuration.Guards),
             CallSessionFactory.CreateExtractor(compiled, chatClients),
-            auditSink: auditSink);
+            observers: CallObservers.Standard(auditSink, logger: null));
 
         return factory.Create();
     }

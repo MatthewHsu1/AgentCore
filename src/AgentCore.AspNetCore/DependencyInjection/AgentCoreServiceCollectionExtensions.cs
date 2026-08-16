@@ -234,15 +234,19 @@ public static class AgentCoreServiceCollectionExtensions
             ? new QueuedAuditSink(store, loggers.CreateLogger<QueuedAuditSink>())
             : null;
 
+        // Composition, and so it happens here rather than inside the factory. The host bound a sink
+        // and a logger and never named an ICallObserver; this is the line that turns those bindings
+        // into the readings of a call, in the order CallObservers.Standard argues for.
+        var sessionLogger = loggers.CreateLogger<CallSession>();
+
         CallSessionFactory sessions = new(
             compiled,
             guards,
             CallSessionFactory.CreateExtractor(compiled, chatClients),
             options.TimeProvider,
-            auditSink,
-            loggers.CreateLogger<CallSession>(),
+            sessionLogger,
             PromptModerator.FromRegistry(evaluators),
-            options.Observers);
+            CallObservers.Standard(auditSink, sessionLogger, options.Observers));
 
         services.AddSingleton(configuration);
         services.AddSingleton(secrets);
