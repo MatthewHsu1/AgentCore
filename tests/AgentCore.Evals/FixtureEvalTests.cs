@@ -22,6 +22,7 @@ namespace AgentCore.Evals;
 /// when the golden-set gate on a deployment branch goes red, this result says which of the two broke.
 /// </para>
 /// </remarks>
+[Collection(EvalStoreCollection.Name)]
 public sealed class FixtureEvalTests
 {
     [Theory]
