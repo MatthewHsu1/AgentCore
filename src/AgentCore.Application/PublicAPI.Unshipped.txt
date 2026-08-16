@@ -6,6 +6,14 @@ AgentCore.Application.Audit.InMemoryAuditSink.AppendAsync(AgentCore.Domain.Audit
 AgentCore.Application.Audit.InMemoryAuditSink.Events.get -> System.Collections.Generic.IReadOnlyList<AgentCore.Domain.Audit.AuditEvent!>!
 AgentCore.Application.Audit.InMemoryAuditSink.EventsOf(string! callId) -> System.Collections.Generic.IReadOnlyList<AgentCore.Domain.Audit.AuditEvent!>!
 AgentCore.Application.Audit.InMemoryAuditSink.InMemoryAuditSink() -> void
+AgentCore.Application.Audit.QueuedAuditSink
+AgentCore.Application.Audit.QueuedAuditSink.AppendAsync(AgentCore.Domain.Audit.AuditEvent! auditEvent, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Audit.QueuedAuditSink.Dispose() -> void
+AgentCore.Application.Audit.QueuedAuditSink.DisposeAsync() -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Audit.QueuedAuditSink.FlushAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Audit.QueuedAuditSink.QueuedAuditSink(AgentCore.Application.Ports.IAuditSinkPort! inner, Microsoft.Extensions.Logging.ILogger? logger = null, int capacity = 10000, int batchSize = 100) -> void
+const AgentCore.Application.Audit.QueuedAuditSink.DefaultBatchSize = 100 -> int
+const AgentCore.Application.Audit.QueuedAuditSink.DefaultCapacity = 10000 -> int
 AgentCore.Application.Call.CallChannel
 AgentCore.Application.Call.CallChannel.<Clone>$() -> AgentCore.Application.Call.CallChannel!
 AgentCore.Application.Call.CallChannel.CallChannel(AgentCore.Application.Ports.ICallInputPort! Input, AgentCore.Application.Ports.ICallOutputPort! Output) -> void
@@ -564,6 +572,7 @@ AgentCore.Application.Ports.IAgentToolFactory
 AgentCore.Application.Ports.IAgentToolFactory.Create(AgentCore.Application.Configuration.Schema.ToolConfiguration! tool) -> Microsoft.Extensions.AI.AITool?
 AgentCore.Application.Ports.IAuditSinkPort
 AgentCore.Application.Ports.IAuditSinkPort.AppendAsync(AgentCore.Domain.Audit.AuditEvent! auditEvent, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Ports.IAuditSinkPort.AppendManyAsync(System.Collections.Generic.IReadOnlyList<AgentCore.Domain.Audit.AuditEvent!>! auditEvents, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Ports.ICallChannelFactory
 AgentCore.Application.Ports.ICallChannelFactory.OpenAsync(AgentCore.Application.Call.CallChannelContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Call.CallChannel!>
 AgentCore.Application.Ports.ICallInputPort
@@ -657,7 +666,7 @@ AgentCore.Application.Runtime.CallSession.CallId.get -> string!
 AgentCore.Application.Runtime.CallSession.Compiled.get -> AgentCore.Application.Configuration.Compilation.CompiledAgent!
 AgentCore.Application.Runtime.CallSession.EndCall(AgentCore.Domain.Audit.CallEndReason reason) -> bool
 AgentCore.Application.Runtime.CallSessionFactory
-AgentCore.Application.Runtime.CallSessionFactory.CallSessionFactory(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Configuration.Validation.IGuardEvaluator! guards, AgentCore.Application.State.StateExtractor? extractor = null, System.TimeProvider? timeProvider = null, AgentCore.Application.Ports.IAuditSinkPort? auditSink = null, Microsoft.Extensions.Logging.ILogger? logger = null, AgentCore.Application.Evaluation.PromptModerator? moderation = null) -> void
+AgentCore.Application.Runtime.CallSessionFactory.CallSessionFactory(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Configuration.Validation.IGuardEvaluator! guards, AgentCore.Application.State.StateExtractor? extractor = null, System.TimeProvider? timeProvider = null, AgentCore.Application.Ports.IAuditSinkPort? auditSink = null, Microsoft.Extensions.Logging.ILogger? logger = null, AgentCore.Application.Evaluation.PromptModerator? moderation = null, System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ICallObserver!>? observers = null) -> void
 AgentCore.Application.Runtime.CallSessionFactory.Create(string? callId = null) -> AgentCore.Application.Runtime.CallSession!
 AgentCore.Application.Runtime.CallSession.Interrupt(string! utteranceUntilInterrupt, System.TimeSpan durationUntilInterrupt, bool cutsRunningTurn = true) -> bool
 AgentCore.Application.Runtime.CallSession.IsComplete.get -> bool

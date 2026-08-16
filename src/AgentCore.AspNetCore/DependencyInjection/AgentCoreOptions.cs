@@ -26,6 +26,7 @@ namespace AgentCore.AspNetCore.DependencyInjection;
 public sealed class AgentCoreOptions
 {
     private readonly List<Func<AgentCoreStartup, IAgentToolFactory>> _toolFactories = [];
+    private readonly List<ICallObserver> _observers = [];
 
     /// <summary>Gets the path of the configuration document, or <see langword="null"/>.</summary>
     /// <remarks>
@@ -113,6 +114,9 @@ public sealed class AgentCoreOptions
 
     /// <summary>Gets the extra tool factory links, in the order the composite asks them.</summary>
     internal IReadOnlyList<Func<AgentCoreStartup, IAgentToolFactory>> ToolFactories => _toolFactories;
+
+    /// <summary>Gets the observers the host registered, in the order it registered them.</summary>
+    internal IReadOnlyList<ICallObserver> Observers => _observers;
 
     /// <summary>Binds the vendor adapters, and the document picks one by each entry's <c>kind</c>.</summary>
     /// <param name="adapters">One adapter for each vendor this host supports.</param>
@@ -311,6 +315,49 @@ public sealed class AgentCoreOptions
     {
         ArgumentNullException.ThrowIfNull(adapters);
         Telemetry = adapters;
+        return this;
+    }
+
+    /// <summary>Binds the host's own readings of a call, beside the three this library keeps.</summary>
+    /// <param name="observers">
+    /// What the host wants told about every call. Each one takes every fact, in the order the call
+    /// produced it. An empty set is legal and registers nothing.
+    /// </param>
+    /// <returns>These options, so a host chains its calls.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is the socket behind <see cref="ICallObserver"/>. That port is the one seam between the
+    /// turn loop and everything that watches it, and this method is how a host reaches it: the audit
+    /// chain of D23, the counters of section 8.6, and the "log once" rows of section 8.7 are the
+    /// library's own three, and a host adds a fourth without touching any of them.
+    /// </para>
+    /// <para>
+    /// <b>It adds rather than replaces.</b> Calling it twice keeps both registrations, so a host
+    /// composes its readings across whatever code configures the container. Nothing here replaces
+    /// <see cref="AuditSink"/>: that binds the store the chain is written to, and this binds a reader
+    /// of the same facts.
+    /// </para>
+    /// <para>
+    /// The host's observers are offered every fact <b>after</b> the library's own, which is what keeps
+    /// the counters and the log rows at the cost they had before any host bound anything. Order across
+    /// observers is fixed only for that synchronous head; past its first await each observer runs on a
+    /// queue of its own, so a slow one delays nothing but its own later facts.
+    /// </para>
+    /// <para>
+    /// The contract of <see cref="ICallObserver"/> applies in full: an observer completes when it has
+    /// ACCEPTED the fact and never when it has stored it, and one that awaits a database or an HTTP
+    /// call inside <c>OnCallEventAsync</c> makes the turn loop pay for it. One that throws is logged
+    /// once and forgotten, and it costs neither the turn nor any other observer.
+    /// </para>
+    /// <para>
+    /// One instance serves every call, because a <c>CallEvent</c> names its own call. An observer that
+    /// holds per-call state keys it by <c>CallEvent.CallId</c>.
+    /// </para>
+    /// </remarks>
+    public AgentCoreOptions UseObservers(params ICallObserver[] observers)
+    {
+        ArgumentNullException.ThrowIfNull(observers);
+        _observers.AddRange(observers);
         return this;
     }
 

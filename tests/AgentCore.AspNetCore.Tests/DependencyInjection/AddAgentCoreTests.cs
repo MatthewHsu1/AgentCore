@@ -848,15 +848,32 @@ public sealed class AddAgentCoreTests
         var session = provider.GetRequiredService<ICallSessionFactory>().Create("call-1");
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
+        // The queue is what keeps the append off the turn, so the rows land on a thread of their own
+        // and a reader that wants them now asks for them now.
+        await Queue(provider).FlushAsync(TestContext.Current.CancellationToken);
+
         var events = sink.EventsOf("call-1");
         Assert.Equal(
             [AuditEventKind.CallStarted, AuditEventKind.TurnCompleted],
             events.Select(item => item.Kind).ToArray());
         Assert.True(AuditChain.Verify(AuditChain.LinkAll(events)).IsIntact);
-
-        // The host bound one, so the host can resolve it back.
-        Assert.Same(sink, provider.GetRequiredService<IAuditSinkPort>());
     }
+
+    [Fact]
+    public async Task AnAuditSink_IsWrappedInTheQueueThatKeepsItOffTheTurn()
+    {
+        InMemoryAuditSink sink = new();
+        using var provider = await BuildAsync(OneAgentYaml, options => options.AuditSink = sink);
+
+        // Section 7 puts a durable insert at 13 ms p50 against 91 nanoseconds to enqueue, and the rule
+        // that follows is applied once, here, to whatever the host bound. So an adapter that blocks on
+        // its database is a correct adapter, and no adapter carries a queue of its own.
+        Assert.IsType<QueuedAuditSink>(provider.GetRequiredService<IAuditSinkPort>());
+    }
+
+    /// <summary>Reads back the queue the composition root put in front of the host's sink.</summary>
+    private static QueuedAuditSink Queue(IServiceProvider provider)
+        => Assert.IsType<QueuedAuditSink>(provider.GetRequiredService<IAuditSinkPort>());
 
     [Fact]
     public async Task NoAuditSinkAndNoLogger_StillRunsATurn()
@@ -870,6 +887,70 @@ public sealed class AddAgentCoreTests
 
         // Nothing stands in for the PostgreSQL sink of section 7, so nothing is registered either.
         Assert.Null(provider.GetService<IAuditSinkPort>());
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // The host's own observers: the socket behind ICallObserver.
+    // -------------------------------------------------------------------------------------------
+    [Fact]
+    public async Task AHostObserver_ReadsTheFactsOfATurn()
+    {
+        RecordingCallObserver first = new();
+        RecordingCallObserver second = new();
+        using var provider = await BuildAsync(OneAgentYaml, options => options.UseObservers(first, second));
+
+        var session = provider.GetRequiredService<ICallSessionFactory>().Create("call-1");
+        await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+
+        // The port is public, so a host writes one of these and binds it. Every observer of a call
+        // reads the same facts, and the library's own three are neither replaced nor bypassed.
+        Assert.Equal([CallEventKind.CallStarted, CallEventKind.TurnCompleted], first.Seen);
+        Assert.Equal([CallEventKind.CallStarted, CallEventKind.TurnCompleted], second.Seen);
+    }
+
+    [Fact]
+    public async Task AHostObserverThatThrows_CostsNeitherTheTurnNorTheChain()
+    {
+        InMemoryAuditSink sink = new();
+        using var provider = await BuildAsync(
+            OneAgentYaml,
+            options =>
+            {
+                options.AuditSink = sink;
+                options.UseObservers(new ThrowingCallObserver());
+            });
+
+        var session = provider.GetRequiredService<ICallSessionFactory>().Create("call-1");
+        var turn = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+
+        // An observer records the call and is never a part of it. That holds for the host's own, and
+        // it holds for the readings registered beside it: a broken host observer does not cost the
+        // chain of D23 a single row.
+        Assert.Equal("hello", turn.ReplyText);
+
+        var events = sink.EventsOf("call-1");
+        Assert.Equal(
+            [AuditEventKind.CallStarted, AuditEventKind.TurnCompleted],
+            events.Select(item => item.Kind).ToArray());
+        Assert.True(AuditChain.Verify(AuditChain.LinkAll(events)).IsIntact);
+    }
+
+    [Fact]
+    public async Task UseObserversTwice_KeepsBothRegistrations()
+    {
+        RecordingCallObserver first = new();
+        RecordingCallObserver second = new();
+        using var provider = await BuildAsync(
+            OneAgentYaml,
+            options => options.UseObservers(first).UseObservers(second));
+
+        var session = provider.GetRequiredService<ICallSessionFactory>().Create("call-1");
+        await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+
+        // The seam adds rather than replaces, so a host composes its readings across whatever code
+        // configures the container.
+        Assert.NotEmpty(first.Seen);
+        Assert.NotEmpty(second.Seen);
     }
 
     // -------------------------------------------------------------------------------------------
@@ -991,6 +1072,43 @@ public sealed class AddAgentCoreTests
             options.UseChatClients(_ => new RoutingChatClientFactory(new SequencedChatClient("hello")));
             configure?.Invoke(options);
         });
+
+    /// <summary>An observer a host binds, which keeps every fact it was offered, in order.</summary>
+    private sealed class RecordingCallObserver : ICallObserver
+    {
+        private readonly Lock _gate = new();
+        private readonly List<CallEventKind> _seen = [];
+
+        /// <summary>Gets what this observer read, in the order the call produced it.</summary>
+        public IReadOnlyList<CallEventKind> Seen
+        {
+            get
+            {
+                // A delivery may land on a thread of its own, so the reading is taken under the gate.
+                lock (_gate)
+                {
+                    return [.. _seen];
+                }
+            }
+        }
+
+        public ValueTask OnCallEventAsync(CallEvent callEvent, CancellationToken cancellationToken)
+        {
+            lock (_gate)
+            {
+                _seen.Add(callEvent.Kind);
+            }
+
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    /// <summary>An observer that refuses every fact, so the isolation of the seam is observable.</summary>
+    private sealed class ThrowingCallObserver : ICallObserver
+    {
+        public ValueTask OnCallEventAsync(CallEvent callEvent, CancellationToken cancellationToken)
+            => throw new InvalidOperationException("the host's observer is broken");
+    }
 
     /// <summary>A moderation vendor a test registers, which counts the times it was asked to build.</summary>
     private sealed class FakeModerationAdapter(string kind, IEvaluator evaluator) : IModerationAdapter

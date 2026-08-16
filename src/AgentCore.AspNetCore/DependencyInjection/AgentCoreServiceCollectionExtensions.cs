@@ -1,3 +1,4 @@
+using AgentCore.Application.Audit;
 using AgentCore.Application.Call;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
@@ -225,14 +226,23 @@ public static class AgentCoreServiceCollectionExtensions
             evaluators.Register(PromptModerator.ModerationEvaluatorName, moderation);
         }
 
+        // The one place the "never sit on the turn" rule of IAuditSinkPort is applied. The host binds
+        // the store, and this wraps it in the bounded channel and batching background writer of
+        // section 7, so a store that blocks on its database is a correct store and no adapter carries
+        // a queue of its own. A host that bound nothing gets nothing: there is no store to drain to.
+        QueuedAuditSink? auditSink = options.AuditSink is { } store
+            ? new QueuedAuditSink(store, loggers.CreateLogger<QueuedAuditSink>())
+            : null;
+
         CallSessionFactory sessions = new(
             compiled,
             guards,
             CallSessionFactory.CreateExtractor(compiled, chatClients),
             options.TimeProvider,
-            options.AuditSink,
+            auditSink,
             loggers.CreateLogger<CallSession>(),
-            PromptModerator.FromRegistry(evaluators));
+            PromptModerator.FromRegistry(evaluators),
+            options.Observers);
 
         services.AddSingleton(configuration);
         services.AddSingleton(secrets);
@@ -290,11 +300,16 @@ public static class AgentCoreServiceCollectionExtensions
         // GetRequiredService<TimeProvider>() caller actually wanted.
         services.TryAddSingleton(options.TimeProvider ?? TimeProvider.System);
 
-        if (options.AuditSink is { } audit)
+        if (auditSink is { } queue)
         {
-            // Only what the host bound is registered. Nothing stands in for the PostgreSQL sink of
-            // section 7, because a list in this process holds none of the three defences of D23.
-            services.AddSingleton(audit);
+            // The QUEUE is what is registered, not the store the host bound. Resolving
+            // IAuditSinkPort must give the thing that honours the port's contract, and appending
+            // straight to the store would be the one path that sits on the caller. It is registered
+            // as the concrete type as well as the port, so a host that wants FlushAsync before it
+            // reports success can ask for it, and so the container disposes it on the way out — that
+            // disposal is what drains the queue and keeps the accepted rows.
+            services.AddSingleton(queue);
+            services.AddSingleton<IAuditSinkPort>(queue);
         }
 
         // The default store holds every call in this process. A host that registered another one

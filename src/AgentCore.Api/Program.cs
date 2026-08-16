@@ -37,6 +37,10 @@ builder.Services.AddSingleton(httpClients);
 
 // The audit chain of D23 belongs in PostgreSQL, and that adapter is not written. This one keeps the
 // events in this process, so chain_check has something to read and no event is silently lost.
+//
+// Whatever is bound here is wrapped by AddAgentCoreAsync in the bounded channel and batching
+// background writer of section 7, so this line binds a STORE and never a queue. That is what makes
+// the PostgreSQL adapter, when it is written, a plain writer with no buffering of its own.
 InMemoryAuditSink auditSink = new();
 
 await builder.Services.AddAgentCoreAsync(options =>

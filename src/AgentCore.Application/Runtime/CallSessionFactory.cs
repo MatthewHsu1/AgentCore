@@ -67,6 +67,11 @@ public sealed class CallSessionFactory : ICallSessionFactory
     /// <see cref="PromptModerator.FromRegistry"/> builds it from the evaluator registry. It holds no
     /// per-call state, so one instance serves every call.
     /// </param>
+    /// <param name="observers">
+    /// The host's own readings of a call, or <see langword="null"/> for a host that adds none. They
+    /// are offered every fact after the three this library keeps, and each one holds no per-call
+    /// state, so one instance serves every call.
+    /// </param>
     public CallSessionFactory(
         CompiledAgent compiled,
         IGuardEvaluator guards,
@@ -74,7 +79,8 @@ public sealed class CallSessionFactory : ICallSessionFactory
         TimeProvider? timeProvider = null,
         IAuditSinkPort? auditSink = null,
         ILogger? logger = null,
-        PromptModerator? moderation = null)
+        PromptModerator? moderation = null,
+        IEnumerable<ICallObserver>? observers = null)
     {
         ArgumentNullException.ThrowIfNull(compiled);
         ArgumentNullException.ThrowIfNull(guards);
@@ -103,9 +109,18 @@ public sealed class CallSessionFactory : ICallSessionFactory
         // nothing is built rather than a sink that drops what it is handed. Both other readings are
         // always present, because the counters and the rows are this library's own and no host opts
         // out of them.
-        _observers = auditSink is null
+        //
+        // <b>The host's own observers go after all three.</b> An observer bound through
+        // AgentCoreOptions.UseObservers is code this library did not write and cannot measure, and
+        // the head of a delivery — the work before the first await — is the one part every observer
+        // still runs one after another. Putting the host last is what keeps the counters, the rows,
+        // and the enqueue at exactly the cost they had before any host bound anything. Past that head
+        // the order buys nothing and costs nothing: each observer has a tail of its own.
+        ICallObserver[] library = auditSink is null
             ? [new TelemetryCallObserver(), new LoggingCallObserver(logger)]
             : [new TelemetryCallObserver(), new LoggingCallObserver(logger), new AuditCallObserver(auditSink)];
+
+        _observers = observers is null ? library : [.. library, .. observers];
     }
 
     /// <summary>Builds the extractor one document declares.</summary>

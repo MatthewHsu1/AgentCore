@@ -33,6 +33,7 @@ AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseKnowledge<TKnowledg
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseKnowledgeRetrieval(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Ports.IKnowledgeRetrievalPort!>! retrieval) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseKnowledgeStores(params AgentCore.Application.Ports.IKnowledgeStoreAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseModeration(params AgentCore.Application.Ports.IModerationAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseObservers(params AgentCore.Application.Ports.ICallObserver![]! observers) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseSpeech(params AgentCore.Application.Ports.ISpeechAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseTelemetry(params AgentCore.Application.Ports.ITelemetryAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreServiceCollectionExtensions

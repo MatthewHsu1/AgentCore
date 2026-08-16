@@ -143,4 +143,28 @@ internal static partial class Log
         Message = "Moderation did not answer for turn {TurnIndex} of call {CallId} ({Reason}). "
             + "The turn ran unchecked, because moderation fails open.")]
     public static partial void ModerationUnavailable(ILogger logger, string callId, int turnIndex, string reason);
+
+    /// <summary>The audit queue had no room, so the event was dropped.</summary>
+    /// <param name="logger">The logger of the queue.</param>
+    /// <param name="callId">The id of the call the dropped event belongs to.</param>
+    /// <param name="sequence">The per-call sequence number of the dropped event.</param>
+    /// <remarks>
+    /// <para>
+    /// An implementation of <see cref="Ports.IAuditSinkPort"/> does not throw for a full queue and it
+    /// does not block. Audit is a record of the call and never a part of it, so a store that cannot
+    /// keep up drops and reports rather than slowing the caller down, and this line is the report.
+    /// </para>
+    /// <para>
+    /// A dropped event is a gap in the chain, which <c>chain_check</c> then reports. It is an error
+    /// and not a warning for that reason: the queue of <see cref="Audit.QueuedAuditSink"/> is sized to
+    /// absorb the p99 of section 7, so one of these lines means the store has been unreachable or slow
+    /// for long enough to matter, and an operator alerts on it.
+    /// </para>
+    /// </remarks>
+    [LoggerMessage(
+        EventId = 8,
+        Level = LogLevel.Error,
+        Message = "The audit queue was full, so event {Sequence} of call {CallId} was dropped. "
+            + "The call continues and the chain has a gap.")]
+    public static partial void AuditQueueFull(ILogger logger, string callId, long sequence);
 }
