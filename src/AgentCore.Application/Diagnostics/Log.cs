@@ -83,14 +83,23 @@ internal static partial class Log
         Message = "The guard {Guard} failed. It is treated as false and the call continues.")]
     public static partial void GuardFailed(ILogger logger, string guard, Exception exception);
 
-    /// <summary>The audit sink refused an event, or faulted behind the enqueue.</summary>
+    /// <summary>An observer of the call refused an event, or faulted behind its own enqueue.</summary>
     /// <param name="logger">The logger of the session.</param>
     /// <param name="callId">The id of the call.</param>
     /// <param name="kind">The wire token of the event kind.</param>
     /// <param name="exception">The cause.</param>
     /// <remarks>
-    /// Audit is a record of the call and never a part of it, so a sink that fails is reported and the
-    /// turn goes on. A lost event breaks the chain, which <c>chain_check</c> then reports.
+    /// <para>
+    /// An observer records the call and is never a part of it, so one that fails is reported and the
+    /// turn goes on. When the observer is the audit sink, a lost event breaks the chain, which
+    /// <c>chain_check</c> then reports.
+    /// </para>
+    /// <para>
+    /// <see cref="Runtime.CallObserverDispatcher"/> routes EVERY observer fault through this row, not
+    /// only the sink's: the telemetry and logging readings of a fact fail the same way and are worth
+    /// the same line. The message names the audit sink because the text, the level, and the event id
+    /// are the ones hosts already alert on and parse, and none of the three moves.
+    /// </para>
     /// </remarks>
     [LoggerMessage(
         EventId = 5,

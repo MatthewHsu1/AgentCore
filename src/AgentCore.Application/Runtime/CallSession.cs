@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using AgentCore.Application.Audit;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
@@ -16,8 +15,6 @@ using AgentCore.Domain;
 using AgentCore.Domain.Audit;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AgentCore.Application.Runtime;
 
@@ -81,11 +78,13 @@ namespace AgentCore.Application.Runtime;
 /// once, and leaves the session ready for the next turn.
 /// </para>
 /// <para>
-/// The session is also where the audit chain of D23 is produced, because it is the only place that
-/// knows the turn index, the stage before and after, and the sequence a later amendment must
-/// reference. It allocates <see cref="AuditEvent.Sequence"/> itself, counting from zero for each
-/// call, and it never waits for the sink: section 7 measures a durable insert at 13 ms p50 against 91
-/// nanoseconds to enqueue, so the reply leaves before the row exists.
+/// The session is also where the facts of the call are RAISED, because it is the only place that
+/// knows the turn index, the stage before and after, and the ordinal a later amendment must
+/// reference. It allocates <see cref="CallEvent.Ordinal"/> itself, counting from zero for each call,
+/// and it knows nothing about what reads it: <see cref="ICallObserver"/> is the one seam, and the
+/// audit chain of D23, the counters of section 8.6, and the "log once" rows of section 8.7 are three
+/// readings of the same fact behind it. It never waits for any of them — section 7 measures a durable
+/// insert at 13 ms p50 against 91 nanoseconds to enqueue, so the reply leaves before the row exists.
 /// </para>
 /// <para>
 /// One turn is one span and one duration sample. The call id goes on the span and never on a metric,
@@ -178,15 +177,14 @@ public sealed class CallSession : IConversationPort
     private readonly PromptModerator? _moderation;
     private readonly CounterStateWriter _counters;
     private readonly TimeProvider _time;
-    private readonly IAuditSinkPort _audit;
-    private readonly ILogger _logger;
+    private readonly CallObserverDispatcher _observers;
     private readonly DateTimeOffset _startedAt;
     private readonly List<ChatMessage> _transcript = [];
     private readonly Lock _interruptLock = new();
     private CancellationTokenSource? _runCancellation;
     private Interruption? _interruption;
     private AmendableTurn? _amendable;
-    private long _sequence;
+    private long _ordinal;
     private int _running;
     private int _ended;
 
@@ -204,13 +202,10 @@ public sealed class CallSession : IConversationPort
     /// <param name="guards">The evaluator that runs each exit guard and each increment rule.</param>
     /// <param name="extractor">The extractor, or <see langword="null"/> when the document declares none.</param>
     /// <param name="timeProvider">The clock the reserved <c>callDurationSeconds</c> slot reads.</param>
-    /// <param name="auditSink">
-    /// The sink the chain of D23 is appended to, or <see langword="null"/> for a sink that writes
-    /// nowhere.
-    /// </param>
-    /// <param name="logger">
-    /// The logger the three "log once" rows of section 8.7 write to, or <see langword="null"/> for
-    /// <see cref="NullLogger.Instance"/>.
+    /// <param name="observers">
+    /// Everything that watches this call, or <see langword="null"/> for a call nothing watches. One
+    /// dispatcher belongs to one session: its ordering guarantee is per instance, so a shared one
+    /// would make every call queue behind every other. <see cref="CallSessionFactory"/> builds it.
     /// </param>
     /// <param name="moderation">
     /// The moderator that reads what the caller said before the model runs, or
@@ -222,8 +217,7 @@ public sealed class CallSession : IConversationPort
         IGuardEvaluator guards,
         StateExtractor? extractor,
         TimeProvider timeProvider,
-        IAuditSinkPort? auditSink = null,
-        ILogger? logger = null,
+        CallObserverDispatcher? observers = null,
         PromptModerator? moderation = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(callId);
@@ -238,10 +232,9 @@ public sealed class CallSession : IConversationPort
         _counters = new CounterStateWriter(guards);
         _time = timeProvider;
 
-        // Both seams are optional and both have a working default. A host that binds neither still
-        // answers a call, and the library never throws for want of either.
-        _audit = auditSink ?? NullAuditSink.Instance;
-        _logger = logger ?? NullLogger.Instance;
+        // The seam is optional and it has a working default. A host that binds nothing to watch the
+        // call still answers it, and the library never throws for want of an observer.
+        _observers = observers ?? new CallObserverDispatcher([]);
         _startedAt = timeProvider.GetUtcNow();
 
         // A document with no policy: has no stage machine. The single-agent row and both graph rows
@@ -252,8 +245,8 @@ public sealed class CallSession : IConversationPort
         // Writer order, step 1.
         ConstStateWriter.Apply(State);
 
-        // Sequence 0 of the chain. The call started, and no turn has run.
-        Append(NewEvent(AuditEventKind.CallStarted, _startedAt, turnIndex: null));
+        // Ordinal 0 of the call. It started, and no turn has run.
+        _ = Raise(CallEventKind.CallStarted, _startedAt, turnIndex: null);
     }
 
     /// <summary>Gets the id of the call.</summary>
@@ -554,9 +547,9 @@ public sealed class CallSession : IConversationPort
     /// </list>
     /// <para>
     /// The amendment is an event and never an edit. T23: the chain is append-only, so
-    /// <see cref="AuditEventKind.ReplyInterrupted"/> names the sequence of the
-    /// <see cref="AuditEventKind.TurnCompleted"/> event it corrects through
-    /// <see cref="AuditEvent.AmendsSequence"/>.
+    /// <see cref="CallEventKind.ReplyInterrupted"/> names the ordinal of the
+    /// <see cref="CallEventKind.TurnCompleted"/> fact it corrects through
+    /// <see cref="CallEvent.AmendsOrdinal"/>.
     /// </para>
     /// <para>
     /// A frame that arrives when no turn has ever run answers <see langword="false"/> and changes
@@ -768,17 +761,17 @@ public sealed class CallSession : IConversationPort
 
         LastTurn = finished with { ReplyText = heard, InterruptedAfter = durationUntilInterrupt };
 
-        Append(NewEvent(
-            AuditEventKind.ReplyInterrupted,
+        _ = Raise(
+            CallEventKind.ReplyInterrupted,
             _time.GetUtcNow(),
             finished.TurnIndex,
-            amends: amendable.CompletedSequence,
+            amends: amendable.CompletedOrdinal,
             payload: new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [AuditPayloadKeys.UtteranceUntilInterrupt] = heard,
                 [AuditPayloadKeys.DurationUntilInterruptMs] =
                     ((long)durationUntilInterrupt.TotalMilliseconds).ToString(CultureInfo.InvariantCulture),
-            }));
+            });
 
         return true;
     }
@@ -815,9 +808,9 @@ public sealed class CallSession : IConversationPort
     /// <returns>The finished turn.</returns>
     /// <remarks>
     /// <para>
-    /// This is where the chain of D23 is written, because this is where the turn index, both stages,
-    /// and the moment the turn ended are all known at once. The clock is read exactly once, so every
-    /// event of the turn carries the same instant.
+    /// This is where the facts of the turn are raised, because this is where the turn index, both
+    /// stages, and the moment the turn ended are all known at once. The clock is read exactly once,
+    /// so every event of the turn carries the same instant.
     /// </para>
     /// <para>
     /// The interruption is read twice, at the two moments it can be answered. The first read decides
@@ -864,21 +857,19 @@ public sealed class CallSession : IConversationPort
             spokenReply = reply;
         }
 
-        // Section 8.7 says "log once" for each of these rows, and each one runs once for the turn.
-        if (toolFault is not null)
+        // Section 8.7, last row, raised once for the turn. It is diagnostic only, so it takes no
+        // ordinal and no row records it; the turn.completed event of this same turn carries the
+        // fallback the caller actually heard. The tool fault of row six is raised in
+        // WriteTurnEvents instead, because the chain stores that one and its row is stamped with
+        // the same endedAt every other event of the turn carries.
+        if (toolFault is null && failure is not null)
         {
-            Log.ToolBudgetSpent(_logger, CallId, turn.Index, toolFault);
-            AgentCoreTelemetry.RecordFailure(AgentCoreTelemetry.FailureTool);
-        }
-        else if (failure is not null)
-        {
-            Log.EmptyReply(_logger, CallId, turn.Index);
-            AgentCoreTelemetry.RecordFailure(AgentCoreTelemetry.FailureEmptyReply);
+            RaiseDiagnostic(CallEventKind.EmptyReply, _time.GetUtcNow(), turn.Index);
         }
 
         // What this turn adds to the transcript. It is built here and written at the end of the
         // method, in one lock with the rest of what a late barge-in may still amend: the transcript
-        // span, the sequence the amendment must reference, and LastTurn itself. Nothing between here
+        // span, the ordinal the amendment must reference, and LastTurn itself. Nothing between here
         // and there reads the transcript — the extractor reads the finished turn, and the writers
         // read the state document — so building it now and committing it once costs nothing.
         List<ChatMessage> written;
@@ -905,8 +896,8 @@ public sealed class CallSession : IConversationPort
         // Writer order, step 2.
         ApplyToolResults(response.Messages);
 
-        // Writer order, step 3. The deadline is here and not on the whole method, because the audit
-        // append and the stage advance must always run.
+        // Writer order, step 3. The deadline is here and not on the whole method, because the raise
+        // of the turn's events and the stage advance must always run.
         string? extractionFailure = null;
 
         // A refused turn runs no extractor. The words moderation flagged are the extractor's only
@@ -929,10 +920,17 @@ public sealed class CallSession : IConversationPort
 
         if (extractionFailure is not null)
         {
-            // Section 8.7, row two: leave the slots unchanged, log once for the turn, and continue
-            // the call. State extraction must never drop a call.
-            Log.ExtractionFailed(_logger, CallId, turn.Index, extractionFailure);
-            AgentCoreTelemetry.RecordFailure(AgentCoreTelemetry.FailureExtraction);
+            // Section 8.7, row two: leave the slots unchanged, report once for the turn, and continue
+            // the call. State extraction must never drop a call. The reason rides on the event
+            // because the line an operator reads is the same one the turn loop used to write itself.
+            RaiseDiagnostic(
+                CallEventKind.ExtractionFailed,
+                _time.GetUtcNow(),
+                turn.Index,
+                payload: new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [CallEventPayloadKeys.Reason] = extractionFailure,
+                });
         }
 
         // Writer order, step 4. The clock comes from the injected provider, so a test owns it. The
@@ -952,7 +950,7 @@ public sealed class CallSession : IConversationPort
             IsComplete = _policy.IsTerminal;
         }
 
-        var completedSequence = WriteTurnEvents(
+        var completedOrdinal = WriteTurnEvents(
             turn, endedAt, stageAfter, reply, spokenReply, toolFault, interruptedAfter);
 
         TurnResult result = new(
@@ -968,7 +966,7 @@ public sealed class CallSession : IConversationPort
             endedAt);
 
         // One lock, one moment. A late barge-in reads all four of these together, so a window in
-        // which LastTurn already names this turn while the span or the sequence still names the one
+        // which LastTurn already names this turn while the span or the ordinal still names the one
         // before it would let an amendment rewrite the wrong part of the transcript.
         lock (_interruptLock)
         {
@@ -977,7 +975,7 @@ public sealed class CallSession : IConversationPort
 
             // A turn one barge-in already cut is not amendable again, so it is not published here.
             _amendable = interruptedAfter is null
-                ? new AmendableTurn(completedSequence, response.Messages, start, written.Count)
+                ? new AmendableTurn(completedOrdinal, response.Messages, start, written.Count)
                 : null;
             LastTurn = result;
 
@@ -1049,7 +1047,7 @@ public sealed class CallSession : IConversationPort
         _ => AgentCoreTelemetry.OutcomeCompleted,
     };
 
-    /// <summary>Writes the audit events of one finished turn, in the order they happened.</summary>
+    /// <summary>Raises the durable facts of one finished turn, in the order they happened.</summary>
     /// <param name="turn">The turn that just spoke.</param>
     /// <param name="endedAt">The moment the turn ended.</param>
     /// <param name="stageAfter">The stage the machine holds after the turn.</param>
@@ -1058,15 +1056,23 @@ public sealed class CallSession : IConversationPort
     /// <param name="toolFault">The message of the fault, or <see langword="null"/>.</param>
     /// <param name="interruptedAfter">The played duration, or <see langword="null"/>.</param>
     /// <returns>
-    /// The sequence of the <c>turn.completed</c> event, so a barge-in that arrives after this turn
-    /// already ended can name it through <see cref="AuditEvent.AmendsSequence"/>.
+    /// The ordinal of the <c>turn.completed</c> fact, so a barge-in that arrives after this turn
+    /// already ended can name it through <see cref="CallEvent.AmendsOrdinal"/>.
     /// </returns>
     /// <remarks>
-    /// A barge-in writes two events and not one. T23: the chain is append-only, so an amendment is a
-    /// second event that references the first, and <c>reply.interrupted</c> names the sequence of the
+    /// <para>
+    /// A barge-in raises two facts and not one. T23: the chain is append-only, so an amendment is a
+    /// second event that references the first, and <c>reply.interrupted</c> names the ordinal of the
     /// <c>turn.completed</c> event it corrects. It carries the text the caller ACTUALLY HEARD, which
     /// the relay reported and nothing here estimated. See item 6a. A barge-in the vendor reports
-    /// only after this turn ended writes the very same pair, from <see cref="AmendLastTurn"/>.
+    /// only after this turn ended raises the very same pair, from <see cref="AmendLastTurn"/>.
+    /// </para>
+    /// <para>
+    /// The tool fault of section 8.7 row six is raised here rather than where the run caught it,
+    /// because the chain stores it: every stored fact of one turn carries the single
+    /// <paramref name="endedAt"/> read, and its ordinal is allocated in the order the chain holds
+    /// the facts.
+    /// </para>
     /// </remarks>
     private long WriteTurnEvents(
         Turn turn,
@@ -1081,18 +1087,18 @@ public sealed class CallSession : IConversationPort
         {
             // The fault threw out of the run, so the tool that spent the budget is not named here.
             // A missing fact is an absent key, so toolName stays out rather than reading "unknown".
-            Append(NewEvent(
-                AuditEventKind.ToolFailed,
+            _ = Raise(
+                CallEventKind.ToolFailed,
                 endedAt,
                 turn.Index,
                 payload: new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     [AuditPayloadKeys.ToolError] = toolFault,
-                }));
+                });
         }
 
-        var completed = NewEvent(
-            AuditEventKind.TurnCompleted,
+        var completed = Raise(
+            CallEventKind.TurnCompleted,
             endedAt,
             turn.Index,
             payload: new Dictionary<string, string>(StringComparer.Ordinal)
@@ -1102,111 +1108,99 @@ public sealed class CallSession : IConversationPort
                 [AuditPayloadKeys.StageAfter] = stageAfter,
             });
 
-        Append(completed);
-
         if (interruptedAfter is not { } played)
         {
-            return completed.Sequence;
+            return completed;
         }
 
-        Append(NewEvent(
-            AuditEventKind.ReplyInterrupted,
+        _ = Raise(
+            CallEventKind.ReplyInterrupted,
             endedAt,
             turn.Index,
-            amends: completed.Sequence,
+            amends: completed,
             payload: new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [AuditPayloadKeys.UtteranceUntilInterrupt] = reply,
                 [AuditPayloadKeys.DurationUntilInterruptMs] =
                     ((long)played.TotalMilliseconds).ToString(CultureInfo.InvariantCulture),
-            }));
+            });
 
-        return completed.Sequence;
+        return completed;
     }
 
-    /// <summary>Builds one event of this call, and takes the next sequence.</summary>
-    /// <param name="kind">What the event records.</param>
+    /// <summary>Raises one durable fact of this call, and takes the next ordinal.</summary>
+    /// <param name="kind">What happened. The chain of D23 stores this one.</param>
     /// <param name="occurredAt">When it happened.</param>
-    /// <param name="turnIndex">The turn it belongs to, or <see langword="null"/> for a call event.</param>
-    /// <param name="amends">The sequence this event corrects, or <see langword="null"/>.</param>
-    /// <param name="payload">The facts the event carries.</param>
-    /// <returns>The event, ready to append.</returns>
+    /// <param name="turnIndex">The turn it belongs to, or <see langword="null"/> for a call fact.</param>
+    /// <param name="amends">The ordinal this fact corrects, or <see langword="null"/>.</param>
+    /// <param name="payload">The detail the fact carries.</param>
+    /// <returns>The ordinal this fact took, so a later amendment can name it.</returns>
     /// <remarks>
-    /// The caller allocates the sequence and not the sink, because the sink answers long after the
-    /// turn moved on. The counter is monotonic within one call and starts at zero.
+    /// The session allocates the ordinal and not the sink, because the sink answers long after the
+    /// turn moved on. The counter is monotonic within one call and starts at zero, and a
+    /// diagnostic-only fact takes none, which is what keeps it gap-free.
     /// </remarks>
-    private AuditEvent NewEvent(
-        AuditEventKind kind,
+    private long Raise(
+        CallEventKind kind,
         DateTimeOffset occurredAt,
         int? turnIndex,
         long? amends = null,
         IReadOnlyDictionary<string, string>? payload = null)
-        => new()
+    {
+        var ordinal = Interlocked.Increment(ref _ordinal) - 1;
+
+        Dispatch(kind, occurredAt, turnIndex, ordinal, amends, payload);
+
+        return ordinal;
+    }
+
+    /// <summary>Raises one fact that is counted and logged and stored nowhere.</summary>
+    /// <param name="kind">What happened. The chain of D23 holds no row for it.</param>
+    /// <param name="occurredAt">When it happened.</param>
+    /// <param name="turnIndex">The turn it belongs to.</param>
+    /// <param name="payload">The detail the fact carries.</param>
+    /// <remarks>
+    /// It takes no ordinal on purpose. A diagnostic fact that consumed a number would leave a gap in
+    /// the chain the moment nothing stored it, so <see cref="CallEvent.Ordinal"/> stays null and the
+    /// numbers are the ones the chain held before the hook existed.
+    /// </remarks>
+    private void RaiseDiagnostic(
+        CallEventKind kind,
+        DateTimeOffset occurredAt,
+        int? turnIndex,
+        IReadOnlyDictionary<string, string>? payload = null)
+        => Dispatch(kind, occurredAt, turnIndex, ordinal: null, amends: null, payload);
+
+    /// <summary>Hands one fact to everything watching the call, and never waits for it.</summary>
+    /// <param name="kind">What happened.</param>
+    /// <param name="occurredAt">When it happened.</param>
+    /// <param name="turnIndex">The turn it belongs to, or <see langword="null"/>.</param>
+    /// <param name="ordinal">The number it took, or <see langword="null"/> when it took none.</param>
+    /// <param name="amends">The ordinal it corrects, or <see langword="null"/>.</param>
+    /// <param name="payload">The detail it carries.</param>
+    /// <remarks>
+    /// Nothing here propagates and nothing here blocks: <see cref="CallObserverDispatcher"/> owns
+    /// both rules, once, for every observer. Section 7 measures a durable insert at 13 ms p50 and 32
+    /// ms p99 against 91 nanoseconds to enqueue, so <b>an observer must never sit on the turn</b>,
+    /// and one that throws is reported once while the turn goes on.
+    /// </remarks>
+    private void Dispatch(
+        CallEventKind kind,
+        DateTimeOffset occurredAt,
+        int? turnIndex,
+        long? ordinal,
+        long? amends,
+        IReadOnlyDictionary<string, string>? payload)
+        => _observers.Dispatch(new CallEvent
         {
             CallId = CallId,
-            Sequence = Interlocked.Increment(ref _sequence) - 1,
             Kind = kind,
             OccurredAt = occurredAt,
+            Ordinal = ordinal,
             TurnIndex = turnIndex,
-            AmendsSequence = amends,
+            AmendsOrdinal = amends,
             Payload = payload ?? new Dictionary<string, string>(StringComparer.Ordinal),
-        };
-
-    /// <summary>Hands one event to the sink, and never waits for it.</summary>
-    /// <param name="auditEvent">The event to append.</param>
-    /// <remarks>
-    /// <para>
-    /// Section 7 measures a durable insert at 13 ms p50 and 32 ms p99, against 91 nanoseconds to
-    /// enqueue, so <b>the sink must never sit on the turn</b>. A sink that completes synchronously
-    /// costs the enqueue and nothing else. A sink that does not is observed on a separate task, so
-    /// the reply leaves while the row is still being written.
-    /// </para>
-    /// <para>
-    /// Nothing here propagates. Audit is a record of the call and never a part of it, so a sink that
-    /// throws is logged once and the turn goes on.
-    /// </para>
-    /// </remarks>
-    private void Append(AuditEvent auditEvent)
-    {
-        AgentCoreTelemetry.RecordAuditEvent(AuditEventKinds.ToToken(auditEvent.Kind));
-
-        try
-        {
-            // CancellationToken.None: the enqueue belongs to the record of the call, not to the turn
-            // the caller may have cancelled.
-            ValueTask pending = _audit.AppendAsync(auditEvent, CancellationToken.None);
-            if (pending.IsCompletedSuccessfully)
-            {
-                return;
-            }
-
-            _ = ObserveAppendAsync(pending, auditEvent.Kind);
-        }
-#pragma warning disable CA1031 // Audit is a record of the call and never a part of it.
-        catch (Exception exception)
-#pragma warning restore CA1031
-        {
-            Log.AuditAppendFailed(_logger, CallId, AuditEventKinds.ToToken(auditEvent.Kind), exception);
-        }
-    }
-
-    /// <summary>Watches an append that did not finish at once, so no fault goes unobserved.</summary>
-    /// <param name="pending">What the sink returned.</param>
-    /// <param name="kind">What the event records.</param>
-    /// <returns>A task that always completes, and never faults.</returns>
-    private async Task ObserveAppendAsync(ValueTask pending, AuditEventKind kind)
-    {
-        try
-        {
-            await pending.ConfigureAwait(false);
-        }
-#pragma warning disable CA1031 // The turn already ended. Reporting is all that is left to do.
-        catch (Exception exception)
-#pragma warning restore CA1031
-        {
-            Log.AuditAppendFailed(_logger, CallId, AuditEventKinds.ToToken(kind), exception);
-        }
-    }
+        });
 
     /// <summary>Closes the chain of this call, once.</summary>
     /// <param name="reason">Why the call ended.</param>
@@ -1238,7 +1232,7 @@ public sealed class CallSession : IConversationPort
             payload[AuditPayloadKeys.StageAfter] = terminalStage;
         }
 
-        Append(NewEvent(AuditEventKind.CallEnded, endedAt, turnIndex: null, payload: payload));
+        _ = Raise(CallEventKind.CallEnded, endedAt, turnIndex: null, payload: payload);
 
         return true;
     }
@@ -1265,11 +1259,11 @@ public sealed class CallSession : IConversationPort
     /// metric outcome is the only record that a turn went unchecked, so an operator alerts on it.
     /// </para>
     /// <para>
-    /// The flag is appended BEFORE the <c>turn.completed</c> event of this turn, because the verdict
-    /// is known before the model runs. It amends nothing, and
-    /// <see cref="AuditEvent.TurnIndex"/> names the turn it belongs to. That is the one rule that
-    /// separates <see cref="AuditEventKind.PromptFlagged"/> from
-    /// <see cref="AuditEventKind.ReplyInterrupted"/>, which must amend under T23.
+    /// The flag is raised BEFORE the <c>turn.completed</c> fact of this turn, and it therefore takes
+    /// the lower ordinal, because the verdict is known before the model runs. It amends nothing, and
+    /// <see cref="CallEvent.TurnIndex"/> names the turn it belongs to. That is the one rule that
+    /// separates <see cref="CallEventKind.PromptFlagged"/> from
+    /// <see cref="CallEventKind.ReplyInterrupted"/>, which must amend under T23.
     /// </para>
     /// <para>
     /// A refused turn speaks <see cref="AgentCoreConfiguration.RefusalReply"/> and NOT
@@ -1302,43 +1296,60 @@ public sealed class CallSession : IConversationPort
             {
                 // The deadline passed, and not the caller's own token. A cancel the host asked for
                 // still propagates, because that is the host ending the turn and not a slow vendor.
-                Log.ModerationUnavailable(_logger, CallId, turn.Index, ModerationTimedOutReason);
-                AgentCoreTelemetry.RecordModeration(AgentCoreTelemetry.ModerationUnavailable);
+                RaiseUnavailable(turn, ModerationTimedOutReason);
                 return null;
             }
 #pragma warning disable CA1031 // Moderation guards the turn. It must never be the thing that drops it.
             catch (Exception exception) when (exception is not OperationCanceledException)
 #pragma warning restore CA1031
             {
-                Log.ModerationUnavailable(_logger, CallId, turn.Index, ModerationFaultedReason);
-                AgentCoreTelemetry.RecordModeration(AgentCoreTelemetry.ModerationUnavailable);
+                RaiseUnavailable(turn, ModerationFaultedReason);
                 return null;
             }
         }
 
         if (categories.Count == 0)
         {
-            AgentCoreTelemetry.RecordModeration(AgentCoreTelemetry.ModerationClean);
+            // Counted and not even logged. The clean verdict is what makes the flagged count
+            // readable as a rate, and a clean turn is not a fact about the call worth a row.
+            RaiseDiagnostic(CallEventKind.ModerationClean, _time.GetUtcNow(), turn.Index);
             return null;
         }
 
         // The order is the endpoint's, because AuditPayloadKeys.ModerationCategories promises it.
         var flagged = string.Join(',', categories);
 
-        Append(NewEvent(
-            AuditEventKind.PromptFlagged,
+        // One fact, three readings: the row of D23, the flagged count of section 8.6, and the
+        // refusal line of section 8.7 all come from this one raise.
+        _ = Raise(
+            CallEventKind.PromptFlagged,
             _time.GetUtcNow(),
             turn.Index,
             payload: new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [AuditPayloadKeys.ModerationCategories] = flagged,
-            }));
-
-        Log.PromptRefused(_logger, CallId, turn.Index, flagged);
-        AgentCoreTelemetry.RecordModeration(AgentCoreTelemetry.ModerationFlagged);
+            });
 
         return new AgentResponse(new ChatMessage(ChatRole.Assistant, _compiled.Configuration.RefusalReply));
     }
+
+    /// <summary>Reports that the turn ran unchecked, because moderation could not answer.</summary>
+    /// <param name="turn">The turn that ran unchecked.</param>
+    /// <param name="reason">Why the endpoint did not answer, in the words the turn loop uses.</param>
+    /// <remarks>
+    /// Diagnostic only: it is counted and logged and stored nowhere, so it takes no ordinal.
+    /// Moderation fails open, and this fact is the only record that a turn went unchecked, so an
+    /// operator alerts on the metric beside the line.
+    /// </remarks>
+    private void RaiseUnavailable(Turn turn, string reason)
+        => RaiseDiagnostic(
+            CallEventKind.ModerationUnavailable,
+            _time.GetUtcNow(),
+            turn.Index,
+            payload: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [CallEventPayloadKeys.Reason] = reason,
+            });
 
     /// <summary>Runs the extractor against the finished turn.</summary>
     /// <param name="turn">The turn that just spoke.</param>
@@ -1536,9 +1547,9 @@ public sealed class CallSession : IConversationPort
         long StartedAt);
 
     /// <summary>Everything a barge-in that arrives after a turn ended needs to correct that turn.</summary>
-    /// <param name="CompletedSequence">
-    /// The sequence of that turn's <c>turn.completed</c> event, which the amendment names through
-    /// <see cref="AuditEvent.AmendsSequence"/>. T23 makes the chain append-only, so nothing is
+    /// <param name="CompletedOrdinal">
+    /// The ordinal of that turn's <c>turn.completed</c> fact, which the amendment names through
+    /// <see cref="CallEvent.AmendsOrdinal"/>. T23 makes the chain append-only, so nothing is
     /// rewritten and the correction is a second event.
     /// </param>
     /// <param name="Messages">
@@ -1553,7 +1564,7 @@ public sealed class CallSession : IConversationPort
     /// is still speaking this one, and that turn's own words must survive the correction.
     /// </remarks>
     private sealed record AmendableTurn(
-        long CompletedSequence,
+        long CompletedOrdinal,
         IList<ChatMessage> Messages,
         int TranscriptStart,
         int TranscriptLength);

@@ -258,7 +258,7 @@ public sealed class CallSessionAuditTests
     // D23: the write never sits on the turn.
     // -------------------------------------------------------------------------------------------
     [Fact]
-    public async Task TheTurn_FinishesWhileEveryAppendIsStillOpen()
+    public async Task TheTurn_FinishesWhileTheAppendIsStillOpen()
     {
         using SequencedChatClient reply = new("hello there.");
         using SequencedChatClient fill = new(StayingNull);
@@ -270,9 +270,25 @@ public sealed class CallSessionAuditTests
         var turn = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
         Assert.Equal("hello there.", turn.ReplyText);
-        Assert.Equal(2, sink.Events.Count);
+
+        // The whole turn ran and returned while call.started is still inside the sink. The
+        // turn.completed event is queued behind it rather than racing past it, because the events of
+        // one call reach an observer in the order the call raised them, so exactly one has arrived.
+        Assert.Single(sink.Events);
 
         sink.Release();
+
+        // Off the turn, and only now. The queued event lands on the dispatcher's own task, which is
+        // where a slow sink is paid for.
+        var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(10);
+        while (sink.Events.Count < 2 && DateTimeOffset.UtcNow < deadline)
+        {
+            await Task.Delay(10, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(
+            [AuditEventKind.CallStarted, AuditEventKind.TurnCompleted],
+            sink.Events.Select(item => item.Kind).ToArray());
     }
 
     [Fact]

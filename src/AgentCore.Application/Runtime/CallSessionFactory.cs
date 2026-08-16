@@ -1,5 +1,7 @@
+using AgentCore.Application.Audit;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.State;
@@ -21,6 +23,14 @@ namespace AgentCore.Application.Runtime;
 /// The constructor stays plain on purpose. It reads no service provider and no configuration source,
 /// so the host owns the registration and this class owns nothing but the seam.
 /// </para>
+/// <para>
+/// It is also where the observers of a call are assembled. The host still binds an
+/// <see cref="IAuditSinkPort"/> and an <see cref="ILogger"/> and knows nothing of
+/// <see cref="ICallObserver"/>; this factory turns them into the audit, telemetry, and logging
+/// readings of one fact. The observers themselves are shared and hold no per-call state, but each
+/// session gets a <see cref="CallObserverDispatcher"/> of its own, because the dispatcher's ordering
+/// guarantee is per instance and a shared one would make every call queue behind every other.
+/// </para>
 /// </remarks>
 public sealed class CallSessionFactory : ICallSessionFactory
 {
@@ -28,7 +38,7 @@ public sealed class CallSessionFactory : ICallSessionFactory
     private readonly IGuardEvaluator _guards;
     private readonly StateExtractor? _extractor;
     private readonly TimeProvider _time;
-    private readonly IAuditSinkPort? _audit;
+    private readonly ICallObserver[] _observers;
     private readonly ILogger? _logger;
     private readonly PromptModerator? _moderation;
 
@@ -73,9 +83,29 @@ public sealed class CallSessionFactory : ICallSessionFactory
         _guards = guards;
         _extractor = extractor;
         _time = timeProvider ?? TimeProvider.System;
-        _audit = auditSink;
         _logger = logger;
         _moderation = moderation;
+
+        // <b>The sink goes LAST.</b> The dispatcher offers one fact to each observer in turn, in
+        // this order, and that order is what a reading of the same fact costs the turn: the counters
+        // of section 8.6 and the rows of section 8.7 are taken above the enqueue, exactly as the old
+        // turn loop took them. The counter and the line always answer at once; a sink is the one that
+        // may not, and a durable insert is measured at 13 ms p50 and 32 ms p99 in section 7.
+        //
+        // What the order no longer decides is what a LATER fact costs. Each observer has a tail of
+        // its own inside the dispatcher, so a sink still writing an earlier row holds up nothing but
+        // its own next row: telemetry and logging keep their old synchronous cost on every event
+        // whatever the sink is doing, and the remarks on TelemetryCallObserver still hold that a kind
+        // is counted whatever the sink then does with it. Order is guaranteed per observer, which is
+        // all the chain of D23 needs, and the slow one pays for itself alone, off the turn.
+        //
+        // A host that bound no sink gets no audit observer at all: there is nothing to write to, so
+        // nothing is built rather than a sink that drops what it is handed. Both other readings are
+        // always present, because the counters and the rows are this library's own and no host opts
+        // out of them.
+        _observers = auditSink is null
+            ? [new TelemetryCallObserver(), new LoggingCallObserver(logger)]
+            : [new TelemetryCallObserver(), new LoggingCallObserver(logger), new AuditCallObserver(auditSink)];
     }
 
     /// <summary>Builds the extractor one document declares.</summary>
@@ -104,7 +134,8 @@ public sealed class CallSessionFactory : ICallSessionFactory
             _guards,
             _extractor,
             _time,
-            _audit,
-            _logger,
+
+            // One dispatcher for each session, over the shared observers. See the remarks above.
+            new CallObserverDispatcher(_observers, _logger),
             _moderation);
 }

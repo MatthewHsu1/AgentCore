@@ -568,6 +568,8 @@ AgentCore.Application.Ports.ICallChannelFactory
 AgentCore.Application.Ports.ICallChannelFactory.OpenAsync(AgentCore.Application.Call.CallChannelContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Call.CallChannel!>
 AgentCore.Application.Ports.ICallInputPort
 AgentCore.Application.Ports.ICallInputPort.ListenAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<AgentCore.Application.Call.CallInput!>!
+AgentCore.Application.Ports.ICallObserver
+AgentCore.Application.Ports.ICallObserver.OnCallEventAsync(AgentCore.Application.Runtime.CallEvent! callEvent, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Ports.ICallOutputPort
 AgentCore.Application.Ports.ICallOutputPort.CompleteAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Ports.ICallOutputPort.SpeakAsync(string! fragment, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
@@ -621,6 +623,35 @@ AgentCore.Application.Providers.VendorSeam.RegistrationHint.init -> void
 AgentCore.Application.Providers.VendorSeam.VendorSeam() -> void
 AgentCore.Application.Providers.VendorSeam.VendorSeam(string! documentPath, string! pointer, string! registrationHint) -> void
 AgentCore.Application.Providers.VendorSeam.VendorSeam(string! DocumentPath, string! Pointer, string! RegistrationHint, string! Plural) -> void
+AgentCore.Application.Runtime.CallEvent
+AgentCore.Application.Runtime.CallEvent.<Clone>$() -> AgentCore.Application.Runtime.CallEvent!
+AgentCore.Application.Runtime.CallEvent.AmendsOrdinal.get -> long?
+AgentCore.Application.Runtime.CallEvent.AmendsOrdinal.init -> void
+AgentCore.Application.Runtime.CallEvent.CallEvent() -> void
+AgentCore.Application.Runtime.CallEvent.CallId.get -> string!
+AgentCore.Application.Runtime.CallEvent.CallId.init -> void
+AgentCore.Application.Runtime.CallEvent.Equals(AgentCore.Application.Runtime.CallEvent? other) -> bool
+AgentCore.Application.Runtime.CallEvent.Kind.get -> AgentCore.Application.Runtime.CallEventKind
+AgentCore.Application.Runtime.CallEvent.Kind.init -> void
+AgentCore.Application.Runtime.CallEvent.OccurredAt.get -> System.DateTimeOffset
+AgentCore.Application.Runtime.CallEvent.OccurredAt.init -> void
+AgentCore.Application.Runtime.CallEvent.Ordinal.get -> long?
+AgentCore.Application.Runtime.CallEvent.Ordinal.init -> void
+AgentCore.Application.Runtime.CallEvent.Payload.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!
+AgentCore.Application.Runtime.CallEvent.Payload.init -> void
+AgentCore.Application.Runtime.CallEvent.TurnIndex.get -> int?
+AgentCore.Application.Runtime.CallEvent.TurnIndex.init -> void
+AgentCore.Application.Runtime.CallEventKind
+AgentCore.Application.Runtime.CallEventKind.CallEnded = 9 -> AgentCore.Application.Runtime.CallEventKind
+AgentCore.Application.Runtime.CallEventKind.CallStarted = 0 -> AgentCore.Application.Runtime.CallEventKind
+AgentCore.Application.Runtime.CallEventKind.EmptyReply = 5 -> AgentCore.Application.Runtime.CallEventKind
+AgentCore.Application.Runtime.CallEventKind.ExtractionFailed = 6 -> AgentCore.Application.Runtime.CallEventKind
+AgentCore.Application.Runtime.CallEventKind.ModerationClean = 3 -> AgentCore.Application.Runtime.CallEventKind
+AgentCore.Application.Runtime.CallEventKind.ModerationUnavailable = 2 -> AgentCore.Application.Runtime.CallEventKind
+AgentCore.Application.Runtime.CallEventKind.PromptFlagged = 1 -> AgentCore.Application.Runtime.CallEventKind
+AgentCore.Application.Runtime.CallEventKind.ReplyInterrupted = 8 -> AgentCore.Application.Runtime.CallEventKind
+AgentCore.Application.Runtime.CallEventKind.ToolFailed = 4 -> AgentCore.Application.Runtime.CallEventKind
+AgentCore.Application.Runtime.CallEventKind.TurnCompleted = 7 -> AgentCore.Application.Runtime.CallEventKind
 AgentCore.Application.Runtime.CallSession
 AgentCore.Application.Runtime.CallSession.CallId.get -> string!
 AgentCore.Application.Runtime.CallSession.Compiled.get -> AgentCore.Application.Configuration.Compilation.CompiledAgent!
@@ -890,6 +921,11 @@ override AgentCore.Application.Configuration.Validation.ConfigurationValidationR
 override AgentCore.Application.Evaluation.EvaluationScore.Equals(object? obj) -> bool
 override AgentCore.Application.Evaluation.EvaluationScore.GetHashCode() -> int
 override AgentCore.Application.Evaluation.EvaluationScore.ToString() -> string!
+override AgentCore.Application.Runtime.CallEvent.Equals(object? obj) -> bool
+override AgentCore.Application.Runtime.CallEvent.GetHashCode() -> int
+override AgentCore.Application.Runtime.CallEvent.ToString() -> string!
+static AgentCore.Application.Runtime.CallEvent.operator !=(AgentCore.Application.Runtime.CallEvent? left, AgentCore.Application.Runtime.CallEvent? right) -> bool
+static AgentCore.Application.Runtime.CallEvent.operator ==(AgentCore.Application.Runtime.CallEvent? left, AgentCore.Application.Runtime.CallEvent? right) -> bool
 ~override AgentCore.Application.Providers.VendorSeam.Equals(object obj) -> bool
 override AgentCore.Application.Providers.VendorSeam.GetHashCode() -> int
 ~override AgentCore.Application.Providers.VendorSeam.ToString() -> string
