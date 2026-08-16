@@ -3,7 +3,7 @@ using Xunit;
 namespace AgentCore.Evals;
 
 /// <summary>
-/// The one collection every class that touches the disk result store belongs to.
+/// The collection of every class that writes results to the disk store.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -16,14 +16,19 @@ namespace AgentCore.Evals;
 /// </para>
 /// <para>
 /// Naming this collection puts those classes in one queue, so no two ever hold the same result file
-/// at once. It buys nothing else. It fixes no order, and the gate still has to run after the suites
-/// that write what it reads. The <c>Category</c> filter of <see cref="BaselineGateTests"/> is what
-/// supplies that.
+/// at once. It buys nothing else. It fixes no order, and the classes in it may run in any order among
+/// themselves, which is fine because none of them reads what another wrote.
+/// </para>
+/// <para>
+/// <see cref="BaselineGateTests"/> does read what they wrote, and that is why it is not in here. It
+/// sits alone in <see cref="EvalGateCollection"/> so that <see cref="GateLastCollectionOrderer"/> can
+/// put it after this one: an orderer sorts collections, so a class that needs to run last needs a
+/// collection to itself.
 /// </para>
 /// </remarks>
 [CollectionDefinition(Name)]
 public sealed class EvalStoreCollection
 {
-    /// <summary>The name each class that touches the store carries.</summary>
+    /// <summary>The name each class that writes to the store carries.</summary>
     public const string Name = "EvalStore";
 }

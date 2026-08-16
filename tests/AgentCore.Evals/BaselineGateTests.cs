@@ -8,12 +8,23 @@ namespace AgentCore.Evals;
 /// <remarks>
 /// <para>
 /// The gate reads what the eval suites already wrote to the disk store, so it has to run after them.
-/// A test run gives no order, so the gate carries the <c>Gate</c> category and CI runs two commands:
+/// That order is now structural: this class sits alone in <see cref="EvalGateCollection"/>, and
+/// <see cref="GateLastCollectionOrderer"/> runs that collection after every other one. So a plain
+/// <c>dotnet test tests/AgentCore.Evals</c>, with no filter, passes from an empty results directory.
+/// </para>
+/// <para>
+/// The <c>Gate</c> category stays, because CI still splits the run in two:
 /// </para>
 /// <code>
 /// dotnet test tests/AgentCore.Evals --filter "Category!=Gate"
 /// dotnet test tests/AgentCore.Evals --filter "Category=Gate"
 /// </code>
+/// <para>
+/// The split is what separates a broken harness from a dropped score in the CI log, and it lets the
+/// two halves carry different secrets. It is no longer what supplies the order. Run the second command
+/// on its own against an empty directory and it still fails, correctly: nothing wrote the results it
+/// measures.
+/// </para>
 /// <para>
 /// A drop larger than the recorded tolerance fails. A rise never fails. The gate writes what it
 /// measured to <c>eval-results/measured.json</c>, so a person who accepts a change copies the numbers
@@ -21,7 +32,7 @@ namespace AgentCore.Evals;
 /// </para>
 /// </remarks>
 [Trait("Category", "Gate")]
-[Collection(EvalStoreCollection.Name)]
+[Collection(EvalGateCollection.Name)]
 public sealed class BaselineGateTests
 {
     private const string MeasuredPath = "eval-results/measured.json";
