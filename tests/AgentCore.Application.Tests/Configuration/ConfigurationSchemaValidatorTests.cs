@@ -356,4 +356,56 @@ public sealed class ConfigurationSchemaValidatorTests
     [Fact]
     public void TheEmbeddedSchema_IsPresent()
         => Assert.Contains("agentcore/v1", ConfigurationSchemaValidator.SchemaJson, StringComparison.Ordinal);
+
+    [Fact]
+    public void ABuiltinToolWithParameters_FailsWithThePointerOfTheTool()
+    {
+        // The C# still reads fixed argument names for a builtin (BuiltinToolFactory). A document
+        // that overrides the schema makes the model fill boxes the C# never reads.
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            tools:
+              - { id: search_chunks, kind: builtin, uses: knowledge.search, parameters: { type: object } }
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+        Assert.Contains(failure.Errors, error => error.Pointer == "/tools/0/parameters");
+    }
+
+    [Fact]
+    public void ABuiltinToolWithNoParameters_PassesCheckOne()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: fine
+            tools:
+              - { id: search_chunks, kind: builtin, uses: knowledge.search }
+            """;
+
+        var parsed = ConfigurationLoader.ReadDocument(document, ConfigurationFormat.Yaml);
+
+        Assert.Empty(ConfigurationSchemaValidator.Evaluate(parsed));
+    }
+
+    [Theory]
+    [InlineData("http",    "request: { method: GET, url: \"https://example.test\" }")]
+    [InlineData("binding", "binds: host.lookup")]
+    [InlineData("agent",   "agent: reviewer")]
+    public void ANonBuiltinToolWithParameters_PassesCheckOne(string kind, string discriminatorField)
+    {
+        var document = "apiVersion: agentcore/v1\n"
+            + "name: fine\n"
+            + "tools:\n"
+            + "  - id: delegated\n"
+            + "    kind: " + kind + "\n"
+            + "    " + discriminatorField + "\n"
+            + "    parameters: { type: object }\n";
+
+        var parsed = ConfigurationLoader.ReadDocument(document, ConfigurationFormat.Yaml);
+
+        Assert.Empty(ConfigurationSchemaValidator.Evaluate(parsed));
+    }
 }
