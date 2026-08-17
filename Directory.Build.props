@@ -20,7 +20,8 @@
     <Company>N/A</Company>
     <Product>AgentCore</Product>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>OPEN — set in the commit that creates the repository</RepositoryUrl>
+    <RepositoryUrl>https://github.com/MatthewHsu1/AgentCore</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/MatthewHsu1/AgentCore</PackageProjectUrl>
     <RepositoryType>git</RepositoryType>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <IncludeSymbols>true</IncludeSymbols>

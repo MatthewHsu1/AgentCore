@@ -41,9 +41,67 @@ public static class AuditPayloadKeys
     public const string StageAfter = "stageAfter";
 
     /// <summary>The name of the tool that failed.</summary>
+    /// <remarks>
+    /// It is the name the MODEL called, which for <see cref="Audit.ToolFailureKind.Undeclared"/> is a
+    /// name the document does not declare. A reader that joins this to <c>tools[].id</c> therefore
+    /// finds nothing for exactly the rows that matter most.
+    /// </remarks>
     public const string ToolName = "toolName";
 
+    /// <summary>
+    /// The id the model gave the one tool call that failed, so two calls to the same tool in one turn
+    /// are two records and not one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A model may emit several <c>FunctionCallContent</c> in one assistant message, and nothing stops
+    /// three of them from naming the same tool. <see cref="ToolName"/> alone then reads as one fact
+    /// repeated, and the chain loses which call failed and which answered. The call id is the only
+    /// thing that tells them apart, and it is also what joins this row to the tool result in the
+    /// transcript and to the <c>gen_ai.tool.call.id</c> attribute on the framework's own
+    /// <c>execute_tool</c> span.
+    /// </para>
+    /// <para>
+    /// <b>Why this is not called <c>gen_ai.tool.call.id</c>.</b> The OpenTelemetry GenAI conventions
+    /// name it that, and adopting a published vocabulary is normally the right instinct. It is refused
+    /// here for three reasons, and the third is the one that decides it. First, every
+    /// <c>gen_ai.*</c> attribute is still marked Development stability, and the conventions were moved
+    /// out of the semantic-conventions repository in v1.42.0 into a repository with no tagged release
+    /// at all, with the <c>execute_tool</c> attribute set restructured after that. Second, the payload
+    /// beside it is already this vocabulary's own — <see cref="ToolName"/>, <see cref="ToolError"/>,
+    /// <see cref="EndReason"/>, <see cref="ReplyText"/> — and one record written in two vocabularies
+    /// reads as two records to whoever queries it. Third, and decisively: D15 makes this constant a
+    /// permanent obligation and the row it keys is hash-chained and read years later, so the name must
+    /// be one WE can promise. Borrowing an unstable name would be promising someone else's.
+    /// </para>
+    /// <para>
+    /// <b>Why there is no schema version beside it.</b> A version key would have to ride every event to
+    /// be worth reading, which changes the canonical bytes of every row for a rename that may never
+    /// come. It is also not needed: the canonical form is ALREADY versioned, in the first line of every
+    /// hashed record, by <see cref="AuditChain.CanonicalFormVersion"/>, so a change to the hashing rule
+    /// leaves every stored row verifiable under the rule it was written with. And a key is never
+    /// renamed in place — a new key is added beside the old one, exactly as a wire token is — because
+    /// "a missing fact is an absent key" already makes an absent old key readable to a new reader. The
+    /// migration path therefore exists without spending bytes on every row.
+    /// </para>
+    /// </remarks>
+    public const string ToolCallId = "toolCallId";
+
+    /// <summary>Which of the two ways a tool call fails this one was.</summary>
+    /// <remarks>
+    /// The value is one wire token of <see cref="Audit.ToolFailureKind"/>, and never free text, for the
+    /// reason <see cref="EndReason"/> gives: the fact is counted years later. It is not required on
+    /// <see cref="AuditEventKind.ToolFailed"/> — a turn whose run threw before any one call could be
+    /// named still writes the event, and a missing fact is an absent key.
+    /// </remarks>
+    public const string ToolFailureKind = "toolFailureKind";
+
     /// <summary>Why the tool failed, in the words the tool gave.</summary>
+    /// <remarks>
+    /// It stays free text. The words come from an arbitrary tool body or an arbitrary endpoint, so
+    /// there is no set here to close; the countable half of the fact is
+    /// <see cref="ToolFailureKind"/> beside it.
+    /// </remarks>
     public const string ToolError = "toolError";
 
     /// <summary>

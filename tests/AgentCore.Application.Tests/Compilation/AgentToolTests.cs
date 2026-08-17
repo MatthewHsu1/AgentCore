@@ -147,6 +147,52 @@ public sealed class AgentToolTests
     }
 
     [Fact]
+    public async Task TheDeclaredParameters_ReplaceTheGeneratedSingleStringSchema()
+    {
+        using ToolCallingChatClient client = new("the specialist answer");
+        var compiled = Compile(DelegatingYaml, client);
+
+        await compiled.Agent.RunAsync("help me", cancellationToken: TestContext.Current.CancellationToken);
+
+        var schema = client.Offered[0].JsonSchema;
+
+        // The whole point of the wrapper: what the model sees is the document's parameters block and
+        // nothing else. AsAIFunction() generates one string argument named query, so a schema that
+        // still carries query is a schema the substitution failed to replace.
+        var properties = schema.GetProperty("properties");
+        Assert.Equal("question", Assert.Single(properties.EnumerateObject()).Name);
+        Assert.False(properties.TryGetProperty("query", out _));
+        Assert.Equal("object", schema.GetProperty("type").GetString());
+        Assert.Equal(
+            ["question"],
+            schema.GetProperty("required").EnumerateArray().Select(entry => entry.GetString()));
+    }
+
+    [Fact]
+    public async Task D8_TheDelegatingFunction_NeverHandsBackTheInnerAgent()
+    {
+        using ToolCallingChatClient client = new("the specialist answer");
+        var compiled = Compile(DelegatingYaml, client);
+
+        await compiled.Agent.RunAsync("help me", cancellationToken: TestContext.Current.CancellationToken);
+
+        var function = client.Offered[0];
+
+        // The wrapper forwards GetService to the function AsAIFunction() built. That function closes
+        // over the inner AIAgent but never publishes it, and D8 depends on it staying that way: no
+        // probe may pull an agent out of a tool the outer agent advertises.
+        Assert.Null(function.GetService<AIAgent>());
+        Assert.Null(function.GetService<ChatClientAgent>());
+
+        // The probe the framework does make answers the same before and after the forward.
+        Assert.Null(function.GetService<ApprovalRequiredAIFunction>());
+
+        // Asking for what this object is still returns this object, keyed lookups still find nothing.
+        Assert.Same(function, function.GetService<AIFunction>());
+        Assert.Null(function.GetService<AIFunction>("keyed"));
+    }
+
+    [Fact]
     public void AKindAgentTool_NeedsNoToolFactory()
     {
         using ToolCallingChatClient client = new("the specialist answer");

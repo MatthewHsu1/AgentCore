@@ -7,6 +7,7 @@ using AgentCore.Application.Runtime;
 using AgentCore.Application.Call;
 using AgentCore.AspNetCore.Sessions;
 using AgentCore.AspNetCore.Call;
+using AgentCore.Domain.Audit;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -268,6 +269,35 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
 
                 if (_session is { } session)
                 {
+                    // The chain closes before the session leaves the store, and never after: §11
+                    // item 6 makes call.ended the last event of every call, and the session is what
+                    // writes it. The reason comes from the status just decided rather than from a
+                    // second reading of the same tasks, so the vendor's close frame and the audit
+                    // row can never disagree about how this call ended. A call that already closed
+                    // its own chain from a terminal stage answers false here and keeps the
+                    // agent.completed it wrote: EndCall is idempotent, and nothing on this path may
+                    // give one call two endings.
+                    //
+                    // Guarded for the same reason CloseAsync above is. §7.1 forbids teardown
+                    // throwing out of the request handler, and the removal below must run whatever
+                    // happens here — InMemoryCallSessionStore evicts nothing on its own, so a
+                    // session skipped here would live for the rest of the process. The event is
+                    // handed to observers that swallow their own faults and the reason is a member
+                    // of a closed set this class picks itself, so the only cause left is the clock
+                    // the session reads; a missing last event is a gap in one chain, and losing the
+                    // rest of teardown would be a leak in every call after it.
+                    try
+                    {
+                        _ = session.EndCall(EndReasonOf(status));
+                    }
+                    catch (Exception fault)
+                    {
+                        ConnectionTaskObserver.SafeLog(() => TelnyxRelayLog.CallEndFaulted(
+                            _logger,
+                            session.CallId,
+                            fault));
+                    }
+
                     var store = _http.RequestServices.GetRequiredService<ICallSessionStore>();
                     await store.RemoveAsync(session.CallId, CancellationToken.None).ConfigureAwait(false);
                 }
@@ -359,6 +389,63 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
 
         return (WebSocketCloseStatus.NormalClosure, null);
     }
+
+    /// <summary>Reads the ending one close status reports, as one member of the closed set.</summary>
+    /// <param name="status">What <see cref="DetermineCloseStatus"/> already decided this call closes with.</param>
+    /// <returns>The reason the last event of the chain carries.</returns>
+    /// <remarks>
+    /// <para>
+    /// §11 item 6 and T55/T56 ask every call to end its chain in <c>call.ended</c> with a reason from
+    /// the closed set of four, and only this adapter can supply two of them: the turn loop closes its
+    /// own chain with <see cref="CallEndReason.AgentCompleted"/> when the stage machine reaches a
+    /// terminal stage, and <see cref="CallEndReason.TransferredToHuman"/> belongs to the Call Control
+    /// path of §4.3 that voice slice 2 adds and this build does not have. What is left for a socket
+    /// that ended is the caller, or a fault.
+    /// </para>
+    /// <para>
+    /// The answer is read off the status rather than recomputed from the three tasks, so one decision
+    /// serves both the close frame the vendor sees and the row a report reads years later. That also
+    /// keeps this method total over a status set only <see cref="DetermineCloseStatus"/> chooses from.
+    /// </para>
+    /// <para>
+    /// <b><see cref="WebSocketError.ConnectionClosedPrematurely"/> is a hang-up, not a fault, and that
+    /// is the load-bearing decision here.</b> A socket that stopped with no close frame is what
+    /// <see cref="DetermineCloseStatus"/> already folds into <see cref="WebSocketCloseStatus.NormalClosure"/>
+    /// alongside a read loop that saw the relay's own close frame — its remarks call both "an ordinary
+    /// end of call" — and what <see cref="ClassifyTelnyxFault"/> already logs through
+    /// <see cref="TelnyxRelayLog.CallDroppedWithNoCloseFrame"/> at Information rather than as a defect.
+    /// This method agrees with both, and it has to: a caller who hangs up and a caller whose phone
+    /// loses signal look identical on this socket, the vendor never reconnects either of them, and
+    /// the audit table would be worth very little if the ordinary way a call ends were counted as a
+    /// system fault. §7.1's rule that a bad frame must never drop a call points the same way — the
+    /// adapter's default reading of an ended socket is the call ending, not the endpoint failing.
+    /// The one place this reading is contradicted is the remark on <see cref="CallEndReason.Faulted"/>
+    /// itself, which lists "a dropped relay socket" among its causes; that sentence predates the
+    /// close-status reasoning above, and it is left alone here rather than edited, because the enum is
+    /// the core's and this decision is the adapter's.
+    /// </para>
+    /// <para>
+    /// The idle deadline lands here too, and for the same reason. A read loop that ends on
+    /// <c>IdleTimeout</c> returns rather than throwing, so it reaches
+    /// <see cref="WebSocketCloseStatus.NormalClosure"/> and is recorded as a hang-up — which is
+    /// exactly what <see cref="TelnyxRelayLog.IdleTimeoutReached"/> already says a silent socket is:
+    /// a call that is already over.
+    /// </para>
+    /// <para>
+    /// Everything else is <see cref="CallEndReason.Faulted"/>, and that includes two endings worth
+    /// naming. A protocol violation closes with the status <see cref="RelayProtocolException"/>
+    /// carries: the relay broke the contract and this endpoint refused the call, which no caller
+    /// chose. A host that stops closes with <see cref="WebSocketCloseStatus.EndpointUnavailable"/>:
+    /// the process went away underneath a live call, which no caller chose either. Neither is a
+    /// hang-up, neither is the agent finishing, and neither is a transfer, so within a set of four
+    /// the honest answer is the fault — recorded as one rather than quietly counted as a caller who
+    /// decided to leave.
+    /// </para>
+    /// </remarks>
+    private static CallEndReason EndReasonOf(WebSocketCloseStatus status)
+        => status is WebSocketCloseStatus.NormalClosure
+            ? CallEndReason.CallerHungUp
+            : CallEndReason.Faulted;
 
     /// <summary>Logs the two faults that are the vendor's doing rather than this endpoint's defect.</summary>
     /// <param name="fault">The exception a loop or a turn ended with.</param>

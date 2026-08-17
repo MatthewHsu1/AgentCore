@@ -153,6 +153,10 @@ AgentCore.Domain.Audit.CallEndReason.CallerHungUp = 0 -> AgentCore.Domain.Audit.
 AgentCore.Domain.Audit.CallEndReason.Faulted = 3 -> AgentCore.Domain.Audit.CallEndReason
 AgentCore.Domain.Audit.CallEndReason.TransferredToHuman = 2 -> AgentCore.Domain.Audit.CallEndReason
 AgentCore.Domain.Audit.CallEndReasons
+AgentCore.Domain.Audit.ToolFailureKind
+AgentCore.Domain.Audit.ToolFailureKind.Faulted = 1 -> AgentCore.Domain.Audit.ToolFailureKind
+AgentCore.Domain.Audit.ToolFailureKinds
+AgentCore.Domain.Audit.ToolFailureKind.Undeclared = 0 -> AgentCore.Domain.Audit.ToolFailureKind
 const AgentCore.Domain.Audit.AuditChain.CanonicalFormVersion = "agentcore-audit-v1" -> string!
 const AgentCore.Domain.Audit.AuditChainVerification.LinkBrokenResult = "link-broken" -> string!
 const AgentCore.Domain.Audit.AuditChainVerification.OkResult = "ok" -> string!
@@ -163,7 +167,9 @@ const AgentCore.Domain.Audit.AuditPayloadKeys.ModerationCategories = "moderation
 const AgentCore.Domain.Audit.AuditPayloadKeys.ReplyText = "replyText" -> string!
 const AgentCore.Domain.Audit.AuditPayloadKeys.StageAfter = "stageAfter" -> string!
 const AgentCore.Domain.Audit.AuditPayloadKeys.StageBefore = "stageBefore" -> string!
+const AgentCore.Domain.Audit.AuditPayloadKeys.ToolCallId = "toolCallId" -> string!
 const AgentCore.Domain.Audit.AuditPayloadKeys.ToolError = "toolError" -> string!
+const AgentCore.Domain.Audit.AuditPayloadKeys.ToolFailureKind = "toolFailureKind" -> string!
 const AgentCore.Domain.Audit.AuditPayloadKeys.ToolName = "toolName" -> string!
 const AgentCore.Domain.Audit.AuditPayloadKeys.UtteranceUntilInterrupt = "utteranceUntilInterrupt" -> string!
 override AgentCore.Domain.Audit.AuditChainLink.Equals(object? obj) -> bool
@@ -201,3 +207,5 @@ static AgentCore.Domain.Audit.AuditHash.Parse(string! value) -> AgentCore.Domain
 static AgentCore.Domain.Audit.AuditHash.TryParse(string? value, out AgentCore.Domain.Audit.AuditHash? hash) -> bool
 static AgentCore.Domain.Audit.CallEndReasons.ToToken(AgentCore.Domain.Audit.CallEndReason reason) -> string!
 static AgentCore.Domain.Audit.CallEndReasons.TryParse(string? token, out AgentCore.Domain.Audit.CallEndReason reason) -> bool
+static AgentCore.Domain.Audit.ToolFailureKinds.ToToken(AgentCore.Domain.Audit.ToolFailureKind kind) -> string!
+static AgentCore.Domain.Audit.ToolFailureKinds.TryParse(string? token, out AgentCore.Domain.Audit.ToolFailureKind kind) -> bool

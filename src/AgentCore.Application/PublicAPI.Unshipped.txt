@@ -1117,6 +1117,7 @@ static readonly AgentCore.Application.Secrets.KnownSecrets.Zilliz -> AgentCore.A
 virtual AgentCore.Application.Call.CallInput.EqualityContract.get -> System.Type!
 virtual AgentCore.Application.Call.CallInput.Equals(AgentCore.Application.Call.CallInput? other) -> bool
 virtual AgentCore.Application.Call.CallInput.PrintMembers(System.Text.StringBuilder! builder) -> bool
+virtual AgentCore.Application.Tools.DeclaredTool.IsBeyondTheModel(System.Exception! failure) -> bool
 virtual AgentCore.Application.Tools.ToolBinding.Invoke(System.Text.Json.Nodes.JsonObject! arguments, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<object?>
 AgentCore.Application.Call.CallSpeechPairing
 AgentCore.Application.Ports.ICallAdapter

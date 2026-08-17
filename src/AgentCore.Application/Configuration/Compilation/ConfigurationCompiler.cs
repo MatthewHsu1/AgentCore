@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Runtime;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -228,7 +229,7 @@ public static class ConfigurationCompiler
 
             path.Add(id);
             var built = new ChatClientAgent(
-                context.ChatClients.GetChatClient(item.Model ?? section.Defaults?.Model),
+                WithToolFailureAuditing(context.ChatClients.GetChatClient(item.Model ?? section.Defaults?.Model)),
                 AgentInstructions.Compose(section.Defaults, item),
                 item.Id,
                 description: null,
@@ -239,6 +240,39 @@ public static class ConfigurationCompiler
             return built;
         }
     }
+
+    /// <summary>Puts the auditing function-invocation loop into the pipeline of one agent.</summary>
+    /// <param name="model">The client <c>providers.llm</c> resolved for this agent.</param>
+    /// <returns>The client the agent sends on.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is how the observer gets into the pipeline, and it works because of one line in
+    /// <c>Microsoft.Agents.AI</c>: <c>ChatClientExtensions.WithDefaultAgentMiddleware</c> tests
+    /// <c>chatClient.GetService&lt;FunctionInvokingChatClient&gt;()</c> FIRST and adds one of its own
+    /// only when it finds none. A <c>ChatClientAgent</c> handed a client that already invokes
+    /// functions therefore uses that one, and there is exactly one loop in the pipeline either way.
+    /// Verified against Microsoft.Agents.AI 1.17.0.
+    /// </para>
+    /// <para>
+    /// It wraps here, and not in <c>CompositeChatClientFactory</c>, because this is the seam where an
+    /// AGENT is built. The factory owns one vendor client for each <c>providers.llm[].as</c> name and
+    /// disposes it, and it also answers the extractor, which is a plain completion call with no tools
+    /// and nothing to observe. This wrapper is stateless, holds nothing per call, and is never
+    /// disposed, so the shared vendor client below it keeps the single owner it had.
+    /// </para>
+    /// <para>
+    /// <b>One consequence, recorded because it is not obvious.</b> MAF 1.17.0 reserves a slot for chat
+    /// telemetry directly BELOW its own function-invocation loop — <c>DeferredOpenTelemetryChatClient</c>
+    /// — so that the chat span is closed before tools run and <c>execute_tool</c> spans hang off the
+    /// <c>invoke_agent</c> span. A loop supplied from underneath, as this one is, ends up below that
+    /// slot rather than above it. Nothing changes today: this repository activates the slot nowhere,
+    /// the slot is inert until <c>OpenTelemetryAgent</c> activates it, and no <c>execute_tool</c> span
+    /// is emitted either way. It would matter the day the agent is wrapped for OpenTelemetry, and the
+    /// fix that day is a change here and not a change to the observer.
+    /// </para>
+    /// </remarks>
+    private static AuditingFunctionInvokingChatClient WithToolFailureAuditing(IChatClient model)
+        => new(model);
 
     private static List<AITool>? BuildTools(
         AgentConfiguration item,

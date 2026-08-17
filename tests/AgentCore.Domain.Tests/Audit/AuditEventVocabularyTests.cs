@@ -78,6 +78,37 @@ public sealed class AuditEventVocabularyTests
         Assert.False(CallEndReasons.TryParse("0", out _));
     }
 
+    [Theory]
+    [InlineData(ToolFailureKind.Undeclared, "tool.undeclared")]
+    [InlineData(ToolFailureKind.Faulted, "tool.faulted")]
+    public void EachToolFailureKind_HasItsToken(ToolFailureKind kind, string token)
+    {
+        // The token is stable forever, for the reason an end reason's is. A report that counts how
+        // often the model invented a tool name reads this token years after the call.
+        Assert.Equal(token, ToolFailureKinds.ToToken(kind));
+        Assert.True(ToolFailureKinds.TryParse(token, out ToolFailureKind parsed));
+        Assert.Equal(kind, parsed);
+    }
+
+    [Fact]
+    public void TheToolFailureKinds_AreClosed()
+    {
+        ToolFailureKind[] declared = Enum.GetValues<ToolFailureKind>();
+
+        // Two facts, and no more: the model named a tool the document does not declare, or a
+        // declared tool threw. The framework's own status set is wider and it is not ours.
+        Assert.Equal(2, declared.Length);
+        foreach (ToolFailureKind kind in declared)
+        {
+            Assert.NotEmpty(ToolFailureKinds.ToToken(kind));
+        }
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => ToolFailureKinds.ToToken((ToolFailureKind)99));
+        Assert.False(ToolFailureKinds.TryParse("NotFound", out _));
+        Assert.False(ToolFailureKinds.TryParse("Exception", out _));
+        Assert.False(ToolFailureKinds.TryParse("1", out _));
+    }
+
     /// <summary>The reason is counted, so the chain refuses free text under it.</summary>
     [Fact]
     public void ACallEndedEventWithAFreeTextReason_IsRefused()

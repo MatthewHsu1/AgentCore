@@ -318,6 +318,11 @@ public sealed class CallSession : IConversationPort
             // cancelled.
             using var scope = CallStateScope.Enter(State);
 
+            // The other scope of the same shape, and open for the same reason: the chat client that
+            // invokes tools is shared by every call under T44, so it finds the call it is running for
+            // here. It closes with the turn, exactly as the state scope above does.
+            using var faults = ToolFailureScope.Enter(failure => RecordToolFailure(turn.Index, failure));
+
             // Moderation reads what the caller said before the model runs. A flagged turn never
             // reaches the model, so nothing of it is generated and nothing of it is extracted.
             if (await RefuseFlaggedPromptAsync(turn, userInput, cancellation.Token).ConfigureAwait(false)
@@ -409,6 +414,11 @@ public sealed class CallSession : IConversationPort
             // first crossing and everything up to the first yield.
             using var opening = CallStateScope.Enter(State);
 
+            // See the same pair in RunTurnAsync. This one covers the first crossing; the round below
+            // opens it again, because an async iterator restores its caller's execution context at
+            // every yield and an ambient value does not survive one.
+            using var openingFaults = ToolFailureScope.Enter(failure => RecordToolFailure(turn.Index, failure));
+
             // Moderation reads what the caller said before the model runs, so a flagged turn opens no
             // stream at all. The host receives the refusal as one update, the same shape it would
             // receive a one-chunk reply in, so nothing downstream learns that this turn was refused.
@@ -442,6 +452,8 @@ public sealed class CallSession : IConversationPort
                         // the first round only. The graph runs inside MoveNextAsync, so the scope
                         // opens again here and closes with the round.
                         using var round = CallStateScope.Enter(State);
+                        using var roundFaults = ToolFailureScope.Enter(
+                            failure => RecordToolFailure(turn.Index, failure));
 
                         if (!await stream.MoveNextAsync().ConfigureAwait(false))
                         {
@@ -1085,8 +1097,18 @@ public sealed class CallSession : IConversationPort
     {
         if (toolFault is not null)
         {
-            // The fault threw out of the run, so the tool that spent the budget is not named here.
-            // A missing fact is an absent key, so toolName stays out rather than reading "unknown".
+            // Section 8.7 row six, at TURN altitude: this run ended, the caller heard the fallback,
+            // and the call lives. It is a different fact from the tool calls that failed inside it,
+            // which AuditingFunctionInvokingChatClient named one by one as they happened, and it is
+            // the only fact that says the TURN ended — no per-call row says that, and a fault that
+            // was never a tool call at all, such as the model transport, reaches only here.
+            //
+            // It carries no toolName and no toolCallId, and that absence is load-bearing rather than
+            // a gap. The fault arrives through ExceptionDispatchInfo with no function name on it, so
+            // a missing fact stays an absent key rather than reading "unknown". The same absence is
+            // what tells the two altitudes apart: LoggingCallObserver writes the one "log once" line
+            // of row six for this row and stays silent for the per-call rows, so an operator still
+            // reads exactly one line for one turn.
             _ = Raise(
                 CallEventKind.ToolFailed,
                 endedAt,
@@ -1127,6 +1149,42 @@ public sealed class CallSession : IConversationPort
 
         return completed;
     }
+
+    /// <summary>Raises the fact of one tool call that did not run to completion.</summary>
+    /// <param name="turnIndex">The turn the call belongs to.</param>
+    /// <param name="failure">What the function-invocation loop saw.</param>
+    /// <remarks>
+    /// <para>
+    /// It is raised the moment it happens rather than at the end of the turn, so the ordinal it takes
+    /// sits before the <c>turn.completed</c> of the same turn and a reader walks the turn in the order
+    /// it ran. The clock is read here for the same reason: the failure happened now, and the turn may
+    /// still run for several more rounds.
+    /// </para>
+    /// <para>
+    /// It is called on the framework's own tool flow, which is not the flow the turn is awaiting.
+    /// Nothing here needs a lock for that: the ordinal is taken with an interlocked increment, the
+    /// dispatch never blocks and never propagates, and one session runs one turn at a time so no
+    /// second turn is allocating ordinals beside it.
+    /// </para>
+    /// <para>
+    /// Every fact of the failure goes in, because §9 makes this chain the only long-term record and
+    /// nothing else holds any of them. The tool call id is what tells two calls to the same tool in
+    /// one turn apart, and <see cref="AuditPayloadKeys.ToolFailureKind"/> is what lets a report count
+    /// an invented tool name apart from a tool that ran and threw.
+    /// </para>
+    /// </remarks>
+    private void RecordToolFailure(int turnIndex, ToolFailure failure)
+        => _ = Raise(
+            CallEventKind.ToolFailed,
+            _time.GetUtcNow(),
+            turnIndex,
+            payload: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [AuditPayloadKeys.ToolName] = failure.ToolName,
+                [AuditPayloadKeys.ToolCallId] = failure.ToolCallId,
+                [AuditPayloadKeys.ToolFailureKind] = ToolFailureKinds.ToToken(failure.Kind),
+                [AuditPayloadKeys.ToolError] = failure.Message,
+            });
 
     /// <summary>Raises one durable fact of this call, and takes the next ordinal.</summary>
     /// <param name="kind">What happened. The chain of D23 stores this one.</param>

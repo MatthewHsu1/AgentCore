@@ -55,38 +55,47 @@ internal static class AgentDelegationTool
     /// Advertises the <c>parameters:</c> the document declares, over a function that takes one string.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// <c>AsAIFunction()</c> generates a single string argument. A delegating tool usually wants a
     /// richer call shape, so this wrapper publishes the declared schema and hands the whole argument
     /// object to the inner agent as one compact JSON object. That is one rule and it never changes:
     /// what the model fills is what the inner agent reads.
+    /// </para>
+    /// <para>
+    /// <see cref="DelegatingAIFunction"/> is the framework's own base for exactly this shape, so the
+    /// substitution is the only thing this class writes. Everything else — the name, the description,
+    /// the return schema, the serializer options, the additional properties — forwards for free, and
+    /// a forwarding member the framework adds later arrives without an edit here. Section 8.1 keeps
+    /// this file about the one declaration it compiles, not about re-stating a base class.
+    /// </para>
+    /// <para>
+    /// Deriving turns two members from inherited defaults into forwards, and both were checked rather
+    /// than assumed. <c>UnderlyingMethod</c> stops being <see langword="null"/> and becomes the method
+    /// behind the generated function; nothing in the framework or in this solution reads it, and a
+    /// <c>MethodInfo</c> is a BCL type, so D8 is untouched. <c>GetService</c> now falls through to the
+    /// inner function once the requested type does not fit this wrapper, and that is safe for the same
+    /// rule: the function <c>AsAIFunction()</c> returns is a plain reflection function that closes over
+    /// the <c>AIAgent</c> and never publishes it, so no probe can pull an agent — or any vendor or
+    /// transport type — back out through this seam and into the core. The one probe the framework
+    /// actually makes on a tool, <c>ApprovalRequiredAIFunction</c>, answers <see langword="null"/>
+    /// before and after, so tool approval behaviour is unchanged.
+    /// </para>
     /// </remarks>
-    private sealed class DeclaredSchemaFunction : AIFunction
+    private sealed class DeclaredSchemaFunction : DelegatingAIFunction
     {
-        private readonly AIFunction _inner;
         private readonly JsonElement _schema;
         private readonly string _argument;
 
         internal DeclaredSchemaFunction(AIFunction inner, JsonNode parameters)
+            : base(inner)
         {
-            _inner = inner;
-
             using var document = JsonDocument.Parse(parameters.ToJsonString());
             _schema = document.RootElement.Clone();
 
             _argument = FirstProperty(inner.JsonSchema) ?? DefaultArgument;
         }
 
-        public override string Name => _inner.Name;
-
-        public override string Description => _inner.Description;
-
         public override JsonElement JsonSchema => _schema;
-
-        public override JsonElement? ReturnJsonSchema => _inner.ReturnJsonSchema;
-
-        public override JsonSerializerOptions JsonSerializerOptions => _inner.JsonSerializerOptions;
-
-        public override IReadOnlyDictionary<string, object?> AdditionalProperties => _inner.AdditionalProperties;
 
         protected override ValueTask<object?> InvokeCoreAsync(
             AIFunctionArguments arguments,
@@ -109,7 +118,7 @@ internal static class AgentDelegationTool
                 Context = arguments.Context,
             };
 
-            return _inner.InvokeAsync(forwarded, cancellationToken);
+            return InnerFunction.InvokeAsync(forwarded, cancellationToken);
         }
 
         /// <summary>Reads the name of the first declared property of one JSON Schema object.</summary>

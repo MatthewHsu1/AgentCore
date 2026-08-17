@@ -276,6 +276,8 @@ public sealed class AuditChainTests
             Payload = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [AuditPayloadKeys.ToolName] = "lookup_order",
+                [AuditPayloadKeys.ToolCallId] = "call_JmQ2v8",
+                [AuditPayloadKeys.ToolFailureKind] = ToolFailureKinds.ToToken(ToolFailureKind.Faulted),
                 [AuditPayloadKeys.ToolError] = "the endpoint answered 503",
             },
         },

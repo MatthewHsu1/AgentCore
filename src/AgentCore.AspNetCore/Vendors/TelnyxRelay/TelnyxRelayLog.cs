@@ -281,4 +281,23 @@ internal static partial class TelnyxRelayLog
         Message = "the relay sent a second setup frame on call {CallId}. The first session is "
             + "released and the new one replaces it.")]
     public static partial void SecondSetupFrame(ILogger logger, string callId);
+
+    /// <summary>Closing the audit chain of a call faulted, so that call has no <c>call.ended</c> event.</summary>
+    /// <param name="logger">The logger of the connection.</param>
+    /// <param name="callId">The id of the call whose chain did not close.</param>
+    /// <param name="exception">The cause.</param>
+    /// <remarks>
+    /// This is worth an Error line and not a quieter one. §9 makes the chain of D23 the only
+    /// long-term record of a call, and §11 item 6 says every chain ends in <c>call.ended</c>, so a
+    /// chain that stops without one is a permanent gap in that record rather than a passing
+    /// inconvenience. Logged and swallowed all the same: §7.1 forbids teardown throwing out of the
+    /// request handler, and the session removal that follows it in <c>RunAsync</c> must still run —
+    /// <see cref="Sessions.InMemoryCallSessionStore"/> evicts nothing on its own, so a removal that
+    /// never runs lives for the rest of the process.
+    /// </remarks>
+    [LoggerMessage(
+        EventId = 20,
+        Level = LogLevel.Error,
+        Message = "the audit chain of call {CallId} could not be closed, so it has no call.ended event.")]
+    public static partial void CallEndFaulted(ILogger logger, string callId, Exception exception);
 }

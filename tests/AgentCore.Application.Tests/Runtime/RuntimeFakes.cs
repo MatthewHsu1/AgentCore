@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Tools;
 using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Tests.Runtime;
@@ -374,6 +375,200 @@ internal sealed class StubToolFactory : IAgentToolFactory
         lock (Called)
         {
             Called.Add(id);
+        }
+    }
+}
+
+/// <summary>
+/// A model that calls one tool by a name of the test's choosing, once, then answers with text.
+/// </summary>
+/// <remarks>
+/// <see cref="ToolCallingChatClient"/> always calls a tool the document declares. This one calls
+/// whatever name it is given, so a test can reproduce the model INVENTING a tool name — the
+/// <c>NotFound</c> case, which the framework answers with a message and no exception, so it spends
+/// none of the error budget and the turn goes on. Nothing recorded it before.
+/// </remarks>
+internal sealed class NamedToolCallingChatClient : IChatClient
+{
+    private readonly string _toolName;
+    private readonly string _reply;
+    private readonly int _callsPerTurn;
+    private int _calls;
+
+    /// <summary>Creates the client.</summary>
+    /// <param name="toolName">The name the model calls. It need not be a name the document declares.</param>
+    /// <param name="reply">What it says once the tool round is over.</param>
+    /// <param name="callsPerTurn">
+    /// How many calls to that one name it emits in a single assistant message. Two reproduces the
+    /// parallel-call case, where the name alone no longer identifies the call.
+    /// </param>
+    public NamedToolCallingChatClient(string toolName, string reply, int callsPerTurn = 1)
+    {
+        _toolName = toolName;
+        _reply = reply;
+        _callsPerTurn = callsPerTurn;
+    }
+
+    /// <summary>Gets the call ids this client handed out, in the order it emitted them.</summary>
+    public List<string> CallIds { get; } = [];
+
+    public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        await Task.Yield();
+
+        var responseId = Guid.NewGuid().ToString("N");
+        var answered = messages.Any(message => message.Contents.Any(content => content is FunctionResultContent));
+
+        // The extractor is offered no tool and must still answer, so a request with no tool at all
+        // never opens a tool round.
+        if (answered || options?.Tools is not { Count: > 0 })
+        {
+            yield return new ChatResponseUpdate(ChatRole.Assistant, _reply)
+            {
+                ResponseId = responseId,
+                MessageId = responseId,
+            };
+            yield break;
+        }
+
+        var round = Interlocked.Increment(ref _calls);
+        List<AIContent> calls = [];
+        for (var index = 0; index < _callsPerTurn; index++)
+        {
+            // Every call of one message carries its own id, exactly as a vendor emits them. This is
+            // the only thing that tells two calls to the same tool apart.
+            var callId = $"call_{round}_{index}";
+            lock (CallIds)
+            {
+                CallIds.Add(callId);
+            }
+
+            calls.Add(new FunctionCallContent(callId, _toolName, new Dictionary<string, object?>(StringComparer.Ordinal)));
+        }
+
+        yield return new ChatResponseUpdate(ChatRole.Assistant, calls)
+        {
+            ResponseId = responseId,
+            MessageId = responseId,
+        };
+    }
+
+    public async Task<ChatResponse> GetResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        List<ChatResponseUpdate> updates = [];
+        await foreach (var update in GetStreamingResponseAsync(messages, options, cancellationToken)
+            .ConfigureAwait(false))
+        {
+            updates.Add(update);
+        }
+
+        return updates.ToChatResponse();
+    }
+
+    public object? GetService(Type serviceType, object? serviceKey = null)
+    {
+        ArgumentNullException.ThrowIfNull(serviceType);
+        return serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
+    }
+
+    public void Dispose()
+    {
+        // Nothing to release.
+    }
+}
+
+/// <summary>
+/// Builds one REAL <see cref="DeclaredTool"/> for each declared tool, and every one of them throws a
+/// fault the model cannot answer.
+/// </summary>
+/// <remarks>
+/// <see cref="ThrowingToolFactory"/> builds a bare <c>AIFunctionFactory</c> delegate, which throws
+/// straight at the framework. This one goes through the base every shipped tool kind shares, so it
+/// exercises the classification of <c>DeclaredTool.IsBeyondTheModel</c> and not just the framework's
+/// reaction to it. Section 8.7 row six is only reachable through a tool that lets a fault out.
+/// </remarks>
+internal sealed class UnreachableEndpointToolFactory : IAgentToolFactory
+{
+    /// <summary>The message every fault carries.</summary>
+    public const string Message = "no such host";
+
+    private int _calls;
+
+    /// <summary>Gets how many times a tool of this factory ran.</summary>
+    public int Calls => Volatile.Read(ref _calls);
+
+    public AITool? Create(ToolConfiguration tool)
+    {
+        ArgumentNullException.ThrowIfNull(tool);
+        return new UnreachableEndpointTool(tool, this);
+    }
+
+    private void Record() => Interlocked.Increment(ref _calls);
+
+    private sealed class UnreachableEndpointTool : DeclaredTool
+    {
+        private readonly UnreachableEndpointToolFactory _owner;
+
+        public UnreachableEndpointTool(ToolConfiguration tool, UnreachableEndpointToolFactory owner)
+            : base(tool) => _owner = owner;
+
+        protected override ValueTask<object?> CallAsync(
+            AIFunctionArguments arguments,
+            CancellationToken cancellationToken)
+        {
+            _owner.Record();
+            throw new HttpRequestException(Message);
+        }
+    }
+}
+
+/// <summary>
+/// Builds one REAL <see cref="DeclaredTool"/> for each declared tool, and every one of them throws a
+/// fault the model CAN answer.
+/// </summary>
+/// <remarks>
+/// The counterpart of <see cref="UnreachableEndpointToolFactory"/>, and the half of section 8.7 that
+/// must not regress: the tool answers with an error result, the model reads it, and the turn ends
+/// with a spoken reply and no failure at all.
+/// </remarks>
+internal sealed class RefusedRequestToolFactory : IAgentToolFactory
+{
+    /// <summary>The message every fault carries.</summary>
+    public const string Message = "the order is already closed.";
+
+    private int _calls;
+
+    /// <summary>Gets how many times a tool of this factory ran.</summary>
+    public int Calls => Volatile.Read(ref _calls);
+
+    public AITool? Create(ToolConfiguration tool)
+    {
+        ArgumentNullException.ThrowIfNull(tool);
+        return new RefusedRequestTool(tool, this);
+    }
+
+    private void Record() => Interlocked.Increment(ref _calls);
+
+    private sealed class RefusedRequestTool : DeclaredTool
+    {
+        private readonly RefusedRequestToolFactory _owner;
+
+        public RefusedRequestTool(ToolConfiguration tool, RefusedRequestToolFactory owner)
+            : base(tool) => _owner = owner;
+
+        protected override ValueTask<object?> CallAsync(
+            AIFunctionArguments arguments,
+            CancellationToken cancellationToken)
+        {
+            _owner.Record();
+            throw new InvalidOperationException(Message);
         }
     }
 }

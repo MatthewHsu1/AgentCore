@@ -632,6 +632,52 @@ public sealed class CallSessionTests
     }
 
     [Fact]
+    public async Task ARealDeclaredToolThatCannotReachItsEndpoint_EndsTheTurnPerRowSixAndKeepsTheCall()
+    {
+        // The same row, reached the way a shipped tool actually reaches it. ThrowingToolFactory
+        // throws straight at the framework; this goes through DeclaredTool, so the classification of
+        // IsBeyondTheModel is what lets the fault out. Before the split every fault became a result
+        // and this budget could never fire at all.
+        using LoopingToolCallingChatClient reply = new();
+        using SequencedChatClient fill = new(StayingNull);
+        UnreachableEndpointToolFactory tools = new();
+        var session = Build(ToolYaml, reply, fill, tools).Create();
+
+        var turn = await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
+
+        // MaximumConsecutiveErrorsPerRequest is 3, so the 4th failure throws out of the run.
+        Assert.Equal(4, tools.Calls);
+        Assert.Equal(CallSession.FallbackReply, turn.ReplyText);
+        Assert.NotNull(turn.Failure);
+        Assert.StartsWith(CallSession.ToolFailureReason, turn.Failure, StringComparison.Ordinal);
+        Assert.Contains(UnreachableEndpointToolFactory.Message, turn.Failure, StringComparison.Ordinal);
+
+        // The writers ran in their fixed order, the machine picked the stage of the next turn, and
+        // the call is still alive.
+        Assert.Equal(1, session.State.TurnIndex);
+        Assert.Equal("greeting", turn.StageAfter);
+        Assert.False(session.IsComplete);
+    }
+
+    [Fact]
+    public async Task ARealDeclaredToolWhoseFaultTheModelCanAnswer_CompletesTheTurnNormally()
+    {
+        // The half that must not regress. The tool answers with an error result, the model reads it,
+        // and nothing about the turn is a failure: no budget spent, no fallback, a real reply.
+        using ToolCallingChatClient reply = new("That order is already closed.");
+        using SequencedChatClient fill = new(StayingNull);
+        RefusedRequestToolFactory tools = new();
+        var session = Build(ToolYaml, reply, fill, tools).Create();
+
+        var turn = await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, tools.Calls);
+        Assert.Null(turn.Failure);
+        Assert.Equal("That order is already closed.", turn.ReplyText);
+        Assert.False(session.IsComplete);
+    }
+
+    [Fact]
     public async Task TheFourthConsecutiveToolFailure_LeavesTheSessionUnlocked()
     {
         using LoopingToolCallingChatClient reply = new();

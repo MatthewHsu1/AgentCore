@@ -67,6 +67,18 @@ internal sealed class LoggingCallObserver : ICallObserver
                 // Section 8.7, row six. The turn spoke the fallback and the call stays alive, so
                 // nothing here is fatal, and the level says Error because a spent retry budget is a
                 // defect in the tool.
+                //
+                // This kind is now raised at two altitudes, and only the TURN one earns a line. A
+                // fact that carries a tool call id is one failing call, and a turn spends up to four
+                // of them; the chain of D23 keeps every one, which is where a record of a call
+                // belongs, and section 8.7 asks for one line and not four. The turn-level fact
+                // carries no call id, because the fault reaches the session with no function name on
+                // it at all, so the absent key is exactly the test.
+                if (callEvent.Payload.ContainsKey(AuditPayloadKeys.ToolCallId))
+                {
+                    break;
+                }
+
                 Log.ToolBudgetSpent(
                     _logger,
                     callEvent.CallId,

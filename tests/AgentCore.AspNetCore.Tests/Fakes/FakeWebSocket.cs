@@ -315,6 +315,15 @@ internal sealed class RelayConnectionHarness : IAsyncDisposable
     /// <summary>Gets the socket a test queues frames on and reads sends off.</summary>
     public FakeWebSocket Socket { get; }
 
+    /// <summary>Gets the container the connection resolves everything from.</summary>
+    /// <remarks>
+    /// The provider is the real one <c>AddAgentCore</c> builds, so a test reads the live session
+    /// store, the audit queue, and the store behind it exactly as the connection does. It is exposed
+    /// rather than mirrored in properties of this class, because what one test wants out of the
+    /// container is no business of the next one.
+    /// </remarks>
+    public IServiceProvider Services => _services;
+
     /// <summary>Gets the task that completes when the connection has torn itself down.</summary>
     public Task Connection { get; }
 
@@ -323,12 +332,17 @@ internal sealed class RelayConnectionHarness : IAsyncDisposable
     /// <param name="reply">The model behind every agent.</param>
     /// <param name="logging">Anything a test adds to the logging pipeline.</param>
     /// <param name="relay">Anything a test binds on the relay endpoint's own options.</param>
+    /// <param name="configure">
+    /// Anything else the test binds on the container's own options, for example the clock every
+    /// call and every connection then runs on.
+    /// </param>
     /// <returns>The running harness.</returns>
     public static async Task<RelayConnectionHarness> StartAsync(
         string yaml,
         IChatClient reply,
         Action<ILoggingBuilder>? logging = null,
-        Action<TelnyxRelayOptions>? relay = null)
+        Action<TelnyxRelayOptions>? relay = null,
+        Action<AgentCoreOptions>? configure = null)
     {
         ServiceCollection services = new();
         services.AddLogging(builder =>
@@ -343,6 +357,7 @@ internal sealed class RelayConnectionHarness : IAsyncDisposable
         {
             options.Configuration = ConfigurationLoader.LoadYaml(yaml);
             options.UseChatClients(_ => new RoutingChatClientFactory(reply));
+            configure?.Invoke(options);
         });
 
         var provider = services.BuildServiceProvider();

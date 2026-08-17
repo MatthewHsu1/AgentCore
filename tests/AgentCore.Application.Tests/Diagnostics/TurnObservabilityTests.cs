@@ -256,6 +256,10 @@ public sealed class TurnObservabilityTests
         await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
 
         // Row six of section 8.7. The turn spoke the fallback, and the call is still alive.
+        //
+        // ONE line, and the turn spent four tool calls to get here. Each of those four is a row in
+        // the chain of D23, which is where a record of a call belongs; the log gets the turn-level
+        // fact alone, so the volume an operator pays Grafana Cloud for did not move.
         var line = Assert.Single(logger.Of(2));
         Assert.Equal(LogLevel.Error, line.Level);
         Assert.Contains(ThrowingToolFactory.Message, line.Message, StringComparison.Ordinal);

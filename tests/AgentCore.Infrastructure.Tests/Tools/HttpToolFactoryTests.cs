@@ -132,25 +132,46 @@ public sealed class HttpToolFactoryTests
     }
 
     [Fact]
-    public async Task ATimeout_BecomesAnErrorResult()
+    public async Task ATimeout_ThrowsSoTheFrameworkBudgetCountsIt()
     {
         using var handler = StubHttpMessageHandler.TimingOut();
         using HttpClient client = new(handler);
 
-        var result = await CallAsync(Factory(client).Create(LookupOrder), ("orderId", "A-42"));
+        // The endpoint did not answer at all. The model cannot fix a deadline by rewording the
+        // arguments, so this propagates and MaximumConsecutiveErrorsPerRequest ends the turn on the
+        // fallback line, per section 8.7 row six. It used to become a result the model retried
+        // against a dead endpoint for the whole turn.
+        var thrown = await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => CallAsync(Factory(client).Create(LookupOrder), ("orderId", "A-42")));
 
-        AssertError(result, "timed out");
+        Assert.IsType<TimeoutException>(thrown.InnerException);
     }
 
     [Fact]
-    public async Task ATransportFailure_BecomesAnErrorResult()
+    public async Task ATransportFailure_ThrowsSoTheFrameworkBudgetCountsIt()
     {
         using StubHttpMessageHandler handler = new(_ => throw new HttpRequestException("no such host"));
         using HttpClient client = new(handler);
 
+        // The host is not resolvable. See ATimeout_ThrowsSoTheFrameworkBudgetCountsIt.
+        var thrown = await Assert.ThrowsAsync<HttpRequestException>(
+            () => CallAsync(Factory(client).Create(LookupOrder), ("orderId", "A-42")));
+
+        Assert.Equal("no such host", thrown.Message);
+    }
+
+    [Fact]
+    public async Task AnEndpointThatRefusedTheRequest_StillBecomesAnErrorResult()
+    {
+        // The counterpart, and the half that must not regress: the endpoint ANSWERED. What it said is
+        // a fact the model reads and works around, so it never spends the budget. HttpTool writes
+        // this result itself and never reaches the classification at all.
+        using var handler = StubHttpMessageHandler.Answering(HttpStatusCode.NotFound, """{"detail":"no such order"}""");
+        using HttpClient client = new(handler);
+
         var result = await CallAsync(Factory(client).Create(LookupOrder), ("orderId", "A-42"));
 
-        AssertError(result, "no such host");
+        AssertError(result, "404");
     }
 
     [Fact]
