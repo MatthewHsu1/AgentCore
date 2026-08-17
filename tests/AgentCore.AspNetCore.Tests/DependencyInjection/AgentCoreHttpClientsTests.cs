@@ -48,6 +48,35 @@ public sealed class AgentCoreHttpClientsTests
         Assert.Equal(2, endpoint.Attempts);
     }
 
+    /// <summary>
+    /// A POST that fails is not retried, because a <c>kind: http</c> tool that POSTs may have already
+    /// fired its side effect, and repeating the attempt would fire it again.
+    /// </summary>
+    [Fact]
+    public async Task AFailedPostIsSentOnlyOnce()
+    {
+        using ScriptedHttpMessageHandler endpoint = new(HttpStatusCode.ServiceUnavailable);
+        using AgentCoreHttpClients clients = new(endpoint);
+
+        using var response = await clients.CreateClient(Name).PostAsync(Endpoint, content: null, Token);
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal(1, endpoint.Attempts);
+    }
+
+    /// <summary>A GET is idempotent, so a server failure still gets retried.</summary>
+    [Fact]
+    public async Task AFailedGetIsStillRetried()
+    {
+        using ScriptedHttpMessageHandler endpoint = new(HttpStatusCode.ServiceUnavailable, HttpStatusCode.OK);
+        using AgentCoreHttpClients clients = new(endpoint);
+
+        using var response = await clients.CreateClient(Name).GetAsync(Endpoint, Token);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(2, endpoint.Attempts);
+    }
+
     [Fact]
     public async Task ItSendsAnAnswerTheEndpointMeantStraightBack()
     {

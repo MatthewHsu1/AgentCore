@@ -118,6 +118,25 @@ public sealed class UnfilledSlotReminderTests
         => Assert.Equal("hello", UnfilledSlotReminder.Prepend(null, "hello"));
 
     [Fact]
+    public void AnExitGuardedByMissing_RemindsOnTheMissingSlot()
+    {
+        // A guard written with the JSONLogic `missing` operator (rather than `var`) still names the
+        // slot it waits on. The walk that collects stage-exit slots must catch both forms, or a guard
+        // written this way reads as waiting on no slots and the caller never gets a reminder.
+        var yaml = Yaml.Replace(
+            "- { \"!!\": [ { var: serialNumber } ] }",
+            "- { \"!\": { missing: [ \"serialNumber\" ] } }",
+            StringComparison.Ordinal);
+        var document = ConfigurationLoader.LoadYaml(yaml);
+        StateDocument state = new(document);
+        state.TryWrite("machineModel", JsonValue.Create("F85"));
+
+        var reminder = UnfilledSlotReminder.Build(state, document.Policy!.Stages[0]);
+
+        Assert.Contains("the serial number.", reminder, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ASlotWithNoDescription_RemindsByItsName()
     {
         var yaml = Yaml.Replace(

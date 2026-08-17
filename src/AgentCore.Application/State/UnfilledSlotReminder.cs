@@ -1,5 +1,6 @@
 using System.Text;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Configuration.Validation;
 
 namespace AgentCore.Application.State;
 
@@ -40,7 +41,7 @@ public static class UnfilledSlotReminder
         ArgumentNullException.ThrowIfNull(stage);
 
         HashSet<string> read = new(StringComparer.Ordinal);
-        RuleVariables.CollectStageExits(state.Configuration, stage, read);
+        CollectStageExits(state.Configuration, stage, read);
 
         List<string> unfilled = [];
         foreach (var (name, slot) in state.Configuration.State)
@@ -111,4 +112,41 @@ public static class UnfilledSlotReminder
         2 => wanted[0] + " and " + wanted[1],
         _ => string.Join(", ", wanted.Take(wanted.Count - 1)) + ", and " + wanted[^1],
     };
+
+    /// <summary>Adds every slot the exits of one stage read to a set.</summary>
+    /// <param name="configuration">The loaded document, which holds the named guards.</param>
+    /// <param name="stage">The stage.</param>
+    /// <param name="names">The set to fill.</param>
+    /// <remarks>
+    /// A stage waits on the slots its exit guards read, and a guard reads a slot through <c>var</c>
+    /// and through <c>missing</c> alike. <see cref="GuardRuleFacts"/> already walks both forms for
+    /// checks 4 and 5, so this reuses it rather than open-coding a second, narrower walk that only
+    /// catches <c>var</c>. Section 8.4 bans the iteration operators, so that walk is finite.
+    /// </remarks>
+    private static void CollectStageExits(AgentCoreConfiguration configuration, StageConfiguration stage, HashSet<string> names)
+    {
+        foreach (var exit in stage.To)
+        {
+            if (exit.When is null)
+            {
+                // An unconditional exit waits on no slots, so it adds nothing to read.
+                continue;
+            }
+
+            var rule = exit.When.Rule;
+            if (rule is null
+                && exit.When.Name is { } guardName
+                && configuration.Guards.TryGetValue(guardName, out var named))
+            {
+                rule = named;
+            }
+
+            var facts = new GuardRuleFacts();
+            facts.Collect(rule);
+            foreach (var name in facts.Variables)
+            {
+                names.Add(name);
+            }
+        }
+    }
 }

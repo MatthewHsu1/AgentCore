@@ -386,6 +386,47 @@ public sealed class ConfigurationLoaderTests
         Assert.Equal(expected, configuration.Evaluation!.SampleRate);
     }
 
+    /// <summary>
+    /// A repeated key is a mistake in both formats. On the YAML path, YamlDotNet's own loader already
+    /// rejects a duplicate scalar key while it builds the mapping node, before <see cref="YamlToJson"/>
+    /// walks it (which has a second, redundant check of its own in <c>ConvertMapping</c>). This test
+    /// pins that rejection rather than proving a live bug on the YAML path.
+    /// </summary>
+    [Fact]
+    public void ADuplicateKeyInYaml_FailsTheLoad()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: plain
+            name: again
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Contains(failure.Errors, error => error.Message.Contains("Duplicate key", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A repeated key on the JSON path is rejected by <c>ReadJson</c>'s own
+    /// <see cref="System.Text.Json.JsonDocumentOptions.AllowDuplicateProperties"/> setting before the
+    /// document ever reaches the shared reparse. This pins that behaviour too.
+    /// </summary>
+    [Fact]
+    public void ADuplicateKeyInJson_FailsTheLoad()
+    {
+        const string document = """
+            {
+              "apiVersion": "agentcore/v1",
+              "name": "plain",
+              "name": "again"
+            }
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadJson(document));
+
+        Assert.Contains(failure.Errors, error => error.Check == ConfigurationCheck.Syntax);
+    }
+
     [Fact]
     public void ShippedExampleFile_Loads()
     {

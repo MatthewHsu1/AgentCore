@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -155,6 +156,23 @@ public sealed class AgentCoreHttpClients : IHttpClientFactory, IHttpMessageHandl
         return null;
     }
 
+    /// <summary>The methods this pipeline retries. Every other method, POST and PATCH included, is sent once.</summary>
+    /// <remarks>
+    /// GET, HEAD, OPTIONS, and TRACE never write, and PUT and DELETE are defined to be idempotent even
+    /// though they do. A <c>kind: http</c> tool that POSTs must not fire its side effect more than
+    /// once, so POST and PATCH — and any method this pipeline does not recognize — are never retried,
+    /// regardless of how the attempt failed.
+    /// </remarks>
+    private static readonly HashSet<HttpMethod> IdempotentMethods =
+    [
+        HttpMethod.Get,
+        HttpMethod.Head,
+        HttpMethod.Options,
+        HttpMethod.Trace,
+        HttpMethod.Put,
+        HttpMethod.Delete,
+    ];
+
     /// <summary>Adds the one retry strategy every client of this pipeline shares.</summary>
     /// <param name="builder">The strategy builder of this client.</param>
     private static void Retry(ResiliencePipelineBuilder<HttpResponseMessage> builder)
@@ -164,12 +182,36 @@ public sealed class AgentCoreHttpClients : IHttpClientFactory, IHttpMessageHandl
             BackoffType = DelayBackoffType.Exponential,
             UseJitter = true,
             Delay = FirstRetryDelay,
-            ShouldHandle = new PredicateBuilder<HttpResponseMessage>()
-                .HandleResult(IsTransient)
-                .Handle<HttpRequestException>()
-                .Handle<TaskCanceledException>(),
+            ShouldHandle = ShouldRetry,
             DelayGenerator = arguments => ValueTask.FromResult(RetryAfter(arguments.Outcome.Result)),
         });
+
+    /// <summary>Decides whether one failed attempt is worth repeating.</summary>
+    /// <param name="arguments">The outcome of the attempt, and the context it ran in.</param>
+    /// <returns><see langword="true"/> when the failure is transient and the method is safe to repeat.</returns>
+    /// <remarks>
+    /// <see cref="Microsoft.Extensions.Http.Resilience.ResilienceHandler"/> calls
+    /// <c>context.SetRequestMessage(request)</c> before it runs this pipeline, so
+    /// <see cref="HttpResilienceContextExtensions.GetRequestMessage"/> reads the request back off the
+    /// <see cref="ResilienceContext"/> here. That is the only place this predicate can reach the
+    /// method: the outcome of a thrown <see cref="HttpRequestException"/> or
+    /// <see cref="TaskCanceledException"/> carries no <see cref="HttpResponseMessage"/>, so there is no
+    /// <see cref="HttpResponseMessage.RequestMessage"/> to read it off there.
+    /// </remarks>
+    private static ValueTask<bool> ShouldRetry(RetryPredicateArguments<HttpResponseMessage> arguments)
+    {
+        var method = arguments.Context.GetRequestMessage()?.Method;
+        if (method is null || !IdempotentMethods.Contains(method))
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        var outcome = arguments.Outcome;
+        var isTransientFailure = (outcome.Result is { } response && IsTransient(response))
+            || outcome.Exception is HttpRequestException
+            || outcome.Exception is TaskCanceledException;
+        return ValueTask.FromResult(isTransientFailure);
+    }
 
     /// <summary>Reads whether one answer is worth sending again.</summary>
     /// <param name="response">The answer.</param>
