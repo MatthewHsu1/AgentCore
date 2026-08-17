@@ -10,8 +10,6 @@ AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.Dispose() -> void
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.AddToolFactory(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Ports.IAgentToolFactory!>! toolFactory) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.AgentCoreOptions() -> void
-AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.AuditSink.get -> AgentCore.Application.Ports.IAuditSinkPort?
-AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.AuditSink.set -> void
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Bindings.get -> AgentCore.Application.Tools.ToolBindingRegistry!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Bind(string! name, AgentCore.Application.Tools.ToolBinding! binding) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Configuration.get -> AgentCore.Application.Configuration.Schema.AgentCoreConfiguration?
@@ -24,6 +22,7 @@ AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.SecretResolver.get -> 
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.SecretResolver.set -> void
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.TimeProvider.get -> System.TimeProvider?
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.TimeProvider.set -> void
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseAuditSinks(params AgentCore.Application.Ports.IAuditSinkAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseCall(params AgentCore.Application.Ports.ICallAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseChatClients(params AgentCore.Application.Ports.IChatClientAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseChatClients(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Ports.IChatClientFactory!>! chatClients) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!

@@ -10,11 +10,12 @@ namespace AgentCore.Application.Runtime;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The host binds an <see cref="IAuditSinkPort"/> and an <see cref="ILogger"/> and knows nothing of
-/// <see cref="ICallObserver"/>. This is what turns them into the telemetry, logging, and audit
-/// readings of one fact. It is composition, so it belongs to the composition root and not to
-/// <see cref="CallSessionFactory"/>: the factory is handed the finished list and holds no opinion
-/// about what is in it.
+/// The composition root resolves an <see cref="IAuditSinkPort"/> — always one, since
+/// <c>providers.audit</c> falls back to the in-process <c>memory</c> kind — and an
+/// <see cref="ILogger"/>, and knows nothing of <see cref="ICallObserver"/>. This is what turns them
+/// into the telemetry, logging, and audit readings of one fact. It is composition, so it belongs to
+/// the composition root and not to <see cref="CallSessionFactory"/>: the factory is handed the
+/// finished list and holds no opinion about what is in it.
 /// </para>
 /// <para>
 /// The observers it builds are shared and hold no per-call state, so one list serves every call.
@@ -27,8 +28,10 @@ public static class CallObservers
 {
     /// <summary>Builds the list one host's bindings ask for.</summary>
     /// <param name="auditSink">
-    /// The sink the chain of D23 is appended to, or <see langword="null"/> for a host that binds
-    /// none. One sink serves every call, because a session names itself on every event.
+    /// The sink the chain of D23 is appended to. There is always one: the composition root reads
+    /// <c>providers.audit</c>, which names the in-process <c>memory</c> kind when the document names
+    /// no vendor, so a host that configures nothing still hands a real sink down rather than a hole.
+    /// One sink serves every call, because a session names itself on every event.
     /// </param>
     /// <param name="logger">
     /// The logger the three "log once" rows of section 8.7 write to, or <see langword="null"/> for a
@@ -38,11 +41,14 @@ public static class CallObservers
     /// The host's own readings of a call, or <see langword="null"/> for a host that adds none.
     /// </param>
     /// <returns>The readings, in the order the dispatcher offers each fact to them.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="auditSink"/> is <see langword="null"/>.</exception>
     public static IReadOnlyList<ICallObserver> Standard(
-        IAuditSinkPort? auditSink,
+        IAuditSinkPort auditSink,
         ILogger? logger,
         IEnumerable<ICallObserver>? hostObservers = null)
     {
+        ArgumentNullException.ThrowIfNull(auditSink);
+
         // <b>The sink goes LAST.</b> The dispatcher offers one fact to each observer in turn, in
         // this order, and that order is what a reading of the same fact costs the turn: the counters
         // of section 8.6 and the rows of section 8.7 are taken above the enqueue, exactly as the old
@@ -56,13 +62,15 @@ public static class CallObservers
         // is counted whatever the sink then does with it. Order is guaranteed per observer, which is
         // all the chain of D23 needs, and the slow one pays for itself alone, off the turn.
         //
-        // A host that bound no sink gets no audit observer at all: there is nothing to write to, so
-        // nothing is built rather than a sink that drops what it is handed. Both other readings are
-        // always present, because the counters and the rows are this library's own and no host opts
-        // out of them.
-        ICallObserver[] library = auditSink is null
-            ? [new TelemetryCallObserver(), new LoggingCallObserver(logger)]
-            : [new TelemetryCallObserver(), new LoggingCallObserver(logger), new AuditCallObserver(auditSink)];
+        // All three readings are unconditional. The counters of section 8.6 and the rows of section
+        // 8.7 are this library's own and no host opts out of them, and the audit reading is now in
+        // the same position: the composition root resolves providers.audit into a sink for every
+        // host, falling back to the in-process memory kind when the document names no vendor, so
+        // there is no longer a "bound nothing" shape for this list to have. The chain of D23 is
+        // therefore written on every call, and a host that wants it durable changes where it goes,
+        // not whether it is taken.
+        ICallObserver[] library =
+            [new TelemetryCallObserver(), new LoggingCallObserver(logger), new AuditCallObserver(auditSink)];
 
         // <b>The host's own observers go after all three.</b> An observer bound through
         // AgentCoreOptions.UseObservers is code this library did not write and cannot measure, and

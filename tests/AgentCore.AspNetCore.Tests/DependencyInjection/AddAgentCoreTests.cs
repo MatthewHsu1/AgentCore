@@ -837,13 +837,49 @@ public sealed class AddAgentCoreTests
     }
 
     // -------------------------------------------------------------------------------------------
-    // The audit sink and the logger: both optional, both with a working default.
+    // The audit sink: named by providers.audit, and never absent.
     // -------------------------------------------------------------------------------------------
+
+    // The same agent, and a document that names the built-in memory kind on purpose.
+    private const string MemoryAuditYaml =
+        """
+        apiVersion: agentcore/v1
+        name: composed
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything" }
+        providers:
+          call:   { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: reply }
+          audit: { kind: memory }
+        """;
+
+    // The same agent, served by an audit vendor the host registers itself.
+    private const string VendorAuditYaml =
+        """
+        apiVersion: agentcore/v1
+        name: composed
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything" }
+        providers:
+          call:   { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: reply }
+          audit: { kind: test }
+        """;
+
     [Fact]
-    public async Task AnAuditSink_ReachesTheTurnLoopAndTheChainVerifies()
+    public async Task TheDefaultAuditSink_ReachesTheTurnLoopAndTheChainVerifies()
     {
-        InMemoryAuditSink sink = new();
-        using var provider = await BuildAsync(OneAgentYaml, options => options.AuditSink = sink);
+        using var provider = await BuildAsync(OneAgentYaml);
 
         var session = provider.GetRequiredService<ICallSessionFactory>().Create("call-1");
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
@@ -852,7 +888,7 @@ public sealed class AddAgentCoreTests
         // and a reader that wants them now asks for them now.
         await Queue(provider).FlushAsync(TestContext.Current.CancellationToken);
 
-        var events = sink.EventsOf("call-1");
+        var events = Sink(provider).EventsOf("call-1");
         Assert.Equal(
             [AuditEventKind.CallStarted, AuditEventKind.TurnCompleted],
             events.Select(item => item.Kind).ToArray());
@@ -860,23 +896,84 @@ public sealed class AddAgentCoreTests
     }
 
     [Fact]
-    public async Task AnAuditSink_IsWrappedInTheQueueThatKeepsItOffTheTurn()
+    public async Task ADocumentThatNamesNoAuditProvider_StillOpensTheMemorySink()
     {
-        InMemoryAuditSink sink = new();
-        using var provider = await BuildAsync(OneAgentYaml, options => options.AuditSink = sink);
+        using var provider = await BuildAsync(OneAgentYaml);
+
+        // The turn loop produces the events of D23 whatever a document says, so the seam that receives
+        // them has a working default rather than a null. That is what lets every reading of a call be
+        // unconditional, and what lets a first run and a test work with no database.
+        Assert.NotNull(provider.GetService<IAuditSinkPort>());
+        Assert.NotNull(provider.GetService<InMemoryAuditSink>());
+    }
+
+    [Fact]
+    public async Task ADocumentThatNamesTheMemoryKind_OpensTheSameSinkAsNamingNothing()
+    {
+        using var provider = await BuildAsync(MemoryAuditYaml);
+
+        // memory is this library's own name and it needs no registered vendor, so writing it says out
+        // loud what leaving the block out does quietly. The startup warning is the difference.
+        Assert.NotNull(provider.GetService<InMemoryAuditSink>());
+    }
+
+    [Fact]
+    public async Task AnAuditVendorTheDocumentNames_IsTheStoreBehindTheQueue()
+    {
+        RecordingAuditSink store = new();
+        using var provider = await BuildAsync(
+            VendorAuditYaml,
+            options => options.UseAuditSinks(new TestAuditSinkAdapter(store)));
+
+        var session = provider.GetRequiredService<ICallSessionFactory>().Create("call-1");
+        await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+        await Queue(provider).FlushAsync(TestContext.Current.CancellationToken);
+
+        // The host lists its vendors once and providers.audit.kind picks one, exactly as the five
+        // seams beside it. Nothing but the document decides which store the chain lands in.
+        Assert.Same(store, provider.GetRequiredService<RecordingAuditSink>());
+        Assert.Equal(
+            [AuditEventKind.CallStarted, AuditEventKind.TurnCompleted],
+            store.Events.Select(item => item.Kind).ToArray());
+    }
+
+    [Fact]
+    public async Task AnAuditKindThisHostDoesNotRegister_FailsTheStart()
+    {
+        // A document that asked for something this host cannot give fails while the host starts, and
+        // never on a call. The message names the kind, exactly as every other vendor seam.
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+            () => BuildAsync(VendorAuditYaml));
+
+        Assert.Contains("test", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheAuditSink_IsWrappedInTheQueueThatKeepsItOffTheTurn()
+    {
+        using var provider = await BuildAsync(OneAgentYaml);
 
         // Section 7 puts a durable insert at 13 ms p50 against 91 nanoseconds to enqueue, and the rule
-        // that follows is applied once, here, to whatever the host bound. So an adapter that blocks on
-        // its database is a correct adapter, and no adapter carries a queue of its own.
+        // that follows is applied once, here, to whatever the document opened. So an adapter that
+        // blocks on its database is a correct adapter, and no adapter carries a queue of its own.
         Assert.IsType<QueuedAuditSink>(provider.GetRequiredService<IAuditSinkPort>());
     }
 
-    /// <summary>Reads back the queue the composition root put in front of the host's sink.</summary>
+    /// <summary>Reads back the queue the composition root put in front of the document's store.</summary>
     private static QueuedAuditSink Queue(IServiceProvider provider)
         => Assert.IsType<QueuedAuditSink>(provider.GetRequiredService<IAuditSinkPort>());
 
+    /// <summary>Reads back the store itself, which is registered under its own concrete type.</summary>
+    /// <remarks>
+    /// The document builds the store now, not the host, so this is how a test that wants the events
+    /// of one call reaches the thing that holds them. Resolving <see cref="IAuditSinkPort"/> gives the
+    /// queue instead, because that is the only registration that honours the port's contract.
+    /// </remarks>
+    private static InMemoryAuditSink Sink(IServiceProvider provider)
+        => provider.GetRequiredService<InMemoryAuditSink>();
+
     [Fact]
-    public async Task NoAuditSinkAndNoLogger_StillRunsATurn()
+    public async Task NoLoggerAndNoAuditVendor_StillRunsATurn()
     {
         using var provider = await BuildAsync(OneAgentYaml);
 
@@ -884,9 +981,6 @@ public sealed class AddAgentCoreTests
         var turn = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
         Assert.Equal("hello", turn.ReplyText);
-
-        // Nothing stands in for the PostgreSQL sink of section 7, so nothing is registered either.
-        Assert.Null(provider.GetService<IAuditSinkPort>());
     }
 
     // -------------------------------------------------------------------------------------------
@@ -911,14 +1005,9 @@ public sealed class AddAgentCoreTests
     [Fact]
     public async Task AHostObserverThatThrows_CostsNeitherTheTurnNorTheChain()
     {
-        InMemoryAuditSink sink = new();
         using var provider = await BuildAsync(
             OneAgentYaml,
-            options =>
-            {
-                options.AuditSink = sink;
-                options.UseObservers(new ThrowingCallObserver());
-            });
+            options => options.UseObservers(new ThrowingCallObserver()));
 
         var session = provider.GetRequiredService<ICallSessionFactory>().Create("call-1");
         var turn = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
@@ -928,7 +1017,9 @@ public sealed class AddAgentCoreTests
         // chain of D23 a single row.
         Assert.Equal("hello", turn.ReplyText);
 
-        var events = sink.EventsOf("call-1");
+        await Queue(provider).FlushAsync(TestContext.Current.CancellationToken);
+
+        var events = Sink(provider).EventsOf("call-1");
         Assert.Equal(
             [AuditEventKind.CallStarted, AuditEventKind.TurnCompleted],
             events.Select(item => item.Kind).ToArray());
@@ -1125,6 +1216,51 @@ public sealed class AddAgentCoreTests
         {
             Builds++;
             return ValueTask.FromResult(evaluator);
+        }
+    }
+
+    /// <summary>An audit vendor a test registers, which opens one store the test already holds.</summary>
+    private sealed class TestAuditSinkAdapter(RecordingAuditSink store) : IAuditSinkAdapter
+    {
+        public string Kind => "test";
+
+        public ValueTask<IAuditSinkPort> OpenAsync(
+            VendorProviderConfiguration entry,
+            ISecretResolverPort? secrets,
+            CancellationToken cancellationToken = default)
+            => ValueTask.FromResult<IAuditSinkPort>(store);
+    }
+
+    /// <summary>An audit store that keeps what it accepted, so what the document opened is observable.</summary>
+    /// <remarks>
+    /// It is not <see cref="InMemoryAuditSink"/>, on purpose: the test has to tell the vendor the
+    /// document named apart from the built-in the document would have fallen back to.
+    /// </remarks>
+    private sealed class RecordingAuditSink : IAuditSinkPort
+    {
+        private readonly Lock _gate = new();
+        private readonly List<AuditEvent> _events = [];
+
+        /// <summary>Gets the events this store accepted, in the order they arrived.</summary>
+        public IReadOnlyList<AuditEvent> Events
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return [.. _events];
+                }
+            }
+        }
+
+        public ValueTask AppendAsync(AuditEvent auditEvent, CancellationToken cancellationToken = default)
+        {
+            lock (_gate)
+            {
+                _events.Add(auditEvent);
+            }
+
+            return ValueTask.CompletedTask;
         }
     }
 

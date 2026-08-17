@@ -34,14 +34,26 @@ public sealed class CallObserversTests
     }
 
     [Fact]
-    public void UnboundSinkBuildsNoAuditReading()
+    public void EveryLibraryReadingIsTaken()
     {
-        var observers = CallObservers.Standard(auditSink: null, logger: null);
+        // The audit reading is no longer conditional on a host having bound something. The
+        // composition root resolves providers.audit for every host and falls back to the in-process
+        // memory kind, so all three readings of a call are always built and the chain of D23 is
+        // written whatever the document names.
+        var observers = CallObservers.Standard(new AcceptingSink(), logger: null);
 
-        Assert.Collection(
-            observers,
-            observer => Assert.IsType<TelemetryCallObserver>(observer),
-            observer => Assert.IsType<LoggingCallObserver>(observer));
+        Assert.Equal(3, observers.Count);
+        Assert.IsType<AuditCallObserver>(observers[2]);
+    }
+
+    [Fact]
+    public void NoSinkIsNotAShapeTheListCanHave()
+    {
+        // There is no "bound nothing" list to build, so asking for one is a caller's mistake rather
+        // than a two-observer reading of the call.
+        Assert.Throws<ArgumentNullException>(
+            "auditSink",
+            () => CallObservers.Standard(auditSink: null!, logger: null));
     }
 
     [Fact]
@@ -68,20 +80,6 @@ public sealed class CallObserversTests
             observer => Assert.IsType<TelemetryCallObserver>(observer),
             observer => Assert.IsType<LoggingCallObserver>(observer),
             observer => Assert.IsType<AuditCallObserver>(observer),
-            observer => Assert.Same(host, observer));
-    }
-
-    [Fact]
-    public void HostReadingsComeAfterTheTwoAnUnboundSinkLeaves()
-    {
-        HostObserver host = new();
-
-        var observers = CallObservers.Standard(auditSink: null, logger: null, [host]);
-
-        Assert.Collection(
-            observers,
-            observer => Assert.IsType<TelemetryCallObserver>(observer),
-            observer => Assert.IsType<LoggingCallObserver>(observer),
             observer => Assert.Same(host, observer));
     }
 }

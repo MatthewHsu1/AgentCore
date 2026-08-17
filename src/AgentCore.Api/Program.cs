@@ -1,5 +1,4 @@
 using System.Text.Json.Nodes;
-using AgentCore.Application.Audit;
 using AgentCore.Application.Secrets;
 using AgentCore.AspNetCore.Call;
 using AgentCore.AspNetCore.DependencyInjection;
@@ -35,20 +34,21 @@ var agentCoreLoggers = LoggerFactory.Create(logging => logging
 AgentCoreHttpClients httpClients = new(loggers: agentCoreLoggers);
 builder.Services.AddSingleton(httpClients);
 
-// The audit chain of D23 belongs in PostgreSQL, and that adapter is not written. This one keeps the
-// events in this process, so chain_check has something to read and no event is silently lost.
-//
-// Whatever is bound here is wrapped by AddAgentCoreAsync in the bounded channel and batching
-// background writer of section 7, so this line binds a STORE and never a queue. That is what makes
-// the PostgreSQL adapter, when it is written, a plain writer with no buffering of its own.
-InMemoryAuditSink auditSink = new();
-
 await builder.Services.AddAgentCoreAsync(options =>
 {
     options.ConfigurationPath = documentPath;
     options.SecretResolver = secrets;
     options.LoggerFactory = agentCoreLoggers;
-    options.AuditSink = auditSink;
+
+    // The audit chain of D23 belongs in PostgreSQL, and that adapter is not written. This host
+    // therefore registers no audit vendor at all, and providers.audit falls back to the in-process
+    // memory sink, so chain_check has something to read and no event is silently lost. The fallback
+    // announces itself with a warning at startup, because it is not durable.
+    //
+    // When the PostgreSQL adapter is written it is listed here, once, exactly as the seams below, and
+    // providers.audit.kind picks it. Whatever the seam opens is wrapped by AddAgentCoreAsync in the
+    // bounded channel and batching background writer of section 7, so an adapter is a plain writer
+    // with no buffering of its own.
 
     // The host lists the vendors it supports, once. providers.llm[].kind picks the adapter for each
     // entry, so a document that changes vendors changes no code here.

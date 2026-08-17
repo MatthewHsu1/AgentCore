@@ -249,4 +249,24 @@ public sealed record ProvidersConfiguration
     /// go wherever the host already sends them.
     /// </remarks>
     public TelemetryProviderConfiguration? Telemetry { get; init; }
+
+    /// <summary>Gets the audit sink provider, or <see langword="null"/> for the in-process default.</summary>
+    /// <remarks>
+    /// <para>
+    /// <c>AgentCore.Application.Ports.IAuditSinkAdapter</c> reads it, and the host registers one
+    /// adapter for each vendor it supports. This seam differs from the others in what an absent block
+    /// means: a document that names none still gets a sink, the built-in
+    /// <c>AgentCore.Application.Audit.AuditSinkFactory.MemoryKind</c> one, because the turn loop
+    /// produces the D23 events whether or not anybody chose where to put them. A document may also
+    /// write that kind out in full, and it means exactly the same thing.
+    /// </para>
+    /// <para>
+    /// <b>The in-process sink is not the audit store.</b> D23 puts the real chain in PostgreSQL, where
+    /// the writer role holds no <c>UPDATE</c> grant, a trigger refuses even the table owner, and a
+    /// <c>CHECK</c> constraint recomputes SHA-256 inside the engine. A list in this process has none of
+    /// those three defences and grows without a bound, so a long-running deployment names a durable
+    /// vendor here and leaves the default to tests and to hosts that have no database.
+    /// </para>
+    /// </remarks>
+    public VendorProviderConfiguration? Audit { get; init; }
 }

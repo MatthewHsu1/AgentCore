@@ -354,6 +354,13 @@ public sealed class CallSessionAuditTests
         IAuditSinkPort? auditSink = null,
         ILogger? logger = null)
     {
+        // There is always a sink now: CallObservers.Standard takes a required one, because the
+        // composition root resolves providers.audit for every host and falls back to the in-process
+        // memory kind. An optional parameter has to be a compile-time constant, so the default is
+        // spelled here instead — a fact that does not care where its events land gets a fresh
+        // in-memory sink and reads exactly as it did when it passed nothing.
+        IAuditSinkPort sink = auditSink ?? new InMemoryAuditSink();
+
         var document = ConfigurationLoader.LoadYaml(yaml);
         RoutingChatClientFactory chatClients = new(reply);
         if (fill is not null)
@@ -372,6 +379,6 @@ public sealed class CallSessionAuditTests
             timeProvider,
             logger,
             moderation: null,
-            CallObservers.Standard(auditSink, logger));
+            CallObservers.Standard(sink, logger));
     }
 }

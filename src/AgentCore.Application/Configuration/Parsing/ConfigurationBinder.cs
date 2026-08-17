@@ -491,6 +491,7 @@ internal static class ConfigurationBinder
             Moderation = BindVendorProvider(providers, "moderation", providersPointer),
             Knowledge = BindKnowledgeProvider(providers, providersPointer),
             Telemetry = BindTelemetryProvider(providers, providersPointer),
+            Audit = BindVendorProvider(providers, "audit", providersPointer),
         };
     }
 

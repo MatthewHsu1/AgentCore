@@ -647,6 +647,10 @@
         "telemetry": {
           "$ref": "#/$defs/telemetryProvider",
           "description": "Where traces, metrics, and logs are exported to. A document that names none exports nothing."
+        },
+        "audit": {
+          "$ref": "#/$defs/vendorProvider",
+          "description": "Where the D23 audit chain is written, such as memory. A document that names none uses the in-process memory sink, which is not durable."
         }
       }
     },

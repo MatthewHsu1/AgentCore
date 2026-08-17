@@ -1,9 +1,9 @@
+using AgentCore.Application.Audit;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Llm;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
-using Microsoft.Extensions.AI.Evaluation;
 using Microsoft.Extensions.Logging;
 
 namespace AgentCore.AspNetCore.DependencyInjection;
@@ -59,14 +59,6 @@ public sealed class AgentCoreOptions
     /// </remarks>
     public TimeProvider? TimeProvider { get; set; }
 
-    /// <summary>Gets or sets the sink the audit chain of D23 is appended to.</summary>
-    /// <remarks>
-    /// A host that binds none still runs, and every event it produces is dropped. Section 7 names the
-    /// adapter this holds in production: <c>Infrastructure/Audit/Postgres</c>, behind a bounded
-    /// <c>Channel</c> and a background writer, so the append never sits on the turn.
-    /// </remarks>
-    public IAuditSinkPort? AuditSink { get; set; }
-
     /// <summary>Gets or sets the factory the library takes its loggers from.</summary>
     /// <remarks>
     /// <para>
@@ -105,6 +97,9 @@ public sealed class AgentCoreOptions
 
     /// <summary>Gets the telemetry vendors the host registered, or <see langword="null"/>.</summary>
     internal IReadOnlyList<ITelemetryAdapter>? Telemetry { get; private set; }
+
+    /// <summary>Gets the audit sink vendors the host registered, or <see langword="null"/>.</summary>
+    internal IReadOnlyList<IAuditSinkAdapter>? AuditSinks { get; private set; }
 
     /// <summary>Gets the speech vendors the host registered, or <see langword="null"/>.</summary>
     internal IReadOnlyList<ISpeechAdapter>? Speech { get; private set; }
@@ -318,6 +313,39 @@ public sealed class AgentCoreOptions
         return this;
     }
 
+    /// <summary>Binds the audit sink vendors, and the document picks one by <c>kind</c>.</summary>
+    /// <param name="adapters">The vendors this host supports.</param>
+    /// <returns>These options, so a host chains its calls.</returns>
+    /// <remarks>
+    /// <para>
+    /// The host lists the vendors it supports, once, exactly as the four seams above.
+    /// <c>providers.audit.kind</c> picks the adapter, so a document that moves the chain of D23 from
+    /// one store to another changes no code here. Registering a vendor costs nothing until a document
+    /// names it: an adapter no field names is never asked to open anything, so a host still starts
+    /// with no database and no key.
+    /// </para>
+    /// <para>
+    /// <b>This seam has a default, and the other five do not.</b> A document that names no
+    /// <c>providers.audit</c> gets <see cref="AuditSinkFactory.MemoryKind"/> — the in-process sink —
+    /// rather than nothing at all, because the turn loop produces the events of D23 whether or not a
+    /// store exists and every reading of a call is now unconditional. That default keeps a test and a
+    /// first run working with no database, and it is not durable: the in-process list grows without a
+    /// bound and dies with the process. A deployment names a durable vendor here.
+    /// </para>
+    /// <para>
+    /// What an adapter returns is a <b>store</b> and never a queue. <c>AddAgentCoreAsync</c> wraps
+    /// whatever this seam opens in the bounded channel and batching background writer of section 7, so
+    /// the "never sit on the turn" rule of <see cref="IAuditSinkPort"/> is applied in one place and a
+    /// vendor adapter is a plain writer with no buffering of its own.
+    /// </para>
+    /// </remarks>
+    public AgentCoreOptions UseAuditSinks(params IAuditSinkAdapter[] adapters)
+    {
+        ArgumentNullException.ThrowIfNull(adapters);
+        AuditSinks = adapters;
+        return this;
+    }
+
     /// <summary>Binds the host's own readings of a call, beside the three this library keeps.</summary>
     /// <param name="observers">
     /// What the host wants told about every call. Each one takes every fact, in the order the call
@@ -334,8 +362,8 @@ public sealed class AgentCoreOptions
     /// <para>
     /// <b>It adds rather than replaces.</b> Calling it twice keeps both registrations, so a host
     /// composes its readings across whatever code configures the container. Nothing here replaces
-    /// <see cref="AuditSink"/>: that binds the store the chain is written to, and this binds a reader
-    /// of the same facts.
+    /// <see cref="UseAuditSinks"/>: that names the store the chain is written to, and this binds a
+    /// reader of the same facts.
     /// </para>
     /// <para>
     /// The host's observers are offered every fact <b>after</b> the library's own, which is what keeps
