@@ -83,11 +83,10 @@ public sealed class OpenAiModerationEvaluatorTests
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     [Fact]
-    public void TheEvaluatorNamesOneMetric()
+    public async Task TheEvaluatorNamesOneMetric()
     {
         using var endpoint = StubHttpMessageHandler.Answering(HttpStatusCode.OK, Clean);
-        using var client = Client(endpoint);
-        OpenAiModerationEvaluator evaluator = new(client);
+        var evaluator = await BuildAsync(endpoint);
 
         Assert.Equal(["Content Safety"], evaluator.EvaluationMetricNames);
         Assert.Equal("Content Safety", OpenAiModerationEvaluator.ContentSafetyMetricName);
@@ -126,8 +125,7 @@ public sealed class OpenAiModerationEvaluatorTests
     {
         List<string> bodies = [];
         using var endpoint = Answering(bodies, HttpStatusCode.OK, Clean);
-        using var client = Client(endpoint);
-        OpenAiModerationEvaluator evaluator = new(client);
+        var evaluator = await BuildAsync(endpoint);
 
         await evaluator.EvaluateAsync([], Response(Reply), cancellationToken: Token);
 
@@ -270,8 +268,7 @@ public sealed class OpenAiModerationEvaluatorTests
     public async Task AnEmptyTextCostsNoRequestAndPasses()
     {
         using var endpoint = StubHttpMessageHandler.Answering(HttpStatusCode.OK, Clean);
-        using var client = Client(endpoint);
-        OpenAiModerationEvaluator evaluator = new(client);
+        var evaluator = await BuildAsync(endpoint);
 
         var result = await evaluator.EvaluateAsync([], Response("   "), cancellationToken: Token);
         var metric = result.Get<BooleanMetric>(OpenAiModerationEvaluator.ContentSafetyMetricName);
@@ -325,8 +322,7 @@ public sealed class OpenAiModerationEvaluatorTests
     public async Task ATimeoutIsInconclusiveAndNeverThrows()
     {
         using var endpoint = StubHttpMessageHandler.TimingOut();
-        using var client = Client(endpoint);
-        OpenAiModerationEvaluator evaluator = new(client);
+        var evaluator = await BuildAsync(endpoint);
 
         var result = await evaluator.EvaluateAsync([], Response(Reply), cancellationToken: Token);
         var metric = result.Get<BooleanMetric>(OpenAiModerationEvaluator.ContentSafetyMetricName);
@@ -384,8 +380,7 @@ public sealed class OpenAiModerationEvaluatorTests
     public async Task ACallerCancelStillThrows()
     {
         using var endpoint = StubHttpMessageHandler.Answering(HttpStatusCode.OK, Clean);
-        using var client = Client(endpoint);
-        OpenAiModerationEvaluator evaluator = new(client);
+        var evaluator = await BuildAsync(endpoint);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             async () => await evaluator.EvaluateAsync(
@@ -398,8 +393,7 @@ public sealed class OpenAiModerationEvaluatorTests
     public async Task ANullResponseIsRefused()
     {
         using var endpoint = StubHttpMessageHandler.Answering(HttpStatusCode.OK, Clean);
-        using var client = Client(endpoint);
-        OpenAiModerationEvaluator evaluator = new(client);
+        var evaluator = await BuildAsync(endpoint);
 
         await Assert.ThrowsAsync<ArgumentNullException>(
             async () => await evaluator.EvaluateAsync([], null!, cancellationToken: Token));
@@ -515,10 +509,45 @@ public sealed class OpenAiModerationEvaluatorTests
         Assert.True(OpenAiModerationEvaluator.ModerationDeadline < TimeSpan.FromSeconds(100));
     }
 
+    /// <summary>
+    /// Every request lands on the injected <see cref="HttpClient"/> exactly once, and the SDK's own
+    /// retry loop never adds a second attempt of its own on top of it.
+    /// </summary>
+    /// <remarks>
+    /// <c>AgentCoreHttpClients</c> is the one place D13 gives retry to. A vendor SDK that retried on
+    /// top of that pipeline would multiply the vendor's load and, because each of its own retries gets
+    /// a fresh deadline budget, could stretch a single check well past
+    /// <see cref="OpenAiModerationEvaluator.ModerationDeadline"/>. This count is the proof that
+    /// <c>OpenAIClientOptions.RetryPolicy</c> is turned off, for an error status the endpoint itself
+    /// answered with.
+    /// </remarks>
+    [Fact]
+    public async Task ARequestReachesTheInjectedHttpClientExactlyOnceEvenOnAFailure()
+    {
+        using var endpoint = StubHttpMessageHandler.Answering(HttpStatusCode.TooManyRequests, "{}");
+        var evaluator = await BuildAsync(endpoint);
+
+        await evaluator.EvaluateAsync([], Response(Reply), cancellationToken: Token);
+
+        Assert.Single(endpoint.Requests);
+    }
+
     private static ChatResponse Response(string text) => new(new ChatMessage(ChatRole.Assistant, text));
 
-    private static HttpClient Client(HttpMessageHandler handler)
-        => new(handler, disposeHandler: false) { BaseAddress = OpenAiModerationEvaluator.ApiEndpoint };
+    /// <summary>Builds the evaluator the way a host does, over a stub in place of the network.</summary>
+    /// <remarks>
+    /// The evaluator takes its <see cref="OpenAI.Moderations.ModerationClient"/> from an internal
+    /// constructor for exactly this reason: every test reaches the network zero times, and this is
+    /// the one place that trades an <see cref="HttpMessageHandler"/> for one.
+    /// </remarks>
+    private static async Task<OpenAiModerationEvaluator> BuildAsync(HttpMessageHandler handler)
+    {
+        StubHandlerFactory pipeline = new(handler);
+        MapSecretResolver resolver = new();
+        resolver.With(OpenAiChatClientAdapter.ApiKeySecretName, ApiKey);
+
+        return await OpenAiModerationEvaluator.CreateAsync(pipeline, resolver, Token);
+    }
 
     private static ValueTask<EvaluationResult> EvaluateAsync(string body)
         => EvaluateAsync(HttpStatusCode.OK, body);
@@ -526,8 +555,7 @@ public sealed class OpenAiModerationEvaluatorTests
     private static async ValueTask<EvaluationResult> EvaluateAsync(HttpStatusCode status, string body)
     {
         using var endpoint = StubHttpMessageHandler.Answering(status, body);
-        using var client = Client(endpoint);
-        OpenAiModerationEvaluator evaluator = new(client);
+        var evaluator = await BuildAsync(endpoint);
 
         return await evaluator.EvaluateAsync([], Response(Reply), cancellationToken: Token);
     }

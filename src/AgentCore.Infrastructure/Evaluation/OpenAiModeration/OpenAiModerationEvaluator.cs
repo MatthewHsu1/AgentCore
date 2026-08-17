@@ -1,5 +1,7 @@
+using System.ClientModel;
+using System.ClientModel.Primitives;
 using System.Globalization;
-using System.Text;
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Evaluation;
@@ -7,6 +9,8 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.AI.Evaluation;
+using OpenAI;
+using OpenAI.Moderations;
 
 namespace AgentCore.Infrastructure.Evaluation.OpenAiModeration;
 
@@ -45,10 +49,15 @@ namespace AgentCore.Infrastructure.Evaluation.OpenAiModeration;
 /// <para>
 /// No key appears in this file. <see cref="SecretResolverExtensions.RequireAsync"/> reads
 /// <see cref="KnownSecrets.OpenAi"/> through the chain and then through the variable of that vendor,
-/// and <see cref="OpenAiModerationAuthHandler"/> writes it. D13 gives one key to all four OpenAI
-/// calls, so this class declares no name of its own and asks the catalog rather than another
-/// adapter. The read happens once, in <see cref="CreateAsync"/>, while the host starts, and it opens
-/// no socket.
+/// and <see cref="CreateAsync"/> hands it to an <see cref="ApiKeyCredential"/> that
+/// <see cref="OpenAIClient"/> owns from there. D13 gives one key to all four OpenAI calls, so this
+/// class declares no name of its own and asks the catalog rather than another adapter. The read
+/// happens once, in <see cref="CreateAsync"/>, while the host starts, and it opens no socket.
+/// </para>
+/// <para>
+/// This class sends through <see cref="ModerationClient"/>'s protocol method, not its typed one, and
+/// keeps the hand-rolled reader below: the SDK gives credentials and transport, and this class still
+/// builds the body and reads the answer, exactly as it did before this class used the SDK at all.
 /// </para>
 /// </remarks>
 public sealed class OpenAiModerationEvaluator : IEvaluator
@@ -121,25 +130,29 @@ public sealed class OpenAiModerationEvaluator : IEvaluator
     /// <summary>The score format one flagged category is recorded in.</summary>
     private const string ScoreFormat = "0.####";
 
-    private readonly HttpClient _client;
+    private readonly ModerationClient _client;
+    private readonly TimeSpan _deadline;
 
-    /// <summary>Opens the evaluator over one client.</summary>
+    /// <summary>Opens the evaluator over one SDK client.</summary>
     /// <param name="client">
-    /// The client. Its <c>BaseAddress</c> is <see cref="ApiEndpoint"/>, and its handler chain carries
-    /// the key: <see cref="OpenAiModerationAuthHandler"/> writes the bearer token, and this class
-    /// writes none.
+    /// The client. <see cref="CreateAsync"/> carries the key, the deadline, and the pipeline of the
+    /// host onto it; this constructor trusts whatever it is given.
+    /// </param>
+    /// <param name="deadline">
+    /// The deadline <paramref name="client"/> was built with, read back by <see cref="Deadline"/>.
     /// </param>
     /// <remarks>
-    /// This is internal for the reason <c>ZillizCollection.Deadline</c> is internal. An
-    /// <see cref="HttpClient"/> in a public signature would put the transport into the D15 promise. A
-    /// host builds through <see cref="CreateAsync"/>, and a test reaches this through
+    /// This is internal for the reason <c>ZillizCollection.Deadline</c> is internal. A
+    /// <see cref="ModerationClient"/> in a public signature would put the vendor SDK into the D15
+    /// promise. A host builds through <see cref="CreateAsync"/>, and a test reaches this through
     /// <c>InternalsVisibleTo</c>.
     /// </remarks>
-    internal OpenAiModerationEvaluator(HttpClient client)
+    internal OpenAiModerationEvaluator(ModerationClient client, TimeSpan deadline)
     {
         ArgumentNullException.ThrowIfNull(client);
 
         _client = client;
+        _deadline = deadline;
     }
 
     /// <summary>Gets the name of the one metric this evaluator produces.</summary>
@@ -147,10 +160,10 @@ public sealed class OpenAiModerationEvaluator : IEvaluator
 
     /// <summary>Gets the deadline of one check, which <see cref="CreateAsync"/> set on the client.</summary>
     /// <remarks>
-    /// The build sets the deadline and this class sends on the client, so a test reads it back here.
-    /// It is internal, so it adds nothing to the public surface.
+    /// The build sets the deadline and this class sends through the client, so a test reads it back
+    /// here. It is internal, so it adds nothing to the public surface.
     /// </remarks>
-    internal TimeSpan Deadline => _client.Timeout;
+    internal TimeSpan Deadline => _deadline;
 
     /// <summary>Builds the evaluator, over the pipeline the host built.</summary>
     /// <param name="handlers">
@@ -167,8 +180,21 @@ public sealed class OpenAiModerationEvaluator : IEvaluator
     /// request, so a host with no route to <see cref="ApiEndpoint"/> still starts.
     /// </para>
     /// <para>
-    /// <b>The pipeline is required rather than optional.</b> A handler built here instead would send
-    /// with no retry and no rate limit answer, and nothing would say so.
+    /// <b>The pipeline is required rather than optional.</b> <see cref="HttpClientPipelineTransport"/>
+    /// carries the <see cref="HttpClient"/> this method takes from <paramref name="handlers"/> into
+    /// <c>OpenAIClientOptions.Transport</c>, so every request this evaluator sends still goes through
+    /// the host's connection pooling and the resilience handler <c>AgentCoreHttpClients</c>
+    /// registered under <see cref="HttpClientName"/>, rather than through a transport the SDK builds
+    /// for itself. A client built here instead would send with no retry and no rate limit answer, and
+    /// nothing would say so.
+    /// </para>
+    /// <para>
+    /// <b>The SDK's own retry loop is turned off.</b> Left at its default of three, it would retry a
+    /// persistent failure on top of whatever <c>AgentCoreHttpClients</c> already allows for the
+    /// request's method — and because each retry gets its own fresh <c>NetworkTimeout</c> budget, it
+    /// would stretch the wait past <see cref="ModerationDeadline"/>. <c>AgentCoreHttpClients</c> is
+    /// the one place D13 gives retry to, so this class asks the SDK for none of its own, the same way
+    /// it asks the SDK for none of its own connection lifetime.
     /// </para>
     /// <para>
     /// The evaluator holds no per-call state, so one instance serves every turn of every call.
@@ -188,19 +214,23 @@ public sealed class OpenAiModerationEvaluator : IEvaluator
                 cancellationToken)
             .ConfigureAwait(false);
 
-        // The key is written onto the request one layer below this class, so no class that builds a
-        // body or reads an answer holds a credential.
-        var inner = handlers.CreateHandler(HttpClientName);
+        // The pipeline owns the chain below this transport, and other clients send on the same
+        // chain, so this client disposes nothing.
+        HttpClient transport = new(handlers.CreateHandler(HttpClientName), disposeHandler: false);
 
-        // The pipeline owns the chain below this handler, and other clients send on the same chain,
-        // so this client disposes nothing.
-        HttpClient client = new(new OpenAiModerationAuthHandler(apiKey) { InnerHandler = inner }, disposeHandler: false)
+        OpenAIClientOptions options = new()
         {
-            BaseAddress = ApiEndpoint,
-            Timeout = ModerationDeadline,
+            Endpoint = new Uri(ApiEndpoint, "/v1"),
+            Transport = new HttpClientPipelineTransport(transport),
+            NetworkTimeout = ModerationDeadline,
+            RetryPolicy = new ClientRetryPolicy(maxRetries: 0),
         };
 
-        return new OpenAiModerationEvaluator(client);
+        // The key is handed to the SDK's own credential here, while the host starts, and no class
+        // that builds a body or reads an answer holds it from this point on.
+        var client = new OpenAIClient(new ApiKeyCredential(apiKey), options).GetModerationClient(ModerationModel);
+
+        return new OpenAiModerationEvaluator(client, ModerationDeadline);
     }
 
     /// <inheritdoc />
@@ -242,22 +272,32 @@ public sealed class OpenAiModerationEvaluator : IEvaluator
         string payload;
         try
         {
-            using HttpRequestMessage request = new(HttpMethod.Post, ModerationPath)
+            RequestOptions options = new()
             {
-                Content = new StringContent(Body(text), Encoding.UTF8, "application/json"),
+                CancellationToken = cancellationToken,
+
+                // This class decides what a non-2xx status means, the same way it always has: Read()
+                // below never runs on one. Left at the SDK's default, ClassifyTextAsync would throw
+                // instead of handing back the response this class needs to build that message from.
+                ErrorOptions = ClientErrorBehaviors.NoThrow,
             };
 
-            // The key rides on the handler chain of this client, so no credential passes through here.
-            using var response = await _client.SendAsync(request, cancellationToken).ConfigureAwait(false);
-            payload = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            // The key rides on the ApiKeyCredential this client was built with, so no credential
+            // passes through here.
+            var response = await _client
+                .ClassifyTextAsync(BinaryContent.CreateJson(Body(text)), options)
+                .ConfigureAwait(false);
 
-            if (!response.IsSuccessStatusCode)
+            var raw = response.GetRawResponse();
+            if (raw.Status is < 200 or >= 300)
             {
                 return new EvaluationResult(Unchecked(
                     "the moderation endpoint answered HTTP "
-                    + ((int)response.StatusCode).ToString(CultureInfo.InvariantCulture)
-                    + " " + response.StatusCode + "."));
+                    + raw.Status.ToString(CultureInfo.InvariantCulture)
+                    + " " + (HttpStatusCode)raw.Status + "."));
             }
+
+            payload = raw.Content.ToString();
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -265,10 +305,13 @@ public sealed class OpenAiModerationEvaluator : IEvaluator
             // above is false and that exception travels on.
             return new EvaluationResult(Unchecked(
                 "the moderation endpoint did not answer inside "
-                + _client.Timeout.TotalSeconds.ToString(CultureInfo.InvariantCulture) + " seconds."));
+                + _deadline.TotalSeconds.ToString(CultureInfo.InvariantCulture) + " seconds."));
         }
-        catch (HttpRequestException error)
+        catch (ClientResultException error)
         {
+            // ErrorOptions.NoThrow above means this fires only when the transport never got a
+            // response at all — a DNS failure, a refused connection — not for a status the endpoint
+            // answered.
             return new EvaluationResult(Unchecked(
                 "the moderation endpoint could not be reached: " + error.Message));
         }
