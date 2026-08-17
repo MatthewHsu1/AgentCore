@@ -211,6 +211,98 @@ public sealed class CompositeChatClientFactoryTests
         Assert.NotSame(first, factory.GetChatClient(new ModelReference { Ref = "reply" }));
     }
 
+    [Fact]
+    public async Task ACallerSuppliedTemperature_WinsOverTheDocumentDefault()
+    {
+        FakeChatClientAdapter openai = new("openai");
+
+        using var factory = await Create(OneVendorYaml, openai);
+        var shaped = factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.2 });
+
+        // The document sets the default; a caller that sets its own keeps it.
+        await shaped.GetResponseAsync(
+            [new ChatMessage(ChatRole.User, "hi")],
+            new ChatOptions { Temperature = 0.9f },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(0.9f, openai.RecorderOf("reply").LastOptions?.Temperature);
+    }
+
+    [Fact]
+    public async Task ACallWithNoOptions_StillGetsTheDocumentTemperature()
+    {
+        FakeChatClientAdapter openai = new("openai");
+
+        using var factory = await Create(OneVendorYaml, openai);
+        var shaped = factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.2 });
+
+        await shaped.GetResponseAsync(
+            [new ChatMessage(ChatRole.User, "hi")],
+            null,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(0.2f, openai.RecorderOf("reply").LastOptions?.Temperature);
+    }
+
+    [Fact]
+    public async Task ATemperature_ReachesAStreamingCallToo()
+    {
+        FakeChatClientAdapter openai = new("openai");
+
+        using var factory = await Create(OneVendorYaml, openai);
+        var shaped = factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.3 });
+
+        await foreach (var _ in shaped.GetStreamingResponseAsync(
+            [new ChatMessage(ChatRole.User, "hi")],
+            null,
+            TestContext.Current.CancellationToken))
+        {
+            // Draining the stream is enough to run the wrapper's Shape/Configure step.
+        }
+
+        Assert.Equal(0.3f, openai.RecorderOf("reply").LastOptions?.Temperature);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Disposal: the factory owns the vendor client. A shaped wrapper is only a view over it, so
+    // disposing the factory must not dispose the shared vendor client more than once.
+    // ---------------------------------------------------------------------------------------------
+    [Fact]
+    public async Task Dispose_ReleasesTheVendorClientExactlyOnce_EvenWithTwoShapedWrappersOverIt()
+    {
+        FakeChatClientAdapter openai = new("openai");
+        var factory = await Create(OneVendorYaml, openai);
+
+        // Two different temperatures over the same 'as' name take two different shaped wrappers,
+        // both delegating to the one shared vendor client underneath.
+        factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.1 });
+        factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.9 });
+
+        factory.Dispose();
+
+        // A shaped wrapper's own Dispose() chains to the vendor client (that's how
+        // DelegatingChatClient/ConfigureOptionsChatClient work). If the factory disposed the
+        // wrappers too, the vendor client would be disposed three times here: once through each
+        // wrapper's cascade, and once directly. Ownership says only the factory's own disposal of
+        // the vendor client counts.
+        Assert.Equal(1, openai.RecorderOf("reply").DisposeCount);
+    }
+
+    [Fact]
+    public async Task Dispose_ReleasesEveryVendorClientExactlyOnce()
+    {
+        FakeChatClientAdapter openai = new("openai");
+        var factory = await Create(OneVendorYaml, openai);
+
+        factory.GetChatClient(new ModelReference { Ref = "reply" });
+        factory.GetChatClient(new ModelReference { Ref = "fill", Temperature = 0.5 });
+
+        factory.Dispose();
+
+        Assert.Equal(1, openai.RecorderOf("reply").DisposeCount);
+        Assert.Equal(1, openai.RecorderOf("fill").DisposeCount);
+    }
+
     // ---------------------------------------------------------------------------------------------
     // What it refuses, at startup and never on the first call.
     // ---------------------------------------------------------------------------------------------

@@ -35,6 +35,7 @@
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
     <PackageVersion Include="JsonSchema.Net" Version="9.4.0" />
     <PackageVersion Include="JsonLogic" Version="6.1.0" />
+    <PackageVersion Include="JsonPointer.Net" Version="7.0.2" />
   </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="Npgsql" Version="10.0.3" />

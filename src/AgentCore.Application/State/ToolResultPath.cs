@@ -1,5 +1,5 @@
-using System.Globalization;
 using System.Text.Json.Nodes;
+using Json.Pointer;
 
 namespace AgentCore.Application.State;
 
@@ -9,7 +9,10 @@ namespace AgentCore.Application.State;
 /// <remarks>
 /// Section 8.3: a <c>writer: tool</c> path is a JSON Pointer into a tool result, and a tool result
 /// has no declared shape. The document writes the path in the compact <c>lookup_order.status</c>
-/// form, so both the dotted form and the RFC 6901 pointer form resolve here.
+/// form, so both the dotted form and the RFC 6901 pointer form resolve here. The dotted form is
+/// normalised to a pointer - escaping <c>~</c> and <c>/</c> per RFC 6901 §3 - and then evaluated by
+/// <see cref="JsonPointer"/>, so a segment that happens to contain either character still resolves
+/// to the literal property name it named under the hand-rolled resolver this replaced.
 /// </remarks>
 internal static class ToolResultPath
 {
@@ -26,49 +29,48 @@ internal static class ToolResultPath
             return null;
         }
 
-        var current = result;
-        foreach (var segment in Split(path))
+        var pointerText = path.Length == 0 || path[0] == '/' ? path : ToPointer(path);
+
+        if (!JsonPointer.TryParse(pointerText, out var pointer))
         {
-            current = Step(current, segment);
-            if (current is null)
+            return null;
+        }
+
+        // RFC 6901 §4 defines the segment '-' as "the (nonexistent) member after the last array
+        // element", and Json.Pointer.JsonPointer.TryEvaluate implements that by resolving it to the
+        // *existing* last element. This repo does not adopt that reading: the hand-rolled resolver
+        // this replaced gave '-' no meaning at all (an array index had to parse as a non-negative
+        // integer, and '-' never does), so a path ending in '-' always reached nothing. That is kept
+        // deliberately, not by oversight - a state slot must be written because a document's path
+        // named a value, never as a side effect of which JSON Pointer library happens to evaluate
+        // the path. So a '-' segment is rejected before it ever reaches the array it would otherwise
+        // resolve against.
+        for (var i = 0; i < pointer.SegmentCount; i++)
+        {
+            if (pointer[i].Equals("-"))
             {
                 return null;
             }
         }
 
-        return current;
+        return pointer.TryEvaluate(result, out var value) ? value : null;
     }
 
-    private static IEnumerable<string> Split(string path)
+    /// <summary>Normalises the dotted compact form into an RFC 6901 pointer.</summary>
+    /// <param name="path">A path with no leading slash, one segment for each dot-separated part.</param>
+    /// <returns>The equivalent pointer, each segment escaped per RFC 6901 §3.</returns>
+    private static string ToPointer(string path)
     {
-        if (path.Length == 0)
+        var segments = path.Split('.');
+        for (var i = 0; i < segments.Length; i++)
         {
-            yield break;
+            // Escape '~' first, so a literal '~' in the dotted segment does not collide with the
+            // '~0'/'~1' escape sequences the '/' replacement below introduces.
+            segments[i] = segments[i]
+                .Replace("~", "~0", StringComparison.Ordinal)
+                .Replace("/", "~1", StringComparison.Ordinal);
         }
 
-        if (path[0] == '/')
-        {
-            foreach (var raw in path[1..].Split('/'))
-            {
-                yield return raw
-                    .Replace("~1", "/", StringComparison.Ordinal)
-                    .Replace("~0", "~", StringComparison.Ordinal);
-            }
-
-            yield break;
-        }
-
-        foreach (var raw in path.Split('.'))
-        {
-            yield return raw;
-        }
+        return "/" + string.Join('/', segments);
     }
-
-    private static JsonNode? Step(JsonNode current, string segment) => current switch
-    {
-        JsonObject map => map.TryGetPropertyValue(segment, out var value) ? value : null,
-        JsonArray list when int.TryParse(segment, NumberStyles.Integer, CultureInfo.InvariantCulture, out var index)
-            && index >= 0 && index < list.Count => list[index],
-        _ => null,
-    };
 }

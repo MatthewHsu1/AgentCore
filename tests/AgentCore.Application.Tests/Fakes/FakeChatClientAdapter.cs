@@ -53,6 +53,9 @@ internal sealed class RecordingChatClient : IChatClient
     /// <summary>Gets the options of the last call, or <see langword="null"/> before one.</summary>
     public ChatOptions? LastOptions { get; private set; }
 
+    /// <summary>Gets how many times <see cref="Dispose"/> ran, so a test can catch a double dispose.</summary>
+    public int DisposeCount { get; private set; }
+
     public Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages,
         ChatOptions? options = null,
@@ -80,6 +83,6 @@ internal sealed class RecordingChatClient : IChatClient
 
     public void Dispose()
     {
-        // Nothing to release.
+        DisposeCount++;
     }
 }

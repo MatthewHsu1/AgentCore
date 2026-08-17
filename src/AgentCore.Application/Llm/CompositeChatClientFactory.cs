@@ -16,7 +16,7 @@ namespace AgentCore.Application.Llm;
 /// <para>
 /// The compile table asks for the client behind an <c>as</c> name and never reads a vendor name.
 /// This class holds the vendor-neutral half of that mapping: the <c>as</c> map, the default entry,
-/// the temperature wrapper, and the client cache. The vendor half lives in the adapters, one for
+/// and the two client caches, vendor and shaped. The vendor half lives in the adapters, one for
 /// each <c>kind</c>, so the document alone decides which vendor answers which reference.
 /// </para>
 /// <para>
@@ -112,22 +112,34 @@ public sealed class CompositeChatClientFactory : IChatClientFactory, IDisposable
         }
 
         // The vendor client stays one for each 'as' name. Only the call settings differ, so the
-        // wrapper sits above the shared client rather than beside it.
+        // wrapper sits above the shared client rather than beside it. ConfigureOptions clones the
+        // caller's ChatOptions (or starts a new one) and never mutates them, which is the same
+        // semantic a hand-rolled wrapper used to reimplement.
         var key = entry.As + "|" + temperature.ToString("R", CultureInfo.InvariantCulture);
-        return _shaped.GetOrAdd(key, _ => new TemperatureChatClient(_vendor[entry.As], (float)temperature));
+        return _shaped.GetOrAdd(
+            key,
+            _ => _vendor[entry.As]
+                .AsBuilder()
+                .ConfigureOptions(options => options.Temperature ??= (float)temperature)
+                .Build());
     }
 
-    /// <summary>Releases every client the adapters built and every wrapper above them.</summary>
+    /// <summary>Releases every client the adapters built.</summary>
+    /// <remarks>
+    /// A shaped client is a view over a shared vendor client, not an owner of one: it holds no
+    /// resource of its own, and its own <see cref="IDisposable.Dispose"/> chains straight through
+    /// to the vendor client it wraps (that is how <see cref="DelegatingChatClient"/> and the client
+    /// <c>ConfigureOptions</c> builds both work). Disposing the shaped clients here as well as the
+    /// vendor clients would therefore dispose a shared vendor client once for every shaped wrapper
+    /// built over it, plus once more directly - safe only by accident, and wrong the moment a vendor
+    /// client's <c>Dispose</c> is not idempotent. Only the vendor client is released; the shaped
+    /// dictionary is dropped without disposing what it held.
+    /// </remarks>
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 1)
         {
             return;
-        }
-
-        foreach (var client in _shaped.Values)
-        {
-            client.Dispose();
         }
 
         foreach (var client in _vendor.Values)
@@ -177,35 +189,4 @@ public sealed class CompositeChatClientFactory : IChatClientFactory, IDisposable
             Message = message,
             Check = ConfigurationCheck.ReferenceResolution,
         });
-
-    /// <summary>The wrapper one temperature takes, above the one shared vendor client.</summary>
-    private sealed class TemperatureChatClient : DelegatingChatClient
-    {
-        private readonly float _temperature;
-
-        public TemperatureChatClient(IChatClient inner, float temperature)
-            : base(inner)
-            => _temperature = temperature;
-
-        public override Task<ChatResponse> GetResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
-            => base.GetResponseAsync(messages, Shape(options), cancellationToken);
-
-        public override IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
-            => base.GetStreamingResponseAsync(messages, Shape(options), cancellationToken);
-
-        // The document sets the default and a caller that sets its own keeps it, exactly as
-        // ConfigureOptions did when the OpenAI factory owned this wrapper.
-        private ChatOptions Shape(ChatOptions? options)
-        {
-            var shaped = options?.Clone() ?? new ChatOptions();
-            shaped.Temperature ??= _temperature;
-            return shaped;
-        }
-    }
 }
