@@ -13,12 +13,13 @@ namespace AgentCore.Application.Diagnostics;
 /// compatibility obligation of D15 to two strings, and it stops a host emitting on a source the
 /// library owns.
 /// </para>
-/// <para><b>What this does not measure.</b> <c>Microsoft.Extensions.AI</c> already emits
-/// <c>gen_ai.client.operation.duration</c>, <c>gen_ai.client.token.usage</c>, and a
-/// <c>chat {model}</c> span, and <c>Microsoft.Agents.AI</c> already emits an <c>invoke_agent</c>
-/// span. Nothing here repeats a model name, a token count, or a model round trip. The turn span sits
-/// above both and carries what neither knows: the stage, the turn index, the section 8.7 row the
-/// turn met, and the barge-in.
+/// <para><b>What this does not measure.</b> <c>ConfigurationCompiler</c> wraps every compiled agent,
+/// and the chat client under it, with <c>Microsoft.Extensions.AI</c>'s and <c>Microsoft.Agents.AI</c>'s
+/// own <c>UseOpenTelemetry</c> — that wrapping, and not something either library does unprompted, is
+/// what emits <c>gen_ai.client.operation.duration</c>, <c>gen_ai.client.token.usage</c>, a
+/// <c>chat {model}</c> span, and an <c>invoke_agent</c> span. Nothing here repeats a model name, a
+/// token count, or a model round trip. The turn span sits above both and carries what neither knows:
+/// the stage, the turn index, the section 8.7 row the turn met, and the barge-in.
 /// </para>
 /// <para>
 /// <see cref="AgentCoreTelemetry"/> sets <c>gen_ai.conversation.id</c> on the span rather than

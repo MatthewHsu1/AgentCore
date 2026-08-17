@@ -102,11 +102,16 @@ public sealed class CompileTableTests
     }
 
     [Fact]
-    public void Row1_CompilesToAChatClientAgent()
+    public void Row1_CompilesToAChatClientAgentInstrumentedForOpenTelemetry()
     {
         var compiled = Compile(OneAgentYaml);
 
-        Assert.IsType<ChatClientAgent>(compiled.Agent);
+        // Task 6a wraps every compiled agent for OpenTelemetry exactly once (ConfigurationCompiler's
+        // Resolve, the single place agents are built and cached). compiled.Agent is therefore the
+        // OpenTelemetryAgent, not the ChatClientAgent underneath it — GetService<T> is how a caller,
+        // and this test, reaches through a DelegatingAIAgent to what it wraps.
+        Assert.IsType<OpenTelemetryAgent>(compiled.Agent);
+        Assert.IsType<ChatClientAgent>(compiled.Agent.GetService<ChatClientAgent>());
         Assert.Equal("only", compiled.Agent.Name);
     }
 
@@ -335,8 +340,10 @@ public sealed class CompileTableTests
     {
         var compiled = Compile(SharedPrefixYaml);
 
-        var greeter = Assert.IsType<ChatClientAgent>(compiled.Agents["greeter"]);
-        var closer = Assert.IsType<ChatClientAgent>(compiled.Agents["closer"]);
+        var greeter = compiled.Agents["greeter"].GetService<ChatClientAgent>();
+        var closer = compiled.Agents["closer"].GetService<ChatClientAgent>();
+        Assert.NotNull(greeter);
+        Assert.NotNull(closer);
 
         // Section 8.1 makes agents.defaults.instructions a cached prefix, and the compiler has one
         // build path for every agent. This asserts that path and not AgentInstructions.Compose: an

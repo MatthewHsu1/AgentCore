@@ -150,12 +150,33 @@ public sealed record TelemetryProviderConfiguration
     public const int MinimumExportIntervalMilliseconds = 60_000;
 
     /// <summary>The extra <c>ActivitySource</c> names listened to when the document lists none.</summary>
+    /// <remarks>
+    /// <c>Experimental.Microsoft.Extensions.AI</c> and <c>Experimental.Microsoft.Agents.AI</c> are the
+    /// default source names <c>Microsoft.Extensions.AI.OpenTelemetryChatClient</c> (10.8.3) and
+    /// <c>Microsoft.Agents.AI.OpenTelemetryAgent</c> (1.17.0) each construct their <c>ActivitySource</c>
+    /// under when a document names no <c>sourceName</c> of its own — read out of the restored assemblies,
+    /// not assumed. Without them here, Task 6a's <c>chat</c> and <c>invoke_agent</c> spans are emitted
+    /// but nothing this repository configures ever listens for them, so an exporter drops every one.
+    /// </remarks>
     public static readonly EquatableList<string> DefaultSources =
-        new(["Microsoft.AspNetCore", "System.Net.Http"]);
+        new(["Microsoft.AspNetCore", "System.Net.Http", "Experimental.Microsoft.Extensions.AI", "Experimental.Microsoft.Agents.AI"]);
 
     /// <summary>The extra <c>Meter</c> names listened to when the document lists none.</summary>
+    /// <remarks>
+    /// <c>OpenTelemetryChatClient</c> names its <c>Meter</c> with the same string it names its
+    /// <c>ActivitySource</c> with, so the two GenAI names here match <see cref="DefaultSources"/>
+    /// exactly. <c>OpenTelemetryAgent</c> owns no <c>Meter</c> of its own — it delegates every metric to
+    /// the same <c>OpenTelemetryChatClient</c> instance it forwards agent runs through — so one name
+    /// covers both libraries' metrics.
+    /// </remarks>
     public static readonly EquatableList<string> DefaultMeters =
-        new(["Microsoft.AspNetCore.Hosting", "Microsoft.AspNetCore.Server.Kestrel", "System.Net.Http"]);
+        new([
+            "Microsoft.AspNetCore.Hosting",
+            "Microsoft.AspNetCore.Server.Kestrel",
+            "System.Net.Http",
+            "Experimental.Microsoft.Extensions.AI",
+            "Experimental.Microsoft.Agents.AI",
+        ]);
 
     /// <summary>Gets the vendor, such as <c>grafana</c>.</summary>
     public required string Kind { get; init; }

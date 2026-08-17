@@ -26,7 +26,10 @@ public sealed class CompiledAgentRunTests
         using ScriptedChatClient client = new(Fragments);
         var compiled = Compile(CompileTableTests.OneAgentYaml, client);
 
-        Assert.IsType<ChatClientAgent>(compiled.Agent);
+        // Task 6a wraps every compiled agent for OpenTelemetry, so compiled.Agent is now the
+        // OpenTelemetryAgent and the ChatClientAgent it built sits underneath it.
+        Assert.IsType<OpenTelemetryAgent>(compiled.Agent);
+        Assert.IsType<ChatClientAgent>(compiled.Agent.GetService<ChatClientAgent>());
 
         var reply = await compiled.Agent.RunAsync("hello", cancellationToken: TestContext.Current.CancellationToken);
 

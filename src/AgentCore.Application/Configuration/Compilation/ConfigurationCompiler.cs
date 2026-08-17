@@ -236,8 +236,17 @@ public static class ConfigurationCompiler
                 BuildTools(item, tools, context, pointer, Resolve));
             path.RemoveAt(path.Count - 1);
 
-            agents[id] = built;
-            return built;
+            // Every agent this compiler ever builds is built here and nowhere else — the dictionary
+            // above is the only cache, row 2's stage lookup and rows 3/4's graphs all read the same
+            // built instance back out of it. Wrapping here, once, before the instance is cached, is
+            // therefore what makes "instrumented exactly once" true: a second Resolve of the same id
+            // returns the already-wrapped agent at the top of this function and never reaches this line.
+            var instrumented = new AIAgentBuilder(built)
+                .UseOpenTelemetry(configure: static agent => agent.EnableSensitiveData = false)
+                .Build();
+
+            agents[id] = instrumented;
+            return instrumented;
         }
     }
 
@@ -261,18 +270,38 @@ public static class ConfigurationCompiler
     /// disposed, so the shared vendor client below it keeps the single owner it had.
     /// </para>
     /// <para>
-    /// <b>One consequence, recorded because it is not obvious.</b> MAF 1.17.0 reserves a slot for chat
-    /// telemetry directly BELOW its own function-invocation loop — <c>DeferredOpenTelemetryChatClient</c>
-    /// — so that the chat span is closed before tools run and <c>execute_tool</c> spans hang off the
-    /// <c>invoke_agent</c> span. A loop supplied from underneath, as this one is, ends up below that
-    /// slot rather than above it. Nothing changes today: this repository activates the slot nowhere,
-    /// the slot is inert until <c>OpenTelemetryAgent</c> activates it, and no <c>execute_tool</c> span
-    /// is emitted either way. It would matter the day the agent is wrapped for OpenTelemetry, and the
-    /// fix that day is a change here and not a change to the observer.
+    /// <b>Chat telemetry is wired here, and not left to MAF's own slot, for a reason worth recording.</b>
+    /// MAF 1.17.0 reserves a slot for chat telemetry — <c>internal sealed class
+    /// DeferredOpenTelemetryChatClient</c>, added by <c>ChatClientExtensions.WithDefaultAgentMiddleware</c>
+    /// — that <c>OpenTelemetryAgent</c> activates once the built <c>ChatClientAgent</c> is wrapped for
+    /// OpenTelemetry. That slot is always inserted as the LAST call in a builder whose factories run in
+    /// reverse order, so it lands directly below whichever <c>FunctionInvokingChatClient</c> the SAME
+    /// builder call finds already present on the client it was handed — and only below a loop MAF
+    /// inserts itself, at the position it inserts it, does the slot end up correctly positioned. This
+    /// loop is not MAF's own: it is supplied from underneath, as the <c>chatClient</c> argument
+    /// <c>WithDefaultAgentMiddleware</c> receives, so its own <c>GetService&lt;FunctionInvokingChatClient&gt;</c>
+    /// check finds THIS loop already present and skips inserting one of its own — and the slot MAF still
+    /// adds lands ABOVE this loop, wrapping the whole tool-calling round trip as one span instead of one
+    /// span per model call. Because the slot is <c>internal sealed</c>, it cannot be constructed and
+    /// placed by hand in the right spot either. The fix is therefore to skip the slot entirely: wrap
+    /// <paramref name="model"/> in the library's own, always-active
+    /// <see cref="Microsoft.Extensions.AI.OpenTelemetryChatClient"/> — verified public in Microsoft.Extensions.AI
+    /// 10.8.3 — directly, here, BELOW this loop, before <see cref="AuditingFunctionInvokingChatClient"/>
+    /// is constructed around it. <see cref="Microsoft.Extensions.AI.FunctionInvokingChatClient"/> reads
+    /// <c>Activity.Current</c> at the moment it invokes a tool, and with a real chat client in place the
+    /// per-round chat span opens and closes before that moment, so <c>Activity.Current</c> has reverted
+    /// to the <c>invoke_agent</c> span the agent wrapper opened and <c>execute_tool</c> nests under it
+    /// rather than under one span covering the whole loop. MAF's own deferred slot is still inserted
+    /// above this pipeline by <c>WithDefaultAgentMiddleware</c>, but <c>OpenTelemetryAgent</c> looks for
+    /// an <c>OpenTelemetryChatClient</c> before it looks for that slot, finds the one wired in here, and
+    /// never activates the slot — so exactly one chat-level instrumentation layer is ever live.
     /// </para>
     /// </remarks>
     private static AuditingFunctionInvokingChatClient WithToolFailureAuditing(IChatClient model)
-        => new(model);
+        => new(
+            model.AsBuilder()
+                .UseOpenTelemetry(configure: static client => client.EnableSensitiveData = false)
+                .Build());
 
     private static List<AITool>? BuildTools(
         AgentConfiguration item,

@@ -338,7 +338,7 @@ public sealed class CallSession : IConversationPort
             try
             {
                 response = await turn.Agent
-                    .RunAsync(turn.Request, cancellationToken: cancellation.Token)
+                    .RunAsync(turn.Request, options: ConversationOptions(), cancellationToken: cancellation.Token)
                     .ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (CurrentInterruption() is not null)
@@ -434,7 +434,7 @@ public sealed class CallSession : IConversationPort
             }
 
             var stream = turn.Agent
-                .RunStreamingAsync(turn.Request, cancellationToken: cancellation.Token)
+                .RunStreamingAsync(turn.Request, options: ConversationOptions(), cancellationToken: cancellation.Token)
                 .GetAsyncEnumerator(cancellation.Token);
 
             try
@@ -683,6 +683,21 @@ public sealed class CallSession : IConversationPort
         var activity = AgentCoreTelemetry.StartTurn(CallId, State.TurnIndex, State.Stage);
         return new Turn(agent, request, spoken, State.Stage, State.TurnIndex, activity, _time.GetTimestamp());
     }
+
+    /// <summary>Names this call as the conversation the run's <c>gen_ai.conversation.id</c> reports.</summary>
+    /// <returns>
+    /// The run options a <see cref="ChatClientAgent"/> reads <c>ConversationId</c> off, whether or not
+    /// something else wraps it. Row 1 and row 2 hand <c>turn.Agent</c> straight through to the
+    /// <see cref="OpenTelemetryAgent"/> wrapping one compiled
+    /// <see cref="ChatClientAgent"/>, so <c>gen_ai.conversation.id</c> lands on every <c>chat</c> and
+    /// <c>invoke_agent</c> span those rows produce, for free, alongside the same value
+    /// <see cref="AgentCoreTelemetry.StartTurn"/> already puts on <c>agentcore.turn</c>. Row 3 and row
+    /// 4 hand this same options instance to a workflow-wrapped agent instead, and nothing here confirms
+    /// a graph node forwards it on to the <see cref="ChatClientAgent"/> at that node — new plumbing to
+    /// confirm or force that would be a second change, not this one.
+    /// </returns>
+    private ChatClientAgentRunOptions ConversationOptions()
+        => new(new ChatOptions { ConversationId = CallId });
 
     /// <summary>Opens the window in which <see cref="Interrupt"/> reaches this turn.</summary>
     /// <param name="audibleFromTheStart">
