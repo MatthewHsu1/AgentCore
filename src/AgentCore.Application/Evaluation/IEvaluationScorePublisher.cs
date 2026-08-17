@@ -14,6 +14,15 @@ namespace AgentCore.Application.Evaluation;
 /// turn, and triage row T18 defers the online path, so an implementation that waits is still correct
 /// here and would not be correct on the turn loop.
 /// </para>
+/// <para>
+/// <c>Microsoft.Extensions.AI.Evaluation.Reporting</c> already fills this role: a
+/// <c>ScenarioRunResult</c> from <c>ReportingConfiguration.CreateScenarioRunAsync</c> carries the
+/// turn identity — <c>ExecutionName</c>, <c>ScenarioName</c>, <c>IterationName</c> — that this seam
+/// says belongs to the host, and the host supplies the destination by implementing the library's
+/// <c>IEvaluationResultStore</c> rather than this interface. When T18 opens, prefer taking an
+/// injected <c>ReportingConfiguration</c> over implementing this port; the offline golden set under
+/// <c>tests/AgentCore.Evals</c> already reaches <c>DiskBasedReportingConfiguration</c> this way.
+/// </para>
 /// </remarks>
 public interface IEvaluationScorePublisher
 {

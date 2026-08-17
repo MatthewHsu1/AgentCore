@@ -22,6 +22,13 @@ namespace AgentCore.Application.Evaluation;
 /// drawing a number, so the two ends are deterministic with no test seam at all. Every rate between
 /// them draws once, and the test passes its own draw.
 /// </para>
+/// <para>
+/// <c>Microsoft.Extensions.AI.Evaluation</c> ships no sampler, so this type has no library
+/// replacement to defer to. When T18 opens, prefer expressing the decision as a decorating
+/// <c>IEvaluator</c> that returns an empty evaluation result for a turn this sampler skips, so it
+/// composes into <c>CompositeEvaluator</c> or <c>ReportingConfiguration.Evaluators</c> rather than
+/// sitting beside them as a singleton every caller must remember to consult.
+/// </para>
 /// </remarks>
 public sealed class EvaluationSampler
 {
