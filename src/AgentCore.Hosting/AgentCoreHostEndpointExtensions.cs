@@ -30,8 +30,8 @@ public static class AgentCoreHostEndpointExtensions
 
         app.UseWebSockets();
 
-        app.MapChatCompletions(chatCompletionsPattern ?? ChatCompletionsEndpointRouteBuilderExtensions.DefaultPattern);\
-        
+        app.MapChatCompletions(chatCompletionsPattern ?? ChatCompletionsEndpointRouteBuilderExtensions.DefaultPattern);
+
         app.MapCall();
 
         return app;
