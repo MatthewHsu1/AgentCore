@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Text.Json.Nodes;
 
 namespace AgentCore.Application.Configuration.Schema;
@@ -6,8 +7,18 @@ namespace AgentCore.Application.Configuration.Schema;
 /// One <c>apiVersion: agentcore/v1</c> configuration document, bound to records.
 /// </summary>
 /// <remarks>
+/// <para>
 /// The parser produces this after check 1 of section 8.5 passes. Checks 2 to 8 read it, and the
 /// compile table in section 8.2 turns it into an agent.
+/// </para>
+/// <para>
+/// <b>Do not compare two of these for equality.</b> The collection properties are BCL interfaces,
+/// so the compiler-written record equality compares them by reference and two loads of the same
+/// document are never equal. Nothing in AgentCore compares two configurations, and rule 17 of
+/// section 11 — the same document loads identically as YAML and as JSON — is proved where it is
+/// stronger: on the raw document trees, through <see cref="JsonNode.DeepEquals(JsonNode, JsonNode)"/>,
+/// which also catches keys these records do not model. See <c>ConfigurationRoundTripTests</c>.
+/// </para>
 /// </remarks>
 public sealed record AgentCoreConfiguration
 {
@@ -66,16 +77,16 @@ public sealed record AgentCoreConfiguration
     public string RefusalReply { get; init; } = DefaultRefusalReply;
 
     /// <summary>Gets the declared state slots, keyed by slot name.</summary>
-    public EquatableDictionary<StateSlotConfiguration> State { get; init; } = EquatableDictionary<StateSlotConfiguration>.Empty;
+    public IReadOnlyDictionary<string, StateSlotConfiguration> State { get; init; } = ReadOnlyDictionary<string, StateSlotConfiguration>.Empty;
 
     /// <summary>Gets the extractor settings, or <see langword="null"/> when the document declares none.</summary>
     public ExtractorConfiguration? Extractor { get; init; }
 
     /// <summary>Gets the named guards, keyed by guard name. Each value is a raw JSONLogic rule.</summary>
-    public EquatableDictionary<JsonNode> Guards { get; init; } = EquatableDictionary<JsonNode>.Empty;
+    public IReadOnlyDictionary<string, JsonNode> Guards { get; init; } = ReadOnlyDictionary<string, JsonNode>.Empty;
 
     /// <summary>Gets the declared tools, in document order.</summary>
-    public EquatableList<ToolConfiguration> Tools { get; init; } = EquatableList<ToolConfiguration>.Empty;
+    public IReadOnlyList<ToolConfiguration> Tools { get; init; } = [];
 
     /// <summary>Gets the agent section, or <see langword="null"/> when the document declares none.</summary>
     public AgentsConfiguration? Agents { get; init; }

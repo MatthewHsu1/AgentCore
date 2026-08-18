@@ -40,7 +40,7 @@ public sealed record StageConfiguration
     public StageNoMatch OnNoMatch { get; init; } = StageNoMatch.Stay;
 
     /// <summary>Gets the exits of the stage, in document order. Check 5 evaluates them as siblings.</summary>
-    public EquatableList<StageTransition> To { get; init; } = EquatableList<StageTransition>.Empty;
+    public IReadOnlyList<StageTransition> To { get; init; } = [];
 }
 
 /// <summary>
@@ -52,5 +52,5 @@ public sealed record PolicyConfiguration
     public required string Initial { get; init; }
 
     /// <summary>Gets the declared stages, in document order.</summary>
-    public required EquatableList<StageConfiguration> Stages { get; init; }
+    public required IReadOnlyList<StageConfiguration> Stages { get; init; }
 }

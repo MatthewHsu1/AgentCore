@@ -927,7 +927,7 @@ public sealed class ConfigurationValidatorTests
         return Assert.Single(result.Errors, error => error.Check == check);
     }
 
-    private static EquatableList<ConfigurationError> Evaluate(string yaml, ConfigurationCheck check)
+    private static IReadOnlyList<ConfigurationError> Evaluate(string yaml, ConfigurationCheck check)
     {
         var configuration = ConfigurationLoader.LoadYaml(yaml);
         var result = ConfigurationValidator.Evaluate(configuration);

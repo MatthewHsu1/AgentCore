@@ -65,7 +65,7 @@ public sealed class CompositeChatClientFactory : IChatClientFactory, IDisposable
 
         CompositeChatClientFactory factory = new();
 
-        var llm = configuration.Providers?.Llm ?? EquatableList<LlmProviderConfiguration>.Empty;
+        var llm = configuration.Providers?.Llm ?? [];
         for (var index = 0; index < llm.Count; index++)
         {
             var entry = llm[index];

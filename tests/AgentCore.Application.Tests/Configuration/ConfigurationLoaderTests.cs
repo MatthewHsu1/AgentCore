@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using Xunit;
@@ -387,10 +388,8 @@ public sealed class ConfigurationLoaderTests
     }
 
     /// <summary>
-    /// A repeated key is a mistake in both formats. On the YAML path, YamlDotNet's own loader already
-    /// rejects a duplicate scalar key while it builds the mapping node, before <see cref="YamlToJson"/>
-    /// walks it (which has a second, redundant check of its own in <c>ConvertMapping</c>). This test
-    /// pins that rejection rather than proving a live bug on the YAML path.
+    /// A repeated key is a mistake in both formats. On the YAML path YamlDotNet's own loader rejects
+    /// two keys that are the same YAML node, before <see cref="YamlToJson"/> walks the mapping.
     /// </summary>
     [Fact]
     public void ADuplicateKeyInYaml_FailsTheLoad()
@@ -404,6 +403,61 @@ public sealed class ConfigurationLoaderTests
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
 
         Assert.Contains(failure.Errors, error => error.Message.Contains("Duplicate key", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Two keys that differ as YAML and agree as JSON are still one key in the document tree.
+    /// </summary>
+    /// <remarks>
+    /// A tag makes two scalars different YAML nodes, so YamlDotNet keeps both — and both name the
+    /// property "1" once the mapping becomes a <c>JsonObject</c>. The check in
+    /// <c>YamlToJson.ConvertMapping</c> is what catches this, and it is the only thing that does:
+    /// without it the second value silently replaces the first.
+    /// </remarks>
+    [Fact]
+    public void TwoKeysThatDifferOnlyByTag_FailTheLoad()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: plain
+            !!str 1: first
+            1: second
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Equal(ConfigurationCheck.Syntax, failure.Check);
+        Assert.Contains(failure.Errors, error => error.Message.Contains("appears twice", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A number no <see cref="double"/> can hold is a defect in the document, not a crash.
+    /// </summary>
+    /// <remarks>
+    /// It parses to an infinity, which JSON cannot write. The loader used to let the
+    /// <c>ArgumentException</c> that came of it straight out, past the
+    /// <see cref="ConfigurationLoadException"/> section 8.7 tells every caller to catch.
+    /// </remarks>
+    [Theory]
+    [InlineData("1e400")]
+    [InlineData("-1e400")]
+    public void ANumberTooLargeToHold_FailsTheLoad(string written)
+    {
+        var failure = Assert.Throws<ConfigurationLoadException>(
+            () => ConfigurationLoader.LoadYaml($"apiVersion: agentcore/v1\nname: plain\nevaluation:\n  sampleRate: {written}\n"));
+
+        Assert.Equal(ConfigurationCheck.Syntax, failure.Check);
+        Assert.Contains(failure.Errors, error => error.Message.Contains("larger than a number can hold", StringComparison.Ordinal));
+    }
+
+    /// <summary>A number that underflows is zero, which JSON can write, so it loads.</summary>
+    [Fact]
+    public void ANumberTooSmallToHold_ReadsAsZero()
+    {
+        var configuration = ConfigurationLoader.LoadYaml(
+            "apiVersion: agentcore/v1\nname: plain\nevaluation:\n  sampleRate: 1e-400\n");
+
+        Assert.Equal(0, configuration.Evaluation!.SampleRate);
     }
 
     /// <summary>
@@ -435,7 +489,7 @@ public sealed class ConfigurationLoaderTests
 
         var shipped = ConfigurationLoader.LoadFile(path);
 
-        Assert.Equal(Example, shipped);
+        Assert.Equal(JsonSerializer.Serialize(Example), JsonSerializer.Serialize(shipped));
     }
 
     private static string RepositoryRoot()

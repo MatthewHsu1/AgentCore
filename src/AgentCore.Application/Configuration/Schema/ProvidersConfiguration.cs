@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace AgentCore.Application.Configuration.Schema;
 
 /// <summary>
@@ -158,8 +160,8 @@ public sealed record TelemetryProviderConfiguration
     /// not assumed. Without them here, Task 6a's <c>chat</c> and <c>invoke_agent</c> spans are emitted
     /// but nothing this repository configures ever listens for them, so an exporter drops every one.
     /// </remarks>
-    public static readonly EquatableList<string> DefaultSources =
-        new(["Microsoft.AspNetCore", "System.Net.Http", "Experimental.Microsoft.Extensions.AI", "Experimental.Microsoft.Agents.AI"]);
+    public static readonly IReadOnlyList<string> DefaultSources =
+        ["Microsoft.AspNetCore", "System.Net.Http", "Experimental.Microsoft.Extensions.AI", "Experimental.Microsoft.Agents.AI"];
 
     /// <summary>The extra <c>Meter</c> names listened to when the document lists none.</summary>
     /// <remarks>
@@ -169,14 +171,14 @@ public sealed record TelemetryProviderConfiguration
     /// the same <c>OpenTelemetryChatClient</c> instance it forwards agent runs through — so one name
     /// covers both libraries' metrics.
     /// </remarks>
-    public static readonly EquatableList<string> DefaultMeters =
-        new([
+    public static readonly IReadOnlyList<string> DefaultMeters =
+        [
             "Microsoft.AspNetCore.Hosting",
             "Microsoft.AspNetCore.Server.Kestrel",
             "System.Net.Http",
             "Experimental.Microsoft.Extensions.AI",
             "Experimental.Microsoft.Agents.AI",
-        ]);
+        ];
 
     /// <summary>Gets the vendor, such as <c>grafana</c>.</summary>
     public required string Kind { get; init; }
@@ -198,6 +200,7 @@ public sealed record TelemetryProviderConfiguration
     /// instead. This is a floor and not a validation failure: a number too small costs money quietly
     /// rather than breaking anything, and refusing to start over it would be worse than correcting it.
     /// </remarks>
+    [JsonPropertyName("exportIntervalMs")]
     public int ExportIntervalMilliseconds
     {
         get => field;
@@ -210,7 +213,7 @@ public sealed record TelemetryProviderConfiguration
     /// <c>Microsoft.AspNetCore</c> is the request span and <c>System.Net.Http</c> is the outbound
     /// call. A document that wants the AgentCore turn span alone writes an empty list.
     /// </remarks>
-    public EquatableList<string> Sources { get; init; } = DefaultSources;
+    public IReadOnlyList<string> Sources { get; init; } = DefaultSources;
 
     /// <summary>Gets the extra <c>Meter</c> names listened to, beside the one AgentCore owns.</summary>
     /// <remarks>
@@ -218,7 +221,7 @@ public sealed record TelemetryProviderConfiguration
     /// normal ASP.NET Core replica spends against the 10,000 ceiling of item 12, so a deployment that
     /// needs the room takes names off this list.
     /// </remarks>
-    public EquatableList<string> Meters { get; init; } = DefaultMeters;
+    public IReadOnlyList<string> Meters { get; init; } = DefaultMeters;
 }
 
 /// <summary>
@@ -230,7 +233,7 @@ public sealed record TelemetryProviderConfiguration
 public sealed record ProvidersConfiguration
 {
     /// <summary>Gets the language models, in document order.</summary>
-    public EquatableList<LlmProviderConfiguration> Llm { get; init; } = EquatableList<LlmProviderConfiguration>.Empty;
+    public IReadOnlyList<LlmProviderConfiguration> Llm { get; init; } = [];
 
     /// <summary>Gets the vendor that carries the call and owns its inbound route, or <see langword="null"/>.</summary>
     /// <remarks>

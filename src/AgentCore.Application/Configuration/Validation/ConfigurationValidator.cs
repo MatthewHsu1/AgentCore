@@ -46,8 +46,8 @@ public static class ConfigurationValidator
 
         return new ConfigurationValidationResult
         {
-            Errors = new EquatableList<ConfigurationError>(errors),
-            Warnings = new EquatableList<ConfigurationError>(warnings),
+            Errors = errors,
+            Warnings = warnings,
         };
     }
 
@@ -104,7 +104,7 @@ public static class ConfigurationValidator
             AddUnknownModel(evaluation.Judge, "/evaluation/judge/ref", names, errors);
         }
 
-        var items = configuration.Agents?.Items ?? EquatableList<AgentConfiguration>.Empty;
+        var items = configuration.Agents?.Items ?? [];
         if (configuration.Agents?.Defaults is { } defaults)
         {
             AddUnknownModel(defaults.Model, "/agents/defaults/model/ref", names, errors);
@@ -583,7 +583,7 @@ public static class ConfigurationValidator
     // ---------------------------------------------------------------------------------------------
     private static void CheckDelegationCycles(AgentCoreConfiguration configuration, List<ConfigurationError> errors)
     {
-        var items = configuration.Agents?.Items ?? EquatableList<AgentConfiguration>.Empty;
+        var items = configuration.Agents?.Items ?? [];
         if (items.Count == 0)
         {
             return;
@@ -754,17 +754,17 @@ public static class ConfigurationValidator
         public static DeclaredNames From(AgentCoreConfiguration configuration)
             => new()
             {
-                Agents = (configuration.Agents?.Items ?? EquatableList<AgentConfiguration>.Empty)
+                Agents = (configuration.Agents?.Items ?? [])
                     .Select(static agent => agent.Id).ToHashSet(StringComparer.Ordinal),
                 Tools = configuration.Tools.Select(static tool => tool.Id).ToHashSet(StringComparer.Ordinal),
                 Guards = configuration.Guards.Keys.ToHashSet(StringComparer.Ordinal),
-                Stages = (configuration.Policy?.Stages ?? EquatableList<StageConfiguration>.Empty)
+                Stages = (configuration.Policy?.Stages ?? [])
                     .Select(static stage => stage.Id).ToHashSet(StringComparer.Ordinal),
-                Nodes = (configuration.Graph?.Nodes ?? EquatableList<GraphNodeConfiguration>.Empty)
+                Nodes = (configuration.Graph?.Nodes ?? [])
                     .Select(static node => node.Id).ToHashSet(StringComparer.Ordinal),
 
                 // An absent providers: section, or an absent providers.llm, declares no model name.
-                Models = (configuration.Providers?.Llm ?? EquatableList<LlmProviderConfiguration>.Empty)
+                Models = (configuration.Providers?.Llm ?? [])
                     .Select(static provider => provider.As).ToHashSet(StringComparer.Ordinal),
             };
     }

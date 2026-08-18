@@ -1,5 +1,3 @@
-using AgentCore.Application.Configuration.Schema;
-
 namespace AgentCore.Application.Configuration.Parsing;
 
 /// <summary>
@@ -11,22 +9,20 @@ namespace AgentCore.Application.Configuration.Parsing;
 /// </remarks>
 public sealed class ConfigurationLoadException : Exception
 {
-    private static readonly EquatableList<ConfigurationError> NoErrors = EquatableList<ConfigurationError>.Empty;
-
     /// <summary>Creates an exception with no error detail.</summary>
     public ConfigurationLoadException()
-        : base("The configuration document did not load.") => Errors = NoErrors;
+        : base("The configuration document did not load.") => Errors = [];
 
     /// <summary>Creates an exception with a plain message and no error detail.</summary>
     /// <param name="message">The message a human reads.</param>
     public ConfigurationLoadException(string message)
-        : base(message) => Errors = NoErrors;
+        : base(message) => Errors = [];
 
     /// <summary>Creates an exception with a plain message and an inner cause.</summary>
     /// <param name="message">The message a human reads.</param>
     /// <param name="innerException">The cause.</param>
     public ConfigurationLoadException(string message, Exception? innerException)
-        : base(message, innerException) => Errors = NoErrors;
+        : base(message, innerException) => Errors = [];
 
     /// <summary>Creates an exception for one error.</summary>
     /// <param name="error">The reason the document did not load.</param>
@@ -55,10 +51,10 @@ public sealed class ConfigurationLoadException : Exception
     /// <param name="innerException">The cause, when one exists.</param>
     public ConfigurationLoadException(IEnumerable<ConfigurationError> errors, Exception? innerException)
         : base(BuildMessage(errors), innerException)
-        => Errors = new EquatableList<ConfigurationError>(errors);
+        => Errors = [.. errors];
 
     /// <summary>Gets every reason the document did not load, in the order the check found them.</summary>
-    public EquatableList<ConfigurationError> Errors { get; }
+    public IReadOnlyList<ConfigurationError> Errors { get; }
 
     /// <summary>Gets the JSON Pointer of the first error, or the root pointer when there is none.</summary>
     public string Pointer => Errors.Count > 0 ? Errors[0].Pointer : ConfigurationError.RootPointer;

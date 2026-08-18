@@ -353,6 +353,129 @@ public sealed class ConfigurationSchemaValidatorTests
         Assert.Equal(ConfigurationCheck.Syntax, failure.Check);
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // What the author of the document reads.
+    //
+    // The library writes for whoever wrote the schema. "All values fail against the false schema" is
+    // exact and says nothing to somebody looking at a YAML file, and the branch machinery of `if` and
+    // `oneOf` used to report its own misses as if they were the document's. These pin the sentences
+    // check 1 hands back instead.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void AnUnknownKey_SaysTheSchemaDoesNotKnowIt()
+    {
+        var failure = Assert.Throws<ConfigurationLoadException>(
+            () => ConfigurationLoader.LoadYaml("apiVersion: agentcore/v1\nname: broken\nsampleRatio: 0.5\n"));
+
+        Assert.DoesNotContain("false schema", failure.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(failure.Errors, error => error.Message.Contains("sampleRatio", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AWriterWithNoPath_DoesNotAdviseAnotherWriter()
+    {
+        // The slot declares `writer: tool` and leaves out `from`. The schema reaches that by asking
+        // each `if` in turn, and the misses used to be reported: the author was told the writer
+        // should have been `counter`, and then `const`, which is the opposite of the fix.
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            state:
+              orderStatus: { type: string, writer: tool }
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        var error = Assert.Single(failure.Errors);
+        Assert.Equal("/state/orderStatus", error.Pointer);
+        Assert.Contains("from", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("counter", failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("const", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnUnknownEnumValue_ListsTheValuesTheKeyAccepts()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            tools:
+              - { id: lookup_order, kind: ftp }
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        var error = Assert.Single(failure.Errors);
+        Assert.Equal("/tools/0/kind", error.Pointer);
+        Assert.Contains("builtin, http, binding, agent", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void APolicyAndAGraphTogether_SayWhatTheDocumentDid()
+    {
+        // The rule has no keyword of its own — it is a `not` over a dependent schema — so the schema
+        // writes it out in prose and check 1 reads that back.
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            agents:
+              items:
+                - { id: greeter }
+            policy:
+              initial: greeting
+              stages:
+                - { id: greeting, agent: greeter, terminal: true }
+            graph:
+              pattern: sequential
+              agents: [ greeter ]
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        var error = Assert.Single(failure.Errors);
+        Assert.Contains("policy and graph", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AGraphThatIsBothShapes_NamesTheShapesItCouldHaveBeen()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            graph:
+              pattern: sequential
+              agents: [ writer ]
+              nodes: [ { id: draft } ]
+              edges: []
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Contains(
+            failure.Errors,
+            error => error.Pointer == "/graph"
+                     && error.Message.Contains("a pattern graph", StringComparison.Ordinal)
+                     && error.Message.Contains("nodes and edges", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AnIdentifierThatIsNotOne_ShowsTheFormTheKeyTakes()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            tools:
+              - { id: "9lives", kind: builtin, uses: knowledge.search }
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        var error = Assert.Single(failure.Errors);
+        Assert.Equal("/tools/0/id", error.Pointer);
+        Assert.Contains("^[A-Za-z_][A-Za-z0-9_-]*$", error.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void TheEmbeddedSchema_IsPresent()
         => Assert.Contains("agentcore/v1", ConfigurationSchemaValidator.SchemaJson, StringComparison.Ordinal);

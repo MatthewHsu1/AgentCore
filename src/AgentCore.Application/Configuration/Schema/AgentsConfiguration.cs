@@ -31,7 +31,7 @@ public sealed record AgentConfiguration
     public ModelReference? Model { get; init; }
 
     /// <summary>Gets the ids of the tools this agent may call.</summary>
-    public EquatableList<string> Tools { get; init; } = EquatableList<string>.Empty;
+    public IReadOnlyList<string> Tools { get; init; } = [];
 }
 
 /// <summary>
@@ -43,5 +43,5 @@ public sealed record AgentsConfiguration
     public AgentDefaults? Defaults { get; init; }
 
     /// <summary>Gets the declared agents, in document order.</summary>
-    public required EquatableList<AgentConfiguration> Items { get; init; }
+    public required IReadOnlyList<AgentConfiguration> Items { get; init; }
 }
