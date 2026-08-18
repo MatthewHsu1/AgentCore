@@ -88,6 +88,12 @@ internal static class CallSessionStartup
 
         services.AddSingleton<ICallSessionFactory>(sessions);
 
+        // The same loop, behind the framework's own seam. A host that consumes AIAgent — a protocol
+        // host, an evaluation harness — resolves this and never learns a second AgentCore type. It
+        // is registered under its concrete type and not as AIAgent, because a host may hold other
+        // agents and this one must not shadow them.
+        services.AddSingleton(new AgentCoreAgent(sessions, configuration.Name));
+
         // The STORE is registered under its own concrete type, so a host or a test that wants to read
         // the chain back asks for the thing that holds it — GetRequiredService<InMemoryAuditSink>()
         // is how the events of one call are read now that the document, and not the host, builds it.

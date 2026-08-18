@@ -786,22 +786,42 @@ public sealed class CallSessionTests
     }
 
     [Fact]
-    public async Task AnInterruption_EndsATurnThatDoesNotStream()
+    public async Task AnInterruption_NeverCutsATurnThatDoesNotStream()
     {
-        using ScriptedChatClient reply = new("hello", " there.") { GateAfterFirstFragment = true };
+        // One audibility rule for both run shapes, decided by the owner on 2026-08-18: a run that
+        // has handed the host nothing cannot be the turn the caller was hearing. A turn that does
+        // not stream hands the host nothing until it returns, so a barge-in during it amends the
+        // turn that finished last — the caller was still hearing THAT reply — and the running turn
+        // finishes undisturbed. It used to be the other way: the frame cut the running turn and
+        // recorded heard text of a reply no host had ever received.
+        using ScriptedChatClient reply = new("hello", " there.");
         using SequencedChatClient fill = new(StayingNull);
         var session = Build(PolicyYaml, reply, fill).Create();
 
-        // The turn takes the session before its first await, so the frame always reaches it.
-        var running = session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
-        Assert.True(session.Interrupt("hel", TimeSpan.FromMilliseconds(90)));
+        var first = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+        Assert.Equal("hello there.", first.ReplyText);
 
-        var turn = await running;
+        // The second turn parks inside its model call, so the frame lands while it runs.
+        reply.GateAfterFirstFragment = true;
+        var running = session.RunTurnAsync("go on", TestContext.Current.CancellationToken);
+        Assert.True(session.Interrupt("hello", TimeSpan.FromMilliseconds(90)));
 
-        Assert.Equal("hel", turn.ReplyText);
-        Assert.Equal(TimeSpan.FromMilliseconds(90), turn.InterruptedAfter);
-        Assert.Null(turn.Failure);
-        Assert.Equal(1, session.State.TurnIndex);
+        // The frame amended the FIRST turn — the only reply the caller could have been hearing —
+        // and the record is readable before the second turn even finishes.
+        var amended = session.LastTurn;
+        Assert.NotNull(amended);
+        Assert.Equal(0, amended.TurnIndex);
+        Assert.Equal("hello", amended.ReplyText);
+        Assert.Equal(TimeSpan.FromMilliseconds(90), amended.InterruptedAfter);
+
+        reply.OpenGate();
+        var second = await running;
+
+        // The running turn was never cut: it spoke its whole reply, uninterrupted.
+        Assert.Equal("hello there.", second.ReplyText);
+        Assert.Null(second.InterruptedAfter);
+        Assert.Null(second.Failure);
+        Assert.Equal(2, session.State.TurnIndex);
     }
 
     [Fact]

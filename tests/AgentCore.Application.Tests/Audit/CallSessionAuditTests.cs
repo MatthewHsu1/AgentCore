@@ -116,9 +116,17 @@ public sealed class CallSessionAuditTests
         InMemoryAuditSink sink = new();
         var session = Build(PolicyYaml, reply, fill, auditSink: sink).Create("call-1");
 
-        var running = session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
-        Assert.True(session.Interrupt("hel", TimeSpan.FromMilliseconds(120)));
-        await running;
+        // The streaming shape, because only an audible turn is cut in flight: the caller heard the
+        // first fragment, then spoke over the rest. A turn that never streamed is never audible and
+        // its frame amends the turn before it instead — see AnInterruption_NeverCutsATurnThatDoesNotStream.
+        await using (var updates = session
+            .RunTurnStreamingAsync("hi", TestContext.Current.CancellationToken)
+            .GetAsyncEnumerator(TestContext.Current.CancellationToken))
+        {
+            Assert.True(await updates.MoveNextAsync());
+            Assert.True(session.Interrupt("hel", TimeSpan.FromMilliseconds(120)));
+            Assert.False(await updates.MoveNextAsync());
+        }
 
         var events = sink.EventsOf("call-1");
         var completed = Assert.Single(events, item => item.Kind == AuditEventKind.TurnCompleted);
