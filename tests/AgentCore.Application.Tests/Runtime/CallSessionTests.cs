@@ -635,9 +635,9 @@ public sealed class CallSessionTests
     public async Task ARealDeclaredToolThatCannotReachItsEndpoint_EndsTheTurnPerRowSixAndKeepsTheCall()
     {
         // The same row, reached the way a shipped tool actually reaches it. ThrowingToolFactory
-        // throws straight at the framework; this goes through DeclaredTool, so the classification of
-        // IsBeyondTheModel is what lets the fault out. Before the split every fault became a result
-        // and this budget could never fire at all.
+        // throws straight at the framework; this goes through DeclaredTool, so the classification
+        // AuditingFunctionInvokingChatClient applies is what lets the fault out. Before the split
+        // every fault became a result and this budget could never fire at all.
         using LoopingToolCallingChatClient reply = new();
         using SequencedChatClient fill = new(StayingNull);
         UnreachableEndpointToolFactory tools = new();

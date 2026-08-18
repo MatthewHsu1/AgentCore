@@ -258,12 +258,27 @@ internal sealed class LoopingToolCallingChatClient : IChatClient
 }
 
 /// <summary>
-/// Builds one function for each declared tool, and every one of them throws.
+/// Builds one function for each declared tool, and every one of them throws a fault the model
+/// cannot answer.
 /// </summary>
 /// <remarks>
-/// A <c>builtin</c> tool returns an error result rather than throwing, so this factory stands for the
-/// case section 8.7 keeps for a defect: the function faults, the framework feeds the error back, and
-/// the 4th consecutive fault throws out of the run.
+/// <para>
+/// A <c>builtin</c> tool returns an error result rather than throwing, so this factory stands for
+/// the case section 8.7 keeps for a defect: the fault is beyond the model, and the 4th consecutive
+/// one throws out of the run and spends the framework's own budget.
+/// </para>
+/// <para>
+/// Task 7a moved that classification off <see cref="AgentCore.Application.Tools.DeclaredTool"/> and
+/// into <see cref="AuditingFunctionInvokingChatClient"/>, the framework's single choke point for
+/// every tool call. This factory builds a bare <c>AIFunctionFactory</c> tool, which is not a
+/// <see cref="AgentCore.Application.Tools.DeclaredTool"/> at all, so it is the one thing in this file
+/// that still exercises the classification of a fault reaching that middleware with no tool kind in
+/// front of it. The exception type is deliberately one <c>IsBeyondTheModel</c> classifies as beyond
+/// the model — before the move that was true of every exception this factory could throw, because
+/// nothing classified it either way; after the move, only this arm keeps the run finite, since an
+/// answerable fault would now become an error result the model reads and
+/// <see cref="LoopingToolCallingChatClient"/> would call the tool again forever.
+/// </para>
 /// </remarks>
 internal sealed class ThrowingToolFactory : IAgentToolFactory
 {
@@ -284,7 +299,7 @@ internal sealed class ThrowingToolFactory : IAgentToolFactory
     private string Fail()
     {
         Interlocked.Increment(ref _calls);
-        throw new InvalidOperationException(Message);
+        throw new TimeoutException(Message);
     }
 }
 
@@ -491,8 +506,9 @@ internal sealed class NamedToolCallingChatClient : IChatClient
 /// <remarks>
 /// <see cref="ThrowingToolFactory"/> builds a bare <c>AIFunctionFactory</c> delegate, which throws
 /// straight at the framework. This one goes through the base every shipped tool kind shares, so it
-/// exercises the classification of <c>DeclaredTool.IsBeyondTheModel</c> and not just the framework's
-/// reaction to it. Section 8.7 row six is only reachable through a tool that lets a fault out.
+/// exercises the classification <c>AuditingFunctionInvokingChatClient</c> applies and not just the
+/// framework's reaction to it. Section 8.7 row six is only reachable through a tool that lets a fault
+/// out.
 /// </remarks>
 internal sealed class UnreachableEndpointToolFactory : IAgentToolFactory
 {

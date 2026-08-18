@@ -84,21 +84,23 @@ public sealed class BindingToolTests
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Section 8.7: a tool returns an error result and does not throw.
+    // Section 8.7: a tool returns an error result and does not throw. Task 7a moved the
+    // classification that makes that true off DeclaredTool and into
+    // AuditingFunctionInvokingChatClient, so calling the bare tool directly now sees the exception
+    // the host delegate threw. See AuditingFunctionInvokingChatClientErrorPolicyTests and
+    // CallSessionTests for the end-to-end guarantee.
     // ---------------------------------------------------------------------------------------------
     [Fact]
-    public async Task AHostDelegateThatThrows_BecomesAnErrorResult()
+    public async Task AHostDelegateThatThrows_PropagatesForTheMiddlewareToClassify()
     {
         ToolBindingRegistry registry = new();
         registry.Register("CreateCase", (arguments, cancellationToken)
             => throw new InvalidOperationException("the case system is down"));
 
-        var result = await CallAsync(new BindingToolFactory(registry).Create(CreateCase), ("summary", "broken belt"));
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await CallAsync(new BindingToolFactory(registry).Create(CreateCase), ("summary", "broken belt")));
 
-        var error = Assert.IsType<JsonObject>(result);
-        Assert.True(ToolErrorResult.IsError(error));
-        Assert.Equal("create_case", error["tool"]!.GetValue<string>());
-        Assert.Contains("the case system is down", error["message"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Equal("the case system is down", thrown.Message);
     }
 
     [Fact]

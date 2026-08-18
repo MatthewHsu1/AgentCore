@@ -17,7 +17,9 @@ namespace AgentCore.Application.Tests.Tools;
 /// The worked example names four of them. <c>knowledge.search</c> calls
 /// <see cref="IKnowledgeRetrievalPort"/>, and <c>knowledge.read</c>, <c>knowledge.list</c> and
 /// <c>knowledge.grep</c> call <see cref="IDocumentStorePort"/>, so the two ports bind apart. A
-/// built-in tool returns an error result and does not throw.
+/// built-in tool answers a bad argument it can check for itself with an error result directly, and
+/// leaves an adapter's own fault to propagate — Task 7a moved the classification of that fault to
+/// <c>AuditingFunctionInvokingChatClient</c>, so a test that invokes the tool directly now sees it.
 /// </remarks>
 public sealed class BuiltinToolTests
 {
@@ -266,26 +268,35 @@ public sealed class BuiltinToolTests
     }
 
     [Fact]
-    public async Task KnowledgeGrep_WithAPatternThatIsNotARegex_ReturnsAnErrorResult()
+    public async Task KnowledgeGrep_WithAPatternThatIsNotARegex_PropagatesForTheMiddlewareToClassify()
     {
         // The model writes the pattern, so a pattern that will not parse is an ordinary bad argument
-        // and not a defect. Section 8.7 says the model reads the failure and tries again.
+        // and not a defect: section 8.7 says the model reads the failure and tries again. Task 7a
+        // moved the classification that turns this into an error result out of DeclaredTool and into
+        // AuditingFunctionInvokingChatClient, so calling the bare tool directly — as this test does —
+        // now sees the exception. AuditingFunctionInvokingChatClientErrorPolicyTests and
+        // CallSessionTests.ARealDeclaredToolWhoseFaultTheModelCanAnswer_CompletesTheTurnNormally pin
+        // the end-to-end guarantee that this still becomes an error result the model reads.
         MapKnowledgePort knowledge = new();
         knowledge.With("returns.md", "A refund takes five days.");
 
-        var result = await CallAsync(Factory(knowledge).Create(GrepDocs), ("pattern", "[unclosed"));
+        var thrown = await Assert.ThrowsAsync<System.Text.RegularExpressions.RegexParseException>(
+            async () => await CallAsync(Factory(knowledge).Create(GrepDocs), ("pattern", "[unclosed")));
 
-        AssertError(result, "grep_docs", "RegexParseException");
+        Assert.Contains("Unterminated", thrown.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task AnAdapterThatThrows_BecomesAnErrorResult()
+    public async Task AnAdapterThatThrows_PropagatesForTheMiddlewareToClassify()
     {
+        // See the remarks on KnowledgeGrep_WithAPatternThatIsNotARegex_PropagatesForTheMiddlewareToClassify:
+        // the same move applies here.
         MapKnowledgePort knowledge = new() { Failure = new InvalidOperationException("the store is down") };
 
-        var result = await CallAsync(Factory(knowledge).Create(Search), ("query", "refund"));
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await CallAsync(Factory(knowledge).Create(Search), ("query", "refund")));
 
-        AssertError(result, "search_chunks", "the store is down");
+        Assert.Equal("the store is down", thrown.Message);
     }
 
     [Fact]

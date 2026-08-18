@@ -7,21 +7,23 @@ using Xunit;
 namespace AgentCore.Application.Tests.Tools;
 
 /// <summary>
-/// The one rule every tool kind shares: a fault the model can answer becomes a result it reads, and a
-/// fault the model cannot answer is rethrown so the framework's budget can end the turn.
+/// <see cref="DeclaredTool.InvokeCoreAsync"/> no longer applies an error policy at all: it runs
+/// <see cref="DeclaredTool.CallAsync"/> and returns or throws exactly what that returned or threw.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Section 8.7 says a tool returns an error result and does not throw, and that stays true for the
-/// failure it was written about: the endpoint said no, the argument was wrong, the record does not
-/// exist. The model reads the answer and tries something else, and that is the design every major
-/// agent framework and the MCP specification converged on.
+/// Task 7a moved the split between a fault the model can answer and a fault beyond it out of this
+/// base class and into <c>AuditingFunctionInvokingChatClient.InvokeFunctionAsync</c>, the framework's
+/// single choke point for every tool call — see
+/// <c>AgentCore.Application.Tests.Runtime.AuditingFunctionInvokingChatClientErrorPolicyTests</c> for
+/// the classification itself and the behaviour it pins.
 /// </para>
 /// <para>
-/// It was never true for the other half. A catch-all made "the caller typed a bad order number" and
-/// "the database is unreachable" the same fact, so <c>MaximumConsecutiveErrorsPerRequest</c> could
-/// never fire for a transport that was simply down and the model spent the whole turn retrying a
-/// socket. These tests pin the split.
+/// What these tests pin instead is narrower and still real: a <see cref="DeclaredTool"/> body may
+/// still answer a fault itself by returning <see cref="ToolErrorResult"/> directly without throwing —
+/// <c>BuiltinToolFactory</c> does exactly that for an argument it already validated — and everything
+/// this base class does NOT catch keeps its original stack, cancellation included, all the way out to
+/// whatever calls <see cref="AIFunction.InvokeAsync"/>.
 /// </para>
 /// </remarks>
 public sealed class DeclaredToolTests
@@ -34,19 +36,17 @@ public sealed class DeclaredToolTests
         Description = "Read one order by its identifier.",
     };
 
-    /// <summary>Every fault the model may be able to answer. It becomes a result, exactly as before.</summary>
-    public static TheoryData<Exception> FaultsTheModelMayAnswer =>
+    /// <summary>
+    /// A representative fault of each kind the old split once told apart. Both propagate identically
+    /// now, because <see cref="DeclaredTool"/> no longer classifies anything.
+    /// </summary>
+    public static TheoryData<Exception> RepresentativeFaults =>
     [
         new InvalidOperationException("the order is already closed."),
         new ArgumentException("orderId is not a number."),
         new FormatException("the date is not a date."),
         new KeyNotFoundException("no such order."),
         new NotSupportedException("this endpoint does not take a range."),
-    ];
-
-    /// <summary>Every fault the model cannot answer. It is rethrown, and the budget counts it.</summary>
-    public static TheoryData<Exception> FaultsTheModelCannotAnswer =>
-    [
         new HttpRequestException("no such host"),
         new SocketException(),
         new IOException("the disk went away."),
@@ -56,29 +56,17 @@ public sealed class DeclaredToolTests
     ];
 
     [Theory]
-    [MemberData(nameof(FaultsTheModelMayAnswer))]
-    public async Task AFaultTheModelMayAnswer_BecomesTheErrorResultTheModelReads(Exception failure)
-    {
-        var result = await new ThrowingTool(failure).InvokeAsync(
-            new AIFunctionArguments(),
-            TestContext.Current.CancellationToken);
-
-        // The converged design, and it must not regress: the loop continues and the model recovers.
-        Assert.True(ToolErrorResult.IsError(result as System.Text.Json.Nodes.JsonNode));
-    }
-
-    [Theory]
-    [MemberData(nameof(FaultsTheModelCannotAnswer))]
-    public async Task AFaultTheModelCannotAnswer_IsRethrownSoTheBudgetCountsIt(Exception failure)
+    [MemberData(nameof(RepresentativeFaults))]
+    public async Task AnyFaultTheBodyThrows_PropagatesUnfiltered(Exception failure)
     {
         var thrown = await Assert.ThrowsAnyAsync<Exception>(
             async () => await new ThrowingTool(failure).InvokeAsync(
                 new AIFunctionArguments(),
                 TestContext.Current.CancellationToken));
 
-        // The very exception, and not a copy: the framework rethrows it by ExceptionDispatchInfo when
-        // the budget runs out, and a stack trace that started here is the only thing that names the
-        // tool in the log.
+        // The very exception, and not a copy: InvokeCoreAsync no longer catches, so this is a plain
+        // await of CallAsync and nothing rewraps the fault. Whether the model could have answered it
+        // is now decided one layer up, by AuditingFunctionInvokingChatClient.
         Assert.Same(failure, thrown);
     }
 
@@ -100,7 +88,8 @@ public sealed class DeclaredToolTests
     {
         // HttpClient reports its own deadline as a TaskCanceledException with a TimeoutException
         // inside it, on a token the caller never cancelled. It reads like a cancellation and it is a
-        // dead endpoint, so the token decides and not the type.
+        // dead endpoint. Nothing here tests the token any more, but the result is the same: it is
+        // never swallowed.
         TaskCanceledException timeout = new("The request timed out.", new TimeoutException());
 
         var thrown = await Assert.ThrowsAnyAsync<Exception>(
@@ -112,11 +101,11 @@ public sealed class DeclaredToolTests
     }
 
     [Fact]
-    public async Task AToolKindThatRefinesTheSplit_IsObeyed()
+    public async Task ABodyThatAnswersItself_StillReturnsTheErrorResultDirectly()
     {
-        // The split is one virtual method, so a tool kind whose vendor SDK spells a transport fault
-        // its own way narrows or widens it without a second catch block in every tool body.
-        var result = await new ForgivingTool(new HttpRequestException("no such host")).InvokeAsync(
+        // The one half of the old rule that still lives here: a tool body may choose to answer a
+        // fault itself, without throwing at all, exactly as BuiltinToolFactory does today.
+        var result = await new SelfAnsweringTool().InvokeAsync(
             new AIFunctionArguments(),
             TestContext.Current.CancellationToken);
 
@@ -136,18 +125,17 @@ public sealed class DeclaredToolTests
             CancellationToken cancellationToken) => throw _failure;
     }
 
-    /// <summary>A tool kind that has decided the model can answer everything.</summary>
-    private sealed class ForgivingTool : DeclaredTool
+    /// <summary>A tool whose body returns its own error result rather than throwing.</summary>
+    private sealed class SelfAnsweringTool : DeclaredTool
     {
-        private readonly Exception _failure;
-
-        public ForgivingTool(Exception failure)
-            : base(LookupOrder) => _failure = failure;
-
-        protected override bool IsBeyondTheModel(Exception failure) => false;
+        public SelfAnsweringTool()
+            : base(LookupOrder)
+        {
+        }
 
         protected override ValueTask<object?> CallAsync(
             AIFunctionArguments arguments,
-            CancellationToken cancellationToken) => throw _failure;
+            CancellationToken cancellationToken)
+            => ValueTask.FromResult<object?>(Failed("the order is already closed."));
     }
 }
