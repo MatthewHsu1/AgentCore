@@ -34,10 +34,20 @@ namespace AgentCore.Application.Runtime;
 /// therefore take different edges through one compiled graph.
 /// </para>
 /// <para>
-/// The session owns the transcript rather than an agent-bound session object. A <c>policy:</c>
-/// document switches the <c>AIAgent</c> between stages, and a conversation bound to one agent cannot
-/// carry a call that changes agent. The turn loop therefore passes the accumulated messages into each
-/// run, and every stage reads the whole call.
+/// The session owns the transcript rather than an agent-bound session object — and NOT because a
+/// stage switch forbids one. It does not: an <c>AgentSession</c> carries a call that changes agent,
+/// measured on Microsoft.Agents.AI 1.17.0 and pinned by <c>AgentSessionAcrossAgentsTests</c> — one
+/// session drove three turns across two <c>ChatClientAgent</c> instances and kept one correct
+/// transcript, given a shared <c>InMemoryChatHistoryProviderOptions.StateKey</c>. What keeps the
+/// transcript here is what this session does to it that no library history provider offers: a
+/// barge-in rewrites the span of a finished turn to hold what the caller heard (see
+/// <see cref="Interrupt"/>), and a turn that failed or was cut keeps only its finished tool pairs —
+/// where the library appends a successful run's messages verbatim, with no lock, and appends nothing
+/// at all for a run that threw (<c>ChatHistoryProvider.InvokedCoreAsync</c> returns early on
+/// <c>InvokeException</c>). The graph rows settle it: <c>AsAIAgent()</c>'s host agent accepts no
+/// session but its own <c>WorkflowSession</c>, so a session-owned transcript could not serve all four
+/// compile rows through one mechanism. The turn loop therefore passes the accumulated messages into
+/// each run, and every stage reads the whole call.
 /// </para>
 /// <para>
 /// The writers run in one fixed order, and every turn repeats it:
