@@ -129,9 +129,9 @@ public sealed class CallSessionInterruptionTests
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(
             timeout.Token, TestContext.Current.CancellationToken);
 
-        // RunTurnAsync discards the whole response on cancellation (CallSession.cs, the tool-fault
-        // catch above CompleteTurnAsync), so only the streaming entry point keeps the round that
-        // already finished. That is the shape a relay actually drives.
+        // Only the streaming entry point is ever cut in flight — a turn that never streams is never
+        // audible, so a barge-in cannot cancel it mid-round. The streaming shape is also the one a
+        // relay actually drives.
         var pump = Task.Run(
             async () =>
             {
@@ -341,12 +341,14 @@ public sealed class CallSessionInterruptionTests
     {
         // CompleteTurnAsync reads the interruption once, before it awaits the extractor. EndRun runs
         // later still, in the finally of whichever method opened the turn, so a frame that lands
-        // inside that await finds a live run and an audible one: Interrupt takes the in-flight path,
-        // sets the record, and answers true — and true, on its own contract, means "this call
-        // recorded the barge-in". The commit lock reads the field a second time for exactly this
-        // frame. Without that read the turn commits as an ordinary completed turn: InterruptedAfter
-        // stays null, the transcript keeps the whole reply the model produced rather than the words
-        // the caller heard, and the chain carries no reply.interrupted event at all.
+        // inside that await finds a live run and — on a streaming turn, audible since its first
+        // yielded fragment — takes the in-flight path, sets the record, and answers true. And true,
+        // on Interrupt's own contract, means "this call recorded the barge-in". The commit lock
+        // reads the field a second time for exactly this frame. Without that read the turn commits
+        // as an ordinary completed turn: InterruptedAfter stays null, the transcript keeps the whole
+        // reply the model produced rather than the words the caller heard, and the chain carries no
+        // reply.interrupted event at all. Only the streaming shape reaches this window: a turn that
+        // never streams is never audible, and its frame amends the turn before it instead.
         using ScriptedChatClient reply = new("Hello", " there", " caller");
         using GatedExtractorChatClient extractor = new();
         var chatClients = new RoutingChatClientFactory(reply).Route("fill", extractor);
@@ -364,7 +366,16 @@ public sealed class CallSessionInterruptionTests
         using var bounded = CancellationTokenSource.CreateLinkedTokenSource(
             deadline.Token, TestContext.Current.CancellationToken);
 
-        var running = session.RunTurnAsync("hi", bounded.Token);
+        var running = Task.Run(
+            async () =>
+            {
+                await foreach (var _ in session.RunTurnStreamingAsync("hi", bounded.Token)
+                    .ConfigureAwait(false))
+                {
+                    // The reply is consumed whole; the frame lands later, inside the extractor.
+                }
+            },
+            CancellationToken.None);
 
         try
         {
@@ -388,12 +399,13 @@ public sealed class CallSessionInterruptionTests
             extractor.OpenGate();
         }
 
-        var turn = await running.WaitAsync(bounded.Token);
+        await running.WaitAsync(bounded.Token);
+        var turn = session.LastTurn;
 
         // D28: both values are the ones the relay reported, unchanged.
+        Assert.NotNull(turn);
         Assert.Equal(TimeSpan.FromMilliseconds(1820), turn.InterruptedAfter);
         Assert.Equal("Hello there", turn.ReplyText);
-        Assert.Same(turn, session.LastTurn);
 
         // The transcript holds what the caller heard, and never the tail the model produced.
         var assistant = Assert.Single(session.Transcript, message => message.Role == ChatRole.Assistant);

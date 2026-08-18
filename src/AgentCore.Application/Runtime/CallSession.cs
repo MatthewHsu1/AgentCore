@@ -198,10 +198,12 @@ public sealed class CallSession : IConversationPort
     private int _running;
     private int _ended;
 
-    // Whether the running turn has already handed the host something to speak. A streaming turn
-    // that has yielded nothing cannot be the turn the caller was hearing, so a barge-in in that
-    // window belongs to the turn that finished before it. See the remarks on <see cref="Interrupt"/>.
-    // It is raised by the run, and dropped twice: once in CompleteTurnAsync's commit lock, the
+    // Whether the running turn has already handed the host something to speak. One rule for both
+    // run shapes: a run that has handed the host nothing cannot be the turn the caller was hearing,
+    // so a barge-in in that window belongs to the turn that finished before it. A streaming turn
+    // raises this at its first piece of content; a turn that never streams hands the host nothing
+    // until it returns, so it never raises it and is never cut in flight. See the remarks on
+    // <see cref="Interrupt"/>. It is dropped twice: once in CompleteTurnAsync's commit lock, the
     // moment the turn's own record exists for a late barge-in to amend, and again in EndRun, which
     // is the only clear a turn that never reached that commit gets.
     private volatile bool _runIsAudible;
@@ -302,9 +304,17 @@ public sealed class CallSession : IConversationPort
     /// <param name="cancellationToken">Cancels the model calls.</param>
     /// <returns>The finished turn. It always carries a spoken line.</returns>
     /// <remarks>
+    /// <para>
     /// A tool that fails four times in a row throws out of the run, and section 8.7 says that must
     /// never kill the call. The turn ends with <see cref="FallbackReply"/>, the writers still run in
     /// their fixed order, and the next turn of the same session starts normally.
+    /// </para>
+    /// <para>
+    /// A barge-in never cuts this turn while it runs, because nothing of it has reached the host
+    /// yet: the reply is handed over whole, at the return. <see cref="Interrupt"/> during the run
+    /// amends the turn that finished last — the only turn the caller could still be hearing — and
+    /// this run finishes undisturbed. That is the one audibility rule both run shapes share.
+    /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">
     /// The call already reached a terminal stage, another turn of this call is still running, or the
@@ -316,10 +326,14 @@ public sealed class CallSession : IConversationPort
 
         var turn = BeginTurn(userInput);
 
-        // A run that never streams hands the whole reply over at once, so there is no window in
-        // which it has produced nothing the caller could have heard. An interrupt during it
-        // therefore always belongs to it.
-        var cancellation = StartRun(audibleFromTheStart: true, cancellationToken);
+        // A run that never streams hands the host NOTHING until it returns, so nothing of it can
+        // have reached the caller while it runs, and a barge-in during it belongs to the turn that
+        // finished last — the only turn the caller could still be hearing. It never becomes audible
+        // in flight, and Interrupt never cuts it. This used to be the other way around
+        // (audibleFromTheStart: true), on the claim that handing the reply over at once left no
+        // inaudible window; the streaming path's own rule says the opposite, and the owner took the
+        // one rule for both shapes on 2026-08-18.
+        var cancellation = StartRun(cancellationToken);
         try
         {
             // Row 4 of the compile table. The compiled graph is a process singleton, so a guarded
@@ -347,14 +361,12 @@ public sealed class CallSession : IConversationPort
 
             try
             {
+                // Interrupt never cancels this token: the turn is not audible, so a barge-in takes
+                // the amendment path against the turn that finished last. Only the host's own token
+                // cancels this run, and that cancellation propagates.
                 response = await turn.Agent
                     .RunAsync(turn.Request, options: ConversationOptions(), cancellationToken: cancellation.Token)
                     .ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (CurrentInterruption() is not null)
-            {
-                // The caller cut the reply off. What the caller heard comes from the relay.
-                response = new AgentResponse();
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
@@ -413,7 +425,7 @@ public sealed class CallSession : IConversationPort
 
         // A streaming turn becomes audible only once it hands the host its first piece of content.
         // Until then nothing of it has reached the caller, and a barge-in belongs elsewhere.
-        var cancellation = StartRun(audibleFromTheStart: false, cancellationToken);
+        var cancellation = StartRun(cancellationToken);
         try
         {
             List<AgentResponseUpdate> updates = [];
@@ -710,14 +722,16 @@ public sealed class CallSession : IConversationPort
         => new(new ChatOptions { ConversationId = CallId });
 
     /// <summary>Opens the window in which <see cref="Interrupt"/> reaches this turn.</summary>
-    /// <param name="audibleFromTheStart">
-    /// Whether a barge-in belongs to this run from its first instant. A run that never streams
-    /// answers <see langword="true"/>, because it hands the whole reply over at once. A streaming
-    /// run answers <see langword="false"/> and becomes audible at its first piece of content.
-    /// </param>
     /// <param name="cancellationToken">The token of the host.</param>
     /// <returns>The source the run reads. The caller ends it with <see cref="EndRun"/>.</returns>
-    private CancellationTokenSource StartRun(bool audibleFromTheStart, CancellationToken cancellationToken)
+    /// <remarks>
+    /// Every run starts inaudible, whichever shape it takes: nothing of it has reached the caller
+    /// yet, so a barge-in in this window belongs to the turn that finished last. A streaming run
+    /// raises <see cref="_runIsAudible"/> at its first piece of content; a run that never streams
+    /// hands the host nothing until it returns, so it stays inaudible for its whole life and a
+    /// barge-in never cuts it.
+    /// </remarks>
+    private CancellationTokenSource StartRun(CancellationToken cancellationToken)
     {
         CancellationTokenSource cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
@@ -725,7 +739,7 @@ public sealed class CallSession : IConversationPort
         {
             _interruption = null;
             _runCancellation = cancellation;
-            _runIsAudible = audibleFromTheStart;
+            _runIsAudible = false;
         }
 
         return cancellation;
@@ -1018,11 +1032,13 @@ public sealed class CallSession : IConversationPort
 
             // The second read. The first one happened before the extractor await, and that await is
             // bounded only by TurnCompletionTimeout, so a barge-in has five whole seconds in which
-            // to land after this turn already decided it was not interrupted. It finds
-            // _runCancellation still set and the run still audible, because EndRun does not run
-            // until this method has returned, so it takes the in-flight path, cancels a run that has
-            // already stopped, and answers true — and true, on the contract of Interrupt, means the
-            // barge-in is recorded. Nothing recorded it. Reading _interruption again here, one
+            // to land after this turn already decided it was not interrupted. On a streaming turn it
+            // finds _runCancellation still set and the run still audible, because EndRun does not
+            // run until this method has returned, so it takes the in-flight path, cancels a run that
+            // has already stopped, and answers true — and true, on the contract of Interrupt, means
+            // the barge-in is recorded. (A turn that never streamed was never audible, so its frame
+            // already took the amendment path against the turn before this one and never lands
+            // here.) Nothing recorded the streaming frame. Reading _interruption again here, one
             // statement after _amendable and LastTurn were published, hands that frame to the very
             // path a frame arriving one instant later would have taken: the tested amendment, which
             // writes the TurnCompleted then ReplyInterrupted pair T23 asks for. The _amendable guard
