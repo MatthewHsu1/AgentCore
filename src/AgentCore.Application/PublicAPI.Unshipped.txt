@@ -761,7 +761,7 @@ AgentCore.Application.Tools.CompositeAgentToolFactory.Count.get -> int
 AgentCore.Application.Tools.CompositeAgentToolFactory.Create(AgentCore.Application.Configuration.Schema.ToolConfiguration! tool) -> Microsoft.Extensions.AI.AITool?
 AgentCore.Application.Tools.DeclaredTool
 AgentCore.Application.Tools.DeclaredTool.Declaration.get -> AgentCore.Application.Configuration.Schema.ToolConfiguration!
-AgentCore.Application.Tools.DeclaredTool.DeclaredTool(AgentCore.Application.Configuration.Schema.ToolConfiguration! tool, string? defaultSchema = null) -> void
+AgentCore.Application.Tools.DeclaredTool.DeclaredTool(AgentCore.Application.Configuration.Schema.ToolConfiguration! tool) -> void
 AgentCore.Application.Tools.DeclaredTool.Failed(string! message) -> System.Text.Json.Nodes.JsonObject!
 AgentCore.Application.Tools.ToolBinding
 AgentCore.Application.Tools.ToolBindingRegistry
@@ -1103,7 +1103,6 @@ static AgentCore.Application.State.UnfilledSlotReminder.Build(AgentCore.Applicat
 static AgentCore.Application.State.UnfilledSlotReminder.Build(AgentCore.Application.State.StateDocument! state, AgentCore.Application.Configuration.Schema.StageConfiguration! stage) -> string?
 static AgentCore.Application.State.UnfilledSlotReminder.Prepend(string? reminder, string! input) -> string!
 static AgentCore.Application.State.UnfilledSlotReminder.UnfilledSlots(AgentCore.Application.State.StateDocument! state, AgentCore.Application.Configuration.Schema.StageConfiguration! stage) -> System.Collections.Generic.IReadOnlyList<string!>!
-static AgentCore.Application.Tools.DeclaredTool.ArgumentInteger(Microsoft.Extensions.AI.AIFunctionArguments! arguments, string! name, int fallback) -> int
 static AgentCore.Application.Tools.DeclaredTool.ArgumentsAsJson(Microsoft.Extensions.AI.AIFunctionArguments! arguments) -> System.Text.Json.Nodes.JsonObject!
 static AgentCore.Application.Tools.DeclaredTool.ArgumentText(Microsoft.Extensions.AI.AIFunctionArguments! arguments, string! name) -> string?
 static AgentCore.Application.Tools.ToolErrorResult.Create(string! tool, string! message) -> System.Text.Json.Nodes.JsonObject!

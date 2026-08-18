@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
@@ -14,12 +15,23 @@ namespace AgentCore.Application.Tests.Tools;
 /// The first tool kind of section 8.1: <c>kind: builtin</c>, which AgentCore ships.
 /// </summary>
 /// <remarks>
+/// <para>
 /// The worked example names four of them. <c>knowledge.search</c> calls
 /// <see cref="IKnowledgeRetrievalPort"/>, and <c>knowledge.read</c>, <c>knowledge.list</c> and
 /// <c>knowledge.grep</c> call <see cref="IDocumentStorePort"/>, so the two ports bind apart. A
 /// built-in tool answers a bad argument it can check for itself with an error result directly, and
 /// leaves an adapter's own fault to propagate — Task 7a moved the classification of that fault to
 /// <c>AuditingFunctionInvokingChatClient</c>, so a test that invokes the tool directly now sees it.
+/// </para>
+/// <para>
+/// Task 7b made each built-in a plain C# method behind <see cref="AIFunctionFactory"/>, which moves
+/// two things these tests pin. The schema the model reads is generated from the parameter list and
+/// lives in <see cref="BuiltinToolSchemaTests"/>, which compares it whole. And an argument that is
+/// ABSENT no longer reaches the tool body at all — binding throws before it — so the "no argument"
+/// cases below propagate exactly as a bad regular expression already did, while an argument that is
+/// PRESENT AND EMPTY still reaches the body and still answers with an error result, because row T46
+/// says the empty string is what a model that meant to omit an argument actually sends.
+/// </para>
 /// </remarks>
 public sealed class BuiltinToolTests
 {
@@ -55,47 +67,38 @@ public sealed class BuiltinToolTests
     // What the model reads.
     // ---------------------------------------------------------------------------------------------
     [Fact]
-    public void ADeclaredSchema_ReachesTheModelUnchanged()
+    public void TheDocumentOwnsTheNameAndTheDescription()
     {
-        var declared = JsonNode.Parse("""{"type":"object","properties":{"q":{"type":"string"}},"required":["q"]}""");
-        var tool = Search with { Parameters = declared, Description = "Find a passage." };
+        // The C# method name is never advertised: the model calls the id the document chose, and
+        // reads the sentence the document wrote to decide when to call it. The schema underneath is
+        // generated, and BuiltinToolSchemaTests compares every one of the four whole.
+        var tool = Search with { Description = "Find a passage." };
 
         var function = Assert.IsAssignableFrom<AIFunction>(Factory().Create(tool));
 
         Assert.Equal("search_chunks", function.Name);
         Assert.Equal("Find a passage.", function.Description);
-        Assert.True(JsonNode.DeepEquals(declared, JsonNode.Parse(function.JsonSchema.GetRawText())));
     }
 
     [Fact]
-    public void ADocumentThatDeclaresNoSchema_GetsTheBuiltInOne()
+    public void ADocumentThatDescribesNothing_AdvertisesNoDescription()
     {
-        // The worked example writes { id: search_chunks, kind: builtin, uses: knowledge.search } and
-        // no parameters:. A tool the model cannot fill is useless, so the built-in publishes the
-        // shape it reads. A declared schema always wins over it.
+        // Not null. The empty string is what this advertised before Task 7b, and a null description
+        // would let AIFunctionFactory fall back to describing the C# method instead.
         var function = Assert.IsAssignableFrom<AIFunction>(Factory().Create(Search));
 
-        Assert.Contains("query", function.JsonSchema.GetRawText(), StringComparison.Ordinal);
+        Assert.Equal(string.Empty, function.Description);
     }
 
     [Fact]
-    public void KnowledgeList_ThatDeclaresNoSchema_PublishesItsOwnPattern()
+    public void ABuiltIn_AdvertisesNoResultSchema()
     {
-        var function = Assert.IsAssignableFrom<AIFunction>(Factory().Create(ListDocs));
+        // A built-in answers with either its result or the section 8.7 error object, so a generated
+        // schema of the success shape alone would describe every failure as malformed. This is what
+        // the tools advertised before Task 7b too, and ExcludeResultSchema is what keeps it.
+        var function = Assert.IsAssignableFrom<AIFunction>(Factory().Create(Search));
 
-        Assert.Contains("pattern", function.JsonSchema.GetRawText(), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void KnowledgeGrep_ThatDeclaresNoSchema_PublishesItsOwnPatternAndGlob()
-    {
-        // The pattern is the one argument the model must fill, so the schema also says so.
-        var function = Assert.IsAssignableFrom<AIFunction>(Factory().Create(GrepDocs));
-
-        var schema = function.JsonSchema.GetRawText();
-        Assert.Contains("pattern", schema, StringComparison.Ordinal);
-        Assert.Contains("glob", schema, StringComparison.Ordinal);
-        Assert.Contains("required", schema, StringComparison.Ordinal);
+        Assert.Null(function.ReturnJsonSchema);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -126,11 +129,27 @@ public sealed class BuiltinToolTests
     }
 
     [Fact]
-    public async Task KnowledgeSearch_WithNoQuery_ReturnsAnErrorResult()
+    public async Task KnowledgeSearch_WithAnEmptyQuery_ReturnsAnErrorResult()
     {
-        var result = await CallAsync(Factory().Create(Search));
+        // Row T46: the empty string is what a model that meant to fill nothing usually sends, and it
+        // reaches the body, so the body answers it.
+        var result = await CallAsync(Factory().Create(Search), ("query", string.Empty));
 
         AssertError(result, "search_chunks", "query");
+    }
+
+    [Fact]
+    public async Task KnowledgeSearch_WithNoQueryAtAll_PropagatesForTheMiddlewareToClassify()
+    {
+        // A call that omits the key entirely never reaches the body: AIFunctionFactory binds the
+        // parameters first and throws. That is an ordinary bad argument, so
+        // AuditingFunctionInvokingChatClient answers the model with the error result it reads and
+        // can retry from — pinned end to end by
+        // AuditingFunctionInvokingChatClientErrorPolicyTests.ARealBuiltinToolCalledWithNoArgumentAtAll_...
+        var thrown = await Assert.ThrowsAsync<ArgumentException>(
+            async () => await CallAsync(Factory().Create(Search)));
+
+        Assert.Contains("query", thrown.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -249,19 +268,22 @@ public sealed class BuiltinToolTests
     }
 
     [Fact]
-    public async Task KnowledgeGrep_WithNoPattern_ReturnsAnErrorResult()
+    public async Task KnowledgeGrep_WithNoPatternAtAll_PropagatesForTheMiddlewareToClassify()
     {
-        // Row T46: a required argument the model leaves out arrives as a silent default, so the tool
-        // checks the pattern itself. An empty pattern would otherwise match every line of every
-        // document.
-        var result = await CallAsync(Factory().Create(GrepDocs));
+        // See KnowledgeSearch_WithNoQueryAtAll_PropagatesForTheMiddlewareToClassify: an omitted key
+        // is a binding failure and never reaches the body.
+        var thrown = await Assert.ThrowsAsync<ArgumentException>(
+            async () => await CallAsync(Factory().Create(GrepDocs)));
 
-        AssertError(result, "grep_docs", "pattern");
+        Assert.Contains("pattern", thrown.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task KnowledgeGrep_WithAnEmptyPattern_ReturnsAnErrorResult()
     {
+        // Row T46: a required argument the model leaves out often arrives as the empty string rather
+        // than as a missing key, and binding cannot tell that apart from a real value. An empty
+        // pattern matches every line of every document, so the tool checks it itself.
         var result = await CallAsync(Factory().Create(GrepDocs), ("pattern", string.Empty));
 
         AssertError(result, "grep_docs", "pattern");
@@ -457,17 +479,32 @@ public sealed class BuiltinToolTests
         return new AIFunctionArguments(values);
     }
 
-    private static async Task<object?> CallAsync(AITool? tool, params (string Name, object? Value)[] arguments)
+    /// <summary>Calls one tool and reads its result as a node tree.</summary>
+    /// <remarks>
+    /// <see cref="AIFunctionFactory"/> marshals whatever the method returned into a
+    /// <see cref="JsonElement"/>, where the hand-written tools returned their <see cref="JsonObject"/>
+    /// untouched. Nothing on the wire changes — <c>CallSession.ToNode</c> already reads either — so
+    /// this helper carries the element back into the tree the assertions below read.
+    /// </remarks>
+    private static async Task<JsonNode?> CallAsync(AITool? tool, params (string Name, object? Value)[] arguments)
     {
         var function = Assert.IsAssignableFrom<AIFunction>(tool);
-        return await function.InvokeAsync(Arguments(arguments), TestContext.Current.CancellationToken);
+        var result = await function.InvokeAsync(Arguments(arguments), TestContext.Current.CancellationToken);
+
+        return result switch
+        {
+            null => null,
+            JsonNode node => node,
+            JsonElement element => JsonNode.Parse(element.GetRawText()),
+            _ => JsonValue.Create(result.ToString()),
+        };
     }
 
     /// <summary>Reads the ids one <c>knowledge.list</c> result names.</summary>
     private static IReadOnlyList<string> DocumentIds(JsonObject listing)
         => [.. Assert.IsType<JsonArray>(listing["documentIds"])!.Select(id => id!.GetValue<string>())];
 
-    private static void AssertError(object? result, string toolId, string fragment)
+    private static void AssertError(JsonNode? result, string toolId, string fragment)
     {
         var error = Assert.IsType<JsonObject>(result);
         Assert.True(ToolErrorResult.IsError(error));

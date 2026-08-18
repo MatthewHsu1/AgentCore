@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
@@ -37,6 +38,16 @@ public static class BuiltinToolNames
 /// A <c>uses:</c> name nothing answers is a startup failure, and so is a <c>uses:</c> name whose
 /// port no adapter binds. Both stop the load and both name what is missing, because an agent that
 /// quietly loses a tool is the silent failure the checks exist to stop.
+/// </para>
+/// <para>
+/// <b>Task 7b: each built-in declares its shape once.</b> Every one of these used to write its form
+/// twice — a hand-written JSON Schema string beside C# that read the same argument names back out of
+/// an untyped bag — and nothing kept the two halves agreeing. They are now plain C# methods handed to
+/// <see cref="AIFunctionFactory"/>, which generates the schema from the parameter list, the
+/// <see cref="DescriptionAttribute"/> on each parameter, and which parameters carry a default. The
+/// document's own <c>parameters:</c> cannot compete with it: <c>7fc7501</c> made that key illegal on
+/// <c>kind: builtin</c> in <c>agentcore-v1.schema.json</c>, precisely because a document that
+/// overrode the schema made the model fill boxes the C# never read.
 /// </para>
 /// </remarks>
 public sealed class BuiltinToolFactory : IAgentToolFactory
@@ -80,16 +91,16 @@ public sealed class BuiltinToolFactory : IAgentToolFactory
 
         return tool.Uses switch
         {
-            BuiltinToolNames.KnowledgeSearch => new KnowledgeSearchTool(
+            BuiltinToolNames.KnowledgeSearch => KnowledgeSearchTool.Create(
                 tool,
                 _retrieval ?? throw Unbound(tool, BuiltinToolNames.KnowledgeSearch, nameof(IKnowledgeRetrievalPort))),
-            BuiltinToolNames.KnowledgeRead => new KnowledgeReadTool(
+            BuiltinToolNames.KnowledgeRead => KnowledgeReadTool.Create(
                 tool,
                 _documents ?? throw Unbound(tool, BuiltinToolNames.KnowledgeRead, nameof(IDocumentStorePort))),
-            BuiltinToolNames.KnowledgeList => new KnowledgeListTool(
+            BuiltinToolNames.KnowledgeList => KnowledgeListTool.Create(
                 tool,
                 _documents ?? throw Unbound(tool, BuiltinToolNames.KnowledgeList, nameof(IDocumentStorePort))),
-            BuiltinToolNames.KnowledgeGrep => new KnowledgeGrepTool(
+            BuiltinToolNames.KnowledgeGrep => KnowledgeGrepTool.Create(
                 tool,
                 _documents ?? throw Unbound(tool, BuiltinToolNames.KnowledgeGrep, nameof(IDocumentStorePort))),
             _ => throw new ConfigurationLoadException(new ConfigurationError
@@ -119,32 +130,79 @@ public sealed class BuiltinToolFactory : IAgentToolFactory
         });
 }
 
-/// <summary>The <c>knowledge.search</c> built-in.</summary>
-internal sealed class KnowledgeSearchTool : DeclaredTool
+/// <summary>
+/// What every built-in hands <see cref="AIFunctionFactory"/>, and the two rules they all share.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <b>The name and the description come from the document, never from the method.</b> A document
+/// names its own tool (<c>id: search_chunks</c>) and writes the sentence the model reads to decide
+/// when to call it, so both are set here and the C# method name is never advertised.
+/// </para>
+/// <para>
+/// <b>No result schema.</b> <see cref="AIFunctionFactoryOptions.ExcludeResultSchema"/> keeps
+/// <c>AIFunction.ReturnJsonSchema</c> null, which is what these tools advertised before. It is
+/// not laziness: a built-in returns either its answer or the section 8.7 error object, and a
+/// generated schema of the success shape alone would describe the failure as malformed.
+/// </para>
+/// <para>
+/// <b>The empty argument is still checked here.</b> Row T46: a model that omits an argument often
+/// sends the empty string rather than omitting the key, and an empty pattern is not a pattern that
+/// keeps nothing — it is the one that keeps everything. Binding cannot see that difference, so each
+/// tool that cares tests it in its own body and answers with <see cref="ToolErrorResult"/> directly.
+/// An argument that is genuinely ABSENT no longer reaches the body at all: binding throws, and
+/// <c>AuditingFunctionInvokingChatClient.InvokeFunctionAsync</c> turns that into the same error
+/// result the model reads and can retry from.
+/// </para>
+/// </remarks>
+internal static class BuiltinTool
 {
-    /// <summary>The shape the model fills when the document declares no <c>parameters:</c>.</summary>
-    private const string DefaultSchema =
-        """{"type":"object","properties":{"query":{"type":"string","description":"What to look for."},"limit":{"type":"integer","description":"The largest number of passages to return."}},"required":["query"]}""";
+    /// <summary>Builds the options every built-in is created with.</summary>
+    /// <param name="tool">The declaration the document holds.</param>
+    /// <returns>The options.</returns>
+    internal static AIFunctionFactoryOptions Options(ToolConfiguration tool) => new()
+    {
+        Name = tool.Id,
+        Description = tool.Description ?? string.Empty,
+        ExcludeResultSchema = true,
+    };
+}
 
+/// <summary>The <c>knowledge.search</c> built-in.</summary>
+internal sealed class KnowledgeSearchTool
+{
     /// <summary>The number of passages a call returns when the model asks for no limit.</summary>
     private const int DefaultLimit = 5;
 
+    private readonly string _toolId;
     private readonly IKnowledgeRetrievalPort _retrieval;
 
-    internal KnowledgeSearchTool(ToolConfiguration tool, IKnowledgeRetrievalPort retrieval)
-        : base(tool, DefaultSchema) => _retrieval = retrieval;
-
-    protected override async ValueTask<object?> CallAsync(
-        AIFunctionArguments arguments,
-        CancellationToken cancellationToken)
+    private KnowledgeSearchTool(string toolId, IKnowledgeRetrievalPort retrieval)
     {
-        if (ArgumentText(arguments, "query") is not { Length: > 0 } query)
+        _toolId = toolId;
+        _retrieval = retrieval;
+    }
+
+    /// <summary>Builds the tool the model calls.</summary>
+    internal static AIFunction Create(ToolConfiguration tool, IKnowledgeRetrievalPort retrieval)
+        => AIFunctionFactory.Create(
+            new KnowledgeSearchTool(tool.Id, retrieval).SearchAsync,
+            BuiltinTool.Options(tool));
+
+    private async Task<JsonObject> SearchAsync(
+        [Description("What to look for.")] string query,
+        [Description("The largest number of passages to return.")] int limit = DefaultLimit,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(query))
         {
-            return Failed("the call filled no 'query', so there is nothing to search for.");
+            return ToolErrorResult.Create(_toolId, "the call filled no 'query', so there is nothing to search for.");
         }
 
-        var limit = Math.Clamp(ArgumentInteger(arguments, "limit", DefaultLimit), 1, 50);
-        var chunks = await _retrieval.SearchAsync(query, limit, cancellationToken).ConfigureAwait(false);
+        // The model writes the limit, so it is clamped rather than trusted: a zero returns nothing
+        // and a thousand returns the whole knowledge base down the telephone.
+        var chunks = await _retrieval.SearchAsync(query, Math.Clamp(limit, 1, 50), cancellationToken)
+            .ConfigureAwait(false);
 
         JsonArray results = [];
         foreach (var chunk in chunks)
@@ -162,30 +220,38 @@ internal sealed class KnowledgeSearchTool : DeclaredTool
 }
 
 /// <summary>The <c>knowledge.read</c> built-in.</summary>
-internal sealed class KnowledgeReadTool : DeclaredTool
+internal sealed class KnowledgeReadTool
 {
-    /// <summary>The shape the model fills when the document declares no <c>parameters:</c>.</summary>
-    private const string DefaultSchema =
-        """{"type":"object","properties":{"documentId":{"type":"string","description":"The id a search result named."}},"required":["documentId"]}""";
-
+    private readonly string _toolId;
     private readonly IDocumentStorePort _documents;
 
-    internal KnowledgeReadTool(ToolConfiguration tool, IDocumentStorePort documents)
-        : base(tool, DefaultSchema) => _documents = documents;
-
-    protected override async ValueTask<object?> CallAsync(
-        AIFunctionArguments arguments,
-        CancellationToken cancellationToken)
+    private KnowledgeReadTool(string toolId, IDocumentStorePort documents)
     {
-        if (ArgumentText(arguments, "documentId") is not { Length: > 0 } documentId)
+        _toolId = toolId;
+        _documents = documents;
+    }
+
+    /// <summary>Builds the tool the model calls.</summary>
+    internal static AIFunction Create(ToolConfiguration tool, IDocumentStorePort documents)
+        => AIFunctionFactory.Create(
+            new KnowledgeReadTool(tool.Id, documents).ReadAsync,
+            BuiltinTool.Options(tool));
+
+    private async Task<JsonObject> ReadAsync(
+        [Description("The id a search result named.")] string documentId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(documentId))
         {
-            return Failed("the call filled no 'documentId', so there is nothing to read.");
+            return ToolErrorResult.Create(_toolId, "the call filled no 'documentId', so there is nothing to read.");
         }
 
         var document = await _documents.ReadAsync(documentId, cancellationToken).ConfigureAwait(false);
         if (document is null)
         {
-            return Failed($"the knowledge base holds no document '{documentId}'. Search for one first.");
+            return ToolErrorResult.Create(
+                _toolId,
+                $"the knowledge base holds no document '{documentId}'. Search for one first.");
         }
 
         return new JsonObject
@@ -201,25 +267,34 @@ internal sealed class KnowledgeReadTool : DeclaredTool
 /// The model reads a directory before it reads a document, so it learns which ids exist rather than
 /// guesses one. The store caps the answer, and <c>truncated</c> carries that cap through unchanged.
 /// </remarks>
-internal sealed class KnowledgeListTool : DeclaredTool
+internal sealed class KnowledgeListTool
 {
-    /// <summary>The shape the model fills when the document declares no <c>parameters:</c>.</summary>
-    private const string DefaultSchema =
-        """{"type":"object","properties":{"pattern":{"type":"string","description":"A glob over document ids, such as policies/**/*.md. Leave it out to name every document."}}}""";
-
     private readonly IDocumentStorePort _documents;
 
-    internal KnowledgeListTool(ToolConfiguration tool, IDocumentStorePort documents)
-        : base(tool, DefaultSchema) => _documents = documents;
+    private KnowledgeListTool(IDocumentStorePort documents) => _documents = documents;
 
-    protected override async ValueTask<object?> CallAsync(
-        AIFunctionArguments arguments,
-        CancellationToken cancellationToken)
+    /// <summary>Builds the tool the model calls.</summary>
+    internal static AIFunction Create(ToolConfiguration tool, IDocumentStorePort documents)
+        => AIFunctionFactory.Create(
+            new KnowledgeListTool(documents).ListAsync,
+            BuiltinTool.Options(tool));
+
+    /// <remarks>
+    /// <paramref name="pattern"/> defaults to the empty string and not to <see langword="null"/>. A
+    /// nullable parameter makes the generated schema say <c>"type":["string","null"]</c>, and a union
+    /// type is the one thing here a provider is known to reject outright; the sentinel keeps the
+    /// plain <c>"type":"string"</c> the hand-written schema advertised. Nothing is lost by it,
+    /// because absent and empty already meant the same thing here.
+    /// </remarks>
+    private async Task<JsonObject> ListAsync(
+        [Description("A glob over document ids, such as policies/**/*.md. Leave it out to name every document.")]
+        string pattern = "",
+        CancellationToken cancellationToken = default)
     {
         // An empty pattern is the silent default of row T46, and it is not a glob that keeps
         // nothing. It means the model asked for no pattern at all.
-        var pattern = ArgumentText(arguments, "pattern") is { Length: > 0 } text ? text : null;
-        var listing = await _documents.ListAsync(pattern, cancellationToken).ConfigureAwait(false);
+        var listing = await _documents.ListAsync(string.IsNullOrEmpty(pattern) ? null : pattern, cancellationToken)
+            .ConfigureAwait(false);
 
         JsonArray documentIds = [];
         foreach (var documentId in listing.DocumentIds)
@@ -241,28 +316,41 @@ internal sealed class KnowledgeListTool : DeclaredTool
 /// silent default. That is row T46, so this tool checks the pattern itself. An empty pattern matches
 /// every line of every document, which is the answer nobody asked for.
 /// </remarks>
-internal sealed class KnowledgeGrepTool : DeclaredTool
+internal sealed class KnowledgeGrepTool
 {
-    /// <summary>The shape the model fills when the document declares no <c>parameters:</c>.</summary>
-    private const string DefaultSchema =
-        """{"type":"object","properties":{"pattern":{"type":"string","description":"The regular expression each line is matched against."},"glob":{"type":"string","description":"A glob over document ids, such as policies/**/*.md, that says which documents to read."}},"required":["pattern"]}""";
-
+    private readonly string _toolId;
     private readonly IDocumentStorePort _documents;
 
-    internal KnowledgeGrepTool(ToolConfiguration tool, IDocumentStorePort documents)
-        : base(tool, DefaultSchema) => _documents = documents;
-
-    protected override async ValueTask<object?> CallAsync(
-        AIFunctionArguments arguments,
-        CancellationToken cancellationToken)
+    private KnowledgeGrepTool(string toolId, IDocumentStorePort documents)
     {
-        if (ArgumentText(arguments, "pattern") is not { Length: > 0 } pattern)
+        _toolId = toolId;
+        _documents = documents;
+    }
+
+    /// <summary>Builds the tool the model calls.</summary>
+    internal static AIFunction Create(ToolConfiguration tool, IDocumentStorePort documents)
+        => AIFunctionFactory.Create(
+            new KnowledgeGrepTool(tool.Id, documents).GrepAsync,
+            BuiltinTool.Options(tool));
+
+    /// <remarks>
+    /// <paramref name="glob"/> takes the empty-string sentinel for the reason spelled out on
+    /// <see cref="KnowledgeListTool"/>: absent and empty already meant the same thing, and the
+    /// sentinel keeps a union type out of the schema the model reads.
+    /// </remarks>
+    private async Task<JsonObject> GrepAsync(
+        [Description("The regular expression each line is matched against.")] string pattern,
+        [Description("A glob over document ids, such as policies/**/*.md, that says which documents to read.")]
+        string glob = "",
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(pattern))
         {
-            return Failed("the call filled no 'pattern', so there is nothing to search for.");
+            return ToolErrorResult.Create(_toolId, "the call filled no 'pattern', so there is nothing to search for.");
         }
 
-        var glob = ArgumentText(arguments, "glob") is { Length: > 0 } text ? text : null;
-        var found = await _documents.GrepAsync(pattern, glob, cancellationToken).ConfigureAwait(false);
+        var found = await _documents.GrepAsync(pattern, string.IsNullOrEmpty(glob) ? null : glob, cancellationToken)
+            .ConfigureAwait(false);
 
         JsonArray matches = [];
         foreach (var match in found.Matches)

@@ -202,6 +202,39 @@ public sealed class AuditingFunctionInvokingChatClientErrorPolicyTests
             StringComparison.Ordinal);
     }
 
+    // ---------------------------------------------------------------------------------------
+    // Task 7b: a built-in binds its arguments through AIFunctionFactory now, so a call that omits
+    // a required argument fails in the BINDING and not in the tool body. That is a new way for a
+    // tool call to fail, and this pins where it lands: the same answerable error result the model
+    // reads and can retry from, and not an unhandled fault that drops the turn.
+    // ---------------------------------------------------------------------------------------
+    [Fact]
+    public async Task ARealBuiltinToolCalledWithNoArgumentAtAll_GetsTheErrorResultTheModelCanRetryFrom()
+    {
+        MapKnowledgePort knowledge = new();
+        ToolConfiguration search = new()
+        {
+            Id = "search_chunks",
+            Kind = ToolKind.Builtin,
+            Uses = BuiltinToolNames.KnowledgeSearch,
+        };
+        var tool = Assert.IsAssignableFrom<AIFunction>(new BuiltinToolFactory(knowledge, null).Create(search));
+
+        // No arguments at all: the model called the tool and filled nothing, which binding rejects
+        // before the tool body runs.
+        var result = await RunSingleRoundAsync(tool, TestContext.Current.CancellationToken);
+
+        Assert.True(ToolErrorResult.IsError(result));
+        Assert.Equal("search_chunks", result[ToolErrorResult.ToolProperty]!.GetValue<string>());
+
+        // The message names the argument that was missing, so the next round can fill it.
+        Assert.Contains(
+            "query",
+            result[ToolErrorResult.MessageProperty]!.GetValue<string>(),
+            StringComparison.Ordinal);
+        Assert.Empty(knowledge.Queries);
+    }
+
     [Fact]
     public async Task ARealBindingTool_GetsTheSameErrorResultThroughTheRealMiddleware()
     {

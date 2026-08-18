@@ -21,8 +21,8 @@ namespace AgentCore.Application.Tools;
 /// </b>, the framework's single choke point for every tool call, and not just the ones that happen to
 /// inherit from here. <see cref="InvokeCoreAsync"/> therefore no longer catches anything: it runs
 /// <see cref="CallAsync"/> and returns or throws exactly what that returned or threw, so a tool kind
-/// still MAY answer a fault itself by returning <see cref="Failed"/> directly — <c>BuiltinToolFactory</c>
-/// does, for the argument it already validated — but a thrown fault is no longer split into "answerable"
+/// still MAY answer a fault itself by returning <see cref="Failed"/> directly — <c>HttpTool</c> does,
+/// for the status code it already read — but a thrown fault is no longer split into "answerable"
 /// and "beyond the model" here. That split, and the reasoning behind each exception type in it, now
 /// lives with the middleware, so a plain <c>AIFunctionFactory.Create(...)</c> tool that is not a
 /// <see cref="DeclaredTool"/> at all gets the identical treatment.
@@ -30,23 +30,25 @@ namespace AgentCore.Application.Tools;
 /// </remarks>
 public abstract class DeclaredTool : AIFunction
 {
-    /// <summary>The schema a tool advertises when neither the document nor the tool declares one.</summary>
+    /// <summary>The schema a tool advertises when the document declares no <c>parameters:</c>.</summary>
     private const string NoArgumentsSchema = """{"type":"object","properties":{}}""";
 
     private readonly JsonElement _schema;
 
     /// <summary>Creates the tool.</summary>
     /// <param name="tool">The declaration the document holds.</param>
-    /// <param name="defaultSchema">
-    /// The JSON Schema to advertise when the document declares no <c>parameters:</c>. A declared
-    /// schema always wins over it.
-    /// </param>
-    protected DeclaredTool(ToolConfiguration tool, string? defaultSchema = null)
+    /// <remarks>
+    /// This used to take a <c>defaultSchema</c> the tool kind supplied for a document that declared
+    /// no <c>parameters:</c>. Only the four built-ins ever passed one, and Task 7b moved them to
+    /// <c>AIFunctionFactory</c>, which generates a schema from the C# instead. What is left is the
+    /// rule in the remarks on this class, with nothing generated over it and nothing behind it.
+    /// </remarks>
+    protected DeclaredTool(ToolConfiguration tool)
     {
         ArgumentNullException.ThrowIfNull(tool);
 
         Declaration = tool;
-        _schema = ParseSchema(tool.Parameters?.ToJsonString() ?? defaultSchema ?? NoArgumentsSchema);
+        _schema = ParseSchema(tool.Parameters?.ToJsonString() ?? NoArgumentsSchema);
     }
 
     /// <summary>Gets the declaration the document holds.</summary>
@@ -114,16 +116,6 @@ public abstract class DeclaredTool : AIFunction
             _ => value.ToString(),
         };
     }
-
-    /// <summary>Reads one argument as a whole number.</summary>
-    /// <param name="arguments">The arguments the model filled.</param>
-    /// <param name="name">The argument name.</param>
-    /// <param name="fallback">The value to take when the model filled nothing readable.</param>
-    /// <returns>The number.</returns>
-    protected static int ArgumentInteger(AIFunctionArguments arguments, string name, int fallback)
-        => int.TryParse(ArgumentText(arguments, name), NumberStyles.Integer, CultureInfo.InvariantCulture, out var number)
-            ? number
-            : fallback;
 
     /// <summary>Copies every argument into one JSON object.</summary>
     /// <param name="arguments">The arguments the model filled.</param>
