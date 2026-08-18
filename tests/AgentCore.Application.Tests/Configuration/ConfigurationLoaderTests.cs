@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using Xunit;
@@ -435,7 +436,7 @@ public sealed class ConfigurationLoaderTests
 
         var shipped = ConfigurationLoader.LoadFile(path);
 
-        Assert.Equal(Example, shipped);
+        Assert.Equal(JsonSerializer.Serialize(Example), JsonSerializer.Serialize(shipped));
     }
 
     private static string RepositoryRoot()

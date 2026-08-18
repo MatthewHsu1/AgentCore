@@ -33,10 +33,10 @@ public sealed class HttpToolFactoryTests
         {
             Method = "GET",
             Url = "https://api.example.com/orders/{orderId}",
-            Headers = new EquatableDictionary<SecretTemplate>(
-            [
-                new KeyValuePair<string, SecretTemplate>("Authorization", SecretTemplate.Parse("Bearer ${secret:orders-api-key}")),
-            ]),
+            Headers = new Dictionary<string, SecretTemplate>(StringComparer.Ordinal)
+            {
+                ["Authorization"] = SecretTemplate.Parse("Bearer ${secret:orders-api-key}"),
+            },
         },
     };
 

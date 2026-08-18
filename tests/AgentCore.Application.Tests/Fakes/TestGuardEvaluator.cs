@@ -15,7 +15,7 @@ namespace AgentCore.Application.Tests.Fakes;
 /// </remarks>
 internal sealed class TestGuardEvaluator : IGuardEvaluator
 {
-    private readonly EquatableDictionary<JsonNode> _guards;
+    private readonly IReadOnlyDictionary<string, JsonNode> _guards;
 
     public TestGuardEvaluator(AgentCoreConfiguration configuration)
     {

@@ -1,5 +1,7 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
+using AgentCore.Application.Configuration.Schema;
 using Xunit;
 
 namespace AgentCore.Application.Tests.Configuration;
@@ -9,15 +11,27 @@ namespace AgentCore.Application.Tests.Configuration;
 /// </summary>
 public sealed class ConfigurationRoundTripTests
 {
+    /// <summary>
+    /// Writes one bound document out as JSON, so two loads compare by content.
+    /// </summary>
+    /// <remarks>
+    /// The bound records hold BCL collections, which a record compares by reference, so
+    /// <c>Assert.Equal</c> on two <see cref="AgentCoreConfiguration"/> values would only ever say
+    /// "different object". Serialising walks every bound field instead — including the raw
+    /// <see cref="JsonNode"/> rules, which a reference comparison would also have missed.
+    /// </remarks>
+    /// <param name="configuration">The bound document.</param>
+    /// <returns>The content of every bound field, as one JSON string.</returns>
+    private static string Content(AgentCoreConfiguration configuration)
+        => JsonSerializer.Serialize(configuration);
+
     [Fact]
-    public void SameDocument_BindsToEqualRecords()
+    public void SameDocument_BindsToTheSameContent()
     {
         var fromYaml = ConfigurationLoader.LoadYaml(ExampleDocument.Yaml);
         var fromJson = ConfigurationLoader.LoadJson(ExampleDocument.Json);
 
-        Assert.Equal(fromYaml, fromJson);
-        Assert.True(fromYaml == fromJson);
-        Assert.Equal(fromYaml.GetHashCode(), fromJson.GetHashCode());
+        Assert.Equal(Content(fromYaml), Content(fromJson));
     }
 
     [Fact]
@@ -30,23 +44,23 @@ public sealed class ConfigurationRoundTripTests
     }
 
     [Fact]
-    public void ADifferentDocument_DoesNotBindToEqualRecords()
+    public void ADifferentDocument_DoesNotBindToTheSameContent()
     {
         var fromYaml = ConfigurationLoader.LoadYaml(ExampleDocument.Yaml);
         var changed = ConfigurationLoader.LoadJson(
             ExampleDocument.Json.Replace("\"service-voice\"", "\"other-voice\"", StringComparison.Ordinal));
 
-        Assert.NotEqual(fromYaml, changed);
+        Assert.NotEqual(Content(fromYaml), Content(changed));
     }
 
     [Fact]
-    public void AChangedGuardThreshold_DoesNotBindToEqualRecords()
+    public void AChangedGuardThreshold_DoesNotBindToTheSameContent()
     {
         var fromYaml = ConfigurationLoader.LoadYaml(ExampleDocument.Yaml);
         var changed = ConfigurationLoader.LoadYaml(
             ExampleDocument.Yaml.Replace("failedResolveTurns }, 3 ]", "failedResolveTurns }, 4 ]", StringComparison.Ordinal));
 
-        Assert.NotEqual(fromYaml, changed);
+        Assert.NotEqual(Content(fromYaml), Content(changed));
     }
 
     [Fact]
@@ -68,28 +82,27 @@ public sealed class ConfigurationRoundTripTests
             }
             """);
 
-        Assert.Equal(fromYaml, fromJson);
-        Assert.Equal(fromYaml.GetHashCode(), fromJson.GetHashCode());
+        Assert.Equal(Content(fromYaml), Content(fromJson));
     }
 
     [Fact]
-    public void AChangedSampleRate_DoesNotBindToEqualRecords()
+    public void AChangedSampleRate_DoesNotBindToTheSameContent()
     {
         var fromYaml = ConfigurationLoader.LoadYaml(ExampleDocument.Yaml);
         var changed = ConfigurationLoader.LoadYaml(
             ExampleDocument.Yaml.Replace("sampleRate: 0", "sampleRate: 0.5", StringComparison.Ordinal));
 
-        Assert.NotEqual(fromYaml, changed);
+        Assert.NotEqual(Content(fromYaml), Content(changed));
     }
 
     [Fact]
-    public void AChangedFallbackReply_DoesNotBindToEqualRecords()
+    public void AChangedFallbackReply_DoesNotBindToTheSameContent()
     {
         var fromYaml = ConfigurationLoader.LoadYaml(ExampleDocument.Yaml);
         var changed = ConfigurationLoader.LoadYaml(
             ExampleDocument.Yaml.Replace("Please say it again.", "Please try once more.", StringComparison.Ordinal));
 
-        Assert.NotEqual(fromYaml, changed);
+        Assert.NotEqual(Content(fromYaml), Content(changed));
     }
 
     [Fact]
@@ -110,12 +123,11 @@ public sealed class ConfigurationRoundTripTests
             }
             """);
 
-        Assert.Equal(fromYaml, fromJson);
-        Assert.Equal(fromYaml.GetHashCode(), fromJson.GetHashCode());
+        Assert.Equal(Content(fromYaml), Content(fromJson));
     }
 
     [Fact]
-    public void AChangedRefusalReply_DoesNotBindToEqualRecords()
+    public void AChangedRefusalReply_DoesNotBindToTheSameContent()
     {
         var fromYaml = ConfigurationLoader.LoadYaml(ExampleDocument.Yaml);
         var changed = ConfigurationLoader.LoadYaml(
@@ -124,7 +136,7 @@ public sealed class ConfigurationRoundTripTests
                 "I am not able to answer that.",
                 StringComparison.Ordinal));
 
-        Assert.NotEqual(fromYaml, changed);
+        Assert.NotEqual(Content(fromYaml), Content(changed));
     }
 
     [Fact]

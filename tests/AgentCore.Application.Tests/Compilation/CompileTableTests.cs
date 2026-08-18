@@ -230,7 +230,7 @@ public sealed class CompileTableTests
             Graph = new GraphConfiguration
             {
                 Pattern = GraphPattern.Sequential,
-                Agents = new EquatableList<string>(["greeter", "closer"]),
+                Agents = ["greeter", "closer"],
             },
         };
 

@@ -1,5 +1,4 @@
 using System.Text;
-using AgentCore.Application.Configuration.Schema;
 
 namespace AgentCore.Application.Configuration.Parsing;
 
@@ -12,7 +11,7 @@ namespace AgentCore.Application.Configuration.Parsing;
 /// </remarks>
 public sealed record SecretTemplate
 {
-    private SecretTemplate(string raw, EquatableList<SecretReference> references)
+    private SecretTemplate(string raw, IReadOnlyList<SecretReference> references)
     {
         Raw = raw;
         References = references;
@@ -22,7 +21,7 @@ public sealed record SecretTemplate
     public string Raw { get; }
 
     /// <summary>Gets the references the text holds, in the order they appear.</summary>
-    public EquatableList<SecretReference> References { get; }
+    public IReadOnlyList<SecretReference> References { get; }
 
     /// <summary>Reports whether the text holds at least one reference.</summary>
     public bool HasSecretReferences => References.Count > 0;
@@ -63,7 +62,7 @@ public sealed record SecretTemplate
 
         return new SecretTemplate(
             text,
-            references is null ? EquatableList<SecretReference>.Empty : new EquatableList<SecretReference>(references));
+            references is null ? [] : references.ToArray());
     }
 
     /// <summary>Rebuilds the text with every reference replaced by its resolved value.</summary>

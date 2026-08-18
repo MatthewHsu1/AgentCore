@@ -96,11 +96,11 @@ internal static class ConfigurationBinder
         return new EvaluationConfiguration { SampleRate = rate, Judge = judge };
     }
 
-    private static EquatableDictionary<StateSlotConfiguration> BindState(JsonObject root, string pointer)
+    private static Dictionary<string, StateSlotConfiguration> BindState(JsonObject root, string pointer)
     {
         if (Property(root, "state") is not { } node)
         {
-            return EquatableDictionary<StateSlotConfiguration>.Empty;
+            return [];
         }
 
         var statePointer = ConfigurationError.AppendPointer(pointer, "state");
@@ -123,10 +123,10 @@ internal static class ConfigurationBinder
             }));
         }
 
-        return new EquatableDictionary<StateSlotConfiguration>(slots);
+        return slots.ToDictionary(StringComparer.Ordinal);
     }
 
-    private static EquatableList<JsonNode>? BindEnumValues(JsonObject slot, string pointer)
+    private static List<JsonNode>? BindEnumValues(JsonObject slot, string pointer)
     {
         if (Property(slot, "enum") is not { } node)
         {
@@ -142,7 +142,7 @@ internal static class ConfigurationBinder
             index++;
         }
 
-        return new EquatableList<JsonNode>(members);
+        return members;
     }
 
     private static ToolResultReference? BindFrom(JsonObject slot, string pointer)
@@ -193,11 +193,11 @@ internal static class ConfigurationBinder
         };
     }
 
-    private static EquatableDictionary<JsonNode> BindGuards(JsonObject root, string pointer)
+    private static Dictionary<string, JsonNode> BindGuards(JsonObject root, string pointer)
     {
         if (Property(root, "guards") is not { } node)
         {
-            return EquatableDictionary<JsonNode>.Empty;
+            return [];
         }
 
         var guardsPointer = ConfigurationError.AppendPointer(pointer, "guards");
@@ -208,14 +208,14 @@ internal static class ConfigurationBinder
             guards.Add(new KeyValuePair<string, JsonNode>(entry.Key, Required(entry.Value, guardPointer).DeepClone()));
         }
 
-        return new EquatableDictionary<JsonNode>(guards);
+        return guards.ToDictionary(StringComparer.Ordinal);
     }
 
-    private static EquatableList<ToolConfiguration> BindTools(JsonObject root, string pointer)
+    private static List<ToolConfiguration> BindTools(JsonObject root, string pointer)
     {
         if (Property(root, "tools") is not { } node)
         {
-            return EquatableList<ToolConfiguration>.Empty;
+            return [];
         }
 
         var toolsPointer = ConfigurationError.AppendPointer(pointer, "tools");
@@ -240,7 +240,7 @@ internal static class ConfigurationBinder
             index++;
         }
 
-        return new EquatableList<ToolConfiguration>(tools);
+        return tools;
     }
 
     private static HttpRequestConfiguration? BindHttpRequest(JsonObject tool, string pointer)
@@ -270,8 +270,8 @@ internal static class ConfigurationBinder
             Method = RequiredString(request, "method", requestPointer),
             Url = RequiredString(request, "url", requestPointer),
             Headers = headers.Count == 0
-                ? EquatableDictionary<SecretTemplate>.Empty
-                : new EquatableDictionary<SecretTemplate>(headers),
+                ? []
+                : headers.ToDictionary(StringComparer.Ordinal),
         };
     }
 
@@ -322,7 +322,7 @@ internal static class ConfigurationBinder
         return new AgentsConfiguration
         {
             Defaults = defaults,
-            Items = new EquatableList<AgentConfiguration>(items),
+            Items = items,
         };
     }
 
@@ -360,15 +360,15 @@ internal static class ConfigurationBinder
         return new PolicyConfiguration
         {
             Initial = RequiredString(policy, "initial", policyPointer),
-            Stages = new EquatableList<StageConfiguration>(stages),
+            Stages = stages,
         };
     }
 
-    private static EquatableList<StageTransition> BindTransitions(JsonObject stage, string pointer)
+    private static List<StageTransition> BindTransitions(JsonObject stage, string pointer)
     {
         if (Property(stage, "to") is not { } node)
         {
-            return EquatableList<StageTransition>.Empty;
+            return [];
         }
 
         var toPointer = ConfigurationError.AppendPointer(pointer, "to");
@@ -387,7 +387,7 @@ internal static class ConfigurationBinder
             index++;
         }
 
-        return new EquatableList<StageTransition>(transitions);
+        return transitions;
     }
 
     private static GraphConfiguration? BindGraph(JsonObject root, string pointer)
@@ -447,8 +447,8 @@ internal static class ConfigurationBinder
                 ? BindEnum(pattern, GraphPatterns, "pattern", ConfigurationError.AppendPointer(graphPointer, "pattern"))
                 : null,
             Agents = BindStringList(graph, "agents", graphPointer),
-            Nodes = nodes.Count == 0 ? EquatableList<GraphNodeConfiguration>.Empty : new EquatableList<GraphNodeConfiguration>(nodes),
-            Edges = edges.Count == 0 ? EquatableList<GraphEdgeConfiguration>.Empty : new EquatableList<GraphEdgeConfiguration>(edges),
+            Nodes = nodes,
+            Edges = edges,
         };
     }
 
@@ -484,7 +484,7 @@ internal static class ConfigurationBinder
 
         return new ProvidersConfiguration
         {
-            Llm = llm.Count == 0 ? EquatableList<LlmProviderConfiguration>.Empty : new EquatableList<LlmProviderConfiguration>(llm),
+            Llm = llm,
             Call = BindCallProvider(providers, providersPointer),
             Speech = BindSpeechProvider(providers, providersPointer),
             Telephony = BindVendorProvider(providers, "telephony", providersPointer),
@@ -528,7 +528,7 @@ internal static class ConfigurationBinder
     /// An empty array is not the same as an absent one. Absent means "use the defaults", and empty
     /// means "listen to nothing but AgentCore", which is how a deployment buys back metric series.
     /// </remarks>
-    private static EquatableList<string>? BindNameList(JsonObject owner, string name, string pointer)
+    private static List<string>? BindNameList(JsonObject owner, string name, string pointer)
     {
         if (Property(owner, name) is not { } node)
         {
@@ -554,7 +554,7 @@ internal static class ConfigurationBinder
             index++;
         }
 
-        return names.Count == 0 ? EquatableList<string>.Empty : new EquatableList<string>(names);
+        return names;
     }
 
     /// <summary>Binds the <c>call</c> block, or null when the document writes none.</summary>
@@ -652,11 +652,11 @@ internal static class ConfigurationBinder
         return GuardReference.FromRule(node.DeepClone());
     }
 
-    private static EquatableList<string> BindStringList(JsonObject parent, string name, string pointer)
+    private static List<string> BindStringList(JsonObject parent, string name, string pointer)
     {
         if (Property(parent, name) is not { } node)
         {
-            return EquatableList<string>.Empty;
+            return [];
         }
 
         var listPointer = ConfigurationError.AppendPointer(pointer, name);
@@ -669,7 +669,7 @@ internal static class ConfigurationBinder
             index++;
         }
 
-        return values.Count == 0 ? EquatableList<string>.Empty : new EquatableList<string>(values);
+        return values;
     }
 
     private static readonly Dictionary<string, StateSlotType> StateSlotTypes = new(StringComparer.Ordinal)

@@ -52,7 +52,7 @@ public sealed record StateSlotConfiguration
     public string? Description { get; init; }
 
     /// <summary>Gets the members check 5 enumerates, or <see langword="null"/> when the slot is not an enumeration.</summary>
-    public EquatableList<JsonNode>? EnumValues { get; init; }
+    public IReadOnlyList<JsonNode>? EnumValues { get; init; }
 
     /// <summary>Gets the tool result the slot reads. It is set when, and only when, the writer is <see cref="StateWriter.Tool"/>.</summary>
     public ToolResultReference? From { get; init; }
@@ -62,21 +62,4 @@ public sealed record StateSlotConfiguration
 
     /// <summary>Gets the fixed value of the slot. It is set when the writer is <see cref="StateWriter.Const"/>.</summary>
     public JsonNode? Value { get; init; }
-
-    /// <summary>Compares this slot with another slot. A raw rule compares by its JSON content.</summary>
-    /// <param name="other">The other slot.</param>
-    /// <returns><see langword="true"/> when both slots are equal.</returns>
-    public bool Equals(StateSlotConfiguration? other)
-        => other is not null
-           && Type == other.Type
-           && Writer == other.Writer
-           && JsonNode.DeepEquals(Default, other.Default)
-           && string.Equals(Description, other.Description, StringComparison.Ordinal)
-           && EqualityComparer<EquatableList<JsonNode>?>.Default.Equals(EnumValues, other.EnumValues)
-           && EqualityComparer<ToolResultReference?>.Default.Equals(From, other.From)
-           && JsonNode.DeepEquals(Increment, other.Increment)
-           && JsonNode.DeepEquals(Value, other.Value);
-
-    /// <inheritdoc />
-    public override int GetHashCode() => HashCode.Combine(Type, Writer, Description, EnumValues, From);
 }

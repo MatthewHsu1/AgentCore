@@ -125,8 +125,8 @@ public sealed class CallRegistrationTests
     // ---------------------------------------------------------------------------------------------
 
     /// <summary>The one model every document here names, so the compile has something to resolve.</summary>
-    private static EquatableList<LlmProviderConfiguration> OneModel { get; } =
-        new([new LlmProviderConfiguration { Kind = "openai", Model = "gpt-4.1-mini", As = "reply" }]);
+    private static IReadOnlyList<LlmProviderConfiguration> OneModel { get; } =
+        [new LlmProviderConfiguration { Kind = "openai", Model = "gpt-4.1-mini", As = "reply" }];
 
     /// <summary>Writes one document that names both required blocks.</summary>
     /// <param name="callKind">The value <c>providers.call.kind</c> carries.</param>
@@ -158,7 +158,7 @@ public sealed class CallRegistrationTests
             Name = "built-in-code",
             Agents = new AgentsConfiguration
             {
-                Items = new([new AgentConfiguration { Id = "only", Instructions = "I answer everything" }]),
+                Items = [new AgentConfiguration { Id = "only", Instructions = "I answer everything" }],
             },
             Providers = providers,
         };

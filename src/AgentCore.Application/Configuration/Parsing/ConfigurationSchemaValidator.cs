@@ -32,7 +32,7 @@ public static class ConfigurationSchemaValidator
     /// <summary>Evaluates a document against the schema and returns every shape error.</summary>
     /// <param name="document">The document, already read from YAML or JSON.</param>
     /// <returns>The errors, ordered by their JSON Pointer. An empty list means the document passes.</returns>
-    public static EquatableList<ConfigurationError> Evaluate(JsonNode document)
+    public static IReadOnlyList<ConfigurationError> Evaluate(JsonNode document)
     {
         ArgumentNullException.ThrowIfNull(document);
 
@@ -40,7 +40,7 @@ public static class ConfigurationSchemaValidator
         var results = LazySchema.Value.Evaluate(element.RootElement, Options);
         if (results.IsValid)
         {
-            return EquatableList<ConfigurationError>.Empty;
+            return [];
         }
 
         var errors = new List<ConfigurationError>();
@@ -80,7 +80,7 @@ public static class ConfigurationSchemaValidator
         }
 
         errors.Sort(static (left, right) => string.CompareOrdinal(left.Pointer, right.Pointer));
-        return new EquatableList<ConfigurationError>(errors);
+        return errors;
     }
 
     /// <summary>Evaluates a document and throws when it holds any shape error.</summary>

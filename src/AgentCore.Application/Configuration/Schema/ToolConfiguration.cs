@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
 
@@ -39,7 +40,7 @@ public sealed record HttpRequestConfiguration
     public required string Url { get; init; }
 
     /// <summary>Gets the request headers. A value may hold <c>${secret:name}</c> references.</summary>
-    public EquatableDictionary<SecretTemplate> Headers { get; init; } = EquatableDictionary<SecretTemplate>.Empty;
+    public IReadOnlyDictionary<string, SecretTemplate> Headers { get; init; } = ReadOnlyDictionary<string, SecretTemplate>.Empty;
 }
 
 /// <summary>
@@ -76,21 +77,4 @@ public sealed record ToolConfiguration
 
     /// <summary>Gets the HTTP call. It is set when the kind is <see cref="ToolKind.Http"/>.</summary>
     public HttpRequestConfiguration? Request { get; init; }
-
-    /// <summary>Compares this tool with another tool. The raw parameter schema compares by its JSON content.</summary>
-    /// <param name="other">The other tool.</param>
-    /// <returns><see langword="true"/> when both tools are equal.</returns>
-    public bool Equals(ToolConfiguration? other)
-        => other is not null
-           && string.Equals(Id, other.Id, StringComparison.Ordinal)
-           && Kind == other.Kind
-           && string.Equals(Description, other.Description, StringComparison.Ordinal)
-           && string.Equals(Uses, other.Uses, StringComparison.Ordinal)
-           && string.Equals(Binds, other.Binds, StringComparison.Ordinal)
-           && string.Equals(Agent, other.Agent, StringComparison.Ordinal)
-           && JsonNode.DeepEquals(Parameters, other.Parameters)
-           && EqualityComparer<HttpRequestConfiguration?>.Default.Equals(Request, other.Request);
-
-    /// <inheritdoc />
-    public override int GetHashCode() => HashCode.Combine(Id, Kind, Description, Uses, Binds, Agent, Request);
 }

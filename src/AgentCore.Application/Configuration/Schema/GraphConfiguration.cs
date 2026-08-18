@@ -75,11 +75,11 @@ public sealed record GraphConfiguration
     public GraphPattern? Pattern { get; init; }
 
     /// <summary>Gets the participants of a pattern graph, in order. It is empty for a node and edge graph.</summary>
-    public EquatableList<string> Agents { get; init; } = EquatableList<string>.Empty;
+    public IReadOnlyList<string> Agents { get; init; } = [];
 
     /// <summary>Gets the nodes. It is empty for a pattern graph.</summary>
-    public EquatableList<GraphNodeConfiguration> Nodes { get; init; } = EquatableList<GraphNodeConfiguration>.Empty;
+    public IReadOnlyList<GraphNodeConfiguration> Nodes { get; init; } = [];
 
     /// <summary>Gets the edges. It is empty for a pattern graph.</summary>
-    public EquatableList<GraphEdgeConfiguration> Edges { get; init; } = EquatableList<GraphEdgeConfiguration>.Empty;
+    public IReadOnlyList<GraphEdgeConfiguration> Edges { get; init; } = [];
 }

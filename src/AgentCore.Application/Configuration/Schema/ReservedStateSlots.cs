@@ -18,7 +18,7 @@ public static class ReservedStateSlots
     public const string CallDurationSeconds = "callDurationSeconds";
 
     /// <summary>Gets every reserved slot name.</summary>
-    public static EquatableList<string> All { get; } = new EquatableList<string>([Stage, TurnIndex, CallDurationSeconds]);
+    public static IReadOnlyList<string> All { get; } = [Stage, TurnIndex, CallDurationSeconds];
 
     /// <summary>Reports whether a name is reserved.</summary>
     /// <param name="name">The slot name to test.</param>

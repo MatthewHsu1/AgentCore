@@ -16,15 +16,15 @@ public sealed record ConfigurationValidationResult
     /// <summary>Gets the result with nothing to report.</summary>
     public static ConfigurationValidationResult Clean { get; } = new()
     {
-        Errors = EquatableList<ConfigurationError>.Empty,
-        Warnings = EquatableList<ConfigurationError>.Empty,
+        Errors = [],
+        Warnings = [],
     };
 
     /// <summary>Gets every reason the document fails, in check order.</summary>
-    public required EquatableList<ConfigurationError> Errors { get; init; }
+    public required IReadOnlyList<ConfigurationError> Errors { get; init; }
 
     /// <summary>Gets every partial-coverage warning, in check order. A warning does not fail the load.</summary>
-    public required EquatableList<ConfigurationError> Warnings { get; init; }
+    public required IReadOnlyList<ConfigurationError> Warnings { get; init; }
 
     /// <summary>Reports whether the document passes checks 2 to 8.</summary>
     public bool IsValid => Errors.Count == 0;
