@@ -10,10 +10,22 @@ namespace AgentCore.Application.Configuration.Parsing;
 /// The first stage of the pipeline in section 6: YamlDotNet to <see cref="JsonNode"/>. This is D20.
 /// </summary>
 /// <remarks>
-/// A plain scalar takes its type from the YAML 1.2 core schema, so <c>3</c> becomes a number,
-/// <c>true</c> becomes a boolean, and <c>gpt-4.1-mini</c> stays a string. A quoted, literal, or
-/// folded scalar always stays a string. This is what makes rule 17 of section 11 hold: the same
-/// document produces the same node tree as YAML and as JSON.
+/// <para>
+/// A plain scalar takes its type from the YAML 1.2 core schema, so <c>3</c> and <c>0x10</c> become
+/// numbers, <c>true</c> becomes a boolean, and <c>gpt-4.1-mini</c>, <c>yes</c> and <c>2024-01-01</c>
+/// stay strings. A quoted, literal, or folded scalar always stays a string, and an explicit
+/// <c>!!str</c> tag forces one. This is what makes rule 17 of section 11 hold: the same document
+/// produces the same node tree as YAML and as JSON.
+/// </para>
+/// <para>
+/// <c>Yaml2JsonNode</c>, by the maintainer of the JsonSchema.Net and JsonLogic packages this
+/// assembly already carries, was measured against this file and does not resolve the core schema.
+/// It reads a plain scalar with <c>decimal.TryParse(NumberStyles.Any)</c> and ignores the tag, so
+/// <c>0x10</c> becomes the string "0x10", <c>!!str 1</c> becomes the number 1, and — the reason it
+/// was not adopted — <c>1,000</c> becomes the number 1000 and <c>(5)</c> becomes the number -5,
+/// which turns a typo in a customer document into a value that passes check 1. See the Task 5 row
+/// of docs/handoff/library-first-cleanup.md.
+/// </para>
 /// </remarks>
 public static partial class YamlToJson
 {
@@ -78,6 +90,11 @@ public static partial class YamlToJson
             }
 
             var childPointer = ConfigurationError.AppendPointer(pointer, key.Value);
+
+            // YamlDotNet rejects two keys that are the same YAML node, so this looks redundant. It is
+            // not: two keys that differ as YAML nodes can still be the same JSON key. `!!str 1:` and
+            // `1:` carry different tags, so the YAML reader keeps both, and both name the property
+            // "1" here. Without this the second would silently overwrite the first.
             if (result.ContainsKey(key.Value))
             {
                 throw Syntax(childPointer, $"the key '{key.Value}' appears twice in the same mapping");
@@ -118,7 +135,7 @@ public static partial class YamlToJson
             return JsonValue.Create(text);
         }
 
-        return ConvertPlain(text);
+        return ConvertPlain(text, pointer);
     }
 
     private static JsonValue? ConvertTagged(string tag, string text, string pointer) => tag switch
@@ -126,12 +143,12 @@ public static partial class YamlToJson
         YamlTagPrefix + "str" => JsonValue.Create(text),
         YamlTagPrefix + "bool" => JsonValue.Create(ParseBool(text, pointer)),
         YamlTagPrefix + "int" => ParseInteger(text) ?? throw Syntax(pointer, $"'{text}' is not an integer"),
-        YamlTagPrefix + "float" => ParseFloat(text) ?? throw Syntax(pointer, $"'{text}' is not a number"),
+        YamlTagPrefix + "float" => ParseFloat(text, pointer) ?? throw Syntax(pointer, $"'{text}' is not a number"),
         YamlTagPrefix + "null" => null,
         _ => throw Syntax(pointer, $"the tag '{tag}' is not supported"),
     };
 
-    private static JsonValue? ConvertPlain(string text)
+    private static JsonValue? ConvertPlain(string text, string pointer)
     {
         if (NullPattern().IsMatch(text))
         {
@@ -148,7 +165,7 @@ public static partial class YamlToJson
             return JsonValue.Create(false);
         }
 
-        return ParseInteger(text) ?? ParseFloat(text) ?? JsonValue.Create(text);
+        return ParseInteger(text) ?? ParseFloat(text, pointer) ?? JsonValue.Create(text);
     }
 
     private static bool ParseBool(string text, string pointer)
@@ -183,15 +200,28 @@ public static partial class YamlToJson
         return null;
     }
 
-    private static JsonValue? ParseFloat(string text)
+    /// <summary>Reads a plain scalar that looks like a YAML 1.2 float.</summary>
+    /// <param name="text">The scalar text.</param>
+    /// <param name="pointer">The pointer to the scalar, for the error.</param>
+    /// <returns>The number, or <see langword="null"/> when the text is not a float and stays a string.</returns>
+    /// <remarks>
+    /// A number too large for a <see cref="double"/> parses to an infinity, and JSON has no way to
+    /// write one. Left alone it would reach <c>JsonValue.Create</c> and come back out of the loader
+    /// as a raw <see cref="ArgumentException"/>, past the <see cref="ConfigurationLoadException"/>
+    /// every caller of section 8.7 is told to catch. It is a defect in the document, so it is
+    /// reported as one.
+    /// </remarks>
+    private static JsonValue? ParseFloat(string text, string pointer)
     {
-        if (FloatPattern().IsMatch(text)
-            && double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+        if (!FloatPattern().IsMatch(text)
+            || !double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
         {
-            return JsonValue.Create(value);
+            return null;
         }
 
-        return null;
+        return double.IsFinite(value)
+            ? JsonValue.Create(value)
+            : throw Syntax(pointer, $"'{text}' is larger than a number can hold");
     }
 
     private static ConfigurationLoadException Syntax(string pointer, string message, Exception? cause = null)

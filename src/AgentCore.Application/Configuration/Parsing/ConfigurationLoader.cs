@@ -102,8 +102,9 @@ public static class ConfigurationLoader
 
         // Both paths end in the same node backing, so two trees of the same document compare equal.
         // JsonOptions travels with this reparse too: ReadJson already enforces it on the JSON path,
-        // and YamlToJson.ConvertMapping already rejects a repeated key on the YAML path (a JsonObject
-        // cannot hold one twice to begin with), so this is belt-and-braces rather than a live gap.
+        // and on the YAML path YamlDotNet rejects a repeated node key while it builds the mapping and
+        // YamlToJson.ConvertMapping rejects the rest (two keys that differ as YAML and agree as JSON),
+        // so this is belt-and-braces rather than a live gap.
         return JsonNode.Parse(node.ToJsonString(), documentOptions: JsonOptions)
                ?? throw Syntax("the document is empty");
     }

@@ -169,6 +169,16 @@ public sealed class ConfigurationRoundTripTests
         Assert.Equal(expected, document["value"]!.GetValue<bool>());
     }
 
+    /// <summary>
+    /// The scalars that stay text.
+    /// </summary>
+    /// <remarks>
+    /// The last four are the ones that separate the YAML 1.2 core schema from a looser reading. An
+    /// explicit <c>!!str</c> tag is the document's only way to force text onto something that would
+    /// otherwise be a number or a boolean, and a thousands separator or a pair of accounting
+    /// parentheses is a typo in a configuration document, not a number. Reading any of them as a
+    /// number would let a mistyped value pass check 1 with a value nobody wrote.
+    /// </remarks>
     [Theory]
     [InlineData("value: \"3\"", "3")]
     [InlineData("value: 'true'", "true")]
@@ -176,6 +186,10 @@ public sealed class ConfigurationRoundTripTests
     [InlineData("value: agentcore/v1", "agentcore/v1")]
     [InlineData("value: ./kb", "./kb")]
     [InlineData("value: yes", "yes")]
+    [InlineData("value: !!str 1", "1")]
+    [InlineData("value: !!str true", "true")]
+    [InlineData("value: 1,000", "1,000")]
+    [InlineData("value: (5)", "(5)")]
     public void AQuotedOrWordScalar_ReadsAsAString(string yaml, string expected)
     {
         var document = ConfigurationLoader.ReadDocument(yaml, ConfigurationFormat.Yaml);
