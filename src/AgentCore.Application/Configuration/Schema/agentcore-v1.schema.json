@@ -154,6 +154,16 @@
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
+          "items": {
+            "type": [
+              "object",
+              "array",
+              "string",
+              "number",
+              "boolean"
+            ],
+            "description": "A member with no value enumerates nothing. Check 5 walks these points and the slot carries a declared type, so null is never one of them."
+          },
           "description": "The members check 5 enumerates for this slot."
         },
         "from": {
@@ -738,7 +748,8 @@
         "maxFrameBytes": {
           "type": "integer",
           "minimum": 1,
-          "description": "The largest inbound frame the socket accepts."
+          "maximum": 2147483647,
+          "description": "The largest inbound frame the socket accepts. The ceiling is int.MaxValue, which is the largest buffer length the socket can be given."
         }
       }
     },
@@ -820,23 +831,27 @@
         },
         "exportIntervalMs": {
           "type": "integer",
-          "description": "How often metrics are sent. T61 puts a floor of 60000 under it, and a smaller number is raised to that floor."
+          "minimum": -2147483648,
+          "maximum": 2147483647,
+          "description": "How often metrics are sent. T61 puts a floor of 60000 under it, and a smaller number is raised to that floor. The bounds are int.MinValue and int.MaxValue, the range the exporter's period is expressed in."
         },
         "sources": {
           "type": "array",
           "items": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "pattern": "\\S"
           },
-          "description": "Extra ActivitySource names listened to, beside the one AgentCore owns. An empty array listens to AgentCore alone."
+          "description": "Extra ActivitySource names listened to, beside the one AgentCore owns. An empty array listens to AgentCore alone. A name of nothing but spaces listens to nothing, so it is refused."
         },
         "meters": {
           "type": "array",
           "items": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "pattern": "\\S"
           },
-          "description": "Extra Meter names listened to, beside the one AgentCore owns. These are the bulk of the active series item 12 caps at 10,000."
+          "description": "Extra Meter names listened to, beside the one AgentCore owns. These are the bulk of the active series item 12 caps at 10,000. A name of nothing but spaces listens to nothing, so it is refused."
         }
       }
     }

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace AgentCore.Application.Configuration.Schema;
 
 /// <summary>
@@ -198,6 +200,7 @@ public sealed record TelemetryProviderConfiguration
     /// instead. This is a floor and not a validation failure: a number too small costs money quietly
     /// rather than breaking anything, and refusing to start over it would be worse than correcting it.
     /// </remarks>
+    [JsonPropertyName("exportIntervalMs")]
     public int ExportIntervalMilliseconds
     {
         get => field;

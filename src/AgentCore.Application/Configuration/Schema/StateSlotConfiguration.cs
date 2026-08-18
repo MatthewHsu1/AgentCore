@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 
 namespace AgentCore.Application.Configuration.Schema;
 
@@ -52,6 +53,11 @@ public sealed record StateSlotConfiguration
     public string? Description { get; init; }
 
     /// <summary>Gets the members check 5 enumerates, or <see langword="null"/> when the slot is not an enumeration.</summary>
+    /// <remarks>
+    /// The document key is <c>enum</c>, which is a C# keyword, so the property carries the name it
+    /// binds by rather than taking it from the naming policy.
+    /// </remarks>
+    [JsonPropertyName("enum")]
     public IReadOnlyList<JsonNode>? EnumValues { get; init; }
 
     /// <summary>Gets the tool result the slot reads. It is set when, and only when, the writer is <see cref="StateWriter.Tool"/>.</summary>
