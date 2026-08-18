@@ -5,8 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../AgentCore.AspNetCore/AgentCore.AspNetCore.csproj" />
-    <ProjectReference Include="../AgentCore.Infrastructure/AgentCore.Infrastructure.csproj" />
+    <ProjectReference Include="../AgentCore.Hosting/AgentCore.Hosting.csproj" />
   </ItemGroup>
 
   <ItemGroup>
