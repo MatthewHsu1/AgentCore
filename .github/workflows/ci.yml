@@ -30,6 +30,12 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: src/AgentCore.Chat/ClientApp/package-lock.json
+
       - name: Restore
         run: |
           dotnet restore
@@ -39,6 +45,13 @@ jobs:
       # line in PublicAPI.Unshipped.txt fails this step, which is rule 2 of section 5.1.
       - name: Build
         run: dotnet build --no-restore -c Release
+
+      - name: Chat UI matches its source
+        run: git diff --exit-code -- src/AgentCore.Chat/wwwroot
+
+      - name: Chat UI tests
+        run: npm test
+        working-directory: src/AgentCore.Chat/ClientApp
 
       - name: Unit tests
         run: dotnet test --no-build -c Release

@@ -6,10 +6,12 @@
 
   <ItemGroup>
     <ProjectReference Include="../AgentCore.Hosting/AgentCore.Hosting.csproj" />
+    <ProjectReference Include="../AgentCore.Chat/AgentCore.Chat.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Content Include="config/example.yaml" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="config/local.yaml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

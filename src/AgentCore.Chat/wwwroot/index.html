@@ -1,0 +1,17 @@
+<!doctype html>
+<!--
+  data-agentcore-endpoint is what lets a host move the text endpoint without a rebuild. The C# side
+  rewrites it when MapAgentCoreChat is given a route; the value here is the default.
+-->
+<html lang="en" data-agentcore-endpoint="/v1/chat/completions">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AgentCore Chat</title>
+    <script type="module" crossorigin src="/chat/assets/index.js"></script>
+    <link rel="stylesheet" crossorigin href="/chat/assets/index.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

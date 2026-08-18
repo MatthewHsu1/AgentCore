@@ -56,6 +56,10 @@
   <ItemGroup>
     <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="5.6.0" />
   </ItemGroup>
+  <!-- The chat UI travels inside AgentCore.Chat.dll rather than as loose files beside it. -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.11" />
+  </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageVersion Include="xunit.v3" Version="3.2.2" />
