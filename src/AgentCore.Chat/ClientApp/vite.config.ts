@@ -1,12 +1,22 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import { fileURLToPath, URL } from "node:url";
 
 // The build writes into the C# project's wwwroot, which is embedded into AgentCore.Chat.dll. The
 // output is committed, so a consumer running `dotnet publish` needs no Node at all — see the
 // AgentCore.Chat.csproj comment on why that matters for a library nobody deploys for you.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   base: "/chat/",
+  // The vendored components under src/components are assistant-ui's own and import through this
+  // alias. It is not a style preference: rewriting their imports would make every future
+  // `shadcn add` a merge instead of an overwrite.
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
+  },
   build: {
     outDir: "../wwwroot",
     emptyOutDir: true,
