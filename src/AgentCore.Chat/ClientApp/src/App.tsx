@@ -1,5 +1,5 @@
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
-import { useAgentCoreRuntime } from "./AgentCoreRuntime";
+import { useAgentCoreRuntime } from "./runtime/AgentCoreRuntime";
 import { Thread } from "./Thread";
 
 /**
