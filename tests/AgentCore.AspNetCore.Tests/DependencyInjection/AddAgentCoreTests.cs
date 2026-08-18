@@ -351,6 +351,22 @@ public sealed class AddAgentCoreTests
     }
 
     [Fact]
+    public async Task AddAgentCore_RegistersTheAgentShimAsAProcessSingleton()
+    {
+        using var provider = await BuildAsync(OneAgentYaml);
+
+        var agent = provider.GetRequiredService<AgentCoreAgent>();
+
+        Assert.Same(agent, provider.GetRequiredService<AgentCoreAgent>());
+        Assert.Equal("composed", agent.Name);
+
+        // One session of the shim is one call, drawn from the same factory the rest of the host
+        // uses, so the two seams describe the same calls.
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        Assert.NotNull(session.GetService<CallSession>());
+    }
+
+    [Fact]
     public async Task AddAgentCore_RegistersTheInMemorySessionStoreByDefault()
     {
         using var provider = await BuildAsync(OneAgentYaml);
