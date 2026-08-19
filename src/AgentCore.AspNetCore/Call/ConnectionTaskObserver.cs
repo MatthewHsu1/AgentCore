@@ -11,6 +11,9 @@ internal enum ConnectionTaskKind
 
     /// <summary>The loop that writes the transport.</summary>
     WriteLoop,
+
+    /// <summary>The wait for the words of the call to reach store 1.</summary>
+    TranscriptFlush,
 }
 
 /// <summary>
@@ -125,6 +128,7 @@ internal sealed class ConnectionTaskObserver(
         ConnectionTaskKind.ReadLoop => "the read loop",
         ConnectionTaskKind.Turn => "the last turn",
         ConnectionTaskKind.WriteLoop => "the write loop",
+        ConnectionTaskKind.TranscriptFlush => "the transcript flush",
         _ => "a task",
     };
 

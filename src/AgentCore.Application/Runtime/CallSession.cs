@@ -8,7 +8,6 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Diagnostics;
-using AgentCore.Application.Evaluation;
 using AgentCore.Application.Policy;
 using AgentCore.Application.Ports;
 using AgentCore.Application.State;
@@ -111,45 +110,34 @@ namespace AgentCore.Application.Runtime;
 /// </remarks>
 public sealed class CallSession : IConversationPort
 {
-    /// <summary>The line the caller hears when a turn fails and the document names none.</summary>
-    /// <remarks>
-    /// Section 8.7 asks for a spoken fallback and names no text. The document names it through the
-    /// optional <c>fallbackReply</c> key, and the turn speaks
-    /// <see cref="AgentCoreConfiguration.FallbackReply"/>. This constant is the value a document that
-    /// omits the key takes, and a host and a test both name it here.
-    /// </remarks>
+    /// <summary>
+    /// The line the caller hears when a turn fails and the document names none.
+    /// </summary>
     public const string FallbackReply = AgentCoreConfiguration.DefaultFallbackReply;
 
-    /// <summary>The reason a turn that produced no text reports.</summary>
-    /// <remarks>
-    /// Section 8.7, last row: <c>MaximumIterationsPerRequest</c> is 40, request 41 goes out with no
-    /// tools, and the run returns quietly. On a voice call that silence is the failure, so the turn
-    /// loop reads the reply and never trusts the absence of an exception.
-    /// </remarks>
+    /// <summary>
+    /// The reason a turn that produced no text reports.
+    /// </summary>
     public const string EmptyReplyReason = "the run returned an empty reply, so the turn spoke the fallback.";
 
-    /// <summary>The reason a turn that lost its tool budget reports, before the message of the fault.</summary>
-    /// <remarks>
-    /// Section 8.7, sixth row: <c>MaximumConsecutiveErrorsPerRequest</c> is 3, so the 4th consecutive
-    /// tool failure throws out of the run. The turn loop catches it and the call stays alive.
-    /// </remarks>
+    /// <summary>
+    /// The reason a turn that lost its tool budget reports, before the message of the fault.
+    /// </summary>
     public const string ToolFailureReason = "a tool failed four times in a row, so the turn spoke the fallback.";
 
-    /// <summary>The failure the turn records when the completion work passes its deadline.</summary>
-    /// <remarks>
-    /// This is a safety net against a hung extractor, not a value a document or a host reads by
-    /// name, so it stays internal. <c>InternalsVisibleTo</c> already gives the test project the
-    /// reach it needs, and D15 makes a public member on <see cref="CallSession"/> a permanent
-    /// promise, which this string is not meant to be.
-    /// </remarks>
+    /// <summary>
+    /// The failure the turn records when the completion work passes its deadline.
+    /// </summary>
     internal const string ExtractionTimedOutReason = "the turn completion passed its deadline.";
 
-    /// <summary>What the log records when the moderation endpoint runs out of time.</summary>
-    /// <remarks>It stays internal for the reason <see cref="ExtractionTimedOutReason"/> gives.</remarks>
+    /// <summary>
+    /// What the log records when the moderation endpoint runs out of time.
+    /// </summary>
     internal const string ModerationTimedOutReason = "the moderation endpoint passed its deadline.";
 
-    /// <summary>What the log records when the moderation endpoint throws.</summary>
-    /// <remarks>It stays internal for the reason <see cref="ExtractionTimedOutReason"/> gives.</remarks>
+    /// <summary>
+    /// What the log records when the moderation endpoint throws.
+    /// </summary>
     internal const string ModerationFaultedReason = "the moderation endpoint threw.";
 
     /// <summary>
@@ -167,20 +155,9 @@ public sealed class CallSession : IConversationPort
     /// </summary>
     internal const string AgentLinePrefix = "You: ";
 
-    /// <summary>How long the work after the reply may take before it is abandoned.</summary>
-    /// <remarks>
-    /// <para>
-    /// Section 8.7 keeps a call alive through a failure, and the work after the reply runs on the
-    /// host token so a barge-in never cancels it. That is deliberate, and it means nothing else
-    /// bounds it. This deadline does.
-    /// </para>
-    /// <para>
-    /// It stays private rather than a document setting. It guards against a hung model call, and it
-    /// is not a product knob a document should tune, so it carries no JSON Schema field and no
-    /// configuration key. D15 makes a public member here a permanent promise; a private one can
-    /// still be promoted later, and a public one could not be taken back.
-    /// </para>
-    /// </remarks>
+    /// <summary>
+    /// How long the work after the reply may take before it is abandoned.
+    /// </summary>
     private static readonly TimeSpan TurnCompletionTimeout = TimeSpan.FromSeconds(5);
 
     private readonly CompiledAgent _compiled;
@@ -211,17 +188,9 @@ public sealed class CallSession : IConversationPort
     // is the only clear a turn that never reached that commit gets.
     private volatile bool _runIsAudible;
 
-    /// <summary>Creates the session of one call.</summary>
-    /// <param name="callId">The id of the call.</param>
-    /// <param name="compiled">The compiled agent. It is shared by every call.</param>
-    /// <param name="guards">The evaluator that runs each exit guard and each increment rule.</param>
-    /// <param name="extractor">The extractor, or <see langword="null"/> when the document declares none.</param>
-    /// <param name="timeProvider">The clock the reserved <c>callDurationSeconds</c> slot reads.</param>
-    /// <param name="observers">
-    /// Everything that watches this call, or <see langword="null"/> for a call nothing watches. One
-    /// dispatcher belongs to one session: its ordering guarantee is per instance, so a shared one
-    /// would make every call queue behind every other. <see cref="CallSessionFactory"/> builds it.
-    /// </param>
+    /// <summary>
+    /// Creates the session of one call.
+    /// </summary>
     internal CallSession(
         string callId,
         CompiledAgent compiled,
@@ -236,25 +205,32 @@ public sealed class CallSession : IConversationPort
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         CallId = callId;
+
         _compiled = compiled;
+
         _history = compiled.History;
 
         // Rows 3 and 4 run a workflow, and its host agent takes no session but its own, so their
         // history rides the request messages instead.
         _sessionCarriesHistory =
             compiled.Shape is CompiledAgentShape.SingleAgent or CompiledAgentShape.Policy;
+
         _extractor = extractor;
+
         _counters = new CounterStateWriter(guards);
+
         _time = timeProvider;
 
         // The seam is optional and it has a working default. A host that binds nothing to watch the
         // call still answers it, and the library never throws for want of an observer.
         _observers = observers ?? new CallObserverDispatcher([]);
+
         _startedAt = timeProvider.GetUtcNow();
 
         // A document with no policy: has no stage machine. The single-agent row and both graph rows
         // read that way, and neither of them ever ends a call by itself.
         _policy = compiled.Configuration.Policy is null ? null : compiled.CreatePolicy(guards);
+
         State = new StateDocument(compiled.Configuration, _policy?.Stage);
 
         // Writer order, step 1.
@@ -264,50 +240,48 @@ public sealed class CallSession : IConversationPort
         _ = Raise(CallEventKind.CallStarted, _startedAt, turnIndex: null);
     }
 
-    /// <summary>Gets the id of the call.</summary>
+    /// <summary>
+    /// Gets the id of the call.
+    /// </summary>
     public string CallId { get; }
 
-    /// <summary>Gets the stage the machine holds. It is empty when the document declares no policy.</summary>
+    /// <summary>
+    /// Gets the stage the machine holds. It is empty when the document declares no policy.
+    /// </summary>
     public string Stage => State.Stage;
 
-    /// <summary>Gets whether the call reached a terminal stage. A document with no policy never does.</summary>
+    /// <summary>
+    /// Gets whether the call reached a terminal stage. A document with no policy never does.
+    /// </summary>
     public bool IsComplete { get; private set; }
 
-    /// <summary>Gets the state of this call. Every guard and every increment rule reads it.</summary>
+    /// <summary>
+    /// Gets the state of this call. Every guard and every increment rule reads it.
+    /// </summary>
     public StateDocument State { get; }
 
-    /// <summary>Gets the conversation, oldest first. Every stage of the call reads it.</summary>
-    /// <remarks>
-    /// A copy taken under the provider's own per-call lock, so what comes back is one whole
-    /// conversation as it stood at one instant, and never a list a barge-in is halfway through
-    /// rewriting. A call whose first turn has not started yet holds nothing.
-    /// </remarks>
+    /// <summary>
+    /// Gets the conversation, oldest first. Every stage of the call reads it.
+    /// </summary>
     public IReadOnlyList<ChatMessage> Transcript
         => Session() is { } session ? _history.Read(session) : [];
 
-    /// <summary>Gets the turn that finished last, or <see langword="null"/> before the first turn ends.</summary>
+    /// <summary>
+    /// Gets the turn that finished last, or <see langword="null"/> before the first turn ends.
+    /// </summary>
     public TurnResult? LastTurn { get; private set; }
 
-    /// <summary>Gets the compiled agent this session runs. Every call shares it.</summary>
+    /// <summary>
+    /// Gets the compiled agent this session runs. Every call shares it.
+    /// </summary>
     public CompiledAgent Compiled => _compiled;
 
-    /// <summary>Runs one turn end to end, and returns what it did.</summary>
+    /// <summary>
+    /// Runs one turn end to end, and returns what it did.
+    /// </summary>
     /// <param name="userInput">What the caller said.</param>
     /// <param name="cancellationToken">Cancels the model calls.</param>
     /// <returns>The finished turn. It always carries a spoken line.</returns>
-    /// <remarks>
-    /// <para>
-    /// A tool that fails four times in a row throws out of the run, and section 8.7 says that must
-    /// never kill the call. The turn ends with <see cref="FallbackReply"/>, the writers still run in
-    /// their fixed order, and the next turn of the same session starts normally.
-    /// </para>
-    /// <para>
-    /// A barge-in never cuts this turn while it runs, because nothing of it has reached the host
-    /// yet: the reply is handed over whole, at the return. <see cref="Interrupt"/> during the run
-    /// amends the turn that finished last — the only turn the caller could still be hearing — and
-    /// this run finishes undisturbed. That is the one audibility rule both run shapes share.
-    /// </para>
-    /// </remarks>
     /// <exception cref="InvalidOperationException">
     /// The call already reached a terminal stage, another turn of this call is still running, or the
     /// stage the machine holds names no agent.
@@ -318,25 +292,12 @@ public sealed class CallSession : IConversationPort
 
         var turn = BeginTurn(userInput, await OpenSessionAsync(cancellationToken).ConfigureAwait(false));
 
-        // A run that never streams hands the host NOTHING until it returns, so nothing of it can
-        // have reached the caller while it runs, and a barge-in during it belongs to the turn that
-        // finished last — the only turn the caller could still be hearing. It never becomes audible
-        // in flight, and Interrupt never cuts it. This used to be the other way around
-        // (audibleFromTheStart: true), on the claim that handing the reply over at once left no
-        // inaudible window; the streaming path's own rule says the opposite, and the owner took the
-        // one rule for both shapes on 2026-08-18.
         var cancellation = StartRun(cancellationToken);
+
         try
         {
-            // Row 4 of the compile table. The compiled graph is a process singleton, so a guarded
-            // edge inside it reads the state of the call that runs now, through this scope. The
-            // using statement closes the scope when the turn ends, when it throws, and when it is
-            // cancelled.
             using var scope = CallStateScope.Enter(State);
 
-            // The other scope of the same shape, and open for the same reason: the chat client that
-            // invokes tools is shared by every call under T44, so it finds the call it is running for
-            // here. It closes with the turn, exactly as the state scope above does.
             using var faults = ToolFailureScope.Enter(failure => RecordToolFailure(turn.Index, failure));
 
             AgentResponse response;
@@ -379,26 +340,6 @@ public sealed class CallSession : IConversationPort
     /// <param name="userInput">What the caller said.</param>
     /// <param name="cancellationToken">Cancels the model calls.</param>
     /// <returns>The reply, one update at a time. Every update carries content.</returns>
-    /// <remarks>
-    /// <para>
-    /// The turn finishes when the enumeration finishes. After that, <see cref="LastTurn"/> holds the
-    /// finished turn, the writers have run, and the machine holds the stage of the next turn. A
-    /// caller that stops enumerating early stops the turn, and the state does not move. A caller that
-    /// interrupts calls <see cref="Interrupt"/> instead, which ends the turn and moves the state.
-    /// </para>
-    /// <para>
-    /// The stream is filtered. Section 8.6 measured <c>AsAIAgent()</c>: it yields 47 updates for 40
-    /// text fragments, and seven of them carry no content because they are lifecycle events. Every
-    /// host would otherwise write the same filter, and a host that forgot it would drift its
-    /// character cursor. This seam therefore drops an update that carries nothing and an update whose
-    /// only content is empty text. A tool call and a tool result still reach the host, because they
-    /// are content a host may show.
-    /// </para>
-    /// <para>
-    /// A tool that fails four times in a row ends the enumeration early. The turn then ends with
-    /// <see cref="FallbackReply"/>, exactly as <see cref="RunTurnAsync"/> does.
-    /// </para>
-    /// </remarks>
     /// <exception cref="InvalidOperationException">
     /// The call already reached a terminal stage, another turn of this call is still running, or the
     /// stage the machine holds names no agent.
@@ -509,7 +450,9 @@ public sealed class CallSession : IConversationPort
         }
     }
 
-    /// <summary>Ends the running turn where the caller cut the reply off.</summary>
+    /// <summary>
+    /// Ends the running turn where the caller cut the reply off.
+    /// </summary>
     /// <param name="utteranceUntilInterrupt">The text the caller actually heard.</param>
     /// <param name="durationUntilInterrupt">How much of the reply played, as the relay reported it.</param>
     /// <param name="cutsRunningTurn">
@@ -525,53 +468,6 @@ public sealed class CallSession : IConversationPort
     /// turn or by amending the turn that finished last, and <see langword="false"/> when there was
     /// nothing to record it against.
     /// </returns>
-    /// <remarks>
-    /// <para>
-    /// This is the barge-in entry point of item 6a. Section 7.1 says the relay reports both values on
-    /// its <c>interrupt</c> frame, so both arrive here together and this method measures neither.
-    /// Nothing behind this call estimates the duration, which is what item 6c asks for.
-    /// </para>
-    /// <para>
-    /// The frame reaches one of two paths, and which one depends on whether the running turn is
-    /// the turn the caller was hearing. This session answers that from its own side — a run that has
-    /// handed the host nothing cannot be the turn anyone heard — and that answer is right whenever
-    /// the caller of this method is also the one speaking the reply. A vendor that paces the audio
-    /// itself knows better: it alone can tell that the turn it is still speaking is not the turn now
-    /// running, because a held prompt already started the next one. <paramref name="cutsRunningTurn"/>
-    /// is how it says so. That is a fact about the call and not a frame schema, so D8 still holds:
-    /// nothing of section 7.1's wire format crosses this seam.
-    /// </para>
-    /// <list type="number">
-    /// <item><description>
-    /// <b>The running turn is audible, and it is the turn the caller was hearing.</b> It stops, and
-    /// it ends the way a finished turn ends. The
-    /// transcript keeps <paramref name="utteranceUntilInterrupt"/> rather than the reply the model
-    /// produced, the writers run in their fixed order, and <see cref="TurnResult.ReplyText"/> holds
-    /// the same heard text while <see cref="TurnResult.InterruptedAfter"/> holds the played duration.
-    /// </description></item>
-    /// <item><description>
-    /// <b>No turn is running, the one that is has produced nothing yet, or
-    /// <paramref name="cutsRunningTurn"/> is <see langword="false"/>.</b> The vendor paces the
-    /// audio, so a reply is still playing long after the model finished streaming it, and a
-    /// held prompt can already have started the next turn inside the finished turn's own ending. The
-    /// caller was therefore hearing the turn that finished last, and that turn is amended:
-    /// <see cref="LastTurn"/> takes the heard text and the played duration, the transcript span of
-    /// that turn is rewritten to hold what the caller heard, and the chain takes a second event. A
-    /// turn that has produced nothing is never cut short, because nobody has heard it.
-    /// </description></item>
-    /// </list>
-    /// <para>
-    /// The amendment is an event and never an edit. T23: the chain is append-only, so
-    /// <see cref="CallEventKind.ReplyInterrupted"/> names the ordinal of the
-    /// <see cref="CallEventKind.TurnCompleted"/> fact it corrects through
-    /// <see cref="CallEvent.AmendsOrdinal"/>.
-    /// </para>
-    /// <para>
-    /// A frame that arrives when no turn has ever run answers <see langword="false"/> and changes
-    /// nothing, and so does a second frame against a turn one barge-in already cut. A late frame
-    /// must not drop a call, which is the same rule section 7.1 gives an unknown frame.
-    /// </para>
-    /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="durationUntilInterrupt"/> is negative.
     /// </exception>
@@ -606,24 +502,6 @@ public sealed class CallSession : IConversationPort
     /// <see langword="true"/> when this call wrote the event, and <see langword="false"/> when the
     /// call had already ended.
     /// </returns>
-    /// <remarks>
-    /// <para>
-    /// The stage machine reaches a terminal stage, and the turn loop closes the chain itself with
-    /// <see cref="CallEndReason.AgentCompleted"/>. Every other ending arrives here from the vendor
-    /// adapter, because only the adapter sees a hang-up, a conference transfer, or a dropped socket.
-    /// A second call answers <see langword="false"/> and changes nothing, which is the same rule
-    /// section 7.1 gives a late frame.
-    /// </para>
-    /// <para>
-    /// The reason is closed rather than free text, because §9 makes the chain the only long-term
-    /// record and a report counts these endings years later. A caller that holds more detail, such
-    /// as the vendor hang-up cause, puts it in another payload key.
-    /// </para>
-    /// <para>
-    /// The session runs no further turn afterwards. The event goes to the sink and nothing waits for
-    /// it.
-    /// </para>
-    /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="reason"/> is not a member of the closed set.
     /// </exception>
@@ -636,15 +514,11 @@ public sealed class CallSession : IConversationPort
         return wrote;
     }
 
-    /// <summary>Opens the session of this call, once, and hands the same one to every later turn.</summary>
+    /// <summary>
+    /// Opens the session of this call, once, and hands the same one to every later turn.
+    /// </summary>
     /// <param name="cancellationToken">Cancels the open.</param>
     /// <returns>The session.</returns>
-    /// <remarks>
-    /// Rows 1 and 2 take the agent's own session, which is what carries the call through
-    /// <see cref="AgentCoreChatHistoryProvider"/> and across a stage switch. Rows 3 and 4 run a
-    /// workflow, whose host agent refuses any session but its own, so they take a carrier that
-    /// holds the transcript and never reaches an agent.
-    /// </remarks>
     private async ValueTask<AgentSession> OpenSessionAsync(CancellationToken cancellationToken)
     {
         if (Session() is { } opened)
@@ -663,28 +537,21 @@ public sealed class CallSession : IConversationPort
         }
     }
 
-    /// <summary>Reads the session one run is handed.</summary>
+    /// <summary>
+    /// Reads the session one run is handed.
+    /// </summary>
     /// <param name="turn">The turn about to run.</param>
     /// <param name="cancellationToken">Cancels the open.</param>
     /// <returns>The call's session on rows 1 and 2, and a fresh workflow session on a graph row.</returns>
-    /// <remarks>
-    /// A workflow host agent refuses any session but its own, and its own cannot be truncated or
-    /// read, so a graph row never carries one across turns: the call rides the request messages
-    /// instead. A fresh one costs 3.5–11.5 µs and about 1.4 KB, does no I/O, and measured no slower
-    /// than carrying one, because a carried workflow transcript grows by three messages a turn
-    /// rather than two.
-    /// </remarks>
     private async ValueTask<AgentSession> RunSessionAsync(Turn turn, CancellationToken cancellationToken)
         => _sessionCarriesHistory
             ? turn.Session
             : await turn.Agent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
 
-    /// <summary>Reads the session of this call, or null before its first turn opened one.</summary>
+    /// <summary>
+    /// Reads the session of this call, or null before its first turn opened one.
+    /// </summary>
     /// <returns>The session.</returns>
-    /// <remarks>
-    /// A barge-in and a transcript read both arrive from other threads, so the field is read under
-    /// the same lock that publishes it.
-    /// </remarks>
     private AgentSession? Session()
     {
         lock (_interruptLock)
@@ -693,16 +560,21 @@ public sealed class CallSession : IConversationPort
         }
     }
 
-    /// <summary>Waits for every store 1 write this call has queued.</summary>
+    /// <summary>
+    /// Waits for every store 1 write this call has queued.
+    /// </summary>
     /// <returns>A task that completes when the words of the call are durable.</returns>
-    /// <remarks>
-    /// Nothing on the call path waits for a write — a turn queues its rows and speaks. Anything that
-    /// must read the record back, rather than the live history, waits here first.
-    /// </remarks>
-    internal Task FlushTranscriptAsync()
-        => Session() is { } session ? _history.DrainAsync(session) : Task.CompletedTask;
+    public async Task FlushTranscriptAsync()
+    {
+        if (Session() is { } session)
+        {
+            await _history.DrainAsync(session).ConfigureAwait(false);
+        }
+    }
 
-    /// <summary>Picks the agent, builds the model input, and takes the turn.</summary>
+    /// <summary>
+    /// Picks the agent, builds the model input, and takes the turn.
+    /// </summary>
     /// <param name="userInput">What the caller said.</param>
     /// <param name="session">The session of this call.</param>
     /// <returns>Everything the rest of the turn needs.</returns>
@@ -758,16 +630,11 @@ public sealed class CallSession : IConversationPort
             _time.GetTimestamp());
     }
 
-    /// <summary>Renders the call so far into the one role a workflow node still recognises.</summary>
+    /// <summary>
+    /// Renders the call so far into the one role a workflow node still recognises.
+    /// </summary>
     /// <param name="history">The caller-facing history of this call, oldest first.</param>
     /// <returns>One <c>system</c> message, or <see langword="null"/> on the first turn of a call.</returns>
-    /// <remarks>
-    /// Measured on 1.17.0: a workflow demotes every caller-supplied <c>assistant</c> message to
-    /// <c>user</c> on the way into a node, so a node handed the raw history cannot tell what it said
-    /// from what the caller said and reads its own answers as things the caller asked for.
-    /// <c>system</c> and <c>tool</c> survive the demotion, so the conversation rides one
-    /// <c>system</c> message that names both speakers instead.
-    /// </remarks>
     private static ChatMessage? GraphHistory(IReadOnlyList<ChatMessage> history)
     {
         StringBuilder rendered = new();
@@ -790,7 +657,9 @@ public sealed class CallSession : IConversationPort
             : new ChatMessage(ChatRole.System, HistoryPreamble + rendered.ToString().TrimEnd('\n'));
     }
 
-    /// <summary>Names this call as the conversation the run's <c>gen_ai.conversation.id</c> reports.</summary>
+    /// <summary>
+    /// Names this call as the conversation the run's <c>gen_ai.conversation.id</c> reports.
+    /// </summary>
     /// <returns>
     /// The run options a <see cref="ChatClientAgent"/> reads <c>ConversationId</c> off, whether or not
     /// something else wraps it. Row 1 and row 2 hand <c>turn.Agent</c> straight through to the
@@ -820,16 +689,11 @@ public sealed class CallSession : IConversationPort
         return new(options);
     }
 
-    /// <summary>Opens the window in which <see cref="Interrupt"/> reaches this turn.</summary>
+    /// <summary>
+    /// Opens the window in which <see cref="Interrupt"/> reaches this turn.
+    /// </summary>
     /// <param name="cancellationToken">The token of the host.</param>
     /// <returns>The source the run reads. The caller ends it with <see cref="EndRun"/>.</returns>
-    /// <remarks>
-    /// Every run starts inaudible, whichever shape it takes: nothing of it has reached the caller
-    /// yet, so a barge-in in this window belongs to the turn that finished last. A streaming run
-    /// raises <see cref="_runIsAudible"/> at its first piece of content; a run that never streams
-    /// hands the host nothing until it returns, so it stays inaudible for its whole life and a
-    /// barge-in never cuts it.
-    /// </remarks>
     private CancellationTokenSource StartRun(CancellationToken cancellationToken)
     {
         CancellationTokenSource cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -844,7 +708,9 @@ public sealed class CallSession : IConversationPort
         return cancellation;
     }
 
-    /// <summary>Closes the window, and frees the session for the next turn.</summary>
+    /// <summary>
+    /// Closes the window, and frees the session for the next turn.
+    /// </summary>
     /// <param name="cancellation">The source <see cref="StartRun"/> returned.</param>
     private void EndRun(CancellationTokenSource cancellation)
     {
@@ -860,29 +726,15 @@ public sealed class CallSession : IConversationPort
         Volatile.Write(ref _running, 0);
     }
 
-    /// <summary>Records a barge-in against the turn that finished last, and corrects its record.</summary>
+    /// <summary>
+    /// Records a barge-in against the turn that finished last, and corrects its record.
+    /// </summary>
     /// <param name="utteranceUntilInterrupt">The text the caller actually heard.</param>
     /// <param name="durationUntilInterrupt">How much of the reply played, as the relay reported it.</param>
     /// <returns>
     /// <see langword="true"/> when the turn was amended, and <see langword="false"/> when there was
     /// no turn to amend.
     /// </returns>
-    /// <remarks>
-    /// <para>
-    /// The caller holds <see cref="_interruptLock"/>. That is what keeps this apart from the commit
-    /// of <see cref="CompleteTurnAsync"/>: a held prompt can have the next turn already running when
-    /// this lands, and the two would otherwise publish <see cref="LastTurn"/> at once.
-    /// </para>
-    /// <para>
-    /// One row of store 1 changes, and it is the one the caller was hearing. The turn being
-    /// corrected finished, so its reply is already written and its ordinal is the one the rewrite
-    /// names — nothing here has to guess which turn a held prompt left the caller listening to.
-    /// </para>
-    /// <para>
-    /// Neither vendor value is touched beyond the trim of correction 2 of section 10, which pipecat
-    /// pins in a test of its own. Nothing here estimates, rounds, or clamps either one: that is D28.
-    /// </para>
-    /// </remarks>
     private bool AmendLastTurn(string utteranceUntilInterrupt, TimeSpan durationUntilInterrupt)
     {
         // The chain has already closed, so nothing may be appended behind call.ended.

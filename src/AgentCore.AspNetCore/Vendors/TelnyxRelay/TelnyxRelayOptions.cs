@@ -19,15 +19,16 @@ internal sealed class TelnyxRelayOptions
 
     /// <summary>Gets or sets how long teardown gives a stuck task before it moves on.</summary>
     /// <remarks>
-    /// Two separate waits share this one bound: how long the last turn of a call may take to
-    /// unwind once teardown cancels it, and how long the close handshake may take before the
-    /// socket is aborted. A telephony call that already dropped never answers a close frame, and a
-    /// chat client is not guaranteed to honour cancellation promptly either, so both waits need a
-    /// bound or either one could wedge teardown forever. Because the two run one after the other
-    /// rather than together, one wedged call to teardown can spend this value twice — worst case
-    /// close to ten seconds at the default — which is longer than Kestrel's own five-second default
-    /// shutdown timeout. That trade is intentional: a slow, bounded teardown beats one with no
-    /// bound at all.
+    /// Every wait that could otherwise wedge a connection shares this one bound: how long the last
+    /// turn of a call may take to unwind once teardown cancels it, how long the close handshake may
+    /// take before the socket is aborted, and how long the words of a call may take to reach store 1
+    /// before its session is dropped. A telephony call that already dropped never answers a close
+    /// frame, a chat client is not guaranteed to honour cancellation promptly, and a transcript
+    /// store talks to a database, so each wait needs a bound or any one of them could wedge the
+    /// connection forever. Because they run one after another rather than together, one wedged
+    /// connection can spend this value several times over — longer than Kestrel's own five-second
+    /// default shutdown timeout. That trade is intentional: a slow, bounded teardown beats one with
+    /// no bound at all.
     /// </remarks>
     public TimeSpan CloseTimeout { get; set; } = TimeSpan.FromSeconds(5);
 

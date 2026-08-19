@@ -654,6 +654,7 @@ AgentCore.Application.Runtime.CallSession
 AgentCore.Application.Runtime.CallSession.CallId.get -> string!
 AgentCore.Application.Runtime.CallSession.Compiled.get -> AgentCore.Application.Configuration.Compilation.CompiledAgent!
 AgentCore.Application.Runtime.CallSession.EndCall(AgentCore.Domain.Audit.CallEndReason reason) -> bool
+AgentCore.Application.Runtime.CallSession.FlushTranscriptAsync() -> System.Threading.Tasks.Task!
 AgentCore.Application.Runtime.CallSession.Interrupt(string! utteranceUntilInterrupt, System.TimeSpan durationUntilInterrupt, bool cutsRunningTurn = true) -> bool
 AgentCore.Application.Runtime.CallSession.IsComplete.get -> bool
 AgentCore.Application.Runtime.CallSession.LastTurn.get -> AgentCore.Domain.TurnResult?

@@ -336,31 +336,38 @@ internal sealed class RelayConnectionHarness : IAsyncDisposable
     /// Anything else the test binds on the container's own options, for example the clock every
     /// call and every connection then runs on.
     /// </param>
+    /// <param name="services">
+    /// Anything a test registers over what <c>AddAgentCore</c> registered. It runs after that call,
+    /// so a registration here is the last one and the connection resolves it.
+    /// </param>
     /// <returns>The running harness.</returns>
     public static async Task<RelayConnectionHarness> StartAsync(
         string yaml,
         IChatClient reply,
         Action<ILoggingBuilder>? logging = null,
         Action<TelnyxRelayOptions>? relay = null,
-        Action<AgentCoreOptions>? configure = null)
+        Action<AgentCoreOptions>? configure = null,
+        Action<IServiceCollection>? services = null)
     {
-        ServiceCollection services = new();
-        services.AddLogging(builder =>
+        ServiceCollection collection = new();
+        collection.AddLogging(builder =>
         {
             builder.ClearProviders();
             logging?.Invoke(builder);
         });
 
         TestHostLifetime lifetime = new();
-        services.AddSingleton<IHostApplicationLifetime>(lifetime);
-        await services.AddAgentCoreAsync(options =>
+        collection.AddSingleton<IHostApplicationLifetime>(lifetime);
+        await collection.AddAgentCoreAsync(options =>
         {
             options.Configuration = ConfigurationLoader.LoadYaml(yaml);
             options.UseChatClients(_ => new RoutingChatClientFactory(reply));
             configure?.Invoke(options);
         });
 
-        var provider = services.BuildServiceProvider();
+        services?.Invoke(collection);
+
+        var provider = collection.BuildServiceProvider();
         DefaultHttpContext http = new() { RequestServices = provider };
 
         TelnyxRelayOptions options = new();

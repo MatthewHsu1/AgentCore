@@ -298,6 +298,22 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
                             fault));
                     }
 
+                    // The words of the call reach store 1 before the session leaves the store, and
+                    // never after. A turn queues its rows and speaks, so a call can end with its
+                    // last turn still in flight, and this session is the only thing that can wait
+                    // for those writes — once it is dropped nothing can, and the durable record
+                    // loses the turn the caller just had with no error anywhere to say so.
+                    //
+                    // Bounded and swallowed for the same reason the close above is: a store that
+                    // stops answering must cost this call its last rows, not wedge teardown and
+                    // strand the session in the store for the life of the process.
+                    await _observer
+                        .ObserveAsync(
+                            session.FlushTranscriptAsync(),
+                            ConnectionTaskKind.TranscriptFlush,
+                            _options.CloseTimeout)
+                        .ConfigureAwait(false);
+
                     var store = _http.RequestServices.GetRequiredService<ICallSessionStore>();
                     await store.RemoveAsync(session.CallId, CancellationToken.None).ConfigureAwait(false);
                 }
@@ -509,6 +525,10 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
                 TelnyxRelayLog.WriteLoopFaulted(_logger, callId, fault);
                 break;
 
+            case ConnectionTaskKind.TranscriptFlush:
+                TelnyxRelayLog.TranscriptFlushFaulted(_logger, callId, fault);
+                break;
+
             case ConnectionTaskKind.ReadLoop:
             default:
                 TelnyxRelayLog.ReadLoopFaulted(_logger, callId, fault);
@@ -636,6 +656,18 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
                 _loggedSecondSetup = true;
                 TelnyxRelayLog.SecondSetupFrame(_logger, replaced.CallId);
             }
+
+            // Its words reach store 1 first, by the rule teardown obeys for the same reason: this
+            // session is the only thing that can wait for the writes it queued, and teardown will
+            // later flush the session that replaced it and never this one. Bounded and swallowed by
+            // the observer, so a store that stopped answering costs the replaced call its last rows
+            // rather than stalling the read loop for the rest of the connection.
+            await _observer
+                .ObserveAsync(
+                    replaced.FlushTranscriptAsync(),
+                    ConnectionTaskKind.TranscriptFlush,
+                    _options.CloseTimeout)
+                .ConfigureAwait(false);
 
             await store.RemoveAsync(replaced.CallId, CancellationToken.None).ConfigureAwait(false);
         }

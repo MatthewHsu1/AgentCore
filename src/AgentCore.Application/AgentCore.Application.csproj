@@ -39,6 +39,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="AgentCore.Application.Tests" />
+    <InternalsVisibleTo Include="AgentCore.AspNetCore.Tests" />
   </ItemGroup>
 
 </Project>

@@ -300,4 +300,19 @@ internal static partial class TelnyxRelayLog
         Level = LogLevel.Error,
         Message = "the audit chain of call {CallId} could not be closed, so it has no call.ended event.")]
     public static partial void CallEndFaulted(ILogger logger, string callId, Exception exception);
+
+    /// <summary>The words of a call could not be written before the session was dropped.</summary>
+    /// <param name="logger">The logger.</param>
+    /// <param name="callId">The id of the call.</param>
+    /// <param name="exception">The cause.</param>
+    /// <remarks>
+    /// A store 1 write already catches its own failure, so this line reports the wait itself
+    /// failing rather than the write. Either way the call keeps the turn the caller just had only in
+    /// the session that is about to be dropped, so the durable record loses it.
+    /// </remarks>
+    [LoggerMessage(
+        EventId = 21,
+        Level = LogLevel.Error,
+        Message = "the transcript of call {CallId} could not be flushed before its session was dropped.")]
+    public static partial void TranscriptFlushFaulted(ILogger logger, string callId, Exception exception);
 }

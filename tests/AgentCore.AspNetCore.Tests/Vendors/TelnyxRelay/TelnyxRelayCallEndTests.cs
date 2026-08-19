@@ -1,8 +1,13 @@
 using AgentCore.Application.Audit;
+using AgentCore.Application.Configuration.Compilation;
+using AgentCore.Application.Configuration.Parsing;
+using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.AspNetCore.Sessions;
 using AgentCore.AspNetCore.Tests.Fakes;
 using AgentCore.Domain.Audit;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -221,6 +226,135 @@ public sealed class TelnyxRelayCallEndTests
         Assert.Null(await Store(harness).TryGetAsync("call-broken-clock", TestContext.Current.CancellationToken));
     }
 
+    [Fact(Timeout = 30_000)]
+    public async Task EndCall_HangUp_FlushesTranscriptBeforeSessionRemoval()
+    {
+        // Arrange
+        //
+        // Store 1 is written off the turn, so a call can end with its last words still in flight.
+        // The session is the only thing that can wait for them, so once it leaves the store nothing
+        // can: the record of that call would lose the turn the caller just had, and no error would
+        // say so. Same shape as the teardown that removed a session without closing its chain.
+        ParkingCallMessageStore transcript = new();
+        OrderedCallSessionStore sessions = new(() => transcript.Landed);
+        using SequencedChatClient reply = new("your order ships Friday");
+        await using var harness = await RelayConnectionHarness.StartAsync(
+            TelnyxRelayTurnTests.PolicyYaml,
+            reply,
+            relay: options => options.CloseTimeout = TimeSpan.FromSeconds(30),
+            services: collection =>
+            {
+                collection.AddSingleton<ICallSessionStore>(sessions);
+                collection.AddSingleton<ICallSessionFactory>(
+                    TranscriptBackedSessions(TelnyxRelayTurnTests.PolicyYaml, reply, transcript));
+            });
+
+        harness.Socket.Queue(RelayFrames.Setup(callSessionId: "call-flush"));
+        harness.Socket.Queue(RelayFrames.Prompt("when does my order ship?", last: true));
+        await transcript.Parked.WaitAsync(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken);
+
+        // Act
+        harness.Socket.QueueClose();
+
+        // The write is still parked, so a teardown that waits for it cannot reach the removal and
+        // this wait runs out. A teardown that does not wait reaches the removal at once and the
+        // wait ends early — which is the failure this test exists to catch, and why the release
+        // below comes after the wait rather than before it.
+        await WaitQuietlyAsync(sessions.Removing, TimeSpan.FromSeconds(2));
+        transcript.Release();
+        await WaitForTeardownAsync(harness);
+
+        // Assert
+        Assert.True(
+            sessions.TranscriptLandedAtRemoval,
+            "the session was dropped while store 1 still owed the call its last turn.");
+        Assert.Null(await sessions.TryGetAsync("call-flush", TestContext.Current.CancellationToken));
+    }
+
+    [Fact(Timeout = 30_000)]
+    public async Task StartCall_SecondSetupFrame_FlushesTheReplacedTranscriptBeforeDroppingIt()
+    {
+        // Arrange
+        //
+        // A second setup frame replaces the session rather than refusing the socket, and the first
+        // one is dropped there and then. It is dropped by the same rule teardown obeys: the session
+        // is the only thing that can wait for the words it queued, so the first call's record would
+        // lose its last turn.
+        ParkingCallMessageStore transcript = new();
+        OrderedCallSessionStore sessions = new(() => transcript.Landed);
+        using SequencedChatClient reply = new("your order ships Friday");
+        await using var harness = await RelayConnectionHarness.StartAsync(
+            TelnyxRelayTurnTests.PolicyYaml,
+            reply,
+            relay: options => options.CloseTimeout = TimeSpan.FromSeconds(30),
+            services: collection =>
+            {
+                collection.AddSingleton<ICallSessionStore>(sessions);
+                collection.AddSingleton<ICallSessionFactory>(
+                    TranscriptBackedSessions(TelnyxRelayTurnTests.PolicyYaml, reply, transcript));
+            });
+
+        harness.Socket.Queue(RelayFrames.Setup(callSessionId: "call-first"));
+        harness.Socket.Queue(RelayFrames.Prompt("when does my order ship?", last: true));
+        await transcript.Parked.WaitAsync(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken);
+
+        // Act
+        harness.Socket.Queue(RelayFrames.Setup(callSessionId: "call-second"));
+
+        // Read as in EndCall_HangUp_FlushesTranscriptBeforeSessionRemoval: the wait runs out while
+        // the write is parked, and ends early when the drop did not wait for it.
+        await WaitQuietlyAsync(sessions.Removing, TimeSpan.FromSeconds(2));
+        transcript.Release();
+
+        // Assert
+        await WaitForSessionAsync(harness, "call-second");
+        Assert.True(
+            sessions.TranscriptLandedAtRemoval,
+            "the replaced session was dropped while store 1 still owed its call the last turn.");
+    }
+
+    /// <summary>Builds the session factory of one document over a given store 1.</summary>
+    /// <param name="yaml">The document, as YAML.</param>
+    /// <param name="reply">The model behind every agent.</param>
+    /// <param name="transcript">Where the words of a call are written.</param>
+    /// <returns>The factory, ready to register over the one <c>AddAgentCore</c> built.</returns>
+    /// <remarks>
+    /// The composition root binds no store 1 yet, so every host compiles onto the memory one. This
+    /// is the only seam a test has for putting a slow store behind a call, and it is why the whole
+    /// factory is rebuilt rather than decorated: the store is compiled into the agent, and the
+    /// factory holds the compiled agent.
+    /// </remarks>
+    private static CallSessionFactory TranscriptBackedSessions(
+        string yaml, IChatClient reply, ICallMessageStore transcript)
+    {
+        var document = ConfigurationLoader.LoadYaml(yaml);
+        RoutingChatClientFactory chatClients = new(reply);
+        var compiled = ConfigurationCompiler.Compile(
+            document,
+            new AgentCompilationContext(chatClients) { MessageStore = transcript });
+
+        return new CallSessionFactory(
+            compiled,
+            new GuardEvaluator(compiled.Configuration.Guards),
+            CallSessionFactory.CreateExtractor(compiled, chatClients));
+    }
+
+    /// <summary>Waits for one task, and treats running out of time as an answer rather than a fault.</summary>
+    /// <param name="task">What to wait for.</param>
+    /// <param name="bound">How long to give it.</param>
+    /// <returns>A task that completes either way.</returns>
+    private static async Task WaitQuietlyAsync(Task task, TimeSpan bound)
+    {
+        try
+        {
+            await task.WaitAsync(bound, TestContext.Current.CancellationToken);
+        }
+        catch (TimeoutException)
+        {
+            // The wait running out is what this caller is asking about.
+        }
+    }
+
     /// <summary>Waits for one connection to finish its own teardown.</summary>
     /// <param name="harness">The running connection.</param>
     /// <returns>A task that completes once teardown has run to its end.</returns>
@@ -354,4 +488,73 @@ internal sealed class FaultingClock : TimeProvider
         => _failing
             ? throw new InvalidOperationException("the clock failed.")
             : base.GetUtcNow();
+}
+
+/// <summary>
+/// A store 1 that holds its first write open until a test releases it.
+/// </summary>
+/// <remarks>
+/// A real store talks to a database, so a write outlives the turn that queued it. The memory store
+/// every other test runs on lands a write before the next line reads it, and would let teardown drop
+/// a session with a write still owing without any test noticing.
+/// </remarks>
+internal sealed class ParkingCallMessageStore : ICallMessageStore
+{
+    private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private volatile bool _landed;
+
+    /// <summary>Gets a task that completes once the first append is parked.</summary>
+    public Task Parked => _entered.Task;
+
+    /// <summary>Gets whether the parked append has finished writing.</summary>
+    public bool Landed => _landed;
+
+    /// <summary>Lets the parked append finish.</summary>
+    public void Release() => _release.TrySetResult();
+
+    /// <inheritdoc />
+    public async ValueTask AppendAsync(
+        IReadOnlyList<CallMessage> messages, CancellationToken cancellationToken = default)
+    {
+        _entered.TrySetResult();
+        await _release.Task.WaitAsync(cancellationToken);
+        _landed = true;
+    }
+
+    /// <inheritdoc />
+    public ValueTask RewriteAsync(
+        string callId, int ordinal, ChatMessage content, CancellationToken cancellationToken = default)
+        => ValueTask.CompletedTask;
+}
+
+/// <summary>
+/// The live session store, with a note of what store 1 had done by the time a session was dropped.
+/// </summary>
+internal sealed class OrderedCallSessionStore(Func<bool> transcriptLanded) : ICallSessionStore
+{
+    private readonly InMemoryCallSessionStore _inner = new();
+    private readonly TaskCompletionSource _removing = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>Gets a task that completes when a session is first dropped.</summary>
+    public Task Removing => _removing.Task;
+
+    /// <summary>Gets whether store 1 had written the call's words when the session was dropped.</summary>
+    public bool? TranscriptLandedAtRemoval { get; private set; }
+
+    /// <inheritdoc />
+    public ValueTask<CallSession?> TryGetAsync(string sessionId, CancellationToken cancellationToken = default)
+        => _inner.TryGetAsync(sessionId, cancellationToken);
+
+    /// <inheritdoc />
+    public ValueTask AddAsync(CallSession session, CancellationToken cancellationToken = default)
+        => _inner.AddAsync(session, cancellationToken);
+
+    /// <inheritdoc />
+    public ValueTask<bool> RemoveAsync(string sessionId, CancellationToken cancellationToken = default)
+    {
+        TranscriptLandedAtRemoval ??= transcriptLanded();
+        _removing.TrySetResult();
+        return _inner.RemoveAsync(sessionId, cancellationToken);
+    }
 }
