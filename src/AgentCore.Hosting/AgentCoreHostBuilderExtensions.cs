@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
+using AgentCore.Hosting.Secrets;
 using AgentCore.Infrastructure.Evaluation.OpenAiModeration;
 using AgentCore.Infrastructure.Knowledge.FileStore;
 using AgentCore.Infrastructure.Knowledge.VectorData.Zilliz;
@@ -86,7 +87,11 @@ public static class AgentCoreHostBuilderExtensions
             builder.Configuration[ConfigurationPathKey] ?? DefaultConfigurationPath;
 
         options.SecretResolver = new ChainedSecretResolver(
-            [new EnvironmentSecretResolver(), new FileSecretResolver()]);
+        [
+            new EnvironmentSecretResolver(),
+            new FileSecretResolver(),
+            new ConfigurationSecretResolver(builder.Configuration),
+        ]);
 
         options.LoggerFactory = loggers;
 
