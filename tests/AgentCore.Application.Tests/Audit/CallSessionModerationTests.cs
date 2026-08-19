@@ -193,7 +193,7 @@ public sealed class CallSessionModerationTests
 
         var events = sink.EventsOf("call-1");
         Assert.Equal([0, 1, 2], events.Select(e => e.Sequence));
-        Assert.True(AuditChain.Verify(AuditChain.LinkAll(events)).IsIntact);
+        Assert.All(events, AuditEventVocabulary.Validate);
     }
 
     // -------------------------------------------------------------------------------------------

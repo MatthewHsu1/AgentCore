@@ -30,7 +30,7 @@ public sealed class AuditCallObserverTests
         CallEventKind.ExtractionFailed,
     ];
 
-    /// <summary>The six kinds the chain stores, beside the token each one writes.</summary>
+    /// <summary>The six kinds the store keeps, beside the token each one writes.</summary>
     public static TheoryData<CallEventKind, AuditEventKind> StoredKinds =>
         new()
         {
@@ -62,7 +62,7 @@ public sealed class AuditCallObserverTests
         InMemoryAuditSink sink = new();
         AuditCallObserver observer = new(sink);
 
-        await observer.OnCallEventAsync(Event(kind, ordinal: 0), TestContext.Current.CancellationToken);
+        await observer.OnCallEventAsync(Event(kind, ordinal: 1, amends: 0), TestContext.Current.CancellationToken);
 
         var written = Assert.Single(sink.Events);
         Assert.Equal(expected, written.Kind);
@@ -90,7 +90,7 @@ public sealed class AuditCallObserverTests
         InMemoryAuditSink sink = new();
         AuditCallObserver observer = new(sink);
 
-        // T23: the chain is append-only, so a barge-in is a second event that names the first.
+        // T23: the store is append-only, so a barge-in is a second event that names the first.
         await observer.OnCallEventAsync(
             Event(CallEventKind.ReplyInterrupted, ordinal: 4, amends: 3),
             TestContext.Current.CancellationToken);
@@ -158,7 +158,7 @@ public sealed class AuditCallObserverTests
 
         await observer.OnCallEventAsync(Event(CallEventKind.CallStarted, ordinal: 0), token);
 
-        // The two diagnostic facts between them take no number, so the chain stays gap-free.
+        // The two diagnostic facts between them take no number, so the sequence stays gap-free.
         await observer.OnCallEventAsync(Event(CallEventKind.ModerationClean), token);
         await observer.OnCallEventAsync(Event(CallEventKind.TurnCompleted, ordinal: 1, turnIndex: 0), token);
         await observer.OnCallEventAsync(Event(CallEventKind.EmptyReply, turnIndex: 0), token);
@@ -189,6 +189,30 @@ public sealed class AuditCallObserverTests
             Ordinal = ordinal,
             TurnIndex = turnIndex,
             AmendsOrdinal = amends,
-            Payload = payload ?? new Dictionary<string, string>(StringComparer.Ordinal),
+            Payload = payload ?? RequiredPayload(kind),
         };
+
+    /// <summary>
+    /// The payload each kind must carry to be a legal event, per <see cref="AuditEventVocabulary"/>.
+    /// </summary>
+    /// <remarks>
+    /// A sink refuses an event that is missing these, so a test that fabricates one has to supply
+    /// them or it asserts about a row that could never be written.
+    /// </remarks>
+    private static Dictionary<string, string> RequiredPayload(CallEventKind kind) => kind switch
+    {
+        CallEventKind.ReplyInterrupted => new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [AuditPayloadKeys.UtteranceUntilInterruptSha256] = AuditHash.OfText("the belt ships").Value,
+        },
+        CallEventKind.PromptFlagged => new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [AuditPayloadKeys.ModerationCategories] = "harassment",
+        },
+        CallEventKind.CallEnded => new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [AuditPayloadKeys.EndReason] = CallEndReasons.ToToken(CallEndReason.CallerHungUp),
+        },
+        _ => new Dictionary<string, string>(StringComparer.Ordinal),
+    };
 }

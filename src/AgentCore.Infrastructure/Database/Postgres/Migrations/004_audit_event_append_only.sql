@@ -2,8 +2,7 @@
 --
 -- Know what these stop. They stop the writer role and they stop an accident. They do not stop an
 -- owner who means it: ALTER TABLE ... DISABLE TRIGGER USER leaves no trace, and
--- SET session_replication_role = replica bypasses all three in one statement with no DDL. The real
--- defences are the nightly anchor into Object Lock and chain_check on a schedule.
+-- SET session_replication_role = replica bypasses all three in one statement with no DDL.
 CREATE FUNCTION agentcore_audit_refuse() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     RAISE EXCEPTION 'audit_event is append-only. A correction is a new event that names the old one.';

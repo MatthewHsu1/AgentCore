@@ -97,7 +97,7 @@ public sealed class TelnyxRelayCallEndTests
             [AuditEventKind.CallStarted, AuditEventKind.CallEnded],
             events.Select(item => item.Kind).ToArray());
         Assert.Equal("caller.hangup", EndReasonOf(events));
-        Assert.True(AuditChain.Verify(AuditChain.LinkAll(events)).IsIntact);
+        Assert.All(events, AuditEventVocabulary.Validate);
     }
 
     [Fact(Timeout = 30_000)]
@@ -122,7 +122,7 @@ public sealed class TelnyxRelayCallEndTests
         Assert.Equal(AuditEventKind.CallEnded, events[^1].Kind);
         Assert.Single(events, item => item.Kind == AuditEventKind.CallEnded);
         Assert.Equal("call.faulted", EndReasonOf(events));
-        Assert.True(AuditChain.Verify(AuditChain.LinkAll(events)).IsIntact);
+        Assert.All(events, AuditEventVocabulary.Validate);
     }
 
     [Fact(Timeout = 30_000)]
@@ -147,7 +147,7 @@ public sealed class TelnyxRelayCallEndTests
 
         Assert.Equal(AuditEventKind.CallEnded, events[^1].Kind);
         Assert.Equal("call.faulted", EndReasonOf(events));
-        Assert.True(AuditChain.Verify(AuditChain.LinkAll(events)).IsIntact);
+        Assert.All(events, AuditEventVocabulary.Validate);
     }
 
     [Fact(Timeout = 30_000)]
@@ -176,7 +176,7 @@ public sealed class TelnyxRelayCallEndTests
 
         Assert.Single(events, item => item.Kind == AuditEventKind.CallEnded);
         Assert.Equal("agent.completed", EndReasonOf(events));
-        Assert.True(AuditChain.Verify(AuditChain.LinkAll(events)).IsIntact);
+        Assert.All(events, AuditEventVocabulary.Validate);
     }
 
     [Fact(Timeout = 30_000)]

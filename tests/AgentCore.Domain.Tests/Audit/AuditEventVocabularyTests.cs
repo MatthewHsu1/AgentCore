@@ -128,7 +128,7 @@ public sealed class AuditEventVocabularyTests
         };
 
         ArgumentException failure = Assert.Throws<ArgumentException>(
-            () => AuditChain.Link(free, AuditHash.Genesis));
+            () => AuditEventVocabulary.Validate(free));
 
         Assert.Contains(AuditPayloadKeys.EndReason, failure.Message, StringComparison.Ordinal);
     }
@@ -141,11 +141,11 @@ public sealed class AuditEventVocabularyTests
             Payload = new Dictionary<string, string>(StringComparer.Ordinal),
         };
 
-        Assert.Throws<ArgumentException>(() => AuditChain.Link(silent, AuditHash.Genesis));
+        Assert.Throws<ArgumentException>(() => AuditEventVocabulary.Validate(silent));
     }
 
     /// <summary>
-    /// T23: the chain is append-only, so a barge-in is a second event that references the first.
+    /// T23: the table is append-only, so a barge-in is a second event that references the first.
     /// </summary>
     [Fact]
     public void AnAmendment_ReferencesTheEventItAmends()
@@ -153,16 +153,16 @@ public sealed class AuditEventVocabularyTests
         AuditEvent turn = Turn(sequence: 4, turnIndex: 2);
         AuditEvent interruption = Interruption(sequence: 5, amends: turn.Sequence, turnIndex: 2);
 
-        IReadOnlyList<AuditChainLink> links = AuditChain.LinkAll([turn, interruption]);
+        AuditEvent[] run = [turn, interruption];
 
-        Assert.True(AuditChain.Verify(links).IsIntact);
-        Assert.Equal(turn.Sequence, links[1].Event.AmendsSequence);
-        Assert.Equal(turn.CallId, links[1].Event.CallId);
-        Assert.Equal(turn.TurnIndex, links[1].Event.TurnIndex);
+        Assert.All(run, AuditEventVocabulary.Validate);
+        Assert.Equal(turn.Sequence, interruption.AmendsSequence);
+        Assert.Equal(turn.CallId, interruption.CallId);
+        Assert.Equal(turn.TurnIndex, interruption.TurnIndex);
 
-        // The first event is untouched. Nothing rewrote the turn, and both events stand in the chain.
-        Assert.Equal(AuditHash.OfText(Spoken).Value, links[0].Event.Payload[AuditPayloadKeys.ReplyTextSha256]);
-        Assert.Null(links[0].Event.AmendsSequence);
+        // The first event is untouched. Nothing rewrote the turn, and both events stand.
+        Assert.Equal(AuditHash.OfText(Spoken).Value, turn.Payload[AuditPayloadKeys.ReplyTextSha256]);
+        Assert.Null(turn.AmendsSequence);
     }
 
     /// <summary>Section 11, item 6a: the event records the text the caller ACTUALLY HEARD.</summary>
@@ -189,7 +189,7 @@ public sealed class AuditEventVocabularyTests
         AuditEvent orphan = Interruption(sequence: 1, amends: 0, turnIndex: 0) with { AmendsSequence = null };
 
         ArgumentException failure = Assert.Throws<ArgumentException>(
-            () => AuditChain.Link(orphan, AuditHash.Genesis));
+            () => AuditEventVocabulary.Validate(orphan));
 
         Assert.Contains("T23", failure.Message, StringComparison.Ordinal);
     }
@@ -206,13 +206,13 @@ public sealed class AuditEventVocabularyTests
         };
 
         ArgumentException failure = Assert.Throws<ArgumentException>(
-            () => AuditChain.Link(silent, AuditHash.Genesis));
+            () => AuditEventVocabulary.Validate(silent));
 
         Assert.Contains(AuditPayloadKeys.UtteranceUntilInterruptSha256, failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void AuditChain_EmptyHashOnInterrupt_IsRefused()
+    public void Validate_EmptyHashOnInterrupt_IsRefused()
     {
         // The chain stores proof of the words and not the words, so the one value that must never
         // reach it is a hash that proves nothing. An empty text still hashes to a full digest.
@@ -226,13 +226,13 @@ public sealed class AuditEventVocabularyTests
         };
 
         ArgumentException failure = Assert.Throws<ArgumentException>(
-            () => AuditChain.Link(unproven, AuditHash.Genesis));
+            () => AuditEventVocabulary.Validate(unproven));
 
         Assert.Contains(AuditPayloadKeys.UtteranceUntilInterruptSha256, failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void AuditChain_EmptyHashOnTurnCompleted_IsRefused()
+    public void Validate_EmptyHashOnTurnCompleted_IsRefused()
     {
         AuditEvent unproven = Turn(sequence: 0, turnIndex: 0) with
         {
@@ -243,7 +243,7 @@ public sealed class AuditEventVocabularyTests
         };
 
         ArgumentException failure = Assert.Throws<ArgumentException>(
-            () => AuditChain.Link(unproven, AuditHash.Genesis));
+            () => AuditEventVocabulary.Validate(unproven));
 
         Assert.Contains(AuditPayloadKeys.ReplyTextSha256, failure.Message, StringComparison.Ordinal);
     }
@@ -253,7 +253,7 @@ public sealed class AuditEventVocabularyTests
     {
         AuditEvent backwards = Interruption(sequence: 1, amends: 0, turnIndex: 0) with { AmendsSequence = 9 };
 
-        Assert.Throws<ArgumentException>(() => AuditChain.Link(backwards, AuditHash.Genesis));
+        Assert.Throws<ArgumentException>(() => AuditEventVocabulary.Validate(backwards));
     }
 
     [Fact]
@@ -261,7 +261,7 @@ public sealed class AuditEventVocabularyTests
     {
         AuditEvent nameless = Turn(sequence: 0, turnIndex: 0) with { CallId = string.Empty };
 
-        Assert.Throws<ArgumentException>(() => AuditChain.Link(nameless, AuditHash.Genesis));
+        Assert.Throws<ArgumentException>(() => AuditEventVocabulary.Validate(nameless));
     }
 
     [Fact]
@@ -272,7 +272,6 @@ public sealed class AuditEventVocabularyTests
         Assert.Throws<ArgumentException>(() => AuditHash.Parse(new string('0', AuditHash.Length - 1)));
         Assert.Throws<ArgumentException>(() => AuditHash.Parse("not a hash"));
         Assert.False(AuditHash.TryParse(null, out _));
-        Assert.Equal(new string('0', AuditHash.Length), AuditHash.Genesis.Value);
     }
 
     /// <summary>
@@ -288,9 +287,9 @@ public sealed class AuditEventVocabularyTests
         Assert.Null(flagged.AmendsSequence);
         Assert.Equal(1, flagged.TurnIndex);
 
-        IReadOnlyList<AuditChainLink> links = AuditChain.LinkAll([flagged]);
+        AuditEvent[] run = [flagged];
 
-        Assert.True(AuditChain.Verify(links).IsIntact);
+        Assert.All(run, AuditEventVocabulary.Validate);
     }
 
     /// <summary>
@@ -303,13 +302,12 @@ public sealed class AuditEventVocabularyTests
         AuditEvent flagged = FlaggedPrompt(sequence: 3, turnIndex: 1);
         AuditEvent turn = Turn(sequence: 4, turnIndex: 1);
 
-        IReadOnlyList<AuditChainLink> links = AuditChain.LinkAll([flagged, turn]);
+        AuditEvent[] run = [flagged, turn];
 
-        Assert.True(AuditChain.Verify(links).IsIntact);
-        Assert.Equal(AuditEventKind.PromptFlagged, links[0].Event.Kind);
-        Assert.Equal(AuditEventKind.TurnCompleted, links[1].Event.Kind);
-        Assert.Equal(links[0].Event.TurnIndex, links[1].Event.TurnIndex);
-        Assert.Null(links[0].Event.AmendsSequence);
+        Assert.All(run, AuditEventVocabulary.Validate);
+        Assert.True(flagged.Sequence < turn.Sequence);
+        Assert.Equal(flagged.TurnIndex, turn.TurnIndex);
+        Assert.Null(flagged.AmendsSequence);
     }
 
     /// <summary>
@@ -325,7 +323,7 @@ public sealed class AuditEventVocabularyTests
         };
 
         ArgumentException failure = Assert.Throws<ArgumentException>(
-            () => AuditChain.Link(silent, AuditHash.Genesis));
+            () => AuditEventVocabulary.Validate(silent));
 
         Assert.Contains(AuditPayloadKeys.ModerationCategories, failure.Message, StringComparison.Ordinal);
     }
@@ -336,7 +334,7 @@ public sealed class AuditEventVocabularyTests
         AuditEvent empty = FlaggedPrompt(sequence: 1, turnIndex: 1, categories: string.Empty);
 
         ArgumentException failure = Assert.Throws<ArgumentException>(
-            () => AuditChain.Link(empty, AuditHash.Genesis));
+            () => AuditEventVocabulary.Validate(empty));
 
         Assert.Contains(AuditPayloadKeys.ModerationCategories, failure.Message, StringComparison.Ordinal);
     }
@@ -351,29 +349,36 @@ public sealed class AuditEventVocabularyTests
         AuditEvent blank = FlaggedPrompt(sequence: 1, turnIndex: 1, categories: categories);
 
         ArgumentException failure = Assert.Throws<ArgumentException>(
-            () => AuditChain.Link(blank, AuditHash.Genesis));
+            () => AuditEventVocabulary.Validate(blank));
 
         Assert.Contains(AuditPayloadKeys.ModerationCategories, failure.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// The chain sorts payload KEYS and never a payload VALUE, so the order the endpoint returned
-    /// survives in the hash.
+    /// The category list is stored exactly as the endpoint returned it. Nothing sorts it, and
+    /// nothing rewrites it.
     /// </summary>
+    /// <remarks>
+    /// The order carries meaning the taxonomy does not: the endpoint returns its own ranking, and a
+    /// reader years later has only this row. Validation checks the SHAPE of the list and never the
+    /// names in it, so both spellings below are legal and neither is normalised.
+    /// </remarks>
     [Fact]
     public void AFlaggedPromptKeepsTheOrderTheEndpointReturned()
     {
         AuditEvent first = FlaggedPrompt(sequence: 1, turnIndex: 1, categories: "harassment,violence");
         AuditEvent second = FlaggedPrompt(sequence: 1, turnIndex: 1, categories: "violence,harassment");
 
-        Assert.NotEqual(
-            AuditChain.ComputeHash(first, AuditHash.Genesis),
-            AuditChain.ComputeHash(second, AuditHash.Genesis));
+        AuditEventVocabulary.Validate(first);
+        AuditEventVocabulary.Validate(second);
+
+        Assert.Equal("harassment,violence", first.Payload[AuditPayloadKeys.ModerationCategories]);
+        Assert.Equal("violence,harassment", second.Payload[AuditPayloadKeys.ModerationCategories]);
     }
 
     /// <summary>
     /// The taxonomy belongs to the moderation endpoint and it is open, unlike
-    /// <see cref="CallEndReason"/>. A closed set would make <see cref="AuditChain.Link"/> throw on a
+    /// <see cref="CallEndReason"/>. A closed set would make <see cref="AuditEventVocabulary.Validate"/> throw on a
     /// category OpenAI added, and destroy the record the chain exists to protect.
     /// </summary>
     [Fact]
@@ -384,12 +389,11 @@ public sealed class AuditEventVocabularyTests
             turnIndex: 1,
             categories: "illicit/violent,some-category-openai-added-last-tuesday");
 
-        IReadOnlyList<AuditChainLink> links = AuditChain.LinkAll([novel]);
+        AuditEventVocabulary.Validate(novel);
 
-        Assert.True(AuditChain.Verify(links).IsIntact);
         Assert.Equal(
             "illicit/violent,some-category-openai-added-last-tuesday",
-            links[0].Event.Payload[AuditPayloadKeys.ModerationCategories]);
+            novel.Payload[AuditPayloadKeys.ModerationCategories]);
     }
 
     /// <summary>The rule requires no amendment, and it forbids none either.</summary>
@@ -399,10 +403,10 @@ public sealed class AuditEventVocabularyTests
         AuditEvent turn = Turn(sequence: 4, turnIndex: 1);
         AuditEvent flagged = FlaggedPrompt(sequence: 5, turnIndex: 1) with { AmendsSequence = turn.Sequence };
 
-        IReadOnlyList<AuditChainLink> links = AuditChain.LinkAll([turn, flagged]);
+        AuditEvent[] run = [turn, flagged];
 
-        Assert.True(AuditChain.Verify(links).IsIntact);
-        Assert.Equal(turn.Sequence, links[1].Event.AmendsSequence);
+        Assert.All(run, AuditEventVocabulary.Validate);
+        Assert.Equal(turn.Sequence, flagged.AmendsSequence);
     }
 
     private static AuditEvent Turn(long sequence, int turnIndex) => new()

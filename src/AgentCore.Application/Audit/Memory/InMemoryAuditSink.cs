@@ -29,10 +29,6 @@ public sealed class InMemoryAuditSink : IAuditSinkPort
     /// </summary>
     /// <param name="callId">The id of the call.</param>
     /// <returns>The events of that call, in the order they arrived.</returns>
-    /// <remarks>
-    /// <see cref="AuditChain.LinkAll"/> turns the answer into a chain, and
-    /// <see cref="AuditChain.Verify"/> is then the <c>chain_check</c> of section 11, item 6.
-    /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="callId"/> is <see langword="null"/>.</exception>
     public IReadOnlyList<AuditEvent> EventsOf(string callId)
     {
@@ -48,6 +44,7 @@ public sealed class InMemoryAuditSink : IAuditSinkPort
     public ValueTask AppendAsync(AuditEvent auditEvent, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(auditEvent);
+        AuditEventVocabulary.Validate(auditEvent);
 
         lock (_gate)
         {

@@ -911,7 +911,7 @@ public sealed class AddAgentCoreTests
         Assert.Equal(
             [AuditEventKind.CallStarted, AuditEventKind.TurnCompleted],
             events.Select(item => item.Kind).ToArray());
-        Assert.True(AuditChain.Verify(AuditChain.LinkAll(events)).IsIntact);
+        Assert.All(events, AuditEventVocabulary.Validate);
     }
 
     [Fact]
@@ -1150,7 +1150,7 @@ public sealed class AddAgentCoreTests
         Assert.Equal(
             [AuditEventKind.CallStarted, AuditEventKind.TurnCompleted],
             events.Select(item => item.Kind).ToArray());
-        Assert.True(AuditChain.Verify(AuditChain.LinkAll(events)).IsIntact);
+        Assert.All(events, AuditEventVocabulary.Validate);
     }
 
     [Fact]

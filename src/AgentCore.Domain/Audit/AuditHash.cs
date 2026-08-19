@@ -7,30 +7,12 @@ namespace AgentCore.Domain.Audit;
 /// <summary>
 /// One SHA-256 digest of the audit chain, as 64 lowercase hexadecimal characters.
 /// </summary>
-/// <remarks>
-/// <para>
-/// The type exists so a hash cannot be confused with a call id, a stage name, or any other string
-/// the chain carries. It also pins the spelling. PostgreSQL renders <c>sha256()</c> through
-/// <c>encode(..., 'hex')</c>, which is lowercase, so the <c>CHECK</c> constraint of T56 compares the
-/// same characters this type holds. Uppercase is refused rather than folded, because a store that
-/// accepts two spellings of one hash cannot say which one it verified.
-/// </para>
-/// </remarks>
 public sealed record AuditHash
 {
     /// <summary>The number of characters in a hexadecimal SHA-256 digest.</summary>
     public const int Length = 64;
 
     private AuditHash(string value) => Value = value;
-
-    /// <summary>
-    /// Gets the hash that stands before the first event of the chain: 64 zeros.
-    /// </summary>
-    /// <remarks>
-    /// The first event still hashes over a previous hash, so it has the same shape as every later
-    /// event, and <see cref="AuditChain.Verify"/> needs no special case for index zero.
-    /// </remarks>
-    public static AuditHash Genesis { get; } = new(new string('0', Length));
 
     /// <summary>Gets the 64 lowercase hexadecimal characters of the digest.</summary>
     public string Value { get; }

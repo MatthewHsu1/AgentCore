@@ -115,7 +115,7 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
     {
         // Arrange
         await PostgresSchema.ApplyAsync(DataSource, Token);
-        await InsertGenesisAsync();
+        await InsertOneEventAsync();
 
         // Act
         var refusal = await Record.ExceptionAsync(() => ExecuteAsync(statement));
@@ -125,16 +125,16 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
     }
 
     [PostgresFact]
-    public async Task AuditEvent_SuppliedChainPosition_IsRefused()
+    public async Task AuditEvent_SuppliedWritePosition_IsRefused()
     {
-        // Arrange — step 7 rests on the database allocating chain_position, so pin that it refuses one.
+        // Arrange — the database allocates write_position, so pin that it refuses a supplied one.
         await PostgresSchema.ApplyAsync(DataSource, Token);
 
         // Act
         var refusal = await Record.ExceptionAsync(() => ExecuteAsync(
             """
-            INSERT INTO audit_event (chain_position, call_id, sequence, kind, occurred_at, previous_hash, hash)
-            VALUES (1, 'C1', 1, 'call.started', now(), repeat('0', 64), repeat('a', 64))
+            INSERT INTO audit_event (write_position, call_id, sequence, kind, occurred_at)
+            VALUES (1, 'C1', 1, 'call.started', now())
             """));
 
         // Assert
@@ -142,17 +142,17 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
     }
 
     [PostgresFact]
-    public async Task AuditEvent_SecondRowOnTheSamePreviousHash_IsRefused()
+    public async Task AuditEvent_SecondRowOnTheSameCallAndSequence_IsRefused()
     {
-        // Arrange — one link may have one successor, or the chain forks.
+        // Arrange — the caller allocates the sequence, so the table is what catches a duplicate.
         await PostgresSchema.ApplyAsync(DataSource, Token);
-        await InsertGenesisAsync();
+        await InsertOneEventAsync();
 
         // Act
         var refusal = await Record.ExceptionAsync(() => ExecuteAsync(
             """
-            INSERT INTO audit_event (call_id, sequence, kind, occurred_at, previous_hash, hash)
-            VALUES ('C1', 2, 'call.ended', now(), repeat('0', 64), repeat('b', 64))
+            INSERT INTO audit_event (call_id, sequence, kind, occurred_at)
+            VALUES ('C1', 1, 'call.ended', now())
             """));
 
         // Assert
@@ -163,12 +163,12 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
     public async Task AuditEvent_SessionReplicationRoleIsReplica_BypassesEveryTrigger()
     {
         // Arrange — session_replication_role bypasses all three triggers in one statement with no
-        // DDL, which is why the triggers are a guard rail and AuditChain.Verify is a defence.
+        // DDL. Nothing detects that edit; see the fourth design amendment in docs/BUILD.md.
         await PostgresSchema.ApplyAsync(DataSource, Token);
         await ExecuteAsync(
             """
-            INSERT INTO audit_event (call_id, sequence, kind, occurred_at, previous_hash, hash)
-            VALUES ('C1', 0, 'call.started', now(), repeat('0', 64), repeat('a', 64))
+            INSERT INTO audit_event (call_id, sequence, kind, occurred_at)
+            VALUES ('C1', 0, 'call.started', now())
             """);
 
         // Act
@@ -199,10 +199,10 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
         Assert.Equal("23505", Assert.IsType<PostgresException>(refusal).SqlState);
     }
 
-    private Task InsertGenesisAsync() => ExecuteAsync(
+    private Task InsertOneEventAsync() => ExecuteAsync(
         """
-        INSERT INTO audit_event (call_id, sequence, kind, occurred_at, previous_hash, hash)
-        VALUES ('C1', 1, 'call.started', now(), repeat('0', 64), repeat('a', 64))
+        INSERT INTO audit_event (call_id, sequence, kind, occurred_at)
+        VALUES ('C1', 1, 'call.started', now())
         """);
 
     /// <summary>Opens a pool that logs in as an ordinary member of <c>agentcore_writer</c>.</summary>

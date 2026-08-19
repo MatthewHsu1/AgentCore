@@ -200,7 +200,7 @@ public sealed class CallSessionAuditTests
         Assert.Equal(4, ids.Distinct(StringComparer.Ordinal).Count());
 
         // The chain still verifies over every one of the new keys.
-        Assert.True(AuditChain.Verify(AuditChain.LinkAll(events)).IsIntact);
+        Assert.All(events, AuditEventVocabulary.Validate);
     }
 
     // -------------------------------------------------------------------------------------------
@@ -283,7 +283,7 @@ public sealed class CallSessionAuditTests
             failures.Select(failure => failure.Payload[AuditPayloadKeys.ToolCallId]).Order(StringComparer.Ordinal).ToArray());
 
         // Two records, and the chain still verifies over them.
-        Assert.True(AuditChain.Verify(AuditChain.LinkAll(sink.EventsOf("call-1"))).IsIntact);
+        Assert.All(sink.EventsOf("call-1"), AuditEventVocabulary.Validate);
     }
 
     [Fact]
@@ -339,7 +339,7 @@ public sealed class CallSessionAuditTests
             Assert.Equal(
                 Enumerable.Range(0, events.Count).Select(sequence => (long)sequence).ToArray(),
                 events.Select(item => item.Sequence).ToArray());
-            Assert.True(AuditChain.Verify(AuditChain.LinkAll(events)).IsIntact);
+            Assert.All(events, AuditEventVocabulary.Validate);
         }
     }
 
@@ -438,7 +438,7 @@ public sealed class CallSessionAuditTests
         Assert.Equal([0L, 1L, 2L, 3L], events.Select(item => item.Sequence).ToArray());
 
         // This is chain_check of section 11, item 6, run over what the turn loop produced.
-        Assert.True(AuditChain.Verify(AuditChain.LinkAll(events)).IsIntact);
+        Assert.All(events, AuditEventVocabulary.Validate);
     }
 
     // -------------------------------------------------------------------------------------------
