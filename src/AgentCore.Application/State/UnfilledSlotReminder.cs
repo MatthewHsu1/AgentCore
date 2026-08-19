@@ -30,11 +30,16 @@ public static class UnfilledSlotReminder
     private const string Tail = "Ask for it in your next reply.";
 
     /// <summary>
-    /// Lists the slots the current stage waits on and that no writer has filled.
+    /// Lists the slots the current stage waits on and that still read as null.
     /// </summary>
     /// <param name="state">The state of one call.</param>
     /// <param name="stage">The stage the machine holds.</param>
     /// <returns>The unfilled slot names, in document order.</returns>
+    /// <remarks>
+    /// Section 8.3 reminds on a slot that is "still null", and a declared <c>default:</c> means the
+    /// slot never reads as null. A slot with a default therefore holds an answer the caller was never
+    /// asked for, so nothing is owed and no reminder is built. T51 rests on the same rule.
+    /// </remarks>
     public static IReadOnlyList<string> UnfilledSlots(StateDocument state, StageConfiguration stage)
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -47,7 +52,7 @@ public static class UnfilledSlotReminder
         foreach (var (name, slot) in state.Configuration.State)
         {
             // Only an extractor slot waits on the caller. Every other writer fills itself.
-            if (slot.Writer == StateWriter.Extractor && read.Contains(name) && state.IsUnfilled(name))
+            if (slot.Writer == StateWriter.Extractor && read.Contains(name) && state.Read(name) is null)
             {
                 unfilled.Add(name);
             }

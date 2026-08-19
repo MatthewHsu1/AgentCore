@@ -19,6 +19,7 @@ public sealed class UnfilledSlotReminderTests
           machineModel:      { type: string,  writer: extractor, description: the machine model }
           serialNumber:      { type: string,  writer: extractor, description: the serial number }
           callerSaidGoodbye: { type: boolean, default: false, writer: extractor }
+          postcode:          { type: string,  writer: extractor }
           orderStatus:       { type: string,  writer: tool, from: lookup_order.status }
         tools:
           - { id: lookup_order, kind: builtin, uses: orders.read }
@@ -141,7 +142,7 @@ public sealed class UnfilledSlotReminderTests
     {
         var yaml = Yaml.Replace(
             "- { \"!!\": [ { var: serialNumber } ] }",
-            "- { \"!\": { var: callerSaidGoodbye } }",
+            "- { \"!!\": [ { var: postcode } ] }",
             StringComparison.Ordinal);
         var document = ConfigurationLoader.LoadYaml(yaml);
         StateDocument state = new(document);
@@ -149,6 +150,58 @@ public sealed class UnfilledSlotReminderTests
 
         var reminder = UnfilledSlotReminder.Build(state, document.Policy!.Stages[0]);
 
-        Assert.Contains("callerSaidGoodbye.", reminder, StringComparison.Ordinal);
+        Assert.Contains("postcode.", reminder, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ASlotWithADeclaredDefault_IsNeverUnfilled()
+    {
+        // Section 8.3 reminds on a slot that is "still null". A declared default means the slot
+        // reads as that default and never as null, so the caller has nothing left to supply. T51
+        // rests on the same rule: a missed extraction and an unanswered question both leave null.
+        var yaml = Yaml.Replace(
+            "- { \"!!\": [ { var: serialNumber } ] }",
+            "- { \"!\": { var: callerSaidGoodbye } }",
+            StringComparison.Ordinal);
+        var document = ConfigurationLoader.LoadYaml(yaml);
+        StateDocument state = new(document);
+        state.TryWrite("machineModel", JsonValue.Create("F85"));
+
+        Assert.DoesNotContain("callerSaidGoodbye", UnfilledSlotReminder.UnfilledSlots(state, document.Policy!.Stages[0]));
+        Assert.Null(UnfilledSlotReminder.Build(state, document.Policy!.Stages[0]));
+    }
+
+    [Fact]
+    public void AnInferredFlagWithADefault_NeverReachesTheCaller()
+    {
+        // The shape config/local.yaml ships: one boolean the extractor infers from the turn, read by
+        // the exit guard of the only talking stage. Before this rule the agent was told to ask the
+        // caller for "callerSaidGoodbye", and it did.
+        var yaml =
+            """
+            apiVersion: agentcore/v1
+            name: local-shape
+            state:
+              callerSaidGoodbye: { type: boolean, default: false, writer: extractor }
+            guards:
+              saidGoodbye: { var: callerSaidGoodbye }
+            agents:
+              items:
+                - { id: helper }
+                - { id: closer }
+            policy:
+              initial: talk
+              stages:
+                - id: talk
+                  agent: helper
+                  to: [ { stage: close, when: saidGoodbye } ]
+                - id: close
+                  agent: closer
+                  terminal: true
+            """;
+        var document = ConfigurationLoader.LoadYaml(yaml);
+        StateDocument state = new(document);
+
+        Assert.Null(UnfilledSlotReminder.Build(state, document.Policy!.Stages[0]));
     }
 }

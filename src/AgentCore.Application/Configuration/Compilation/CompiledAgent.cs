@@ -1,6 +1,7 @@
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Policy;
+using AgentCore.Application.Runtime;
 using Microsoft.Agents.AI;
 
 namespace AgentCore.Application.Configuration.Compilation;
@@ -34,17 +35,20 @@ public sealed class CompiledAgent
         Dictionary<string, AIAgent> byAgentId,
         Dictionary<string, string> agentIdByStage,
         IReadOnlySet<string>? spokenBy,
+        AgentCoreChatHistoryProvider history,
         Func<AIAgent, AIAgent> turnLayers)
     {
         Configuration = configuration;
         Shape = shape;
         Agent = entry;
         SpokenBy = spokenBy;
+        History = history;
         _byAgentId = byAgentId;
         _agentIdByStage = agentIdByStage;
 
         TurnAgent = turnLayers(entry);
         _turnByAgentId = new Dictionary<string, AIAgent>(StringComparer.Ordinal);
+        
         foreach (var (id, agent) in byAgentId)
         {
             _turnByAgentId[id] = turnLayers(agent);
@@ -79,6 +83,15 @@ public sealed class CompiledAgent
     /// may legitimately answer last.
     /// </remarks>
     internal IReadOnlySet<string>? SpokenBy { get; }
+
+    /// <summary>Gets store 1 of every call this agent answers.</summary>
+    /// <remarks>
+    /// One instance is shared by every call under R7, and it holds nothing about any of them: the
+    /// words of a call live in that call's <see cref="AgentSession"/>. <c>CallSession</c> hands it to
+    /// each run so the framework serves the history from it, and writes the finished turn to it
+    /// itself.
+    /// </remarks>
+    internal AgentCoreChatHistoryProvider History { get; }
 
     /// <summary>Gets the agent a turn runs, with the turn-disposition layers on it.</summary>
     /// <remarks>

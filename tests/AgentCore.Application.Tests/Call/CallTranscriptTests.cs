@@ -49,30 +49,65 @@ public sealed class CallTranscriptTests
         _ = transcript.Append([User("order 41?"), reply]);
 
         // Act
-        var row = transcript.TruncateLastReply("it ships");
+        var rows = transcript.TruncateLastReply("it ships");
 
         // Assert
-        Assert.NotNull(row);
+        var row = Assert.Single(rows);
         Assert.Equal("it ships", row.Content.Text);
         Assert.Equal(7, row.Content.Contents.OfType<UsageContent>().Single().Details.OutputTokenCount);
     }
 
     [Fact]
-    public void TruncateLastReply_ThisTurnSpokeNothing_ReturnsNull()
+    public void TruncateLastReply_TheCallSpokeNothing_RewritesNoRow()
     {
         // Arrange
         var transcript = new CallTranscript { CallId = "call-1" };
         _ = transcript.Append([User("hello")]);
 
         // Act
-        var row = transcript.TruncateLastReply("nothing was said");
+        var rows = transcript.TruncateLastReply("nothing was said");
 
         // Assert
-        Assert.Null(row);
+        Assert.Empty(rows);
     }
 
+    /// <summary>
+    /// A model routinely writes a line and puts the tool call it announces on the same message. The
+    /// caller heard as much of the turn as the vendor played and nothing else, so the announcement
+    /// must not survive the cut as words the caller is recorded as having heard.
+    /// </summary>
     [Fact]
-    public void BeginTurn_NextTurnOpens_ClosesThePreviousReplyToACut()
+    public void TruncateLastReply_ProseBesideAToolCall_KeepsTheCallAndDropsTheWords()
+    {
+        // Arrange
+        var transcript = new CallTranscript { CallId = "call-1" };
+        var announced = new ChatMessage(
+            ChatRole.Assistant,
+            [new TextContent("Let me check that for you"), new FunctionCallContent("call-1", "lookup")]);
+        _ = transcript.Append(
+            [
+                User("how much?"),
+                announced,
+                new ChatMessage(ChatRole.Tool, [new FunctionResultContent("call-1", "50")]),
+                Assistant("the price is fifty"),
+            ]);
+
+        // Act
+        var rows = transcript.TruncateLastReply("the price");
+
+        // Assert
+        Assert.Equal([1, 3], rows.Select(row => row.Ordinal));
+        Assert.Equal([string.Empty, "the price"], rows.Select(row => row.Content.Text));
+        Assert.Single(rows[0].Content.Contents.OfType<FunctionCallContent>());
+    }
+
+    /// <summary>
+    /// The held prompt of item 6a opens turn 1 while the vendor is still speaking turn 0, so the
+    /// reply a barge-in cuts is the one before the turn now open. Whether that turn may still be
+    /// corrected is <c>CallSession</c>'s decision, and this class does not take it away.
+    /// </summary>
+    [Fact]
+    public void BeginTurn_NextTurnOpens_LeavesThePreviousReplyOpenToACut()
     {
         // Arrange
         var transcript = new CallTranscript { CallId = "call-1" };
@@ -83,8 +118,9 @@ public sealed class CallTranscriptTests
         transcript.BeginTurn(1);
 
         // Assert
-        Assert.Null(transcript.LastAssistantOrdinal);
-        Assert.Null(transcript.TruncateLastReply("hi"));
+        Assert.Equal(1, transcript.LastAssistantOrdinal);
+        var row = Assert.Single(transcript.TruncateLastReply("hi"));
+        Assert.Equal(0, row.TurnIndex);
     }
 
     [Fact]

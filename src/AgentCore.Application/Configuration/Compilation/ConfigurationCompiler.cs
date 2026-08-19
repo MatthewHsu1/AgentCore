@@ -152,6 +152,7 @@ public static class ConfigurationCompiler
             agents,
             stages,
             spokenBy,
+            new AgentCoreChatHistoryProvider(context.MessageStore),
             inner => WithTurnDisposition(inner, configuration, context.Moderation, spokenBy));
     }
 
@@ -296,17 +297,21 @@ public static class ConfigurationCompiler
             path.Add(id);
             var built = new ChatClientAgent(
                 WithToolFailureAuditing(context.ChatClients.GetChatClient(item.Model ?? section.Defaults?.Model)),
-                AgentInstructions.Compose(section.Defaults, item),
-                item.Id,
-                description: null,
-                BuildTools(item, tools, context, pointer, Resolve));
+                new ChatClientAgentOptions
+                {
+                    Name = item.Id,
+                    ChatOptions = new ChatOptions
+                    {
+                        Instructions = AgentInstructions.Compose(section.Defaults, item),
+                        Tools = BuildTools(item, tools, context, pointer, Resolve),
+                    },
+
+                    // The provider is deliberately NOT set here. CallSession supplies it per run
+                    // instead, and this flag is what lets it: see CallSession.ConversationOptions.
+                    ThrowOnChatHistoryProviderConflict = false,
+                });
             path.RemoveAt(path.Count - 1);
 
-            // Every agent this compiler ever builds is built here and nowhere else — the dictionary
-            // above is the only cache, row 2's stage lookup and rows 3/4's graphs all read the same
-            // built instance back out of it. Wrapping here, once, before the instance is cached, is
-            // therefore what makes "instrumented exactly once" true: a second Resolve of the same id
-            // returns the already-wrapped agent at the top of this function and never reaches this line.
             var instrumented = new AIAgentBuilder(built)
                 .UseOpenTelemetry(configure: static agent => agent.EnableSensitiveData = false)
                 .Build();

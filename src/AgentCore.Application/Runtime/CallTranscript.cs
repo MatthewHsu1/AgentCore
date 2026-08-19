@@ -12,9 +12,9 @@ namespace AgentCore.Application.Runtime;
 /// store.
 /// </para>
 /// <para>
-/// <b>It is not safe for two callers at once.</b> The provider's per-call gate is what serialises
-/// it, and that gate is what keeps two appends off one ordinal and keeps a barge-in from rewriting
-/// a reply the caller fully heard.
+/// <b>It is not safe for two callers at once.</b> The provider's per-call lock is what serialises
+/// it, and that lock is what keeps two appends off one ordinal when a barge-in lands on one thread
+/// while a turn is still finishing on another.
 /// </para>
 /// <para>
 /// It is the value the provider keeps in the session's state bag, so every member here has to
@@ -32,24 +32,21 @@ internal sealed class CallTranscript
     /// <summary>Gets or sets the next free ordinal of the call.</summary>
     public int NextOrdinal { get; set; }
 
-    /// <summary>Gets or sets the reply a barge-in would cut, or null when this turn has spoken none yet.</summary>
+    /// <summary>Gets or sets the reply a barge-in would cut, or null when the call has spoken none.</summary>
+    /// <remarks>
+    /// It survives the turn that produced it. The vendor paces the audio, so a held prompt starts
+    /// the next turn while the caller is still hearing the last one, and the reply a barge-in cuts is
+    /// then the previous turn's. Whether that turn may still be corrected is
+    /// <see cref="CallSession"/>'s decision, and this class does not second-guess it.
+    /// </remarks>
     public int? LastAssistantOrdinal { get; set; }
 
     /// <summary>Gets the live history of the call, oldest first.</summary>
     public List<StoredMessage> Messages { get; } = [];
 
-    /// <summary>Opens a turn, and closes the previous turn's reply to a cut.</summary>
+    /// <summary>Opens a turn, so the rows it appends carry its index.</summary>
     /// <param name="turnIndex">The zero-based index of the turn about to run.</param>
-    /// <remarks>
-    /// A barge-in that finds no reply for the turn now running must do nothing and let the append
-    /// record the already-cut text. It must never reach back a turn and replace a sentence the
-    /// caller heard in full.
-    /// </remarks>
-    public void BeginTurn(int turnIndex)
-    {
-        TurnIndex = turnIndex;
-        LastAssistantOrdinal = null;
-    }
+    public void BeginTurn(int turnIndex) => TurnIndex = turnIndex;
 
     /// <summary>Reads the whole call, oldest message first.</summary>
     public IReadOnlyList<ChatMessage> Read() => [.. Messages.Select(stored => stored.Message)];
@@ -78,33 +75,57 @@ internal sealed class CallTranscript
         return rows;
     }
 
-    /// <summary>Replaces this turn's reply with the words the caller actually heard.</summary>
+    /// <summary>Cuts the turn the caller was hearing down to the words the caller actually heard.</summary>
     /// <param name="heard">The text the caller heard, as the vendor reported it. Nothing is estimated.</param>
-    /// <returns>The row to rewrite, or <see langword="null"/> when this turn has no reply to cut.</returns>
+    /// <returns>The rows to rewrite, oldest first, or empty when the call has no reply to cut.</returns>
     /// <remarks>
-    /// Everything the message carried besides its words is kept. A reply also carries the tokens it
-    /// cost, and rebuilding it from the heard text alone would drop them.
+    /// <para>
+    /// <b>Every word of the turn goes, not only the last one.</b> A model routinely writes a line and
+    /// puts the tool call it announces on the same message — "Let me check that for you", then the
+    /// call — and a graph row writes one reply for each node. The caller heard as much of the turn as
+    /// the vendor played, and nothing else, so the prose of every earlier message is dropped and the
+    /// heard text lands once, on the reply the cut fell in.
+    /// </para>
+    /// <para>
+    /// Nothing but the words changes. A row keeps its tool content, so a side effect that ran stays
+    /// visible to the next turn, and a reply keeps the tokens it cost. No row is removed, because an
+    /// ordinal is permanent: a turn the caller cut before it spoke leaves a reply row holding nothing.
+    /// </para>
     /// </remarks>
-    public CallMessage? TruncateLastReply(string heard)
+    public IReadOnlyList<CallMessage> TruncateLastReply(string heard)
     {
         ArgumentNullException.ThrowIfNull(heard);
 
-        if (LastAssistantOrdinal is not int ordinal)
+        if (LastAssistantOrdinal is not int ordinal
+            || Messages.Find(message => message.Ordinal == ordinal) is not { } spoken)
         {
-            return null;
+            return [];
         }
 
-        var stored = Messages.Find(message => message.Ordinal == ordinal);
-        if (stored is null)
+        List<CallMessage> rows = [];
+        foreach (var stored in Messages)
         {
-            return null;
+            if (stored.TurnIndex != spoken.TurnIndex || stored.Message.Role != ChatRole.Assistant)
+            {
+                continue;
+            }
+
+            var isReply = stored.Ordinal == ordinal;
+            if (!isReply && !stored.Message.Contents.Any(content => content is TextContent))
+            {
+                continue;
+            }
+
+            List<AIContent> kept = [.. stored.Message.Contents.Where(content => content is not TextContent)];
+
+            var corrected = stored.Message.Clone();
+            corrected.Contents = isReply && heard.Length > 0 ? [new TextContent(heard), .. kept] : kept;
+            stored.Message = corrected;
+
+            rows.Add(new CallMessage(CallId, stored.Ordinal, stored.TurnIndex, corrected));
         }
 
-        var truncated = stored.Message.Clone();
-        truncated.Contents = [new TextContent(heard), .. stored.Message.Contents.Where(c => c is not TextContent)];
-        stored.Message = truncated;
-
-        return new CallMessage(CallId, ordinal, stored.TurnIndex, truncated);
+        return rows;
     }
 
     /// <summary>One message of the live history, with the ordinal its stored row carries.</summary>

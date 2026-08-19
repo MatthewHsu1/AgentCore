@@ -22,20 +22,28 @@ public sealed class AgentCompilationContext
         ChatClients = chatClients;
     }
 
-    /// <summary>Gets the seam that resolves a model reference.</summary>
+    /// <summary>
+    /// Gets the seam that resolves a model reference.
+    /// </summary>
     public IChatClientFactory ChatClients { get; }
 
-    /// <summary>Gets or sets the seam that builds a tool. An agent advertises no tool when this is null.</summary>
+    /// <summary>
+    /// Gets or sets the seam that builds a tool. An agent advertises no tool when this is null.
+    /// </summary>
     public IAgentToolFactory? Tools { get; init; }
 
-    /// <summary>Gets or sets the evaluator a guarded graph edge calls.</summary>
+    /// <summary>
+    /// Gets or sets the evaluator a guarded graph edge calls.
+    /// </summary>
     /// <remarks>
     /// A <c>graph:</c> with a guarded edge needs both this and <see cref="StateSnapshot"/>. A
     /// <c>policy:</c> takes its evaluator when the machine is built, once for each call.
     /// </remarks>
     public IGuardEvaluator? Guards { get; init; }
 
-    /// <summary>Gets or sets the moderator that reads what the caller said before the model runs.</summary>
+    /// <summary>
+    /// Gets or sets the moderator that reads what the caller said before the model runs.
+    /// </summary>
     /// <remarks>
     /// R3: the caller's words are moderated and a flagged turn is refused, so the check sits on the
     /// agent a turn runs rather than in the turn loop. A host that moderates
@@ -44,7 +52,19 @@ public sealed class AgentCompilationContext
     /// </remarks>
     public PromptModerator? Moderation { get; init; }
 
-    /// <summary>Gets or sets the source of the state a guarded graph edge reads.</summary>
+    /// <summary>
+    /// Gets or sets the backing store of store 1, or <see langword="null"/> for memory.
+    /// </summary>
+    /// <remarks>
+    /// One store serves every call, and the compiled <c>AgentCoreChatHistoryProvider</c> that writes
+    /// to it is a process singleton under R7. It stays internal because the port is internal: a host
+    /// binds a store through the composition root and never through this type.
+    /// </remarks>
+    internal ICallMessageStore? MessageStore { get; init; }
+
+    /// <summary>
+    /// Gets or sets the source of the state a guarded graph edge reads.
+    /// </summary>
     /// <remarks>
     /// The compiled graph is a process singleton under T44, so this source must not close over the
     /// state of one call. It answers the state of the call running on the current flow of execution.

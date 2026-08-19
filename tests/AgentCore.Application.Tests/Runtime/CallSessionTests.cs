@@ -57,6 +57,38 @@ public sealed class CallSessionTests
               terminal: true
         """;
 
+    private const string ReminderYaml =
+        """
+        apiVersion: agentcore/v1
+        name: reminder-loop
+        state:
+          machineModel: { type: string, writer: extractor, description: the machine model }
+          serialNumber: { type: string, writer: extractor, description: the serial number }
+        guards:
+          identified:
+            and:
+              - { "!!": [ { var: machineModel } ] }
+              - { "!!": [ { var: serialNumber } ] }
+        extractor:
+          model: { ref: fill }
+          when: after_reply
+        agents:
+          defaults:
+            model: { ref: reply }
+          items:
+            - { id: greeter, instructions: "greet the caller" }
+            - { id: closer,  instructions: "close the call" }
+        policy:
+          initial: greeting
+          stages:
+            - id: greeting
+              agent: greeter
+              to: [ { stage: close, when: identified } ]
+            - id: close
+              agent: closer
+              terminal: true
+        """;
+
     private const string TwoStagesYaml =
         """
         apiVersion: agentcore/v1
@@ -198,14 +230,14 @@ public sealed class CallSessionTests
     {
         using SequencedChatClient reply = new("hello there.");
         using SequencedChatClient fill = new(StayingNull);
-        var session = Build(PolicyYaml, reply, fill).Create();
+        var session = Build(ReminderYaml, reply, fill).Create();
 
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
-        // The stage waits on callerSaidGoodbye, and no writer has filled it yet.
+        // The stage waits on two slots the caller supplies, and no writer has filled either yet.
         var prompt = reply.LastUserText(0);
         Assert.Contains(UnfilledSlotReminder.OpenTag, prompt, StringComparison.Ordinal);
-        Assert.Contains("whether the caller said goodbye", prompt, StringComparison.Ordinal);
+        Assert.Contains("the machine model and the serial number", prompt, StringComparison.Ordinal);
         Assert.EndsWith("hi", prompt, StringComparison.Ordinal);
 
         // The reminder rides one request. A stale reminder never repeats in a later turn.
@@ -213,18 +245,37 @@ public sealed class CallSessionTests
     }
 
     [Fact]
-    public async Task TheReminder_StopsOnceAWriterFillsTheSlot()
+    public async Task TheReminder_DropsASlotOnceAWriterFillsIt()
     {
         using SequencedChatClient reply = new("hello there.", "still here.");
-        using SequencedChatClient fill = new("""{ "callerSaidGoodbye": false }""", StayingNull);
-        var session = Build(PolicyYaml, reply, fill).Create();
+        using SequencedChatClient fill = new("""{ "machineModel": "F85" }""", StayingNull);
+        var session = Build(ReminderYaml, reply, fill).Create();
 
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
         await session.RunTurnAsync("still there?", TestContext.Current.CancellationToken);
 
-        // Unfilled and filled-false are different states, and only the first one asks a question.
-        Assert.Contains(UnfilledSlotReminder.OpenTag, reply.LastUserText(0), StringComparison.Ordinal);
-        Assert.DoesNotContain(UnfilledSlotReminder.OpenTag, reply.LastUserText(1), StringComparison.Ordinal);
+        // Turn 2 still waits on the serial number, so the reminder survives and names only that one.
+        Assert.Contains("the machine model and the serial number", reply.LastUserText(0), StringComparison.Ordinal);
+        Assert.Contains(UnfilledSlotReminder.OpenTag, reply.LastUserText(1), StringComparison.Ordinal);
+        Assert.Contains("the serial number.", reply.LastUserText(1), StringComparison.Ordinal);
+        Assert.DoesNotContain("the machine model", reply.LastUserText(1), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheReminder_NeverAsksTheCallerForAnInferredFlag()
+    {
+        // config/local.yaml ships this shape: one boolean the extractor infers from the turn, read by
+        // the exit guard of the talking stage, carrying a default. Section 8.3 reminds on a slot that
+        // is "still null", and a default is never null, so nothing is owed and the caller is not asked.
+        using SequencedChatClient reply = new("hello there.");
+        using SequencedChatClient fill = new(StayingNull);
+        var session = Build(PolicyYaml, reply, fill).Create();
+
+        await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+
+        var prompt = reply.LastUserText(0);
+        Assert.DoesNotContain(UnfilledSlotReminder.OpenTag, prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("callerSaidGoodbye", prompt, StringComparison.Ordinal);
     }
 
     // -------------------------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Tests.Fakes;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
@@ -8,20 +9,20 @@ using Xunit;
 namespace AgentCore.Application.Tests.Call;
 
 /// <summary>
-/// Pins what the provider adds to <see cref="CallTranscript"/>: the gate, the writes, and the rule
-/// that a store failure never reaches the turn.
+/// Pins what the provider adds to <see cref="CallTranscript"/>: the lock, the write chain, and the
+/// rule that a store failure never reaches the turn.
 /// </summary>
 public sealed class AgentCoreChatHistoryProviderTests
 {
     private const string CallId = "call-1";
 
     [Fact]
-    public async Task ProvideChatHistory_AfterStore_ReturnsMessagesInOrder()
+    public async Task ProvideChatHistory_AfterAppend_ReturnsMessagesInOrder()
     {
         // Arrange
         var (provider, _, session) = NewCall();
-        await StoreTurnAsync(provider, session, turnIndex: 0, "hello", "hi there");
-        await StoreTurnAsync(provider, session, turnIndex: 1, "order 41?", "it ships Friday");
+        AppendTurn(provider, session, turnIndex: 0, "hello", "hi there");
+        AppendTurn(provider, session, turnIndex: 1, "order 41?", "it ships Friday");
 
         // Act
         var history = await ProvideAsync(provider, session);
@@ -33,49 +34,82 @@ public sealed class AgentCoreChatHistoryProviderTests
     }
 
     [Fact]
-    public async Task StoreChatHistory_MultipleTurns_OrdinalsAreDenseAndUnique()
+    public async Task AppendTurn_MultipleTurns_OrdinalsAreDenseAndUnique()
     {
         // Arrange
         var (provider, store, session) = NewCall();
-        await StoreTurnAsync(provider, session, turnIndex: 0, "hello", "hi there");
+        AppendTurn(provider, session, turnIndex: 0, "hello", "hi there");
 
         // Act
-        await StoreTurnAsync(provider, session, turnIndex: 1, "order 41?", "it ships Friday");
+        AppendTurn(provider, session, turnIndex: 1, "order 41?", "it ships Friday");
 
         // Assert
+        await provider.DrainAsync(session);
         Assert.Equal([0, 1, 2, 3], store.Rows.Select(row => row.Ordinal));
         Assert.Equal([0, 0, 1, 1], store.Rows.Select(row => row.TurnIndex));
         Assert.All(store.Rows, row => Assert.Equal(CallId, row.CallId));
     }
 
     [Fact]
-    public async Task StoreChatHistory_RefusedTurn_IsStored()
+    public async Task AppendTurn_RefusedTurn_IsStored()
     {
         // Arrange
         var (provider, store, session) = NewCall();
 
         // Act
-        await StoreTurnAsync(provider, session, turnIndex: 0, "something flagged", "I can't help with that.");
+        AppendTurn(provider, session, turnIndex: 0, "something flagged", "I can't help with that.");
 
         // Assert
+        await provider.DrainAsync(session);
         Assert.Equal(
             ["something flagged", "I can't help with that."],
             store.Rows.Select(row => row.Content.Text));
     }
 
     [Fact]
-    public async Task StoreChatHistory_FailedTurn_IsStored()
+    public async Task AppendTurn_FailedTurn_IsStored()
     {
         // Arrange
         var (provider, store, session) = NewCall();
 
         // Act
-        await StoreTurnAsync(provider, session, turnIndex: 0, "check my order", "Sorry, I had trouble with that.");
+        AppendTurn(provider, session, turnIndex: 0, "check my order", "Sorry, I had trouble with that.");
 
         // Assert
+        await provider.DrainAsync(session);
         Assert.Equal(
             ["check my order", "Sorry, I had trouble with that."],
             store.Rows.Select(row => row.Content.Text));
+    }
+
+    /// <summary>
+    /// The framework offers to store a finished run, and this provider declines. Measured on
+    /// Microsoft.Agents.AI 1.17.0, that hook stores the request verbatim — reminder and all — and is
+    /// never called at all for a run the caller cut short, which is every barge-in. CallSession
+    /// writes the turn it shaped instead.
+    /// </summary>
+    [Fact]
+    public async Task StoreChatHistory_FinishedRun_StoresNothing()
+    {
+        // Arrange
+        var (provider, store, session) = NewCall();
+        provider.BeginTurn(session, CallId, turnIndex: 0);
+
+        // Act
+#pragma warning disable MAAI001 // The context constructors are the framework's own experimental surface.
+        await provider.InvokedAsync(
+            new ChatHistoryProvider.InvokedContext(
+                StubAgent.Instance,
+                session,
+                [new ChatMessage(ChatRole.User, "<system-reminder>ask for the id</system-reminder>\norder 41?")],
+                [new ChatMessage(ChatRole.Assistant, "it ships Friday")]),
+            TestContext.Current.CancellationToken);
+#pragma warning restore MAAI001
+
+        // Assert
+        await provider.DrainAsync(session);
+        Assert.Empty(store.Rows);
+        Assert.Empty(await ProvideAsync(provider, session));
     }
 
     [Fact]
@@ -83,12 +117,11 @@ public sealed class AgentCoreChatHistoryProviderTests
     {
         // Arrange
         var (provider, store, session) = NewCall();
-        await StoreTurnAsync(provider, session, turnIndex: 0, "hello", "hi there");
-        await StoreTurnAsync(provider, session, turnIndex: 1, "order 41?", "it ships Friday from the depot");
+        AppendTurn(provider, session, turnIndex: 0, "hello", "hi there");
+        AppendTurn(provider, session, turnIndex: 1, "order 41?", "it ships Friday from the depot");
 
         // Act
-        var cut = await provider.TruncateLastReplyAsync(
-            session, "it ships", TimeSpan.FromMilliseconds(420), TestContext.Current.CancellationToken);
+        var cut = provider.TruncateLastReply(session, "it ships", TimeSpan.FromMilliseconds(420));
 
         // Assert
         Assert.True(cut);
@@ -96,6 +129,7 @@ public sealed class AgentCoreChatHistoryProviderTests
         Assert.Equal(
             ["hello", "hi there", "order 41?", "it ships"],
             history.Select(message => message.Text));
+        await provider.DrainAsync(session);
         Assert.Equal([3], store.Rewrites.Select(rewrite => rewrite.Ordinal));
     }
 
@@ -104,11 +138,10 @@ public sealed class AgentCoreChatHistoryProviderTests
     {
         // Arrange
         var (provider, _, session) = NewCall();
-        await StoreTurnAsync(provider, session, turnIndex: 0, "order 41?", "it ships Friday from the depot");
+        AppendTurn(provider, session, turnIndex: 0, "order 41?", "it ships Friday from the depot");
 
         // Act
-        _ = await provider.TruncateLastReplyAsync(
-            session, "it ships Fri", TimeSpan.FromMilliseconds(300), TestContext.Current.CancellationToken);
+        _ = provider.TruncateLastReply(session, "it ships Fri", TimeSpan.FromMilliseconds(300));
 
         // Assert
         var history = await ProvideAsync(provider, session);
@@ -116,34 +149,95 @@ public sealed class AgentCoreChatHistoryProviderTests
     }
 
     /// <summary>
-    /// The barge-in lands while the turn it belongs to is still inside its own write. The gate is
-    /// what makes it wait: a rewrite that overtakes the insert it targets finds no row, changes
-    /// nothing, and leaves the record holding words the caller never heard.
+    /// The barge-in lands while the turn it belongs to is still inside its own write. The write
+    /// chain is what orders the two: a rewrite that overtook the insert it targets would find no row
+    /// and leave the record holding words the caller never heard.
     /// </summary>
     [Fact]
-    public async Task TruncateLastReply_RacingAppend_NeverRewritesPreviousTurn()
+    public async Task TruncateLastReply_WhileTheAppendIsStillWriting_ReachesTheStoreAfterIt()
     {
         // Arrange
         var store = new BlockingCallMessageStore();
         var provider = new AgentCoreChatHistoryProvider(store);
         var session = new StubSession();
-        await StoreTurnAsync(provider, session, turnIndex: 0, "hello", "hi there");
-        await provider.BeginTurnAsync(session, CallId, turnIndex: 1, TestContext.Current.CancellationToken);
+        AppendTurn(provider, session, turnIndex: 0, "hello", "hi there");
+        await provider.DrainAsync(session);
         store.BlockNextAppend();
-        var append = InvokeTurnAsync(provider, session, "order 41?", "it ships Friday from the depot");
+        AppendTurn(provider, session, turnIndex: 1, "order 41?", "it ships Friday from the depot");
         await store.Entered;
 
         // Act
-        var truncate = provider.TruncateLastReplyAsync(
-            session, "it ships", TimeSpan.FromMilliseconds(90), TestContext.Current.CancellationToken).AsTask();
+        var cut = provider.TruncateLastReply(session, "it ships", TimeSpan.FromMilliseconds(90));
         store.Release();
+        await provider.DrainAsync(session);
 
         // Assert
-        await append;
-        Assert.True(await truncate);
+        Assert.True(cut);
         Assert.Equal(
             ["hello", "hi there", "order 41?", "it ships"],
             store.Read(CallId).Select(row => row.Content.Text));
+    }
+
+    /// <summary>
+    /// The held prompt of item 6a: the vendor is still speaking turn 0 when turn 1 begins, so the
+    /// reply the caller was hearing belongs to the turn before the one now open. CallSession decides
+    /// that a barge-in reaches it; the provider must not refuse because the turn moved on.
+    /// </summary>
+    [Fact]
+    public async Task TruncateLastReply_AfterTheNextTurnOpened_CutsTheReplyTheCallerWasHearing()
+    {
+        // Arrange
+        var (provider, _, session) = NewCall();
+        AppendTurn(provider, session, turnIndex: 0, "hello", "hi there caller");
+        provider.BeginTurn(session, CallId, turnIndex: 1);
+
+        // Act
+        var cut = provider.TruncateLastReply(session, "hi there", TimeSpan.FromMilliseconds(300));
+
+        // Assert
+        Assert.True(cut);
+        var history = await ProvideAsync(provider, session);
+        Assert.Equal(["hello", "hi there"], history.Select(message => message.Text));
+    }
+
+    /// <summary>
+    /// A model routinely writes a line and puts the tool call it announces on the same message, and a
+    /// graph row writes one reply for each node. The caller heard as much of the turn as the vendor
+    /// played and nothing else, so no earlier word of that turn may survive the cut as text the
+    /// caller is recorded as having heard.
+    /// </summary>
+    [Fact]
+    public async Task TruncateLastReply_TurnWithProseBesideAToolCall_DropsEveryWordButTheHeardOnes()
+    {
+        // Arrange
+        var (provider, store, session) = NewCall();
+        provider.BeginTurn(session, CallId, turnIndex: 0);
+        ChatMessage announced = new(
+            ChatRole.Assistant,
+            [new TextContent("Let me check that for you"), new FunctionCallContent("call-1", "lookup")]);
+        provider.AppendTurn(
+            session,
+            [
+                new ChatMessage(ChatRole.User, "how much?"),
+                announced,
+                new ChatMessage(ChatRole.Tool, [new FunctionResultContent("call-1", "50")]),
+                new ChatMessage(ChatRole.Assistant, "the price is fifty"),
+            ]);
+
+        // Act
+        var cut = provider.TruncateLastReply(session, "the price", TimeSpan.FromMilliseconds(400));
+
+        // Assert
+        Assert.True(cut);
+        var history = await ProvideAsync(provider, session);
+        Assert.Equal(["how much?", string.Empty, string.Empty, "the price"], history.Select(m => m.Text));
+
+        // The side effect ran, so the pair stays. That is the rule the cut must not break.
+        Assert.Contains(history, m => m.Contents.OfType<FunctionCallContent>().Any());
+        Assert.Contains(history, m => m.Contents.OfType<FunctionResultContent>().Any());
+
+        await provider.DrainAsync(session);
+        Assert.Equal([1, 3], store.Rewrites.Select(rewrite => rewrite.Ordinal));
     }
 
     [Fact]
@@ -151,11 +245,10 @@ public sealed class AgentCoreChatHistoryProviderTests
     {
         // Arrange
         var (provider, store, session) = NewCall();
-        await provider.BeginTurnAsync(session, CallId, turnIndex: 0, TestContext.Current.CancellationToken);
+        provider.BeginTurn(session, CallId, turnIndex: 0);
 
         // Act
-        var cut = await provider.TruncateLastReplyAsync(
-            session, "nothing was said", TimeSpan.Zero, TestContext.Current.CancellationToken);
+        var cut = provider.TruncateLastReply(session, "nothing was said", TimeSpan.Zero);
 
         // Assert
         Assert.False(cut);
@@ -164,18 +257,23 @@ public sealed class AgentCoreChatHistoryProviderTests
     }
 
     [Fact]
-    public async Task StoreChatHistory_ConcurrentAppends_LosesNoMessage()
+    public async Task AppendTurn_ConcurrentAppends_LosesNoMessage()
     {
         // Arrange
         var (provider, store, session) = NewCall();
-        await provider.BeginTurnAsync(session, CallId, turnIndex: 0, TestContext.Current.CancellationToken);
+        provider.BeginTurn(session, CallId, turnIndex: 0);
         var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var turns = Enumerable.Range(0, 20)
             .Select(index => Task.Run(
                 async () =>
                 {
                     await start.Task;
-                    await InvokeTurnAsync(provider, session, $"said {index}", $"replied {index}");
+                    provider.AppendTurn(
+                        session,
+                        [
+                            new ChatMessage(ChatRole.User, $"said {index}"),
+                            new ChatMessage(ChatRole.Assistant, $"replied {index}"),
+                        ]);
                 },
                 TestContext.Current.CancellationToken))
             .ToArray();
@@ -185,6 +283,7 @@ public sealed class AgentCoreChatHistoryProviderTests
         await Task.WhenAll(turns);
 
         // Assert
+        await provider.DrainAsync(session);
         Assert.Equal(40, store.Rows.Count);
         Assert.Equal(Enumerable.Range(0, 40), store.Rows.Select(row => row.Ordinal).Order());
     }
@@ -196,10 +295,10 @@ public sealed class AgentCoreChatHistoryProviderTests
         var provider = new AgentCoreChatHistoryProvider(new RecordingCallMessageStore());
         var first = new StubSession();
         var second = new StubSession();
-        await StoreTurnAsync(provider, first, turnIndex: 0, "a said", "a heard", "call-a");
+        AppendTurn(provider, first, turnIndex: 0, "a said", "a heard", "call-a");
 
         // Act
-        await StoreTurnAsync(provider, second, turnIndex: 0, "b said", "b heard", "call-b");
+        AppendTurn(provider, second, turnIndex: 0, "b said", "b heard", "call-b");
 
         // Assert
         Assert.Equal(["a said", "a heard"], (await ProvideAsync(provider, first)).Select(message => message.Text));
@@ -207,36 +306,18 @@ public sealed class AgentCoreChatHistoryProviderTests
     }
 
     [Fact]
-    public async Task StoreChatHistory_BackingStoreThrows_DoesNotFailTheTurn()
+    public async Task AppendTurn_BackingStoreThrows_DoesNotFailTheTurn()
     {
         // Arrange
         var provider = new AgentCoreChatHistoryProvider(new ThrowingCallMessageStore());
         var session = new StubSession();
 
         // Act
-        await StoreTurnAsync(provider, session, turnIndex: 0, "hello", "hi there");
+        AppendTurn(provider, session, turnIndex: 0, "hello", "hi there");
 
         // Assert
+        await provider.DrainAsync(session);
         Assert.Equal(["hello", "hi there"], (await ProvideAsync(provider, session)).Select(message => message.Text));
-    }
-
-    [Fact]
-    public async Task AppendCallerFacingTurn_GraphTurn_StoresOnlyTheTwoMessagesGiven()
-    {
-        // Arrange
-        var (provider, store, session) = NewCall();
-        await provider.BeginTurnAsync(session, CallId, turnIndex: 0, TestContext.Current.CancellationToken);
-
-        // Act
-        await provider.AppendCallerFacingTurnAsync(
-            session,
-            new ChatMessage(ChatRole.User, "order 41?"),
-            new ChatMessage(ChatRole.Assistant, "it ships Friday"),
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal(["order 41?", "it ships Friday"], store.Rows.Select(row => row.Content.Text));
-        Assert.Equal([0, 1], store.Rows.Select(row => row.Ordinal));
     }
 
     [Fact]
@@ -246,13 +327,13 @@ public sealed class AgentCoreChatHistoryProviderTests
         var store = new InMemoryCallMessageStore();
         var provider = new AgentCoreChatHistoryProvider(store);
         var session = new StubSession();
-        await StoreTurnAsync(provider, session, turnIndex: 0, "order 41?", "it ships Friday from the depot");
+        AppendTurn(provider, session, turnIndex: 0, "order 41?", "it ships Friday from the depot");
 
         // Act
-        _ = await provider.TruncateLastReplyAsync(
-            session, "it ships", TimeSpan.FromMilliseconds(200), TestContext.Current.CancellationToken);
+        _ = provider.TruncateLastReply(session, "it ships", TimeSpan.FromMilliseconds(200));
 
         // Assert
+        await provider.DrainAsync(session);
         Assert.Equal(["order 41?", "it ships"], store.Read(CallId).Select(row => row.Content.Text));
     }
 
@@ -262,8 +343,8 @@ public sealed class AgentCoreChatHistoryProviderTests
         return (new AgentCoreChatHistoryProvider(store), store, new StubSession());
     }
 
-    /// <summary>Runs one turn's worth of provider calls: stamp the turn, then store what it produced.</summary>
-    private static async Task StoreTurnAsync(
+    /// <summary>Writes one turn the way <c>CallSession</c> does: name the turn, then append it.</summary>
+    private static void AppendTurn(
         AgentCoreChatHistoryProvider provider,
         AgentSession session,
         int turnIndex,
@@ -271,22 +352,10 @@ public sealed class AgentCoreChatHistoryProviderTests
         string replied,
         string callId = CallId)
     {
-        await provider.BeginTurnAsync(session, callId, turnIndex, TestContext.Current.CancellationToken);
-        await InvokeTurnAsync(provider, session, said, replied);
-    }
-
-    /// <summary>Hands the provider one finished run, the way the framework does.</summary>
-    private static async Task InvokeTurnAsync(
-        AgentCoreChatHistoryProvider provider, AgentSession session, string said, string replied)
-    {
-#pragma warning disable MAAI001 // The context constructors are the framework's own experimental surface.
-        var context = new ChatHistoryProvider.InvokedContext(
-            StubAgent.Instance,
+        provider.BeginTurn(session, callId, turnIndex);
+        provider.AppendTurn(
             session,
-            [new ChatMessage(ChatRole.User, said)],
-            [new ChatMessage(ChatRole.Assistant, replied)]);
-#pragma warning restore MAAI001
-        await provider.InvokedAsync(context, TestContext.Current.CancellationToken);
+            [new ChatMessage(ChatRole.User, said), new ChatMessage(ChatRole.Assistant, replied)]);
     }
 
     private static async Task<IReadOnlyList<ChatMessage>> ProvideAsync(
@@ -297,37 +366,6 @@ public sealed class AgentCoreChatHistoryProviderTests
 #pragma warning restore MAAI001
         var messages = await provider.InvokingAsync(context, TestContext.Current.CancellationToken);
         return [.. messages];
-    }
-
-    private sealed class RecordingCallMessageStore : ICallMessageStore
-    {
-        private readonly Lock _lock = new();
-
-        public List<CallMessage> Rows { get; } = [];
-
-        public List<CallMessage> Rewrites { get; } = [];
-
-        public ValueTask AppendAsync(
-            IReadOnlyList<CallMessage> messages, CancellationToken cancellationToken = default)
-        {
-            lock (_lock)
-            {
-                Rows.AddRange(messages);
-            }
-
-            return default;
-        }
-
-        public ValueTask RewriteAsync(
-            string callId, int ordinal, ChatMessage content, CancellationToken cancellationToken = default)
-        {
-            lock (_lock)
-            {
-                Rewrites.Add(new CallMessage(callId, ordinal, TurnIndex: -1, content));
-            }
-
-            return default;
-        }
     }
 
     /// <summary>
