@@ -593,7 +593,9 @@ public sealed class CallSessionTests
             updates.Add(update);
         }
 
-        Assert.Empty(updates);
+        // The host hears the fallback rather than nothing at all: R2 makes a quiet run an ordinary
+        // successful one, and the spoken line leaves the seam the same way any reply does.
+        Assert.Equal([CallSession.FallbackReply], updates.Select(update => update.Text));
         Assert.NotNull(session.LastTurn);
         Assert.Equal(CallSession.FallbackReply, session.LastTurn.ReplyText);
         Assert.Equal(CallSession.EmptyReplyReason, session.LastTurn.Failure);

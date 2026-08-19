@@ -2,6 +2,7 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Evaluation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tools;
@@ -28,6 +29,10 @@ internal static class CompilationStartup
     /// <param name="options">The options the host filled. It carries the chat client seam.</param>
     /// <param name="startup">The loaded document and the resolved secrets, as the chat client seam reads them.</param>
     /// <param name="tools">The chain step 4 built.</param>
+    /// <param name="evaluators">
+    /// The registry the moderator comes out of. R3 puts moderation in the chat pipeline of every
+    /// compiled agent, so it is bound here rather than on the session factory.
+    /// </param>
     /// <param name="loggers">The factory the guard evaluator takes its logger from.</param>
     /// <param name="cancellationToken">Cancels the chat client build.</param>
     /// <returns>The compiled graph, and the seams that made it.</returns>
@@ -52,6 +57,7 @@ internal static class CompilationStartup
         AgentCoreOptions options,
         AgentCoreStartup startup,
         CompositeAgentToolFactory tools,
+        EvaluatorRegistry evaluators,
         ILoggerFactory loggers,
         CancellationToken cancellationToken)
     {
@@ -71,6 +77,7 @@ internal static class CompilationStartup
             {
                 Tools = tools,
                 Guards = guards,
+                Moderation = PromptModerator.FromRegistry(evaluators),
                 StateSnapshot = CallStateScope.Snapshot,
             });
 

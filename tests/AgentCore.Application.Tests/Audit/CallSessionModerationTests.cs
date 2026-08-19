@@ -349,7 +349,14 @@ public sealed class CallSessionModerationTests
             chatClients.Route("fill", fill);
         }
 
-        var compiled = ConfigurationCompiler.Compile(document, new AgentCompilationContext(chatClients));
+        // R3 puts moderation in the chat pipeline of every compiled agent, so the moderator is
+        // bound at compile time and not on the session factory.
+        var compiled = ConfigurationCompiler.Compile(
+            document,
+            new AgentCompilationContext(chatClients)
+            {
+                Moderation = moderation is null ? null : new PromptModerator(moderation),
+            });
 
         return new CallSessionFactory(
             compiled,
@@ -357,7 +364,6 @@ public sealed class CallSessionModerationTests
             CallSessionFactory.CreateExtractor(compiled, chatClients),
             timeProvider: null,
             logger,
-            moderation is null ? null : new PromptModerator(moderation),
             CallObservers.Standard(auditSink, logger));
     }
 }

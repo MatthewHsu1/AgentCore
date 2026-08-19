@@ -504,6 +504,7 @@ eval-report.html
 
 # Harness-created agent worktrees. Never commit these.
 .claude/worktrees/
+CLAUDE.md
 
 docs/
 .superpowers/

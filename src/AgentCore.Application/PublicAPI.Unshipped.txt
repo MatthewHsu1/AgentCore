@@ -663,7 +663,7 @@ AgentCore.Application.Runtime.CallSession.Stage.get -> string!
 AgentCore.Application.Runtime.CallSession.State.get -> AgentCore.Application.State.StateDocument!
 AgentCore.Application.Runtime.CallSession.Transcript.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatMessage!>!
 AgentCore.Application.Runtime.CallSessionFactory
-AgentCore.Application.Runtime.CallSessionFactory.CallSessionFactory(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Configuration.Validation.IGuardEvaluator! guards, AgentCore.Application.State.StateExtractor? extractor = null, System.TimeProvider? timeProvider = null, Microsoft.Extensions.Logging.ILogger? logger = null, AgentCore.Application.Evaluation.PromptModerator? moderation = null, System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ICallObserver!>? observers = null) -> void
+AgentCore.Application.Runtime.CallSessionFactory.CallSessionFactory(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Configuration.Validation.IGuardEvaluator! guards, AgentCore.Application.State.StateExtractor? extractor = null, System.TimeProvider? timeProvider = null, Microsoft.Extensions.Logging.ILogger? logger = null, System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ICallObserver!>? observers = null) -> void
 AgentCore.Application.Runtime.CallSessionFactory.Create(string? callId = null) -> AgentCore.Application.Runtime.CallSession!
 AgentCore.Application.Runtime.CallStateScope
 AgentCore.Application.Runtime.ICallSessionFactory
@@ -1100,3 +1100,5 @@ virtual AgentCore.Application.Call.CallInput.PrintMembers(System.Text.StringBuil
 virtual AgentCore.Application.Tools.ToolBinding.Invoke(System.Text.Json.Nodes.JsonObject! arguments, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<object?>
 ~override AgentCore.Application.Providers.VendorSeam.Equals(object obj) -> bool
 ~override AgentCore.Application.Providers.VendorSeam.ToString() -> string
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Moderation.get -> AgentCore.Application.Evaluation.PromptModerator?
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Moderation.init -> void

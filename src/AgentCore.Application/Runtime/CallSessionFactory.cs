@@ -37,7 +37,6 @@ public sealed class CallSessionFactory : ICallSessionFactory
     private readonly TimeProvider _time;
     private readonly ICallObserver[] _observers;
     private readonly ILogger? _logger;
-    private readonly PromptModerator? _moderation;
 
     /// <summary>Creates the factory.</summary>
     /// <param name="compiled">The compiled agent. Every call shares it.</param>
@@ -55,12 +54,6 @@ public sealed class CallSessionFactory : ICallSessionFactory
     /// to, or <see langword="null"/> for a logger that writes nowhere. The library never throws for
     /// want of one.
     /// </param>
-    /// <param name="moderation">
-    /// The moderator that reads what the caller said before the model runs, or
-    /// <see langword="null"/> for a host that moderates nothing.
-    /// <see cref="PromptModerator.FromRegistry"/> builds it from the evaluator registry. It holds no
-    /// per-call state, so one instance serves every call.
-    /// </param>
     /// <param name="observers">
     /// The readings of a call, in the order the dispatcher offers each fact to them, or
     /// <see langword="null"/> for a host that wants none at all.
@@ -73,7 +66,6 @@ public sealed class CallSessionFactory : ICallSessionFactory
         StateExtractor? extractor = null,
         TimeProvider? timeProvider = null,
         ILogger? logger = null,
-        PromptModerator? moderation = null,
         IEnumerable<ICallObserver>? observers = null)
     {
         ArgumentNullException.ThrowIfNull(compiled);
@@ -84,7 +76,6 @@ public sealed class CallSessionFactory : ICallSessionFactory
         _extractor = extractor;
         _time = timeProvider ?? TimeProvider.System;
         _logger = logger;
-        _moderation = moderation;
 
         // Copied, not held: the list is the caller's, and a caller that keeps adding to it after this
         // must not change what a session already built. The order is the caller's too — see
@@ -120,6 +111,5 @@ public sealed class CallSessionFactory : ICallSessionFactory
             _time,
 
             // One dispatcher for each session, over the shared observers. See the remarks above.
-            new CallObserverDispatcher(_observers, _logger),
-            _moderation);
+            new CallObserverDispatcher(_observers, _logger));
 }

@@ -109,15 +109,15 @@ public static class AgentCoreServiceCollectionExtensions
         // Step 4: build the tool factory chain.
         var tools = ToolFactoryStartup.Build(options, startup, knowledge);
 
-        // Step 5: compile. The registry compiles once and every call shares the result.
-        var graph = await CompilationStartup
-            .CompileAsync(configuration, options, startup, tools, loggers, cancellationToken)
-            .ConfigureAwait(false);
-
-        // The evaluator registry is built before the session factory, because the moderator the turn
-        // loop reads comes out of it.
+        // The evaluator registry is built before the compile, because the moderator that guards each
+        // agent's chat pipeline comes out of it and is wired in at compile time.
         var evaluators = await EvaluationStartup
             .CreateRegistryAsync(configuration, options, cancellationToken)
+            .ConfigureAwait(false);
+
+        // Step 5: compile. The registry compiles once and every call shares the result.
+        var graph = await CompilationStartup
+            .CompileAsync(configuration, options, startup, tools, evaluators, loggers, cancellationToken)
             .ConfigureAwait(false);
 
         // Step 6: register. Everything above is shared and read-only for the life of the process.
@@ -134,7 +134,7 @@ public static class AgentCoreServiceCollectionExtensions
         services.AddSingleton<IGuardEvaluator>(graph.Guards);
 
         await CallSessionStartup
-            .RegisterAsync(services, configuration, options, graph, evaluators, loggers, cancellationToken)
+            .RegisterAsync(services, configuration, options, graph, loggers, cancellationToken)
             .ConfigureAwait(false);
 
         // The same clock CallSessionFactory already reads off options.TimeProvider, now resolvable

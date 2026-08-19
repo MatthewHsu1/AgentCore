@@ -23,7 +23,6 @@ internal static class CallSessionStartup
     /// <param name="configuration">The loaded document. It carries <c>providers.audit</c>.</param>
     /// <param name="options">The options the host filled. It carries the audit vendors, the clock, and any observer.</param>
     /// <param name="graph">The compiled graph and the seams step 5 made.</param>
-    /// <param name="evaluators">The registry the moderator comes out of.</param>
     /// <param name="loggers">The factory the session and the audit queue take their loggers from.</param>
     /// <param name="cancellationToken">Cancels the store open.</param>
     /// <remarks>
@@ -53,7 +52,6 @@ internal static class CallSessionStartup
         AgentCoreConfiguration configuration,
         AgentCoreOptions options,
         CompiledGraph graph,
-        EvaluatorRegistry evaluators,
         ILoggerFactory loggers,
         CancellationToken cancellationToken)
     {
@@ -83,7 +81,6 @@ internal static class CallSessionStartup
             CallSessionFactory.CreateExtractor(graph.Compiled, graph.ChatClients),
             options.TimeProvider,
             sessionLogger,
-            PromptModerator.FromRegistry(evaluators),
             CallObservers.Standard(auditSink, sessionLogger, options.Observers));
 
         services.AddSingleton<ICallSessionFactory>(sessions);

@@ -449,7 +449,6 @@ public sealed class TurnObservabilityTests
             CallSessionFactory.CreateExtractor(compiled, chatClients),
             timeProvider,
             logger,
-            moderation: null,
             CallObservers.Standard(sink, logger));
     }
 }

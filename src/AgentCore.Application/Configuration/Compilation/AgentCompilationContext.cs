@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Evaluation;
 using AgentCore.Application.Ports;
 
 namespace AgentCore.Application.Configuration.Compilation;
@@ -33,6 +34,15 @@ public sealed class AgentCompilationContext
     /// <c>policy:</c> takes its evaluator when the machine is built, once for each call.
     /// </remarks>
     public IGuardEvaluator? Guards { get; init; }
+
+    /// <summary>Gets or sets the moderator that reads what the caller said before the model runs.</summary>
+    /// <remarks>
+    /// R3: the caller's words are moderated and a flagged turn is refused, so the check sits on the
+    /// agent a turn runs rather than in the turn loop. A host that moderates
+    /// nothing leaves this null and every turn runs. The moderator holds no per-call state, so one
+    /// instance serves every call under T44.
+    /// </remarks>
+    public PromptModerator? Moderation { get; init; }
 
     /// <summary>Gets or sets the source of the state a guarded graph edge reads.</summary>
     /// <remarks>

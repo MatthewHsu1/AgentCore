@@ -25,19 +25,30 @@ public sealed class CompiledAgent
 {
     private readonly Dictionary<string, AIAgent> _byAgentId;
     private readonly Dictionary<string, string> _agentIdByStage;
+    private readonly Dictionary<string, AIAgent> _turnByAgentId;
 
     internal CompiledAgent(
         AgentCoreConfiguration configuration,
         CompiledAgentShape shape,
         AIAgent entry,
         Dictionary<string, AIAgent> byAgentId,
-        Dictionary<string, string> agentIdByStage)
+        Dictionary<string, string> agentIdByStage,
+        IReadOnlySet<string>? spokenBy,
+        Func<AIAgent, AIAgent> turnLayers)
     {
         Configuration = configuration;
         Shape = shape;
         Agent = entry;
+        SpokenBy = spokenBy;
         _byAgentId = byAgentId;
         _agentIdByStage = agentIdByStage;
+
+        TurnAgent = turnLayers(entry);
+        _turnByAgentId = new Dictionary<string, AIAgent>(StringComparer.Ordinal);
+        foreach (var (id, agent) in byAgentId)
+        {
+            _turnByAgentId[id] = turnLayers(agent);
+        }
     }
 
     /// <summary>Gets the document this agent was compiled from.</summary>
@@ -60,6 +71,24 @@ public sealed class CompiledAgent
     /// </remarks>
     public AIAgent Agent { get; }
 
+    /// <summary>Gets the agents whose reply the caller hears, or <see langword="null"/> for all of them.</summary>
+    /// <remarks>
+    /// A graph row runs several agents for one turn and the caller hears one of them. This names
+    /// which, so the streaming seam hands the host the answer and not the deliberation that produced
+    /// it. It is null on the rows that run one agent, and on the graph patterns where any participant
+    /// may legitimately answer last.
+    /// </remarks>
+    internal IReadOnlySet<string>? SpokenBy { get; }
+
+    /// <summary>Gets the agent a turn runs, with the turn-disposition layers on it.</summary>
+    /// <remarks>
+    /// <see cref="Agent"/> is the bare compiled artifact, and a host that consumes it reads whatever
+    /// the compile table promised — including the fault a graph that matched no edge raises. This one
+    /// is what <c>CallSession</c> runs: R1, R2 and R3 turn every audible turn into a successful run,
+    /// so the turn loop never branches on how a turn went.
+    /// </remarks>
+    internal AIAgent TurnAgent { get; }
+
     /// <summary>Gets every compiled agent, keyed by the <c>agents.items</c> id.</summary>
     public IReadOnlyDictionary<string, AIAgent> Agents => _byAgentId;
 
@@ -77,6 +106,23 @@ public sealed class CompiledAgent
         }
 
         return agentId.Length == 0 ? null : _byAgentId[agentId];
+    }
+
+    /// <summary>Gets the agent one stage names, with the turn-disposition layers on it.</summary>
+    /// <param name="stageId">The stage id.</param>
+    /// <returns>The agent, or <see langword="null"/> when the stage names none.</returns>
+    /// <exception cref="KeyNotFoundException">The stage is not declared.</exception>
+    /// <remarks>See <see cref="TurnAgent"/> for why a turn runs this one and not <see cref="ForStage"/>.</remarks>
+    internal AIAgent? TurnAgentForStage(string stageId)
+    {
+        ArgumentNullException.ThrowIfNull(stageId);
+
+        if (!_agentIdByStage.TryGetValue(stageId, out var agentId))
+        {
+            throw new KeyNotFoundException($"The stage '{stageId}' is not declared in policy.stages.");
+        }
+
+        return agentId.Length == 0 ? null : _turnByAgentId[agentId];
     }
 
     /// <summary>Builds one stage machine for one call.</summary>

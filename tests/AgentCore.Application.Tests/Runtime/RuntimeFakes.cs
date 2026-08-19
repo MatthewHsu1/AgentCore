@@ -588,3 +588,42 @@ internal sealed class RefusedRequestToolFactory : IAgentToolFactory
         }
     }
 }
+
+/// <summary>
+/// A model that throws instead of answering, on both run shapes.
+/// </summary>
+/// <remarks>
+/// R1 reaches the turn loop through a tool that failed four times, and that path needs a tool, a
+/// looping model, and four round trips to set up. The fault this client raises is the same fault as
+/// far as everything above the chat pipeline is concerned, so a test of the fallback layer says what
+/// it means in three lines.
+/// </remarks>
+internal sealed class ThrowingChatClient : IChatClient
+{
+    private readonly Exception _fault;
+
+    public ThrowingChatClient(Exception fault) => _fault = fault;
+
+    public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
+        CancellationToken cancellationToken = default)
+        => throw _fault;
+
+    public Task<ChatResponse> GetResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
+        CancellationToken cancellationToken = default)
+        => throw _fault;
+
+    public object? GetService(Type serviceType, object? serviceKey = null)
+    {
+        ArgumentNullException.ThrowIfNull(serviceType);
+        return serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
+    }
+
+    public void Dispose()
+    {
+        // Nothing to release.
+    }
+}

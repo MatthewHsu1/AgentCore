@@ -309,7 +309,6 @@ public sealed class LibraryOpenTelemetryTests
             CallSessionFactory.CreateExtractor(compiled, factory),
             timeProvider: null,
             logger: null,
-            moderation: null,
             CallObservers.Standard(new InMemoryAuditSink(), logger: null));
     }
 }

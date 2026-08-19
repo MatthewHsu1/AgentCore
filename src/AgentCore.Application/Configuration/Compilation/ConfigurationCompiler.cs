@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Evaluation;
 using AgentCore.Application.Runtime;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
@@ -154,7 +155,88 @@ public static class ConfigurationCompiler
             _ => (BuildExplicitGraph(configuration, agents, context), NoStages()),
         };
 
-        return new CompiledAgent(configuration, shape, entry, agents, stages);
+        // R1, R2 and R3 are rules about a TURN, and one turn is one run of one agent on every row of
+        // the compile table. The layers therefore go on the agent a turn runs and never on a graph
+        // node, which is one step inside a turn. CompiledAgent.Agent stays the bare compiled
+        // artifact, so a host that runs it itself still reads the fault section 8.2 asks it to raise.
+        var spokenBy = SpokenAuthors(configuration, shape);
+
+        return new CompiledAgent(
+            configuration,
+            shape,
+            entry,
+            agents,
+            stages,
+            spokenBy,
+            inner => WithTurnDisposition(inner, configuration, context.Moderation, spokenBy));
+    }
+
+    /// <summary>Names the agents whose reply the caller actually hears.</summary>
+    /// <param name="configuration">The loaded document.</param>
+    /// <param name="shape">The row this document compiles through.</param>
+    /// <returns>
+    /// The <c>agents.items</c> ids that answer the caller, or <see langword="null"/> when the last
+    /// thing the run produced is the answer.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// Rows 1 and 2 run one agent, so the run's own last message is the reply and no filter is
+    /// needed. A sequential graph answers from its last participant, and an explicit graph from its
+    /// <c>output: true</c> nodes.
+    /// </para>
+    /// <para>
+    /// The other three patterns name no answering agent. Concurrent aggregates every participant,
+    /// and handoff and group chat both end wherever the conversation took them, so on those rows any
+    /// participant may legitimately speak last.
+    /// </para>
+    /// </remarks>
+    private static HashSet<string>? SpokenAuthors(AgentCoreConfiguration configuration, CompiledAgentShape shape)
+    {
+        if (configuration.Graph is not { } graph)
+        {
+            return null;
+        }
+
+        if (shape is CompiledAgentShape.PatternGraph)
+        {
+            return graph is { Pattern: GraphPattern.Sequential, Agents.Count: > 0 }
+                ? new HashSet<string>(StringComparer.Ordinal) { graph.Agents[^1] }
+                : null;
+        }
+
+        HashSet<string> outputs = new(StringComparer.Ordinal);
+        foreach (var node in graph.Nodes)
+        {
+            if (node.Output && node.Agent is { } agentId)
+            {
+                outputs.Add(agentId);
+            }
+        }
+
+        return outputs.Count == 0 ? null : outputs;
+    }
+
+    /// <summary>Puts the two turn-disposition layers on one agent a turn runs.</summary>
+    /// <param name="agent">The compiled agent of one row, or of one <c>policy:</c> stage.</param>
+    /// <param name="configuration">The document. It names the fallback line and the refusal line.</param>
+    /// <param name="moderation">The endpoint seam, or <see langword="null"/> to moderate nothing.</param>
+    /// <param name="spokenBy">The agents whose reply the caller hears, or <see langword="null"/> for all.</param>
+    /// <returns>The agent the turn loop runs.</returns>
+    /// <remarks>
+    /// Moderation goes outside the fallback, so the verdict survives a run that then threw: the
+    /// fallback layer marks the run it answered, and moderation folds that mark into its own.
+    /// </remarks>
+    private static AIAgent WithTurnDisposition(
+        AIAgent agent,
+        AgentCoreConfiguration configuration,
+        PromptModerator? moderation,
+        IReadOnlySet<string>? spokenBy)
+    {
+        AIAgent layered = new FallbackAgent(agent, configuration.FallbackReply, spokenBy);
+
+        return moderation is null
+            ? layered
+            : new ModerationAgent(layered, moderation, configuration.RefusalReply, ModerationAgent.DefaultTimeout);
     }
 
     /// <summary>Builds one <c>ChatClientAgent</c> for each <c>agents.items</c> entry.</summary>

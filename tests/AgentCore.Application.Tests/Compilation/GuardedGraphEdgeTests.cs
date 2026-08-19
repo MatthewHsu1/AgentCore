@@ -219,7 +219,10 @@ public sealed class GuardedGraphEdgeTests
 
         harness.ReleaseEscalatedReply();
 
-        Assert.Equal("ROUTED", first);
+        // The delta arrives before the run finishes, which is what rule 13 asks. It is the OUTPUT
+        // node's word and not the start node's: the caller hears the answer, never the graph
+        // deliberating its way to one, on the streaming path exactly as on the buffered one.
+        Assert.Equal("ESCALATED", first);
     }
 
     [Fact]
