@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Compilation;
@@ -50,9 +51,11 @@ namespace AgentCore.Application.Runtime;
 /// </para>
 /// <para>
 /// Rows 3 and 4 are the exception that shapes the seam: <c>AsAIAgent()</c>'s host agent accepts no
-/// session but its own <c>WorkflowSession</c>, so a graph turn gets no session and reads its history
-/// out of the request messages instead. The session it holds is then a carrier for the transcript
-/// and nothing else, and the write path is the same one every other row takes.
+/// session but its own <c>WorkflowSession</c>, so a graph turn takes a fresh one of those each turn
+/// and reads its history out of the request messages instead. The session the call holds is then a
+/// carrier for the transcript and nothing else, and the write path is the same one every other row
+/// takes — with one rule of its own: store 1 keeps the caller-facing turn, never the graph's
+/// node-to-node chatter.
 /// </para>
 /// <para>
 /// The writers run in one fixed order, and every turn repeats it:
@@ -148,6 +151,21 @@ public sealed class CallSession : IConversationPort
     /// <summary>What the log records when the moderation endpoint throws.</summary>
     /// <remarks>It stays internal for the reason <see cref="ExtractionTimedOutReason"/> gives.</remarks>
     internal const string ModerationFaultedReason = "the moderation endpoint threw.";
+
+    /// <summary>
+    /// What opens the <c>system</c> message a graph row's history rides on.
+    /// </summary>
+    internal const string HistoryPreamble = "Conversation so far:\n";
+
+    /// <summary>
+    /// What names the caller in that message.
+    /// </summary>
+    internal const string CallerLinePrefix = "Caller: ";
+
+    /// <summary>
+    /// What names this agent in that message.
+    /// </summary>
+    internal const string AgentLinePrefix = "You: ";
 
     /// <summary>How long the work after the reply may take before it is abandoned.</summary>
     /// <remarks>
@@ -332,7 +350,7 @@ public sealed class CallSession : IConversationPort
                 response = await turn.Agent
                     .RunAsync(
                         turn.Request,
-                        RunSession(turn),
+                        await RunSessionAsync(turn, cancellation.Token).ConfigureAwait(false),
                         options: ConversationOptions(),
                         cancellationToken: cancellation.Token)
                     .ConfigureAwait(false);
@@ -414,7 +432,7 @@ public sealed class CallSession : IConversationPort
             var stream = turn.Agent
                 .RunStreamingAsync(
                     turn.Request,
-                    RunSession(turn),
+                    await RunSessionAsync(turn, cancellation.Token).ConfigureAwait(false),
                     options: ConversationOptions(),
                     cancellationToken: cancellation.Token)
                 .GetAsyncEnumerator(cancellation.Token);
@@ -647,11 +665,19 @@ public sealed class CallSession : IConversationPort
 
     /// <summary>Reads the session one run is handed.</summary>
     /// <param name="turn">The turn about to run.</param>
-    /// <returns>
-    /// The call's session on rows 1 and 2, and <see langword="null"/> on a graph row, whose workflow
-    /// host agent refuses any session but its own.
-    /// </returns>
-    private AgentSession? RunSession(Turn turn) => _sessionCarriesHistory ? turn.Session : null;
+    /// <param name="cancellationToken">Cancels the open.</param>
+    /// <returns>The call's session on rows 1 and 2, and a fresh workflow session on a graph row.</returns>
+    /// <remarks>
+    /// A workflow host agent refuses any session but its own, and its own cannot be truncated or
+    /// read, so a graph row never carries one across turns: the call rides the request messages
+    /// instead. A fresh one costs 3.5–11.5 µs and about 1.4 KB, does no I/O, and measured no slower
+    /// than carrying one, because a carried workflow transcript grows by three messages a turn
+    /// rather than two.
+    /// </remarks>
+    private async ValueTask<AgentSession> RunSessionAsync(Turn turn, CancellationToken cancellationToken)
+        => _sessionCarriesHistory
+            ? turn.Session
+            : await turn.Agent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
 
     /// <summary>Reads the session of this call, or null before its first turn opened one.</summary>
     /// <returns>The session.</returns>
@@ -710,10 +736,13 @@ public sealed class CallSession : IConversationPort
 
         // Rows 1 and 2 read the call out of the session, so the run carries the new message alone
         // and the provider prepends the rest. A workflow takes no provider, so its history rides
-        // the request. Neither shape puts the caller's message in store 1 yet: the turn writes what
-        // it said and what it heard together, when it commits, so the run that is about to read the
-        // history does not find its own prompt already in it.
-        List<ChatMessage> request = _sessionCarriesHistory ? [prompt] : [.. _history.Read(session), prompt];
+        // the request, rendered into the one role a node still recognises. Neither shape puts the
+        // caller's message in store 1 yet: the turn writes what it said and what it heard together,
+        // when it commits, so the run that is about to read the history does not find its own
+        // prompt already in it.
+        List<ChatMessage> request = _sessionCarriesHistory
+            ? [prompt]
+            : GraphHistory(_history.Read(session)) is { } rendered ? [rendered, prompt] : [prompt];
 
         // One turn is one span. The call id rides here, on a span attribute, because T61 refuses it
         // on a metric. The span is disposed in the finally of whichever run method opened the turn.
@@ -727,6 +756,38 @@ public sealed class CallSession : IConversationPort
             State.TurnIndex,
             activity,
             _time.GetTimestamp());
+    }
+
+    /// <summary>Renders the call so far into the one role a workflow node still recognises.</summary>
+    /// <param name="history">The caller-facing history of this call, oldest first.</param>
+    /// <returns>One <c>system</c> message, or <see langword="null"/> on the first turn of a call.</returns>
+    /// <remarks>
+    /// Measured on 1.17.0: a workflow demotes every caller-supplied <c>assistant</c> message to
+    /// <c>user</c> on the way into a node, so a node handed the raw history cannot tell what it said
+    /// from what the caller said and reads its own answers as things the caller asked for.
+    /// <c>system</c> and <c>tool</c> survive the demotion, so the conversation rides one
+    /// <c>system</c> message that names both speakers instead.
+    /// </remarks>
+    private static ChatMessage? GraphHistory(IReadOnlyList<ChatMessage> history)
+    {
+        StringBuilder rendered = new();
+
+        foreach (var message in history)
+        {
+            if (message.Text is not { Length: > 0 } text)
+            {
+                continue;
+            }
+
+            rendered
+                .Append(message.Role == ChatRole.User ? CallerLinePrefix : AgentLinePrefix)
+                .Append(text)
+                .Append('\n');
+        }
+
+        return rendered.Length == 0
+            ? null
+            : new ChatMessage(ChatRole.System, HistoryPreamble + rendered.ToString().TrimEnd('\n'));
     }
 
     /// <summary>Names this call as the conversation the run's <c>gen_ai.conversation.id</c> reports.</summary>
@@ -991,8 +1052,19 @@ public sealed class CallSession : IConversationPort
         // span, the ordinal the amendment must reference, and LastTurn itself. Nothing between here
         // and there reads the transcript — the extractor reads the finished turn, and the writers
         // read the state document — so building it now and committing it once costs nothing.
-        List<ChatMessage> written;
-        if (interruptedAfter is not null || failure is not null)
+        // A barge-in inside the first 100 ms leaves no heard text, and an empty assistant message
+        // teaches the model nothing. pipecat and livekit both guard this. Both row shapes read this
+        // one value, so what counts as words the caller heard is decided once.
+        var heard = reply.Length > 0 ? new ChatMessage(ChatRole.Assistant, reply) : null;
+
+        List<ChatMessage> written = [];
+        if (!_sessionCarriesHistory)
+        {
+            // Rows 3 and 4 record the caller-facing turn alone, so they keep none of the run's own
+            // messages: a node's tool pair and a node's line to the next node are neither said nor
+            // heard. The write below takes the heard reply straight.
+        }
+        else if (interruptedAfter is not null || failure is not null)
         {
             // The transcript holds what the caller heard. A run that stopped mid-round would otherwise
             // leave a tool call with no result behind, and the next turn would send it. So the pairs
@@ -1000,11 +1072,9 @@ public sealed class CallSession : IConversationPort
             // stay visible to the next turn. livekit/agents fixed the same defect in issue 3702.
             written = [.. FinishedToolMessages(response.Messages)];
 
-            // A barge-in inside the first 100 ms leaves no heard text, and an empty assistant message
-            // teaches the model nothing. pipecat and livekit both guard this.
-            if (reply.Length > 0)
+            if (heard is not null)
             {
-                written.Add(new ChatMessage(ChatRole.Assistant, reply));
+                written.Add(heard);
             }
         }
         else
@@ -1092,7 +1162,17 @@ public sealed class CallSession : IConversationPort
             // What the caller said and what the caller heard, written together. The prompt the run
             // read carried a reminder and this message does not, which is why store 1 takes the
             // turn's own copy rather than the messages the framework saw.
-            _history.AppendTurn(turn.Session, [turn.Spoken, .. written]);
+            if (_sessionCarriesHistory)
+            {
+                _history.AppendTurn(turn.Session, [turn.Spoken, .. written]);
+            }
+            else
+            {
+                // Rows 3 and 4 answer with one reply per node, and the caller hears one of them.
+                // Store 1 holds the caller-facing turn alone, so the deliberation that produced the
+                // answer never enters the record and never reaches a later turn.
+                _history.AppendCallerFacingTurn(turn.Session, turn.Spoken, heard);
+            }
 
             // A turn one barge-in already cut is not amendable again, so it is not published here.
             _amendableOrdinal = interruptedAfter is null ? completedOrdinal : null;

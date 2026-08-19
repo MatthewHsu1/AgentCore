@@ -132,6 +132,27 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
             });
     }
 
+    /// <summary>Adds the caller-facing turn of a graph row: what the caller said, and what it heard.</summary>
+    /// <param name="session">The session of the call.</param>
+    /// <param name="spoken">What the caller said, without the reminder the request carried.</param>
+    /// <param name="heard">
+    /// What the caller heard: the answering node's reply, or the words a cut left. It is
+    /// <see langword="null"/> when the caller heard no words at all, and the turn then records the
+    /// utterance alone. <see cref="CallSession"/> decides which, for both row shapes alike.
+    /// </param>
+    /// <remarks>
+    /// A workflow takes no chat history provider, so the framework cannot drive store 1 for a graph
+    /// and the turn loop drives it here. Store 1 holds the caller-facing turn only: a graph's
+    /// node-to-node chatter is neither said nor heard, so it never enters the record and never
+    /// reaches a later turn.
+    /// </remarks>
+    public void AppendCallerFacingTurn(AgentSession session, ChatMessage spoken, ChatMessage? heard)
+    {
+        ArgumentNullException.ThrowIfNull(spoken);
+
+        AppendTurn(session, heard is null ? [spoken] : [spoken, heard]);
+    }
+
     /// <summary>Replaces the reply the caller was hearing with the words the caller actually heard.</summary>
     /// <param name="session">The session of the call.</param>
     /// <param name="heard">The text the caller heard, as the vendor reported it. Nothing is estimated.</param>
