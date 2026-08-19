@@ -114,3 +114,10 @@ AgentCore.Infrastructure.Telemetry.Grafana.GrafanaOtlpTelemetryAdapter.GrafanaOt
 AgentCore.Infrastructure.Telemetry.Grafana.GrafanaOtlpTelemetryAdapter.Kind.get -> string!
 AgentCore.Infrastructure.Telemetry.Grafana.GrafanaOtlpTelemetryAdapter.StartAsync(AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.ITelemetrySession!>
 const AgentCore.Infrastructure.Telemetry.Grafana.GrafanaOtlpTelemetryAdapter.GrafanaKind = "grafana" -> string!
+AgentCore.Infrastructure.Database.Postgres.PostgresSchema
+static AgentCore.Infrastructure.Database.Postgres.PostgresSchema.ApplyAsync(Npgsql.NpgsqlDataSource! dataSource, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<string!>!>!
+AgentCore.Infrastructure.Audit.Postgres.PostgresAuditSinkAdapter
+AgentCore.Infrastructure.Audit.Postgres.PostgresAuditSinkAdapter.Kind.get -> string!
+AgentCore.Infrastructure.Audit.Postgres.PostgresAuditSinkAdapter.OpenAsync(AgentCore.Application.Configuration.Schema.VendorProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IAuditSinkPort!>
+AgentCore.Infrastructure.Audit.Postgres.PostgresAuditSinkAdapter.PostgresAuditSinkAdapter() -> void
+const AgentCore.Infrastructure.Audit.Postgres.PostgresAuditSinkAdapter.ProviderKind = "postgres" -> string!

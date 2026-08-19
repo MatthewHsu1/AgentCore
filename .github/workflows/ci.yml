@@ -23,6 +23,20 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
 
@@ -56,6 +70,8 @@ jobs:
       - name: Unit tests
         run: dotnet test --no-build -c Release
              --filter "FullyQualifiedName!~AgentCore.Evals"
+        env:
+          AGENTCORE_TEST_POSTGRES: Host=localhost;Port=5432;Username=postgres;Password=ci
 
       # The harness self-test. The golden-set suites skip here, because this repository names no
       # dataset. A recall below 1 on the fixture means the harness broke, not that retrieval is weak.

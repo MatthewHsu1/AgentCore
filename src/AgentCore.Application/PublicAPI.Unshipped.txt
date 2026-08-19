@@ -1104,3 +1104,6 @@ virtual AgentCore.Application.Tools.ToolBinding.Invoke(System.Text.Json.Nodes.Js
 ~override AgentCore.Application.Providers.VendorSeam.ToString() -> string
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Moderation.get -> AgentCore.Application.Evaluation.PromptModerator?
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Moderation.init -> void
+const AgentCore.Application.Secrets.KnownSecrets.PostgresConnectionStringName = "postgres-connection-string" -> string!
+const AgentCore.Application.Secrets.KnownSecrets.PostgresConnectionStringVariable = "POSTGRES_CONNECTION_STRING" -> string!
+static readonly AgentCore.Application.Secrets.KnownSecrets.PostgresConnectionString -> AgentCore.Application.Secrets.SecretName!
