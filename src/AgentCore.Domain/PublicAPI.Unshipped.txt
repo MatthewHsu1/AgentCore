@@ -164,14 +164,14 @@ const AgentCore.Domain.Audit.AuditHash.Length = 64 -> int
 const AgentCore.Domain.Audit.AuditPayloadKeys.DurationUntilInterruptMs = "durationUntilInterruptMs" -> string!
 const AgentCore.Domain.Audit.AuditPayloadKeys.EndReason = "endReason" -> string!
 const AgentCore.Domain.Audit.AuditPayloadKeys.ModerationCategories = "moderationCategories" -> string!
-const AgentCore.Domain.Audit.AuditPayloadKeys.ReplyText = "replyText" -> string!
+const AgentCore.Domain.Audit.AuditPayloadKeys.ReplyTextSha256 = "replyTextSha256" -> string!
 const AgentCore.Domain.Audit.AuditPayloadKeys.StageAfter = "stageAfter" -> string!
 const AgentCore.Domain.Audit.AuditPayloadKeys.StageBefore = "stageBefore" -> string!
 const AgentCore.Domain.Audit.AuditPayloadKeys.ToolCallId = "toolCallId" -> string!
 const AgentCore.Domain.Audit.AuditPayloadKeys.ToolError = "toolError" -> string!
 const AgentCore.Domain.Audit.AuditPayloadKeys.ToolFailureKind = "toolFailureKind" -> string!
 const AgentCore.Domain.Audit.AuditPayloadKeys.ToolName = "toolName" -> string!
-const AgentCore.Domain.Audit.AuditPayloadKeys.UtteranceUntilInterrupt = "utteranceUntilInterrupt" -> string!
+const AgentCore.Domain.Audit.AuditPayloadKeys.UtteranceUntilInterruptSha256 = "utteranceUntilInterruptSha256" -> string!
 override AgentCore.Domain.Audit.AuditChainLink.Equals(object? obj) -> bool
 override AgentCore.Domain.Audit.AuditChainLink.GetHashCode() -> int
 override AgentCore.Domain.Audit.AuditChainLink.ToString() -> string!
@@ -203,6 +203,7 @@ static AgentCore.Domain.Audit.AuditHash.FromDigest(System.ReadOnlySpan<byte> dig
 static AgentCore.Domain.Audit.AuditHash.Genesis.get -> AgentCore.Domain.Audit.AuditHash!
 static AgentCore.Domain.Audit.AuditHash.operator ==(AgentCore.Domain.Audit.AuditHash? left, AgentCore.Domain.Audit.AuditHash? right) -> bool
 static AgentCore.Domain.Audit.AuditHash.operator !=(AgentCore.Domain.Audit.AuditHash? left, AgentCore.Domain.Audit.AuditHash? right) -> bool
+static AgentCore.Domain.Audit.AuditHash.OfText(string! text) -> AgentCore.Domain.Audit.AuditHash!
 static AgentCore.Domain.Audit.AuditHash.Parse(string! value) -> AgentCore.Domain.Audit.AuditHash!
 static AgentCore.Domain.Audit.AuditHash.TryParse(string? value, out AgentCore.Domain.Audit.AuditHash? hash) -> bool
 static AgentCore.Domain.Audit.CallEndReasons.ToToken(AgentCore.Domain.Audit.CallEndReason reason) -> string!

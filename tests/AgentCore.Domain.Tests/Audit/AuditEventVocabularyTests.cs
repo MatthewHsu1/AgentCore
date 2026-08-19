@@ -9,6 +9,12 @@ namespace AgentCore.Domain.Tests.Audit;
 /// </summary>
 public sealed class AuditEventVocabularyTests
 {
+    /// <summary>What the model produced on the turn these facts describe.</summary>
+    private const string Spoken = "Welcome to Sole, how can I help you today?";
+
+    /// <summary>What the caller heard of it before speaking over the rest.</summary>
+    private const string Heard = "Welcome to Sole, how can I";
+
     private static readonly DateTimeOffset Start = DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_000_000);
 
     [Theory]
@@ -155,7 +161,7 @@ public sealed class AuditEventVocabularyTests
         Assert.Equal(turn.TurnIndex, links[1].Event.TurnIndex);
 
         // The first event is untouched. Nothing rewrote the turn, and both events stand in the chain.
-        Assert.Equal("Welcome to Sole, how can I help you today?", links[0].Event.Payload[AuditPayloadKeys.ReplyText]);
+        Assert.Equal(AuditHash.OfText(Spoken).Value, links[0].Event.Payload[AuditPayloadKeys.ReplyTextSha256]);
         Assert.Null(links[0].Event.AmendsSequence);
     }
 
@@ -166,11 +172,14 @@ public sealed class AuditEventVocabularyTests
         AuditEvent turn = Turn(sequence: 0, turnIndex: 0);
         AuditEvent interruption = Interruption(sequence: 1, amends: 0, turnIndex: 0);
 
-        string produced = turn.Payload[AuditPayloadKeys.ReplyText];
-        string heard = interruption.Payload[AuditPayloadKeys.UtteranceUntilInterrupt];
+        string produced = turn.Payload[AuditPayloadKeys.ReplyTextSha256];
+        string heard = interruption.Payload[AuditPayloadKeys.UtteranceUntilInterruptSha256];
 
+        // The chain holds proof of the words and never the words, so the reviewer's check is against
+        // store 1: the amendment proves what the caller heard, and it is not the whole reply.
         Assert.NotEqual(produced, heard);
-        Assert.StartsWith(heard, produced, StringComparison.Ordinal);
+        Assert.Equal(AuditHash.OfText(Heard).Value, heard);
+        Assert.Equal(AuditHash.OfText(Spoken).Value, produced);
         Assert.Equal("1820", interruption.Payload[AuditPayloadKeys.DurationUntilInterruptMs]);
     }
 
@@ -199,7 +208,44 @@ public sealed class AuditEventVocabularyTests
         ArgumentException failure = Assert.Throws<ArgumentException>(
             () => AuditChain.Link(silent, AuditHash.Genesis));
 
-        Assert.Contains(AuditPayloadKeys.UtteranceUntilInterrupt, failure.Message, StringComparison.Ordinal);
+        Assert.Contains(AuditPayloadKeys.UtteranceUntilInterruptSha256, failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AuditChain_EmptyHashOnInterrupt_IsRefused()
+    {
+        // The chain stores proof of the words and not the words, so the one value that must never
+        // reach it is a hash that proves nothing. An empty text still hashes to a full digest.
+        AuditEvent unproven = Interruption(sequence: 1, amends: 0, turnIndex: 0) with
+        {
+            Payload = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [AuditPayloadKeys.UtteranceUntilInterruptSha256] = string.Empty,
+                [AuditPayloadKeys.DurationUntilInterruptMs] = "1820",
+            },
+        };
+
+        ArgumentException failure = Assert.Throws<ArgumentException>(
+            () => AuditChain.Link(unproven, AuditHash.Genesis));
+
+        Assert.Contains(AuditPayloadKeys.UtteranceUntilInterruptSha256, failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AuditChain_EmptyHashOnTurnCompleted_IsRefused()
+    {
+        AuditEvent unproven = Turn(sequence: 0, turnIndex: 0) with
+        {
+            Payload = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [AuditPayloadKeys.ReplyTextSha256] = string.Empty,
+            },
+        };
+
+        ArgumentException failure = Assert.Throws<ArgumentException>(
+            () => AuditChain.Link(unproven, AuditHash.Genesis));
+
+        Assert.Contains(AuditPayloadKeys.ReplyTextSha256, failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -368,7 +414,7 @@ public sealed class AuditEventVocabularyTests
         TurnIndex = turnIndex,
         Payload = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            [AuditPayloadKeys.ReplyText] = "Welcome to Sole, how can I help you today?",
+            [AuditPayloadKeys.ReplyTextSha256] = AuditHash.OfText(Spoken).Value,
             [AuditPayloadKeys.StageBefore] = "greeting",
             [AuditPayloadKeys.StageAfter] = "identify",
         },
@@ -384,7 +430,7 @@ public sealed class AuditEventVocabularyTests
         AmendsSequence = amends,
         Payload = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            [AuditPayloadKeys.UtteranceUntilInterrupt] = "Welcome to Sole, how can I",
+            [AuditPayloadKeys.UtteranceUntilInterruptSha256] = AuditHash.OfText(Heard).Value,
             [AuditPayloadKeys.DurationUntilInterruptMs] = "1820",
         },
     };

@@ -93,6 +93,16 @@ public enum CallEventKind
     /// </remarks>
     ReplyInterrupted = 8,
 
+    /// <summary>A store 1 write was refused, so the durable copy of some words was lost.</summary>
+    /// <remarks>
+    /// Diagnostic only: it is counted and logged, and <see cref="CallEvent.Ordinal"/> is
+    /// <see langword="null"/> so no audit row records it. A dropped write is a fact about the system
+    /// and not about the call — the caller notices nothing, the live history is unharmed, and the
+    /// next turn still has the whole conversation — so it must not take an ordinal the chain would
+    /// then be missing.
+    /// </remarks>
+    TranscriptWriteFailed = 10,
+
     /// <summary>The call ended. It is the last fact of every call.</summary>
     /// <remarks>One call raises exactly one of these, and it carries no turn index. The chain stores it.</remarks>
     CallEnded = 9,

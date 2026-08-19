@@ -119,7 +119,7 @@ public sealed class AuditCallObserverTests
         AuditCallObserver observer = new(sink);
         Dictionary<string, string> payload = new(StringComparer.Ordinal)
         {
-            [AuditPayloadKeys.ReplyText] = "hello there.",
+            [AuditPayloadKeys.ReplyTextSha256] = AuditHash.OfText("hello there.").Value,
             [AuditPayloadKeys.StageBefore] = "greeting",
             [AuditPayloadKeys.StageAfter] = "triage",
         };

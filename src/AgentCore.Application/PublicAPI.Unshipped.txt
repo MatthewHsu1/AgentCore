@@ -648,6 +648,7 @@ AgentCore.Application.Runtime.CallEventKind.ModerationUnavailable = 2 -> AgentCo
 AgentCore.Application.Runtime.CallEventKind.PromptFlagged = 1 -> AgentCore.Application.Runtime.CallEventKind
 AgentCore.Application.Runtime.CallEventKind.ReplyInterrupted = 8 -> AgentCore.Application.Runtime.CallEventKind
 AgentCore.Application.Runtime.CallEventKind.ToolFailed = 4 -> AgentCore.Application.Runtime.CallEventKind
+AgentCore.Application.Runtime.CallEventKind.TranscriptWriteFailed = 10 -> AgentCore.Application.Runtime.CallEventKind
 AgentCore.Application.Runtime.CallEventKind.TurnCompleted = 7 -> AgentCore.Application.Runtime.CallEventKind
 AgentCore.Application.Runtime.CallObservers
 AgentCore.Application.Runtime.CallSession

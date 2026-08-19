@@ -39,9 +39,10 @@ public enum AuditEventKind
     /// </para>
     /// <para>
     /// Section 11, item 6a: the event records the text the caller ACTUALLY HEARD, not the text the
-    /// model produced. The value arrives in the relay's <c>utteranceUntilInterrupt</c> field, so it
-    /// is reported and never estimated (T54). It is required on this kind, under
-    /// <see cref="AuditPayloadKeys.UtteranceUntilInterrupt"/>.
+    /// model produced. The words arrive in the relay's <c>utteranceUntilInterrupt</c> field, so they
+    /// are reported and never estimated (T54). The chain carries their SHA-256 and the words stay in
+    /// store 1, where they remain erasable. It is required on this kind, under
+    /// <see cref="AuditPayloadKeys.UtteranceUntilInterruptSha256"/>.
     /// </para>
     /// </remarks>
     ReplyInterrupted = 2,
@@ -82,7 +83,7 @@ public enum AuditEventKind
     /// <see cref="AuditChain.Link"/> refuses the event without it. The kind alone says something
     /// flagged the caller, and the categories are the only other fact the event holds. Section 9
     /// makes this chain the only long-term record, so the fact goes in with the event or it is lost.
-    /// This is the argument the chain already makes for <c>utteranceUntilInterrupt</c> on
+    /// This is the argument the chain already makes for <c>utteranceUntilInterruptSha256</c> on
     /// <see cref="ReplyInterrupted"/>.
     /// </para>
     /// <para>

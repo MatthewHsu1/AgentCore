@@ -98,7 +98,7 @@ public sealed class CallSessionAuditTests
         var completed = Assert.Single(sink.EventsOf("call-1"), item => item.Kind == AuditEventKind.TurnCompleted);
         Assert.Equal(1, completed.Sequence);
         Assert.Equal(0, completed.TurnIndex);
-        Assert.Equal("hello there.", completed.Payload[AuditPayloadKeys.ReplyText]);
+        Assert.Equal(AuditHash.OfText("hello there.").Value, completed.Payload[AuditPayloadKeys.ReplyTextSha256]);
         Assert.Equal("greeting", completed.Payload[AuditPayloadKeys.StageBefore]);
         Assert.Equal("greeting", completed.Payload[AuditPayloadKeys.StageAfter]);
 
@@ -139,7 +139,7 @@ public sealed class CallSessionAuditTests
 
         // Item 6a: the event records the text the caller ACTUALLY HEARD. Nothing here is estimated,
         // because the relay reported both values on its interrupt frame.
-        Assert.Equal("hel", cut.Payload[AuditPayloadKeys.UtteranceUntilInterrupt]);
+        Assert.Equal(AuditHash.OfText("hel").Value, cut.Payload[AuditPayloadKeys.UtteranceUntilInterruptSha256]);
         Assert.Equal("120", cut.Payload[AuditPayloadKeys.DurationUntilInterruptMs]);
     }
 

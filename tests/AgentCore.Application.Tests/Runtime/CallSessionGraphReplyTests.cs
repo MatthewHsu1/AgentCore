@@ -79,7 +79,7 @@ public sealed class CallSessionGraphReplyTests
         var completed = Assert.Single(
             sink.EventsOf("call-graph"),
             entry => entry.Kind == AuditEventKind.TurnCompleted);
-        Assert.Equal(Spoken, completed.Payload[AuditPayloadKeys.ReplyText]);
+        Assert.Equal(AuditHash.OfText(Spoken).Value, completed.Payload[AuditPayloadKeys.ReplyTextSha256]);
     }
 
     [Fact]
@@ -101,7 +101,7 @@ public sealed class CallSessionGraphReplyTests
         var completed = Assert.Single(
             sink.EventsOf("call-tool"),
             entry => entry.Kind == AuditEventKind.TurnCompleted);
-        Assert.Equal(Spoken, completed.Payload[AuditPayloadKeys.ReplyText]);
+        Assert.Equal(AuditHash.OfText(Spoken).Value, completed.Payload[AuditPayloadKeys.ReplyTextSha256]);
     }
 
     [Fact]
@@ -125,7 +125,9 @@ public sealed class CallSessionGraphReplyTests
         var completed = Assert.Single(
             sink.EventsOf("call-quiet"),
             entry => entry.Kind == AuditEventKind.TurnCompleted);
-        Assert.Equal(CallSession.FallbackReply, completed.Payload[AuditPayloadKeys.ReplyText]);
+        Assert.Equal(
+            AuditHash.OfText(CallSession.FallbackReply).Value,
+            completed.Payload[AuditPayloadKeys.ReplyTextSha256]);
     }
 
     [Fact]

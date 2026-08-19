@@ -233,7 +233,9 @@ public sealed class CallSessionInterruptionTests
         var amendment = Assert.Single(events, item => item.Kind == AuditEventKind.ReplyInterrupted);
         Assert.Equal(completed.Sequence, amendment.AmendsSequence);
         Assert.Equal(completed.TurnIndex, amendment.TurnIndex);
-        Assert.Equal("Hello there", amendment.Payload[AuditPayloadKeys.UtteranceUntilInterrupt]);
+        Assert.Equal(
+            AuditHash.OfText("Hello there").Value,
+            amendment.Payload[AuditPayloadKeys.UtteranceUntilInterruptSha256]);
         Assert.Equal("1820", amendment.Payload[AuditPayloadKeys.DurationUntilInterruptMs]);
 
         // One barge-in cuts one reply once. A repeat frame amends nothing a second time.
@@ -327,7 +329,9 @@ public sealed class CallSessionInterruptionTests
             sink.EventsOf(session.CallId),
             item => item.Kind == AuditEventKind.ReplyInterrupted);
         Assert.Equal(first!.TurnIndex, amendment.TurnIndex);
-        Assert.Equal("first", amendment.Payload[AuditPayloadKeys.UtteranceUntilInterrupt]);
+        Assert.Equal(
+            AuditHash.OfText("first").Value,
+            amendment.Payload[AuditPayloadKeys.UtteranceUntilInterruptSha256]);
     }
 
     // -------------------------------------------------------------------------------------------
@@ -417,7 +421,9 @@ public sealed class CallSessionInterruptionTests
         var amendment = Assert.Single(events, item => item.Kind == AuditEventKind.ReplyInterrupted);
         Assert.Equal(completed.Sequence, amendment.AmendsSequence);
         Assert.Equal(completed.TurnIndex, amendment.TurnIndex);
-        Assert.Equal("Hello there", amendment.Payload[AuditPayloadKeys.UtteranceUntilInterrupt]);
+        Assert.Equal(
+            AuditHash.OfText("Hello there").Value,
+            amendment.Payload[AuditPayloadKeys.UtteranceUntilInterruptSha256]);
         Assert.Equal("1820", amendment.Payload[AuditPayloadKeys.DurationUntilInterruptMs]);
 
         // One barge-in cuts one reply once. The turn is no longer amendable, so a repeat says so.

@@ -260,6 +260,19 @@ public static class AuditChain
         return true;
     }
 
+    /// <summary>
+    /// Refuses a payload value that is not a SHA-256 digest.
+    /// </summary>
+    private static void RequireHash(AuditEvent auditEvent, string key, string? value)
+    {
+        if (!AuditHash.TryParse(value, out _))
+        {
+            throw new ArgumentException(
+                $"The audit payload value of '{key}' is {AuditHash.Length} lowercase hexadecimal characters. This one is '{value}'.",
+                nameof(auditEvent));
+        }
+    }
+
     /// <summary>Refuses an event the vocabulary does not permit.</summary>
     private static void Validate(AuditEvent auditEvent)
     {
@@ -296,14 +309,24 @@ public static class AuditChain
                     nameof(auditEvent));
             }
 
-            // Section 11, item 6a: the event records the text the caller ACTUALLY HEARD.
-            if (!auditEvent.Payload.TryGetValue(AuditPayloadKeys.UtteranceUntilInterrupt, out string? utterance)
-                || utterance is null)
+            // Section 11, item 6a: the event proves the text the caller ACTUALLY HEARD. The words
+            // are in store 1, where they stay erasable, so what is required here is the digest.
+            if (!auditEvent.Payload.TryGetValue(AuditPayloadKeys.UtteranceUntilInterruptSha256, out string? utterance))
             {
                 throw new ArgumentException(
-                    $"A reply.interrupted event carries '{AuditPayloadKeys.UtteranceUntilInterrupt}', the text the caller actually heard. See section 11, item 6a.",
+                    $"A reply.interrupted event carries '{AuditPayloadKeys.UtteranceUntilInterruptSha256}', the SHA-256 of the text the caller actually heard. See section 11, item 6a.",
                     nameof(auditEvent));
             }
+
+            RequireHash(auditEvent, AuditPayloadKeys.UtteranceUntilInterruptSha256, utterance);
+        }
+
+        if (auditEvent.Payload.TryGetValue(AuditPayloadKeys.ReplyTextSha256, out string? replyText))
+        {
+            // An empty value here is the one thing that cannot be true: every text hashes to 64
+            // characters, the empty string included, so an empty hash proves nothing and would leave
+            // the row unverifiable against store 1 forever.
+            RequireHash(auditEvent, AuditPayloadKeys.ReplyTextSha256, replyText);
         }
 
         if (auditEvent.Kind == AuditEventKind.PromptFlagged)

@@ -93,7 +93,7 @@ public sealed class AgentCoreChatHistoryProviderTests
     {
         // Arrange
         var (provider, store, session) = NewCall();
-        provider.BeginTurn(session, CallId, turnIndex: 0);
+        provider.BeginTurn(session, turnIndex: 0);
 
         // Act
 #pragma warning disable MAAI001 // The context constructors are the framework's own experimental surface.
@@ -160,6 +160,7 @@ public sealed class AgentCoreChatHistoryProviderTests
         var store = new BlockingCallMessageStore();
         var provider = new AgentCoreChatHistoryProvider(store);
         var session = new StubSession();
+        provider.BeginCall(session, CallId);
         AppendTurn(provider, session, turnIndex: 0, "hello", "hi there");
         await provider.DrainAsync(session);
         store.BlockNextAppend();
@@ -189,7 +190,7 @@ public sealed class AgentCoreChatHistoryProviderTests
         // Arrange
         var (provider, _, session) = NewCall();
         AppendTurn(provider, session, turnIndex: 0, "hello", "hi there caller");
-        provider.BeginTurn(session, CallId, turnIndex: 1);
+        provider.BeginTurn(session, turnIndex: 1);
 
         // Act
         var cut = provider.TruncateLastReply(session, "hi there", TimeSpan.FromMilliseconds(300));
@@ -211,7 +212,7 @@ public sealed class AgentCoreChatHistoryProviderTests
     {
         // Arrange
         var (provider, store, session) = NewCall();
-        provider.BeginTurn(session, CallId, turnIndex: 0);
+        provider.BeginTurn(session, turnIndex: 0);
         ChatMessage announced = new(
             ChatRole.Assistant,
             [new TextContent("Let me check that for you"), new FunctionCallContent("call-1", "lookup")]);
@@ -245,7 +246,7 @@ public sealed class AgentCoreChatHistoryProviderTests
     {
         // Arrange
         var (provider, store, session) = NewCall();
-        provider.BeginTurn(session, CallId, turnIndex: 0);
+        provider.BeginTurn(session, turnIndex: 0);
 
         // Act
         var cut = provider.TruncateLastReply(session, "nothing was said", TimeSpan.Zero);
@@ -261,7 +262,7 @@ public sealed class AgentCoreChatHistoryProviderTests
     {
         // Arrange
         var (provider, store, session) = NewCall();
-        provider.BeginTurn(session, CallId, turnIndex: 0);
+        provider.BeginTurn(session, turnIndex: 0);
         var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var turns = Enumerable.Range(0, 20)
             .Select(index => Task.Run(
@@ -295,10 +296,12 @@ public sealed class AgentCoreChatHistoryProviderTests
         var provider = new AgentCoreChatHistoryProvider(new RecordingCallMessageStore());
         var first = new StubSession();
         var second = new StubSession();
-        AppendTurn(provider, first, turnIndex: 0, "a said", "a heard", "call-a");
+        provider.BeginCall(first, "call-a");
+        provider.BeginCall(second, "call-b");
+        AppendTurn(provider, first, turnIndex: 0, "a said", "a heard");
 
         // Act
-        AppendTurn(provider, second, turnIndex: 0, "b said", "b heard", "call-b");
+        AppendTurn(provider, second, turnIndex: 0, "b said", "b heard");
 
         // Assert
         Assert.Equal(["a said", "a heard"], (await ProvideAsync(provider, first)).Select(message => message.Text));
@@ -311,6 +314,7 @@ public sealed class AgentCoreChatHistoryProviderTests
         // Arrange
         var provider = new AgentCoreChatHistoryProvider(new ThrowingCallMessageStore());
         var session = new StubSession();
+        provider.BeginCall(session, CallId);
 
         // Act
         AppendTurn(provider, session, turnIndex: 0, "hello", "hi there");
@@ -321,12 +325,30 @@ public sealed class AgentCoreChatHistoryProviderTests
     }
 
     [Fact]
+    public async Task BeginCall_BackingStoreThrows_TellsTheReporterWhichTurnWasLost()
+    {
+        // Arrange
+        var provider = new AgentCoreChatHistoryProvider(new ThrowingCallMessageStore());
+        var session = new StubSession();
+        List<int> dropped = [];
+        provider.BeginCall(session, CallId, (turnIndex, _) => dropped.Add(turnIndex));
+
+        // Act
+        AppendTurn(provider, session, turnIndex: 3, "hello", "hi there");
+
+        // Assert
+        await provider.DrainAsync(session);
+        Assert.Equal([3], dropped);
+    }
+
+    [Fact]
     public async Task InMemoryStore_AfterTurnAndBargeIn_HoldsTheHeardTextInOrder()
     {
         // Arrange
         var store = new InMemoryCallMessageStore();
         var provider = new AgentCoreChatHistoryProvider(store);
         var session = new StubSession();
+        provider.BeginCall(session, CallId);
         AppendTurn(provider, session, turnIndex: 0, "order 41?", "it ships Friday from the depot");
 
         // Act
@@ -337,10 +359,14 @@ public sealed class AgentCoreChatHistoryProviderTests
         Assert.Equal(["order 41?", "it ships"], store.Read(CallId).Select(row => row.Content.Text));
     }
 
+    /// <summary>Opens one call on a fresh session, the way <c>CallSession</c> does at call start.</summary>
     private static (AgentCoreChatHistoryProvider Provider, RecordingCallMessageStore Store, StubSession Session) NewCall()
     {
         var store = new RecordingCallMessageStore();
-        return (new AgentCoreChatHistoryProvider(store), store, new StubSession());
+        var provider = new AgentCoreChatHistoryProvider(store);
+        var session = new StubSession();
+        provider.BeginCall(session, CallId);
+        return (provider, store, session);
     }
 
     /// <summary>Writes one turn the way <c>CallSession</c> does: name the turn, then append it.</summary>
@@ -349,10 +375,9 @@ public sealed class AgentCoreChatHistoryProviderTests
         AgentSession session,
         int turnIndex,
         string said,
-        string replied,
-        string callId = CallId)
+        string replied)
     {
-        provider.BeginTurn(session, callId, turnIndex);
+        provider.BeginTurn(session, turnIndex);
         provider.AppendTurn(
             session,
             [new ChatMessage(ChatRole.User, said), new ChatMessage(ChatRole.Assistant, replied)]);
@@ -403,17 +428,6 @@ public sealed class AgentCoreChatHistoryProviderTests
         public ValueTask RewriteAsync(
             string callId, int ordinal, ChatMessage content, CancellationToken cancellationToken = default)
             => _rows.RewriteAsync(callId, ordinal, content, cancellationToken);
-    }
-
-    private sealed class ThrowingCallMessageStore : ICallMessageStore
-    {
-        public ValueTask AppendAsync(
-            IReadOnlyList<CallMessage> messages, CancellationToken cancellationToken = default)
-            => throw new InvalidOperationException("the transcript store is down.");
-
-        public ValueTask RewriteAsync(
-            string callId, int ordinal, ChatMessage content, CancellationToken cancellationToken = default)
-            => throw new InvalidOperationException("the transcript store is down.");
     }
 
     private sealed class StubSession : AgentSession;

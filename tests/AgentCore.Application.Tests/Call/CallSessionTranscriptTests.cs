@@ -129,7 +129,7 @@ public sealed class CallSessionTranscriptTests
     {
         // Arrange
         RecordingCallMessageStore store = new();
-        RecordingChatClient reply = new("hi there caller", "it ships Friday from the depot");
+        RequestRecordingChatClient reply = new("hi there caller", "it ships Friday from the depot");
         var session = CreateSession(OneAgentYaml, reply, store);
         _ = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
         _ = await session.RunTurnAsync("order 41?", TestContext.Current.CancellationToken);
@@ -149,7 +149,7 @@ public sealed class CallSessionTranscriptTests
     public async Task RunTurn_SecondTurn_SendsTheNewCallerMessageAloneAndTheModelStillSeesTheCall()
     {
         // Arrange
-        RecordingChatClient reply = new("hi there", "it ships Friday");
+        RequestRecordingChatClient reply = new("hi there", "it ships Friday");
         var session = CreateSession(OneAgentYaml, reply, new RecordingCallMessageStore());
         _ = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
 
@@ -172,7 +172,7 @@ public sealed class CallSessionTranscriptTests
     {
         // Arrange
         RecordingCallMessageStore store = new();
-        RecordingChatClient reply = new("which order?");
+        RequestRecordingChatClient reply = new("which order?");
         var session = CreateSession(SlotYaml, reply, store);
 
         // Act
@@ -232,40 +232,6 @@ public sealed class CallSessionTranscriptTests
     private static async Task DrainAsync(IAsyncEnumerable<ChatResponseUpdate> updates)
     {
         await foreach (var _ in updates.ConfigureAwait(false))
-        {
-        }
-    }
-
-    /// <summary>Answers each request in turn, and keeps what it was asked.</summary>
-    private sealed class RecordingChatClient : IChatClient
-    {
-        private readonly string[] _replies;
-
-        public RecordingChatClient(params string[] replies) => _replies = replies;
-
-        /// <summary>Gets every request this client answered, one role-prefixed line per message.</summary>
-        public List<List<string>> Requests { get; } = [];
-
-        public Task<ChatResponse> GetResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
-        {
-            ArgumentNullException.ThrowIfNull(messages);
-            Requests.Add([.. messages.Select(message => $"{message.Role}:{message.Text}")]);
-            return Task.FromResult(
-                new ChatResponse(new ChatMessage(ChatRole.Assistant, _replies[Requests.Count - 1])));
-        }
-
-        public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
-            => throw new NotSupportedException("These facts drive the buffered path only.");
-
-        public object? GetService(Type serviceType, object? serviceKey = null) => null;
-
-        public void Dispose()
         {
         }
     }

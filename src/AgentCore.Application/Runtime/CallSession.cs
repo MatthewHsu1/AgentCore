@@ -532,10 +532,32 @@ public sealed class CallSession : IConversationPort
 
         lock (_interruptLock)
         {
-            _agentSession ??= session;
+            if (_agentSession is null)
+            {
+                _agentSession = session;
+
+                // The provider serves every call, so it is told here which call this session
+                // carries and where THIS call's dropped writes go. A session that lost the race
+                // above opens nothing: it is discarded, and no write was ever queued against it.
+                _history.BeginCall(session, CallId, RecordDroppedTranscriptWrite);
+            }
+
             return _agentSession;
         }
     }
+
+    /// <summary>
+    /// Raises the fact of one store 1 write the backing store refused.
+    /// </summary>
+    private void RecordDroppedTranscriptWrite(int turnIndex, Exception exception)
+        => RaiseDiagnostic(
+            CallEventKind.TranscriptWriteFailed,
+            _time.GetUtcNow(),
+            turnIndex,
+            payload: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [CallEventPayloadKeys.Reason] = $"{exception.GetType().Name}: {exception.Message}",
+            });
 
     /// <summary>
     /// Reads the session one run is handed.
@@ -604,7 +626,7 @@ public sealed class CallSession : IConversationPort
         ChatMessage prompt = new(ChatRole.User, UnfilledSlotReminder.Prepend(reminder, userInput));
 
         // The framework has never heard of a turn, so the turn loop names this one before the run.
-        _history.BeginTurn(session, CallId, State.TurnIndex);
+        _history.BeginTurn(session, State.TurnIndex);
 
         // Rows 1 and 2 read the call out of the session, so the run carries the new message alone
         // and the provider prepends the rest. A workflow takes no provider, so its history rides
@@ -751,7 +773,15 @@ public sealed class CallSession : IConversationPort
         // Store 1 keeps the reply row and rewrites its words, rather than replacing the turn's
         // messages. The turn it corrects ran to its end, so every tool call it made is already
         // paired and there is nothing unfinished to strip out.
-        _ = _history.TruncateLastReply(session, heard, durationUntilInterrupt);
+        //
+        // The cut always lands today: a turn is amendable only when it completed with words, and a
+        // turn that completed with words left a reply row holding them. The answer is still read,
+        // because the row below names a HASH of those words — a chain that proves words store 1
+        // does not hold proves nothing, so no cut means no amendment.
+        if (!_history.TruncateLastReply(session, heard, durationUntilInterrupt))
+        {
+            return false;
+        }
 
         LastTurn = finished with { ReplyText = heard, InterruptedAfter = durationUntilInterrupt };
 
@@ -762,7 +792,7 @@ public sealed class CallSession : IConversationPort
             amends: completedOrdinal,
             payload: new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                [AuditPayloadKeys.UtteranceUntilInterrupt] = heard,
+                [AuditPayloadKeys.UtteranceUntilInterruptSha256] = AuditHash.OfText(heard).Value,
                 [AuditPayloadKeys.DurationUntilInterruptMs] =
                     ((long)durationUntilInterrupt.TotalMilliseconds).ToString(CultureInfo.InvariantCulture),
             });
@@ -841,8 +871,8 @@ public sealed class CallSession : IConversationPort
     /// extractor: the words moderation flagged are its only input, and a slot filled from them would
     /// carry the flagged content into the state document and into every later prompt. Everything else
     /// about a refused turn is ordinary, so the refusal enters the transcript, the stage machine
-    /// advances, and <c>turn.completed</c> records the refusal under
-    /// <see cref="AuditPayloadKeys.ReplyText"/>.
+    /// advances, and <c>turn.completed</c> proves the refusal under
+    /// <see cref="AuditPayloadKeys.ReplyTextSha256"/>.
     /// </param>
     private async Task<TurnResult> CompleteTurnAsync(
         Turn turn,
@@ -991,9 +1021,6 @@ public sealed class CallSession : IConversationPort
             IsComplete = _policy.IsTerminal;
         }
 
-        var completedOrdinal = WriteTurnEvents(
-            turn, endedAt, stageAfter, reply, spokenReply, toolFault, interruptedAfter);
-
         TurnResult result = new(
             CallId,
             turn.Index,
@@ -1025,6 +1052,11 @@ public sealed class CallSession : IConversationPort
                 // answer never enters the record and never reaches a later turn.
                 _history.AppendCallerFacingTurn(turn.Session, turn.Spoken, heard);
             }
+
+            // Only now. The chain stores a hash of the spoken text and store 1 stores the text, so a
+            // reply.interrupted raised before the append would name a hash of words nothing holds.
+            var completedOrdinal = WriteTurnEvents(
+                turn, endedAt, stageAfter, reply, spokenReply, toolFault, interruptedAfter);
 
             // A turn one barge-in already cut is not amendable again, so it is not published here.
             _amendableOrdinal = interruptedAfter is null ? completedOrdinal : null;
@@ -1166,7 +1198,7 @@ public sealed class CallSession : IConversationPort
             turn.Index,
             payload: new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                [AuditPayloadKeys.ReplyText] = spokenReply,
+                [AuditPayloadKeys.ReplyTextSha256] = AuditHash.OfText(spokenReply).Value,
                 [AuditPayloadKeys.StageBefore] = turn.StageBefore,
                 [AuditPayloadKeys.StageAfter] = stageAfter,
             });
@@ -1183,7 +1215,7 @@ public sealed class CallSession : IConversationPort
             amends: completed,
             payload: new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                [AuditPayloadKeys.UtteranceUntilInterrupt] = reply,
+                [AuditPayloadKeys.UtteranceUntilInterruptSha256] = AuditHash.OfText(reply).Value,
                 [AuditPayloadKeys.DurationUntilInterruptMs] =
                     ((long)played.TotalMilliseconds).ToString(CultureInfo.InvariantCulture),
             });

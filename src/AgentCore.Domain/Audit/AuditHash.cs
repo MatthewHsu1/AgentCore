@@ -1,4 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace AgentCore.Domain.Audit;
 
@@ -90,6 +92,26 @@ public sealed record AuditHash
         }
 
         return new AuditHash(Convert.ToHexStringLower(digest));
+    }
+
+    /// <summary>Hashes one text, so the chain can prove words it does not hold.</summary>
+    /// <param name="text">The text to hash. The empty string is legal and hashes to a full digest.</param>
+    /// <returns>The SHA-256 of the UTF-8 bytes of the text.</returns>
+    /// <remarks>
+    /// The spoken words of a call live in store 1, where they stay erasable, and the chain stores
+    /// this instead. The bytes are UTF-8 with no byte-order mark, which is the same input
+    /// <c>encode(sha256(convert_to(t, 'UTF8')), 'hex')</c> reads in PostgreSQL, so a reviewer can
+    /// recompute the proof in either place.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="text"/> is <see langword="null"/>.</exception>
+    public static AuditHash OfText(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+
+        byte[] bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(text);
+        Span<byte> digest = stackalloc byte[SHA256.HashSizeInBytes];
+        SHA256.HashData(bytes, digest);
+        return FromDigest(digest);
     }
 
     /// <summary>Reads the hexadecimal text of the hash.</summary>

@@ -52,7 +52,8 @@ public sealed class AuditChainTests
         {
             Payload = new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                [AuditPayloadKeys.UtteranceUntilInterrupt] = "Welcome to Sole, how can I help you today?",
+                [AuditPayloadKeys.UtteranceUntilInterruptSha256] =
+                    AuditHash.OfText("Welcome to Sole, how can I help you today?").Value,
                 [AuditPayloadKeys.DurationUntilInterruptMs] = "1820",
             },
         };
@@ -114,7 +115,7 @@ public sealed class AuditChainTests
             TurnIndex = 3,
             Payload = new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                [AuditPayloadKeys.ReplyText] = "The torque is 45 newton metres.",
+                [AuditPayloadKeys.ReplyTextSha256] = AuditHash.OfText("The torque is 45 newton metres.").Value,
                 [AuditPayloadKeys.StageBefore] = "resolve",
                 [AuditPayloadKeys.StageAfter] = "close",
             },
@@ -131,7 +132,7 @@ public sealed class AuditChainTests
             Payload = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [AuditPayloadKeys.StageAfter] = "close",
-                [AuditPayloadKeys.ReplyText] = "The torque is 45 newton metres.",
+                [AuditPayloadKeys.ReplyTextSha256] = AuditHash.OfText("The torque is 45 newton metres.").Value,
                 [AuditPayloadKeys.StageBefore] = "resolve",
             },
         };
@@ -247,7 +248,8 @@ public sealed class AuditChainTests
             TurnIndex = 0,
             Payload = new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                [AuditPayloadKeys.ReplyText] = "Welcome to Sole, how can I help you today?",
+                [AuditPayloadKeys.ReplyTextSha256] =
+                    AuditHash.OfText("Welcome to Sole, how can I help you today?").Value,
                 [AuditPayloadKeys.StageBefore] = "greeting",
                 [AuditPayloadKeys.StageAfter] = "identify",
             },
@@ -262,7 +264,7 @@ public sealed class AuditChainTests
             AmendsSequence = 1,
             Payload = new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                [AuditPayloadKeys.UtteranceUntilInterrupt] = "Welcome to Sole, how can I",
+                [AuditPayloadKeys.UtteranceUntilInterruptSha256] = AuditHash.OfText("Welcome to Sole, how can I").Value,
                 [AuditPayloadKeys.DurationUntilInterruptMs] = "1820",
             },
         },

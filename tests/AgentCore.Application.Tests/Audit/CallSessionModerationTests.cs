@@ -145,8 +145,8 @@ public sealed class CallSessionModerationTests
 
         var completed = Assert.Single(sink.EventsOf("call-1"), e => e.Kind == AuditEventKind.TurnCompleted);
         Assert.Equal(
-            "I am sorry. I cannot help with that request.",
-            completed.Payload[AuditPayloadKeys.ReplyText]);
+            AuditHash.OfText("I am sorry. I cannot help with that request.").Value,
+            completed.Payload[AuditPayloadKeys.ReplyTextSha256]);
     }
 
     [Fact]
