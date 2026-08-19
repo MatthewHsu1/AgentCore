@@ -1,0 +1,107 @@
+using AgentCore.Application.Runtime;
+using Microsoft.Extensions.AI;
+using Xunit;
+
+namespace AgentCore.Application.Tests.Call;
+
+/// <summary>Pins the rules of store 1: ordinals, which reply a barge-in cuts, and what a cut keeps.</summary>
+public sealed class CallTranscriptTests
+{
+    [Fact]
+    public void Append_TwoTurns_AllocatesDenseUniqueOrdinals()
+    {
+        // Arrange
+        var transcript = new CallTranscript { CallId = "call-1" };
+        transcript.BeginTurn(0);
+        _ = transcript.Append([User("hello"), Assistant("hi there")]);
+        transcript.BeginTurn(1);
+
+        // Act
+        var rows = transcript.Append([User("order 41?"), Assistant("it ships Friday")]);
+
+        // Assert
+        Assert.Equal([2, 3], rows.Select(row => row.Ordinal));
+        Assert.Equal([1, 1], rows.Select(row => row.TurnIndex));
+    }
+
+    [Fact]
+    public void Append_ToolCallingTurn_AimsTheCutAtTheSpokenReply()
+    {
+        // Arrange
+        var transcript = new CallTranscript { CallId = "call-1" };
+        var toolCall = new ChatMessage(ChatRole.Assistant, [new FunctionCallContent("id", "lookup")]);
+
+        // Act
+        _ = transcript.Append([User("order 41?"), toolCall, Assistant("it ships Friday")]);
+
+        // Assert
+        Assert.Equal(2, transcript.LastAssistantOrdinal);
+    }
+
+    [Fact]
+    public void TruncateLastReply_ReplyCarryingUsage_KeepsEverythingButTheWords()
+    {
+        // Arrange
+        var transcript = new CallTranscript { CallId = "call-1" };
+        var reply = new ChatMessage(
+            ChatRole.Assistant,
+            [new TextContent("it ships Friday from the depot"), new UsageContent(new UsageDetails { OutputTokenCount = 7 })]);
+        _ = transcript.Append([User("order 41?"), reply]);
+
+        // Act
+        var row = transcript.TruncateLastReply("it ships");
+
+        // Assert
+        Assert.NotNull(row);
+        Assert.Equal("it ships", row.Content.Text);
+        Assert.Equal(7, row.Content.Contents.OfType<UsageContent>().Single().Details.OutputTokenCount);
+    }
+
+    [Fact]
+    public void TruncateLastReply_ThisTurnSpokeNothing_ReturnsNull()
+    {
+        // Arrange
+        var transcript = new CallTranscript { CallId = "call-1" };
+        _ = transcript.Append([User("hello")]);
+
+        // Act
+        var row = transcript.TruncateLastReply("nothing was said");
+
+        // Assert
+        Assert.Null(row);
+    }
+
+    [Fact]
+    public void BeginTurn_NextTurnOpens_ClosesThePreviousReplyToACut()
+    {
+        // Arrange
+        var transcript = new CallTranscript { CallId = "call-1" };
+        transcript.BeginTurn(0);
+        _ = transcript.Append([User("hello"), Assistant("hi there")]);
+
+        // Act
+        transcript.BeginTurn(1);
+
+        // Assert
+        Assert.Null(transcript.LastAssistantOrdinal);
+        Assert.Null(transcript.TruncateLastReply("hi"));
+    }
+
+    [Fact]
+    public void Read_AfterTruncate_ReturnsHeardTextNotProducedText()
+    {
+        // Arrange
+        var transcript = new CallTranscript { CallId = "call-1" };
+        _ = transcript.Append([User("order 41?"), Assistant("it ships Friday from the depot")]);
+
+        // Act
+        _ = transcript.TruncateLastReply("it ships Fri");
+
+        // Assert
+        Assert.Equal(["order 41?", "it ships Fri"], transcript.Read().Select(message => message.Text));
+    }
+
+    private static ChatMessage User(string text) => new(ChatRole.User, text);
+
+    private static ChatMessage Assistant(string text) => new(ChatRole.Assistant, text);
+}

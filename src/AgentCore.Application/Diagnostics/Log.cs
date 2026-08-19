@@ -167,4 +167,39 @@ internal static partial class Log
         Message = "The audit queue was full, so event {Sequence} of call {CallId} was dropped. "
             + "The call continues and the chain has a gap.")]
     public static partial void AuditQueueFull(ILogger logger, string callId, long sequence);
+
+    /// <summary>A store 1 write was refused, so the turn has no durable record.</summary>
+    /// <param name="logger">The logger of the session.</param>
+    /// <param name="callId">The id of the call.</param>
+    /// <param name="turnIndex">The zero-based index of the turn that was being written.</param>
+    /// <param name="exception">The cause.</param>
+    /// <remarks>
+    /// The live history stays in the session, so the caller notices nothing and the next turn still
+    /// has the whole conversation. It is a warning and not an error for that reason: store 1 is the
+    /// erasable store, and losing a row there is recoverable in a way that losing a link of the
+    /// audit chain is not.
+    /// </remarks>
+    [LoggerMessage(
+        EventId = 9,
+        Level = LogLevel.Warning,
+        Message = "The transcript store did not accept turn {TurnIndex} of call {CallId}. "
+            + "The call continues and the turn has no durable record.")]
+    public static partial void TranscriptWriteFailed(ILogger logger, string callId, int turnIndex, Exception exception);
+
+    /// <summary>A barge-in cut a reply, so the record now holds what the caller heard.</summary>
+    /// <param name="logger">The logger of the session.</param>
+    /// <param name="callId">The id of the call.</param>
+    /// <param name="turnIndex">The zero-based index of the turn whose reply was cut.</param>
+    /// <param name="playedMilliseconds">How much of the reply was played, as the vendor reported it.</param>
+    /// <remarks>
+    /// The text the caller heard is NOT logged, for the reason
+    /// <see cref="PromptRefused"/> gives. This line reports that the cut happened and how far it
+    /// got; the words stay in store 1 and the proof of them stays in the audit chain.
+    /// </remarks>
+    [LoggerMessage(
+        EventId = 10,
+        Level = LogLevel.Debug,
+        Message = "A barge-in cut the reply of turn {TurnIndex} of call {CallId} "
+            + "after {PlayedMilliseconds} ms, so the record holds what the caller heard.")]
+    public static partial void ReplyTruncated(ILogger logger, string callId, int turnIndex, double playedMilliseconds);
 }
