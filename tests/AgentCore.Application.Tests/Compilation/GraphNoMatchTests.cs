@@ -74,7 +74,7 @@ public sealed class GraphNoMatchTests
 
         Assert.IsType<InvalidOperationException>(failure);
         Assert.Contains("no-match-graph", failure.Message, StringComparison.Ordinal);
-        Assert.Contains(ConfigurationCompiler.NoOutputMessage, failure.Message, StringComparison.Ordinal);
+        Assert.Contains(RequireOutputAgent.NoOutputMessage, failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]

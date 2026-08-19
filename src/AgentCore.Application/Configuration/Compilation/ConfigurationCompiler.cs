@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
@@ -44,21 +43,6 @@ namespace AgentCore.Application.Configuration.Compilation;
 /// </remarks>
 public static class ConfigurationCompiler
 {
-    /// <summary>The reason a row 4 graph that produced no text reports, after it names the graph.</summary>
-    /// <remarks>
-    /// It is a constant so a test asserts the message a host reads, rather than a copy of it. It stays
-    /// internal, because a host reads this message and never matches it. D15 makes every public member
-    /// a compatibility obligation, and the value of a public constant is one as well.
-    /// </remarks>
-    internal const string NoOutputMessage =
-        "Row 4 of the section 8.2 compile table ends the run at idle when no outgoing edge guard of "
-        + "the node that holds the run is true. Measured on Microsoft.Agents.AI.Workflows 1.17.0: "
-        + "InProcessRunner raises no exception for that, and the AsAIAgent() wrapper emits no update, "
-        + "so the caller would read an empty run and no error. Read the when: guard of every edge that "
-        + "leaves the node the run reached, and make one of them true for this state. A stage says "
-        + "onNoMatch: error, and a graph node takes no such key: D15 makes a new public key a "
-        + "permanent obligation, so this check adds none.";
-
     private const string NoAgentId = "";
 
     /// <summary>Picks the row of the compile table one document selects.</summary>
@@ -641,129 +625,13 @@ public static class ConfigurationCompiler
             builder = builder.WithOutputFrom([.. outputs]);
         }
 
-        var compiled = builder.WithName(configuration.Name).Build().AsAIAgent(name: configuration.Name);
+        var compiled = builder.WithName(configuration.Name)
+                              .Build()
+                              .AsAIAgent(name: configuration.Name);
 
-        // Every explicit graph takes the output check, guarded edges or not. The state pre-check goes
-        // outside it, so a run with no state behind it still fails before the graph starts.
-        var loud = RequireOutput(compiled, configuration.Name);
-        return guardedState is null ? loud : RequireState(loud, guardedState);
+        AIAgent loud = new RequireOutputAgent(compiled, configuration.Name);
+        return guardedState is null ? loud : new RequireStateAgent(loud, guardedState);
     }
-
-    /// <summary>Wraps an explicit graph so a run that produced no text fails loudly.</summary>
-    /// <param name="graph">The workflow of row 4, already wrapped by <c>AsAIAgent()</c>.</param>
-    /// <param name="name">The name of the document, which the failure reports.</param>
-    /// <returns>The agent a caller runs.</returns>
-    /// <remarks>
-    /// <para>
-    /// Each edge of row 4 may carry a <c>when:</c> guard. When every outgoing guard of the node that
-    /// holds the run is false, the workflow ends at idle. Measured on
-    /// <c>Microsoft.Agents.AI.Workflows</c> 1.17.0: <c>InProcessRunner</c> raises no exception for
-    /// that, and the <c>AsAIAgent()</c> wrapper emits no update, so the caller reads an empty run and
-    /// no error. That is the silent graph failure section 8.2 refuses to ship.
-    /// </para>
-    /// <para>
-    /// A stage answers the same case with <c>onNoMatch: error</c>, and a graph node carries no such
-    /// key. This check adds none either: D15 makes a new public key a permanent obligation, and the
-    /// rule needs no document to state it, because a graph that answers nothing is never what a
-    /// document meant.
-    /// </para>
-    /// <para>
-    /// The check reads the text the run produced, because that is the one thing both paths share and
-    /// the one thing a host consumes. Every node binding emits agent update events, so a node that
-    /// spoke carries its own text out of the run and the check stays quiet.
-    /// </para>
-    /// </remarks>
-    private static AIAgent RequireOutput(AIAgent graph, string name)
-        => new AIAgentBuilder(graph)
-            .Use(
-                async (messages, session, options, inner, cancellationToken) =>
-                {
-                    var response = await inner.RunAsync(messages, session, options, cancellationToken)
-                        .ConfigureAwait(false);
-
-                    return string.IsNullOrWhiteSpace(response.Text) ? throw NoOutput(name) : response;
-                },
-                (messages, session, options, inner, cancellationToken)
-                    => RequireOutputWhileStreaming(inner, messages, session, options, name, cancellationToken))
-            .Build();
-
-    /// <summary>Passes every update of one streaming run through, and fails after the last empty one.</summary>
-    /// <param name="inner">The graph this wrapper sits in front of.</param>
-    /// <param name="messages">What the caller asked.</param>
-    /// <param name="session">The session the caller runs in, or <see langword="null"/>.</param>
-    /// <param name="options">The options the caller passed, or <see langword="null"/>.</param>
-    /// <param name="name">The name of the document, which the failure reports.</param>
-    /// <param name="cancellationToken">Cancels the run.</param>
-    /// <returns>The updates the graph produced, unchanged and in order.</returns>
-    /// <remarks>
-    /// The streaming path holds nothing back. Rule 13 asks for the first delta before the model
-    /// finishes, so each update leaves as it arrives and the check reads it on the way past. Only
-    /// after the last update, when nothing carried text, does the run fail. This is an iterator, so
-    /// the throw lands inside the enumeration and not on the call that built it, which is where
-    /// <see cref="Runtime.CallSession.RunTurnStreamingAsync"/> catches it.
-    /// </remarks>
-    private static async IAsyncEnumerable<AgentResponseUpdate> RequireOutputWhileStreaming(
-        AIAgent inner,
-        IEnumerable<ChatMessage> messages,
-        AgentSession? session,
-        AgentRunOptions? options,
-        string name,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
-    {
-        var carriedText = false;
-
-        await foreach (var update in inner.RunStreamingAsync(messages, session, options, cancellationToken)
-            .ConfigureAwait(false))
-        {
-            carriedText |= !string.IsNullOrWhiteSpace(update.Text);
-            yield return update;
-        }
-
-        if (!carriedText)
-        {
-            throw NoOutput(name);
-        }
-    }
-
-    /// <summary>Builds the failure a row 4 graph that produced no text reports.</summary>
-    /// <param name="name">The name of the document.</param>
-    /// <returns>The fault the caller reads.</returns>
-    private static InvalidOperationException NoOutput(string name)
-        => new($"The graph '{name}' produced no text. " + NoOutputMessage);
-
-    /// <summary>Wraps a guarded graph so a run with no state behind it fails before the graph starts.</summary>
-    /// <param name="graph">The workflow of row 4, already wrapped by <c>AsAIAgent()</c>.</param>
-    /// <param name="state">The state source the guarded edges read.</param>
-    /// <returns>The agent a caller runs.</returns>
-    /// <remarks>
-    /// <para>
-    /// A predicate that throws is not loud enough by itself. Measured on
-    /// <c>Microsoft.Agents.AI.Workflows</c> 1.17.0: <c>InProcessRunner</c> catches every superstep
-    /// fault and raises a <c>WorkflowErrorEvent</c> instead of throwing, and the <c>AsAIAgent()</c>
-    /// wrapper turns no such event into an update. A guarded edge whose state source failed would
-    /// therefore end the run at idle with no output and no error, which is the silent graph failure
-    /// section 8.2 refuses to ship.
-    /// </para>
-    /// <para>
-    /// The check runs once, before the graph does, where a throw still reaches the caller. It asks
-    /// the same source the edges ask, so it needs no second seam and it knows nothing about how the
-    /// host finds the state.
-    /// </para>
-    /// </remarks>
-    private static AIAgent RequireState(AIAgent graph, Func<IReadOnlyDictionary<string, JsonNode?>> state)
-        => new AIAgentBuilder(graph)
-            .Use(
-                (messages, session, options, inner, cancellationToken) =>
-                {
-                    _ = state();
-                    return inner.RunAsync(messages, session, options, cancellationToken);
-                },
-                (messages, session, options, inner, cancellationToken) =>
-                {
-                    _ = state();
-                    return inner.RunStreamingAsync(messages, session, options, cancellationToken);
-                })
-            .Build();
 
     /// <summary>Names the seams a guarded edge needs and the context left unbound.</summary>
     /// <param name="context">The seams the document names.</param>
