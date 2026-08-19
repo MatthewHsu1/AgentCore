@@ -1,8 +1,9 @@
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Transcript;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Call;
+namespace AgentCore.Application.Tests.Transcript;
 
 /// <summary>Pins the rules of store 1: ordinals, which reply a barge-in cuts, and what a cut keeps.</summary>
 public sealed class CallTranscriptTests

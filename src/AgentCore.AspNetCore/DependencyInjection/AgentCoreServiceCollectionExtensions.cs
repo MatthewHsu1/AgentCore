@@ -1,9 +1,8 @@
-using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Secrets;
+using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.AspNetCore.Sessions;
 using Microsoft.AspNetCore.WebSockets;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,40 +15,6 @@ namespace AgentCore.AspNetCore.DependencyInjection;
 /// <summary>
 /// The composition root. It turns one document into the services a host resolves.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Everything happens while the host starts, in one order, and each step below owns its own class in
-/// <c>DependencyInjection/Startup/</c>: load the document and run checks 2 to 8
-/// (<see cref="ConfigurationStartup"/>), start the telemetry export
-/// (<see cref="TelemetryStartup"/>), resolve every <c>${secret:name}</c> once
-/// (<see cref="SecretsStartup"/>), open the knowledge base the document names
-/// (<see cref="KnowledgeStartup"/>), build the tool factory chain
-/// (<see cref="ToolFactoryStartup"/>), compile through <see cref="CompiledAgentRegistry"/>
-/// (<see cref="CompilationStartup"/>), and register the seam a call arrives on
-/// (<see cref="CallSeamStartup"/> and <see cref="CallSessionStartup"/>). A configuration defect
-/// therefore stops the process with a message that names the fault and points into the document.
-/// Nothing is deferred to the first call.
-/// </para>
-/// <para>
-/// The order is the data flow, and it is held by the local variables of
-/// <see cref="AddAgentCoreAsync"/> rather than by any list of steps: a step that needs the resolved
-/// secrets takes them as a parameter, so a step run out of order does not compile.
-/// </para>
-/// <para>
-/// <see cref="CompiledAgent"/> is a process singleton by design, and it is registered as one.
-/// <see cref="CallSession"/> is not, and it is registered nowhere: one call gets one session from
-/// <see cref="ICallSessionFactory"/>, and <see cref="ICallSessionStore"/> holds it between requests.
-/// </para>
-/// <para>
-/// This also registers a <see cref="TimeProvider"/> for the whole container —
-/// <see cref="AgentCoreOptions.TimeProvider"/> when the host bound one, otherwise
-/// <see cref="TimeProvider.System"/> — unless a host already registered its own before calling
-/// this method, which it keeps. <see cref="CallSessionFactory"/> reads the same clock
-/// directly off <see cref="AgentCoreOptions.TimeProvider"/>, and the relay's idle deadline in
-/// <c>AgentCore.AspNetCore/Vendors/TelnyxRelay/</c> resolves this registration, so the two always
-/// agree on what time it is.
-/// </para>
-/// </remarks>
 public static class AgentCoreServiceCollectionExtensions
 {
     /// <summary>Loads one document and registers everything a call needs to run on it.</summary>
@@ -65,11 +30,6 @@ public static class AgentCoreServiceCollectionExtensions
     /// adapter serves, or does not compile.
     /// </exception>
     /// <exception cref="SecretResolutionException">One <c>${secret:name}</c> reference resolves to nothing.</exception>
-    /// <remarks>
-    /// This method is async because three of its steps wait: the secret resolution of step 3, the
-    /// knowledge seam of step 3b, and the chat client seam of step 5. A top-level <c>Program.cs</c>
-    /// awaits it before <c>builder.Build()</c>, and no thread blocks while the host starts.
-    /// </remarks>
     public static async ValueTask<IServiceCollection> AddAgentCoreAsync(
         this IServiceCollection services,
         Action<AgentCoreOptions> configure,
@@ -109,6 +69,12 @@ public static class AgentCoreServiceCollectionExtensions
         // Step 4: build the tool factory chain.
         var tools = ToolFactoryStartup.Build(options, startup, knowledge);
 
+        // Step 4b: open store 1. The compile below builds the history provider around it, and that
+        // provider is one instance for the whole process under R7.
+        var transcript = await TranscriptStartup
+            .OpenAsync(configuration, options, loggers, cancellationToken)
+            .ConfigureAwait(false);
+
         // The evaluator registry is built before the compile, because the moderator that guards each
         // agent's chat pipeline comes out of it and is wired in at compile time.
         var evaluators = await EvaluationStartup
@@ -117,7 +83,7 @@ public static class AgentCoreServiceCollectionExtensions
 
         // Step 5: compile. The registry compiles once and every call shares the result.
         var graph = await CompilationStartup
-            .CompileAsync(configuration, options, startup, tools, evaluators, loggers, cancellationToken)
+            .CompileAsync(configuration, options, startup, tools, transcript, evaluators, loggers, cancellationToken)
             .ConfigureAwait(false);
 
         // Step 6: register. Everything above is shared and read-only for the life of the process.
@@ -132,6 +98,12 @@ public static class AgentCoreServiceCollectionExtensions
         services.AddSingleton<IChatClientFactory>(_ => graph.ChatClients);
         services.AddSingleton<IAgentToolFactory>(tools);
         services.AddSingleton<IGuardEvaluator>(graph.Guards);
+
+        // Under the port, so a host reads the seam it bound, and under its own type, so a test or an
+        // operator asks the thing that holds the rows — the in-process store's Read is how the words
+        // of one call are read back when no database is named.
+        services.AddSingleton(transcript);
+        services.AddSingleton(transcript.GetType(), transcript);
 
         await CallSessionStartup
             .RegisterAsync(services, configuration, options, graph, loggers, cancellationToken)
@@ -158,24 +130,6 @@ public static class AgentCoreServiceCollectionExtensions
     /// <summary>Registers WebSocket options that suit a phone call rather than a browser tab.</summary>
     /// <param name="services">The service collection of the host.</param>
     /// <returns>The same collection, so a host chains its calls.</returns>
-    /// <remarks>
-    /// <para>
-    /// The shipped default is a two-minute <c>KeepAliveInterval</c> and no <c>KeepAliveTimeout</c>
-    /// at all, so a peer that stopped answering can hold a Kestrel connection, and the call session
-    /// behind it, for two minutes before anything notices. A phone call needs a dead peer caught in
-    /// seconds, not minutes, so this sets both to about twenty seconds. This is a convenience for
-    /// <c>UseWebSockets</c>, not <c>providers.call.idleTimeoutSeconds</c>: the keep-alive ping
-    /// only catches a peer the network itself stopped answering, and only that idle timeout catches
-    /// a peer that still answers pings but sends no relay frame. A host that wants different numbers
-    /// calls <c>services.AddWebSockets(...)</c> itself and skips this method.
-    /// </para>
-    /// <para>
-    /// The host must still call the no-argument <c>app.UseWebSockets()</c>. The overload that takes
-    /// a <c>WebSocketOptions</c> instance directly — <c>app.UseWebSockets(new WebSocketOptions())</c>
-    /// — never reads this registration at all, so a host that calls this method and then that
-    /// overload gets the shipped two-minute defaults back, with no error or warning either way.
-    /// </para>
-    /// </remarks>
     public static IServiceCollection AddAgentCoreWebSockets(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);

@@ -29,18 +29,6 @@ public sealed record VendorProviderConfiguration
 /// <summary>
 /// The two speech roles: who turns sound into text, and who turns text back into sound.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Recognition and synthesis are two jobs, which a deployment whose transport carries audio may buy
-/// from one vendor or from two. One name covering both only ever described the bundled case, where
-/// a single transport happens to sell them together; naming the roles separately describes both
-/// shapes, and the bundled case simply writes the same vendor twice.
-/// </para>
-/// <para>
-/// There is no shorthand. One shape is read, bound, and validated, so a document is never two
-/// documents in disguise.
-/// </para>
-/// </remarks>
 public sealed record SpeechProviderConfiguration
 {
     /// <summary>Gets the recognition vendor: what the caller said, turned into text.</summary>
@@ -53,21 +41,6 @@ public sealed record SpeechProviderConfiguration
 /// <summary>
 /// The vendor that carries the call, and the limits of the socket it opens.
 /// </summary>
-/// <remarks>
-/// <para>
-/// This is the <b>media</b> plane: who carries the call and what route they dial. It is not
-/// <c>providers.speech</c>, which is recognition and synthesis, and it is not
-/// <c>providers.telephony</c>, which dials, transfers, and hangs up. A warm transfer creates a
-/// second media leg, so the control identity in <c>telephony</c> must outlive any one call's
-/// socket; this block is per-socket and cannot serve that.
-/// </para>
-/// <para>
-/// The three limits are written in whole seconds and bytes rather than as duration strings. The
-/// document carries no other duration, so there was no convention to follow, and integers need no
-/// parser and validate with a plain <c>minimum</c>. Each name carries its unit so nothing is
-/// guessed. <c>-1</c> on either timeout means <see cref="System.Threading.Timeout.InfiniteTimeSpan"/>.
-/// </para>
-/// </remarks>
 public sealed record CallProviderConfiguration
 {
     /// <summary>Gets the vendor that carries the call, such as <c>telnyx-relay</c>.</summary>
@@ -86,10 +59,6 @@ public sealed record CallProviderConfiguration
 /// <summary>
 /// The knowledge provider: one adapter for each knowledge port, and what those adapters read.
 /// </summary>
-/// <remarks>
-/// The two ports pick their adapter one at a time, so a document can search a vector store and
-/// still read the documents from disk.
-/// </remarks>
 public sealed record KnowledgeProviderConfiguration
 {
     /// <summary>The search adapter used when the document names none.</summary>
@@ -123,16 +92,6 @@ public sealed record KnowledgeProviderConfiguration
 /// <summary>
 /// The telemetry provider: where the signals go, and what is listened to on the way.
 /// </summary>
-/// <remarks>
-/// <para>
-/// A document that names none exports nothing. See <c>AgentCore.Application.Ports.ITelemetryAdapter</c>.
-/// </para>
-/// <para>
-/// The two name lists are here rather than inside an adapter because they are not a vendor's
-/// business. A deployment decides how much of its own process it pays to watch, and the adapter only
-/// carries what it is told to.
-/// </para>
-/// </remarks>
 public sealed record TelemetryProviderConfiguration
 {
     /// <summary>The service name used when the document sets none.</summary>
@@ -141,36 +100,16 @@ public sealed record TelemetryProviderConfiguration
     /// <summary>
     /// The metric export interval used when the document sets none, in milliseconds.
     /// </summary>
-    /// <remarks>
-    /// T61 puts a floor under this, and <see cref="ExportIntervalMilliseconds"/> is where the floor is
-    /// enforced. Grafana Cloud bills the greater of active series and data points a minute, so
-    /// sending four times a minute costs four times as much as sending once, for the same series.
-    /// </remarks>
     public const int DefaultExportIntervalMilliseconds = 60_000;
 
     /// <summary>The lowest interval T61 allows, in milliseconds.</summary>
     public const int MinimumExportIntervalMilliseconds = 60_000;
 
     /// <summary>The extra <c>ActivitySource</c> names listened to when the document lists none.</summary>
-    /// <remarks>
-    /// <c>Experimental.Microsoft.Extensions.AI</c> and <c>Experimental.Microsoft.Agents.AI</c> are the
-    /// default source names <c>Microsoft.Extensions.AI.OpenTelemetryChatClient</c> (10.8.3) and
-    /// <c>Microsoft.Agents.AI.OpenTelemetryAgent</c> (1.17.0) each construct their <c>ActivitySource</c>
-    /// under when a document names no <c>sourceName</c> of its own — read out of the restored assemblies,
-    /// not assumed. Without them here, Task 6a's <c>chat</c> and <c>invoke_agent</c> spans are emitted
-    /// but nothing this repository configures ever listens for them, so an exporter drops every one.
-    /// </remarks>
     public static readonly IReadOnlyList<string> DefaultSources =
         ["Microsoft.AspNetCore", "System.Net.Http", "Experimental.Microsoft.Extensions.AI", "Experimental.Microsoft.Agents.AI"];
 
     /// <summary>The extra <c>Meter</c> names listened to when the document lists none.</summary>
-    /// <remarks>
-    /// <c>OpenTelemetryChatClient</c> names its <c>Meter</c> with the same string it names its
-    /// <c>ActivitySource</c> with, so the two GenAI names here match <see cref="DefaultSources"/>
-    /// exactly. <c>OpenTelemetryAgent</c> owns no <c>Meter</c> of its own — it delegates every metric to
-    /// the same <c>OpenTelemetryChatClient</c> instance it forwards agent runs through — so one name
-    /// covers both libraries' metrics.
-    /// </remarks>
     public static readonly IReadOnlyList<string> DefaultMeters =
         [
             "Microsoft.AspNetCore.Hosting",
@@ -184,22 +123,12 @@ public sealed record TelemetryProviderConfiguration
     public required string Kind { get; init; }
 
     /// <summary>Gets the collector URL, or <see langword="null"/> to read it from the environment.</summary>
-    /// <remarks>
-    /// An endpoint is not a credential, so it belongs in the document. Leaving it out lets the
-    /// standard <c>OTEL_EXPORTER_OTLP_ENDPOINT</c> variable answer instead, which is what a
-    /// deployment that runs a collector beside the process already sets.
-    /// </remarks>
     public string? Endpoint { get; init; }
 
     /// <summary>Gets the <c>service.name</c> every exported signal carries.</summary>
     public string ServiceName { get; init; } = DefaultServiceName;
 
     /// <summary>Gets how often metrics are sent, in milliseconds, never below the T61 floor.</summary>
-    /// <remarks>
-    /// A document that writes a smaller number gets <see cref="MinimumExportIntervalMilliseconds"/>
-    /// instead. This is a floor and not a validation failure: a number too small costs money quietly
-    /// rather than breaking anything, and refusing to start over it would be worse than correcting it.
-    /// </remarks>
     [JsonPropertyName("exportIntervalMs")]
     public int ExportIntervalMilliseconds
     {
@@ -208,89 +137,41 @@ public sealed record TelemetryProviderConfiguration
     } = DefaultExportIntervalMilliseconds;
 
     /// <summary>Gets the extra <c>ActivitySource</c> names listened to, beside the one AgentCore owns.</summary>
-    /// <remarks>
-    /// .NET emits these itself, so listening costs a name and no instrumentation package.
-    /// <c>Microsoft.AspNetCore</c> is the request span and <c>System.Net.Http</c> is the outbound
-    /// call. A document that wants the AgentCore turn span alone writes an empty list.
-    /// </remarks>
     public IReadOnlyList<string> Sources { get; init; } = DefaultSources;
 
     /// <summary>Gets the extra <c>Meter</c> names listened to, beside the one AgentCore owns.</summary>
-    /// <remarks>
-    /// These are the built-in .NET meters. They are the bulk of the roughly 1,750 active series a
-    /// normal ASP.NET Core replica spends against the 10,000 ceiling of item 12, so a deployment that
-    /// needs the room takes names off this list.
-    /// </remarks>
     public IReadOnlyList<string> Meters { get; init; } = DefaultMeters;
 }
 
 /// <summary>
 /// The <c>providers:</c> section. It configures adapters and never changes agent shape.
 /// </summary>
-/// <remarks>
-/// This is the seam where the ports in section 7 bind.
-/// </remarks>
 public sealed record ProvidersConfiguration
 {
     /// <summary>Gets the language models, in document order.</summary>
     public IReadOnlyList<LlmProviderConfiguration> Llm { get; init; } = [];
 
     /// <summary>Gets the vendor that carries the call and owns its inbound route, or <see langword="null"/>.</summary>
-    /// <remarks>
-    /// The media plane. This is the pipe the audio travels down, and the one seam of the three that
-    /// owns an inbound HTTP route.
-    /// </remarks>
     public CallProviderConfiguration? Call { get; init; }
 
     /// <summary>Gets the two speech roles, or <see langword="null"/>.</summary>
-    /// <remarks>
-    /// Recognition and synthesis, named one at a time. Not the pipe — see <see cref="Call"/>.
-    /// </remarks>
     public SpeechProviderConfiguration? Speech { get; init; }
 
     /// <summary>Gets the telephony provider, or <see langword="null"/>.</summary>
-    /// <remarks>
-    /// Dial, transfer, and hang up. Not the pipe — see <see cref="Call"/>. A warm transfer creates a
-    /// second media leg, so this identity outlives any one of them.
-    /// </remarks>
     public VendorProviderConfiguration? Telephony { get; init; }
 
     /// <summary>Gets the moderation provider, or <see langword="null"/>.</summary>
-    /// <remarks>
-    /// <c>AgentCore.Application.Ports.IModerationAdapter</c> reads it, and the host registers one
-    /// adapter for each vendor it supports. A document that names none moderates nothing, and every
-    /// turn reaches the model.
-    /// </remarks>
     public VendorProviderConfiguration? Moderation { get; init; }
 
     /// <summary>Gets the knowledge provider, or <see langword="null"/>.</summary>
     public KnowledgeProviderConfiguration? Knowledge { get; init; }
 
     /// <summary>Gets the telemetry provider, or <see langword="null"/>.</summary>
-    /// <remarks>
-    /// <c>AgentCore.Application.Ports.ITelemetryAdapter</c> reads it, and the host registers one
-    /// adapter for each vendor it supports. A document that names none exports nothing, and log lines
-    /// go wherever the host already sends them.
-    /// </remarks>
     public TelemetryProviderConfiguration? Telemetry { get; init; }
 
     /// <summary>Gets the audit sink provider, or <see langword="null"/> for the in-process default.</summary>
-    /// <remarks>
-    /// <para>
-    /// <c>AgentCore.Application.Ports.IAuditSinkAdapter</c> reads it, and the host registers one
-    /// adapter for each vendor it supports. This seam differs from the others in what an absent block
-    /// means: a document that names none still gets a sink, the built-in
-    /// <c>AgentCore.Application.Audit.AuditSinkFactory.MemoryKind</c> one, because the turn loop
-    /// produces the D23 events whether or not anybody chose where to put them. A document may also
-    /// write that kind out in full, and it means exactly the same thing.
-    /// </para>
-    /// <para>
-    /// <b>The in-process sink is not the audit store.</b> D23 puts the real chain in PostgreSQL, where
-    /// the writer role holds no <c>UPDATE</c> grant, a trigger refuses even the table owner, and a
-    /// <c>CHECK</c> constraint recomputes SHA-256 inside the engine. A list in this process has none of
-    /// those three defences and grows without a bound, so a long-running deployment names a durable
-    /// vendor here and leaves the default to tests and to hosts that have no database.
-    /// </para>
-    /// </remarks>
     public VendorProviderConfiguration? Audit { get; init; }
+
+    /// <summary>Gets the transcript store provider, or <see langword="null"/> for the in-process default.</summary>
+    public VendorProviderConfiguration? Transcript { get; init; }
 }

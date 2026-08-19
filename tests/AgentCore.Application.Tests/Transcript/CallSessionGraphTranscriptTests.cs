@@ -9,7 +9,7 @@ using AgentCore.Application.Tests.Runtime;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Call;
+namespace AgentCore.Application.Tests.Transcript;
 
 /// <summary>
 /// Pins what a graph row keeps and what it sends: the caller-facing turn, and nothing else.
@@ -47,7 +47,7 @@ public sealed class CallSessionGraphTranscriptTests
     public async Task Run_GraphRow_StoresOnlyCallerFacingMessages()
     {
         // Arrange
-        RecordingCallMessageStore store = new();
+        RecordingTranscriptStore store = new();
         RecordingNodeClient researcher = new(Thinking);
         RecordingNodeClient responder = new(Spoken);
         var session = CreateSession(researcher, responder, store);
@@ -72,7 +72,7 @@ public sealed class CallSessionGraphTranscriptTests
         // Arrange
         RecordingNodeClient researcher = new(Thinking);
         RecordingNodeClient responder = new(Spoken);
-        var session = CreateSession(researcher, responder, new RecordingCallMessageStore());
+        var session = CreateSession(researcher, responder, new RecordingTranscriptStore());
         _ = await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
 
         // Act
@@ -100,7 +100,7 @@ public sealed class CallSessionGraphTranscriptTests
     public async Task Run_GraphRow_ReplyIsFinalNodeOnly()
     {
         // Arrange
-        RecordingCallMessageStore store = new();
+        RecordingTranscriptStore store = new();
         RecordingNodeClient researcher = new(Thinking);
         RecordingNodeClient responder = new(Spoken);
         var session = CreateSession(researcher, responder, store);
@@ -121,7 +121,7 @@ public sealed class CallSessionGraphTranscriptTests
     public async Task Interrupt_MidGraphReply_StoresTheHeardWordsOnly()
     {
         // Arrange
-        RecordingCallMessageStore store = new();
+        RecordingTranscriptStore store = new();
         RecordingNodeClient researcher = new(Thinking);
         using ScriptedChatClient responder = new("Order 41 ", "ships Friday.") { GateAfterFirstFragment = true };
         var session = CreateSession(researcher, responder, store);
@@ -149,7 +149,7 @@ public sealed class CallSessionGraphTranscriptTests
     public async Task Interrupt_BeforeAnyGraphWordLanded_StoresTheCallerUtteranceAlone()
     {
         // Arrange
-        RecordingCallMessageStore store = new();
+        RecordingTranscriptStore store = new();
         RecordingNodeClient researcher = new(Thinking);
         using ScriptedChatClient responder = new("Order 41 ", "ships Friday.") { GateAfterFirstFragment = true };
         var session = CreateSession(researcher, responder, store);
@@ -195,7 +195,7 @@ public sealed class CallSessionGraphTranscriptTests
     }
 
     private static CallSession CreateSession(
-        IChatClient researcher, IChatClient responder, ICallMessageStore store)
+        IChatClient researcher, IChatClient responder, ITranscriptStore store)
     {
         var document = ConfigurationLoader.LoadYaml(GraphYaml);
         RoutingChatClientFactory chatClients = new(researcher);
@@ -203,7 +203,7 @@ public sealed class CallSessionGraphTranscriptTests
 
         var compiled = ConfigurationCompiler.Compile(
             document,
-            new AgentCompilationContext(chatClients) { MessageStore = store });
+            new AgentCompilationContext(chatClients) { TranscriptStore = store });
 
         var factory = new CallSessionFactory(
             compiled,

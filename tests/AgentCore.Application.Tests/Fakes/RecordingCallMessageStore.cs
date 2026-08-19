@@ -1,5 +1,6 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Transcript;
 using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Tests.Fakes;
@@ -11,7 +12,7 @@ namespace AgentCore.Application.Tests.Fakes;
 /// <see cref="Live"/> is the state those calls left behind, which is what a reader of the record
 /// years later would see.
 /// </remarks>
-internal sealed class RecordingCallMessageStore : ICallMessageStore
+internal sealed class RecordingTranscriptStore : ITranscriptStore
 {
     private readonly Lock _lock = new();
     private readonly Dictionary<(string CallId, int Ordinal), CallMessage> _state = [];

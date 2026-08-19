@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Audit;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
@@ -9,6 +9,7 @@ using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using System.Diagnostics;
 using Xunit;
 
 namespace AgentCore.Application.Tests.Diagnostics;

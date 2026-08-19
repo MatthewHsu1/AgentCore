@@ -1,9 +1,3 @@
-using System.Diagnostics;
-using System.Globalization;
-using System.Runtime.CompilerServices;
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
@@ -11,10 +5,17 @@ using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Policy;
 using AgentCore.Application.Ports;
 using AgentCore.Application.State;
-using AgentCore.Domain;
+using AgentCore.Application.Transcript;
 using AgentCore.Domain.Audit;
+using AgentCore.Domain;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using System.Diagnostics;
+using System.Globalization;
+using System.Runtime.CompilerServices;
+using System.Text.Json.Nodes;
+using System.Text.Json;
+using System.Text;
 
 namespace AgentCore.Application.Runtime;
 

@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Audit;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
@@ -7,9 +7,10 @@ using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
-using AgentCore.Domain;
 using AgentCore.Domain.Audit;
+using AgentCore.Domain;
 using Microsoft.Extensions.AI;
+using System.Runtime.CompilerServices;
 using Xunit;
 
 namespace AgentCore.Application.Tests.Runtime;

@@ -1,12 +1,14 @@
-using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
+using AgentCore.Application.Transcript.Memory;
+using AgentCore.Application.Transcript;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using System.Text.Json;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Call;
+namespace AgentCore.Application.Tests.Transcript;
 
 /// <summary>
 /// Pins what the provider adds to <see cref="CallTranscript"/>: the lock, the write chain, and the
@@ -157,7 +159,7 @@ public sealed class AgentCoreChatHistoryProviderTests
     public async Task TruncateLastReply_WhileTheAppendIsStillWriting_ReachesTheStoreAfterIt()
     {
         // Arrange
-        var store = new BlockingCallMessageStore();
+        var store = new BlockingTranscriptStore();
         var provider = new AgentCoreChatHistoryProvider(store);
         var session = new StubSession();
         provider.BeginCall(session, CallId);
@@ -293,7 +295,7 @@ public sealed class AgentCoreChatHistoryProviderTests
     public async Task ProvideChatHistory_TwoConcurrentSessions_DoNotMix()
     {
         // Arrange
-        var provider = new AgentCoreChatHistoryProvider(new RecordingCallMessageStore());
+        var provider = new AgentCoreChatHistoryProvider(new RecordingTranscriptStore());
         var first = new StubSession();
         var second = new StubSession();
         provider.BeginCall(first, "call-a");
@@ -312,7 +314,7 @@ public sealed class AgentCoreChatHistoryProviderTests
     public async Task AppendTurn_BackingStoreThrows_DoesNotFailTheTurn()
     {
         // Arrange
-        var provider = new AgentCoreChatHistoryProvider(new ThrowingCallMessageStore());
+        var provider = new AgentCoreChatHistoryProvider(new ThrowingTranscriptStore());
         var session = new StubSession();
         provider.BeginCall(session, CallId);
 
@@ -328,7 +330,7 @@ public sealed class AgentCoreChatHistoryProviderTests
     public async Task BeginCall_BackingStoreThrows_TellsTheReporterWhichTurnWasLost()
     {
         // Arrange
-        var provider = new AgentCoreChatHistoryProvider(new ThrowingCallMessageStore());
+        var provider = new AgentCoreChatHistoryProvider(new ThrowingTranscriptStore());
         var session = new StubSession();
         List<int> dropped = [];
         provider.BeginCall(session, CallId, (turnIndex, _) => dropped.Add(turnIndex));
@@ -345,7 +347,7 @@ public sealed class AgentCoreChatHistoryProviderTests
     public async Task InMemoryStore_AfterTurnAndBargeIn_HoldsTheHeardTextInOrder()
     {
         // Arrange
-        var store = new InMemoryCallMessageStore();
+        var store = new InMemoryTranscriptStore();
         var provider = new AgentCoreChatHistoryProvider(store);
         var session = new StubSession();
         provider.BeginCall(session, CallId);
@@ -360,9 +362,9 @@ public sealed class AgentCoreChatHistoryProviderTests
     }
 
     /// <summary>Opens one call on a fresh session, the way <c>CallSession</c> does at call start.</summary>
-    private static (AgentCoreChatHistoryProvider Provider, RecordingCallMessageStore Store, StubSession Session) NewCall()
+    private static (AgentCoreChatHistoryProvider Provider, RecordingTranscriptStore Store, StubSession Session) NewCall()
     {
-        var store = new RecordingCallMessageStore();
+        var store = new RecordingTranscriptStore();
         var provider = new AgentCoreChatHistoryProvider(store);
         var session = new StubSession();
         provider.BeginCall(session, CallId);
@@ -397,11 +399,11 @@ public sealed class AgentCoreChatHistoryProviderTests
     /// Holds one append open, so a barge-in can arrive while a turn is still writing. It keeps the
     /// real store's ordering rule: a rewrite of a row that is not there yet changes nothing.
     /// </summary>
-    private sealed class BlockingCallMessageStore : ICallMessageStore
+    private sealed class BlockingTranscriptStore : ITranscriptStore
     {
         private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private readonly InMemoryCallMessageStore _rows = new();
+        private readonly InMemoryTranscriptStore _rows = new();
         private bool _block;
 
         public Task Entered => _entered.Task;

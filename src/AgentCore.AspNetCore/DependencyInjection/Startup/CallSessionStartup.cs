@@ -1,21 +1,14 @@
 using AgentCore.Application.Audit;
-using AgentCore.Application.Configuration.Compilation;
+using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Evaluation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
-using AgentCore.AspNetCore.Sessions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace AgentCore.AspNetCore.DependencyInjection;
 
 /// <summary>The seam a call arrives on: the audit queue, the observers, and the session factory.</summary>
-/// <remarks>
-/// <see cref="CompiledAgent"/> is a process singleton by design, and it is registered as one.
-/// <see cref="CallSession"/> is not, and it is registered nowhere: one call gets one session from
-/// <see cref="ICallSessionFactory"/>, and <see cref="ICallSessionStore"/> holds it between requests.
-/// </remarks>
 internal static class CallSessionStartup
 {
     /// <summary>Opens the audit store the document names, reads the call, and registers the session factory.</summary>
@@ -25,28 +18,6 @@ internal static class CallSessionStartup
     /// <param name="graph">The compiled graph and the seams step 5 made.</param>
     /// <param name="loggers">The factory the session and the audit queue take their loggers from.</param>
     /// <param name="cancellationToken">Cancels the store open.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>There is always a sink.</b> <c>providers.audit.kind</c> picks one of the vendors the host
-    /// registered, and a document that names none gets <see cref="AuditSinkFactory.MemoryKind"/>. The
-    /// turn loop produces the events of D23 whatever a document says, so the seam that receives them
-    /// has a working default rather than a null: that is what lets every reading of a call in
-    /// <see cref="CallObservers.Standard"/> be unconditional, and what lets a first run and a test
-    /// work with no database.
-    /// </para>
-    /// <para>
-    /// The default is not durable, so it is announced. The in-process list grows without a bound and
-    /// dies with the process, which is the wrong store for anything long-running and a silent one to
-    /// fall into — a deployment that forgot the block would otherwise discover it by running out of
-    /// memory. One warning at startup costs nothing and names the fix.
-    /// </para>
-    /// <para>
-    /// This is the one place the "never sit on the turn" rule of <see cref="IAuditSinkPort"/> is
-    /// applied. The seam opens a STORE, and this wraps it in the bounded channel and batching
-    /// background writer of section 7, so a store that blocks on its database is a correct store and
-    /// no adapter carries a queue of its own.
-    /// </para>
-    /// </remarks>
     internal static async ValueTask RegisterAsync(
         IServiceCollection services,
         AgentCoreConfiguration configuration,

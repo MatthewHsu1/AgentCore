@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Audit;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
@@ -8,14 +8,17 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Secrets;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Transcript.Memory;
+using AgentCore.Application.Transcript;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Sessions;
 using AgentCore.AspNetCore.Tests.Fakes;
 using AgentCore.Domain.Audit;
 using AgentCore.Infrastructure.Tools;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.AI.Evaluation;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
+using System.Text.Json.Nodes;
 using Xunit;
 
 namespace AgentCore.AspNetCore.Tests.DependencyInjection;
@@ -987,6 +990,114 @@ public sealed class AddAgentCoreTests
     /// </remarks>
     private static InMemoryAuditSink Sink(IServiceProvider provider)
         => provider.GetRequiredService<InMemoryAuditSink>();
+
+    // -------------------------------------------------------------------------------------------
+    // The transcript store: named by providers.transcript, and never absent.
+    // -------------------------------------------------------------------------------------------
+
+    // The same agent, served by a transcript vendor the host registers itself.
+    private const string VendorTranscriptYaml =
+        """
+        apiVersion: agentcore/v1
+        name: composed
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything" }
+        providers:
+          call:   { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: reply }
+          transcript: { kind: test }
+        """;
+
+    [Fact]
+    public async Task ADocumentThatNamesNoTranscriptProvider_StillOpensTheMemoryStore()
+    {
+        using var provider = await BuildAsync(OneAgentYaml);
+
+        // The turn loop writes the words of every call whatever a document says, so this seam has a
+        // working default rather than a null, and a first run needs no database.
+        Assert.NotNull(provider.GetService<ITranscriptStore>());
+        Assert.NotNull(provider.GetService<InMemoryTranscriptStore>());
+    }
+
+    [Fact]
+    public async Task ATranscriptVendorTheDocumentNames_IsTheStoreTheTurnWritesTo()
+    {
+        RecordingTranscriptStore store = new();
+        using var provider = await BuildAsync(
+            VendorTranscriptYaml,
+            options => options.UseTranscriptStores(new TestTranscriptStoreAdapter(store)));
+
+        var session = provider.GetRequiredService<ICallSessionFactory>().Create("call-1");
+        await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+        await session.FlushTranscriptAsync();
+
+        // The host lists its vendors once and providers.transcript.kind picks one. Nothing but the
+        // document decides where the words of a call land.
+        Assert.Same(store, provider.GetRequiredService<RecordingTranscriptStore>());
+        Assert.Equal(["user", "assistant"], store.Roles);
+    }
+
+    [Fact]
+    public async Task ATranscriptKindThisHostDoesNotRegister_FailsTheStart()
+    {
+        // A document that asked for something this host cannot give fails while the host starts, and
+        // never on a call.
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+            () => BuildAsync(VendorTranscriptYaml));
+
+        Assert.Contains("test", failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A transcript vendor that hands over the store the test holds.</summary>
+    private sealed class TestTranscriptStoreAdapter(RecordingTranscriptStore store) : ITranscriptStoreAdapter
+    {
+        public string Kind => "test";
+
+        public ValueTask<ITranscriptStore> OpenAsync(
+            VendorProviderConfiguration entry,
+            ISecretResolverPort? secrets,
+            CancellationToken cancellationToken = default)
+            => ValueTask.FromResult<ITranscriptStore>(store);
+    }
+
+    /// <summary>A store 1 backing that keeps the role of every row it accepted.</summary>
+    private sealed class RecordingTranscriptStore : ITranscriptStore
+    {
+        private readonly Lock _gate = new();
+        private readonly List<string> _roles = [];
+
+        /// <summary>Gets the role of each row this store accepted, in the order it arrived.</summary>
+        public IReadOnlyList<string> Roles
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return [.. _roles];
+                }
+            }
+        }
+
+        public ValueTask AppendAsync(
+            IReadOnlyList<CallMessage> messages, CancellationToken cancellationToken = default)
+        {
+            lock (_gate)
+            {
+                _roles.AddRange(messages.Select(message => message.Content.Role.Value));
+            }
+
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask RewriteAsync(
+            string callId, int ordinal, ChatMessage content, CancellationToken cancellationToken = default)
+            => ValueTask.CompletedTask;
+    }
 
     [Fact]
     public async Task NoLoggerAndNoAuditVendor_StillRunsATurn()

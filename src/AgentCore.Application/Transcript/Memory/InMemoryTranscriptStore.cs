@@ -1,15 +1,10 @@
 using AgentCore.Application.Ports;
 using Microsoft.Extensions.AI;
 
-namespace AgentCore.Application.Runtime;
+namespace AgentCore.Application.Transcript.Memory;
 
-/// <summary>The store 1 backing that keeps every row in this process.</summary>
-/// <remarks>
-/// It is the default backing, and it is what a host that binds no database gets. The rows outlive
-/// the call and nothing sweeps them, so it belongs to a test or a single-process demo and never to
-/// a deployment that answers real calls.
-/// </remarks>
-internal sealed class InMemoryCallMessageStore : ICallMessageStore
+/// <summary>The store backing that keeps every row in this process.</summary>
+public sealed class InMemoryTranscriptStore : ITranscriptStore
 {
     private readonly Lock _lock = new();
     private readonly Dictionary<(string CallId, int Ordinal), CallMessage> _rows = [];
@@ -47,6 +42,7 @@ internal sealed class InMemoryCallMessageStore : ICallMessageStore
 
     /// <summary>Reads one whole call, oldest message first.</summary>
     /// <param name="callId">The call to read.</param>
+    /// <returns>Every row of the call, or an empty list when it holds none.</returns>
     public IReadOnlyList<CallMessage> Read(string callId)
     {
         lock (_lock)

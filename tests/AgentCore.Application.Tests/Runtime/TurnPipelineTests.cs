@@ -1,3 +1,4 @@
+using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Audit;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;

@@ -1,26 +1,8 @@
 using Microsoft.Extensions.AI;
 
-namespace AgentCore.Application.Runtime;
+namespace AgentCore.Application.Transcript;
 
 /// <summary>The words of one call, and the ordinals that address them.</summary>
-/// <remarks>
-/// <para>
-/// It is state and rules, and nothing else: every method is synchronous, allocates the ordinals it
-/// needs, and hands back the rows a caller must write. The connection, the gate, and the
-/// write-failure policy belong to <see cref="AgentCoreChatHistoryProvider"/>, which is its only
-/// caller. That split is what lets the rules below be tested without an agent, a session, or a
-/// store.
-/// </para>
-/// <para>
-/// <b>It is not safe for two callers at once.</b> The provider's per-call lock is what serialises
-/// it, and that lock is what keeps two appends off one ordinal when a barge-in lands on one thread
-/// while a turn is still finishing on another.
-/// </para>
-/// <para>
-/// It is the value the provider keeps in the session's state bag, so every member here has to
-/// survive a round trip through JSON.
-/// </para>
-/// </remarks>
 internal sealed class CallTranscript
 {
     /// <summary>Gets or sets the id of the call. The turn loop stamps it.</summary>
@@ -33,12 +15,6 @@ internal sealed class CallTranscript
     public int NextOrdinal { get; set; }
 
     /// <summary>Gets or sets the reply a barge-in would cut, or null when the call has spoken none.</summary>
-    /// <remarks>
-    /// It survives the turn that produced it. The vendor paces the audio, so a held prompt starts
-    /// the next turn while the caller is still hearing the last one, and the reply a barge-in cuts is
-    /// then the previous turn's. Whether that turn may still be corrected is
-    /// <see cref="CallSession"/>'s decision, and this class does not second-guess it.
-    /// </remarks>
     public int? LastAssistantOrdinal { get; set; }
 
     /// <summary>Gets the live history of the call, oldest first.</summary>
@@ -78,20 +54,6 @@ internal sealed class CallTranscript
     /// <summary>Cuts the turn the caller was hearing down to the words the caller actually heard.</summary>
     /// <param name="heard">The text the caller heard, as the vendor reported it. Nothing is estimated.</param>
     /// <returns>The rows to rewrite, oldest first, or empty when the call has no reply to cut.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>Every word of the turn goes, not only the last one.</b> A model routinely writes a line and
-    /// puts the tool call it announces on the same message — "Let me check that for you", then the
-    /// call — and a graph row writes one reply for each node. The caller heard as much of the turn as
-    /// the vendor played, and nothing else, so the prose of every earlier message is dropped and the
-    /// heard text lands once, on the reply the cut fell in.
-    /// </para>
-    /// <para>
-    /// Nothing but the words changes. A row keeps its tool content, so a side effect that ran stays
-    /// visible to the next turn, and a reply keeps the tokens it cost. No row is removed, because an
-    /// ordinal is permanent: a turn the caller cut before it spoke leaves a reply row holding nothing.
-    /// </para>
-    /// </remarks>
     public IReadOnlyList<CallMessage> TruncateLastReply(string heard)
     {
         ArgumentNullException.ThrowIfNull(heard);

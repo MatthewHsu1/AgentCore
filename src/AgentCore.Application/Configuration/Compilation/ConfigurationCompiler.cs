@@ -1,11 +1,12 @@
-using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Runtime;
-using Microsoft.Agents.AI;
+using AgentCore.Application.Transcript;
 using Microsoft.Agents.AI.Workflows;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using System.Text.Json.Nodes;
 
 namespace AgentCore.Application.Configuration.Compilation;
 
@@ -152,7 +153,7 @@ public static class ConfigurationCompiler
             agents,
             stages,
             spokenBy,
-            new AgentCoreChatHistoryProvider(context.MessageStore),
+            new AgentCoreChatHistoryProvider(context.TranscriptStore),
             inner => WithTurnDisposition(inner, configuration, context.Moderation, spokenBy));
     }
 

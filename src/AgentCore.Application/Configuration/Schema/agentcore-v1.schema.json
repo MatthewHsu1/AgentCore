@@ -665,6 +665,10 @@
         "audit": {
           "$ref": "#/$defs/vendorProvider",
           "description": "Where the D23 audit chain is written, such as memory. A document that names none uses the in-process memory sink, which is not durable."
+        },
+        "transcript": {
+          "$ref": "#/$defs/vendorProvider",
+          "description": "Where the words of a call are written, such as memory or postgres. A document that names none uses the in-process memory store, which is not durable and holds no retention window."
         }
       }
     },

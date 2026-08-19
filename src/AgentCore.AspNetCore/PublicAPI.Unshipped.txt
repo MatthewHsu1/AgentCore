@@ -10,12 +10,12 @@ AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.Dispose() -> void
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.AddToolFactory(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Ports.IAgentToolFactory!>! toolFactory) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.AgentCoreOptions() -> void
-AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Bindings.get -> AgentCore.Application.Tools.ToolBindingRegistry!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Bind(string! name, AgentCore.Application.Tools.ToolBinding! binding) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Bindings.get -> AgentCore.Application.Tools.ToolBindingRegistry!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Configuration.get -> AgentCore.Application.Configuration.Schema.AgentCoreConfiguration?
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Configuration.set -> void
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.ConfigurationPath.get -> string?
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.ConfigurationPath.set -> void
-AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Configuration.set -> void
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.LoggerFactory.get -> Microsoft.Extensions.Logging.ILoggerFactory?
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.LoggerFactory.set -> void
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.SecretResolver.get -> AgentCore.Application.Ports.ISecretResolverPort?
@@ -24,9 +24,9 @@ AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.TimeProvider.get -> Sy
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.TimeProvider.set -> void
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseAuditSinks(params AgentCore.Application.Ports.IAuditSinkAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseCall(params AgentCore.Application.Ports.ICallAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
-AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseChatClients(params AgentCore.Application.Ports.IChatClientAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseChatClients(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Ports.IChatClientFactory!>! chatClients) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseChatClients(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IChatClientFactory!>>! chatClients) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseChatClients(params AgentCore.Application.Ports.IChatClientAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseDocumentStore(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Ports.IDocumentStorePort!>! documents) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseKnowledge<TKnowledge>(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, TKnowledge!>! knowledge) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseKnowledgeRetrieval(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Ports.IKnowledgeRetrievalPort!>! retrieval) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
@@ -35,6 +35,7 @@ AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseModeration(params A
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseObservers(params AgentCore.Application.Ports.ICallObserver![]! observers) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseSpeech(params AgentCore.Application.Ports.ISpeechAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseTelemetry(params AgentCore.Application.Ports.ITelemetryAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseTranscriptStores(params AgentCore.Application.Ports.ITranscriptStoreAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreServiceCollectionExtensions
 AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup
 AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup.Configuration.get -> AgentCore.Application.Configuration.Schema.AgentCoreConfiguration!

@@ -34,4 +34,20 @@ internal static partial class StartupLog
             + "process. That store is not durable and it grows without a bound. Name a durable "
             + "providers.audit.kind, or write kind: memory to say this was meant.")]
     public static partial void AuditSinkDefaulted(ILogger logger);
+
+    /// <summary>The document named no <c>providers.transcript</c>, so the in-process store was opened.</summary>
+    /// <param name="logger">The factory's logger for the in-process store.</param>
+    /// <remarks>
+    /// The same reasoning as <see cref="AuditSinkDefaulted"/>: the default works, and it holds the
+    /// words of every call in a list that grows without a bound, sweeps nothing, and dies with the
+    /// process. A call cannot be resumed out of it and no retention window applies to it.
+    /// </remarks>
+    [LoggerMessage(
+        EventId = 2,
+        Level = LogLevel.Warning,
+        Message = "the document names no providers.transcript, so the words of every call are kept in "
+            + "this process. That store is not durable, it grows without a bound, and no retention "
+            + "window applies to it. Name a durable providers.transcript.kind, or write kind: memory "
+            + "to say this was meant.")]
+    public static partial void TranscriptStoreDefaulted(ILogger logger);
 }

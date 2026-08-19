@@ -1,9 +1,11 @@
+using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Audit;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Transcript;
 using AgentCore.AspNetCore.Sessions;
 using AgentCore.AspNetCore.Tests.Fakes;
 using AgentCore.Domain.Audit;
@@ -235,7 +237,7 @@ public sealed class TelnyxRelayCallEndTests
         // The session is the only thing that can wait for them, so once it leaves the store nothing
         // can: the record of that call would lose the turn the caller just had, and no error would
         // say so. Same shape as the teardown that removed a session without closing its chain.
-        ParkingCallMessageStore transcript = new();
+        ParkingTranscriptStore transcript = new();
         OrderedCallSessionStore sessions = new(() => transcript.Landed);
         using SequencedChatClient reply = new("your order ships Friday");
         await using var harness = await RelayConnectionHarness.StartAsync(
@@ -280,7 +282,7 @@ public sealed class TelnyxRelayCallEndTests
         // one is dropped there and then. It is dropped by the same rule teardown obeys: the session
         // is the only thing that can wait for the words it queued, so the first call's record would
         // lose its last turn.
-        ParkingCallMessageStore transcript = new();
+        ParkingTranscriptStore transcript = new();
         OrderedCallSessionStore sessions = new(() => transcript.Landed);
         using SequencedChatClient reply = new("your order ships Friday");
         await using var harness = await RelayConnectionHarness.StartAsync(
@@ -325,13 +327,13 @@ public sealed class TelnyxRelayCallEndTests
     /// factory holds the compiled agent.
     /// </remarks>
     private static CallSessionFactory TranscriptBackedSessions(
-        string yaml, IChatClient reply, ICallMessageStore transcript)
+        string yaml, IChatClient reply, ITranscriptStore transcript)
     {
         var document = ConfigurationLoader.LoadYaml(yaml);
         RoutingChatClientFactory chatClients = new(reply);
         var compiled = ConfigurationCompiler.Compile(
             document,
-            new AgentCompilationContext(chatClients) { MessageStore = transcript });
+            new AgentCompilationContext(chatClients) { TranscriptStore = transcript });
 
         return new CallSessionFactory(
             compiled,
@@ -498,7 +500,7 @@ internal sealed class FaultingClock : TimeProvider
 /// every other test runs on lands a write before the next line reads it, and would let teardown drop
 /// a session with a write still owing without any test noticing.
 /// </remarks>
-internal sealed class ParkingCallMessageStore : ICallMessageStore
+internal sealed class ParkingTranscriptStore : ITranscriptStore
 {
     private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);

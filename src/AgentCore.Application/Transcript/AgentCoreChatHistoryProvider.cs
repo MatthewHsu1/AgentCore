@@ -1,13 +1,14 @@
-using System.Runtime.CompilerServices;
-using System.Text.Json;
 using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Transcript.Memory;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
+using System.Runtime.CompilerServices;
+using System.Text.Json;
 
-namespace AgentCore.Application.Runtime;
+namespace AgentCore.Application.Transcript;
 
 /// <summary>
 /// Reports one store 1 write that was dropped, so the call can raise a diagnostic for it.
@@ -22,15 +23,15 @@ internal delegate void TranscriptWriteDropped(int turnIndex, Exception exception
 internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
 {
     private readonly ConditionalWeakTable<AgentSession, CallGate> _gates = [];
-    private readonly ICallMessageStore _store;
+    private readonly ITranscriptStore _store;
     private readonly ILogger _logger;
 
     /// <summary>Creates the provider over a backing store.</summary>
     /// <param name="store">Where the words are written, or <see langword="null"/> for memory.</param>
     /// <param name="logger">Where a dropped write is reported, or <see langword="null"/> for none.</param>
-    public AgentCoreChatHistoryProvider(ICallMessageStore? store = null, ILogger? logger = null)
+    public AgentCoreChatHistoryProvider(ITranscriptStore? store = null, ILogger? logger = null)
     {
-        _store = store ?? new InMemoryCallMessageStore();
+        _store = store ?? new InMemoryTranscriptStore();
         _logger = logger ?? NullLogger.Instance;
     }
 

@@ -29,6 +29,7 @@ internal static class CompilationStartup
     /// <param name="options">The options the host filled. It carries the chat client seam.</param>
     /// <param name="startup">The loaded document and the resolved secrets, as the chat client seam reads them.</param>
     /// <param name="tools">The chain step 4 built.</param>
+    /// <param name="transcript">The store 1 backing step 4b opened. One store serves every call.</param>
     /// <param name="evaluators">
     /// The registry the moderator comes out of. R3 puts moderation in the chat pipeline of every
     /// compiled agent, so it is bound here rather than on the session factory.
@@ -38,25 +39,12 @@ internal static class CompilationStartup
     /// <returns>The compiled graph, and the seams that made it.</returns>
     /// <exception cref="InvalidOperationException">The options bind no chat client adapter.</exception>
     /// <exception cref="ConfigurationLoadException">The document does not compile.</exception>
-    /// <remarks>
-    /// <para>
-    /// Section 8.7, row five: a guard that throws at run time is not a defect. The evaluator already
-    /// reports each distinct guard exactly once, and this is where that report finds a logger. Nothing
-    /// else binds it, so an unbound evaluator would report into nothing.
-    /// </para>
-    /// <para>
-    /// Row 4 of the compile table needs both seams, so both are bound here. The state source is
-    /// <see cref="CallStateScope"/>, which finds the state of the call running on the current flow of
-    /// execution, and <c>CallSession</c> opens that scope for the turn. One compiled graph therefore
-    /// serves every call, exactly as T44 asks, and two calls that run at the same time take different
-    /// edges.
-    /// </para>
-    /// </remarks>
     internal static async ValueTask<CompiledGraph> CompileAsync(
         AgentCoreConfiguration configuration,
         AgentCoreOptions options,
         AgentCoreStartup startup,
         CompositeAgentToolFactory tools,
+        ITranscriptStore transcript,
         EvaluatorRegistry evaluators,
         ILoggerFactory loggers,
         CancellationToken cancellationToken)
@@ -78,6 +66,7 @@ internal static class CompilationStartup
                 Tools = tools,
                 Guards = guards,
                 Moderation = PromptModerator.FromRegistry(evaluators),
+                TranscriptStore = transcript,
                 StateSnapshot = CallStateScope.Snapshot,
             });
 

@@ -1,5 +1,4 @@
-using System.Diagnostics;
-using System.Diagnostics.Metrics;
+using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Audit;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
@@ -10,6 +9,8 @@ using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Runtime;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics.Metrics;
+using System.Diagnostics;
 using Xunit;
 
 namespace AgentCore.Application.Tests.Diagnostics;
@@ -338,7 +339,7 @@ public sealed class TurnObservabilityTests
 
         using SequencedChatClient reply = new("hello there.", "   ", "goodbye.");
         using SequencedChatClient fill = new(StayingNull, StayingNull, """{ "callerSaidGoodbye": true }""");
-        var session = Build(PolicyYaml, reply, fill, auditSink: new Application.Audit.InMemoryAuditSink())
+        var session = Build(PolicyYaml, reply, fill, auditSink: new Application.Audit.Memory.InMemoryAuditSink())
             .Create(callId);
 
         var token = TestContext.Current.CancellationToken;
