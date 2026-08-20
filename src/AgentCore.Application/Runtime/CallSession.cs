@@ -22,7 +22,6 @@ namespace AgentCore.Application.Runtime;
 /// <summary>
 /// The turn loop of one call. It owns the state, the stage machine, and the transcript.
 /// </summary>
-/// <remarks>
 public sealed class CallSession : IConversationPort
 {
     /// <summary>
