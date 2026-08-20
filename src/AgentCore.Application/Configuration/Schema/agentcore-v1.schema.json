@@ -1,0 +1,863 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentcore.dev/schemas/agentcore-v1.schema.json",
+  "title": "AgentCore configuration document, apiVersion agentcore/v1",
+  "description": "Check 1 of section 8.5. Shape only. Checks 2 to 8 run after this one.",
+  "type": "object",
+  "required": [
+    "apiVersion",
+    "name"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {
+      "const": "agentcore/v1",
+      "description": "The only version this schema accepts."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The name of the configured agent."
+    },
+    "fallbackReply": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Section 8.7: the line the caller hears when a turn fails. It sits at the root because every document shape speaks it. The default is the sentence AgentCore ships."
+    },
+    "refusalReply": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "The line the caller hears when the agent refuses to answer. Content moderation reads the caller's spoken input before the model runs, and the agent refuses the turn when the endpoint flags it. It sits at the root beside fallbackReply because every document shape speaks it. The key is optional, and the default is the sentence AgentCore ships. fallbackReply cannot serve here: its default asks the caller to say it again, which invites the harmful request a second time, and section 8.7 gives fallbackReply to a turn that failed, while a refusal never asks the model at all."
+    },
+    "state": {
+      "type": "object",
+      "description": "The declared state slots. Guards read only these and the three reserved slots.",
+      "propertyNames": {
+        "$ref": "#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/stateSlot"
+      }
+    },
+    "extractor": {
+      "$ref": "#/$defs/extractor"
+    },
+    "guards": {
+      "type": "object",
+      "description": "A guard name mapped to a raw JSONLogic rule.",
+      "propertyNames": {
+        "$ref": "#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/rule"
+      }
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/tool"
+      }
+    },
+    "agents": {
+      "$ref": "#/$defs/agents"
+    },
+    "policy": {
+      "$ref": "#/$defs/policy"
+    },
+    "graph": {
+      "$ref": "#/$defs/graph"
+    },
+    "providers": {
+      "$ref": "#/$defs/providers"
+    },
+    "evaluation": {
+      "$ref": "#/$defs/evaluation"
+    }
+  },
+  "dependentSchemas": {
+    "graph": {
+      "description": "Section 8.2: a document that holds both policy and graph is a load-time error.",
+      "not": {
+        "required": [
+          "policy"
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$"
+    },
+    "rule": {
+      "description": "A raw JSONLogic rule. Section 8.4 checks its operators, and this schema does not type it.",
+      "type": [
+        "object",
+        "array",
+        "string",
+        "number",
+        "boolean"
+      ]
+    },
+    "modelRef": {
+      "type": "object",
+      "required": [
+        "ref"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The `as` name of one entry in providers.llm."
+        },
+        "temperature": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        }
+      }
+    },
+    "stateSlot": {
+      "type": "object",
+      "required": [
+        "type",
+        "writer"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "boolean",
+            "integer",
+            "number",
+            "string"
+          ]
+        },
+        "writer": {
+          "enum": [
+            "extractor",
+            "tool",
+            "counter",
+            "const"
+          ]
+        },
+        "default": {
+          "description": "The value the slot holds before any writer fills it."
+        },
+        "description": {
+          "type": "string"
+        },
+        "enum": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": [
+              "object",
+              "array",
+              "string",
+              "number",
+              "boolean"
+            ],
+            "description": "A member with no value enumerates nothing. Check 5 walks these points and the slot carries a declared type, so null is never one of them."
+          },
+          "description": "The members check 5 enumerates for this slot."
+        },
+        "from": {
+          "type": "string",
+          "pattern": "^[^.\\s]+\\.[^\\s]+$",
+          "description": "writer: tool. A tool id, a dot, then a path into the tool result."
+        },
+        "increment": {
+          "$ref": "#/$defs/rule",
+          "description": "writer: counter. The slot increments whenever this rule is true."
+        },
+        "value": {
+          "description": "writer: const. The fixed value of the slot."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "writer"
+            ],
+            "properties": {
+              "writer": {
+                "const": "tool"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "from"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "writer"
+            ],
+            "properties": {
+              "writer": {
+                "const": "counter"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "increment"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "writer"
+            ],
+            "properties": {
+              "writer": {
+                "const": "const"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "value"
+            ]
+          }
+        }
+      ]
+    },
+    "extractor": {
+      "type": "object",
+      "required": [
+        "model"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "$ref": "#/$defs/modelRef"
+        },
+        "when": {
+          "enum": [
+            "after_reply"
+          ],
+          "default": "after_reply",
+          "description": "Section 8.3: agentcore/v1 defines no second value."
+        }
+      }
+    },
+    "tool": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "kind": {
+          "enum": [
+            "builtin",
+            "http",
+            "binding",
+            "agent"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "uses": {
+          "type": "string",
+          "minLength": 1,
+          "description": "kind: builtin. The name of the built-in the tool calls."
+        },
+        "binds": {
+          "type": "string",
+          "minLength": 1,
+          "description": "kind: binding. The name of the host delegate the tool calls."
+        },
+        "agent": {
+          "$ref": "#/$defs/identifier",
+          "description": "kind: agent. The id of the agents.items entry this tool runs. Check 8 walks this field."
+        },
+        "parameters": {
+          "type": "object",
+          "description": "The raw JSON Schema of the tool arguments. This schema does not type it."
+        },
+        "request": {
+          "$ref": "#/$defs/httpRequest"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "builtin"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "uses"
+            ],
+            "properties": {
+              "parameters": false
+            },
+            "$comment": "kind: builtin reads fixed argument names in C# (BuiltinToolFactory). A document that overrides the schema makes the model fill boxes the C# never reads, so parameters is forbidden here."
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "http"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "request"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "binding"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "binds"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "agent"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "agent"
+            ]
+          }
+        }
+      ]
+    },
+    "httpRequest": {
+      "type": "object",
+      "required": [
+        "method",
+        "url"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ]
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "A value may hold one or more ${secret:name} references."
+        }
+      }
+    },
+    "agents": {
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "defaults": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "$ref": "#/$defs/modelRef"
+            },
+            "instructions": {
+              "type": "string",
+              "description": "The stable cached prefix. Each stage appends a delta below it."
+            }
+          }
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/agent"
+          }
+        }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "instructions": {
+          "type": "string"
+        },
+        "model": {
+          "$ref": "#/$defs/modelRef"
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "required": [
+        "initial",
+        "stages"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "initial": {
+          "$ref": "#/$defs/identifier"
+        },
+        "stages": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/stage"
+          }
+        }
+      }
+    },
+    "stage": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "agent": {
+          "$ref": "#/$defs/identifier"
+        },
+        "terminal": {
+          "type": "boolean",
+          "default": false
+        },
+        "onNoMatch": {
+          "enum": [
+            "stay",
+            "error"
+          ],
+          "default": "stay",
+          "description": "Section 8.5: a stage may reject the zero-guards-true case."
+        },
+        "to": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/transition"
+          }
+        }
+      }
+    },
+    "transition": {
+      "type": "object",
+      "required": [
+        "stage"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "stage": {
+          "$ref": "#/$defs/identifier"
+        },
+        "when": {
+          "$ref": "#/$defs/rule",
+          "description": "A guard name, or an inline JSONLogic rule."
+        }
+      }
+    },
+    "graph": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pattern": {
+          "enum": [
+            "sequential",
+            "concurrent",
+            "handoff",
+            "group_chat"
+          ]
+        },
+        "agents": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/identifier"
+          },
+          "description": "The participants of a pattern graph, in order."
+        },
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/graphNode"
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/graphEdge"
+          }
+        }
+      },
+      "oneOf": [
+        {
+          "description": "Section 8.2 row 3: a pattern graph.",
+          "required": [
+            "pattern",
+            "agents"
+          ],
+          "properties": {
+            "nodes": false,
+            "edges": false
+          }
+        },
+        {
+          "description": "Section 8.2 row 4: nodes and edges.",
+          "required": [
+            "nodes",
+            "edges"
+          ],
+          "properties": {
+            "pattern": false,
+            "agents": false
+          }
+        }
+      ]
+    },
+    "graphNode": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "agent": {
+          "$ref": "#/$defs/identifier"
+        },
+        "start": {
+          "type": "boolean",
+          "default": false,
+          "description": "Check 7 needs exactly one start node."
+        },
+        "output": {
+          "type": "boolean",
+          "default": false,
+          "description": "Check 7 needs every path to reach an output node."
+        }
+      }
+    },
+    "graphEdge": {
+      "type": "object",
+      "required": [
+        "from",
+        "to"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/identifier"
+        },
+        "to": {
+          "$ref": "#/$defs/identifier"
+        },
+        "when": {
+          "$ref": "#/$defs/rule",
+          "description": "A guard name, or an inline JSONLogic rule."
+        }
+      }
+    },
+    "providers": {
+      "type": "object",
+      "required": [
+        "call",
+        "speech"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "llm": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/llmProvider"
+          }
+        },
+        "call": {
+          "$ref": "#/$defs/callProvider"
+        },
+        "speech": {
+          "$ref": "#/$defs/speechProvider"
+        },
+        "telephony": {
+          "$ref": "#/$defs/vendorProvider"
+        },
+        "moderation": {
+          "$ref": "#/$defs/vendorProvider",
+          "description": "The adapter that reads what the caller said through a moderation endpoint, such as openai. A document that names none moderates nothing."
+        },
+        "knowledge": {
+          "$ref": "#/$defs/knowledgeProvider"
+        },
+        "telemetry": {
+          "$ref": "#/$defs/telemetryProvider",
+          "description": "Where traces, metrics, and logs are exported to. A document that names none exports nothing."
+        },
+        "audit": {
+          "$ref": "#/$defs/vendorProvider",
+          "description": "Where the D23 audit chain is written, such as memory. A document that names none uses the in-process memory sink, which is not durable."
+        },
+        "transcript": {
+          "$ref": "#/$defs/vendorProvider",
+          "description": "Where the words of a call are written, such as memory or postgres. A document that names none uses the in-process memory store, which is not durable and holds no retention window."
+        }
+      }
+    },
+    "llmProvider": {
+      "type": "object",
+      "required": [
+        "kind",
+        "model",
+        "as"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "as": {
+          "$ref": "#/$defs/identifier",
+          "description": "The name a modelRef points at."
+        }
+      }
+    },
+    "vendorProvider": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "speechProvider": {
+      "type": "object",
+      "description": "The two speech roles: stt is recognition, what the caller said turned into text, and tts is synthesis, text turned into what the caller hears. Both are always written out. A transport that carries text is both, and names itself twice.",
+      "required": [
+        "stt",
+        "tts"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "stt": {
+          "$ref": "#/$defs/vendorProvider"
+        },
+        "tts": {
+          "$ref": "#/$defs/vendorProvider"
+        }
+      }
+    },
+    "callProvider": {
+      "type": "object",
+      "description": "The media plane: who carries the call and owns its inbound route. Not providers.speech, which is recognition and synthesis, and not providers.telephony, which is call control.",
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "idleTimeoutSeconds": {
+          "type": "integer",
+          "minimum": -1,
+          "maximum": 4294967,
+          "description": "How long the socket waits with no inbound frame before ending the call. -1 means never."
+        },
+        "closeTimeoutSeconds": {
+          "type": "integer",
+          "minimum": -1,
+          "maximum": 4294967,
+          "description": "How long teardown gives a stuck task before moving on. -1 means never."
+        },
+        "maxFrameBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647,
+          "description": "The largest inbound frame the socket accepts. The ceiling is int.MaxValue, which is the largest buffer length the socket can be given."
+        }
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "description": "Triage row T18: the share of finished turns a judge scores. D9 keeps the judge off the turn.",
+      "additionalProperties": false,
+      "properties": {
+        "sampleRate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0,
+          "description": "The share of finished turns to evaluate, from 0 through 1. The default of 0 evaluates none."
+        },
+        "judge": {
+          "$ref": "#/$defs/modelRef",
+          "description": "The model that scores a turn. The online sampled path and the offline golden set both read it. The key is optional, and a document that omits it runs only the evaluators that call no model."
+        }
+      }
+    },
+    "knowledgeProvider": {
+      "type": "object",
+      "description": "One adapter for each knowledge port, and what those adapters read.",
+      "additionalProperties": false,
+      "properties": {
+        "search": {
+          "type": "string",
+          "minLength": 1,
+          "default": "filesystem",
+          "description": "The adapter that answers IKnowledgeRetrievalPort, such as filesystem or zilliz."
+        },
+        "documents": {
+          "type": "string",
+          "minLength": 1,
+          "default": "filesystem",
+          "description": "The adapter that answers IDocumentStorePort, such as filesystem."
+        },
+        "root": {
+          "type": "string",
+          "minLength": 1,
+          "default": "./kb",
+          "description": "The root of the knowledge-base tree. The tree is its own Git repository."
+        },
+        "endpoint": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The cluster URL the zilliz adapter reads."
+        },
+        "collection": {
+          "type": "string",
+          "minLength": 1,
+          "default": "kb_chunks",
+          "description": "The collection the zilliz adapter reads."
+        }
+      }
+    },
+    "telemetryProvider": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The vendor that exports the signals, such as grafana."
+        },
+        "endpoint": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The collector URL. Left out, the OTEL_EXPORTER_OTLP_ENDPOINT variable answers instead."
+        },
+        "serviceName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The service.name every exported signal carries. Defaults to agentcore."
+        },
+        "exportIntervalMs": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647,
+          "description": "How often metrics are sent. T61 puts a floor of 60000 under it, and a smaller number is raised to that floor. The bounds are int.MinValue and int.MaxValue, the range the exporter's period is expressed in."
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "description": "Extra ActivitySource names listened to, beside the one AgentCore owns. An empty array listens to AgentCore alone. A name of nothing but spaces listens to nothing, so it is refused."
+        },
+        "meters": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "description": "Extra Meter names listened to, beside the one AgentCore owns. These are the bulk of the active series item 12 caps at 10,000. A name of nothing but spaces listens to nothing, so it is refused."
+        }
+      }
+    }
+  }
+}

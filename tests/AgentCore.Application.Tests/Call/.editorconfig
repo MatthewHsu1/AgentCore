@@ -1,0 +1,11 @@
+[*.cs]
+
+# CA1707: "Remove the underscores from member name". A test name reads Subject_Behaviour, and the
+# underscore is what separates the two halves.
+dotnet_diagnostic.CA1707.severity = none
+
+# CA1716: "Rename namespace AgentCore.Application.Tests.Call so that it no longer conflicts with
+# the reserved language keyword 'Call'." This assembly does not target VB.NET or other languages
+# that reserve the word, and the namespace mirrors src/AgentCore.Application/Call, which task 0 of
+# the call-transport-seam plan named deliberately.
+dotnet_diagnostic.CA1716.severity = none

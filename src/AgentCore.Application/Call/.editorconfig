@@ -1,0 +1,8 @@
+[*.cs]
+
+# CA1716: "Rename namespace AgentCore.Application.Call so that it no longer conflicts with the
+# reserved language keyword 'Call'." This assembly does not target VB.NET or other languages that
+# reserve the word, and the namespace name is deliberate: task 0 of the call-transport-seam plan
+# renamed the call's text pipe out of Speech and into Call, matching the folder, and every later
+# task in that plan depends on this name.
+dotnet_diagnostic.CA1716.severity = none

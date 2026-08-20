@@ -1,0 +1,97 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
+    <ClientAppStamp>$(IntermediateOutputPath)clientapp.stamp</ClientAppStamp>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../AgentCore.Hosting/AgentCore.Hosting.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" />
+  </ItemGroup>
+
+  <!--
+    The built UI, embedded into this assembly. Loose files beside the exe would work too, and would
+    be the usual ASP.NET shape, but a library nobody deploys for you should not depend on a consumer
+    copying a folder correctly. One DLL either arrives or it does not.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="wwwroot/**" />
+  </ItemGroup>
+
+  <!--
+    This glob is evaluated when MSBuild loads the project, which is before the target below can run
+    npm. That is why ClientApp/vite.config.ts emits stable asset names rather than the usual content
+    hashes: a name that changed would leave this glob pointing at a file npm had just deleted, and
+    the first build after every UI edit would fail to read its own resources. Re-globbing inside the
+    target does not repair it — the compiler still reads the evaluated list.
+  -->
+
+  <!--
+    wwwroot is committed on purpose. AgentCore ships no deployment workflow — hosting is the
+    consumer's decision — so `dotnet publish` has to work on a machine with no Node and no npm. The
+    committed artifact is what buys that. The target below keeps it honest for whoever edits the UI,
+    and the CI step named in ci.yml fails a pull request whose committed output does not match its
+    source.
+  -->
+  <ItemGroup>
+    <ClientAppSource Include="ClientApp\src\**\*" />
+    <ClientAppSource Include="ClientApp\index.html" />
+    <ClientAppSource Include="ClientApp\package.json" />
+    <ClientAppSource Include="ClientApp\package-lock.json" />
+    <ClientAppSource Include="ClientApp\vite.config.ts" />
+    <ClientAppSource Include="ClientApp\tsconfig*.json" />
+  </ItemGroup>
+
+  <!--
+    Node is optional. A machine without it builds against the committed wwwroot and says so; a
+    machine with it rebuilds only when something under ClientApp actually changed. Set
+    SkipClientAppBuild=true to force the committed artifact even where Node exists.
+
+    The probe is a task inside this target and not a separate one it depends on. MSBuild evaluates a
+    target's Condition BEFORE running its DependsOnTargets, so a condition on a property another
+    target sets is always false and the target is skipped in silence — which is exactly the bug this
+    shape had first. Keeping the probe inside also means an up-to-date build spawns no process at
+    all.
+  -->
+  <Target Name="BuildClientApp"
+          BeforeTargets="BeforeBuild"
+          Condition="'$(SkipClientAppBuild)' != 'true'"
+          Inputs="@(ClientAppSource)"
+          Outputs="$(ClientAppStamp)">
+    <Exec Command="node --version"
+          ContinueOnError="true"
+          IgnoreExitCode="true"
+          StandardOutputImportance="low"
+          StandardErrorImportance="low">
+      <Output TaskParameter="ExitCode" PropertyName="NodeProbeExitCode" />
+    </Exec>
+
+    <PropertyGroup>
+      <HasNode Condition="'$(NodeProbeExitCode)' == '0'">true</HasNode>
+    </PropertyGroup>
+
+    <!--
+      No stamp is written in this case, so the probe runs again next build and the UI starts being
+      rebuilt the moment Node appears.
+    -->
+    <Message Condition="'$(HasNode)' != 'true'"
+             Importance="high"
+             Text="AgentCore.Chat: no Node on this machine, so the committed wwwroot is used as-is." />
+
+    <Exec Condition="'$(HasNode)' == 'true' AND !Exists('ClientApp/node_modules')"
+          Command="npm ci"
+          WorkingDirectory="ClientApp" />
+    <Exec Condition="'$(HasNode)' == 'true'"
+          Command="npm run build"
+          WorkingDirectory="ClientApp" />
+
+    <Touch Condition="'$(HasNode)' == 'true'" Files="$(ClientAppStamp)" AlwaysCreate="true" />
+  </Target>
+
+</Project>

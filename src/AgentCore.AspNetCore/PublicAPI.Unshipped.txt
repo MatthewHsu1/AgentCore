@@ -1,1 +1,78 @@
 #nullable enable
+AgentCore.AspNetCore.Call.CallEndpointRouteBuilderExtensions
+AgentCore.AspNetCore.Call.ICallTransportAdapter
+AgentCore.AspNetCore.Call.ICallTransportAdapter.Map(Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints, string! pattern, AgentCore.Application.Configuration.Schema.CallProviderConfiguration! configuration) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients
+AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.AgentCoreHttpClients(System.Net.Http.HttpMessageHandler? primaryHandler = null, Microsoft.Extensions.Logging.ILoggerFactory? loggers = null) -> void
+AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.CreateClient(string! name) -> System.Net.Http.HttpClient!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.CreateHandler(string! name) -> System.Net.Http.HttpMessageHandler!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.Dispose() -> void
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.AddToolFactory(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Ports.IAgentToolFactory!>! toolFactory) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.AgentCoreOptions() -> void
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Bind(string! name, AgentCore.Application.Tools.ToolBinding! binding) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Bindings.get -> AgentCore.Application.Tools.ToolBindingRegistry!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Configuration.get -> AgentCore.Application.Configuration.Schema.AgentCoreConfiguration?
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Configuration.set -> void
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.ConfigurationPath.get -> string?
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.ConfigurationPath.set -> void
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.LoggerFactory.get -> Microsoft.Extensions.Logging.ILoggerFactory?
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.LoggerFactory.set -> void
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.SecretResolver.get -> AgentCore.Application.Ports.ISecretResolverPort?
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.SecretResolver.set -> void
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.TimeProvider.get -> System.TimeProvider?
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.TimeProvider.set -> void
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseAuditSinks(params AgentCore.Application.Ports.IAuditSinkAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseCall(params AgentCore.Application.Ports.ICallAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseChatClients(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Ports.IChatClientFactory!>! chatClients) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseChatClients(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IChatClientFactory!>>! chatClients) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseChatClients(params AgentCore.Application.Ports.IChatClientAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseDocumentStore(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Ports.IDocumentStorePort!>! documents) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseKnowledge<TKnowledge>(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, TKnowledge!>! knowledge) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseKnowledgeRetrieval(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Ports.IKnowledgeRetrievalPort!>! retrieval) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseKnowledgeStores(params AgentCore.Application.Ports.IKnowledgeStoreAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseModeration(params AgentCore.Application.Ports.IModerationAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseObservers(params AgentCore.Application.Ports.ICallObserver![]! observers) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseSpeech(params AgentCore.Application.Ports.ISpeechAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseTelemetry(params AgentCore.Application.Ports.ITelemetryAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseTranscriptStores(params AgentCore.Application.Ports.ITranscriptStoreAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreServiceCollectionExtensions
+AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup
+AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup.Configuration.get -> AgentCore.Application.Configuration.Schema.AgentCoreConfiguration!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup.Secrets.get -> AgentCore.Application.Secrets.ResolvedSecrets!
+AgentCore.AspNetCore.Endpoints.ChatCompletionsEndpointRouteBuilderExtensions
+AgentCore.AspNetCore.Sessions.ICallSessionStore
+AgentCore.AspNetCore.Sessions.ICallSessionStore.AddAsync(AgentCore.Application.Runtime.CallSession! session, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.AspNetCore.Sessions.ICallSessionStore.RemoveAsync(string! sessionId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<bool>
+AgentCore.AspNetCore.Sessions.ICallSessionStore.TryGetAsync(string! sessionId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Runtime.CallSession?>
+AgentCore.AspNetCore.Sessions.InMemoryCallSessionStore
+AgentCore.AspNetCore.Sessions.InMemoryCallSessionStore.AddAsync(AgentCore.Application.Runtime.CallSession! session, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.AspNetCore.Sessions.InMemoryCallSessionStore.Count.get -> int
+AgentCore.AspNetCore.Sessions.InMemoryCallSessionStore.InMemoryCallSessionStore() -> void
+AgentCore.AspNetCore.Sessions.InMemoryCallSessionStore.RemoveAsync(string! sessionId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<bool>
+AgentCore.AspNetCore.Sessions.InMemoryCallSessionStore.TryGetAsync(string! sessionId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Runtime.CallSession?>
+AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayCallAdapter
+AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayCallAdapter.CarriesText.get -> bool
+AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayCallAdapter.Kind.get -> string!
+AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayCallAdapter.Map(Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints, string! pattern, AgentCore.Application.Configuration.Schema.CallProviderConfiguration! configuration) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
+AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayCallAdapter.TelnyxRelayCallAdapter() -> void
+AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelaySpeechAdapter
+AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelaySpeechAdapter.Kind.get -> string!
+AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelaySpeechAdapter.TelnyxRelaySpeechAdapter() -> void
+const AgentCore.AspNetCore.Call.CallEndpointRouteBuilderExtensions.DefaultPattern = "/v1/call" -> string!
+const AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.MaxAttempts = 3 -> int
+const AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.PipelineName = "agentcore-http" -> string!
+const AgentCore.AspNetCore.Endpoints.ChatCompletionsEndpointRouteBuilderExtensions.DefaultPattern = "/v1/chat/completions" -> string!
+const AgentCore.AspNetCore.Endpoints.ChatCompletionsEndpointRouteBuilderExtensions.SessionHeaderName = "X-AgentCore-Session" -> string!
+const AgentCore.AspNetCore.Endpoints.ChatCompletionsEndpointRouteBuilderExtensions.StageHeaderName = "X-AgentCore-Stage" -> string!
+const AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayCallAdapter.TelnyxRelayKind = "telnyx-relay" -> string!
+const AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelaySpeechAdapter.TelnyxRelayKind = "telnyx-relay" -> string!
+static AgentCore.AspNetCore.Call.CallEndpointRouteBuilderExtensions.MapCall(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
+static AgentCore.AspNetCore.Call.CallEndpointRouteBuilderExtensions.MapCall(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints, string! pattern) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
+static AgentCore.AspNetCore.DependencyInjection.AgentCoreServiceCollectionExtensions.AddAgentCoreAsync(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!>! configure, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.DependencyInjection.IServiceCollection!>
+static AgentCore.AspNetCore.DependencyInjection.AgentCoreServiceCollectionExtensions.AddAgentCoreWebSockets(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static AgentCore.AspNetCore.Endpoints.ChatCompletionsEndpointRouteBuilderExtensions.MapChatCompletions(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
+static AgentCore.AspNetCore.Endpoints.ChatCompletionsEndpointRouteBuilderExtensions.MapChatCompletions(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints, string! pattern) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
+static readonly AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.ConnectionLifetime -> System.TimeSpan
+static readonly AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.FirstRetryDelay -> System.TimeSpan
+static readonly AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.RequestDeadline -> System.TimeSpan

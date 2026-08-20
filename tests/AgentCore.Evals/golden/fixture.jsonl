@@ -1,0 +1,8 @@
+# The synthetic set. It proves the harness, and it measures no quality.
+# Every document it names lives in golden/kb, and every fact in it is invented.
+# The real set belongs to a deployment. Name it with AGENTCORE_EVAL_DATASET.
+{"id":"fx-001","query":"the treadmill shows E7 and stops","expectedDocumentIds":["faults/e7.md"],"expectedFaultCodes":["E7"],"tags":["fault-code"]}
+{"id":"fx-002","query":"the belt slips under load","expectedDocumentIds":["service/belt-tension.md"],"expectedFaultCodes":[],"tags":["mechanical"]}
+{"id":"fx-003","query":"the console is dark and has no power","expectedDocumentIds":["faults/no-power.md","service/psu.md"],"expectedFaultCodes":[],"tags":["power"]}
+{"id":"fx-004","query":"what does LS-12 mean","expectedDocumentIds":["faults/ls-12.md"],"expectedFaultCodes":["LS-12"],"tags":["fault-code"]}
+{"id":"fx-005","query":"how do I fold the deck","expectedDocumentIds":["manual/folding.md"],"expectedFaultCodes":[],"tags":["how-to"]}

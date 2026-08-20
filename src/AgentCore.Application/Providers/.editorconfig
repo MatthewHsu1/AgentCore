@@ -1,0 +1,9 @@
+# The vendor seam carries the same RFC 6901 JSON Pointer the configuration layer does, under the
+# same name, so one naming rule is off inside this folder only.
+
+[*.cs]
+
+# CA1720: "Identifier contains type name". VendorSeam.Pointer holds the pointer that
+# ConfigurationError.Pointer will carry, and Configuration/.editorconfig turns this rule off for
+# exactly that reason. Renaming it here would break the tie between the seam and the error it writes.
+dotnet_diagnostic.CA1720.severity = none

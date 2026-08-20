@@ -1,19 +1,17 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <UserSecretsId>d7549002-fd56-4ad5-b74d-3360ef14904e</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../AgentCore.AspNetCore/AgentCore.AspNetCore.csproj" />
-    <ProjectReference Include="../AgentCore.Infrastructure/AgentCore.Infrastructure.csproj" />
+    <ProjectReference Include="../AgentCore.Hosting/AgentCore.Hosting.csproj" />
+    <ProjectReference Include="../AgentCore.Chat/AgentCore.Chat.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
-    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.Http" />
+    <Content Include="config/example.yaml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

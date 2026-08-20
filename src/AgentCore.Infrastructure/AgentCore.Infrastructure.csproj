@@ -10,11 +10,25 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.AI.Evaluation" />
     <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
+    <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="Microsoft.Extensions.VectorData.Abstractions" />
     <PackageReference Include="OpenAI" />
     <PackageReference Include="Npgsql" />
     <PackageReference Include="AWSSDK.S3" />
     <PackageReference Include="LibGit2Sharp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Database/Postgres/Migrations/*.sql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OpenTelemetry" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
   </ItemGroup>
 
   <ItemGroup>

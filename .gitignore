@@ -496,3 +496,19 @@ src/AgentCore.Api/config/config.json
 
 # Fly.io local state
 .fly/
+
+# The evaluation store and the response cache. The store is a build output: it holds one run, and
+# `dotnet aieval report` reads it. The committed inputs are golden/ inside tests/AgentCore.Evals.
+eval-results/
+eval-report.html
+
+# Harness-created agent worktrees. Never commit these.
+.claude/worktrees/
+CLAUDE.md
+
+docs/
+.superpowers/
+
+# A deployment's own document. The shipped example stays generic; a real endpoint,
+# stack, and knowledge base belong to a deployment and never to this repository.
+src/AgentCore.Api/config/local.yaml

@@ -1,0 +1,9 @@
+#nullable enable
+AgentCore.Hosting.AgentCoreHostBuilderExtensions
+AgentCore.Hosting.AgentCoreHostEndpointExtensions
+const AgentCore.Hosting.AgentCoreHostBuilderExtensions.ConfigurationPathKey = "AgentCore:ConfigurationPath" -> string!
+const AgentCore.Hosting.AgentCoreHostBuilderExtensions.CreateCaseBinding = "CreateCase" -> string!
+const AgentCore.Hosting.AgentCoreHostBuilderExtensions.DefaultConfigurationPath = "config/example.yaml" -> string!
+const AgentCore.Hosting.AgentCoreHostEndpointExtensions.HealthPattern = "/health" -> string!
+static AgentCore.Hosting.AgentCoreHostBuilderExtensions.AddAgentCoreHostAsync(this Microsoft.AspNetCore.Builder.WebApplicationBuilder! builder, System.Action<AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!>? configure = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.AspNetCore.Builder.WebApplicationBuilder!>
+static AgentCore.Hosting.AgentCoreHostEndpointExtensions.MapAgentCoreHost(this Microsoft.AspNetCore.Builder.WebApplication! app, string? chatCompletionsPattern = null) -> Microsoft.AspNetCore.Builder.WebApplication!

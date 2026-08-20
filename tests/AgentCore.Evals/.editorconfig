@@ -1,0 +1,10 @@
+[*.cs]
+
+# CA1707: "Remove the underscores from member name". A test name reads Subject_Behaviour, and the
+# underscore is what separates the two halves.
+dotnet_diagnostic.CA1707.severity = none
+
+# CA1711: "Rename type so that it does not end in 'Collection'". The rule reserves that suffix for a
+# type that implements ICollection. A test collection is not one, and the runner names it that way,
+# so the suffix is allowed here and the rule keeps guarding every other reserved word.
+dotnet_code_quality.CA1711.allowed_suffixes = Collection

@@ -1,0 +1,17 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.test.json" },
+    { "path": "./tsconfig.node.json" }
+  ],
+  // Not used for compilation — this is a solution file and `files` is empty. It is here so the
+  // shadcn CLI can resolve `@/components` when it vendors assistant-ui's files: the CLI reads the
+  // root tsconfig alone, and without this it writes them to a literal `@/` directory.
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  }
+}

@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.VectorData.Abstractions" />
     <PackageReference Include="Microsoft.Agents.AI" />
     <PackageReference Include="Microsoft.Agents.AI.Workflows" />
@@ -18,9 +19,15 @@
     <PackageReference Include="YamlDotNet" />
     <PackageReference Include="JsonSchema.Net" />
     <PackageReference Include="JsonLogic" />
+    <PackageReference Include="JsonPointer.Net" />
     <PackageReference Include="Microsoft.Extensions.AI.Evaluation" />
     <PackageReference Include="Microsoft.Extensions.AI.Evaluation.Quality" />
     <PackageReference Include="Microsoft.Extensions.AI.Evaluation.NLP" />
+  </ItemGroup>
+
+  <!-- Check 1, section 8.5: the configuration schema ships inside the assembly. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Configuration/Schema/agentcore-v1.schema.json" />
   </ItemGroup>
 
   <!-- Rule 2, section 5.1: guard the public surface. -->
@@ -32,6 +39,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="AgentCore.Application.Tests" />
+    <InternalsVisibleTo Include="AgentCore.AspNetCore.Tests" />
   </ItemGroup>
 
 </Project>

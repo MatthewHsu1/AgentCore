@@ -1,1 +1,128 @@
 #nullable enable
+AgentCore.Infrastructure.Audit.Postgres.PostgresAuditSinkAdapter
+AgentCore.Infrastructure.Audit.Postgres.PostgresAuditSinkAdapter.Kind.get -> string!
+AgentCore.Infrastructure.Audit.Postgres.PostgresAuditSinkAdapter.OpenAsync(AgentCore.Application.Configuration.Schema.VendorProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IAuditSinkPort!>
+AgentCore.Infrastructure.Audit.Postgres.PostgresAuditSinkAdapter.PostgresAuditSinkAdapter() -> void
+AgentCore.Infrastructure.Database.Postgres.PostgresSchema
+AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationAdapter
+AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationAdapter.CreateAsync(AgentCore.Application.Configuration.Schema.VendorProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.Evaluation.IEvaluator!>
+AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationAdapter.Kind.get -> string!
+AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationAdapter.OpenAiModerationAdapter(System.Net.Http.IHttpMessageHandlerFactory! handlers) -> void
+AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator
+AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator.EvaluateAsync(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages, Microsoft.Extensions.AI.ChatResponse! modelResponse, Microsoft.Extensions.AI.Evaluation.ChatConfiguration? chatConfiguration = null, System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.Evaluation.EvaluationContext!>? additionalContext = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.Evaluation.EvaluationResult!>
+AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator.EvaluationMetricNames.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
+AgentCore.Infrastructure.Knowledge.FileStore.FileSystemKnowledgeAdapter
+AgentCore.Infrastructure.Knowledge.FileStore.FileSystemKnowledgeAdapter.CanServeDocuments.get -> bool
+AgentCore.Infrastructure.Knowledge.FileStore.FileSystemKnowledgeAdapter.CanServeSearch.get -> bool
+AgentCore.Infrastructure.Knowledge.FileStore.FileSystemKnowledgeAdapter.CreateDocumentsAsync(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IDocumentStorePort!>
+AgentCore.Infrastructure.Knowledge.FileStore.FileSystemKnowledgeAdapter.CreateSearchAsync(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IKnowledgeRetrievalPort!>
+AgentCore.Infrastructure.Knowledge.FileStore.FileSystemKnowledgeAdapter.FileSystemKnowledgeAdapter() -> void
+AgentCore.Infrastructure.Knowledge.FileStore.FileSystemKnowledgeAdapter.Kind.get -> string!
+AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore
+AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.FileSystemKnowledgeStore(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration? knowledge) -> void
+AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.FileSystemKnowledgeStore(string! root) -> void
+AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.GrepAsync(string! pattern, string? glob = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Domain.Knowledge.GrepResult!>
+AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.ListAsync(string? pattern = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Domain.Knowledge.DocumentListing!>
+AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.ReadAsync(string! documentId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Domain.Knowledge.KnowledgeDocument?>
+AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.Root.get -> string!
+AgentCore.Infrastructure.Knowledge.FileSystemKnowledgeStore.SearchAsync(string! query, int limit, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Domain.Knowledge.KnowledgeChunk!>!>
+AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord
+AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord.<Clone>$() -> AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord!
+AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord.Distance.get -> double
+AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord.Distance.init -> void
+AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord.Equals(AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord? other) -> bool
+AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord.Path.get -> string!
+AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord.Path.init -> void
+AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord.Text.get -> string!
+AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord.Text.init -> void
+AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord.ZillizChunkRecord() -> void
+AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizCollection
+AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizCollection.ZillizCollection(System.Net.Http.HttpClient! client, string! collection) -> void
+AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter
+AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.CanServeDocuments.get -> bool
+AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.CanServeSearch.get -> bool
+AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.CreateDocumentsAsync(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IDocumentStorePort!>
+AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.CreateSearchAsync(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IKnowledgeRetrievalPort!>
+AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.Kind.get -> string!
+AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.ZillizKnowledgeAdapter(System.Net.Http.IHttpMessageHandlerFactory! handlers, Microsoft.Extensions.AI.IEmbeddingGenerator<string!, Microsoft.Extensions.AI.Embedding<float>!>? embeddings = null) -> void
+AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizRetrievalStore
+AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizRetrievalStore.SearchAsync(string! query, int limit, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Domain.Knowledge.KnowledgeChunk!>!>
+AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizRetrievalStore.ZillizRetrievalStore(Microsoft.Extensions.VectorData.VectorStoreCollection<string!, AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord!>! collection, Microsoft.Extensions.AI.IEmbeddingGenerator<string!, Microsoft.Extensions.AI.Embedding<float>!>! embeddings) -> void
+AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter
+AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.CreateClientAsync(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.IChatClient!>
+AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.Kind.get -> string!
+AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.OpenAiChatClientAdapter() -> void
+AgentCore.Infrastructure.Secrets.ChainedSecretResolver
+AgentCore.Infrastructure.Secrets.ChainedSecretResolver.ChainedSecretResolver(System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ISecretResolverPort!>! links) -> void
+AgentCore.Infrastructure.Secrets.ChainedSecretResolver.Count.get -> int
+AgentCore.Infrastructure.Secrets.ChainedSecretResolver.TryResolveAsync(string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string?>
+AgentCore.Infrastructure.Secrets.EnvironmentSecretResolver
+AgentCore.Infrastructure.Secrets.EnvironmentSecretResolver.EnvironmentSecretResolver() -> void
+AgentCore.Infrastructure.Secrets.EnvironmentSecretResolver.TryResolveAsync(string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string?>
+AgentCore.Infrastructure.Secrets.FileSecretResolver
+AgentCore.Infrastructure.Secrets.FileSecretResolver.Directory.get -> string!
+AgentCore.Infrastructure.Secrets.FileSecretResolver.FileSecretResolver() -> void
+AgentCore.Infrastructure.Secrets.FileSecretResolver.FileSecretResolver(string! directory) -> void
+AgentCore.Infrastructure.Secrets.FileSecretResolver.TryResolveAsync(string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string?>
+AgentCore.Infrastructure.Telemetry.Grafana.GrafanaOtlpTelemetryAdapter
+AgentCore.Infrastructure.Telemetry.Grafana.GrafanaOtlpTelemetryAdapter.GrafanaOtlpTelemetryAdapter() -> void
+AgentCore.Infrastructure.Telemetry.Grafana.GrafanaOtlpTelemetryAdapter.Kind.get -> string!
+AgentCore.Infrastructure.Telemetry.Grafana.GrafanaOtlpTelemetryAdapter.StartAsync(AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.ITelemetrySession!>
+AgentCore.Infrastructure.Tools.HttpToolFactory
+AgentCore.Infrastructure.Tools.HttpToolFactory.Create(AgentCore.Application.Configuration.Schema.ToolConfiguration! tool) -> Microsoft.Extensions.AI.AITool?
+AgentCore.Infrastructure.Tools.HttpToolFactory.HttpToolFactory(System.Net.Http.HttpClient! client, AgentCore.Application.Secrets.ResolvedSecrets! secrets) -> void
+AgentCore.Infrastructure.Transcript.Postgres.PostgresTranscriptStoreAdapter
+AgentCore.Infrastructure.Transcript.Postgres.PostgresTranscriptStoreAdapter.Kind.get -> string!
+AgentCore.Infrastructure.Transcript.Postgres.PostgresTranscriptStoreAdapter.OpenAsync(AgentCore.Application.Configuration.Schema.VendorProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.ITranscriptStore!>
+AgentCore.Infrastructure.Transcript.Postgres.PostgresTranscriptStoreAdapter.PostgresTranscriptStoreAdapter() -> void
+const AgentCore.Infrastructure.Audit.Postgres.PostgresAuditSinkAdapter.ProviderKind = "postgres" -> string!
+const AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationAdapter.ProviderKind = "openai" -> string!
+const AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator.ContentSafetyMetricName = "Content Safety" -> string!
+const AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator.EvaluatorName = "moderation" -> string!
+const AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator.HttpClientName = "agentcore.openai.moderation" -> string!
+const AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator.ModerationModel = "omni-moderation-latest" -> string!
+const AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator.ModerationPath = "/v1/moderations" -> string!
+const AgentCore.Infrastructure.Knowledge.FileStore.FileSystemKnowledgeAdapter.ProviderKind = "filesystem" -> string!
+const AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizCollection.PathFieldName = "path" -> string!
+const AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizCollection.SearchPath = "/v2/vectordb/entities/search" -> string!
+const AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizCollection.TextFieldName = "text" -> string!
+const AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizCollection.VectorFieldName = "vector" -> string!
+const AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.ApiKeySecretName = "zilliz-api-key" -> string!
+const AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.ApiKeyVariableName = "ZILLIZ_API_KEY" -> string!
+const AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.EmbeddingDimensions = 1024 -> int
+const AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.EmbeddingModel = "text-embedding-3-small" -> string!
+const AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.EndpointPointer = "/providers/knowledge/endpoint" -> string!
+const AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.HttpClientName = "agentcore.zilliz" -> string!
+const AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.ProviderKind = "zilliz" -> string!
+const AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.ApiKeySecretName = "openai-api-key" -> string!
+const AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.ApiKeyVariableName = "OPENAI_API_KEY" -> string!
+const AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.ProviderKind = "openai" -> string!
+const AgentCore.Infrastructure.Secrets.FileSecretResolver.DefaultDirectory = "/run/secrets" -> string!
+const AgentCore.Infrastructure.Telemetry.Grafana.GrafanaOtlpTelemetryAdapter.GrafanaKind = "grafana" -> string!
+const AgentCore.Infrastructure.Tools.HttpToolFactory.HttpClientName = "agentcore.tools" -> string!
+const AgentCore.Infrastructure.Transcript.Postgres.PostgresTranscriptStoreAdapter.ProviderKind = "postgres" -> string!
+override AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord.Equals(object? obj) -> bool
+override AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord.GetHashCode() -> int
+override AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord.ToString() -> string!
+override AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizCollection.CollectionExistsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+override AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizCollection.DeleteAsync(System.Collections.Generic.IEnumerable<string!>! keys, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+override AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizCollection.DeleteAsync(string! key, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+override AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizCollection.EnsureCollectionDeletedAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+override AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizCollection.EnsureCollectionExistsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+override AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizCollection.GetAsync(System.Collections.Generic.IEnumerable<string!>! keys, Microsoft.Extensions.VectorData.RecordRetrievalOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord!>!
+override AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizCollection.GetAsync(System.Linq.Expressions.Expression<System.Func<AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord!, bool>!>! filter, int top, Microsoft.Extensions.VectorData.FilteredRecordRetrievalOptions<AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord!>? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord!>!
+override AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizCollection.GetAsync(string! key, Microsoft.Extensions.VectorData.RecordRetrievalOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord?>!
+override AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizCollection.GetService(System.Type! serviceType, object? serviceKey = null) -> object?
+override AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizCollection.Name.get -> string!
+override AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizCollection.SearchAsync<TInput>(TInput searchValue, int top, Microsoft.Extensions.VectorData.VectorSearchOptions<AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord!>? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.VectorData.VectorSearchResult<AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord!>!>!
+override AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizCollection.UpsertAsync(AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord! record, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+override AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizCollection.UpsertAsync(System.Collections.Generic.IEnumerable<AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord!>! records, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+static AgentCore.Infrastructure.Database.Postgres.PostgresSchema.ApplyAsync(Npgsql.NpgsqlDataSource! dataSource, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<string!>!>!
+static AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator.CreateAsync(System.Net.Http.IHttpMessageHandlerFactory! handlers, AgentCore.Application.Ports.ISecretResolverPort? secrets = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator!>
+static AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord.operator !=(AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord? left, AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord? right) -> bool
+static AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord.operator ==(AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord? left, AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord? right) -> bool
+static AgentCore.Infrastructure.Secrets.EnvironmentSecretResolver.ToVariableName(string! name) -> string!
+static readonly AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator.ApiEndpoint -> System.Uri!
+static readonly AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator.Categories -> System.Collections.Generic.IReadOnlyList<string!>!
+static readonly AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator.ModerationDeadline -> System.TimeSpan
+static readonly AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizKnowledgeAdapter.SearchDeadline -> System.TimeSpan

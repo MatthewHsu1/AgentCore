@@ -1,10 +1,14 @@
-// The voice host. Section 6 gives the final shape:
-//   AddAgentCore + MapTelnyxMedia + MapTelnyxWebhooks + MapChatCompletions.
-// None of those exist yet, so this host only starts and answers a health probe.
+using AgentCore.Chat;
+using AgentCore.Hosting;
 
 var builder = WebApplication.CreateBuilder(args);
+
+await builder.AddAgentCoreHostAsync();
+
 var app = builder.Build();
 
-app.MapGet("/health", () => Results.Ok("ok"));
+app.MapAgentCoreHost();
+
+app.MapAgentCoreChat();
 
 app.Run();

@@ -1,0 +1,101 @@
+# The hermetic gate. It runs on every push and every pull request, and it holds no secret.
+#
+# A pull request from a fork gets no secret on GitHub, so this workflow has to pass with none. Every
+# job below reads no key: the unit tests use fakes, and the offline eval set uses the synthetic
+# fixture and the one evaluator that calls no model.
+#
+# The judged metrics and the real golden set belong to a deployment. They run on a deploy/<org>
+# branch, where the knowledge base, the configuration document, and the keys all exist.
+name: ci
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_AIEVAL_TELEMETRY_OPTOUT: true
+  EVAL_RESULTS: tests/AgentCore.Evals/bin/Release/net10.0/eval-results
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: src/AgentCore.Chat/ClientApp/package-lock.json
+
+      - name: Chat UI dependencies
+        run: npm ci
+        working-directory: src/AgentCore.Chat/ClientApp
+
+      - name: Restore
+        run: |
+          dotnet restore
+          dotnet tool restore
+
+      # TreatWarningsAsErrors and the public API analyzer both run here. A new public member with no
+      # line in PublicAPI.Unshipped.txt fails this step, which is rule 2 of section 5.1.
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      - name: Chat UI matches its source
+        run: git diff --exit-code -- src/AgentCore.Chat/wwwroot
+
+      - name: Chat UI tests
+        run: npm test
+        working-directory: src/AgentCore.Chat/ClientApp
+
+      - name: Unit tests
+        run: dotnet test --no-build -c Release
+             --filter "FullyQualifiedName!~AgentCore.Evals"
+        env:
+          AGENTCORE_TEST_POSTGRES: Host=localhost;Port=5432;Username=postgres;Password=ci
+
+      # The harness self-test. The golden-set suites skip here, because this repository names no
+      # dataset. A recall below 1 on the fixture means the harness broke, not that retrieval is weak.
+      - name: Offline evals
+        run: dotnet test --no-build -c Release tests/AgentCore.Evals
+             --filter "Category!=Gate"
+
+      # The gate reads what the step above wrote, so it runs as a second command. A test run gives no
+      # order, and the gate needs the results to exist.
+      - name: Score gate
+        run: dotnet test --no-build -c Release tests/AgentCore.Evals
+             --filter "Category=Gate"
+
+      - name: Report
+        if: always()
+        run: dotnet aieval report --path "$EVAL_RESULTS" --output eval-report.html
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-report
+          path: eval-report.html
+          if-no-files-found: warn

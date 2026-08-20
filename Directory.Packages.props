@@ -7,6 +7,13 @@
     <GlobalPackageReference Include="MinVer" Version="7.0.0" />
   </ItemGroup>
   <ItemGroup>
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.FileSystemGlobbing" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.2.0" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageVersion Include="Microsoft.Extensions.AI" Version="10.8.3" />
     <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.8.3" />
     <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.8.3" />
@@ -16,7 +23,7 @@
     <PackageVersion Include="Microsoft.Agents.AI.Workflows" Version="1.17.0" />
   </ItemGroup>
   <ItemGroup>
-    <PackageVersion Include="OpenAI" Version="2.13.0" />
+    <PackageVersion Include="OpenAI" Version="2.12.0" />
   </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="Microsoft.Extensions.VectorData.Abstractions" Version="10.8.2" />
@@ -28,6 +35,7 @@
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
     <PackageVersion Include="JsonSchema.Net" Version="9.4.0" />
     <PackageVersion Include="JsonLogic" Version="6.1.0" />
+    <PackageVersion Include="JsonPointer.Net" Version="7.0.2" />
   </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="Npgsql" Version="10.0.3" />
@@ -35,10 +43,8 @@
     <PackageVersion Include="LibGit2Sharp" Version="0.32.0" />
   </ItemGroup>
   <ItemGroup>
-    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />
+    <PackageVersion Include="OpenTelemetry" Version="1.17.0" />
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.17.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.17.0" />
   </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="Microsoft.Extensions.AI.Evaluation" Version="10.8.0" />
@@ -49,6 +55,10 @@
   </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="5.6.0" />
+  </ItemGroup>
+  <!-- The chat UI travels inside AgentCore.Chat.dll rather than as loose files beside it. -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.11" />
   </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
