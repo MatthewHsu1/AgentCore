@@ -1,3 +1,5 @@
+using AgentCore.Application.Ports;
+using AgentCore.Application.Sessions.Memory;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 

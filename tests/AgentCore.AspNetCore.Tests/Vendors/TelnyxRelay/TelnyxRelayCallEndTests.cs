@@ -1,13 +1,13 @@
-using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Audit;
+using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Sessions.Memory;
 using AgentCore.Application.Transcript;
 using AgentCore.Application.Transcript.Memory;
-using AgentCore.AspNetCore.Sessions;
 using AgentCore.AspNetCore.Tests.Fakes;
 using AgentCore.Domain.Audit;
 using Microsoft.Extensions.AI;

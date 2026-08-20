@@ -1,8 +1,9 @@
-using System.Collections.Concurrent;
-using AgentCore.Application.Runtime;
 using AgentCore.Domain.Audit;
+using System.Collections.Concurrent;
+using AgentCore.Application.Ports;
+using AgentCore.Application.Runtime;
 
-namespace AgentCore.AspNetCore.Sessions;
+namespace AgentCore.Application.Sessions.Memory;
 
 /// <summary>
 /// The default <see cref="ICallSessions"/>. It holds every session in this process.
@@ -135,7 +136,7 @@ public sealed class InMemoryCallSessions : ICallSessions
     /// §11 item 6 makes <c>call.ended</c> the last event of every call, and expiry is a way a call
     /// ends. Nothing else writes it here: the relay closes its own chain from the socket and the
     /// turn loop closes its own from a terminal stage, so a caller who simply stops replying is the
-    /// one ending that would otherwise leave a chain with no end. <see cref="CallSession.EndCall"/>
+    /// one ending that would otherwise leave a chain with no end. <see cref="CallSession.EndCall(CallEndReason)"/>
     /// is idempotent, so a session that already closed its chain keeps the reason it wrote.
     /// The reason is <see cref="CallEndReason.Faulted"/> because the closed set of §6 holds no
     /// reason for an abandoned call; see the amendment owed on that enum.

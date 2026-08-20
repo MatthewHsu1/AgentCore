@@ -1,6 +1,6 @@
 using AgentCore.Application.Runtime;
 
-namespace AgentCore.AspNetCore.Sessions;
+namespace AgentCore.Application.Ports;
 
 /// <summary>
 /// Owns the session of a call for as long as the call needs it.

@@ -1,3 +1,4 @@
+using AgentCore.Application.Sessions.Memory;
 using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Audit;
 using AgentCore.Application.Configuration.Compilation;

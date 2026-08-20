@@ -526,8 +526,6 @@ AgentCore.Application.Evaluation.FaultCodeEvaluator.EvaluateAsync(System.Collect
 AgentCore.Application.Evaluation.FaultCodeEvaluator.EvaluationMetricNames.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
 AgentCore.Application.Evaluation.FaultCodeEvaluator.FaultCodeEvaluator() -> void
 AgentCore.Application.Evaluation.FaultCodeEvaluator.FaultCodeEvaluator(string! codePattern) -> void
-AgentCore.Application.Evaluation.IEvaluationScorePublisher
-AgentCore.Application.Evaluation.IEvaluationScorePublisher.PublishAsync(AgentCore.Application.Evaluation.EvaluationScore! score, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Evaluation.InMemoryEvaluationScorePublisher
 AgentCore.Application.Evaluation.InMemoryEvaluationScorePublisher.InMemoryEvaluationScorePublisher() -> void
 AgentCore.Application.Evaluation.InMemoryEvaluationScorePublisher.PublishAsync(AgentCore.Application.Evaluation.EvaluationScore! score, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
@@ -577,6 +575,12 @@ AgentCore.Application.Ports.ICallOutputPort
 AgentCore.Application.Ports.ICallOutputPort.CompleteAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Ports.ICallOutputPort.SpeakAsync(string! fragment, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Ports.ICallOutputPort.StopAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Ports.ICallSessionFactory
+AgentCore.Application.Ports.ICallSessionFactory.Create(string? callId = null) -> AgentCore.Application.Runtime.CallSession!
+AgentCore.Application.Ports.ICallSessions
+AgentCore.Application.Ports.ICallSessions.CloseAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Ports.ICallSessions.OpenAsync(string? callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Runtime.CallSession!>
+AgentCore.Application.Ports.ICallSessions.TryGetAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Runtime.CallSession?>
 AgentCore.Application.Ports.IChatClientAdapter
 AgentCore.Application.Ports.IChatClientAdapter.CreateClientAsync(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.IChatClient!>
 AgentCore.Application.Ports.IChatClientFactory
@@ -593,6 +597,8 @@ AgentCore.Application.Ports.IDocumentStorePort
 AgentCore.Application.Ports.IDocumentStorePort.GrepAsync(string! pattern, string? glob = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Domain.Knowledge.GrepResult!>
 AgentCore.Application.Ports.IDocumentStorePort.ListAsync(string? pattern = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Domain.Knowledge.DocumentListing!>
 AgentCore.Application.Ports.IDocumentStorePort.ReadAsync(string! documentId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Domain.Knowledge.KnowledgeDocument?>
+AgentCore.Application.Ports.IEvaluationScorePublisher
+AgentCore.Application.Ports.IEvaluationScorePublisher.PublishAsync(AgentCore.Application.Evaluation.EvaluationScore! score, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Ports.IKnowledgeRetrievalPort
 AgentCore.Application.Ports.IKnowledgeRetrievalPort.SearchAsync(string! query, int limit, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Domain.Knowledge.KnowledgeChunk!>!>
 AgentCore.Application.Ports.IKnowledgeStoreAdapter
@@ -632,7 +638,7 @@ AgentCore.Application.Providers.VendorSeam.VendorSeam() -> void
 AgentCore.Application.Providers.VendorSeam.VendorSeam(string! DocumentPath, string! Pointer, string! RegistrationHint, string! Plural) -> void
 AgentCore.Application.Providers.VendorSeam.VendorSeam(string! documentPath, string! pointer, string! registrationHint) -> void
 AgentCore.Application.Runtime.AgentCoreAgent
-AgentCore.Application.Runtime.AgentCoreAgent.AgentCoreAgent(AgentCore.Application.Runtime.ICallSessionFactory! sessions, string? name = null, string? description = null) -> void
+AgentCore.Application.Runtime.AgentCoreAgent.AgentCoreAgent(AgentCore.Application.Ports.ICallSessionFactory! sessions, string? name = null, string? description = null) -> void
 AgentCore.Application.Runtime.AgentCoreAgent.CreateSessionAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Agents.AI.AgentSession!>
 AgentCore.Application.Runtime.CallEvent
 AgentCore.Application.Runtime.CallEvent.<Clone>$() -> AgentCore.Application.Runtime.CallEvent!
@@ -683,8 +689,6 @@ AgentCore.Application.Runtime.CallSessionFactory
 AgentCore.Application.Runtime.CallSessionFactory.CallSessionFactory(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Configuration.Validation.IGuardEvaluator! guards, AgentCore.Application.State.StateExtractor? extractor = null, System.TimeProvider? timeProvider = null, Microsoft.Extensions.Logging.ILogger? logger = null, System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ICallObserver!>? observers = null) -> void
 AgentCore.Application.Runtime.CallSessionFactory.Create(string? callId = null) -> AgentCore.Application.Runtime.CallSession!
 AgentCore.Application.Runtime.CallStateScope
-AgentCore.Application.Runtime.ICallSessionFactory
-AgentCore.Application.Runtime.ICallSessionFactory.Create(string? callId = null) -> AgentCore.Application.Runtime.CallSession!
 AgentCore.Application.Secrets.KnownSecrets
 AgentCore.Application.Secrets.ResolvedSecrets
 AgentCore.Application.Secrets.ResolvedSecrets.Contains(string! name) -> bool
@@ -704,6 +708,13 @@ AgentCore.Application.Secrets.SecretResolutionException.SecretResolutionExceptio
 AgentCore.Application.Secrets.SecretResolutionException.SecretResolutionException(string! message) -> void
 AgentCore.Application.Secrets.SecretResolutionException.SecretResolutionException(string! message, System.Exception? innerException) -> void
 AgentCore.Application.Secrets.SecretResolverExtensions
+AgentCore.Application.Sessions.Memory.InMemoryCallSessions
+AgentCore.Application.Sessions.Memory.InMemoryCallSessions.CloseAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Sessions.Memory.InMemoryCallSessions.Count.get -> int
+AgentCore.Application.Sessions.Memory.InMemoryCallSessions.InMemoryCallSessions(AgentCore.Application.Ports.ICallSessionFactory! factory, System.TimeSpan idleTimeout, System.TimeProvider! timeProvider) -> void
+AgentCore.Application.Sessions.Memory.InMemoryCallSessions.OpenAsync(string? callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Runtime.CallSession!>
+AgentCore.Application.Sessions.Memory.InMemoryCallSessions.SweepAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Sessions.Memory.InMemoryCallSessions.TryGetAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Runtime.CallSession?>
 AgentCore.Application.State.ConstStateWriter
 AgentCore.Application.State.CounterStateWriter
 AgentCore.Application.State.CounterStateWriter.Apply(AgentCore.Application.State.StateDocument! state) -> int
@@ -1136,6 +1147,7 @@ static readonly AgentCore.Application.Secrets.KnownSecrets.GrafanaCloudInstanceI
 static readonly AgentCore.Application.Secrets.KnownSecrets.OpenAi -> AgentCore.Application.Secrets.SecretName!
 static readonly AgentCore.Application.Secrets.KnownSecrets.PostgresConnectionString -> AgentCore.Application.Secrets.SecretName!
 static readonly AgentCore.Application.Secrets.KnownSecrets.Zilliz -> AgentCore.Application.Secrets.SecretName!
+static readonly AgentCore.Application.Sessions.Memory.InMemoryCallSessions.DefaultIdleTimeout -> System.TimeSpan
 virtual AgentCore.Application.Call.CallInput.EqualityContract.get -> System.Type!
 virtual AgentCore.Application.Call.CallInput.Equals(AgentCore.Application.Call.CallInput? other) -> bool
 virtual AgentCore.Application.Call.CallInput.PrintMembers(System.Text.StringBuilder! builder) -> bool

@@ -1,4 +1,6 @@
-namespace AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime;
+
+namespace AgentCore.Application.Ports;
 
 /// <summary>
 /// Creates one session for one call.

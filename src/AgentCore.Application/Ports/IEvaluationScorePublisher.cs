@@ -1,4 +1,6 @@
-namespace AgentCore.Application.Evaluation;
+using AgentCore.Application.Evaluation;
+
+namespace AgentCore.Application.Ports;
 
 /// <summary>
 /// The seam that carries a finished evaluation out of the library.
