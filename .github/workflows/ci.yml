@@ -50,6 +50,10 @@ jobs:
           cache: npm
           cache-dependency-path: src/AgentCore.Chat/ClientApp/package-lock.json
 
+      - name: Chat UI dependencies
+        run: npm ci
+        working-directory: src/AgentCore.Chat/ClientApp
+
       - name: Restore
         run: |
           dotnet restore
