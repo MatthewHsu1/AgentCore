@@ -39,8 +39,8 @@ internal sealed class TelnyxRelayHost : IAsyncDisposable
         _errors = errors;
     }
 
-    /// <summary>Gets the store the host resolved, so a test reads the live sessions.</summary>
-    public ICallSessionStore Store => _app.Services.GetRequiredService<ICallSessionStore>();
+    /// <summary>Gets the sessions the host resolved, so a test reads the live ones.</summary>
+    public ICallSessions Sessions => _app.Services.GetRequiredService<ICallSessions>();
 
     /// <summary>Gets the <c>ws://</c> address of the relay route.</summary>
     /// <remarks>
@@ -208,7 +208,7 @@ internal sealed class TelnyxRelayHost : IAsyncDisposable
     /// <param name="callId">The call id, which is the <c>callSessionId</c> of the setup frame.</param>
     /// <returns>The session, or null.</returns>
     public async Task<CallSession?> FindSessionAsync(string callId)
-        => await Store.TryGetAsync(callId, TestContext.Current.CancellationToken);
+        => await Sessions.TryGetAsync(callId, TestContext.Current.CancellationToken);
 
     /// <summary>Waits until the store no longer holds one call.</summary>
     /// <param name="callId">The call id.</param>

@@ -13,27 +13,6 @@ namespace AgentCore.AspNetCore.Endpoints;
 /// <summary>
 /// The text path: an OpenAI-compatible <c>POST /v1/chat/completions</c> over the turn loop.
 /// </summary>
-/// <remarks>
-/// <para>
-/// One request runs one turn. The endpoint reads the last <c>user</c> message of the request, hands
-/// it to <see cref="CallSession.RunTurnAsync"/>, and answers the reply. With <c>stream: true</c> it
-/// runs <see cref="CallSession.RunTurnStreamingAsync"/> instead and writes one server-sent event for
-/// each update, so the first word leaves the host as soon as the model produced it.
-/// </para>
-/// <para>
-/// A request names its session in the <see cref="SessionHeaderName"/> header. The OpenAI request
-/// shape carries no session field, so adding one would break a strict client; a header rides beside
-/// the shape and every client can set one. A request that sets no header starts a new call, and the
-/// answer carries the id in the same header and in the <c>agentcore.session</c> field of the body. A
-/// request that names an id the store does not hold is answered <c>404</c> and starts nothing,
-/// because a silently new call would lose the stage the caller was in.
-/// </para>
-/// <para>
-/// The session lives in <see cref="ICallSessionStore"/> between two requests. The default store is
-/// <see cref="InMemoryCallSessionStore"/>, which does not survive a restart and does not span
-/// instances.
-/// </para>
-/// </remarks>
 public static class ChatCompletionsEndpointRouteBuilderExtensions
 {
     /// <summary>The route this endpoint answers on when the host names none.</summary>
@@ -109,13 +88,13 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
             return;
         }
 
-        var store = http.RequestServices.GetRequiredService<ICallSessionStore>();
+        var sessions = http.RequestServices.GetRequiredService<ICallSessions>();
         var named = http.Request.Headers[SessionHeaderName].ToString();
 
         CallSession session;
         if (named is { Length: > 0 })
         {
-            if (await store.TryGetAsync(named, cancellationToken).ConfigureAwait(false) is not { } found)
+            if (await sessions.TryGetAsync(named, cancellationToken).ConfigureAwait(false) is not { } found)
             {
                 await WriteErrorAsync(
                     http,
@@ -132,8 +111,7 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
         }
         else
         {
-            session = http.RequestServices.GetRequiredService<ICallSessionFactory>().Create();
-            await store.AddAsync(session, cancellationToken).ConfigureAwait(false);
+            session = await sessions.OpenAsync(null, cancellationToken).ConfigureAwait(false);
         }
 
         var model = request?.Model is { Length: > 0 } asked ? asked : session.Compiled.Name;

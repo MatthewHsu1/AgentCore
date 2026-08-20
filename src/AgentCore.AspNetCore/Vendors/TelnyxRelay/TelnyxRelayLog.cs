@@ -123,9 +123,9 @@ internal static partial class TelnyxRelayLog
     /// <param name="exception">The cause.</param>
     /// <remarks>
     /// Logged and swallowed rather than left to propagate, because a throw here must not skip the
-    /// write-loop observation or the session removal that follow it in <c>RunAsync</c>.
-    /// <see cref="Sessions.InMemoryCallSessionStore"/> documents that it evicts nothing on its own,
-    /// so a session removal that never runs lives for the rest of the process.
+    /// write-loop observation or the session close that follow it in <c>RunAsync</c>. A close that
+    /// never runs leaves the call to wait out its idle timeout, and nothing waits for the words its
+    /// last turn still owed store 1.
     /// </remarks>
     [LoggerMessage(
         EventId = 9,
@@ -271,9 +271,9 @@ internal static partial class TelnyxRelayLog
     /// <remarks>
     /// One socket carries one call, and the vendor sends one <c>setup</c>. A second one is the
     /// vendor's defect, and section 7.1 forbids dropping a call over one, so the frame replaces the
-    /// session rather than refusing the socket. The first session is removed from the store as it
-    /// goes: <see cref="Sessions.InMemoryCallSessionStore"/> evicts nothing on its own, and teardown
-    /// only ever removes the session the connection currently holds.
+    /// session rather than refusing the socket. The first session is closed as it goes, because
+    /// teardown only ever closes the session the connection currently holds — so this is the last
+    /// moment anything waits for the words the replaced call still owed store 1.
     /// </remarks>
     [LoggerMessage(
         EventId = 19,
@@ -291,9 +291,9 @@ internal static partial class TelnyxRelayLog
     /// long-term record of a call, and §11 item 6 says every chain ends in <c>call.ended</c>, so a
     /// chain that stops without one is a permanent gap in that record rather than a passing
     /// inconvenience. Logged and swallowed all the same: §7.1 forbids teardown throwing out of the
-    /// request handler, and the session removal that follows it in <c>RunAsync</c> must still run —
-    /// <see cref="Sessions.InMemoryCallSessionStore"/> evicts nothing on its own, so a removal that
-    /// never runs lives for the rest of the process.
+    /// request handler, and the session close that follows it in <c>RunAsync</c> must still run — a
+    /// close that never runs leaves the call to wait out its idle timeout with its last words never
+    /// waited for.
     /// </remarks>
     [LoggerMessage(
         EventId = 20,
@@ -301,23 +301,23 @@ internal static partial class TelnyxRelayLog
         Message = "the audit chain of call {CallId} could not be closed, so it has no call.ended event.")]
     public static partial void CallEndFaulted(ILogger logger, string callId, Exception exception);
 
-    /// <summary>The words of a call could not be written before the session was dropped.</summary>
-    /// <param name="logger">The logger.</param>
-    /// <param name="callId">The id of the call.</param>
-    /// <param name="exception">The cause.</param>
-    [LoggerMessage(
-        EventId = 21,
-        Level = LogLevel.Error,
-        Message = "the transcript of call {CallId} could not be flushed before its session was dropped.")]
-    public static partial void TranscriptFlushFaulted(ILogger logger, string callId, Exception exception);
-
-    /// <summary>A session could not be dropped from the store at the end of its call.</summary>
+    /// <summary>The session of a call could not be closed at the end of that call.</summary>
     /// <param name="logger">The logger.</param>
     /// <param name="callId">The id of the call.</param>
     /// <param name="exception">The cause.</param>
     [LoggerMessage(
         EventId = 22,
         Level = LogLevel.Error,
-        Message = "the session of call {CallId} could not be removed from the store, so it stays there for the life of the process.")]
-    public static partial void SessionRemoveFaulted(ILogger logger, string callId, Exception exception);
+        Message = "the session of call {CallId} could not be closed, so its last words may never reach store 1 and it waits out the idle timeout.")]
+    public static partial void CallCloseFaulted(ILogger logger, string callId, Exception exception);
+
+    /// <summary>The store could not be told that a call is still being had.</summary>
+    /// <param name="logger">The logger.</param>
+    /// <param name="callId">The id of the call.</param>
+    /// <param name="exception">The cause.</param>
+    [LoggerMessage(
+        EventId = 23,
+        Level = LogLevel.Warning,
+        Message = "the store could not be read for call {CallId}, so that call may be dropped by the idle sweep while it is still running.")]
+    public static partial void SessionTouchFaulted(ILogger logger, string callId, Exception exception);
 }

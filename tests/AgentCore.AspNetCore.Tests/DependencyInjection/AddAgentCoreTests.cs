@@ -390,28 +390,40 @@ public sealed class AddAgentCoreTests
     }
 
     [Fact]
-    public async Task AddAgentCore_RegistersTheInMemorySessionStoreByDefault()
+    public async Task AddAgentCore_RegistersTheInMemorySessionsByDefault()
     {
         using var provider = await BuildAsync(OneAgentYaml);
 
-        var store = provider.GetRequiredService<ICallSessionStore>();
+        var sessions = provider.GetRequiredService<ICallSessions>();
 
-        Assert.IsType<InMemoryCallSessionStore>(store);
-        Assert.Same(store, provider.GetRequiredService<ICallSessionStore>());
+        Assert.IsType<InMemoryCallSessions>(sessions);
+        Assert.Same(sessions, provider.GetRequiredService<ICallSessions>());
     }
 
     [Fact]
-    public async Task AddAgentCore_KeepsASessionStoreTheHostRegisteredFirst()
+    public async Task AddAgentCore_RunsTheIdleSweepForTheDefaultSessions()
     {
-        CountingCallSessionStore mine = new();
+        // Expiry needs something to drive it. Without this the idle timeout never fires and the
+        // text path holds every call a caller walked away from for the life of the process.
+        using var provider = await BuildAsync(OneAgentYaml);
+
+        Assert.Contains(
+            provider.GetServices<IHostedService>(),
+            service => service is CallSessionSweeper);
+    }
+
+    [Fact]
+    public async Task AddAgentCore_KeepsSessionsTheHostRegisteredFirst()
+    {
+        CountingCallSessions mine = new();
         ServiceCollection services = new();
-        services.AddSingleton<ICallSessionStore>(mine);
+        services.AddSingleton<ICallSessions>(mine);
         await ConfigureAsync(services, OneAgentYaml, null);
 
         using var provider = services.BuildServiceProvider();
 
         // A distributed store replaces the default one, and the default steps aside.
-        Assert.Same(mine, provider.GetRequiredService<ICallSessionStore>());
+        Assert.Same(mine, provider.GetRequiredService<ICallSessions>());
     }
 
     // -------------------------------------------------------------------------------------------
@@ -1632,16 +1644,16 @@ public sealed class AddAgentCoreTests
         }
     }
 
-    /// <summary>A store a host registers in place of the default one.</summary>
-    private sealed class CountingCallSessionStore : ICallSessionStore
+    /// <summary>Sessions a host registers in place of the default ones.</summary>
+    private sealed class CountingCallSessions : ICallSessions
     {
-        public ValueTask<CallSession?> TryGetAsync(string sessionId, CancellationToken cancellationToken = default)
+        public ValueTask<CallSession> OpenAsync(string? callId, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public ValueTask<CallSession?> TryGetAsync(string callId, CancellationToken cancellationToken = default)
             => ValueTask.FromResult<CallSession?>(null);
 
-        public ValueTask AddAsync(CallSession session, CancellationToken cancellationToken = default)
+        public ValueTask CloseAsync(string callId, CancellationToken cancellationToken = default)
             => ValueTask.CompletedTask;
-
-        public ValueTask<bool> RemoveAsync(string sessionId, CancellationToken cancellationToken = default)
-            => ValueTask.FromResult(false);
     }
 }

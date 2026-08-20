@@ -41,16 +41,18 @@ AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup
 AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup.Configuration.get -> AgentCore.Application.Configuration.Schema.AgentCoreConfiguration!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup.Secrets.get -> AgentCore.Application.Secrets.ResolvedSecrets!
 AgentCore.AspNetCore.Endpoints.ChatCompletionsEndpointRouteBuilderExtensions
-AgentCore.AspNetCore.Sessions.ICallSessionStore
-AgentCore.AspNetCore.Sessions.ICallSessionStore.AddAsync(AgentCore.Application.Runtime.CallSession! session, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
-AgentCore.AspNetCore.Sessions.ICallSessionStore.RemoveAsync(string! sessionId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<bool>
-AgentCore.AspNetCore.Sessions.ICallSessionStore.TryGetAsync(string! sessionId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Runtime.CallSession?>
-AgentCore.AspNetCore.Sessions.InMemoryCallSessionStore
-AgentCore.AspNetCore.Sessions.InMemoryCallSessionStore.AddAsync(AgentCore.Application.Runtime.CallSession! session, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
-AgentCore.AspNetCore.Sessions.InMemoryCallSessionStore.Count.get -> int
-AgentCore.AspNetCore.Sessions.InMemoryCallSessionStore.InMemoryCallSessionStore() -> void
-AgentCore.AspNetCore.Sessions.InMemoryCallSessionStore.RemoveAsync(string! sessionId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<bool>
-AgentCore.AspNetCore.Sessions.InMemoryCallSessionStore.TryGetAsync(string! sessionId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Runtime.CallSession?>
+AgentCore.AspNetCore.Sessions.ICallSessions
+AgentCore.AspNetCore.Sessions.ICallSessions.CloseAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.AspNetCore.Sessions.ICallSessions.OpenAsync(string? callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Runtime.CallSession!>
+AgentCore.AspNetCore.Sessions.ICallSessions.TryGetAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Runtime.CallSession?>
+AgentCore.AspNetCore.Sessions.InMemoryCallSessions
+AgentCore.AspNetCore.Sessions.InMemoryCallSessions.CloseAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.AspNetCore.Sessions.InMemoryCallSessions.Count.get -> int
+static readonly AgentCore.AspNetCore.Sessions.InMemoryCallSessions.DefaultIdleTimeout -> System.TimeSpan
+AgentCore.AspNetCore.Sessions.InMemoryCallSessions.InMemoryCallSessions(AgentCore.Application.Runtime.ICallSessionFactory! factory, System.TimeSpan idleTimeout, System.TimeProvider! timeProvider) -> void
+AgentCore.AspNetCore.Sessions.InMemoryCallSessions.OpenAsync(string? callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Runtime.CallSession!>
+AgentCore.AspNetCore.Sessions.InMemoryCallSessions.SweepAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.AspNetCore.Sessions.InMemoryCallSessions.TryGetAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Runtime.CallSession?>
 AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayCallAdapter
 AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayCallAdapter.CarriesText.get -> bool
 AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayCallAdapter.Kind.get -> string!

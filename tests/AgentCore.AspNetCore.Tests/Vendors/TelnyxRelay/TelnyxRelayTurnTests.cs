@@ -310,9 +310,8 @@ public sealed class TelnyxRelayTurnTests
     {
         // One socket carries one call, so a second setup frame is the vendor's defect. Section 7.1
         // still forbids dropping a call over one, so it replaces rather than refuses. Teardown only
-        // ever removes the session the connection currently holds, and InMemoryCallSessionStore
-        // evicts nothing on its own, so a first session left behind would live for the whole
-        // process.
+        // ever closes the session the connection currently holds, so a first session left behind
+        // would never have anything wait for the words it still owed store 1.
         using SequencedChatClient reply = new("hello");
         EventObservedLoggerProvider capture = new("SecondSetupFrame");
         await using var host = await TelnyxRelayHost.StartAsync(

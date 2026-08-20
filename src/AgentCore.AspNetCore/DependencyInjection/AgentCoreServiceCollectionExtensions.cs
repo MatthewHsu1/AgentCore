@@ -1,6 +1,7 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Runtime;
 using AgentCore.Application.Secrets;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.AspNetCore.Sessions;
@@ -95,7 +96,16 @@ public static class AgentCoreServiceCollectionExtensions
 
         services.TryAddSingleton(options.TimeProvider ?? TimeProvider.System);
 
-        services.TryAddSingleton<ICallSessionStore, InMemoryCallSessionStore>();
+        services.TryAddSingleton<ICallSessions>(provider => new InMemoryCallSessions(
+            provider.GetRequiredService<ICallSessionFactory>(),
+            InMemoryCallSessions.DefaultIdleTimeout,
+            provider.GetRequiredService<TimeProvider>()));
+
+        services.AddHostedService(provider => new CallSessionSweeper(
+            provider.GetRequiredService<ICallSessions>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetService<ILoggerFactory>()?.CreateLogger<CallSessionSweeper>()
+                ?? NullLogger<CallSessionSweeper>.Instance));
 
         EvaluationStartup.Register(services, configuration, evaluators);
 
