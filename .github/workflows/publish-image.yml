@@ -3,8 +3,6 @@
 # ci.yml is the gate and holds no secret. This workflow is the opposite: it runs only on a version
 # tag of this repository, and it writes. It runs no test, because the tag is cut from a commit that
 # already passed ci.yml.
-#
-# samples/agentcore-flyio-starter is what a consumer does with what this publishes.
 name: publish-image
 
 on:
