@@ -16,6 +16,9 @@ internal sealed class RequestRecordingChatClient : IChatClient
     /// <summary>Gets every request this client answered, one role-prefixed line per message.</summary>
     public List<List<string>> Requests { get; } = [];
 
+    /// <summary>Gets the instructions of each request, in call order. A per-invocation context lands here.</summary>
+    public List<string?> Instructions { get; } = [];
+
     public Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages,
         ChatOptions? options = null,
@@ -23,6 +26,7 @@ internal sealed class RequestRecordingChatClient : IChatClient
     {
         ArgumentNullException.ThrowIfNull(messages);
         Requests.Add([.. messages.Select(message => $"{message.Role}:{message.Text}")]);
+        Instructions.Add(options?.Instructions);
         return Task.FromResult(
             new ChatResponse(new ChatMessage(ChatRole.Assistant, _replies[Requests.Count - 1])));
     }

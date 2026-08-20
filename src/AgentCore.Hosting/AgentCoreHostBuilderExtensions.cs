@@ -52,11 +52,15 @@ public static class AgentCoreHostBuilderExtensions
             .AddConfiguration(builder.Configuration.GetSection("Logging"))
             .AddConsole());
 
-        builder.Services.AddSingleton(loggers);
+        // Through a factory and not as an instance: a container disposes only what it built, so an
+        // instance handed to AddSingleton is never closed. Both of these are opened before the
+        // container exists, and container disposal runs after every hosted service has stopped — so
+        // the audit drain still has somewhere to log.
+        builder.Services.AddSingleton(_ => loggers);
 
         // One outbound HTTP pipeline for the life of the process.
         AgentCoreHttpClients httpClients = new(loggers: loggers);
-        builder.Services.AddSingleton(httpClients);
+        builder.Services.AddSingleton(_ => httpClients);
 
         await builder.Services.AddAgentCoreAsync(
             options => Configure(builder, options, httpClients, loggers, configure),

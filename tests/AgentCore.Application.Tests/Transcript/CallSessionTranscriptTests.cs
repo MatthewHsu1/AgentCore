@@ -163,9 +163,8 @@ public sealed class CallSessionTranscriptTests
     }
 
     /// <summary>
-    /// The reminder rides exactly one request. Stored, it would repeat in every later prompt of the
-    /// call, which is why the turn loop writes store 1 itself rather than letting the framework
-    /// store the request verbatim.
+    /// The reminder rides exactly one invocation, as instructions the framework merges and stores
+    /// nowhere. Nothing of it reaches the caller's own message, so store 1 keeps what was said.
     /// </summary>
     [Fact]
     public async Task RunTurn_WithAnUnfilledSlot_KeepsTheReminderOutOfTheStoredTranscript()
@@ -179,7 +178,9 @@ public sealed class CallSessionTranscriptTests
         _ = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Contains("<system-reminder>", reply.Requests[0][^1], StringComparison.Ordinal);
+        Assert.Contains("<system-reminder>", reply.Instructions[0], StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            reply.Requests[0], message => message.Contains("<system-reminder>", StringComparison.Ordinal));
         await session.FlushTranscriptAsync();
         Assert.Equal(["hello", "which order?"], store.Live(session.CallId).Select(row => row.Content.Text));
     }

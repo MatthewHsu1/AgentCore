@@ -130,6 +130,35 @@ public sealed class AgentCoreHostTests
     }
 
     // ---------------------------------------------------------------------------------------------
+    // What this extension opened before the container existed, it has to close with the container.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task TheOutboundHttpPipelineClosesWithTheHost()
+    {
+        var host = await StartAsync();
+        var clients = host.Services.GetRequiredService<AgentCoreHttpClients>();
+
+        await host.DisposeAsync();
+
+        // The pipeline holds a container and a SocketsHttpHandler per client name. A host that stops
+        // and leaves them open leaks both, and a process that restarts it leaks them again.
+        Assert.Throws<ObjectDisposedException>(() => clients.CreateClient("agentcore.test"));
+    }
+
+    [Fact]
+    public async Task TheLoggerFactoryClosesWithTheHost()
+    {
+        var host = await StartAsync();
+        var loggers = host.Services.GetRequiredService<ILoggerFactory>();
+
+        await host.DisposeAsync();
+
+        // This factory is built before the container, so nothing else can be holding its providers.
+        Assert.Throws<ObjectDisposedException>(() => loggers.CreateLogger("after"));
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // The routes. Mapping is the other half: the registrations above answer nothing on their own.
     // ---------------------------------------------------------------------------------------------
 

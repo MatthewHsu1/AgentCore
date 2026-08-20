@@ -10,62 +10,12 @@ namespace AgentCore.Application.Audit;
 /// <summary>
 /// Puts a bounded queue and a batching background writer in front of any other audit sink.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Section 7 measures a durable insert at 13 ms at p50 and 32 ms at p99, against 91 nanoseconds to
-/// enqueue, and <see cref="IAuditSinkPort"/> turns that into a rule: an append completes when the
-/// event is ACCEPTED and never when it is DURABLE. <b>Before this class that rule was a doc comment.</b>
-/// An adapter that awaited its database broke it silently, and nothing in the type system said so.
-/// Wrapping the store here makes the rule structural: <see cref="AppendAsync"/> writes to a channel
-/// and returns, whatever the store behind it does.
-/// </para>
-/// <para>
-/// So the adapter behind this is allowed to be slow and allowed to block. That is the point. A
-/// PostgreSQL adapter, a file, an object store — each one is written as the simplest correct writer
-/// of its medium, and none of them carries a queue of its own.
-/// </para>
-/// <para>
-/// <b>It batches.</b> The writer drains everything waiting, up to
-/// <see cref="DefaultBatchSize"/> events, and hands the run to
-/// <see cref="IAuditSinkPort.AppendManyAsync"/> as one call. Twenty rows in one round trip cost 13 ms
-/// together where twenty round trips cost 260 ms, so a store that overrides that method absorbs a
-/// burst at the price of a single insert. A store that does not override it still works, one row at a
-/// time, because the port's default appends each in turn.
-/// </para>
-/// <para>
-/// <b>One reader means one order.</b> The chain of D23 is a record of a call, and the writer here is
-/// a single loop over a single channel, so events reach the store in the order they were accepted. An
-/// adapter therefore never allocates a chain position under concurrency, because it is never called
-/// concurrently.
-/// </para>
-/// <para>
-/// A full queue drops and reports, per the port: it does not throw and it does not block, because
-/// audit is a record of the call and never a part of it. The drop is one
-/// <see cref="Log.AuditQueueFull"/> line per event, at error level, because a gap in the chain is
-/// what <c>chain_check</c> will report later.
-/// </para>
-/// <para>
-/// Disposal drains. A host that stops does not lose the rows it already accepted, which is what makes
-/// putting a queue in front of the chain safe. It is both <see cref="IDisposable"/> and
-/// <see cref="IAsyncDisposable"/>, because a service provider disposes whichever it finds and the
-/// synchronous path must not be the one that loses events.
-/// </para>
-/// </remarks>
 public sealed class QueuedAuditSink : IAuditSinkPort, IAsyncDisposable, IDisposable
 {
     /// <summary>The number of events the queue holds before it starts dropping.</summary>
-    /// <remarks>
-    /// Sized to absorb an unreachable store rather than a slow one. At the p99 of section 7 the
-    /// writer clears well over a thousand events a second in batches, so this is minutes of a busy
-    /// line and a drop means something is actually wrong.
-    /// </remarks>
     public const int DefaultCapacity = 10_000;
 
     /// <summary>The most events the writer hands the store in one call.</summary>
-    /// <remarks>
-    /// Large enough that a burst costs one round trip, small enough that one statement stays inside
-    /// the parameter limits of an ordinary database driver.
-    /// </remarks>
     public const int DefaultBatchSize = 100;
 
     /// <summary>How long <see cref="Dispose"/> waits for the drain before it gives up.</summary>
@@ -124,10 +74,6 @@ public sealed class QueuedAuditSink : IAuditSinkPort, IAsyncDisposable, IDisposa
     }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// It writes to the channel and returns, so the cost to the caller is the enqueue and nothing
-    /// else. It never blocks, it never throws, and it never waits for the store.
-    /// </remarks>
     public ValueTask AppendAsync(AuditEvent auditEvent, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(auditEvent);
@@ -150,10 +96,6 @@ public sealed class QueuedAuditSink : IAuditSinkPort, IAsyncDisposable, IDisposa
     /// <summary>Waits until every accepted event has been handed to the store.</summary>
     /// <param name="cancellationToken">Stops waiting. It cancels no write.</param>
     /// <returns>A task that completes when nothing is left in the queue.</returns>
-    /// <remarks>
-    /// Nothing in the turn loop calls this. It is for a host that wants the chain caught up before it
-    /// reports success, and for a test that wants to read the store back.
-    /// </remarks>
     public async ValueTask FlushAsync(CancellationToken cancellationToken = default)
     {
         while (Volatile.Read(ref _pending) > 0)
@@ -183,11 +125,6 @@ public sealed class QueuedAuditSink : IAuditSinkPort, IAsyncDisposable, IDisposa
     }
 
     /// <summary>Stops taking events and writes what is queued, blocking until it is done.</summary>
-    /// <remarks>
-    /// <see cref="DisposeAsync"/> is the one to call. This exists because a service provider disposes
-    /// whichever interface it finds, and the one it finds must not be the one that loses events. There
-    /// is no synchronization context to deadlock against in a host, and the wait behind it is bounded.
-    /// </remarks>
     public void Dispose() => DisposeAsync().AsTask().GetAwaiter().GetResult();
 
     /// <summary>Waits out the drain, and reports whether it finished rather than throwing.</summary>

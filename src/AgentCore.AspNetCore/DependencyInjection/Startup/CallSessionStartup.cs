@@ -6,7 +6,7 @@ using AgentCore.Application.Runtime;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace AgentCore.AspNetCore.DependencyInjection;
+namespace AgentCore.AspNetCore.DependencyInjection.Startup;
 
 /// <summary>The seam a call arrives on: the audit queue, the observers, and the session factory.</summary>
 internal static class CallSessionStartup
@@ -70,10 +70,17 @@ internal static class CallSessionStartup
         // The QUEUE is what answers the port, not the store behind it. Resolving IAuditSinkPort must
         // give the thing that honours the port's contract, and appending straight to the store would
         // be the one path that sits on the caller. It is registered as the concrete type as well as
-        // the port, so a host that wants FlushAsync before it reports success can ask for it, and so
-        // the container disposes it on the way out — that disposal is what drains the queue and keeps
-        // the accepted rows.
+        // the port, so a host that wants FlushAsync before it reports success can ask for it.
         services.AddSingleton(auditSink);
         services.AddSingleton<IAuditSinkPort>(auditSink);
+
+        // Neither the queue nor the store is owned by the container: it disposes only what it built,
+        // so an instance handed to AddSingleton is never closed. Without this line the queue is never
+        // drained, and every event accepted but not yet written is lost when the process stops.
+        //
+        // The order of the pair is the point. The queue drains INTO the store, so the store must
+        // still be open while the drain runs; closing it first would fail exactly the writes this
+        // owner exists to keep.
+        StartupResourceOwner.Own(services, auditSink, store);
     }
 }

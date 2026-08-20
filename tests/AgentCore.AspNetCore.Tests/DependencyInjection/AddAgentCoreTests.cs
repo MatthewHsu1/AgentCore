@@ -450,6 +450,68 @@ public sealed class AddAgentCoreTests
     }
 
     // -------------------------------------------------------------------------------------------
+    // The audit chain shuts down with the host. An event is ACCEPTED when AppendAsync returns, so a
+    // stop that does not drain the queue loses every row still in it.
+    // -------------------------------------------------------------------------------------------
+    [Fact]
+    public async Task AddAgentCore_DrainsTheAuditQueueWhenTheHostStops()
+    {
+        var (host, store) = await BuildAuditHostAsync();
+
+        using (host)
+        {
+            await host.StartAsync(TestContext.Current.CancellationToken);
+
+            await host.Services
+                .GetRequiredService<IAuditSinkPort>()
+                .AppendAsync(AuditRow(1), TestContext.Current.CancellationToken);
+
+            await host.StopAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(1, store.Written);
+        }
+    }
+
+    [Fact]
+    public async Task AddAgentCore_ClosesTheAuditStoreOnlyAfterTheQueueHasDrained()
+    {
+        var (host, store) = await BuildAuditHostAsync();
+
+        using (host)
+        {
+            await host.StartAsync(TestContext.Current.CancellationToken);
+
+            await host.Services
+                .GetRequiredService<IAuditSinkPort>()
+                .AppendAsync(AuditRow(1), TestContext.Current.CancellationToken);
+
+            await host.StopAsync(TestContext.Current.CancellationToken);
+
+            // The store the queue writes into is closed by the same shutdown. Closing it first would
+            // hand the drain a store that can no longer accept the rows it already promised to keep.
+            Assert.True(store.Closed);
+            Assert.Equal(1, store.WrittenWhenClosed);
+        }
+    }
+
+    [Fact]
+    public async Task AddAgentCore_ClosesTheTranscriptStoreWhenTheHostStops()
+    {
+        RecordingTranscriptStore store = new();
+        HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+        await ConfigureAsync(
+            (ServiceCollection)builder.Services,
+            VendorTranscriptYaml,
+            options => options.UseTranscriptStores(new TestTranscriptStoreAdapter(store)));
+
+        using IHost host = builder.Build();
+        await host.StartAsync(TestContext.Current.CancellationToken);
+        await host.StopAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(store.Closed);
+    }
+
+    // -------------------------------------------------------------------------------------------
     // The document picks the vendor, and no code names one: the point of the adapter seam.
     // -------------------------------------------------------------------------------------------
     [Fact]
@@ -1121,10 +1183,13 @@ public sealed class AddAgentCoreTests
     }
 
     /// <summary>A store 1 backing that keeps the role of every row it accepted.</summary>
-    private sealed class RecordingTranscriptStore : ITranscriptStore
+    private sealed class RecordingTranscriptStore : ITranscriptStore, IAsyncDisposable
     {
         private readonly Lock _gate = new();
         private readonly List<string> _roles = [];
+
+        /// <summary>Gets whether this store was closed.</summary>
+        public bool Closed { get; private set; }
 
         /// <summary>Gets the role of each row this store accepted, in the order it arrived.</summary>
         public IReadOnlyList<string> Roles
@@ -1152,6 +1217,12 @@ public sealed class AddAgentCoreTests
         public ValueTask RewriteAsync(
             string callId, int ordinal, ChatMessage content, CancellationToken cancellationToken = default)
             => ValueTask.CompletedTask;
+
+        public ValueTask DisposeAsync()
+        {
+            Closed = true;
+            return ValueTask.CompletedTask;
+        }
     }
 
     [Fact]
@@ -1343,6 +1414,29 @@ public sealed class AddAgentCoreTests
         return (builder.Build(), adapter);
     }
 
+    private static async Task<(IHost Host, ClosingAuditSink Store)> BuildAuditHostAsync()
+    {
+        ClosingAuditSink store = new();
+        HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+        await ConfigureAsync(
+            (ServiceCollection)builder.Services,
+            VendorAuditYaml,
+            options => options.UseAuditSinks(new TestAuditSinkAdapter(store)));
+
+        return (builder.Build(), store);
+    }
+
+    /// <summary>One well-formed event, which is all a drain has to carry.</summary>
+    /// <param name="sequence">The chain position.</param>
+    /// <returns>The event.</returns>
+    private static AuditEvent AuditRow(long sequence) => new()
+    {
+        CallId = "call-1",
+        Sequence = sequence,
+        Kind = AuditEventKind.TurnCompleted,
+        OccurredAt = DateTimeOffset.UnixEpoch.AddSeconds(sequence),
+    };
+
     private static async Task<ServiceProvider> BuildAsync(string yaml, Action<AgentCoreOptions>? configure = null)
     {
         ServiceCollection services = new();
@@ -1442,7 +1536,7 @@ public sealed class AddAgentCoreTests
     }
 
     /// <summary>An audit vendor a test registers, which opens one store the test already holds.</summary>
-    private sealed class TestAuditSinkAdapter(RecordingAuditSink store) : IAuditSinkAdapter
+    private sealed class TestAuditSinkAdapter(IAuditSinkPort store) : IAuditSinkAdapter
     {
         public string Kind => "test";
 
@@ -1450,7 +1544,41 @@ public sealed class AddAgentCoreTests
             VendorProviderConfiguration entry,
             ISecretResolverPort? secrets,
             CancellationToken cancellationToken = default)
-            => ValueTask.FromResult<IAuditSinkPort>(store);
+            => ValueTask.FromResult(store);
+    }
+
+    /// <summary>An audit store that is slow to write and records what it held when it was closed.</summary>
+    /// <remarks>
+    /// The delay is the whole test: a shutdown that does not wait for the queue returns long before
+    /// this store has been handed anything, so a lost row is a failed assertion rather than a race.
+    /// </remarks>
+    private sealed class ClosingAuditSink : IAuditSinkPort, IAsyncDisposable
+    {
+        private static readonly TimeSpan WriteDelay = TimeSpan.FromMilliseconds(200);
+
+        private int _written;
+
+        /// <summary>Gets the number of events this store has written.</summary>
+        public int Written => Volatile.Read(ref _written);
+
+        /// <summary>Gets whether this store was closed.</summary>
+        public bool Closed { get; private set; }
+
+        /// <summary>Gets how many events this store had written by the time it was closed.</summary>
+        public int WrittenWhenClosed { get; private set; }
+
+        public async ValueTask AppendAsync(AuditEvent auditEvent, CancellationToken cancellationToken = default)
+        {
+            await Task.Delay(WriteDelay, CancellationToken.None);
+            Interlocked.Increment(ref _written);
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Closed = true;
+            WrittenWhenClosed = Written;
+            return ValueTask.CompletedTask;
+        }
     }
 
     /// <summary>An audit store that keeps what it accepted, so what the document opened is observable.</summary>

@@ -1,47 +1,33 @@
+using System.Collections.Frozen;
+
 namespace AgentCore.Application.Configuration.Validation;
 
 /// <summary>
 /// The JSONLogic operator allow-list of section 8.4.
 /// </summary>
-/// <remarks>
-/// <para>
-/// A state slot is a scalar, so the array, string, and iteration operators have nothing to act on.
-/// Banning them keeps the domain enumeration of check 5 finite and keeps a guard cheap, because a
-/// guard runs on every turn.
-/// </para>
-/// <para>
-/// Three rejections are not style choices. <c>==</c> is loose equality and follows JavaScript, so it
-/// hides the type error that check 4 exists to raise. <c>log</c> writes to the console on every turn.
-/// <c>map</c>, <c>filter</c>, and <c>reduce</c> make the cost of a guard unbounded and break check 5.
-/// </para>
-/// <para>
-/// <c>RuleRegistry.AddRule</c> can add a custom operator. AgentCore registers none, because a rule
-/// that no other implementation can read stops being portable.
-/// </para>
-/// </remarks>
 public static class GuardOperators
 {
-    private static readonly HashSet<string> AllowedSet = new(StringComparer.Ordinal)
+    private static readonly FrozenSet<string> AllowedSet = new[]
     {
         "var", "missing", "if", "===", "!==", ">", ">=", "<", "<=", "!", "!!",
         "and", "or", "in", "+", "-", "*", "/", "min", "max",
-    };
+    }.ToFrozenSet(StringComparer.Ordinal);
 
-    private static readonly HashSet<string> RejectedSet = new(StringComparer.Ordinal)
+    private static readonly FrozenSet<string> RejectedSet = new[]
     {
         "==", "!=", "log", "map", "filter", "reduce", "all", "some", "none", "merge", "cat", "substr",
-    };
+    }.ToFrozenSet(StringComparer.Ordinal);
 
-    private static readonly Dictionary<string, string> Replacements = new(StringComparer.Ordinal)
+    private static readonly FrozenDictionary<string, string> Replacements = new Dictionary<string, string>
     {
         ["=="] = "===",
         ["!="] = "!==",
-    };
+    }.ToFrozenDictionary(StringComparer.Ordinal);
 
-    private static readonly HashSet<string> NumericComparisonSet = new(StringComparer.Ordinal)
+    private static readonly FrozenSet<string> NumericComparisonSet = new[]
     {
         ">", ">=", "<", "<=",
-    };
+    }.ToFrozenSet(StringComparer.Ordinal);
 
     private static readonly string[] AllowedOrder =
     [
@@ -61,12 +47,6 @@ public static class GuardOperators
     public static IReadOnlyList<string> Rejected => RejectedOrder;
 
     /// <summary>Gets the message check 4 reports for the unary sugar form of <c>!!</c>.</summary>
-    /// <remarks>
-    /// <c>!!</c> stays on the allow-list, and only the sugar form is rejected. The JSONLogic
-    /// specification allows a bare argument, and this library implements that for <c>!</c> and not
-    /// for <c>!!</c>: both engines of package version 6.1.0 throw on <c>{"!!": x}</c>. Check 4 names
-    /// the working form rather than rewrite the rule, which is the precedent <c>==</c> already sets.
-    /// </remarks>
     public static string DoubleNegationSugarRejection
         => "the operator '!!' is written in the unary sugar form, and JsonLogic reads that form for "
            + "'!' only. Use '{\"!!\": [ x ]}' instead.";

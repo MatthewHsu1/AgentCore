@@ -1,8 +1,8 @@
 using AgentCore.Application.Audit.Memory;
-using AgentCore.Application.Audit;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
@@ -209,11 +209,24 @@ public sealed class LibraryOpenTelemetryTests
     }
 
     // -------------------------------------------------------------------------------------------
-    // gen_ai.conversation.id "for free": CallSession names the call as the conversation, and both
-    // library layers pick it up through ChatOptions.ConversationId with no plumbing beyond that.
+    // gen_ai.conversation.id: the parent span carries it, and the library children do not.
     // -------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The call id reaches a trace once, from <c>AgentCoreTelemetry.StartTurn</c>.
+    /// </summary>
+    /// <remarks>
+    /// Naming the call on <c>ChatOptions.ConversationId</c> would put the attribute on the library's
+    /// children as well, and it is the one thing that must not be done to get it. To
+    /// <c>ChatClientAgent</c> a conversation id means the SERVICE keeps the history, so it answers by
+    /// ignoring the agent's own <c>ChatHistoryProvider</c> for the whole run — store 1, silently
+    /// gone. Keeping it then costs a per-run override of the provider and
+    /// <c>ThrowOnChatHistoryProviderConflict = false</c> on every compiled agent. The attribute is
+    /// not worth a disabled safety check: a reader that wants the call id of a child span walks up
+    /// the trace to <c>agentcore.turn</c>.
+    /// </remarks>
     [Fact]
-    public async Task ASingleAgentTurn_CarriesTheCallIdAsGenAiConversationIdOnBothLibrarySpans()
+    public async Task ASingleAgentTurn_CarriesTheCallIdOnTheTurnSpanAndOnNeitherLibrarySpan()
     {
         var agentId = "agent-" + Guid.NewGuid().ToString("N");
         var yaml = $$"""
@@ -225,7 +238,8 @@ public sealed class LibraryOpenTelemetryTests
             """;
 
         List<Activity> spans = [];
-        using var listener = ListenToLibrarySources(spans);
+        using var libraries = ListenToLibrarySources(spans);
+        using var turns = ListenTo(spans, AgentCoreTelemetry.ActivitySourceName);
 
         using ToolCallingChatClient client = new("hello there.");
         var callId = "call-" + Guid.NewGuid().ToString("N");
@@ -243,8 +257,14 @@ public sealed class LibraryOpenTelemetryTests
         var chat = Assert.Single(
             mine, span => IsChatRoundSpan(span) && string.Equals(span.ParentId, invokeAgent.Id, StringComparison.Ordinal));
 
-        Assert.Equal(callId, invokeAgent.GetTagItem("gen_ai.conversation.id"));
-        Assert.Equal(callId, chat.GetTagItem("gen_ai.conversation.id"));
+        var turn = Assert.Single(
+            mine,
+            span => span.DisplayName == AgentCoreTelemetry.TurnActivityName
+                && string.Equals(span.Id, invokeAgent.ParentId, StringComparison.Ordinal));
+
+        Assert.Equal(callId, turn.GetTagItem("gen_ai.conversation.id"));
+        Assert.Null(invokeAgent.GetTagItem("gen_ai.conversation.id"));
+        Assert.Null(chat.GetTagItem("gen_ai.conversation.id"));
     }
 
     // -------------------------------------------------------------------------------------------
@@ -266,12 +286,14 @@ public sealed class LibraryOpenTelemetryTests
 
     /// <summary>Subscribes to the two library sources this task turns on.</summary>
     private static ActivityListener ListenToLibrarySources(List<Activity> spans)
+        => ListenTo(spans, ChatSourceName, AgentSourceName);
+
+    /// <summary>Subscribes to the named sources, collecting every span each one closes.</summary>
+    private static ActivityListener ListenTo(List<Activity> spans, params string[] sources)
     {
         ActivityListener listener = new()
         {
-            ShouldListenTo = source =>
-                string.Equals(source.Name, ChatSourceName, StringComparison.Ordinal)
-                || string.Equals(source.Name, AgentSourceName, StringComparison.Ordinal),
+            ShouldListenTo = source => Array.Exists(sources, name => string.Equals(source.Name, name, StringComparison.Ordinal)),
             Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
             ActivityStopped = activity =>
             {

@@ -87,6 +87,8 @@ public sealed class AgentToolTests
             - { id: talk, agent: first, terminal: true }
         """;
 
+    private static readonly string[] Tags = ["belt", "motor"];
+
     // ---------------------------------------------------------------------------------------------
     // Binding.
     // ---------------------------------------------------------------------------------------------
@@ -226,6 +228,26 @@ public sealed class AgentToolTests
         // The inner reply came back as a tool result, and the outer agent produced the final text.
         Assert.Contains("the specialist answer", client.ToolResults);
         Assert.Equal("the specialist answer", reply.Text);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // The fallback arm of the argument switch. A type it does not name is carried as the text of
+    // ToString(), and not serialized. Any replacement for the switch has to keep answering this way.
+    // ---------------------------------------------------------------------------------------------
+    [Fact]
+    public async Task AnArgumentTypeTheSwitchDoesNotName_ReachesTheInnerAgentAsItsToStringText()
+    {
+        using ToolCallingChatClient client = new(
+            "the specialist answer",
+            new Dictionary<string, object?>(StringComparer.Ordinal) { ["question"] = Tags });
+
+        var compiled = Compile(DelegatingYaml, client);
+
+        await compiled.Agent.RunAsync("help me", cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Contains(
+            client.Prompts,
+            prompt => prompt.Contains("""{"question":"System.String[]"}""", StringComparison.Ordinal));
     }
 
     // ---------------------------------------------------------------------------------------------

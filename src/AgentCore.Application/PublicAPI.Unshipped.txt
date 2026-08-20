@@ -1120,7 +1120,6 @@ static AgentCore.Application.State.StateValueCoercion.TryCoerce(System.Text.Json
 static AgentCore.Application.State.ToolStateWriter.Apply(AgentCore.Application.State.StateDocument! state, string! toolId, System.Text.Json.Nodes.JsonNode? result) -> int
 static AgentCore.Application.State.UnfilledSlotReminder.Build(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, System.Collections.Generic.IReadOnlyList<string!>! slots) -> string?
 static AgentCore.Application.State.UnfilledSlotReminder.Build(AgentCore.Application.State.StateDocument! state, AgentCore.Application.Configuration.Schema.StageConfiguration! stage) -> string?
-static AgentCore.Application.State.UnfilledSlotReminder.Prepend(string? reminder, string! input) -> string!
 static AgentCore.Application.State.UnfilledSlotReminder.UnfilledSlots(AgentCore.Application.State.StateDocument! state, AgentCore.Application.Configuration.Schema.StageConfiguration! stage) -> System.Collections.Generic.IReadOnlyList<string!>!
 static AgentCore.Application.Tools.DeclaredTool.ArgumentText(Microsoft.Extensions.AI.AIFunctionArguments! arguments, string! name) -> string?
 static AgentCore.Application.Tools.DeclaredTool.ArgumentsAsJson(Microsoft.Extensions.AI.AIFunctionArguments! arguments) -> System.Text.Json.Nodes.JsonObject!

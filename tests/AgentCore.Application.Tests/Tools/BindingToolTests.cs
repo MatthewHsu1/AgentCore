@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
@@ -24,6 +25,8 @@ public sealed class BindingToolTests
         Description = "Open a service case for a human agent.",
         Parameters = JsonNode.Parse("""{"type":"object","properties":{"summary":{"type":"string"}},"required":["summary"]}"""),
     };
+
+    private static readonly string[] Tags = ["belt", "motor"];
 
     // ---------------------------------------------------------------------------------------------
     // The registry.
@@ -68,6 +71,68 @@ public sealed class BindingToolTests
         Assert.NotNull(seen);
         Assert.Equal("broken belt", seen["summary"]!.GetValue<string>());
         Assert.Equal("C-1", Assert.IsType<JsonObject>(result)["caseId"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task EachArgumentTypeTheSwitchNames_ArrivesAsThatJsonType()
+    {
+        JsonObject? seen = null;
+        ToolBindingRegistry registry = new();
+        registry.Register("CreateCase", (arguments, cancellationToken) =>
+        {
+            seen = arguments;
+            return ValueTask.FromResult<object?>(null);
+        });
+
+        await CallAsync(
+            new BindingToolFactory(registry).Create(CreateCase),
+            ("summary", "broken belt"),
+            ("node", JsonNode.Parse("""{"a":1}""")),
+            ("element", JsonDocument.Parse("""[1,2]""").RootElement),
+            ("flag", true),
+            ("count", 7),
+            ("ticks", 9_000_000_000L),
+            ("ratio", 1.5d),
+            ("money", 2.25m),
+            ("nothing", null));
+
+        Assert.NotNull(seen);
+        Assert.Equal("broken belt", seen["summary"]!.GetValue<string>());
+        Assert.Equal("""{"a":1}""", seen["node"]!.ToJsonString());
+        Assert.Equal("[1,2]", seen["element"]!.ToJsonString());
+        Assert.True(seen["flag"]!.GetValue<bool>());
+        Assert.Equal(7, seen["count"]!.GetValue<int>());
+        Assert.Equal(9_000_000_000L, seen["ticks"]!.GetValue<long>());
+        Assert.Equal(1.5d, seen["ratio"]!.GetValue<double>());
+        Assert.Equal(2.25m, seen["money"]!.GetValue<decimal>());
+        Assert.Null(seen["nothing"]);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // The fallback arm. A type the switch does not name is carried as the text of ToString(), and
+    // not serialized. Any replacement for the switch has to keep answering this way.
+    // ---------------------------------------------------------------------------------------------
+    [Fact]
+    public async Task AnArgumentTypeTheSwitchDoesNotName_ArrivesAsItsToStringText()
+    {
+        JsonObject? seen = null;
+        ToolBindingRegistry registry = new();
+        registry.Register("CreateCase", (arguments, cancellationToken) =>
+        {
+            seen = arguments;
+            return ValueTask.FromResult<object?>(null);
+        });
+
+        await CallAsync(
+            new BindingToolFactory(registry).Create(CreateCase),
+            ("tags", Tags),
+            ("id", Guid.Parse("2f1b7d64-0f4a-4f0a-9c1c-2b0b6a2b7c11")),
+            ("ratio", 1.5f));
+
+        Assert.NotNull(seen);
+        Assert.Equal("System.String[]", seen["tags"]!.GetValue<string>());
+        Assert.Equal("2f1b7d64-0f4a-4f0a-9c1c-2b0b6a2b7c11", seen["id"]!.GetValue<string>());
+        Assert.Equal(JsonValueKind.String, seen["ratio"]!.GetValueKind());
     }
 
     [Fact]

@@ -45,6 +45,12 @@ public sealed class CompiledAgent
         }
     }
 
+    /// <summary>Whether a row answers its runs out of store 1 on its own session.</summary>
+    /// <param name="shape">The row of the compile table.</param>
+    /// <returns>Whether the call rides the session, rather than the request messages.</returns>
+    internal static bool SessionCarriesHistory(CompiledAgentShape shape)
+        => shape is CompiledAgentShape.SingleAgent or CompiledAgentShape.Policy;
+
     /// <summary>Gets the document this agent was compiled from.</summary>
     public AgentCoreConfiguration Configuration { get; }
 
@@ -99,7 +105,6 @@ public sealed class CompiledAgent
     /// <param name="stageId">The stage id.</param>
     /// <returns>The agent, or <see langword="null"/> when the stage names none.</returns>
     /// <exception cref="KeyNotFoundException">The stage is not declared.</exception>
-    /// <remarks>See <see cref="TurnAgent"/> for why a turn runs this one and not <see cref="ForStage"/>.</remarks>
     internal AIAgent? TurnAgentForStage(string stageId)
     {
         ArgumentNullException.ThrowIfNull(stageId);
@@ -115,7 +120,6 @@ public sealed class CompiledAgent
     /// <summary>Builds one stage machine for one call.</summary>
     /// <param name="guards">The evaluator that runs each exit guard.</param>
     /// <returns>The machine, in the initial stage.</returns>
-    /// <exception cref="InvalidOperationException">The document declares no <c>policy:</c>.</exception>
     public StagePolicy CreatePolicy(IGuardEvaluator guards)
     {
         if (Configuration.Policy is not { } policy)

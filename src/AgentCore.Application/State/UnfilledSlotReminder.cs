@@ -7,17 +7,6 @@ namespace AgentCore.Application.State;
 /// <summary>
 /// The reminder that an unfilled slot puts in front of the reply agent's input.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Section 8.3: a slot the current stage declares, and that is still unfilled at the start of the
-/// next turn, is prepended to the <em>reply agent's</em> input as a <c>system-reminder</c>. The
-/// wording tells the agent what it still needs <em>from the caller</em>, so the agent asks a
-/// question. It never asks the agent to fill a slot, because the reply agent never writes state.
-/// </para>
-/// <para>
-/// This costs no model request, because it rides a request that happens anyway.
-/// </para>
-/// </remarks>
 public static class UnfilledSlotReminder
 {
     /// <summary>The tag that opens the reminder.</summary>
@@ -27,6 +16,7 @@ public static class UnfilledSlotReminder
     public const string CloseTag = "</system-reminder>";
 
     private const string Lead = "You still need this from the caller before you can continue: ";
+
     private const string Tail = "Ask for it in your next reply.";
 
     /// <summary>
@@ -35,11 +25,6 @@ public static class UnfilledSlotReminder
     /// <param name="state">The state of one call.</param>
     /// <param name="stage">The stage the machine holds.</param>
     /// <returns>The unfilled slot names, in document order.</returns>
-    /// <remarks>
-    /// Section 8.3 reminds on a slot that is "still null", and a declared <c>default:</c> means the
-    /// slot never reads as null. A slot with a default therefore holds an answer the caller was never
-    /// asked for, so nothing is owed and no reminder is built. T51 rests on the same rule.
-    /// </remarks>
     public static IReadOnlyList<string> UnfilledSlots(StateDocument state, StageConfiguration stage)
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -99,16 +84,6 @@ public static class UnfilledSlotReminder
     {
         ArgumentNullException.ThrowIfNull(state);
         return Build(state.Configuration, UnfilledSlots(state, stage));
-    }
-
-    /// <summary>Puts the reminder in front of the reply agent's input.</summary>
-    /// <param name="reminder">The reminder, or <see langword="null"/> when there is none.</param>
-    /// <param name="input">The input the turn would have sent.</param>
-    /// <returns>The input, with the reminder above it.</returns>
-    public static string Prepend(string? reminder, string input)
-    {
-        ArgumentNullException.ThrowIfNull(input);
-        return reminder is null ? input : reminder + "\n\n" + input;
     }
 
     private static string Join(List<string> wanted) => wanted.Count switch

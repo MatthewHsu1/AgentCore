@@ -1,12 +1,12 @@
+using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Transcript;
-using Microsoft.Agents.AI.Workflows;
 using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
-using System.Text.Json.Nodes;
 
 namespace AgentCore.Application.Configuration.Compilation;
 
@@ -130,7 +130,10 @@ public static class ConfigurationCompiler
         ArgumentNullException.ThrowIfNull(context);
 
         var shape = SelectShape(configuration);
-        var agents = BuildAgents(configuration, context);
+
+        AgentCoreChatHistoryProvider history = new(context.TranscriptStore);
+
+        var agents = BuildAgents(configuration, context, CompiledAgent.SessionCarriesHistory(shape) ? history : null);
 
         var (entry, stages) = shape switch
         {
@@ -140,10 +143,6 @@ public static class ConfigurationCompiler
             _ => (BuildExplicitGraph(configuration, agents, context), NoStages()),
         };
 
-        // R1, R2 and R3 are rules about a TURN, and one turn is one run of one agent on every row of
-        // the compile table. The layers therefore go on the agent a turn runs and never on a graph
-        // node, which is one step inside a turn. CompiledAgent.Agent stays the bare compiled
-        // artifact, so a host that runs it itself still reads the fault section 8.2 asks it to raise.
         var spokenBy = SpokenAuthors(configuration, shape);
 
         return new CompiledAgent(
@@ -153,7 +152,7 @@ public static class ConfigurationCompiler
             agents,
             stages,
             spokenBy,
-            new AgentCoreChatHistoryProvider(context.TranscriptStore),
+            history,
             inner => WithTurnDisposition(inner, configuration, context.Moderation, spokenBy));
     }
 
@@ -208,10 +207,6 @@ public static class ConfigurationCompiler
     /// <param name="moderation">The endpoint seam, or <see langword="null"/> to moderate nothing.</param>
     /// <param name="spokenBy">The agents whose reply the caller hears, or <see langword="null"/> for all.</param>
     /// <returns>The agent the turn loop runs.</returns>
-    /// <remarks>
-    /// Moderation goes outside the fallback, so the verdict survives a run that then threw: the
-    /// fallback layer marks the run it answered, and moderation folds that mark into its own.
-    /// </remarks>
     private static AIAgent WithTurnDisposition(
         AIAgent agent,
         AgentCoreConfiguration configuration,
@@ -228,10 +223,12 @@ public static class ConfigurationCompiler
     /// <summary>Builds one <c>ChatClientAgent</c> for each <c>agents.items</c> entry.</summary>
     /// <param name="configuration">The loaded document.</param>
     /// <param name="context">The seams the document names.</param>
+    /// <param name="history">Store 1, or <see langword="null"/> to leave the framework default in place.</param>
     /// <returns>The agents, keyed by id.</returns>
     private static Dictionary<string, AIAgent> BuildAgents(
         AgentCoreConfiguration configuration,
-        AgentCompilationContext context)
+        AgentCompilationContext context,
+        AgentCoreChatHistoryProvider? history)
     {
         Dictionary<string, AIAgent> agents = new(StringComparer.Ordinal);
         if (configuration.Agents is not { } section)
@@ -306,10 +303,8 @@ public static class ConfigurationCompiler
                         Instructions = AgentInstructions.Compose(section.Defaults, item),
                         Tools = BuildTools(item, tools, context, pointer, Resolve),
                     },
-
-                    // The provider is deliberately NOT set here. CallSession supplies it per run
-                    // instead, and this flag is what lets it: see CallSession.ConversationOptions.
-                    ThrowOnChatHistoryProviderConflict = false,
+                    ChatHistoryProvider = history,
+                    AIContextProviders = [new TurnContextProvider()],
                 });
             path.RemoveAt(path.Count - 1);
 
@@ -325,55 +320,10 @@ public static class ConfigurationCompiler
     /// <summary>Puts the auditing function-invocation loop into the pipeline of one agent.</summary>
     /// <param name="model">The client <c>providers.llm</c> resolved for this agent.</param>
     /// <returns>The client the agent sends on.</returns>
-    /// <remarks>
-    /// <para>
-    /// This is how the observer gets into the pipeline, and it works because of one line in
-    /// <c>Microsoft.Agents.AI</c>: <c>ChatClientExtensions.WithDefaultAgentMiddleware</c> tests
-    /// <c>chatClient.GetService&lt;FunctionInvokingChatClient&gt;()</c> FIRST and adds one of its own
-    /// only when it finds none. A <c>ChatClientAgent</c> handed a client that already invokes
-    /// functions therefore uses that one, and there is exactly one loop in the pipeline either way.
-    /// Verified against Microsoft.Agents.AI 1.17.0.
-    /// </para>
-    /// <para>
-    /// It wraps here, and not in <c>CompositeChatClientFactory</c>, because this is the seam where an
-    /// AGENT is built. The factory owns one vendor client for each <c>providers.llm[].as</c> name and
-    /// disposes it, and it also answers the extractor, which is a plain completion call with no tools
-    /// and nothing to observe. This wrapper is stateless, holds nothing per call, and is never
-    /// disposed, so the shared vendor client below it keeps the single owner it had.
-    /// </para>
-    /// <para>
-    /// <b>Chat telemetry is wired here, and not left to MAF's own slot, for a reason worth recording.</b>
-    /// MAF 1.17.0 reserves a slot for chat telemetry — <c>internal sealed class
-    /// DeferredOpenTelemetryChatClient</c>, added by <c>ChatClientExtensions.WithDefaultAgentMiddleware</c>
-    /// — that <c>OpenTelemetryAgent</c> activates once the built <c>ChatClientAgent</c> is wrapped for
-    /// OpenTelemetry. That slot is always inserted as the LAST call in a builder whose factories run in
-    /// reverse order, so it lands directly below whichever <c>FunctionInvokingChatClient</c> the SAME
-    /// builder call finds already present on the client it was handed — and only below a loop MAF
-    /// inserts itself, at the position it inserts it, does the slot end up correctly positioned. This
-    /// loop is not MAF's own: it is supplied from underneath, as the <c>chatClient</c> argument
-    /// <c>WithDefaultAgentMiddleware</c> receives, so its own <c>GetService&lt;FunctionInvokingChatClient&gt;</c>
-    /// check finds THIS loop already present and skips inserting one of its own — and the slot MAF still
-    /// adds lands ABOVE this loop, wrapping the whole tool-calling round trip as one span instead of one
-    /// span per model call. Because the slot is <c>internal sealed</c>, it cannot be constructed and
-    /// placed by hand in the right spot either. The fix is therefore to skip the slot entirely: wrap
-    /// <paramref name="model"/> in the library's own, always-active
-    /// <see cref="Microsoft.Extensions.AI.OpenTelemetryChatClient"/> — verified public in Microsoft.Extensions.AI
-    /// 10.8.3 — directly, here, BELOW this loop, before <see cref="AuditingFunctionInvokingChatClient"/>
-    /// is constructed around it. <see cref="Microsoft.Extensions.AI.FunctionInvokingChatClient"/> reads
-    /// <c>Activity.Current</c> at the moment it invokes a tool, and with a real chat client in place the
-    /// per-round chat span opens and closes before that moment, so <c>Activity.Current</c> has reverted
-    /// to the <c>invoke_agent</c> span the agent wrapper opened and <c>execute_tool</c> nests under it
-    /// rather than under one span covering the whole loop. MAF's own deferred slot is still inserted
-    /// above this pipeline by <c>WithDefaultAgentMiddleware</c>, but <c>OpenTelemetryAgent</c> looks for
-    /// an <c>OpenTelemetryChatClient</c> before it looks for that slot, finds the one wired in here, and
-    /// never activates the slot — so exactly one chat-level instrumentation layer is ever live.
-    /// </para>
-    /// </remarks>
     private static AuditingFunctionInvokingChatClient WithToolFailureAuditing(IChatClient model)
-        => new(
-            model.AsBuilder()
-                .UseOpenTelemetry(configure: static client => client.EnableSensitiveData = false)
-                .Build());
+        => new(model.AsBuilder()
+                    .UseOpenTelemetry(configure: static client => client.EnableSensitiveData = false)
+                    .Build());
 
     private static List<AITool>? BuildTools(
         AgentConfiguration item,

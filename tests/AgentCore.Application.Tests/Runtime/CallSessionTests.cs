@@ -226,7 +226,7 @@ public sealed class CallSessionTests
     // The reminder rides one request.
     // -------------------------------------------------------------------------------------------
     [Fact]
-    public async Task TheReminder_ReachesTheReplyAgentAndTheTranscriptKeepsTheRawInput()
+    public async Task TheReminder_ReachesTheReplyAgentAndLeavesTheCallersMessageAlone()
     {
         using SequencedChatClient reply = new("hello there.");
         using SequencedChatClient fill = new(StayingNull);
@@ -235,13 +235,14 @@ public sealed class CallSessionTests
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
         // The stage waits on two slots the caller supplies, and no writer has filled either yet.
-        var prompt = reply.LastUserText(0);
-        Assert.Contains(UnfilledSlotReminder.OpenTag, prompt, StringComparison.Ordinal);
-        Assert.Contains("the machine model and the serial number", prompt, StringComparison.Ordinal);
-        Assert.EndsWith("hi", prompt, StringComparison.Ordinal);
+        Assert.Contains(UnfilledSlotReminder.OpenTag, reply.Options[0]!.Instructions, StringComparison.Ordinal);
+        Assert.Contains(
+            "the machine model and the serial number", reply.Options[0]!.Instructions, StringComparison.Ordinal);
 
-        // The reminder rides one request. A stale reminder never repeats in a later turn.
-        Assert.DoesNotContain(UnfilledSlotReminder.OpenTag, session.Transcript[0].Text, StringComparison.Ordinal);
+        // The caller's utterance is the caller's. It goes to the model, to store 1 and to the
+        // extractor as it was spoken.
+        Assert.Equal("hi", reply.LastUserText(0));
+        Assert.Equal("hi", session.Transcript[0].Text);
     }
 
     [Fact]
@@ -255,10 +256,29 @@ public sealed class CallSessionTests
         await session.RunTurnAsync("still there?", TestContext.Current.CancellationToken);
 
         // Turn 2 still waits on the serial number, so the reminder survives and names only that one.
-        Assert.Contains("the machine model and the serial number", reply.LastUserText(0), StringComparison.Ordinal);
-        Assert.Contains(UnfilledSlotReminder.OpenTag, reply.LastUserText(1), StringComparison.Ordinal);
-        Assert.Contains("the serial number.", reply.LastUserText(1), StringComparison.Ordinal);
-        Assert.DoesNotContain("the machine model", reply.LastUserText(1), StringComparison.Ordinal);
+        Assert.Contains(
+            "the machine model and the serial number", reply.Options[0]!.Instructions, StringComparison.Ordinal);
+        Assert.Contains(UnfilledSlotReminder.OpenTag, reply.Options[1]!.Instructions, StringComparison.Ordinal);
+        Assert.Contains("the serial number.", reply.Options[1]!.Instructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("the machine model", reply.Options[1]!.Instructions, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheReminder_ReachesAStreamingTurnToo()
+    {
+        // The run is inside the async iterator, and an iterator restores its caller's execution
+        // context at every yield. A per-turn ambient value has to be opened again for each round or
+        // the streaming path silently loses the reminder the buffered path carries.
+        using SequencedChatClient reply = new("hello there.");
+        using SequencedChatClient fill = new(StayingNull);
+        var session = Build(ReminderYaml, reply, fill).Create();
+
+        await foreach (var _ in session.RunTurnStreamingAsync("hi", TestContext.Current.CancellationToken))
+        {
+        }
+
+        Assert.Contains(UnfilledSlotReminder.OpenTag, reply.Options[0]!.Instructions, StringComparison.Ordinal);
+        Assert.Equal("hi", reply.LastUserText(0));
     }
 
     [Fact]
@@ -273,9 +293,9 @@ public sealed class CallSessionTests
 
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
-        var prompt = reply.LastUserText(0);
-        Assert.DoesNotContain(UnfilledSlotReminder.OpenTag, prompt, StringComparison.Ordinal);
-        Assert.DoesNotContain("callerSaidGoodbye", prompt, StringComparison.Ordinal);
+        var instructions = reply.Options[0]!.Instructions ?? string.Empty;
+        Assert.DoesNotContain(UnfilledSlotReminder.OpenTag, instructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("callerSaidGoodbye", instructions, StringComparison.Ordinal);
     }
 
     // -------------------------------------------------------------------------------------------
