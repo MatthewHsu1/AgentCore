@@ -20,6 +20,7 @@ internal sealed class EventObservedLoggerProvider(string eventName) : ILoggerPro
     private readonly TaskCompletionSource _observed = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _count;
     private LogLevel? _level;
+    private string? _message;
 
     /// <summary>Gets a task that completes once the connection first logs the named line.</summary>
     public Task Observed => _observed.Task;
@@ -28,12 +29,10 @@ internal sealed class EventObservedLoggerProvider(string eventName) : ILoggerPro
     public int Count => Volatile.Read(ref _count);
 
     /// <summary>Gets the level of the most recent match, or null before the first one.</summary>
-    /// <remarks>
-    /// Matching on <see cref="EventId.Name"/> alone proves a line fired; a test that also cares
-    /// which severity it fired at — a protocol violation logging at Warning rather than the Error
-    /// level an unhandled defect gets — reads this alongside <see cref="Observed"/>.
-    /// </remarks>
     public LogLevel? Level => _level;
+
+    /// <summary>Gets the rendered text of the most recent match, or null before the first one.</summary>
+    public string? Message => _message;
 
     public ILogger CreateLogger(string categoryName) => new Logger(this, eventName);
 
@@ -60,6 +59,7 @@ internal sealed class EventObservedLoggerProvider(string eventName) : ILoggerPro
             if (eventId.Name == eventName)
             {
                 owner._level = logLevel;
+                owner._message = formatter(state, exception);
                 Interlocked.Increment(ref owner._count);
                 owner._observed.TrySetResult();
             }

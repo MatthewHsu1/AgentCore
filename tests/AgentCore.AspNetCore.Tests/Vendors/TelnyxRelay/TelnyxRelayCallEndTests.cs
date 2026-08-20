@@ -11,6 +11,7 @@ using AgentCore.AspNetCore.Tests.Fakes;
 using AgentCore.Domain.Audit;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay;
@@ -315,6 +316,82 @@ public sealed class TelnyxRelayCallEndTests
             "the replaced session was dropped while store 1 still owed its call the last turn.");
     }
 
+    [Fact(Timeout = 30_000)]
+    public async Task EndCall_StoreThatThrowsOnRemoval_LogsItAndStillTearsDown()
+    {
+        // Arrange
+        //
+        // ICallSessionStore is a public seam, and the removal is the last thing teardown does. The
+        // in-memory store never fails, so a store held over the network is the only one that can
+        // fail here — and its failure must not leave the request handler, which section 7.1 forbids.
+        FaultingCallSessionStore sessions = new(new InvalidOperationException("the store is gone."));
+        EventObservedLoggerProvider capture = new("SessionRemoveFaulted");
+        using SequencedChatClient reply = new("your order ships Friday");
+        await using var harness = await RelayConnectionHarness.StartAsync(
+            TelnyxRelayTurnTests.PolicyYaml,
+            reply,
+            logging: logging => logging.AddProvider(capture),
+            services: collection => collection.AddSingleton<ICallSessionStore>(sessions));
+
+        harness.Socket.Queue(RelayFrames.Setup(callSessionId: "call-store-faulted"));
+
+        // Act
+        harness.Socket.QueueClose();
+        await WaitForTeardownAsync(harness);
+
+        // Assert
+        //
+        // WaitForTeardownAsync is what proves the throw stayed inside. The line is what proves the
+        // failure was reported rather than swallowed into silence: nothing retries the removal, so
+        // that session is in the store for the rest of the process and an operator has to hear it.
+        await capture.Observed.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.Equal(LogLevel.Error, capture.Level);
+        Assert.True(sessions.RemovalAttempted, "teardown never reached the removal at all.");
+    }
+
+    [Fact(Timeout = 30_000)]
+    public async Task EndCall_StoreThatNeverAnswersRemoval_TimesOutRatherThanWedgingTeardown()
+    {
+        // Arrange
+        //
+        // The other half of the same seam. A store that stops answering is not a store that throws:
+        // an unbounded wait here would hold this connection, its Kestrel request, and its
+        // registration on ApplicationStopping for the life of the process, and every call after it
+        // would do the same.
+        HangingCallSessionStore sessions = new();
+        EventObservedLoggerProvider capture = new("TeardownTimedOut");
+        using SequencedChatClient reply = new("your order ships Friday");
+        await using var harness = await RelayConnectionHarness.StartAsync(
+            TelnyxRelayTurnTests.PolicyYaml,
+            reply,
+            logging: logging => logging.AddProvider(capture),
+            relay: options => options.CloseTimeout = TimeSpan.FromSeconds(1),
+            services: collection => collection.AddSingleton<ICallSessionStore>(sessions));
+
+        harness.Socket.Queue(RelayFrames.Setup(callSessionId: "call-store-hung"));
+
+        try
+        {
+            // Act
+            harness.Socket.QueueClose();
+            await WaitForTeardownAsync(harness);
+
+            // Assert
+            //
+            // The text is read rather than the line alone: TeardownTimedOut is written about
+            // whichever task ran out of time, and nothing else in this call is slow, so a match on
+            // the name alone would still pass if the removal were left unbounded and some other
+            // wait timed out instead.
+            await capture.Observed.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            Assert.Contains("the session removal", capture.Message);
+        }
+        finally
+        {
+            // The removal is still parked, and disposal below waits on the connection.
+            sessions.Release();
+        }
+    }
+
     /// <summary>Builds the session factory of one document over a given store 1.</summary>
     /// <param name="yaml">The document, as YAML.</param>
     /// <param name="reply">The model behind every agent.</param>
@@ -559,4 +636,64 @@ internal sealed class OrderedCallSessionStore(Func<bool> transcriptLanded) : ICa
         _removing.TrySetResult();
         return _inner.RemoveAsync(sessionId, cancellationToken);
     }
+}
+
+/// <summary>A store that holds sessions normally and fails only when asked to drop one.</summary>
+/// <param name="fault">What the removal throws.</param>
+/// <remarks>
+/// It throws before its first await rather than from inside an async body, which is the harder of
+/// the two for teardown to catch: a synchronous throw out of a <see cref="ValueTask{TResult}"/>
+/// method lands at the call site, not on the returned task.
+/// </remarks>
+internal sealed class FaultingCallSessionStore(Exception fault) : ICallSessionStore
+{
+    private readonly InMemoryCallSessionStore _inner = new();
+
+    /// <summary>Gets whether teardown ever reached the removal.</summary>
+    public bool RemovalAttempted { get; private set; }
+
+    /// <inheritdoc />
+    public ValueTask<CallSession?> TryGetAsync(string sessionId, CancellationToken cancellationToken = default)
+        => _inner.TryGetAsync(sessionId, cancellationToken);
+
+    /// <inheritdoc />
+    public ValueTask AddAsync(CallSession session, CancellationToken cancellationToken = default)
+        => _inner.AddAsync(session, cancellationToken);
+
+    /// <inheritdoc />
+    public ValueTask<bool> RemoveAsync(string sessionId, CancellationToken cancellationToken = default)
+    {
+        RemovalAttempted = true;
+        throw fault;
+    }
+}
+
+/// <summary>A store whose removal never answers until a test releases it.</summary>
+internal sealed class HangingCallSessionStore : ICallSessionStore
+{
+    private readonly InMemoryCallSessionStore _inner = new();
+    private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <inheritdoc />
+    public ValueTask<CallSession?> TryGetAsync(string sessionId, CancellationToken cancellationToken = default)
+        => _inner.TryGetAsync(sessionId, cancellationToken);
+
+    /// <inheritdoc />
+    public ValueTask AddAsync(CallSession session, CancellationToken cancellationToken = default)
+        => _inner.AddAsync(session, cancellationToken);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// It ignores <paramref name="cancellationToken"/> on purpose. Teardown passes
+    /// <see cref="CancellationToken.None"/> there, so a store that honoured a token would prove
+    /// nothing about the bound teardown puts on the wait itself.
+    /// </remarks>
+    public async ValueTask<bool> RemoveAsync(string sessionId, CancellationToken cancellationToken = default)
+    {
+        await _release.Task;
+        return await _inner.RemoveAsync(sessionId, CancellationToken.None);
+    }
+
+    /// <summary>Lets the parked removal finish.</summary>
+    public void Release() => _release.TrySetResult();
 }

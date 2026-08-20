@@ -314,8 +314,12 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
                             _options.CloseTimeout)
                         .ConfigureAwait(false);
 
-                    var store = _http.RequestServices.GetRequiredService<ICallSessionStore>();
-                    await store.RemoveAsync(session.CallId, CancellationToken.None).ConfigureAwait(false);
+                    await _observer
+                        .ObserveAsync(
+                            RemoveSessionAsync(session.CallId),
+                            ConnectionTaskKind.SessionRemove,
+                            _options.CloseTimeout)
+                        .ConfigureAwait(false);
                 }
             }
             finally
@@ -323,6 +327,15 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
                 _cancellation.Dispose();
             }
         }
+    }
+
+    /// <summary>Drops one session from the store, as a task the observer can bound and watch.</summary>
+    /// <param name="callId">The session to drop.</param>
+    /// <returns>A task that completes once the store has answered.</returns>
+    private async Task RemoveSessionAsync(string callId)
+    {
+        var store = _http.RequestServices.GetRequiredService<ICallSessionStore>();
+        _ = await store.RemoveAsync(callId, CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <summary>Works out the status and the description the vendor sees on the close frame.</summary>
@@ -527,6 +540,10 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
 
             case ConnectionTaskKind.TranscriptFlush:
                 TelnyxRelayLog.TranscriptFlushFaulted(_logger, callId, fault);
+                break;
+
+            case ConnectionTaskKind.SessionRemove:
+                TelnyxRelayLog.SessionRemoveFaulted(_logger, callId, fault);
                 break;
 
             case ConnectionTaskKind.ReadLoop:

@@ -305,14 +305,19 @@ internal static partial class TelnyxRelayLog
     /// <param name="logger">The logger.</param>
     /// <param name="callId">The id of the call.</param>
     /// <param name="exception">The cause.</param>
-    /// <remarks>
-    /// A store 1 write already catches its own failure, so this line reports the wait itself
-    /// failing rather than the write. Either way the call keeps the turn the caller just had only in
-    /// the session that is about to be dropped, so the durable record loses it.
-    /// </remarks>
     [LoggerMessage(
         EventId = 21,
         Level = LogLevel.Error,
         Message = "the transcript of call {CallId} could not be flushed before its session was dropped.")]
     public static partial void TranscriptFlushFaulted(ILogger logger, string callId, Exception exception);
+
+    /// <summary>A session could not be dropped from the store at the end of its call.</summary>
+    /// <param name="logger">The logger.</param>
+    /// <param name="callId">The id of the call.</param>
+    /// <param name="exception">The cause.</param>
+    [LoggerMessage(
+        EventId = 22,
+        Level = LogLevel.Error,
+        Message = "the session of call {CallId} could not be removed from the store, so it stays there for the life of the process.")]
+    public static partial void SessionRemoveFaulted(ILogger logger, string callId, Exception exception);
 }
