@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
 using AgentCore.Hosting.Secrets;
+using AgentCore.Infrastructure.Audit.Postgres;
 using AgentCore.Infrastructure.Evaluation.OpenAiModeration;
 using AgentCore.Infrastructure.Knowledge.FileStore;
 using AgentCore.Infrastructure.Knowledge.VectorData.Zilliz;
@@ -9,6 +10,7 @@ using AgentCore.Infrastructure.Llm.OpenAI;
 using AgentCore.Infrastructure.Secrets;
 using AgentCore.Infrastructure.Telemetry.Grafana;
 using AgentCore.Infrastructure.Tools;
+using AgentCore.Infrastructure.Transcript.Postgres;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -122,11 +124,11 @@ public static class AgentCoreHostBuilderExtensions
         options.AddToolFactory(startup =>
             new HttpToolFactory(httpClients.CreateClient(HttpToolFactory.HttpClientName), startup.Secrets));
 
-        // D23 puts the audit chain in PostgreSQL, and that adapter is not written. No audit vendor is
-        // named here at all, so providers.audit falls back to the in-process memory sink: chain_check
-        // has something to read and no event is silently lost. The fallback announces itself with a
-        // warning at startup, because it is not durable. When the PostgreSQL adapter is written it is
-        // listed here, once, exactly as the seams above, and providers.audit.kind picks it.
+        // providers.audit.kind picks the adapter.
+        options.UseAuditSinks(new PostgresAuditSinkAdapter());
+
+        // providers.transcript.kind picks the adapter.
+        options.UseTranscriptStores(new PostgresTranscriptStoreAdapter());
 
         // The host has the last word, and it has to be the last word: every Use* seam above is a
         // setter and not a list, so whoever writes last wins. A host that binds its own chat client

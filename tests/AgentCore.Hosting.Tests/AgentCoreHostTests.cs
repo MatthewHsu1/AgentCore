@@ -1,9 +1,15 @@
 using System.Text.Json.Nodes;
+using AgentCore.Application.Audit;
+using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Secrets;
+using AgentCore.Application.Transcript.Memory;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Endpoints;
+using AgentCore.Infrastructure.Audit.Postgres;
+using AgentCore.Infrastructure.Transcript.Postgres;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.AI;
@@ -84,6 +90,64 @@ public sealed class AgentCoreHostTests
         using var host = await StartAsync();
 
         Assert.NotNull(host.Services.GetService<IChatClientFactory>());
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // The durable seams. Naming a vendor here is what makes providers.audit.kind: postgres startable.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task ProvidersAuditPostgresReachesTheAdapterRatherThanTheSelector()
+    {
+        // The failure this guards is the selector's: a kind no registered adapter serves. Reaching
+        // the credential instead is the proof that the default list names the PostgreSQL vendor.
+        var failure = await Assert.ThrowsAsync<SecretResolutionException>(
+            () => StartAsync(options => options.SecretResolver = new EmptySecretResolver(), Audit));
+
+        Assert.Contains(KnownSecrets.PostgresConnectionString.Name, failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProvidersTranscriptPostgresReachesTheAdapterRatherThanTheSelector()
+    {
+        var failure = await Assert.ThrowsAsync<SecretResolutionException>(
+            () => StartAsync(options => options.SecretResolver = new EmptySecretResolver(), Transcript));
+
+        Assert.Contains(KnownSecrets.PostgresConnectionString.Name, failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ADocumentNamingNoDurableVendorStillGetsTheInProcessStores()
+    {
+        // Naming the PostgreSQL vendor must not make it the default. The factory answers an absent
+        // block before it reads the adapter list, and this is the line that holds it to that.
+        using var host = await StartAsync();
+
+        Assert.NotNull(host.Services.GetService<InMemoryAuditSink>());
+        Assert.IsType<InMemoryTranscriptStore>(host.Services.GetRequiredService<ITranscriptStore>());
+    }
+
+    [Fact]
+    public async Task AHostAuditSinkWinsOverTheDefaultVendorOnTheSameKind()
+    {
+        // UseAuditSinks is a setter, so this replaces the list rather than joining it. Were the
+        // default written after the callback, the start would want a connection string instead.
+        using var host = await StartAsync(
+            options => options.UseAuditSinks(new FakeSinkAdapter()),
+            Audit);
+
+        Assert.IsType<QueuedAuditSink>(host.Services.GetRequiredService<IAuditSinkPort>());
+        Assert.NotNull(host.Services.GetService<InMemoryAuditSink>());
+    }
+
+    [Fact]
+    public async Task AHostTranscriptStoreWinsOverTheDefaultVendorOnTheSameKind()
+    {
+        using var host = await StartAsync(
+            options => options.UseTranscriptStores(new FakeStoreAdapter()),
+            Transcript);
+
+        Assert.IsType<InMemoryTranscriptStore>(host.Services.GetRequiredService<ITranscriptStore>());
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -231,18 +295,29 @@ public sealed class AgentCoreHostTests
             - { kind: fake, model: fake-model, as: reply }
         """;
 
+    /// <summary>The <c>providers</c> line that asks for the durable audit vendor.</summary>
+    private const string Audit = "  audit: { kind: postgres }";
+
+    /// <summary>The <c>providers</c> line that asks for the durable transcript vendor.</summary>
+    private const string Transcript = "  transcript: { kind: postgres }";
+
     /// <summary>Builds a host the way a deployable does, over a fake model and no key.</summary>
     /// <param name="configure">Anything else the test says on the options.</param>
+    /// <param name="providers">A further line under <c>providers</c>, or null for the document above.</param>
     /// <returns>The built host, not started.</returns>
-    private static async Task<WebApplication> BuildAsync(Action<AgentCoreOptions>? configure = null)
+    private static async Task<WebApplication> BuildAsync(
+        Action<AgentCoreOptions>? configure = null,
+        string? providers = null)
     {
         var builder = WebApplication.CreateSlimBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Logging.ClearProviders();
 
+        var document = providers is null ? Document : Document + Environment.NewLine + providers;
+
         await builder.AddAgentCoreHostAsync(options =>
         {
-            options.Configuration = ConfigurationLoader.LoadYaml(Document);
+            options.Configuration = ConfigurationLoader.LoadYaml(document);
             options.UseChatClients(_ => new FakeChatClientFactory());
             configure?.Invoke(options);
         });
@@ -252,9 +327,50 @@ public sealed class AgentCoreHostTests
 
     /// <summary>Builds a host and reads its container, with nothing mapped and nothing listening.</summary>
     /// <param name="configure">Anything else the test says on the options.</param>
+    /// <param name="providers">A further line under <c>providers</c>, or null for the plain document.</param>
     /// <returns>The built host.</returns>
-    private static Task<WebApplication> StartAsync(Action<AgentCoreOptions>? configure = null)
-        => BuildAsync(configure);
+    private static Task<WebApplication> StartAsync(
+        Action<AgentCoreOptions>? configure = null,
+        string? providers = null)
+        => BuildAsync(configure, providers);
+
+    /// <summary>A chain that holds the connection string and answers nothing for it.</summary>
+    /// <remarks>
+    /// A held-but-blank name fails without falling back, so these tests reach the same failure on a
+    /// machine that happens to export POSTGRES_CONNECTION_STRING.
+    /// </remarks>
+    private sealed class EmptySecretResolver : ISecretResolverPort
+    {
+        public ValueTask<string?> TryResolveAsync(string name, CancellationToken cancellationToken = default)
+            => ValueTask.FromResult<string?>(
+                string.Equals(name, KnownSecrets.PostgresConnectionString.Name, StringComparison.Ordinal)
+                    ? string.Empty
+                    : null);
+    }
+
+    /// <summary>An audit vendor answering to the same kind the default list names.</summary>
+    private sealed class FakeSinkAdapter : IAuditSinkAdapter
+    {
+        public string Kind => PostgresAuditSinkAdapter.ProviderKind;
+
+        public ValueTask<IAuditSinkPort> OpenAsync(
+            VendorProviderConfiguration entry,
+            ISecretResolverPort? secrets,
+            CancellationToken cancellationToken = default)
+            => ValueTask.FromResult<IAuditSinkPort>(new InMemoryAuditSink());
+    }
+
+    /// <summary>A transcript vendor answering to the same kind the default list names.</summary>
+    private sealed class FakeStoreAdapter : ITranscriptStoreAdapter
+    {
+        public string Kind => PostgresTranscriptStoreAdapter.ProviderKind;
+
+        public ValueTask<ITranscriptStore> OpenAsync(
+            VendorProviderConfiguration entry,
+            ISecretResolverPort? secrets,
+            CancellationToken cancellationToken = default)
+            => ValueTask.FromResult<ITranscriptStore>(new InMemoryTranscriptStore());
+    }
 
     /// <summary>Builds a host, maps every route, and puts it on a real socket.</summary>
     /// <param name="chatCompletionsPattern">The route the text endpoint answers on, or null for the default.</param>

@@ -14,6 +14,10 @@ namespace AgentCore.AspNetCore.DependencyInjection;
 public sealed class AgentCoreHttpClients : IHttpClientFactory, IHttpMessageHandlerFactory, IDisposable
 {
     /// <summary>The deadline of one call, over every attempt this pipeline makes.</summary>
+    /// <remarks>
+    /// This is the whole of a send and not one attempt: <see cref="MaxAttempts"/> attempts and the
+    /// backoff between them all have to finish inside it.
+    /// </remarks>
     public static readonly TimeSpan RequestDeadline = TimeSpan.FromSeconds(100);
 
     /// <summary>How long a pooled connection is kept before it is opened again.</summary>

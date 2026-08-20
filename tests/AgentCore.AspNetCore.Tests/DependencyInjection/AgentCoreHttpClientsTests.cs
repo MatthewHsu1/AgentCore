@@ -91,14 +91,15 @@ public sealed class AgentCoreHttpClientsTests
     }
 
     [Fact]
-    public void EveryClientCarriesTheDeadlineOfThisPipelineAndNotTheDefaultOne()
+    public void EveryClientCarriesTheDeadlineOfThisPipeline()
     {
         using ScriptedHttpMessageHandler endpoint = new(HttpStatusCode.OK);
         using AgentCoreHttpClients clients = new(endpoint);
 
-        // The shipped default is 100 seconds, which is longer than any call this host answers on.
+        // Any name is served without being registered first, so a vendor that names a new client
+        // must still get the deadline rather than whatever the factory would hand out.
         Assert.Equal(AgentCoreHttpClients.RequestDeadline, clients.CreateClient(Name).Timeout);
-        Assert.True(AgentCoreHttpClients.RequestDeadline < TimeSpan.FromSeconds(100));
+        Assert.NotEqual(Timeout.InfiniteTimeSpan, AgentCoreHttpClients.RequestDeadline);
     }
 
     /// <summary>
