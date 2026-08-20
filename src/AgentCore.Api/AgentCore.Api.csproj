@@ -12,7 +12,6 @@
 
   <ItemGroup>
     <Content Include="config/example.yaml" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="config/local.yaml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

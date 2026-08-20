@@ -1,0 +1,12 @@
+**/bin/
+**/obj/
+**/node_modules/
+.git/
+.github/
+.claude/
+.superpowers/
+.config/
+docs/
+tests/
+**/.DS_Store
+**/*.user
