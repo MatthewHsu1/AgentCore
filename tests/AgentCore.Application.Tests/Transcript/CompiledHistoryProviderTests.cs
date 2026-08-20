@@ -2,7 +2,6 @@ using System.Runtime.CompilerServices;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime;
@@ -363,7 +362,9 @@ public sealed class CompiledHistoryProviderTests
             await Task.Yield();
 
             var responseId = Guid.NewGuid().ToString("N");
-            var last = messages.LastOrDefault();
+            // The turn's context provider appends a system message below the caller's words, so the
+            // caller's utterance is no longer the last message. Skip what the framework injected.
+            var last = messages.LastOrDefault(message => message.Role != ChatRole.System);
             var tool = options?.Tools?.OfType<AIFunction>().FirstOrDefault();
 
             if (tool is not null && last?.Role == ChatRole.User)

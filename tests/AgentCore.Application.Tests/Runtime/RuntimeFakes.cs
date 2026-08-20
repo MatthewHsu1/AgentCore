@@ -46,6 +46,17 @@ internal sealed class SequencedChatClient : IChatClient
     /// <summary>Gets how many requests this client answered.</summary>
     public int Calls => Volatile.Read(ref _calls);
 
+    /// <summary>Gets the text of the system messages of one request, joined by a newline.</summary>
+    public string SystemText(int request)
+    {
+        lock (Requests)
+        {
+            return string.Join(
+                '\n',
+                Requests[request].Where(message => message.Role == ChatRole.System).Select(message => message.Text));
+        }
+    }
+
     /// <summary>Gets the text of the last user message of one request.</summary>
     public string LastUserText(int request)
     {

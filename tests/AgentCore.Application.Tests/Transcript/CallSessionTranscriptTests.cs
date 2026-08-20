@@ -178,9 +178,10 @@ public sealed class CallSessionTranscriptTests
         _ = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Contains("<system-reminder>", reply.Instructions[0], StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            reply.Requests[0], message => message.Contains("<system-reminder>", StringComparison.Ordinal));
+        // The reminder rides a message of its own, below the transcript, so the instructions block
+        // stays byte-identical across turns and the vendor's cacheable prefix covers the transcript.
+        Assert.DoesNotContain("<system-reminder>", reply.Instructions[0] ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains(reply.Requests[0], message => message.Contains("<system-reminder>", StringComparison.Ordinal));
         await session.FlushTranscriptAsync();
         Assert.Equal(["hello", "which order?"], store.Live(session.CallId).Select(row => row.Content.Text));
     }

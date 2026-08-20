@@ -85,7 +85,13 @@ public sealed class TurnContextProviderTests
 
         var context = await InvokeAsync(session);
 
-        Assert.Equal("ask for the model", context.Instructions);
+        // A message, not AIContext.Instructions. The framework folds Instructions into the system
+        // message at the head of the prompt, where per-turn text caps the vendor's cacheable prefix.
+        Assert.NotNull(context.Messages);
+        var message = Assert.Single(context.Messages);
+        Assert.Equal(ChatRole.System, message.Role);
+        Assert.Equal("ask for the model", message.Text);
+        Assert.Null(context.Instructions);
     }
 
     [Fact]
@@ -97,6 +103,7 @@ public sealed class TurnContextProviderTests
 
         var context = await InvokeAsync(delegated);
 
+        Assert.Null(context.Messages);
         Assert.Null(context.Instructions);
     }
 
@@ -105,6 +112,7 @@ public sealed class TurnContextProviderTests
     {
         var context = await InvokeAsync(new StubSession());
 
+        Assert.Null(context.Messages);
         Assert.Null(context.Instructions);
     }
 
@@ -137,7 +145,7 @@ public sealed class TurnContextProviderTests
     }
 
     [Fact]
-    public async Task TheReminder_ReachesTheReplyAgentAsInstructions()
+    public async Task TheReminder_ReachesTheReplyAgentBelowTheTranscript()
     {
         using SequencedChatClient reply = new("hello there.");
         using SequencedChatClient specialist = new("the specialist answer");
@@ -145,11 +153,12 @@ public sealed class TurnContextProviderTests
 
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
-        Assert.Contains(UnfilledSlotReminder.OpenTag, reply.Options[0]!.Instructions, StringComparison.Ordinal);
-        Assert.Contains("the machine model", reply.Options[0]!.Instructions, StringComparison.Ordinal);
+        Assert.Contains(UnfilledSlotReminder.OpenTag, reply.SystemText(0), StringComparison.Ordinal);
+        Assert.Contains("the machine model", reply.SystemText(0), StringComparison.Ordinal);
 
-        // The agent's own instructions survive: the turn's context is added to them, not put over them.
-        Assert.Contains("greet the caller", reply.Options[0]!.Instructions, StringComparison.Ordinal);
+        // The agent's own instructions survive, and stay clean: the turn's context rides a message of
+        // its own so the instructions block is byte-identical from one turn to the next.
+        Assert.Equal("greet the caller", reply.Options[0]!.Instructions);
     }
 
     [Fact]
@@ -165,11 +174,11 @@ public sealed class TurnContextProviderTests
 
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
-        Assert.NotEmpty(specialist.Options);
+        Assert.NotEmpty(specialist.Requests);
         Assert.All(
-            specialist.Options,
-            options => Assert.DoesNotContain(
-                UnfilledSlotReminder.OpenTag, options?.Instructions ?? string.Empty, StringComparison.Ordinal));
+            Enumerable.Range(0, specialist.Requests.Count),
+            request => Assert.DoesNotContain(
+                UnfilledSlotReminder.OpenTag, specialist.SystemText(request), StringComparison.Ordinal));
     }
 
     /// <summary>Runs the provider the way the framework runs it, for one run on one session.</summary>

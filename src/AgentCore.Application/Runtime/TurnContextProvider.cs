@@ -1,4 +1,5 @@
 using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Runtime;
 
@@ -13,6 +14,16 @@ internal sealed class TurnContextProvider : AIContextProvider
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        return new(new AIContext { Instructions = TurnContextScope.For(context.Session)?.Instructions });
+        var instructions = TurnContextScope.For(context.Session)?.Instructions;
+
+        var tools = TurnContextScope.ToolsFor(FunctionInvokingChatClient.CurrentContext?.Function.Name);
+
+        return new(new AIContext
+        {
+            Messages = string.IsNullOrEmpty(instructions)
+                ? null
+                : [new ChatMessage(ChatRole.System, instructions)],
+            Tools = tools,
+        });
     }
 }

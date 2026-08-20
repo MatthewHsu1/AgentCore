@@ -235,9 +235,9 @@ public sealed class CallSessionTests
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
         // The stage waits on two slots the caller supplies, and no writer has filled either yet.
-        Assert.Contains(UnfilledSlotReminder.OpenTag, reply.Options[0]!.Instructions, StringComparison.Ordinal);
+        Assert.Contains(UnfilledSlotReminder.OpenTag, reply.SystemText(0), StringComparison.Ordinal);
         Assert.Contains(
-            "the machine model and the serial number", reply.Options[0]!.Instructions, StringComparison.Ordinal);
+            "the machine model and the serial number", reply.SystemText(0), StringComparison.Ordinal);
 
         // The caller's utterance is the caller's. It goes to the model, to store 1 and to the
         // extractor as it was spoken.
@@ -257,10 +257,10 @@ public sealed class CallSessionTests
 
         // Turn 2 still waits on the serial number, so the reminder survives and names only that one.
         Assert.Contains(
-            "the machine model and the serial number", reply.Options[0]!.Instructions, StringComparison.Ordinal);
-        Assert.Contains(UnfilledSlotReminder.OpenTag, reply.Options[1]!.Instructions, StringComparison.Ordinal);
-        Assert.Contains("the serial number.", reply.Options[1]!.Instructions, StringComparison.Ordinal);
-        Assert.DoesNotContain("the machine model", reply.Options[1]!.Instructions, StringComparison.Ordinal);
+            "the machine model and the serial number", reply.SystemText(0), StringComparison.Ordinal);
+        Assert.Contains(UnfilledSlotReminder.OpenTag, reply.SystemText(1), StringComparison.Ordinal);
+        Assert.Contains("the serial number.", reply.SystemText(1), StringComparison.Ordinal);
+        Assert.DoesNotContain("the machine model", reply.SystemText(1), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -277,7 +277,7 @@ public sealed class CallSessionTests
         {
         }
 
-        Assert.Contains(UnfilledSlotReminder.OpenTag, reply.Options[0]!.Instructions, StringComparison.Ordinal);
+        Assert.Contains(UnfilledSlotReminder.OpenTag, reply.SystemText(0), StringComparison.Ordinal);
         Assert.Equal("hi", reply.LastUserText(0));
     }
 
@@ -293,9 +293,9 @@ public sealed class CallSessionTests
 
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
-        var instructions = reply.Options[0]!.Instructions ?? string.Empty;
-        Assert.DoesNotContain(UnfilledSlotReminder.OpenTag, instructions, StringComparison.Ordinal);
-        Assert.DoesNotContain("callerSaidGoodbye", instructions, StringComparison.Ordinal);
+        var turnContext = reply.SystemText(0);
+        Assert.DoesNotContain(UnfilledSlotReminder.OpenTag, turnContext, StringComparison.Ordinal);
+        Assert.DoesNotContain("callerSaidGoodbye", turnContext, StringComparison.Ordinal);
     }
 
     // -------------------------------------------------------------------------------------------

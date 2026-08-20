@@ -102,6 +102,8 @@ public sealed class CallSession : IConversationPort
     // is the only clear a turn that never reached that commit gets.
     private volatile bool _runIsAudible;
 
+    private (string ToolId, IReadOnlyList<AITool> Tools)? _delegatedTools;
+
     /// <summary>
     /// Creates the session of one call.
     /// </summary>
@@ -186,6 +188,20 @@ public sealed class CallSession : IConversationPort
     /// Gets the compiled agent this session runs. Every call shares it.
     /// </summary>
     public CompiledAgent Compiled => _compiled;
+
+    /// <summary>
+    /// Gives the runs this call delegates through one tool a set of tools of their own.
+    /// </summary>
+    /// <param name="delegatingToolId">The <c>kind: agent</c> tool whose delegated runs are offered these.</param>
+    /// <param name="tools">The tools. An empty list offers nothing, exactly as never calling this does.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    public void SetDelegatedTools(string delegatingToolId, IReadOnlyList<AITool> tools)
+    {
+        ArgumentNullException.ThrowIfNull(delegatingToolId);
+        ArgumentNullException.ThrowIfNull(tools);
+
+        _delegatedTools = (delegatingToolId, tools);
+    }
 
     /// <summary>
     /// Runs one turn end to end, and returns what it did.
@@ -487,8 +503,14 @@ public sealed class CallSession : IConversationPort
     /// </summary>
     /// <param name="turn">The turn about to run.</param>
     /// <returns>The context <see cref="TurnContextProvider"/> merges into the request.</returns>
-    private static TurnContext TurnContextOf(Turn turn)
-        => new() { Session = turn.Session, Instructions = turn.Reminder };
+    private TurnContext TurnContextOf(Turn turn)
+        => new()
+        {
+            Session = turn.Session,
+            Instructions = turn.Reminder,
+            Tools = _delegatedTools?.Tools,
+            ToolsFor = _delegatedTools?.ToolId,
+        };
 
     /// <summary>
     /// Reads the session of this call, or null before its first turn opened one.
@@ -538,8 +560,8 @@ public sealed class CallSession : IConversationPort
                 $"A turn of the call '{CallId}' is still running. One call runs one turn at a time.");
         }
 
-        // The reminder rides a request that happens anyway, and it rides exactly one, as instructions
-        // the framework merges for that invocation and stores nowhere. It reads the state document
+        // The reminder rides a request that happens anyway, and it rides exactly one, as a message
+        // the framework appends for that invocation and stores nowhere. It reads the state document
         // and never the transcript. Only a document with a policy: has a stage that waits on a slot.
         var reminder = _policy is null ? null : UnfilledSlotReminder.Build(State, _policy.CurrentStage);
         ChatMessage spoken = new(ChatRole.User, userInput);

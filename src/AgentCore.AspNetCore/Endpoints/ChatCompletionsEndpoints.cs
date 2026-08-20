@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using AgentCore.Application.Runtime;
 using AgentCore.AspNetCore.Sessions;
@@ -22,14 +23,16 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
     public const string SessionHeaderName = "X-AgentCore-Session";
 
     /// <summary>The answer header that reports the stage the machine holds after the turn.</summary>
-    /// <remarks>
-    /// The streaming path writes its headers before the turn ends, so it reports the stage the turn
-    /// spoke in. Read <c>agentcore.stage_after</c> of the last chunk for the stage after the turn.
-    /// </remarks>
+
     public const string StageHeaderName = "X-AgentCore-Stage";
 
+    /// <summary>The render channel of each open call.</summary>
+    private static readonly ConditionalWeakTable<CallSession, RenderChannel> Channels = [];
+
     private const string EventPrefix = "data: ";
+
     private const string EventSuffix = "\n\n";
+
     private const string DoneEvent = "data: [DONE]\n\n";
 
     /// <summary>Maps the endpoint on <see cref="DefaultPattern"/>.</summary>
@@ -157,6 +160,8 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
     {
         var turn = await session.RunTurnAsync(input, cancellationToken).ConfigureAwait(false);
 
+        Channels.GetValue(session, _ => new RenderChannel()).Drain();
+
         http.Response.StatusCode = StatusCodes.Status200OK;
         http.Response.Headers[SessionHeaderName] = session.CallId;
         http.Response.Headers[StageHeaderName] = turn.StageAfter;
@@ -213,8 +218,12 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
             Chunk(id, created, model, new ChatCompletionMessage { Role = "assistant" }, finishReason: null, turn: null),
             cancellationToken).ConfigureAwait(false);
 
+        var channel = Channels.GetValue(session, _ => new RenderChannel());
+
         await foreach (var update in session.RunTurnStreamingAsync(input, cancellationToken).ConfigureAwait(false))
         {
+            await DrainAsync(http, channel, id, created, model, cancellationToken).ConfigureAwait(false);
+
             if (update.Text is not { Length: > 0 } text)
             {
                 // A tool call and a tool result arrive as updates too, and neither is speech.
@@ -227,6 +236,8 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
                 cancellationToken).ConfigureAwait(false);
         }
 
+        await DrainAsync(http, channel, id, created, model, cancellationToken).ConfigureAwait(false);
+
         // The turn is finished once the enumeration is, so the last chunk is the first place that
         // knows the stage the machine moved to.
         await WriteEventAsync(
@@ -236,6 +247,33 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
 
         await http.Response.WriteAsync(DoneEvent, cancellationToken).ConfigureAwait(false);
         await http.Response.Body.FlushAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Writes one event for each thing the call queued to draw.</summary>
+    /// <param name="http">The request.</param>
+    /// <param name="channel">The channel of the call.</param>
+    /// <param name="id">The id every chunk of one reply shares.</param>
+    /// <param name="created">When the reply started.</param>
+    /// <param name="model">The model name the answer reports.</param>
+    /// <param name="cancellationToken">Cancels the writes.</param>
+    /// <returns>A task that completes when every queued payload has been written.</returns>
+    private static async Task DrainAsync(
+        HttpContext http,
+        RenderChannel channel,
+        string id,
+        long created,
+        string model,
+        CancellationToken cancellationToken)
+    {
+        foreach (var payload in channel.Drain())
+        {
+            await WriteEventAsync(
+                http,
+                Chunk(id, created, model, new ChatCompletionMessage(), finishReason: null, turn: null)
+                    with
+                { AgentCoreData = payload },
+                cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>Builds one chunk of a stream.</summary>

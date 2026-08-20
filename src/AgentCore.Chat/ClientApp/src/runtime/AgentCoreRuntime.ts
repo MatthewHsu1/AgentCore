@@ -1,9 +1,9 @@
-import { useRef } from "react";
 import {
   useLocalRuntime,
   type ChatModelAdapter,
   type ThreadMessage,
 } from "@assistant-ui/react";
+import { useRef } from "react";
 import { runTurn, wireMessages, type Session, type WireMessage } from "./transport.ts";
 
 /**
@@ -56,8 +56,21 @@ export function useAgentCoreRuntime(endpoint: string) {
         fetch: (url, init) => fetch(url, init),
       });
 
-      for await (const text of turn) {
-        yield { content: [{ type: "text" as const, text }] };
+      for await (const state of turn) {
+        // Every yield replaces the message content rather than adding to it, so each one repeats
+        // everything drawn so far. Drop the repeat and a later text-only yield erases the drawing.
+        yield {
+          content: [
+            ...(state.text.length > 0
+              ? [{ type: "text" as const, text: state.text }]
+              : []),
+            ...state.data.map((part) => ({
+              type: "data" as const,
+              name: part.name,
+              data: part.data,
+            })),
+          ],
+        };
       }
     },
   };

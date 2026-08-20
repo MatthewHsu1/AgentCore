@@ -112,6 +112,10 @@ internal sealed record ChatCompletionResponse
     /// <summary>Gets what the turn did, or <see langword="null"/> before the turn ends.</summary>
     [JsonPropertyName("agentcore")]
     public AgentCoreTurnInfo? AgentCore { get; init; }
+
+    /// <summary>Gets what this chunk asks the browser to draw, or <see langword="null"/> when nothing.</summary>
+    [JsonPropertyName("agentcore_data")]
+    public RenderPayload? AgentCoreData { get; init; }
 }
 
 /// <summary>The body of one failure.</summary>

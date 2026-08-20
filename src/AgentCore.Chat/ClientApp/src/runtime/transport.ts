@@ -22,6 +22,18 @@ export type WireMessage = {
   readonly content: string;
 };
 
+/** One thing the host asked the browser to draw. */
+export type RenderPart = {
+  readonly name: string;
+  readonly data: unknown;
+};
+
+/** Everything one turn has produced so far. */
+export type TurnState = {
+  readonly text: string;
+  readonly data: readonly RenderPart[];
+};
+
 /** The id of the open call, held for the life of the tab. */
 export type Session = {
   current: string | null;
@@ -50,6 +62,7 @@ type TurnInfo = {
 type StreamChunk = {
   choices?: { delta?: { content?: string }; finish_reason?: string | null }[];
   agentcore?: TurnInfo;
+  agentcore_data?: RenderPart;
 };
 
 /** The body of one refusal. */
@@ -142,10 +155,10 @@ function post(options: TurnOptions, session: string | null): Promise<Response> {
  * runtime above renders.
  *
  * @param options What the turn needs.
- * @returns The reply, yielded once per piece that carries text.
+ * @returns The reply, yielded once per piece that carries text or something to draw.
  * @throws Error The host refused the turn, or answered with no body.
  */
-export async function* runTurn(options: TurnOptions): AsyncGenerator<string> {
+export async function* runTurn(options: TurnOptions): AsyncGenerator<TurnState> {
   const { session } = options;
 
   let response = await post(options, session.current);
@@ -181,9 +194,10 @@ export async function* runTurn(options: TurnOptions): AsyncGenerator<string> {
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
   let pending = "";
   let text = "";
+  let data: RenderPart[] = [];
 
   try {
-    for (;;) {
+    for (; ;) {
       const { done, value } = await reader.read();
       if (done) {
         break;
@@ -207,10 +221,18 @@ export async function* runTurn(options: TurnOptions): AsyncGenerator<string> {
           session.current = null;
         }
 
+        const rendered = chunk.agentcore_data;
+        if (rendered) {
+          // A new array each time: the yielded state is read after the yield, so the consumer must
+          // never see a list this loop keeps changing underneath it.
+          data = [...data, rendered];
+          yield { text, data };
+        }
+
         const delta = chunk.choices?.[0]?.delta?.content;
         if (delta) {
           text += delta;
-          yield text;
+          yield { text, data };
         }
       }
     }

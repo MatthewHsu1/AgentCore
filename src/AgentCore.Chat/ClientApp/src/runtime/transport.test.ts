@@ -87,14 +87,14 @@ async function collect(
   const { fetch, sent } = scripted(responses);
   const yields: string[] = [];
 
-  for await (const text of runTurn({
+  for await (const state of runTurn({
     endpoint: "/v1/chat/completions",
     session,
     messages: wireMessages(messages),
     abortSignal: new AbortController().signal,
     fetch,
   })) {
-    yields.push(text);
+    yields.push(state.text);
   }
 
   return { yields, sent };
@@ -296,4 +296,54 @@ test("a chunk that carries no text yields nothing", async () => {
   );
 
   assert.deepEqual(yields, ["after"]);
+});
+
+test("runTurn yields data parts alongside the text", async () => {
+  const events = [
+    'data: {"choices":[{"delta":{"content":"here it is"}}]}\n\n',
+    'data: {"agentcore_data":{"name":"chart","data":{"title":"Q3"}}}\n\n',
+    "data: [DONE]\n\n",
+  ];
+
+  const session: Session = { current: null };
+  const states = [];
+  for await (const state of runTurn({
+    endpoint: "/v1/chat/completions",
+    session,
+    messages: [{ role: "user", content: "chart it" }],
+    abortSignal: new AbortController().signal,
+    fetch: scripted([streaming(events)]).fetch,
+  })) {
+    states.push(state);
+  }
+
+  const last = states[states.length - 1];
+  assert.equal(last.text, "here it is");
+  assert.deepEqual(last.data, [{ name: "chart", data: { title: "Q3" } }]);
+});
+
+test("a data part survives a later text-only yield", async () => {
+  // The runtime replaces message content on every yield, so a state that forgot the drawing would
+  // blank it from the screen the moment the model spoke again.
+  const events = [
+    'data: {"agentcore_data":{"name":"chart","data":{"title":"Q3"}}}\n\n',
+    'data: {"choices":[{"delta":{"content":"and that is why"}}]}\n\n',
+    "data: [DONE]\n\n",
+  ];
+
+  const session: Session = { current: null };
+  const states = [];
+  for await (const state of runTurn({
+    endpoint: "/v1/chat/completions",
+    session,
+    messages: [{ role: "user", content: "chart it" }],
+    abortSignal: new AbortController().signal,
+    fetch: scripted([streaming(events)]).fetch,
+  })) {
+    states.push(state);
+  }
+
+  const last = states[states.length - 1];
+  assert.equal(last.text, "and that is why");
+  assert.deepEqual(last.data, [{ name: "chart", data: { title: "Q3" } }]);
 });
