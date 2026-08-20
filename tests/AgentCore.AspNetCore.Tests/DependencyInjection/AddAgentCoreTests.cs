@@ -18,6 +18,8 @@ using AgentCore.Infrastructure.Tools;
 using Microsoft.Extensions.AI.Evaluation;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using System.Text.Json.Nodes;
 using Xunit;
 
@@ -46,6 +48,24 @@ public sealed class AddAgentCoreTests
             tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
+        """;
+
+    // The same agent, and a document that names a telemetry vendor.
+    private const string TelemetryYaml =
+        """
+        apiVersion: agentcore/v1
+        name: composed
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything" }
+        providers:
+          call:   { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: reply }
+          telemetry: { kind: test }
         """;
 
     // The same agent, and a document that names a moderation vendor.
@@ -392,6 +412,41 @@ public sealed class AddAgentCoreTests
 
         // A distributed store replaces the default one, and the default steps aside.
         Assert.Same(mine, provider.GetRequiredService<ICallSessionStore>());
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Telemetry shuts down with the host. Disposal is the flush, so something has to trigger it.
+    // -------------------------------------------------------------------------------------------
+    [Fact]
+    public async Task AddAgentCore_FlushesTheTelemetrySessionWhenTheHostStops()
+    {
+        var (host, adapter) = await BuildTelemetryHostAsync();
+
+        using (host)
+        {
+            await host.StartAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(0, adapter.Session.Flushes);
+
+            await host.StopAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(1, adapter.Session.Flushes);
+        }
+    }
+
+    [Fact]
+    public async Task AddAgentCore_FlushesTheTelemetrySessionOnceWhenTheHostStopsAndIsThenDisposed()
+    {
+        var (host, adapter) = await BuildTelemetryHostAsync();
+
+        await host.StartAsync(TestContext.Current.CancellationToken);
+        await host.StopAsync(TestContext.Current.CancellationToken);
+
+        // Stop drains, and the dispose that follows reaches the same owner. An adapter's session is
+        // not required to survive being drained twice, so the second call has to be a no-op.
+        host.Dispose();
+
+        Assert.Equal(1, adapter.Session.Flushes);
     }
 
     // -------------------------------------------------------------------------------------------
@@ -1276,6 +1331,18 @@ public sealed class AddAgentCoreTests
             TestContext.Current.CancellationToken);
     }
 
+    private static async Task<(IHost Host, FlushRecordingTelemetryAdapter Adapter)> BuildTelemetryHostAsync()
+    {
+        FlushRecordingTelemetryAdapter adapter = new("test");
+        HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+        await ConfigureAsync(
+            (ServiceCollection)builder.Services,
+            TelemetryYaml,
+            options => options.UseTelemetry(adapter));
+
+        return (builder.Build(), adapter);
+    }
+
     private static async Task<ServiceProvider> BuildAsync(string yaml, Action<AgentCoreOptions>? configure = null)
     {
         ServiceCollection services = new();
@@ -1290,6 +1357,34 @@ public sealed class AddAgentCoreTests
             options.UseChatClients(_ => new RoutingChatClientFactory(new SequencedChatClient("hello")));
             configure?.Invoke(options);
         });
+
+    /// <summary>An adapter that starts nothing and hands back a session that records its flush.</summary>
+    private sealed class FlushRecordingTelemetryAdapter(string kind) : ITelemetryAdapter
+    {
+        public string Kind => kind;
+
+        public FlushRecordingSession Session { get; } = new();
+
+        public ValueTask<ITelemetrySession> StartAsync(
+            TelemetryProviderConfiguration entry,
+            ISecretResolverPort? secrets,
+            CancellationToken cancellationToken = default)
+            => ValueTask.FromResult<ITelemetrySession>(Session);
+    }
+
+    /// <summary>A session that exports nowhere and counts how many times it was drained.</summary>
+    private sealed class FlushRecordingSession : ITelemetrySession
+    {
+        public ILoggerProvider? Logs => null;
+
+        public int Flushes { get; private set; }
+
+        public ValueTask DisposeAsync()
+        {
+            Flushes++;
+            return ValueTask.CompletedTask;
+        }
+    }
 
     /// <summary>An observer a host binds, which keeps every fact it was offered, in order.</summary>
     private sealed class RecordingCallObserver : ICallObserver
