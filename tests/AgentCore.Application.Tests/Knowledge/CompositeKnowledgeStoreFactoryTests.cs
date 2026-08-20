@@ -1,8 +1,8 @@
+using AgentCore.TestSupport;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tests.Knowledge.Fakes;
-using AgentCore.Application.Tests.Secrets.Fakes;
 using Xunit;
 
 namespace AgentCore.Application.Tests.Knowledge;
@@ -88,8 +88,8 @@ public sealed class CompositeKnowledgeStoreFactoryTests
     [Fact]
     public async Task TwoKinds_RouteToTheTwoAdaptersTheHostRegistered()
     {
-        FakeKnowledgeStoreAdapter zilliz = new("zilliz") { CanServeDocuments = false, ReadsWhatItRanks = false };
-        FakeKnowledgeStoreAdapter files = new("filesystem");
+        RecordingKnowledgeStoreAdapter zilliz = new("zilliz") { CanServeDocuments = false, ReadsWhatItRanks = false };
+        RecordingKnowledgeStoreAdapter files = new("filesystem");
 
         var (search, documents) = await Create(TwoKindsYaml, zilliz, files);
 
@@ -103,7 +103,7 @@ public sealed class CompositeKnowledgeStoreFactoryTests
     [Fact]
     public async Task AKindWrittenInAnotherCase_StillFindsItsAdapter()
     {
-        FakeKnowledgeStoreAdapter files = new("filesystem");
+        RecordingKnowledgeStoreAdapter files = new("filesystem");
 
         var (search, documents) = await Create(ShoutedKindYaml, files);
 
@@ -114,7 +114,7 @@ public sealed class CompositeKnowledgeStoreFactoryTests
     [Fact]
     public async Task NoKnowledgeBlockAtAll_TakesTheDefaultOfBothPorts()
     {
-        FakeKnowledgeStoreAdapter files = new("filesystem");
+        RecordingKnowledgeStoreAdapter files = new("filesystem");
 
         var (search, documents) = await Create(NoKnowledgeYaml, files);
 
@@ -127,7 +127,7 @@ public sealed class CompositeKnowledgeStoreFactoryTests
     [Fact]
     public async Task TheAdapter_ReceivesTheEntryAndTheResolverChainTheHostBound()
     {
-        FakeKnowledgeStoreAdapter files = new("filesystem");
+        RecordingKnowledgeStoreAdapter files = new("filesystem");
         MapSecretResolver resolver = new();
 
         await Create(OneKindYaml, resolver, files);
@@ -142,7 +142,7 @@ public sealed class CompositeKnowledgeStoreFactoryTests
     [Fact]
     public async Task OneKindForBothPorts_OpensOneStoreAndBindsItTwice()
     {
-        FakeKnowledgeStoreAdapter files = new("filesystem");
+        RecordingKnowledgeStoreAdapter files = new("filesystem");
 
         var (search, documents) = await Create(OneKindYaml, files);
 
@@ -154,7 +154,7 @@ public sealed class CompositeKnowledgeStoreFactoryTests
     [Fact]
     public async Task OneKindWhoseRankerDoesNotRead_StillOpensTheDocumentStore()
     {
-        FakeKnowledgeStoreAdapter files = new("filesystem") { ReadsWhatItRanks = false };
+        RecordingKnowledgeStoreAdapter files = new("filesystem") { ReadsWhatItRanks = false };
 
         var (search, documents) = await Create(OneKindYaml, files);
 
@@ -171,7 +171,7 @@ public sealed class CompositeKnowledgeStoreFactoryTests
     [Fact]
     public async Task APortTheCallerDidNotAskFor_IsNeitherResolvedNorBuilt()
     {
-        FakeKnowledgeStoreAdapter files = new("filesystem");
+        RecordingKnowledgeStoreAdapter files = new("filesystem");
 
         var (search, documents) = await CreateFor(OneKindYaml, includeSearch: false, includeDocuments: true, null, files);
 
@@ -186,7 +186,7 @@ public sealed class CompositeKnowledgeStoreFactoryTests
     {
         // The document reads from 'filesystem' and this host registers only the ranker. The caller
         // holds the document port itself, so the field that names 'filesystem' is never looked up.
-        FakeKnowledgeStoreAdapter zilliz = new("zilliz") { CanServeDocuments = false, ReadsWhatItRanks = false };
+        RecordingKnowledgeStoreAdapter zilliz = new("zilliz") { CanServeDocuments = false, ReadsWhatItRanks = false };
 
         var (search, documents) = await CreateFor(TwoKindsYaml, includeSearch: true, includeDocuments: false, null, zilliz);
 
@@ -198,7 +198,7 @@ public sealed class CompositeKnowledgeStoreFactoryTests
     [Fact]
     public async Task ACallerThatHoldsBothPorts_BuildsNothingAtAll()
     {
-        FakeKnowledgeStoreAdapter files = new("filesystem");
+        RecordingKnowledgeStoreAdapter files = new("filesystem");
 
         var (search, documents) = await CreateFor(TwoKindsYaml, includeSearch: false, includeDocuments: false, null, files);
 
@@ -216,7 +216,7 @@ public sealed class CompositeKnowledgeStoreFactoryTests
     public async Task ASearchKindNoAdapterServes_FailsAndNamesTheRegisteredKinds()
     {
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
-            async () => await Create(TwoKindsYaml, new FakeKnowledgeStoreAdapter("filesystem")));
+            async () => await Create(TwoKindsYaml, new RecordingKnowledgeStoreAdapter("filesystem")));
 
         var error = Assert.Single(failure.Errors);
         Assert.Equal("/providers/knowledge/search", error.Pointer);
@@ -228,7 +228,7 @@ public sealed class CompositeKnowledgeStoreFactoryTests
     public async Task ADocumentKindNoAdapterServes_FailsAndNamesTheRegisteredKinds()
     {
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
-            async () => await Create(TwoKindsYaml, new FakeKnowledgeStoreAdapter("zilliz")));
+            async () => await Create(TwoKindsYaml, new RecordingKnowledgeStoreAdapter("zilliz")));
 
         var error = Assert.Single(failure.Errors);
         Assert.Equal("/providers/knowledge/documents", error.Pointer);
@@ -240,7 +240,7 @@ public sealed class CompositeKnowledgeStoreFactoryTests
     public async Task AnAdapterThatDoesNotServeThatPort_FailsAndNamesThePort()
     {
         // The Zilliz connector ranks and reads nothing, so a document that reads from it is a fault.
-        FakeKnowledgeStoreAdapter zilliz = new("zilliz") { CanServeDocuments = false };
+        RecordingKnowledgeStoreAdapter zilliz = new("zilliz") { CanServeDocuments = false };
 
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
             async () => await Create(BothPortsOn("zilliz"), zilliz));
@@ -254,7 +254,7 @@ public sealed class CompositeKnowledgeStoreFactoryTests
     [Fact]
     public async Task AnAdapterThatDoesNotRank_FailsTheSearchPort()
     {
-        FakeKnowledgeStoreAdapter files = new("filesystem") { CanServeSearch = false };
+        RecordingKnowledgeStoreAdapter files = new("filesystem") { CanServeSearch = false };
 
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
             async () => await Create(OneKindYaml, files));
@@ -269,8 +269,8 @@ public sealed class CompositeKnowledgeStoreFactoryTests
     {
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(async () => await Create(
             OneKindYaml,
-            new FakeKnowledgeStoreAdapter("filesystem"),
-            new FakeKnowledgeStoreAdapter("FileSystem")));
+            new RecordingKnowledgeStoreAdapter("filesystem"),
+            new RecordingKnowledgeStoreAdapter("FileSystem")));
 
         var error = Assert.Single(failure.Errors);
         Assert.Equal("/providers/knowledge/search", error.Pointer);
@@ -291,7 +291,7 @@ public sealed class CompositeKnowledgeStoreFactoryTests
     [Fact]
     public async Task NothingIsBuilt_UntilBothPortsFoundTheirAdapter()
     {
-        FakeKnowledgeStoreAdapter files = new("filesystem");
+        RecordingKnowledgeStoreAdapter files = new("filesystem");
 
         await Assert.ThrowsAsync<ConfigurationLoadException>(
             async () => await Create(TwoKindsYaml, files));

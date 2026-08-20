@@ -1,12 +1,12 @@
-namespace AgentCore.AspNetCore.Tests.Fakes;
+namespace AgentCore.TestSupport;
 
 /// <summary>
 /// A clock a test owns, including every timer a production seam schedules against it.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <see cref="AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayConnection"/> bounds its idle
-/// deadline with <c>Task.Delay(delay, timeProvider, cancellationToken)</c>, and that overload arms
+/// A seam that bounds a deadline with <c>Task.Delay(delay, timeProvider, cancellationToken)</c> —
+/// the relay connection's idle deadline is the case this was written for — arms
 /// its completion through <see cref="TimeProvider.CreateTimer"/>, not through
 /// <see cref="TimeProvider.GetUtcNow"/>. A fake that only overrode <c>GetUtcNow</c> would leave
 /// that timer running on the real clock underneath it, so a test would still have to sleep for the
@@ -20,7 +20,7 @@ namespace AgentCore.AspNetCore.Tests.Fakes;
 /// so a future caller that does ask for a period is not silently starved.
 /// </para>
 /// </remarks>
-internal sealed class FakeTimeProvider : TimeProvider
+public sealed class FakeTimeProvider : TimeProvider
 {
     private readonly Lock _gate = new();
     private readonly List<FakeTimer> _timers = [];

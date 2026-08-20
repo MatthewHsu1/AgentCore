@@ -1,3 +1,4 @@
+using AgentCore.TestSupport;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;

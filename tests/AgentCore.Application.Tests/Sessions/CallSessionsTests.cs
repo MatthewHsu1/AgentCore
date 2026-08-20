@@ -1,16 +1,15 @@
+using AgentCore.TestSupport;
 using AgentCore.Application.Sessions.Memory;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
-using AgentCore.AspNetCore.Tests.Fakes;
-using AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
-namespace AgentCore.AspNetCore.Tests.Sessions;
+namespace AgentCore.Application.Tests.Sessions;
 
 /// <summary>
 /// The lifecycle of one call's session: opened, found again, and closed.
@@ -131,35 +130,6 @@ public sealed class CallSessionsTests
         Assert.Contains(observer.Kinds, kind => kind == CallEventKind.CallEnded);
     }
 
-    [Fact(Timeout = 30_000)]
-    public async Task ATurnTellsTheStoreItsCallIsStillBeingHad()
-    {
-        // The relay opens its session once and holds it for the whole call, so nothing else reads
-        // it back. A read is the one sign a store gets that a call is still live, so without one
-        // the idle sweep drops a long call out from under the turn about to run.
-        using SequencedChatClient reply = new("your order ships Friday");
-        var factory = Factory(yaml: TelnyxRelayTurnTests.PolicyYaml, reply: reply);
-        CountingCallSessions sessions = new(factory);
-
-        await using var harness = await RelayConnectionHarness.StartAsync(
-            TelnyxRelayTurnTests.PolicyYaml,
-            reply,
-            services: collection =>
-            {
-                collection.AddSingleton<ICallSessions>(sessions);
-                collection.AddSingleton<ICallSessionFactory>(factory);
-            });
-
-        harness.Socket.Queue(RelayFrames.Setup(callSessionId: "call-live"));
-        harness.Socket.Queue(RelayFrames.Prompt("when does my order ship?", last: true));
-
-        for (var attempt = 0; attempt < 400 && sessions.Reads == 0; attempt++)
-        {
-            await Task.Delay(10, Token);
-        }
-
-        Assert.True(sessions.Reads > 0, "the turn never told the store its call is still being had.");
-    }
 
     private static FakeTimeProvider Clock()
         => new(new DateTimeOffset(2026, 8, 20, 12, 0, 0, TimeSpan.Zero));
@@ -236,25 +206,4 @@ public sealed class CallSessionsTests
     }
 
     /// <summary>The default store, counting the reads that keep a call out of the idle sweep.</summary>
-    private sealed class CountingCallSessions(ICallSessionFactory factory) : ICallSessions
-    {
-        private readonly InMemoryCallSessions _inner =
-            new(factory, InMemoryCallSessions.DefaultIdleTimeout, TimeProvider.System);
-
-        private int _reads;
-
-        public int Reads => Volatile.Read(ref _reads);
-
-        public ValueTask<CallSession> OpenAsync(string? callId, CancellationToken cancellationToken = default)
-            => _inner.OpenAsync(callId, cancellationToken);
-
-        public ValueTask<CallSession?> TryGetAsync(string callId, CancellationToken cancellationToken = default)
-        {
-            Interlocked.Increment(ref _reads);
-            return _inner.TryGetAsync(callId, cancellationToken);
-        }
-
-        public ValueTask CloseAsync(string callId, CancellationToken cancellationToken = default)
-            => _inner.CloseAsync(callId, cancellationToken);
-    }
 }

@@ -8,12 +8,12 @@ namespace AgentCore.Application.Tests.Fakes;
 /// <summary>
 /// An offline vendor adapter. It answers one <c>kind</c> and records what it was asked to build.
 /// </summary>
-internal sealed class FakeChatClientAdapter : IChatClientAdapter
+internal sealed class RecordingChatClientAdapter : IChatClientAdapter
 {
     private readonly List<string> _builtNames = [];
     private readonly Dictionary<string, RecordingChatClient> _clients = new(StringComparer.Ordinal);
 
-    public FakeChatClientAdapter(string kind) => Kind = kind;
+    public RecordingChatClientAdapter(string kind) => Kind = kind;
 
     public string Kind { get; }
 

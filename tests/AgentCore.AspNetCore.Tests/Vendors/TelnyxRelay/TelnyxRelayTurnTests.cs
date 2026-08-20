@@ -1,3 +1,4 @@
+using AgentCore.TestSupport;
 using AgentCore.AspNetCore.Tests.Fakes;
 using Microsoft.Extensions.Logging;
 using Xunit;
@@ -38,7 +39,7 @@ public sealed class TelnyxRelayTurnTests
     [Fact]
     public async Task AFinalPrompt_RunsOneTurnAndSendsOneTextFrameForEachUpdate()
     {
-        using SequencedChatClient reply = new("hello there caller");
+        using FragmentingChatClient reply = new("hello there caller");
         await using var host = await TelnyxRelayHost.StartAsync(PolicyYaml, reply);
         await using var relay = await host.ConnectAsync();
 
@@ -56,7 +57,7 @@ public sealed class TelnyxRelayTurnTests
     {
         // callSessionId groups the legs of one logical call, so it survives the warm transfer of
         // slice 2. A leg id would not.
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         await using var host = await TelnyxRelayHost.StartAsync(PolicyYaml, reply);
         await using var relay = await host.ConnectAsync();
 
@@ -152,7 +153,7 @@ public sealed class TelnyxRelayTurnTests
         // later interim prompts would then hit the in-flight guard and be dropped for the wrong
         // reason, and Calls would still read 1. Asserting on the text the model actually saw is
         // what tells the two apart — the model must see the final transcript, never an interim one.
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         await using var host = await TelnyxRelayHost.StartAsync(PolicyYaml, reply);
         await using var relay = await host.ConnectAsync();
 
@@ -171,7 +172,7 @@ public sealed class TelnyxRelayTurnTests
     [Fact]
     public async Task APromptSplitAcrossThreeFragments_ArrivesAsOneFrame()
     {
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         await using var host = await TelnyxRelayHost.StartAsync(PolicyYaml, reply);
         await using var relay = await host.ConnectAsync();
 
@@ -185,7 +186,7 @@ public sealed class TelnyxRelayTurnTests
     [Fact]
     public async Task AnUnknownFrameType_IsIgnoredAndTheCallGoesOn()
     {
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         await using var host = await TelnyxRelayHost.StartAsync(PolicyYaml, reply);
         await using var relay = await host.ConnectAsync();
 
@@ -202,7 +203,7 @@ public sealed class TelnyxRelayTurnTests
         // Section 7.1: a vendor that changes a frame must not be able to drop a call. The type is
         // known and only one field will not bind, so the frame is refused and the socket lives.
         // A decimal here would otherwise end a live call at the exact moment of a barge-in.
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         EventObservedLoggerProvider capture = new("FrameBodyRefused");
         await using var host = await TelnyxRelayHost.StartAsync(
             PolicyYaml,
@@ -247,7 +248,7 @@ public sealed class TelnyxRelayTurnTests
         // The same rule, on the one frame that starts a call. customParameters binds to a
         // dictionary of strings, so a number in it will not bind, and refusing the whole socket
         // would kill the call before it ever began.
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         EventObservedLoggerProvider capture = new("FrameBodyRefused");
         await using var host = await TelnyxRelayHost.StartAsync(
             PolicyYaml,
@@ -294,7 +295,7 @@ public sealed class TelnyxRelayTurnTests
     public async Task AnErrorFrame_KeepsTheSocketOpen()
     {
         // This frame reports our defect, not a call fault. Dropping the call would be worse.
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         await using var host = await TelnyxRelayHost.StartAsync(PolicyYaml, reply);
         await using var relay = await host.ConnectAsync();
 
@@ -312,7 +313,7 @@ public sealed class TelnyxRelayTurnTests
         // still forbids dropping a call over one, so it replaces rather than refuses. Teardown only
         // ever closes the session the connection currently holds, so a first session left behind
         // would never have anything wait for the words it still owed store 1.
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         EventObservedLoggerProvider capture = new("SecondSetupFrame");
         await using var host = await TelnyxRelayHost.StartAsync(
             PolicyYaml,
@@ -367,7 +368,7 @@ public sealed class TelnyxRelayTurnTests
         // call once it does. WaitForSessionAsync first makes sure the server actually created the
         // session before the abort below, so a pass here proves removal and not merely the absence
         // of something that was never added.
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         await using var host = await TelnyxRelayHost.StartAsync(PolicyYaml, reply);
         await using var relay = await host.ConnectAsync();
 

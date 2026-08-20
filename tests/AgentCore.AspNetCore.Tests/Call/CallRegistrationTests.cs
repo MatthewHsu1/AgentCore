@@ -1,3 +1,4 @@
+using AgentCore.TestSupport;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
@@ -193,7 +194,7 @@ public sealed class CallRegistrationTests
             options =>
             {
                 options.Configuration = configuration;
-                options.UseChatClients(_ => new RoutingChatClientFactory(new SequencedChatClient("hello")));
+                options.UseChatClients(_ => new RoutingChatClientFactory(new FragmentingChatClient("hello")));
                 options.UseSpeech(new TelnyxRelaySpeechAdapter());
 
                 if (adapters.Length > 0)

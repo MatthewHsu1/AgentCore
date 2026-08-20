@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
+    <Description>Fakes every test project shares. Application ports only — a fake of a layer above belongs to that layer's own test project.</Description>
+    <!-- These types are public only to cross the assembly boundary, not as an API. A fake carries a
+         doc comment where its behaviour would surprise a test author, and nowhere else. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/AgentCore.Application/AgentCore.Application.csproj" />
+  </ItemGroup>
+
+</Project>

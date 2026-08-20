@@ -1,3 +1,4 @@
+using AgentCore.TestSupport;
 using System.Net;
 using AgentCore.AspNetCore.Call;
 using AgentCore.AspNetCore.Tests.Fakes;
@@ -32,7 +33,7 @@ public sealed class TelnyxRelayThroughTheCallSeamTests
     [Fact(Timeout = 30_000)]
     public async Task APlainGetToTheVendorNeutralRoute_ReachesTheRelayHandler()
     {
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
 
         // The host names no vendor at the route. providers.call: { kind: telnyx-relay } is what
         // picks this adapter, and app.MapCall() is what asks.

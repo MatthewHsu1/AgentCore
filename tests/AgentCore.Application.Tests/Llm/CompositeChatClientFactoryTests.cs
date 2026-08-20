@@ -1,9 +1,9 @@
+using AgentCore.TestSupport;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Llm;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tests.Fakes;
-using AgentCore.Application.Tests.Secrets.Fakes;
 using Microsoft.Extensions.AI;
 using Xunit;
 
@@ -103,8 +103,8 @@ public sealed class CompositeChatClientFactoryTests
     [Fact]
     public async Task TwoKinds_RouteToTheTwoAdaptersTheHostRegistered()
     {
-        FakeChatClientAdapter openai = new("openai");
-        FakeChatClientAdapter anthropic = new("anthropic");
+        RecordingChatClientAdapter openai = new("openai");
+        RecordingChatClientAdapter anthropic = new("anthropic");
 
         using var factory = await Create(TwoVendorsYaml, openai, anthropic);
 
@@ -115,7 +115,7 @@ public sealed class CompositeChatClientFactoryTests
     [Fact]
     public async Task AKindWrittenInAnotherCase_StillFindsItsAdapter()
     {
-        FakeChatClientAdapter openai = new("openai");
+        RecordingChatClientAdapter openai = new("openai");
 
         using var factory = await Create(UpperCaseKindYaml, openai);
 
@@ -125,7 +125,7 @@ public sealed class CompositeChatClientFactoryTests
     [Fact]
     public async Task EveryClient_IsBuiltWhileTheFactoryBuildsAndNeverAgain()
     {
-        FakeChatClientAdapter openai = new("openai");
+        RecordingChatClientAdapter openai = new("openai");
 
         using var factory = await Create(OneVendorYaml, openai);
         factory.GetChatClient(new ModelReference { Ref = "reply" });
@@ -139,7 +139,7 @@ public sealed class CompositeChatClientFactoryTests
     [Fact]
     public async Task TheAdapter_ReceivesTheResolverChainTheHostBound()
     {
-        FakeChatClientAdapter openai = new("openai");
+        RecordingChatClientAdapter openai = new("openai");
         MapSecretResolver resolver = new();
 
         using var factory = await Create(UpperCaseKindYaml, resolver, openai);
@@ -153,7 +153,7 @@ public sealed class CompositeChatClientFactoryTests
     [Fact]
     public async Task AReferenceWithNoModel_TakesTheFirstDeclaredEntry()
     {
-        FakeChatClientAdapter openai = new("openai");
+        RecordingChatClientAdapter openai = new("openai");
 
         using var factory = await Create(OneVendorYaml, openai);
 
@@ -163,7 +163,7 @@ public sealed class CompositeChatClientFactoryTests
     [Fact]
     public async Task AnUnknownAsName_FailsAndNamesWhatTheDocumentDoesDeclare()
     {
-        using var factory = await Create(OneVendorYaml, new FakeChatClientAdapter("openai"));
+        using var factory = await Create(OneVendorYaml, new RecordingChatClientAdapter("openai"));
 
         var failure = Assert.Throws<ConfigurationLoadException>(
             () => factory.GetChatClient(new ModelReference { Ref = "summarise" }));
@@ -176,7 +176,7 @@ public sealed class CompositeChatClientFactoryTests
     [Fact]
     public async Task ADocumentWithNoModel_FailsAReferenceThatNamesNone()
     {
-        using var factory = await Create(NoModelYaml, new FakeChatClientAdapter("openai"));
+        using var factory = await Create(NoModelYaml, new RecordingChatClientAdapter("openai"));
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => factory.GetChatClient(null));
 
@@ -189,7 +189,7 @@ public sealed class CompositeChatClientFactoryTests
     [Fact]
     public async Task ATemperature_ReachesTheCallWithoutASecondVendorClient()
     {
-        FakeChatClientAdapter openai = new("openai");
+        RecordingChatClientAdapter openai = new("openai");
 
         using var factory = await Create(OneVendorYaml, openai);
         var shaped = factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.2 });
@@ -202,7 +202,7 @@ public sealed class CompositeChatClientFactoryTests
     [Fact]
     public async Task OneTemperature_TakesOneWrapperHoweverOftenItIsAsked()
     {
-        using var factory = await Create(OneVendorYaml, new FakeChatClientAdapter("openai"));
+        using var factory = await Create(OneVendorYaml, new RecordingChatClientAdapter("openai"));
 
         var first = factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.2 });
         var second = factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.2 });
@@ -214,7 +214,7 @@ public sealed class CompositeChatClientFactoryTests
     [Fact]
     public async Task ACallerSuppliedTemperature_WinsOverTheDocumentDefault()
     {
-        FakeChatClientAdapter openai = new("openai");
+        RecordingChatClientAdapter openai = new("openai");
 
         using var factory = await Create(OneVendorYaml, openai);
         var shaped = factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.2 });
@@ -231,7 +231,7 @@ public sealed class CompositeChatClientFactoryTests
     [Fact]
     public async Task ACallWithNoOptions_StillGetsTheDocumentTemperature()
     {
-        FakeChatClientAdapter openai = new("openai");
+        RecordingChatClientAdapter openai = new("openai");
 
         using var factory = await Create(OneVendorYaml, openai);
         var shaped = factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.2 });
@@ -247,7 +247,7 @@ public sealed class CompositeChatClientFactoryTests
     [Fact]
     public async Task ATemperature_ReachesAStreamingCallToo()
     {
-        FakeChatClientAdapter openai = new("openai");
+        RecordingChatClientAdapter openai = new("openai");
 
         using var factory = await Create(OneVendorYaml, openai);
         var shaped = factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.3 });
@@ -270,7 +270,7 @@ public sealed class CompositeChatClientFactoryTests
     [Fact]
     public async Task Dispose_ReleasesTheVendorClientExactlyOnce_EvenWithTwoShapedWrappersOverIt()
     {
-        FakeChatClientAdapter openai = new("openai");
+        RecordingChatClientAdapter openai = new("openai");
         var factory = await Create(OneVendorYaml, openai);
 
         // Two different temperatures over the same 'as' name take two different shaped wrappers,
@@ -291,7 +291,7 @@ public sealed class CompositeChatClientFactoryTests
     [Fact]
     public async Task Dispose_ReleasesEveryVendorClientExactlyOnce()
     {
-        FakeChatClientAdapter openai = new("openai");
+        RecordingChatClientAdapter openai = new("openai");
         var factory = await Create(OneVendorYaml, openai);
 
         factory.GetChatClient(new ModelReference { Ref = "reply" });
@@ -310,7 +310,7 @@ public sealed class CompositeChatClientFactoryTests
     public async Task AKindNoAdapterServes_FailsTheBuildAndNamesTheRegisteredKinds()
     {
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
-            async () => await Create(TwoVendorsYaml, new FakeChatClientAdapter("openai")));
+            async () => await Create(TwoVendorsYaml, new RecordingChatClientAdapter("openai")));
 
         var error = Assert.Single(failure.Errors);
         Assert.Equal("/providers/llm/1/kind", error.Pointer);
@@ -324,8 +324,8 @@ public sealed class CompositeChatClientFactoryTests
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
             async () => await Create(
                 OneVendorYaml,
-                new FakeChatClientAdapter("openai"),
-                new FakeChatClientAdapter("openai")));
+                new RecordingChatClientAdapter("openai"),
+                new RecordingChatClientAdapter("openai")));
 
         Assert.Contains("two adapters", failure.Message, StringComparison.Ordinal);
         Assert.Contains("providers.llm", failure.Message, StringComparison.Ordinal);
@@ -335,7 +335,7 @@ public sealed class CompositeChatClientFactoryTests
     public async Task TwoEntriesWithOneAsName_FailTheBuild()
     {
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
-            async () => await Create(DuplicateAsYaml, new FakeChatClientAdapter("openai")));
+            async () => await Create(DuplicateAsYaml, new RecordingChatClientAdapter("openai")));
 
         var error = Assert.Single(failure.Errors);
         Assert.Equal("/providers/llm/1/as", error.Pointer);

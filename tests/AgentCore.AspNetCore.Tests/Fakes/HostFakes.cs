@@ -15,12 +15,12 @@ namespace AgentCore.AspNetCore.Tests.Fakes;
 /// out. The streaming path yields one update for each word, so a test can see the reply arrive in
 /// pieces rather than in one block.
 /// </remarks>
-internal sealed class SequencedChatClient : IChatClient
+internal sealed class FragmentingChatClient : IChatClient
 {
     private readonly string[] _replies;
     private int _calls;
 
-    public SequencedChatClient(params string[] replies) => _replies = replies;
+    public FragmentingChatClient(params string[] replies) => _replies = replies;
 
     /// <summary>Gets how many requests this client answered.</summary>
     public int Calls => Volatile.Read(ref _calls);
@@ -349,32 +349,6 @@ internal sealed class HeldPromptChatClient : IChatClient
 }
 
 /// <summary>
-/// Hands one client to the reply model and another to the extractor model.
-/// </summary>
-/// <remarks>
-/// <c>providers.llm[].as</c> names each model, and the document points <c>extractor.model</c> at one
-/// of those names. This factory routes on that name, so a test scripts the two models apart. No test
-/// in this project reaches a network or needs an API key.
-/// </remarks>
-internal sealed class RoutingChatClientFactory : IChatClientFactory
-{
-    private readonly Dictionary<string, IChatClient> _byName = new(StringComparer.Ordinal);
-    private readonly IChatClient _fallback;
-
-    public RoutingChatClientFactory(IChatClient fallback) => _fallback = fallback;
-
-    /// <summary>Binds one client to one <c>as</c> name.</summary>
-    public RoutingChatClientFactory Route(string name, IChatClient client)
-    {
-        _byName[name] = client;
-        return this;
-    }
-
-    public IChatClient GetChatClient(ModelReference? model)
-        => model is not null && _byName.TryGetValue(model.Ref, out var client) ? client : _fallback;
-}
-
-/// <summary>
 /// An offline knowledge adapter that answers both knowledge ports and holds nothing.
 /// </summary>
 /// <remarks>
@@ -401,24 +375,6 @@ internal sealed class EmptyKnowledgeStore : IKnowledgeRetrievalPort, IDocumentSt
         string? glob = null,
         CancellationToken cancellationToken = default)
         => ValueTask.FromResult(new GrepResult { Matches = [], Truncated = false });
-}
-
-/// <summary>
-/// A resolver over a map a test writes. It holds no file and no environment variable.
-/// </summary>
-internal sealed class MapSecretResolver : ISecretResolverPort
-{
-    private readonly Dictionary<string, string> _values = new(StringComparer.Ordinal);
-
-    /// <summary>Adds one name and its value.</summary>
-    public MapSecretResolver With(string name, string value)
-    {
-        _values[name] = value;
-        return this;
-    }
-
-    public ValueTask<string?> TryResolveAsync(string name, CancellationToken cancellationToken = default)
-        => ValueTask.FromResult(_values.TryGetValue(name, out var value) ? value : null);
 }
 
 /// <summary>

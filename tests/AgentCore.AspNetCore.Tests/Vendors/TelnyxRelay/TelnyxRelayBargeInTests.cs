@@ -1,3 +1,4 @@
+using AgentCore.TestSupport;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -170,7 +171,7 @@ public sealed class TelnyxRelayBargeInTests
         // that wait," so the fixed delay below stands in for one, sized to outlast a same-process
         // production of one string and two channel writes many times over.
         var hugeFragment = new string('x', 8 * 1024 * 1024);
-        using SequencedChatClient reply = new(hugeFragment);
+        using FragmentingChatClient reply = new(hugeFragment);
         EventObservedLoggerProvider capture = new("InterruptReceived");
         await using var host = await TelnyxRelayHost.StartAsync(
             TelnyxRelayTurnTests.PolicyYaml,
@@ -260,7 +261,7 @@ public sealed class TelnyxRelayBargeInTests
     [Fact(Timeout = 30_000)]
     public async Task AnInterruptWithNoTurnRunning_ChangesNothing()
     {
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         await using var host = await TelnyxRelayHost.StartAsync(TelnyxRelayTurnTests.PolicyYaml, reply);
         await using var relay = await host.ConnectAsync();
 
@@ -291,7 +292,7 @@ public sealed class TelnyxRelayBargeInTests
         // HandleInterrupt's own guard exists to survive, since System.Text.Json deserializes a
         // missing non-nullable string as null rather than throwing, and CallSession.Interrupt
         // itself would otherwise take an ArgumentNullException straight into the read loop.
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         EventObservedLoggerProvider capture = new("MalformedInterruptFrame");
         await using var host = await TelnyxRelayHost.StartAsync(
             TelnyxRelayTurnTests.PolicyYaml,
@@ -334,7 +335,7 @@ public sealed class TelnyxRelayBargeInTests
         // range check on durationUntilInterruptMs, so a negative value would otherwise reach
         // CallSession.Interrupt's own ArgumentOutOfRangeException uncaught and take the read loop
         // down with it. D28 forbids clamping it into something plausible instead of refusing it.
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         EventObservedLoggerProvider capture = new("MalformedInterruptFrame");
         await using var host = await TelnyxRelayHost.StartAsync(
             TelnyxRelayTurnTests.PolicyYaml,

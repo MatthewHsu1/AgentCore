@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/AgentCore.Infrastructure/AgentCore.Infrastructure.csproj" />
+    <ProjectReference Include="../AgentCore.TestSupport/AgentCore.TestSupport.csproj" />
   </ItemGroup>
 
   <ItemGroup>

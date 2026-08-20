@@ -1,3 +1,4 @@
+using AgentCore.TestSupport;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -81,8 +82,8 @@ public sealed class ChatCompletionsTests
     [Fact]
     public async Task ATurn_AnswersTheOpenAiShapeAndNamesTheSession()
     {
-        using SequencedChatClient reply = new("hello there");
-        using SequencedChatClient fill = new(StayingNull);
+        using FragmentingChatClient reply = new("hello there");
+        using FragmentingChatClient fill = new(StayingNull);
         await using var host = await ChatCompletionsHost.StartAsync(PolicyYaml, reply, fill);
 
         using var response = await host.PostAsync("hi");
@@ -107,8 +108,8 @@ public sealed class ChatCompletionsTests
     [Fact]
     public async Task ATurn_RunsTheReplyModelAndTheExtractorModelOnce()
     {
-        using SequencedChatClient reply = new("hello there");
-        using SequencedChatClient fill = new(StayingNull);
+        using FragmentingChatClient reply = new("hello there");
+        using FragmentingChatClient fill = new(StayingNull);
         await using var host = await ChatCompletionsHost.StartAsync(PolicyYaml, reply, fill);
 
         using var response = await host.PostAsync("hi");
@@ -124,8 +125,8 @@ public sealed class ChatCompletionsTests
     [Fact]
     public async Task AStreamedTurn_WritesOneEventForEachUpdateAndClosesWithDone()
     {
-        using SequencedChatClient reply = new("hello there caller");
-        using SequencedChatClient fill = new(StayingNull);
+        using FragmentingChatClient reply = new("hello there caller");
+        using FragmentingChatClient fill = new(StayingNull);
         await using var host = await ChatCompletionsHost.StartAsync(PolicyYaml, reply, fill);
 
         using var response = await host.PostStreamingAsync("hi");
@@ -145,8 +146,8 @@ public sealed class ChatCompletionsTests
     [Fact]
     public async Task AStreamedTurn_ReportsWhatTheTurnDidOnTheLastChunk()
     {
-        using SequencedChatClient reply = new("hello there");
-        using SequencedChatClient fill = new(SaidGoodbye);
+        using FragmentingChatClient reply = new("hello there");
+        using FragmentingChatClient fill = new(SaidGoodbye);
         await using var host = await ChatCompletionsHost.StartAsync(PolicyYaml, reply, fill);
 
         using var response = await host.PostStreamingAsync("goodbye");
@@ -166,7 +167,7 @@ public sealed class ChatCompletionsTests
     [Fact]
     public async Task TwoRequestsOnOneSession_CarryTheStageAndTheTranscript()
     {
-        using SequencedChatClient reply = new("first reply", "second reply");
+        using FragmentingChatClient reply = new("first reply", "second reply");
         await using var host = await ChatCompletionsHost.StartAsync(TwoStagesYaml, reply);
 
         using var first = await host.PostAsync("one");
@@ -191,7 +192,7 @@ public sealed class ChatCompletionsTests
     [Fact]
     public async Task TwoRequestsWithNoSessionHeader_StartTwoCalls()
     {
-        using SequencedChatClient reply = new("first reply", "second reply");
+        using FragmentingChatClient reply = new("first reply", "second reply");
         await using var host = await ChatCompletionsHost.StartAsync(TwoStagesYaml, reply);
 
         using var first = await host.PostAsync("one");
@@ -209,7 +210,7 @@ public sealed class ChatCompletionsTests
     [Fact]
     public async Task AnUnknownSession_Is404AndStartsNothing()
     {
-        using SequencedChatClient reply = new("hello there");
+        using FragmentingChatClient reply = new("hello there");
         await using var host = await ChatCompletionsHost.StartAsync(TwoStagesYaml, reply);
 
         using var response = await host.PostAsync("hi", "call-that-never-existed");
@@ -227,7 +228,7 @@ public sealed class ChatCompletionsTests
     [Fact]
     public async Task ARequestWithNoUserMessage_Is400()
     {
-        using SequencedChatClient reply = new("hello there");
+        using FragmentingChatClient reply = new("hello there");
         await using var host = await ChatCompletionsHost.StartAsync(TwoStagesYaml, reply);
 
         using var response = await host.Client.PostAsJsonAsync(
@@ -245,8 +246,8 @@ public sealed class ChatCompletionsTests
     [Fact]
     public async Task ATurnOnAFinishedCall_Is409()
     {
-        using SequencedChatClient reply = new("hello there");
-        using SequencedChatClient fill = new(SaidGoodbye);
+        using FragmentingChatClient reply = new("hello there");
+        using FragmentingChatClient fill = new(SaidGoodbye);
         await using var host = await ChatCompletionsHost.StartAsync(PolicyYaml, reply, fill);
 
         using var first = await host.PostAsync("goodbye");

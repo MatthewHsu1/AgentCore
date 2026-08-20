@@ -1,3 +1,4 @@
+using AgentCore.TestSupport;
 using AgentCore.Application.Sessions.Memory;
 using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Audit;
@@ -533,8 +534,8 @@ public sealed class AddAgentCoreTests
         // 'kind: openai' selects the adapter registered under that kind. The host lists what it
         // supports, once, and the document decides which entry runs.
         using var provider = await BuildAsync(OneAgentYaml, options => options.UseChatClients(
-            new FakeChatClientAdapter("openai", () => new SequencedChatClient("routed")),
-            new FakeChatClientAdapter("anthropic", () => new SequencedChatClient("wrong vendor"))));
+            new FakeChatClientAdapter("openai", () => new FragmentingChatClient("routed")),
+            new FakeChatClientAdapter("anthropic", () => new FragmentingChatClient("wrong vendor"))));
 
         var session = provider.GetRequiredService<ICallSessionFactory>().Create();
         var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
@@ -548,7 +549,7 @@ public sealed class AddAgentCoreTests
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(() => BuildAsync(
             OtherVendorYaml,
             options => options.UseChatClients(
-                new FakeChatClientAdapter("openai", () => new SequencedChatClient("hello")))));
+                new FakeChatClientAdapter("openai", () => new FragmentingChatClient("hello")))));
 
         // The message names the kind the document wrote and the kinds the host registers, so the
         // reader knows which side to change.
@@ -563,7 +564,7 @@ public sealed class AddAgentCoreTests
             async (startup, cancellationToken) =>
             {
                 await Task.Yield();
-                return new RoutingChatClientFactory(new SequencedChatClient("awaited"));
+                return new RoutingChatClientFactory(new FragmentingChatClient("awaited"));
             }));
 
         var session = provider.GetRequiredService<ICallSessionFactory>().Create();
@@ -949,7 +950,7 @@ public sealed class AddAgentCoreTests
     public async Task AQuietTurn_SpeaksTheFallbackTheDocumentNames()
     {
         using var provider = await BuildAsync(TunedYaml, options => options.UseChatClients(
-            _ => new RoutingChatClientFactory(new SequencedChatClient(string.Empty))));
+            _ => new RoutingChatClientFactory(new FragmentingChatClient(string.Empty))));
         var session = provider.GetRequiredService<ICallSessionFactory>().Create();
 
         var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
@@ -962,7 +963,7 @@ public sealed class AddAgentCoreTests
     public async Task AQuietTurn_SpeaksTheDefaultFallbackWhenTheDocumentNamesNone()
     {
         using var provider = await BuildAsync(OneAgentYaml, options => options.UseChatClients(
-            _ => new RoutingChatClientFactory(new SequencedChatClient(string.Empty))));
+            _ => new RoutingChatClientFactory(new FragmentingChatClient(string.Empty))));
         var session = provider.GetRequiredService<ICallSessionFactory>().Create();
 
         var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
@@ -1333,7 +1334,7 @@ public sealed class AddAgentCoreTests
             async () => await services.AddAgentCoreAsync(options =>
             {
                 options.ConfigurationPath = "no-such-extension.txt";
-                options.UseChatClients(_ => new RoutingChatClientFactory(new SequencedChatClient("hello")));
+                options.UseChatClients(_ => new RoutingChatClientFactory(new FragmentingChatClient("hello")));
             }, TestContext.Current.CancellationToken));
 
         Assert.Equal(ConfigurationCheck.Syntax, failure.Check);
@@ -1346,7 +1347,7 @@ public sealed class AddAgentCoreTests
 
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(
             async () => await services.AddAgentCoreAsync(
-                options => options.UseChatClients(_ => new RoutingChatClientFactory(new SequencedChatClient("hello"))),
+                options => options.UseChatClients(_ => new RoutingChatClientFactory(new FragmentingChatClient("hello"))),
                 TestContext.Current.CancellationToken));
 
         Assert.Contains("names no document", failure.Message, StringComparison.Ordinal);
@@ -1362,7 +1363,7 @@ public sealed class AddAgentCoreTests
             {
                 options.Configuration = ConfigurationLoader.LoadYaml(OneAgentYaml);
                 options.ConfigurationPath = "config/example.yaml";
-                options.UseChatClients(_ => new RoutingChatClientFactory(new SequencedChatClient("hello")));
+                options.UseChatClients(_ => new RoutingChatClientFactory(new FragmentingChatClient("hello")));
             }, TestContext.Current.CancellationToken));
 
         Assert.Contains("names two documents", failure.Message, StringComparison.Ordinal);
@@ -1388,9 +1389,9 @@ public sealed class AddAgentCoreTests
     /// <returns>The provider a test resolves from.</returns>
     private static Task<ServiceProvider> BuildGuardedGraphAsync()
     {
-        RoutingChatClientFactory models = new(new SequencedChatClient("ROUTED"));
-        models.Route("human", new SequencedChatClient("ESCALATED"));
-        models.Route("bot", new SequencedChatClient("HANDLED"));
+        RoutingChatClientFactory models = new(new FragmentingChatClient("ROUTED"));
+        models.Route("human", new FragmentingChatClient("ESCALATED"));
+        models.Route("bot", new FragmentingChatClient("HANDLED"));
 
         return BuildAsync(GuardedGraphYaml, options => options.UseChatClients(_ => models));
     }
@@ -1461,7 +1462,7 @@ public sealed class AddAgentCoreTests
         => await services.AddAgentCoreAsync(options =>
         {
             options.Configuration = ConfigurationLoader.LoadYaml(yaml);
-            options.UseChatClients(_ => new RoutingChatClientFactory(new SequencedChatClient("hello")));
+            options.UseChatClients(_ => new RoutingChatClientFactory(new FragmentingChatClient("hello")));
             configure?.Invoke(options);
         });
 

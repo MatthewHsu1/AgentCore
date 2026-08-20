@@ -1,3 +1,4 @@
+using AgentCore.TestSupport;
 using System.Net;
 using System.Net.WebSockets;
 using AgentCore.AspNetCore.Tests.Fakes;
@@ -19,7 +20,7 @@ public sealed class TelnyxRelayEndpointTests
     [Fact(Timeout = 30_000)]
     public async Task APlainGet_IsRefused()
     {
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         await using var host = await TelnyxRelayHost.StartAsync(TelnyxRelayTurnTests.PolicyYaml, reply);
 
         var answer = await host.GetAsync(TelnyxRelayEndpointRouteBuilderExtensions.DefaultPattern);
@@ -34,7 +35,7 @@ public sealed class TelnyxRelayEndpointTests
         // the endpoint throws InvalidOperationException rather than answering 400 — ASP.NET Core's
         // own hosting layer has no exception-handling middleware here, so ASP.NET Core turns that
         // unhandled throw into an empty 500, and the reason must not be a mystery in the log.
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         await using var host = await TelnyxRelayHost.StartWithoutWebSocketsAsync(
             TelnyxRelayTurnTests.PolicyYaml,
             reply);
@@ -56,7 +57,7 @@ public sealed class TelnyxRelayEndpointTests
     [Fact(Timeout = 30_000)]
     public async Task MalformedJson_ClosesWithInvalidPayloadData()
     {
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         await using var host = await TelnyxRelayHost.StartAsync(TelnyxRelayTurnTests.PolicyYaml, reply);
         await using var relay = await host.ConnectAsync();
 
@@ -74,7 +75,7 @@ public sealed class TelnyxRelayEndpointTests
         // exception. RelayProtocolViolation must log it at Warning — the level PromptBeforeSetup,
         // FrameRefused, and MalformedInterruptFrame already use for a bad frame — and not at the
         // Error level ReadLoopFaulted uses for an unhandled defect.
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         EventObservedLoggerProvider capture = new("RelayProtocolViolation");
         await using var host = await TelnyxRelayHost.StartAsync(
             TelnyxRelayTurnTests.PolicyYaml,
@@ -103,7 +104,7 @@ public sealed class TelnyxRelayEndpointTests
     [Fact(Timeout = 30_000)]
     public async Task AFrameOverTheLimit_ClosesWithMessageTooBig()
     {
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         await using var host = await TelnyxRelayHost.StartAsync(
             TelnyxRelayTurnTests.PolicyYaml,
             reply,
@@ -120,7 +121,7 @@ public sealed class TelnyxRelayEndpointTests
     public async Task AClientThatVanishesWithNoCloseFrame_ReleasesTheSession()
     {
         // The vendor never reconnects, so a dead socket is a finished call.
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         await using var host = await TelnyxRelayHost.StartAsync(TelnyxRelayTurnTests.PolicyYaml, reply);
 
         var relay = await host.ConnectAsync();
@@ -143,7 +144,7 @@ public sealed class TelnyxRelayEndpointTests
         // bounded wait below gives up.
         FakeTimeProvider clock = new(DateTimeOffset.UtcNow);
         EventObservedLoggerProvider capture = new("IdleTimeoutReached");
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         await using var host = await TelnyxRelayHost.StartAsync(
             TelnyxRelayTurnTests.PolicyYaml,
             reply,
@@ -202,7 +203,7 @@ public sealed class TelnyxRelayEndpointTests
         const int steps = 5;
         FakeTimeProvider clock = new(DateTimeOffset.UtcNow);
         EventObservedLoggerProvider dtmf = new("DtmfReceived");
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         await using var host = await TelnyxRelayHost.StartAsync(
             TelnyxRelayTurnTests.PolicyYaml,
             reply,

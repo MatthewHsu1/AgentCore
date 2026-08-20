@@ -1,15 +1,11 @@
 using AgentCore.Application.Ports;
 
-namespace AgentCore.Infrastructure.Tests.Fakes;
+namespace AgentCore.TestSupport;
 
 /// <summary>
-/// An offline resolver that answers from a map, and records every name it is asked for.
+/// A resolver that holds a map of names to values, and remembers what it was asked for.
 /// </summary>
-/// <remarks>
-/// This mirrors the resolver fake the application tests use. An adapter resolves its credential at
-/// startup, so the recorded names prove which secret an adapter reads and how many times.
-/// </remarks>
-internal sealed class MapSecretResolver : ISecretResolverPort
+public sealed class MapSecretResolver : ISecretResolverPort
 {
     private readonly Dictionary<string, string> _values = new(StringComparer.Ordinal);
 
@@ -23,6 +19,7 @@ internal sealed class MapSecretResolver : ISecretResolverPort
         return this;
     }
 
+    /// <inheritdoc />
     public ValueTask<string?> TryResolveAsync(string name, CancellationToken cancellationToken = default)
     {
         Asked.Add(name);

@@ -12,9 +12,9 @@ namespace AgentCore.Application.Tests.Knowledge.Fakes;
 /// <see cref="ReadsWhatItRanks"/> says whether the object <see cref="CreateSearchAsync"/> returns
 /// also reads documents, which is the one condition the composite memoizes on.
 /// </remarks>
-internal sealed class FakeKnowledgeStoreAdapter : IKnowledgeStoreAdapter
+internal sealed class RecordingKnowledgeStoreAdapter : IKnowledgeStoreAdapter
 {
-    public FakeKnowledgeStoreAdapter(string kind)
+    public RecordingKnowledgeStoreAdapter(string kind)
         => Kind = kind;
 
     public string Kind { get; }

@@ -1,3 +1,4 @@
+using AgentCore.TestSupport;
 using AgentCore.Application.Audit;
 using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Configuration.Compilation;
@@ -81,7 +82,7 @@ public sealed class TelnyxRelayCallEndTests
         // The ordinary end of a call. The read loop sees the vendor's own close frame, teardown
         // picks NormalClosure, and the chain has to close on the reason a report counts years
         // later — not stop mid-chain with no terminal event at all.
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         await using var harness = await RelayConnectionHarness.StartAsync(
             TelnyxRelayTurnTests.PolicyYaml,
             reply);
@@ -108,7 +109,7 @@ public sealed class TelnyxRelayCallEndTests
         // Nothing on a healthy socket makes a send throw, so the fault is injected. The write loop
         // faults, teardown picks InternalServerError, and the ending recorded must be the fault
         // rather than a hang-up nobody performed.
-        using SequencedChatClient reply = new("hello there caller");
+        using FragmentingChatClient reply = new("hello there caller");
         await using var harness = await RelayConnectionHarness.StartAsync(
             TelnyxRelayTurnTests.PolicyYaml,
             reply);
@@ -134,7 +135,7 @@ public sealed class TelnyxRelayCallEndTests
         // section 4 holds four endings and this is not one of the other three, so the honest one is
         // the fault. Recording it as caller.hangup would have a report count a shutdown as a caller
         // choosing to leave.
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         await using var harness = await RelayConnectionHarness.StartAsync(
             TelnyxRelayTurnTests.PolicyYaml,
             reply);
@@ -159,7 +160,7 @@ public sealed class TelnyxRelayCallEndTests
         // EndCall is idempotent, and this is the proof that the idempotence really holds through
         // the adapter's path: one call.ended in the chain, and the reason is the agent's, not the
         // socket's.
-        using SequencedChatClient reply = new("goodbye then");
+        using FragmentingChatClient reply = new("goodbye then");
         await using var harness = await RelayConnectionHarness.StartAsync(TerminalStageYaml, reply);
 
         harness.Socket.Queue(RelayFrames.Setup(callSessionId: "call-completed"));
@@ -187,7 +188,7 @@ public sealed class TelnyxRelayCallEndTests
         // No setup frame ever arrived, so there is no call, no session, and nothing to close. A
         // chain with a call.ended and no call.started would be a record of a call that never
         // happened, and teardown must not throw its way out of the request handler either.
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         await using var harness = await RelayConnectionHarness.StartAsync(
             TelnyxRelayTurnTests.PolicyYaml,
             reply);
@@ -209,7 +210,7 @@ public sealed class TelnyxRelayCallEndTests
         // here must cost the chain its last event and nothing else — never the session close behind
         // it, which is what waits for the words the call's last turn still owed store 1.
         FaultingClock clock = new();
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         await using var harness = await RelayConnectionHarness.StartAsync(
             TelnyxRelayTurnTests.PolicyYaml,
             reply,
@@ -239,7 +240,7 @@ public sealed class TelnyxRelayCallEndTests
         // can: the record of that call would lose the turn the caller just had, and no error would
         // say so. Same shape as the teardown that removed a session without closing its chain.
         ParkingTranscriptStore transcript = new();
-        using SequencedChatClient reply = new("your order ships Friday");
+        using FragmentingChatClient reply = new("your order ships Friday");
         var factory = TranscriptBackedSessions(TelnyxRelayTurnTests.PolicyYaml, reply, transcript);
         OrderedCallSessions sessions = new(factory, () => transcript.Landed);
         await using var harness = await RelayConnectionHarness.StartAsync(
@@ -283,7 +284,7 @@ public sealed class TelnyxRelayCallEndTests
         // is the only thing that can wait for the words it queued, so the first call's record would
         // lose its last turn.
         ParkingTranscriptStore transcript = new();
-        using SequencedChatClient reply = new("your order ships Friday");
+        using FragmentingChatClient reply = new("your order ships Friday");
         var factory = TranscriptBackedSessions(TelnyxRelayTurnTests.PolicyYaml, reply, transcript);
         OrderedCallSessions sessions = new(factory, () => transcript.Landed);
         await using var harness = await RelayConnectionHarness.StartAsync(
@@ -324,7 +325,7 @@ public sealed class TelnyxRelayCallEndTests
         // in-memory store never fails, so a store held over the network is the only one that can
         // fail here — and its failure must not leave the request handler, which section 7.1 forbids.
         EventObservedLoggerProvider capture = new("CallCloseFaulted");
-        using SequencedChatClient reply = new("your order ships Friday");
+        using FragmentingChatClient reply = new("your order ships Friday");
         FaultingCallSessions sessions = new(
             SessionsFor(TelnyxRelayTurnTests.PolicyYaml, reply),
             new InvalidOperationException("the store is gone."));
@@ -360,7 +361,7 @@ public sealed class TelnyxRelayCallEndTests
         // registration on ApplicationStopping for the life of the process, and every call after it
         // would do the same.
         EventObservedLoggerProvider capture = new("TeardownTimedOut");
-        using SequencedChatClient reply = new("your order ships Friday");
+        using FragmentingChatClient reply = new("your order ships Friday");
         HangingCallSessions sessions = new(SessionsFor(TelnyxRelayTurnTests.PolicyYaml, reply));
         await using var harness = await RelayConnectionHarness.StartAsync(
             TelnyxRelayTurnTests.PolicyYaml,
@@ -575,44 +576,6 @@ internal sealed class FaultingClock : TimeProvider
         => _failing
             ? throw new InvalidOperationException("the clock failed.")
             : base.GetUtcNow();
-}
-
-/// <summary>
-/// A store 1 that holds its first write open until a test releases it.
-/// </summary>
-/// <remarks>
-/// A real store talks to a database, so a write outlives the turn that queued it. The memory store
-/// every other test runs on lands a write before the next line reads it, and would let teardown drop
-/// a session with a write still owing without any test noticing.
-/// </remarks>
-internal sealed class ParkingTranscriptStore : ITranscriptStore
-{
-    private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private volatile bool _landed;
-
-    /// <summary>Gets a task that completes once the first append is parked.</summary>
-    public Task Parked => _entered.Task;
-
-    /// <summary>Gets whether the parked append has finished writing.</summary>
-    public bool Landed => _landed;
-
-    /// <summary>Lets the parked append finish.</summary>
-    public void Release() => _release.TrySetResult();
-
-    /// <inheritdoc />
-    public async ValueTask AppendAsync(
-        IReadOnlyList<CallMessage> messages, CancellationToken cancellationToken = default)
-    {
-        _entered.TrySetResult();
-        await _release.Task.WaitAsync(cancellationToken);
-        _landed = true;
-    }
-
-    /// <inheritdoc />
-    public ValueTask RewriteAsync(
-        string callId, int ordinal, ChatMessage content, CancellationToken cancellationToken = default)
-        => ValueTask.CompletedTask;
 }
 
 /// <summary>
