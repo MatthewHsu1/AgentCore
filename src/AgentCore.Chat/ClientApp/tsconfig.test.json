@@ -1,10 +1,24 @@
 {
   "compilerOptions": {
     "target": "ES2023",
-    "lib": ["ES2023", "DOM"],
+    "lib": [
+      "ES2023",
+      "DOM"
+    ],
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "types": ["node"],
+    // The renderer tests mount React, so this project compiles JSX and resolves the same "@"
+    // alias the app and the vendored components use.
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    },
+    "types": [
+      "node"
+    ],
     "strict": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
@@ -14,5 +28,9 @@
     "allowImportingTsExtensions": true,
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo"
   },
-  "include": ["src/transport.ts", "src/**/*.test.ts"]
+  "include": [
+    "src/runtime/transport.ts",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx"
+  ]
 }

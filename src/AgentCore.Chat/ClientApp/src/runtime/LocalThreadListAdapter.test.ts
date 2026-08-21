@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import { browserStorage } from "./LocalThreadListAdapter.ts";
 
 /** The smallest thing that behaves like `window.localStorage` for these tests. */

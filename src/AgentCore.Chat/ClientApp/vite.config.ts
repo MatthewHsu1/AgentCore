@@ -1,7 +1,8 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
+/// <reference types="vitest/config" />
 import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
 import { fileURLToPath, URL } from "node:url";
+import { defineConfig } from "vite";
 
 // The build writes into the C# project's wwwroot, which is embedded into AgentCore.Chat.dll. The
 // output is committed, so a consumer running `dotnet publish` needs no Node at all — see the
@@ -33,6 +34,15 @@ export default defineConfig({
         assetFileNames: "assets/[name].[ext]",
       },
     },
+  },
+  // Vitest reads this block, so the runner needs no config file of its own. It is a devDependency
+  // and therefore invisible to `dotnet publish` and to a machine with no Node, both of which build
+  // against the committed wwwroot.
+  test: {
+    // The renderer tests mount React, so they need a DOM. The old `node --test` runner could not
+    // even load a .tsx file.
+    environment: "happy-dom",
+    include: ["src/**/*.test.{ts,tsx}"],
   },
   server: {
     // The dev server serves the UI and forwards the API to the running host, so `npm run dev` and

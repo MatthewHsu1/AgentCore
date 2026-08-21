@@ -1,9 +1,10 @@
-import { AssistantRuntimeProvider, useRemoteThreadListRuntime } from "@assistant-ui/react";
 import { Thread } from "@/components/assistant-ui/thread";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AgentCoreSidebar } from "./runtime/AgentCoreSidebar";
+import { AssistantRuntimeProvider, useRemoteThreadListRuntime } from "@assistant-ui/react";
+import { GenerativeUiDataUI } from "./generative/GenerativeUiDataUI";
 import { useAgentCoreRuntime } from "./runtime/AgentCoreRuntime";
+import { AgentCoreSidebar } from "./runtime/AgentCoreSidebar";
 import { localThreadListAdapter } from "./runtime/LocalThreadListAdapter";
 
 /**
@@ -37,6 +38,7 @@ export function App() {
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
+      <GenerativeUiDataUI />
       <TooltipProvider>
         <SidebarProvider>
           <div className="flex h-dvh w-full">
