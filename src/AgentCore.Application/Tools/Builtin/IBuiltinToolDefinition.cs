@@ -14,15 +14,19 @@ public sealed record BuiltinToolPorts(
     IDocumentStorePort? Documents,
     IChatClientFactory? ChatClients);
 
-/// <summary>One tool AgentCore ships, describing itself.</summary>
-internal interface IBuiltinToolDefinition
+/// <summary>What every <c>uses:</c> name AgentCore ships has, whatever kind of thing it builds.</summary>
+internal interface IToolDefinition
 {
     /// <summary>The name a <c>uses:</c> field writes.</summary>
     string Name { get; }
 
     /// <summary>The sentence the model reads when the document writes no <c>description:</c>.</summary>
     string DefaultDescription { get; }
+}
 
+/// <summary>One tool AgentCore ships, describing itself.</summary>
+internal interface IBuiltinToolDefinition : IToolDefinition
+{
     /// <summary>Builds the tool.</summary>
     /// <param name="tool">The declaration the document holds.</param>
     /// <param name="ports">The adapters the host bound.</param>

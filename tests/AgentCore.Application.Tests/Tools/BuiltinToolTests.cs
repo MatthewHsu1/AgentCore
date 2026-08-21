@@ -7,6 +7,7 @@ using AgentCore.Application.Tests.Configuration;
 using AgentCore.Application.Tests.Tools.Fakes;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Tools.Builtin;
+using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
 
@@ -464,8 +465,11 @@ public sealed class BuiltinToolTests
     {
         private readonly BuiltinToolSource _source;
 
+        // The chat client factory is always bound: ui.draw is a shipped agent, and one declared in
+        // a document with no factory behind it fails the boot rather than building.
         public BuiltinFactory(IKnowledgeRetrievalPort? retrieval, IDocumentStorePort? documents)
-            => _source = new BuiltinToolSource(new BuiltinToolPorts(retrieval, documents, null));
+            => _source = new BuiltinToolSource(
+                new BuiltinToolPorts(retrieval, documents, new RecordingChatClientFactory()));
 
         public AITool? Create(ToolConfiguration tool)
         {

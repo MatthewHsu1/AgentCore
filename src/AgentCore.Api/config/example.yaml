@@ -128,13 +128,15 @@ tools:
   - { id: grep_docs,     kind: builtin, uses: knowledge.grep }
 
   # Draws something for the caller to look at, when the host has a screen. The agent asks for it in
-  # words; a second, private model call turns that into a tree of cards, charts, tables and buttons
+  # words; a private agent of its own turns that into a tree of cards, charts, tables and buttons
   # and sends it to the browser. The vocabulary never reaches this agent, so listing this tool costs
-  # it 239 bytes rather than the 19,355 the drawing vocabulary would.
+  # it 128 bytes rather than the 19,355 the drawing vocabulary would.
   #
   # A host with no screen — the telephone — answers the model that it cannot draw, and the agent
   # says it in words instead. Leave this out of the tools: list of an agent that should only speak.
-  - { id: draw,          kind: builtin, uses: ui.draw }
+  #
+  # Drawing on the primary reply model is wasted money. Point it at a cheaper providers.llm entry.
+  - { id: draw,          kind: builtin, uses: ui.draw, model: { ref: cheap } }
 
   - id: lookup_order
     kind: http
@@ -245,6 +247,7 @@ providers:
     - { kind: openai, model: gpt-4.1-mini, as: reply }      # the voice path, chosen on latency
     - { kind: openai, model: gpt-5.4-nano, as: fill }       # the extractor, chosen on null discipline
     - { kind: openai, model: gpt-4.1,      as: judge }      # evaluation only, chosen on judgement
+    - { kind: openai, model: gpt-4.1-nano, as: cheap }      # ui.draw only, chosen on price
   # Three planes, and they are not duplicates. call is the media pipe and owns the inbound route.
   # speech is recognition and synthesis. telephony is call control, which must outlive any one
   # media leg because a warm transfer creates a second one.

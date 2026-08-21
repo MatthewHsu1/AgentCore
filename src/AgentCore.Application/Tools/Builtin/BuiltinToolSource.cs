@@ -1,6 +1,7 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Tools.Shipped;
 
 namespace AgentCore.Application.Tools.Builtin;
 
@@ -16,7 +17,12 @@ public sealed class BuiltinToolSource : IToolSource
             [BuiltinToolNames.KnowledgeRead] = new KnowledgeReadDefinition(),
             [BuiltinToolNames.KnowledgeList] = new KnowledgeListDefinition(),
             [BuiltinToolNames.KnowledgeGrep] = new KnowledgeGrepDefinition(),
-            [BuiltinToolNames.Draw] = new DrawingToolDefinition(),
+        };
+
+    private static readonly Dictionary<string, IShippedAgentDefinition> ShippedAgents =
+        new(StringComparer.Ordinal)
+        {
+            [BuiltinToolNames.Draw] = new DrawingAgentDefinition(),
         };
 
     private readonly BuiltinToolPorts _ports;
@@ -40,19 +46,25 @@ public sealed class BuiltinToolSource : IToolSource
 
         foreach (var declared in context.DeclarationsOf(ToolKind.Builtin))
         {
-            if (declared.Uses is not { } uses || !Definitions.TryGetValue(uses, out var definition))
+            // Built eagerly, whichever table serves it: a definition reports an unbound port by
+            // throwing, and that failure belongs on the boot rather than on the first call.
+            var uses = declared.Uses;
+
+            if (uses is not null && ShippedAgents.TryGetValue(uses, out var shipped))
+            {
+                var describedAgent = Described(declared, shipped);
+                var agent = ShippedAgentBuilder.Build(shipped, describedAgent, _ports);
+
+                registrations.Add(new ToolRegistration(declared.Id, describedAgent.Description!, () => agent));
+                continue;
+            }
+
+            if (uses is null || !Definitions.TryGetValue(uses, out var definition))
             {
                 throw UnknownName(declared);
             }
 
-            // Resolved once, so the value the boot validates and the value AIFunctionFactory
-            // advertises to the model are the same string.
-            var resolved = declared.Description is null
-                ? declared with { Description = definition.DefaultDescription }
-                : declared;
-
-            // Built eagerly: a definition reports an unbound port by throwing, and that failure
-            // belongs on the boot rather than on the first call.
+            var resolved = Described(declared, definition);
             var built = definition.Build(resolved, _ports);
 
             registrations.Add(new ToolRegistration(declared.Id, resolved.Description!, () => built));
@@ -60,6 +72,21 @@ public sealed class BuiltinToolSource : IToolSource
 
         return ValueTask.FromResult<IReadOnlyList<ToolRegistration>>(registrations);
     }
+
+    /// <summary>
+    /// Applies the one description rule: what the document wrote, else what the source ships.
+    /// </summary>
+    /// <param name="declared">The declaration the document holds.</param>
+    /// <param name="definition">The shipped thing that name serves.</param>
+    /// <returns>The declaration with a description on it.</returns>
+    /// <remarks>
+    /// Resolved here and nowhere else, so the value the boot validates and the value
+    /// <c>AIFunctionFactory</c> advertises to the model are the same string. Every builder calls
+    /// this rather than falling back on its own, and calling it twice on one declaration is a
+    /// no-op.
+    /// </remarks>
+    internal static ToolConfiguration Described(ToolConfiguration declared, IToolDefinition definition)
+        => declared.Description is null ? declared with { Description = definition.DefaultDescription } : declared;
 
     internal static ConfigurationLoadException Unbound(ToolConfiguration tool, string uses, string port)
         => ToolSourceError.Fail(
@@ -69,5 +96,5 @@ public sealed class BuiltinToolSource : IToolSource
     private static ConfigurationLoadException UnknownName(ToolConfiguration tool)
         => ToolSourceError.Fail(
             $"the tool '{tool.Id}' is kind: builtin and uses: '{tool.Uses}', which AgentCore does "
-            + $"not ship. This release ships {string.Join(", ", Definitions.Keys)}.");
+            + $"not ship. This release ships {string.Join(", ", Definitions.Keys.Concat(ShippedAgents.Keys))}.");
 }

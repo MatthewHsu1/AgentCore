@@ -11,14 +11,8 @@ namespace AgentCore.Application.Tools.Shipped;
 /// host's own <c>providers.llm[].as</c> entries and a shipped agent cannot know them. The document
 /// names one with <c>model:</c>, or names none and the host default applies.
 /// </remarks>
-internal interface IShippedAgentDefinition
+internal interface IShippedAgentDefinition : IToolDefinition
 {
-    /// <summary>The name a <c>uses:</c> field writes.</summary>
-    string Name { get; }
-
-    /// <summary>The sentence the outer model reads when the document writes no <c>description:</c>.</summary>
-    string DefaultDescription { get; }
-
     /// <summary>The instructions. They are the contract, so a document never overrides them.</summary>
     string Instructions { get; }
 

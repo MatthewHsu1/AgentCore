@@ -71,7 +71,7 @@ internal static class ExampleDocument
           - { id: read_doc,      kind: builtin, uses: knowledge.read }
           - { id: list_docs,     kind: builtin, uses: knowledge.list }
           - { id: grep_docs,     kind: builtin, uses: knowledge.grep }
-          - { id: draw,          kind: builtin, uses: ui.draw }
+          - { id: draw,          kind: builtin, uses: ui.draw, model: { ref: cheap } }
           - id: lookup_order
             kind: http
             description: Read one order by its identifier.
@@ -133,6 +133,7 @@ internal static class ExampleDocument
             - { kind: openai, model: gpt-4.1-mini, as: reply }      # the voice path, chosen on latency
             - { kind: openai, model: gpt-5.4-nano, as: fill }       # the extractor, chosen on null discipline
             - { kind: openai, model: gpt-4.1,      as: judge }      # evaluation only, chosen on judgement
+            - { kind: openai, model: gpt-4.1-nano, as: cheap }      # ui.draw only, chosen on price
           call:      { kind: telnyx-relay }        # the pipe: who carries the call and owns /v1/call
           speech:                                  # the ears and the mouth, named one role at a time
             stt: { kind: telnyx-relay }            # recognition. Bundled here, so it matches call
@@ -319,7 +320,10 @@ internal static class ExampleDocument
             {
               "id": "draw",
               "kind": "builtin",
-              "uses": "ui.draw"
+              "uses": "ui.draw",
+              "model": {
+                "ref": "cheap"
+              }
             },
             {
               "id": "lookup_order",
@@ -483,6 +487,11 @@ internal static class ExampleDocument
                 "kind": "openai",
                 "model": "gpt-4.1",
                 "as": "judge"
+              },
+              {
+                "kind": "openai",
+                "model": "gpt-4.1-nano",
+                "as": "cheap"
               }
             ],
             "call": {

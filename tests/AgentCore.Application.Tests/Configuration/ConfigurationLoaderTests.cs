@@ -143,11 +143,12 @@ public sealed class ConfigurationLoaderTests
     public void Example_BindsProviders()
     {
         Assert.NotNull(Example.Providers);
-        Assert.Equal(3, Example.Providers!.Llm.Count);
+        Assert.Equal(4, Example.Providers!.Llm.Count);
         Assert.Equal("gpt-4.1-mini", Example.Providers.Llm[0].Model);
         Assert.Equal("reply", Example.Providers.Llm[0].As);
         Assert.Equal("fill", Example.Providers.Llm[1].As);
         Assert.Equal("judge", Example.Providers.Llm[2].As);
+        Assert.Equal("cheap", Example.Providers.Llm[3].As);
         Assert.Equal("telnyx-relay", Example.Providers.Speech!.Stt.Kind);
         Assert.Equal("telnyx-relay", Example.Providers.Speech.Tts.Kind);
         Assert.Equal("telnyx", Example.Providers.Telephony!.Kind);

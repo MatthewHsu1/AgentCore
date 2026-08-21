@@ -622,3 +622,85 @@ internal sealed class RecordingRenderPort : IRenderPort
 
     public void Publish(string name, object data) => Published.Add((name, data));
 }
+
+/// <summary>
+/// A drawing model: its first answer is one call to <c>present</c> carrying a fixed tree, and every
+/// answer after that is plain text.
+/// </summary>
+/// <remarks>
+/// Enough to drive a real <c>ChatClientAgent</c> end to end. The agent's own tool loop invokes
+/// <c>present</c>, feeds it the result, and the text answer is what ends the run.
+/// </remarks>
+internal sealed class PresentCallingChatClient : IChatClient
+{
+    private readonly string _tree;
+    private int _calls;
+
+    public PresentCallingChatClient(string tree) => _tree = tree;
+
+    /// <summary>Gets how many requests this client answered.</summary>
+    public int Calls => Volatile.Read(ref _calls);
+
+    public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        var index = Interlocked.Increment(ref _calls);
+        await Task.Yield();
+
+        var responseId = Guid.NewGuid().ToString("N");
+
+        if (index > 1)
+        {
+            yield return new ChatResponseUpdate(ChatRole.Assistant, "drawn.")
+            {
+                ResponseId = responseId,
+                MessageId = responseId,
+            };
+            yield break;
+        }
+
+        yield return new ChatResponseUpdate(
+            ChatRole.Assistant,
+            [new FunctionCallContent(
+                $"call_{index}",
+                "present",
+                new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["tree"] = JsonSerializer.Deserialize<JsonElement>(_tree),
+                })])
+        {
+            ResponseId = responseId,
+            MessageId = responseId,
+        };
+    }
+
+    public async Task<ChatResponse> GetResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        List<ChatResponseUpdate> updates = [];
+        await foreach (var update in GetStreamingResponseAsync(messages, options, cancellationToken)
+            .ConfigureAwait(false))
+        {
+            updates.Add(update);
+        }
+
+        return updates.ToChatResponse();
+    }
+
+    public object? GetService(Type serviceType, object? serviceKey = null)
+    {
+        ArgumentNullException.ThrowIfNull(serviceType);
+        return serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
+    }
+
+    public void Dispose()
+    {
+        // Nothing to release.
+    }
+}

@@ -8,7 +8,7 @@ import {
 import { renderGenerativeUI } from "@assistant-ui/react-generative-ui";
 import type { FC } from "react";
 
-/** The data-part name the server publishes drawings under. It matches `DrawingTool.RendererName`. */
+/** The data-part name the server publishes drawings under. It matches `PresentTool.RendererName`. */
 export const GENERATIVE_UI_PART = "generative-ui";
 
 /**

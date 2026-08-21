@@ -64,7 +64,7 @@ public sealed class DrawingWireTests
             new DrawingChatClient(),
             configure: options => options.Bind("DrawIt", (_, _) =>
             {
-                // Exactly what DrawingTool does: find the call's screen and push to it.
+                // Exactly what PresentTool does: find the call's screen and push to it.
                 CallRenderScope.Current?.Publish("generative-ui", new { title = "Q3 revenue" });
                 return ValueTask.FromResult<object?>("drew a Card; buttons: none");
             }));

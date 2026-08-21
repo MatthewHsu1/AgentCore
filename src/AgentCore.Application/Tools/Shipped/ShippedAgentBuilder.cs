@@ -38,6 +38,7 @@ internal static class ShippedAgentBuilder
                 + "reads IChatClientFactory, and no adapter binds that port. Call options.UseChatClients(...).");
         }
 
+        var described = BuiltinToolSource.Described(tool, definition);
         var rounds = tool.MaxRounds ?? definition.DefaultMaxRounds;
 
         var agent = new ChatClientAgent(
@@ -60,7 +61,7 @@ internal static class ShippedAgentBuilder
         return agent.AsAIFunction(new AIFunctionFactoryOptions
         {
             Name = tool.Id,
-            Description = tool.Description ?? definition.DefaultDescription,
+            Description = described.Description!,
             ExcludeResultSchema = true,
         });
     }

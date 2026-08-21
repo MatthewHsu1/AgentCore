@@ -12,7 +12,7 @@ internal static class DrawingTree
     /// This is the security boundary the browser enforces as well: a <c>$type</c> outside the list
     /// renders nothing. It is checked here so the model is told, rather than the caller being shown
     /// a hole. It must agree with <c>vocabulary.md</c> and with the library the browser renders
-    /// with; <c>DrawingToolTests.TheVocabulary_TeachesEveryComponentTheValidatorAllows</c> and
+    /// with; <c>DrawingAgentTests.TheVocabulary_TeachesEveryComponentTheValidatorAllows</c> and
     /// <c>GenerativeUiDataUI.test.tsx</c> pin both.
     /// </remarks>
     internal static readonly string[] AllowedComponents =
