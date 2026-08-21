@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using Microsoft.Extensions.AI;
 
@@ -612,4 +613,12 @@ internal sealed class ThrowingChatClient : IChatClient
     {
         // Nothing to release.
     }
+}
+
+/// <summary>A screen that records everything it was asked to show, in the order it was shown.</summary>
+internal sealed class RecordingRenderPort : IRenderPort
+{
+    public List<(string Name, object Data)> Published { get; } = [];
+
+    public void Publish(string name, object data) => Published.Add((name, data));
 }

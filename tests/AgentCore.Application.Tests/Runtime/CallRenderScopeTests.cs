@@ -200,11 +200,4 @@ public sealed class CallRenderScopeTests
 
         public IRenderPort? Seen { get; private set; }
     }
-
-    private sealed class RecordingRenderPort : IRenderPort
-    {
-        public List<(string Name, object Data)> Published { get; } = [];
-
-        public void Publish(string name, object data) => Published.Add((name, data));
-    }
 }
