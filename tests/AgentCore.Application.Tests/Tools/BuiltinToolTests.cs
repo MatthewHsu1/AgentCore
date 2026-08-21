@@ -652,4 +652,37 @@ public sealed class BuiltinToolTests
 
         Assert.Contains("knowledge.invent", failure.Message, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The schema keeps <c>model:</c> and <c>maxRounds:</c> to <c>kind: builtin</c>, and this is the
+    /// half of the guard only the source can hold: whether a <c>uses:</c> name is a shipped agent or
+    /// a plain function is known here. On a plain function either key boots clean and changes
+    /// nothing, which decisions 4 and 8 reject.
+    /// </summary>
+    [Theory]
+    [InlineData("model")]
+    [InlineData("maxRounds")]
+    public async Task AShippedAgentDialOnAPlainBuiltin_FailsTheBoot(string dial)
+    {
+        var declared = Search with
+        {
+            Model = dial == "model" ? new ModelReference { Ref = "cheap" } : null,
+            MaxRounds = dial == "maxRounds" ? 4 : null,
+        };
+
+        BuiltinToolSource source = new(new BuiltinToolPorts(new MapKnowledgePort(), null, null));
+        var context = new ToolSourceContext(new AgentCoreConfiguration
+        {
+            ApiVersion = "agentcore/v1",
+            Name = "test",
+            Tools = [declared],
+        });
+
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(async () =>
+            await source.ProvideAsync(context, TestContext.Current.CancellationToken));
+
+        Assert.Contains(Search.Id, failure.Message, StringComparison.Ordinal);
+        Assert.Contains(dial, failure.Message, StringComparison.Ordinal);
+        Assert.Contains(BuiltinToolNames.Draw, failure.Message, StringComparison.Ordinal);
+    }
 }

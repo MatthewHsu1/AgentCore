@@ -63,9 +63,14 @@ internal static class PresentTool
                 return ToolErrorResult.Create(toolId, $"that tree is not valid: {fault} Fix it and call {Name} again.");
             }
 
+            // The receipt is read off the tree first so that Publish is the last statement that can
+            // run: anything that fails after it would leave the drawing on the caller's screen and
+            // still answer the model an error.
+            var receipt = DrawingReceipt.Describe(node);
+
             screen.Publish(RendererName, node);
 
-            return new JsonObject { ["drew"] = DrawingReceipt.Describe(node) };
+            return new JsonObject { ["drew"] = receipt };
         }
         catch (OperationCanceledException)
         {

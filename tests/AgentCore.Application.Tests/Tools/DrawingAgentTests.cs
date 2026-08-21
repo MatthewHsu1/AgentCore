@@ -22,7 +22,10 @@ namespace AgentCore.Application.Tests.Tools;
 /// 19,355 bytes as a JSON Schema and would ride every request of every turn; here it is prose in the
 /// drawing agent's instructions, and the calling agent's tool is one string. Retrying a tree that
 /// does not validate belongs to the agent's own tool loop, so <see cref="PresentToolTests"/> owns
-/// what a bad tree answers and <see cref="ShippedAgentBuilderTests"/> owns the round cap.
+/// what one bad tree answers in isolation, and the retry itself is only covered here, end to end.
+/// <see cref="ShippedAgentBuilderTests"/> owns the round cap as a mechanism, over a fake definition;
+/// the cover for <see cref="DrawingAgentDefinition.DefaultMaxRounds"/> being three, and for what a
+/// spent cap answers the calling agent, is here and nowhere else.
 /// </remarks>
 public sealed class DrawingAgentTests
 {
@@ -127,6 +130,25 @@ public sealed class DrawingAgentTests
         await Draw(trees);
 
         Assert.Equal(drawn, screen.Published.Count == 1);
+    }
+
+    [Fact]
+    public async Task ADrawingAgentThatSpendsEveryRound_AnswersASection87ErrorAndNotAnEmptyString()
+    {
+        // AsAIFunction hands back the agent's final text, and the response the round cap stops on
+        // holds only the tool call it refused to invoke, so the text is "". Handed that, the calling
+        // agent would tell the caller their drawing is on screen.
+        RecordingRenderPort screen = new();
+        using var scope = CallRenderScope.Enter(screen);
+
+        var result = await Draw("""{ "$type": "Wombat" }""", """{ "$type": "Wombat" }""", """{ "$type": "Wombat" }""", Card);
+
+        Assert.Empty(screen.Published);
+
+        var error = Assert.IsType<JsonObject>(result);
+        Assert.True(ToolErrorResult.IsError(error));
+        Assert.Equal("draw", error[ToolErrorResult.ToolProperty]!.GetValue<string>());
+        Assert.Contains("3", error[ToolErrorResult.MessageProperty]!.GetValue<string>(), StringComparison.Ordinal);
     }
 
     [Fact]

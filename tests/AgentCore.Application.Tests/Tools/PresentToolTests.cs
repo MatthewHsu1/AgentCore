@@ -102,6 +102,29 @@ public sealed class PresentToolTests
         Assert.Contains("Button", message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// <c>$key</c> is reserved, so <see cref="DrawingTree.Validate"/>'s prop loop never looks inside
+    /// it, while the receipt walks every key but <c>$action</c> and does. Reading the <c>type</c>
+    /// there unguarded threw <see cref="InvalidOperationException"/> from inside the publish block —
+    /// after the tree was already on the caller's screen.
+    /// </summary>
+    [Fact]
+    public async Task Present_ANonStringActionTypeUnderAReservedKey_FinishesWithoutThrowing()
+    {
+        RecordingRenderPort screen = new();
+        using var scope = CallRenderScope.Enter(screen);
+
+        var result = await Invoke(
+            PresentTool.Create("draw"), """{ "$type": "Card", "$key": { "$action": { "type": 42 } } }""");
+
+        // The validator accepts this tree, so the tool must finish it: one publish, one receipt, and
+        // no button named off a type that is not a string. What must never happen again is the
+        // half-done state — a published tree and an error result for the same call.
+        Assert.False(result.ContainsKey(ToolErrorResult.ErrorProperty));
+        Assert.Single(screen.Published);
+        Assert.Contains("buttons: none", result["drew"]!.GetValue<string>(), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void TheTool_AdvertisesNoResultSchema()
     {

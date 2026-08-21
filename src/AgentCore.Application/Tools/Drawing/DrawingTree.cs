@@ -160,12 +160,16 @@ internal static class DrawingTree
     /// <summary>
     /// Reads a node as a string without throwing.
     /// </summary>
+    /// <param name="node">The node to read.</param>
+    /// <returns>The string it holds, or <see langword="null"/> when it holds anything else.</returns>
     /// <remarks>
     /// A model can send a <c>$type</c> or <c>$action.type</c> of any JSON kind — a number, a bool, an
     /// object. <see cref="JsonNode.GetValue{T}"/> throws <see cref="InvalidOperationException"/> for
     /// any of those, and section 8.7 forbids that path: the wrong kind is a fault the model can act
-    /// on, not a reason to end the turn.
+    /// on, not a reason to end the turn. <see cref="DrawingReceipt"/> reads the same fields back off
+    /// a tree this validator has already accepted, and reserved keys go unvalidated, so it reads
+    /// them through here too.
     /// </remarks>
-    private static string? ReadString(JsonNode? node)
+    internal static string? ReadString(JsonNode? node)
         => node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
 }

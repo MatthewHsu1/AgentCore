@@ -377,6 +377,27 @@
               "agent"
             ]
           }
+        },
+        {
+          "if": {
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "not": {
+                  "const": "builtin"
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "model": false,
+              "maxRounds": false
+            },
+            "$comment": "Only the kind: builtin path reads model and maxRounds (ShippedAgentBuilder). A kind: agent tool takes its model from its agents.items entry, and http and binding call no model at all, so either key there would be accepted and then ignored."
+          }
         }
       ]
     },

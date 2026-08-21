@@ -64,6 +64,14 @@ public sealed class BuiltinToolSource : IToolSource
                 throw UnknownName(declared);
             }
 
+            if (UnreadDial(declared) is { } dial)
+            {
+                throw ToolSourceError.Fail(
+                    $"the tool '{declared.Id}' is kind: builtin and uses: '{uses}', which is a plain function "
+                    + $"and reads no {dial}. Take the key out, or point uses: at a shipped agent "
+                    + $"({string.Join(", ", ShippedAgents.Keys)}).");
+            }
+
             var resolved = Described(declared, definition);
             var built = definition.Build(resolved, _ports);
 
@@ -92,6 +100,18 @@ public sealed class BuiltinToolSource : IToolSource
         => ToolSourceError.Fail(
             $"the tool '{tool.Id}' is kind: builtin and uses: '{uses}', which reads {port}, and no "
             + "adapter binds that port. Bind one, or take the tool out of the document.");
+
+    /// <summary>Names a dial the document set on a built-in that has nothing to spend it on.</summary>
+    /// <param name="tool">The declaration the document holds.</param>
+    /// <returns>The key, or <see langword="null"/> when the declaration sets neither.</returns>
+    /// <remarks>
+    /// The schema keeps <c>model:</c> and <c>maxRounds:</c> to <c>kind: builtin</c>, which is as far
+    /// as it can go: whether one <c>uses:</c> name is a shipped agent is known here and nowhere
+    /// else. Accepting either on a plain function built-in would boot clean and change nothing,
+    /// which is the silent failure decisions 4 and 8 reject.
+    /// </remarks>
+    private static string? UnreadDial(ToolConfiguration tool)
+        => tool.Model is not null ? "model:" : tool.MaxRounds is not null ? "maxRounds:" : null;
 
     private static ConfigurationLoadException UnknownName(ToolConfiguration tool)
         => ToolSourceError.Fail(

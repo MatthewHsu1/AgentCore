@@ -1,6 +1,9 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Tests.Runtime;
+using AgentCore.Application.Tools;
 using AgentCore.Application.Tools.Builtin;
 using AgentCore.Application.Tools.Shipped;
 using AgentCore.TestSupport;
@@ -130,6 +133,61 @@ public sealed class ShippedAgentBuilderTests
             TestContext.Current.CancellationToken);
 
         Assert.Equal(FakeDefinition.DefaultRounds, calls);
+    }
+
+    /// <summary>
+    /// The spec's failure rules put a spent round cap alongside a dead MCP server: a section 8.7
+    /// error result, never a throw and never silence. <c>AsAIFunction</c> on its own returns the
+    /// final text of the response the cap stopped on, and
+    /// <see cref="PresentCallingChatClient"/> asks for a tool on every request including the
+    /// tool-less last one, so that text is the empty string an outer agent reads as success.
+    /// </summary>
+    [Fact]
+    public async Task Build_TheInnerLoopSpendsEveryRound_AnswersAnErrorNamingTheToolAndTheCap()
+    {
+        const string Tree = """{ "$type": "Card" }""";
+
+        var definition = new FakeDefinition(
+            innerTools: [AIFunctionFactory.Create((JsonElement tree) => "ok", "present")]);
+
+        var function = ShippedAgentBuilder.Build(
+            definition,
+            Declared("draw") with { MaxRounds = 2 },
+            new BuiltinToolPorts(
+                null, null, new RecordingChatClientFactory(new PresentCallingChatClient(Tree, Tree, Tree))));
+
+        var result = await function.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "go" }),
+            TestContext.Current.CancellationToken);
+
+        var error = Assert.IsType<JsonObject>(result);
+        Assert.True(ToolErrorResult.IsError(error));
+        Assert.Equal("draw", error[ToolErrorResult.ToolProperty]!.GetValue<string>());
+        Assert.Contains("2", error[ToolErrorResult.MessageProperty]!.GetValue<string>(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Reaching the cap is not the same as being cut off mid-sentence: MEAI spends one last request
+    /// with the tools removed, so a model that will answer in words still gets the last word.
+    /// <see cref="LoopingToolCallingChatClient"/> answers <c>{}</c> exactly when it is offered no
+    /// tool, which is what makes that round visible here. Words are handed back untouched.
+    /// </summary>
+    [Fact]
+    public async Task Build_TheInnerAgentAnswersTheToollessLastRound_HandsThoseWordsBackUntouched()
+    {
+        var definition = new FakeDefinition(
+            innerTools: [AIFunctionFactory.Create(() => "keep going", "loop_tool")]);
+
+        var function = ShippedAgentBuilder.Build(
+            definition,
+            Declared("draw") with { MaxRounds = 2 },
+            new BuiltinToolPorts(null, null, new RecordingChatClientFactory(new LoopingToolCallingChatClient())));
+
+        var result = await function.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "go" }),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("{}", Assert.IsType<JsonElement>(result).GetString());
     }
 
     /// <summary>A shipped agent whose missing port and inner tools a test controls, so these tests can

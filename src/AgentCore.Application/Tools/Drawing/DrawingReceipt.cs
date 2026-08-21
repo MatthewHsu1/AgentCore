@@ -19,7 +19,7 @@ internal static class DrawingReceipt
         List<string> actions = [];
         Collect(tree, actions);
 
-        var root = tree["$type"]?.GetValue<string>() ?? "tree";
+        var root = DrawingTree.ReadString(tree["$type"]) ?? "tree";
 
         return actions.Count == 0
             ? $"drew a {root}; buttons: none"
@@ -39,8 +39,11 @@ internal static class DrawingReceipt
                 return;
 
             case JsonObject item:
+                // Through DrawingTree.ReadString, because this walks reserved keys the validator
+                // skipped: nothing inside a $key was ever checked, and a $action.type of any other
+                // JSON kind would otherwise throw here.
                 if (item["$action"] is JsonObject action
-                    && action["type"]?.GetValue<string>() is { Length: > 0 } type)
+                    && DrawingTree.ReadString(action["type"]) is { Length: > 0 } type)
                 {
                     var payload = string.Join(
                         " ",
