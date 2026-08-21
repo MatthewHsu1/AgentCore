@@ -33,7 +33,7 @@ public sealed class DrawingToolTests
     [Fact]
     public void TheToolTheAgentSees_TakesOneStringAndCarriesNoVocabulary()
     {
-        var tool = DrawingTool.Create(Declaration, static () => null);
+        var tool = DrawingTool.Create(Declaration, null);
 
         var schema = tool.JsonSchema.ToString();
 
@@ -59,7 +59,7 @@ public sealed class DrawingToolTests
         // by running it against the pinned 0.0.15.
         const int ShippedSchemaBytes = 19_355;
 
-        var schema = DrawingTool.Create(Declaration, static () => null).JsonSchema.ToString();
+        var schema = DrawingTool.Create(Declaration, null).JsonSchema.ToString();
 
         Assert.True(
             schema.Length * 10 < ShippedSchemaBytes,
@@ -178,7 +178,7 @@ public sealed class DrawingToolTests
         // they can see one.
         var tool = DrawingTool.Create(
             Declaration,
-            () => new SingleChatClientFactory(new PresentingChatClient("""{"$type":"Text","value":"x"}""")));
+            new SingleChatClientFactory(new PresentingChatClient("""{"$type":"Text","value":"x"}""")));
 
         var result = Read(await tool.InvokeAsync(
             new AIFunctionArguments { ["request"] = "draw a chart" }, TestContext.Current.CancellationToken));
@@ -194,7 +194,7 @@ public sealed class DrawingToolTests
         // telephone.
         using var screen = RecordingRenderPort.Open(out var port);
 
-        var tool = DrawingTool.Create(Declaration, () => new SingleChatClientFactory(new ThrowingChatClient()));
+        var tool = DrawingTool.Create(Declaration, new SingleChatClientFactory(new ThrowingChatClient()));
 
         var result = Read(await tool.InvokeAsync(
             new AIFunctionArguments { ["request"] = "draw" }, TestContext.Current.CancellationToken));
@@ -210,7 +210,7 @@ public sealed class DrawingToolTests
         using var screen = RecordingRenderPort.Open(out var port);
 
         var client = new PresentingChatClient("""{"$type":"Text","value":"x"}""");
-        var tool = DrawingTool.Create(Declaration, () => new SingleChatClientFactory(client));
+        var tool = DrawingTool.Create(Declaration, new SingleChatClientFactory(client));
 
         var result = Read(await tool.InvokeAsync(
             new AIFunctionArguments { ["request"] = "  " }, TestContext.Current.CancellationToken));
@@ -245,7 +245,7 @@ public sealed class DrawingToolTests
     {
         using var scope = RecordingRenderPort.Open(out var port);
 
-        var tool = DrawingTool.Create(Declaration, () => new SingleChatClientFactory(client));
+        var tool = DrawingTool.Create(Declaration, new SingleChatClientFactory(client));
 
         var result = Read(await tool.InvokeAsync(
             new AIFunctionArguments { ["request"] = "draw the thing" },

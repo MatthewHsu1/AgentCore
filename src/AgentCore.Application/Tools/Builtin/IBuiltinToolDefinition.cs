@@ -8,11 +8,11 @@ namespace AgentCore.Application.Tools.Builtin;
 /// <summary>The adapters a built-in may need. A built-in uses none, one, or two of them.</summary>
 /// <param name="Retrieval">The adapter <c>knowledge.search</c> ranks with, or <see langword="null"/>.</param>
 /// <param name="Documents">The adapter the three document built-ins open, or <see langword="null"/>.</param>
-/// <param name="ChatClients">Finds the chat client factory <c>ui.draw</c> draws with.</param>
+/// <param name="ChatClients">The factory a shipped agent runs on, or <see langword="null"/> when the host bound none.</param>
 public sealed record BuiltinToolPorts(
     IKnowledgeRetrievalPort? Retrieval,
     IDocumentStorePort? Documents,
-    Func<IChatClientFactory?> ChatClients);
+    IChatClientFactory? ChatClients);
 
 /// <summary>One tool AgentCore ships, describing itself.</summary>
 internal interface IBuiltinToolDefinition

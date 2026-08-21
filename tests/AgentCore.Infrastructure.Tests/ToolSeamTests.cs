@@ -97,7 +97,7 @@ public sealed class ToolSeamTests
         // Step two: build the sources over the resolved values.
         var registry = await ToolRegistryBuilder.BuildAsync(
             [
-                new BuiltinToolSource(new BuiltinToolPorts(store, store, static () => null)),
+                new BuiltinToolSource(new BuiltinToolPorts(store, store, null)),
                 new HttpToolSource(client, secrets),
                 new BindingToolSource(bindings),
             ],

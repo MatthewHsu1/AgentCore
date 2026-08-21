@@ -12,7 +12,7 @@ internal static class ToolRegistryStartup
     /// <param name="options">The options the host filled.</param>
     /// <param name="startup">The loaded document and the resolved secrets.</param>
     /// <param name="knowledge">The two ports the knowledge registry opened, each one or <see langword="null"/>.</param>
-    /// <param name="chatClients">Finds the chat client factory <c>ui.draw</c> draws with.</param>
+    /// <param name="chatClients">The factory <c>ui.draw</c> draws with, or <see langword="null"/> when the host bound none.</param>
     /// <param name="configuration">The loaded document.</param>
     /// <param name="cancellationToken">Cancels the discovery.</param>
     /// <returns>The registry.</returns>
@@ -20,7 +20,7 @@ internal static class ToolRegistryStartup
         AgentCoreOptions options,
         AgentCoreStartup startup,
         (IKnowledgeRetrievalPort? Search, IDocumentStorePort? Documents) knowledge,
-        Func<IChatClientFactory?> chatClients,
+        IChatClientFactory? chatClients,
         AgentCoreConfiguration configuration,
         CancellationToken cancellationToken)
     {

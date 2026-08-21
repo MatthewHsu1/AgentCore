@@ -573,6 +573,30 @@ public sealed class AddAgentCoreTests
         Assert.Equal("awaited", turn.ReplyText);
     }
 
+    [Fact]
+    public async Task AToolSource_SeesTheChatClientFactoryAlreadyBuilt()
+    {
+        // The seam that builds the factory only runs once, so a null capture here means the tools
+        // were built before it ran — exactly the ordering ui.draw depends on.
+        IChatClientFactory? builtFactory = null;
+        IChatClientFactory? seenWhenToolsWereBuilt = null;
+
+        using var provider = await BuildAsync(OneAgentYaml, options =>
+        {
+            options.UseChatClients((_, _) =>
+            {
+                builtFactory = new RoutingChatClientFactory(new FragmentingChatClient("hello"));
+                return ValueTask.FromResult(builtFactory);
+            });
+
+            options.AddToolSource(_ => new SpyToolSource(() => seenWhenToolsWereBuilt = builtFactory));
+        });
+
+        Assert.NotNull(provider.GetRequiredService<CompiledAgent>());
+        Assert.NotNull(seenWhenToolsWereBuilt);
+        Assert.Same(builtFactory, seenWhenToolsWereBuilt);
+    }
+
     // -------------------------------------------------------------------------------------------
     // The seams the host binds.
     // -------------------------------------------------------------------------------------------
@@ -1657,5 +1681,16 @@ public sealed class AddAgentCoreTests
 
         public ValueTask CloseAsync(string callId, CancellationToken cancellationToken = default)
             => ValueTask.CompletedTask;
+    }
+
+    /// <summary>A tool source that serves nothing, and tells a test when it was asked to.</summary>
+    private sealed class SpyToolSource(Action onProvide) : IToolSource
+    {
+        public ValueTask<IReadOnlyList<ToolRegistration>> ProvideAsync(
+            ToolSourceContext context, CancellationToken cancellationToken = default)
+        {
+            onProvide();
+            return ValueTask.FromResult<IReadOnlyList<ToolRegistration>>([]);
+        }
     }
 }

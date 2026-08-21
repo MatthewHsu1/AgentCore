@@ -24,10 +24,9 @@ internal readonly record struct CompiledGraph(
 /// <summary>Step 5: compile the document once, so every call shares the result.</summary>
 internal static class CompilationStartup
 {
-    /// <summary>Asks the host for its chat clients, then compiles the document against them.</summary>
+    /// <summary>Compiles the document against the tools and the chat clients already built.</summary>
     /// <param name="configuration">The loaded document.</param>
-    /// <param name="options">The options the host filled. It carries the chat client seam.</param>
-    /// <param name="startup">The loaded document and the resolved secrets, as the chat client seam reads them.</param>
+    /// <param name="chatClients">The factory step 3c built, which the compile table asks for every agent and for the extractor.</param>
     /// <param name="tools">The registry step 4 built.</param>
     /// <param name="transcript">The store 1 backing step 4b opened. One store serves every call.</param>
     /// <param name="evaluators">
@@ -35,27 +34,16 @@ internal static class CompilationStartup
     /// compiled agent, so it is bound here rather than on the session factory.
     /// </param>
     /// <param name="loggers">The factory the guard evaluator takes its logger from.</param>
-    /// <param name="cancellationToken">Cancels the chat client build.</param>
     /// <returns>The compiled graph, and the seams that made it.</returns>
-    /// <exception cref="InvalidOperationException">The options bind no chat client adapter.</exception>
     /// <exception cref="ConfigurationLoadException">The document does not compile.</exception>
-    internal static async ValueTask<CompiledGraph> CompileAsync(
+    internal static ValueTask<CompiledGraph> CompileAsync(
         AgentCoreConfiguration configuration,
-        AgentCoreOptions options,
-        AgentCoreStartup startup,
+        IChatClientFactory chatClients,
         ToolRegistry tools,
         ITranscriptStore transcript,
         EvaluatorRegistry evaluators,
-        ILoggerFactory loggers,
-        CancellationToken cancellationToken)
+        ILoggerFactory loggers)
     {
-        var chatClients = await (options.ChatClients
-            ?? throw new InvalidOperationException(
-                "AddAgentCoreAsync binds no chat client adapter. Call options.UseChatClients(...), because the "
-                + "compile table asks it for every agent and for the extractor."))
-            .Invoke(startup, cancellationToken)
-            .ConfigureAwait(false);
-
         GuardEvaluator guards = new(configuration.Guards, loggers.CreateLogger<GuardEvaluator>());
         CompiledAgentRegistry registry = new();
 
@@ -70,6 +58,6 @@ internal static class CompilationStartup
                 StateSnapshot = CallStateScope.Snapshot,
             });
 
-        return new CompiledGraph(chatClients, guards, registry, compiled);
+        return ValueTask.FromResult(new CompiledGraph(chatClients, guards, registry, compiled));
     }
 }

@@ -465,7 +465,7 @@ public sealed class BuiltinToolTests
         private readonly BuiltinToolSource _source;
 
         public BuiltinFactory(IKnowledgeRetrievalPort? retrieval, IDocumentStorePort? documents)
-            => _source = new BuiltinToolSource(new BuiltinToolPorts(retrieval, documents, static () => null));
+            => _source = new BuiltinToolSource(new BuiltinToolPorts(retrieval, documents, null));
 
         public AITool? Create(ToolConfiguration tool)
         {
@@ -536,7 +536,7 @@ public sealed class BuiltinToolTests
     [Fact]
     public async Task ABuiltinWithNoDeclaredDescription_TakesTheShippedDefault()
     {
-        BuiltinToolSource source = new(new BuiltinToolPorts(new MapKnowledgePort(), null, static () => null));
+        BuiltinToolSource source = new(new BuiltinToolPorts(new MapKnowledgePort(), null, null));
         var context = new ToolSourceContext(new AgentCoreConfiguration
         {
             ApiVersion = "agentcore/v1",
@@ -553,7 +553,7 @@ public sealed class BuiltinToolTests
     public async Task ABuiltinWithADeclaredDescription_KeepsTheDocumentsWords()
     {
         const string Declared = "Find a passage.";
-        BuiltinToolSource source = new(new BuiltinToolPorts(new MapKnowledgePort(), null, static () => null));
+        BuiltinToolSource source = new(new BuiltinToolPorts(new MapKnowledgePort(), null, null));
         var context = new ToolSourceContext(new AgentCoreConfiguration
         {
             ApiVersion = "agentcore/v1",
@@ -575,7 +575,7 @@ public sealed class BuiltinToolTests
     [Fact]
     public async Task ABuiltinWithNoDeclaredDescription_MaterialisesTheShippedDefault()
     {
-        BuiltinToolSource source = new(new BuiltinToolPorts(new MapKnowledgePort(), null, static () => null));
+        BuiltinToolSource source = new(new BuiltinToolPorts(new MapKnowledgePort(), null, null));
         var context = new ToolSourceContext(new AgentCoreConfiguration
         {
             ApiVersion = "agentcore/v1",
@@ -594,7 +594,7 @@ public sealed class BuiltinToolTests
     public async Task ABuiltinWithADeclaredDescription_MaterialisesTheDocumentsWords()
     {
         const string Declared = "Find a passage.";
-        BuiltinToolSource source = new(new BuiltinToolPorts(new MapKnowledgePort(), null, static () => null));
+        BuiltinToolSource source = new(new BuiltinToolPorts(new MapKnowledgePort(), null, null));
         var context = new ToolSourceContext(new AgentCoreConfiguration
         {
             ApiVersion = "agentcore/v1",
@@ -618,7 +618,7 @@ public sealed class BuiltinToolTests
     [Fact]
     public async Task ABuiltinWhosePortIsUnbound_FailsTheBoot()
     {
-        BuiltinToolSource source = new(new BuiltinToolPorts(null, null, static () => null));
+        BuiltinToolSource source = new(new BuiltinToolPorts(null, null, null));
         var context = new ToolSourceContext(new AgentCoreConfiguration
         {
             ApiVersion = "agentcore/v1",
@@ -635,7 +635,7 @@ public sealed class BuiltinToolTests
     [Fact]
     public async Task AUsesNameAgentCoreDoesNotShip_FailsTheBoot()
     {
-        BuiltinToolSource source = new(new BuiltinToolPorts(new MapKnowledgePort(), null, static () => null));
+        BuiltinToolSource source = new(new BuiltinToolPorts(new MapKnowledgePort(), null, null));
         var context = new ToolSourceContext(new AgentCoreConfiguration
         {
             ApiVersion = "agentcore/v1",

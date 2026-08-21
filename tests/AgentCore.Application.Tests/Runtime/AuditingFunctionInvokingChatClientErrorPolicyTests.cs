@@ -268,7 +268,7 @@ public sealed class AuditingFunctionInvokingChatClientErrorPolicyTests
     /// <summary>Builds one real <c>kind: builtin</c> tool through <see cref="BuiltinToolSource"/>.</summary>
     private static async Task<AIFunction> BuildAsync(ToolConfiguration tool, IKnowledgeRetrievalPort retrieval)
     {
-        BuiltinToolSource source = new(new BuiltinToolPorts(retrieval, null, static () => null));
+        BuiltinToolSource source = new(new BuiltinToolPorts(retrieval, null, null));
         var context = new ToolSourceContext(new AgentCoreConfiguration
         {
             ApiVersion = "agentcore/v1",

@@ -161,7 +161,7 @@ public sealed class BuiltinToolSchemaTests
     private static AIFunction Build(string uses, string toolId)
     {
         MapKnowledgePort store = new();
-        BuiltinToolSource source = new(new BuiltinToolPorts(store, store, static () => null));
+        BuiltinToolSource source = new(new BuiltinToolPorts(store, store, null));
         ToolConfiguration tool = new() { Id = toolId, Kind = ToolKind.Builtin, Uses = uses };
         var context = new ToolSourceContext(new AgentCoreConfiguration
         {

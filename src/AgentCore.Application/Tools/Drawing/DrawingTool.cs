@@ -71,10 +71,10 @@ internal sealed class DrawingTool
     private static readonly Lazy<string> Vocabulary = new(ReadVocabulary);
 
     private readonly string _toolId;
-    
-    private readonly Func<IChatClientFactory?> _chatClients;
 
-    private DrawingTool(string toolId, Func<IChatClientFactory?> chatClients)
+    private readonly IChatClientFactory? _chatClients;
+
+    private DrawingTool(string toolId, IChatClientFactory? chatClients)
     {
         _toolId = toolId;
         _chatClients = chatClients;
@@ -85,12 +85,9 @@ internal sealed class DrawingTool
 
     /// <summary>Builds the tool the model calls.</summary>
     /// <param name="tool">The declared tool.</param>
-    /// <param name="chatClients">
-    /// Finds the chat client factory. It is a function and not the factory itself because the tool
-    /// is built one step before the factory exists; see <c>ChatClientBox</c>.
-    /// </param>
+    /// <param name="chatClients">The factory this draws with, or <see langword="null"/> when the host bound none.</param>
     /// <returns>The tool.</returns>
-    internal static AIFunction Create(ToolConfiguration tool, Func<IChatClientFactory?> chatClients)
+    internal static AIFunction Create(ToolConfiguration tool, IChatClientFactory? chatClients)
         => AIFunctionFactory.Create(
             new DrawingTool(tool.Id, chatClients).DrawAsync,
             BuiltinToolOptions.Options(tool));
@@ -113,7 +110,7 @@ internal sealed class DrawingTool
                 "this call has no screen, so nothing can be drawn on it. Say it in words instead.");
         }
 
-        if (_chatClients.Invoke() is not { } clients)
+        if (_chatClients is not { } clients)
         {
             return ToolErrorResult.Create(
                 _toolId,

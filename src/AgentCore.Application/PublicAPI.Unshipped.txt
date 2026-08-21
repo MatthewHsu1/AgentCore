@@ -774,10 +774,10 @@ AgentCore.Application.Tools.BindingToolSource.ProvideAsync(AgentCore.Application
 AgentCore.Application.Tools.Builtin.BuiltinToolNames
 AgentCore.Application.Tools.Builtin.BuiltinToolPorts
 AgentCore.Application.Tools.Builtin.BuiltinToolPorts.<Clone>$() -> AgentCore.Application.Tools.Builtin.BuiltinToolPorts!
-AgentCore.Application.Tools.Builtin.BuiltinToolPorts.BuiltinToolPorts(AgentCore.Application.Ports.IKnowledgeRetrievalPort? Retrieval, AgentCore.Application.Ports.IDocumentStorePort? Documents, System.Func<AgentCore.Application.Ports.IChatClientFactory?>! ChatClients) -> void
-AgentCore.Application.Tools.Builtin.BuiltinToolPorts.ChatClients.get -> System.Func<AgentCore.Application.Ports.IChatClientFactory?>!
+AgentCore.Application.Tools.Builtin.BuiltinToolPorts.BuiltinToolPorts(AgentCore.Application.Ports.IKnowledgeRetrievalPort? Retrieval, AgentCore.Application.Ports.IDocumentStorePort? Documents, AgentCore.Application.Ports.IChatClientFactory? ChatClients) -> void
+AgentCore.Application.Tools.Builtin.BuiltinToolPorts.ChatClients.get -> AgentCore.Application.Ports.IChatClientFactory?
 AgentCore.Application.Tools.Builtin.BuiltinToolPorts.ChatClients.init -> void
-AgentCore.Application.Tools.Builtin.BuiltinToolPorts.Deconstruct(out AgentCore.Application.Ports.IKnowledgeRetrievalPort? Retrieval, out AgentCore.Application.Ports.IDocumentStorePort? Documents, out System.Func<AgentCore.Application.Ports.IChatClientFactory?>! ChatClients) -> void
+AgentCore.Application.Tools.Builtin.BuiltinToolPorts.Deconstruct(out AgentCore.Application.Ports.IKnowledgeRetrievalPort? Retrieval, out AgentCore.Application.Ports.IDocumentStorePort? Documents, out AgentCore.Application.Ports.IChatClientFactory? ChatClients) -> void
 AgentCore.Application.Tools.Builtin.BuiltinToolPorts.Documents.get -> AgentCore.Application.Ports.IDocumentStorePort?
 AgentCore.Application.Tools.Builtin.BuiltinToolPorts.Documents.init -> void
 AgentCore.Application.Tools.Builtin.BuiltinToolPorts.Equals(AgentCore.Application.Tools.Builtin.BuiltinToolPorts? other) -> bool

@@ -60,13 +60,12 @@ public static class AgentCoreServiceCollectionExtensions
             .OpenAsync(configuration, options, cancellationToken)
             .ConfigureAwait(false);
 
-        // The compile step below produces the chat client factory, and every tool has to exist
-        // before it runs because agents compile against them. ui.draw therefore finds its model
-        // through this box, which the compile step fills a few lines down.
-        ChatClientBox chatClients = new();
+        var chatClients = await ChatClientStartup
+            .BuildAsync(options, startup, cancellationToken)
+            .ConfigureAwait(false);
 
         var tools = await ToolRegistryStartup
-            .BuildAsync(options, startup, knowledge, () => chatClients.Value, configuration, cancellationToken)
+            .BuildAsync(options, startup, knowledge, chatClients, configuration, cancellationToken)
             .ConfigureAwait(false);
 
         var transcript = await TranscriptStartup
@@ -78,10 +77,8 @@ public static class AgentCoreServiceCollectionExtensions
             .ConfigureAwait(false);
 
         var graph = await CompilationStartup
-            .CompileAsync(configuration, options, startup, tools, transcript, evaluators, loggers, cancellationToken)
+            .CompileAsync(configuration, chatClients, tools, transcript, evaluators, loggers)
             .ConfigureAwait(false);
-
-        chatClients.Value = graph.ChatClients;
 
         services.AddSingleton(configuration);
         services.AddSingleton(secrets);
