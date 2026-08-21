@@ -444,6 +444,10 @@ AgentCore.Application.Configuration.Schema.ToolConfiguration.Id.get -> string!
 AgentCore.Application.Configuration.Schema.ToolConfiguration.Id.init -> void
 AgentCore.Application.Configuration.Schema.ToolConfiguration.Kind.get -> AgentCore.Application.Configuration.Schema.ToolKind
 AgentCore.Application.Configuration.Schema.ToolConfiguration.Kind.init -> void
+AgentCore.Application.Configuration.Schema.ToolConfiguration.MaxRounds.get -> int?
+AgentCore.Application.Configuration.Schema.ToolConfiguration.MaxRounds.init -> void
+AgentCore.Application.Configuration.Schema.ToolConfiguration.Model.get -> AgentCore.Application.Configuration.Schema.ModelReference?
+AgentCore.Application.Configuration.Schema.ToolConfiguration.Model.init -> void
 AgentCore.Application.Configuration.Schema.ToolConfiguration.Parameters.get -> System.Text.Json.Nodes.JsonNode?
 AgentCore.Application.Configuration.Schema.ToolConfiguration.Parameters.init -> void
 AgentCore.Application.Configuration.Schema.ToolConfiguration.Request.get -> AgentCore.Application.Configuration.Schema.HttpRequestConfiguration?

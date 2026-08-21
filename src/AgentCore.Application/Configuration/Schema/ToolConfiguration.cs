@@ -77,4 +77,19 @@ public sealed record ToolConfiguration
 
     /// <summary>Gets the HTTP call. It is set when the kind is <see cref="ToolKind.Http"/>.</summary>
     public HttpRequestConfiguration? Request { get; init; }
+
+    /// <summary>Gets the model this tool runs on, or <see langword="null"/> to use the host default.</summary>
+    /// <remarks>
+    /// Only a <c>uses:</c> naming a shipped agent reads this. Drawing on the primary reply model is
+    /// wasted money, so a document points the inner call at a cheaper entry of
+    /// <c>providers.llm[].as</c>. A kind with no model of its own ignores it.
+    /// </remarks>
+    public ModelReference? Model { get; init; }
+
+    /// <summary>Gets the round cap of a shipped agent, or <see langword="null"/> to use its own default.</summary>
+    /// <remarks>
+    /// It counts model round trips inside the tool, and it is not the section 8.7 budget of the
+    /// calling agent, which is 40 and counts this whole tool as one round.
+    /// </remarks>
+    public int? MaxRounds { get; init; }
 }

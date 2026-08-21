@@ -294,6 +294,15 @@
         },
         "request": {
           "$ref": "#/$defs/httpRequest"
+        },
+        "model": {
+          "$ref": "#/$defs/modelRef",
+          "description": "kind: builtin naming a shipped agent. The model that inner agent runs on. Omitted, the host default applies."
+        },
+        "maxRounds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "kind: builtin naming a shipped agent. The round cap inside that tool, not the calling agent's turn budget."
         }
       },
       "allOf": [

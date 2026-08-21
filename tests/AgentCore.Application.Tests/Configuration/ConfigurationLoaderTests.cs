@@ -482,6 +482,36 @@ public sealed class ConfigurationLoaderTests
     }
 
     [Fact]
+    public void Load_AToolWithAModelRef_ReadsIt()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: plain
+            tools:
+              - { id: draw, kind: builtin, uses: ui.draw, description: d, model: { ref: cheap } }
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+
+        Assert.Equal("cheap", configuration.Tools[0].Model!.Ref);
+    }
+
+    [Fact]
+    public void Load_AToolWithMaxRounds_ReadsIt()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: plain
+            tools:
+              - { id: draw, kind: builtin, uses: ui.draw, description: d, maxRounds: 4 }
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+
+        Assert.Equal(4, configuration.Tools[0].MaxRounds);
+    }
+
+    [Fact]
     public void ShippedExampleFile_Loads()
     {
         var path = Path.Combine(RepositoryRoot(), "src", "AgentCore.Api", "config", "example.yaml");

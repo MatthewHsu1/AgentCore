@@ -499,6 +499,22 @@ public sealed class ConfigurationSchemaValidatorTests
     }
 
     [Fact]
+    public void AToolWithMaxRoundsBelowOne_FailsWithThePointerOfTheTool()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            tools:
+              - { id: draw, kind: builtin, uses: ui.draw, maxRounds: 0 }
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+        Assert.Contains(failure.Errors, error => error.Pointer.Contains("maxRounds", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void ABuiltinToolWithNoParameters_PassesCheckOne()
     {
         const string document = """
