@@ -27,8 +27,9 @@ internal interface IShippedAgentDefinition
 
     /// <summary>The tools this agent calls. They are its own, never the document's.</summary>
     /// <param name="tool">The declaration, so a tool can name the declared id in its own errors.</param>
+    /// <param name="ports">The adapters the host bound, for an inner tool that needs one of its own.</param>
     /// <returns>The inner tools.</returns>
-    IReadOnlyList<AITool> InnerTools(ToolConfiguration tool);
+    IReadOnlyList<AITool> InnerTools(ToolConfiguration tool, BuiltinToolPorts ports);
 
     /// <summary>Names the one port this agent needs and the host did not bind.</summary>
     /// <param name="ports">The adapters the host bound.</param>

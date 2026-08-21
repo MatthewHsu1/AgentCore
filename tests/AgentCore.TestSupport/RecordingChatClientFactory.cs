@@ -11,7 +11,12 @@ namespace AgentCore.TestSupport;
 /// </summary>
 public sealed class RecordingChatClientFactory : IChatClientFactory
 {
-    private static readonly IChatClient Stub = new StubChatClient();
+    private readonly IChatClient _client;
+
+    /// <summary>Creates the factory.</summary>
+    /// <param name="client">The client every call answers with, or <see langword="null"/> for a
+    /// stub that always replies <c>"ok"</c> and calls no tool.</param>
+    public RecordingChatClientFactory(IChatClient? client = null) => _client = client ?? new StubChatClient();
 
     /// <summary>Gets the reference the last call passed, or <see langword="null"/> when no call has
     /// happened yet or the last call asked for the host default.</summary>
@@ -20,7 +25,7 @@ public sealed class RecordingChatClientFactory : IChatClientFactory
     public IChatClient GetChatClient(ModelReference? model)
     {
         Asked = model;
-        return Stub;
+        return _client;
     }
 
     private sealed class StubChatClient : IChatClient

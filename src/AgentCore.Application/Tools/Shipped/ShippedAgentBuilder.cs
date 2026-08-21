@@ -11,7 +11,9 @@ namespace AgentCore.Application.Tools.Shipped;
 /// </summary>
 /// <remarks>
 /// The agent goes onto the same <c>AsAIFunction()</c> path <c>kind: agent</c> already uses, so
-/// there is one code path for every agent-as-tool.
+/// there is one code path for every agent-as-tool. The inner agent runs on a session of its own
+/// that no <c>BeginCall</c> ever names, so none of its rounds reach store 1 —
+/// <c>InnerAgentTranscriptTests</c> holds that.
 /// </remarks>
 internal static class ShippedAgentBuilder
 {
@@ -26,9 +28,7 @@ internal static class ShippedAgentBuilder
     {
         if (definition.MissingPort(ports) is { } missing)
         {
-            throw ToolSourceError.Fail(
-                $"the tool '{tool.Id}' is kind: builtin and uses: '{definition.Name}', which reads {missing}, "
-                + "and no adapter binds that port. Bind one, or take the tool out of the document.");
+            throw BuiltinToolSource.Unbound(tool, definition.Name, missing);
         }
 
         if (ports.ChatClients is not { } clients)
@@ -52,7 +52,7 @@ internal static class ShippedAgentBuilder
                 ChatOptions = new ChatOptions
                 {
                     Instructions = definition.Instructions,
-                    Tools = [.. definition.InnerTools(tool)],
+                    Tools = [.. definition.InnerTools(tool, ports)],
                     ToolMode = ChatToolMode.RequireAny,
                 },
             });
