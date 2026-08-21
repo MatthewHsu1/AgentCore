@@ -42,7 +42,7 @@ public sealed class DrawingToolTests
 
         // The whole justification of this design. Every component name is in the instructions of a
         // private model call, and none of them is in what the calling agent is charged for.
-        foreach (var component in DrawingTool.AllowedComponents)
+        foreach (var component in DrawingTree.AllowedComponents)
         {
             Assert.DoesNotContain($"\"{component}\"", schema, StringComparison.Ordinal);
         }
@@ -225,13 +225,13 @@ public sealed class DrawingToolTests
     {
         var text = DrawingTool.VocabularyText;
 
-        foreach (var component in DrawingTool.AllowedComponents)
+        foreach (var component in DrawingTree.AllowedComponents)
         {
             Assert.Contains($"`{component}`", text, StringComparison.Ordinal);
         }
 
-        Assert.Equal(27, DrawingTool.AllowedComponents.Length);
-        Assert.Equal(DrawingTool.AllowedComponents.Length, DrawingTool.AllowedComponents.Distinct().Count());
+        Assert.Equal(27, DrawingTree.AllowedComponents.Length);
+        Assert.Equal(DrawingTree.AllowedComponents.Length, DrawingTree.AllowedComponents.Distinct().Count());
     }
 
     /// <summary>Reads a tool result. The framework hands it back serialised, not as the object.</summary>

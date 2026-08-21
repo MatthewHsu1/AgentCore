@@ -43,29 +43,6 @@ internal sealed class DrawingTool
     /// </remarks>
     private const int MaxRounds = 3;
 
-    /// <summary>
-    /// The component names a tree may use.
-    /// </summary>
-    /// <remarks>
-    /// This is the security boundary the browser enforces as well: a <c>$type</c> outside the list
-    /// renders nothing. It is checked here so the model is told, rather than the caller being shown
-    /// a hole. It must agree with <c>vocabulary.md</c> and with the library the browser renders
-    /// with; <c>DrawingToolTests.TheVocabulary_TeachesEveryComponentTheValidatorAllows</c> and
-    /// <c>GenerativeUiDataUI.test.tsx</c> pin both.
-    /// </remarks>
-    internal static readonly string[] AllowedComponents =
-    [
-        "Header", "Text", "Caption", "Image", "Divider", "Fact", "Button", "Select", "Input",
-        "DatePicker", "Checkbox", "RadioGroup", "Form", "Card", "Col", "Row", "Spacer", "Badge",
-        "Box", "ListView", "ListViewItem", "Table", "Markdown", "Chart", "Alert", "Carousel", "Icon",
-    ];
-
-    /// <summary>The keys that are not props. <c>vocabulary.md</c> names the same four.</summary>
-    private static readonly HashSet<string> Reserved = new(StringComparer.Ordinal)
-    {
-        "$type", "$key", "$action", "children",
-    };
-
     private const string VocabularyResource = "AgentCore.Application.Tools.Drawing.vocabulary.md";
 
     private static readonly Lazy<string> Vocabulary = new(ReadVocabulary);
@@ -170,7 +147,7 @@ internal sealed class DrawingTool
                 continue;
             }
 
-            if (Validate(tree) is { } fault)
+            if (DrawingTree.Validate(tree) is { } fault)
             {
                 lastFault = fault;
                 messages.AddRange(response.Messages);
@@ -180,7 +157,7 @@ internal sealed class DrawingTool
 
             screen.Publish(RendererName, tree);
 
-            return new JsonObject { ["drew"] = Receipt(tree) };
+            return new JsonObject { ["drew"] = DrawingReceipt.Describe(tree) };
         }
 
         return ToolErrorResult.Create(
@@ -194,8 +171,8 @@ internal sealed class DrawingTool
     /// <remarks>
     /// The argument is one free-form object. The shape it must hold is in the instructions, not
     /// here, which is the whole point of this design: a declared shape would cost the 19 KB this
-    /// avoids. Nothing constrains the model's output as a result, so <see cref="Validate"/> is the
-    /// only thing standing between the model and the renderer.
+    /// avoids. Nothing constrains the model's output as a result, so <see cref="DrawingTree.Validate"/>
+    /// is the only thing standing between the model and the renderer.
     /// </remarks>
     private static AIFunction BuildPresentTool()
         => AIFunctionFactory.Create(
@@ -232,184 +209,6 @@ internal sealed class DrawingTool
         catch (JsonException)
         {
             return null;
-        }
-    }
-
-    /// <summary>Checks a tree against the vocabulary.</summary>
-    /// <param name="node">The tree.</param>
-    /// <returns>What is wrong, in words the model can act on, or <see langword="null"/> when it is sound.</returns>
-    private static string? Validate(JsonNode? node)
-    {
-        if (node is not JsonObject item)
-        {
-            return node is JsonArray
-                ? "a node is an array where an object was wanted."
-                : "a node is not an object.";
-        }
-
-        if (item["$type"]?.GetValue<string>() is not { Length: > 0 } type)
-        {
-            return "a node has no $type.";
-        }
-
-        if (Array.IndexOf(AllowedComponents, type) < 0)
-        {
-            return $"'{type}' is not a component. Use one of: {string.Join(", ", AllowedComponents)}.";
-        }
-
-        if (item["$action"] is { } action
-            && (action is not JsonObject bag || bag["type"]?.GetValue<string>() is not { Length: > 0 }))
-        {
-            return $"the $action on '{type}' has no 'type'.";
-        }
-
-        if (item["children"] is { } children)
-        {
-            if (children is not JsonArray list)
-            {
-                return $"'children' on '{type}' is not an array.";
-            }
-
-            foreach (var child in list)
-            {
-                // A bare string is a valid child: the renderer draws it as text.
-                if (child is JsonValue)
-                {
-                    continue;
-                }
-
-                if (Validate(child) is { } fault)
-                {
-                    return fault;
-                }
-            }
-        }
-
-        foreach (var pair in item)
-        {
-            if (Reserved.Contains(pair.Key))
-            {
-                continue;
-            }
-
-            if (ValidateActions(pair.Value, pair.Key) is { } fault)
-            {
-                return fault;
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>Checks the <c>$action</c> of anything that is not a node.</summary>
-    /// <param name="node">A prop value.</param>
-    /// <param name="owner">The prop it was reached through, for the message.</param>
-    /// <returns>What is wrong, or <see langword="null"/>.</returns>
-    /// <remarks>
-    /// A prop can carry an <c>$action</c> without being a component: <c>Card.confirm</c> and
-    /// <c>Card.cancel</c> are <c>{ "label", "$action" }</c>. This walks the same props
-    /// <see cref="Collect"/> does, so nothing the receipt names goes unchecked. It asks for no
-    /// <c>$type</c>, because most props holding objects — <c>Chart.data</c>, <c>Table.columns</c>,
-    /// <c>Select.options</c> — are data rather than nodes.
-    /// </remarks>
-    private static string? ValidateActions(JsonNode? node, string owner)
-    {
-        switch (node)
-        {
-            case JsonArray list:
-                foreach (var item in list)
-                {
-                    if (ValidateActions(item, owner) is { } fault)
-                    {
-                        return fault;
-                    }
-                }
-
-                return null;
-
-            case JsonObject bag:
-                if (bag["$action"] is { } action
-                    && (action is not JsonObject shape || shape["type"]?.GetValue<string>() is not { Length: > 0 }))
-                {
-                    return $"the $action on '{owner}' has no 'type'.";
-                }
-
-                foreach (var pair in bag)
-                {
-                    // Not into the $action itself: its payload is the model's own data.
-                    if (string.Equals(pair.Key, "$action", StringComparison.Ordinal))
-                    {
-                        continue;
-                    }
-
-                    if (ValidateActions(pair.Value, owner) is { } fault)
-                    {
-                        return fault;
-                    }
-                }
-
-                return null;
-
-            default:
-                return null;
-        }
-    }
-
-    /// <summary>
-    /// Writes the one line the calling agent gets.
-    /// </summary>
-    /// <param name="tree">The tree that was drawn.</param>
-    /// <returns>What was drawn, and every button with its payload.</returns>
-    /// <remarks>
-    /// The calling agent never sees the tree. A click arrives as caller words carrying the payload,
-    /// so without the payloads named here it has no way to read one.
-    /// </remarks>
-    private static string Receipt(JsonObject tree)
-    {
-        List<string> actions = [];
-        Collect(tree, actions);
-
-        var root = tree["$type"]?.GetValue<string>() ?? "tree";
-
-        return actions.Count == 0
-            ? $"drew a {root}; buttons: none"
-            : $"drew a {root}; buttons: {string.Join(", ", actions)}";
-    }
-
-    private static void Collect(JsonNode? node, List<string> actions)
-    {
-        switch (node)
-        {
-            case JsonArray list:
-                foreach (var child in list)
-                {
-                    Collect(child, actions);
-                }
-
-                return;
-
-            case JsonObject item:
-                if (item["$action"] is JsonObject action
-                    && action["type"]?.GetValue<string>() is { Length: > 0 } type)
-                {
-                    var payload = string.Join(
-                        " ",
-                        action
-                            .Where(pair => !string.Equals(pair.Key, "type", StringComparison.Ordinal))
-                            .Select(pair => $"{pair.Key}={pair.Value?.ToJsonString().Trim('"')}"));
-
-                    actions.Add(payload.Length == 0 ? type : $"{type} {payload}");
-                }
-
-                foreach (var pair in item)
-                {
-                    if (!string.Equals(pair.Key, "$action", StringComparison.Ordinal))
-                    {
-                        Collect(pair.Value, actions);
-                    }
-                }
-
-                return;
         }
     }
 
