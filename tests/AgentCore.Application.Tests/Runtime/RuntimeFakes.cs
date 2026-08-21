@@ -624,19 +624,20 @@ internal sealed class RecordingRenderPort : IRenderPort
 }
 
 /// <summary>
-/// A drawing model: its first answer is one call to <c>present</c> carrying a fixed tree, and every
-/// answer after that is plain text.
+/// A drawing model: it answers each request with one call to <c>present</c> carrying the next
+/// scripted tree, and answers with plain text once the script runs out.
 /// </summary>
 /// <remarks>
-/// Enough to drive a real <c>ChatClientAgent</c> end to end. The agent's own tool loop invokes
-/// <c>present</c>, feeds it the result, and the text answer is what ends the run.
+/// Enough to drive a real <c>ChatClientAgent</c> end to end, including recovery: a tree the
+/// validator rejects comes back to the agent as <c>present</c>'s error result, the agent asks again,
+/// and this client hands it the next tree. The text answer is what ends the run.
 /// </remarks>
 internal sealed class PresentCallingChatClient : IChatClient
 {
-    private readonly string _tree;
+    private readonly string[] _trees;
     private int _calls;
 
-    public PresentCallingChatClient(string tree) => _tree = tree;
+    public PresentCallingChatClient(params string[] trees) => _trees = trees;
 
     /// <summary>Gets how many requests this client answered.</summary>
     public int Calls => Volatile.Read(ref _calls);
@@ -648,12 +649,12 @@ internal sealed class PresentCallingChatClient : IChatClient
     {
         ArgumentNullException.ThrowIfNull(messages);
 
-        var index = Interlocked.Increment(ref _calls);
+        var index = Interlocked.Increment(ref _calls) - 1;
         await Task.Yield();
 
         var responseId = Guid.NewGuid().ToString("N");
 
-        if (index > 1)
+        if (index >= _trees.Length)
         {
             yield return new ChatResponseUpdate(ChatRole.Assistant, "drawn.")
             {
@@ -670,7 +671,7 @@ internal sealed class PresentCallingChatClient : IChatClient
                 "present",
                 new Dictionary<string, object?>(StringComparer.Ordinal)
                 {
-                    ["tree"] = JsonSerializer.Deserialize<JsonElement>(_tree),
+                    ["tree"] = JsonSerializer.Deserialize<JsonElement>(_trees[index]),
                 })])
         {
             ResponseId = responseId,
@@ -701,6 +702,5 @@ internal sealed class PresentCallingChatClient : IChatClient
 
     public void Dispose()
     {
-        // Nothing to release.
     }
 }

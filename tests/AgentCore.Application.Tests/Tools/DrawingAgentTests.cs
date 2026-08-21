@@ -34,6 +34,10 @@ public sealed class DrawingAgentTests
         Description = "Draw something for the caller.",
     };
 
+    private const string Card = """
+        { "$type": "Card", "children": [{ "$type": "Text", "children": ["hi"] }] }
+        """;
+
     [Fact]
     public void TheToolTheAgentSees_TakesOneStringAndCarriesNoVocabulary()
     {
@@ -42,6 +46,7 @@ public sealed class DrawingAgentTests
         var schema = tool.JsonSchema.ToString();
 
         Assert.Equal("draw", tool.Name);
+        Assert.Contains("\"query\"", schema, StringComparison.Ordinal);
 
         // The whole justification of this design. Every component name is in the instructions of a
         // private agent, and none of them is in what the calling agent is charged for.
@@ -75,9 +80,7 @@ public sealed class DrawingAgentTests
         RecordingRenderPort screen = new();
         using var scope = CallRenderScope.Enter(screen);
 
-        var function = Build(new RecordingChatClientFactory(new PresentCallingChatClient("""
-            { "$type": "Card", "children": [{ "$type": "Text", "children": ["hi"] }] }
-            """)));
+        var function = Build(new RecordingChatClientFactory(new PresentCallingChatClient(Card)));
 
         var result = await function.InvokeAsync(
             new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "draw a card" }),
@@ -89,6 +92,41 @@ public sealed class DrawingAgentTests
 
         // What comes back to the calling agent is the drawing agent's final text and not the tree.
         Assert.Equal("drawn.", Assert.IsType<JsonElement>(result).GetString());
+    }
+
+    [Fact]
+    public async Task ATreeTheValidatorRejects_ComesBackAsAnErrorAndTheAgentDrawsTheNextOne()
+    {
+        // The whole reason the hand-rolled retry loop could be deleted. Nothing in C# notices the
+        // bad tree: present answers a section 8.7 error, the agent reads it, and asks again.
+        RecordingRenderPort screen = new();
+        using var scope = CallRenderScope.Enter(screen);
+
+        var result = await Draw("""{ "$type": "Wombat" }""", Card);
+
+        var published = Assert.Single(screen.Published);
+        Assert.Equal("Card", ((JsonObject)published.Data)["$type"]!.GetValue<string>());
+        Assert.Equal("drawn.", Assert.IsType<JsonElement>(result).GetString());
+    }
+
+    /// <summary>
+    /// Pins <see cref="DrawingAgentDefinition.DefaultMaxRounds"/> at three by what it does, not by
+    /// reading the property back. Section 8.7 budgets 40 rounds for the calling agent and this whole
+    /// tool is one of them, so the number is load-bearing and a change to it must fail here.
+    /// </summary>
+    [Theory]
+    [InlineData(2, true)]
+    [InlineData(3, false)]
+    public async Task TheDefaultRoundCap_AllowsThreeTriesAndNoFourth(int rejected, bool drawn)
+    {
+        RecordingRenderPort screen = new();
+        using var scope = CallRenderScope.Enter(screen);
+
+        string[] trees = [.. Enumerable.Repeat("""{ "$type": "Wombat" }""", rejected), Card];
+
+        await Draw(trees);
+
+        Assert.Equal(drawn, screen.Published.Count == 1);
     }
 
     [Fact]
@@ -172,6 +210,19 @@ public sealed class DrawingAgentTests
 
         Assert.Equal(27, DrawingTree.AllowedComponents.Length);
         Assert.Equal(DrawingTree.AllowedComponents.Length, DrawingTree.AllowedComponents.Distinct().Count());
+    }
+
+    /// <summary>Runs the drawing agent the document declares over one script of trees.</summary>
+    private static async Task<object?> Draw(params string[] trees)
+    {
+        var registration = await Provide(
+            Declaration, new RecordingChatClientFactory(new PresentCallingChatClient(trees)));
+
+        var function = Assert.IsAssignableFrom<AIFunction>(registration.Materialise());
+
+        return await function.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "draw a card" }),
+            TestContext.Current.CancellationToken);
     }
 
     private static AIFunction Build(RecordingChatClientFactory factory)

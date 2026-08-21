@@ -324,7 +324,7 @@
             "properties": {
               "parameters": false
             },
-            "$comment": "kind: builtin reads fixed argument names in C# (BuiltinToolFactory). A document that overrides the schema makes the model fill boxes the C# never reads, so parameters is forbidden here."
+            "$comment": "kind: builtin reads fixed argument names in C# (BuiltinToolSource). A document that overrides the schema makes the model fill boxes the C# never reads, so parameters is forbidden here."
           }
         },
         {

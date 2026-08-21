@@ -20,7 +20,15 @@ internal sealed class DrawingAgentDefinition : IShippedAgentDefinition
     public string Name => BuiltinToolNames.Draw;
 
     /// <inheritdoc />
-    public string DefaultDescription => "Draw something on the caller's screen for them to look at.";
+    /// <remarks>
+    /// The second sentence is the only place it can be said. <c>kind: builtin</c> forbids
+    /// <c>parameters:</c> (schema <c>$defs/tool.allOf[0]</c>), and the one argument
+    /// <c>AsAIFunction()</c> generates carries the framework's own wording, so a document has no
+    /// lever on it. Without the clause a terse request draws a chart with no data in it.
+    /// </remarks>
+    public string DefaultDescription
+        => "Draw something on the caller's screen for them to look at. Whoever draws it cannot see "
+           + "the conversation, so anything it needs has to be in the request.";
 
     /// <inheritdoc />
     public string Instructions => DrawingVocabulary.Text;
