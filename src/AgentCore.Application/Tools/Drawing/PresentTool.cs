@@ -51,18 +51,31 @@ internal static class PresentTool
                 toolId, "this call has no screen, so nothing can be drawn on it. Say it in words instead.");
         }
 
-        if (JsonSerializer.SerializeToNode(tree) is not JsonObject node)
+        try
         {
-            return ToolErrorResult.Create(toolId, "the tree was not a JSON object.");
-        }
+            if (JsonSerializer.SerializeToNode(tree) is not JsonObject node)
+            {
+                return ToolErrorResult.Create(toolId, "the tree was not a JSON object.");
+            }
 
-        if (DrawingTree.Validate(node) is { } fault)
+            if (DrawingTree.Validate(node) is { } fault)
+            {
+                return ToolErrorResult.Create(toolId, $"that tree is not valid: {fault} Fix it and call {Name} again.");
+            }
+
+            screen.Publish(RendererName, node);
+
+            return new JsonObject { ["drew"] = DrawingReceipt.Describe(node) };
+        }
+        catch (OperationCanceledException)
         {
-            return ToolErrorResult.Create(toolId, $"that tree is not valid: {fault} Fix it and call {Name} again.");
+            throw;
         }
-
-        screen.Publish(RendererName, node);
-
-        return new JsonObject { ["drew"] = DrawingReceipt.Describe(node) };
+        catch (Exception exception)
+        {
+            // Section 8.7: nothing here may end the turn, including a fault DrawingTree.Validate
+            // itself did not anticipate.
+            return ToolErrorResult.Create(toolId, $"the tree could not be drawn: {exception.Message}");
+        }
     }
 }

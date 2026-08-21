@@ -26,7 +26,7 @@ public sealed class PresentToolTests
             """);
 
         Assert.Equal(PresentTool.RendererName, Assert.Single(screen.Published).Name);
-        Assert.DoesNotContain(ToolErrorResult.ErrorProperty, result.ToString(), StringComparison.Ordinal);
+        Assert.False(result.ContainsKey(ToolErrorResult.ErrorProperty));
     }
 
     [Fact]
@@ -68,6 +68,38 @@ public sealed class PresentToolTests
         var result = await Invoke(PresentTool.Create("draw"), """{ "$type": "Wombat" }""");
 
         Assert.Equal("draw", result[ToolErrorResult.ToolProperty]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task Present_ANumericType_ReturnsAnActionableErrorAndDrawsNothing()
+    {
+        RecordingRenderPort screen = new();
+        using var scope = CallRenderScope.Enter(screen);
+
+        var result = await Invoke(PresentTool.Create("draw"), """{ "$type": 123 }""");
+
+        Assert.Empty(screen.Published);
+        Assert.True(result[ToolErrorResult.ErrorProperty]!.GetValue<bool>());
+        var message = result[ToolErrorResult.MessageProperty]!.GetValue<string>();
+        Assert.Contains("$type", message, StringComparison.Ordinal);
+        Assert.Contains("not a string", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Present_ANonStringActionType_ReturnsAnActionableErrorAndDrawsNothing()
+    {
+        RecordingRenderPort screen = new();
+        using var scope = CallRenderScope.Enter(screen);
+
+        var result = await Invoke(
+            PresentTool.Create("draw"),
+            """{ "$type": "Button", "label": "Yes", "$action": { "type": 42 } }""");
+
+        Assert.Empty(screen.Published);
+        Assert.True(result[ToolErrorResult.ErrorProperty]!.GetValue<bool>());
+        var message = result[ToolErrorResult.MessageProperty]!.GetValue<string>();
+        Assert.Contains("$action", message, StringComparison.Ordinal);
+        Assert.Contains("Button", message, StringComparison.Ordinal);
     }
 
     [Fact]

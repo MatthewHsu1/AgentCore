@@ -40,9 +40,10 @@ internal static class DrawingTree
                 : "a node is not an object.";
         }
 
-        if (item["$type"]?.GetValue<string>() is not { Length: > 0 } type)
+        var rawType = item["$type"];
+        if (ReadString(rawType) is not { Length: > 0 } type)
         {
-            return "a node has no $type.";
+            return rawType is null ? "a node has no $type." : "a node's $type is not a string.";
         }
 
         if (Array.IndexOf(AllowedComponents, type) < 0)
@@ -152,7 +153,19 @@ internal static class DrawingTree
     /// <returns>What is wrong, or <see langword="null"/> when there is no fault.</returns>
     private static string? ActionFault(JsonObject node, string owner)
         => node["$action"] is { } action
-           && (action is not JsonObject shape || shape["type"]?.GetValue<string>() is not { Length: > 0 })
+           && (action is not JsonObject shape || ReadString(shape["type"]) is not { Length: > 0 })
             ? $"the $action on '{owner}' has no 'type'."
             : null;
+
+    /// <summary>
+    /// Reads a node as a string without throwing.
+    /// </summary>
+    /// <remarks>
+    /// A model can send a <c>$type</c> or <c>$action.type</c> of any JSON kind — a number, a bool, an
+    /// object. <see cref="JsonNode.GetValue{T}"/> throws <see cref="InvalidOperationException"/> for
+    /// any of those, and section 8.7 forbids that path: the wrong kind is a fault the model can act
+    /// on, not a reason to end the turn.
+    /// </remarks>
+    private static string? ReadString(JsonNode? node)
+        => node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
 }
