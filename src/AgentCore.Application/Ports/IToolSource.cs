@@ -5,7 +5,6 @@ namespace AgentCore.Application.Ports;
 /// <summary>
 /// One place tools come from.
 /// </summary>
-/// <remarks>
 public interface IToolSource
 {
     /// <summary>Names every tool this source serves.</summary>
