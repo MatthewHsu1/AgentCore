@@ -7,6 +7,7 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Tools.Builtin;
 using AgentCore.Infrastructure.Knowledge;
 using AgentCore.Infrastructure.Secrets;
 using AgentCore.Infrastructure.Tests.Tools;
@@ -21,8 +22,8 @@ namespace AgentCore.Infrastructure.Tests;
 /// </summary>
 /// <remarks>
 /// The worked example of section 8.1 declares all four tool kinds. This test walks the three that
-/// need a factory, in the order a host starts them: resolve every <c>${secret:name}</c> once, build
-/// the factory over the resolved values, then compile.
+/// need a source, in the order a host starts them: resolve every <c>${secret:name}</c> once, build
+/// the sources over the resolved values, then compile.
 /// </remarks>
 public sealed class ToolSeamTests
 {
@@ -82,7 +83,6 @@ public sealed class ToolSeamTests
         ChainedSecretResolver chain = new([new EnvironmentSecretResolver(_ => "sk-live-0123456789")]);
         var secrets = await ResolvedSecrets.ResolveAsync(document, chain, Token);
 
-        // Step two: build the factory over the resolved values.
         using var handler = StubHttpMessageHandler.Answering(HttpStatusCode.OK, """{"status":"shipped"}""");
         using HttpClient client = new(handler);
 
@@ -94,24 +94,25 @@ public sealed class ToolSeamTests
         // link. A Zilliz retrieval adapter would take the first argument and leave this one reading.
         FileSystemKnowledgeStore store = new(document.Providers?.Knowledge);
 
-        CompositeAgentToolFactory tools = new(
-        [
-            new BuiltinToolFactory(store, store),
-            new HttpToolFactory(client, secrets),
-            new BindingToolFactory(bindings),
-        ]);
+        // Step two: build the sources over the resolved values.
+        var registry = await ToolRegistryBuilder.BuildAsync(
+            [
+                new BuiltinToolSource(new BuiltinToolPorts(store, store, static () => null)),
+                new HttpToolSource(client, secrets),
+                new BindingToolSource(bindings),
+            ],
+            new ToolSourceContext(document), Token);
 
         // Step three: compile.
         using OneReplyChatClient model = new("done");
         var compiled = ConfigurationCompiler.Compile(
             document,
-            new AgentCompilationContext(new OneClientFactory(model)) { Tools = tools });
+            new AgentCompilationContext(new OneClientFactory(model)) { Tools = registry });
 
         Assert.Equal(3, compiled.Agents.Count);
 
         // The HTTP tool now makes its call. Before this seam existed it could not.
-        var lookup = Assert.IsAssignableFrom<AIFunction>(
-            tools.Create(document.Tools.Single(tool => tool.Id == "lookup_order")));
+        var lookup = Assert.IsAssignableFrom<AIFunction>(registry.Resolve("lookup_order"));
 
         var result = await lookup.InvokeAsync(
             new AIFunctionArguments(new Dictionary<string, object?>(StringComparer.Ordinal) { ["orderId"] = "A-42" }),

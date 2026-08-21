@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
+using AgentCore.Application.Ports;
 
 namespace AgentCore.AspNetCore.Endpoints;
 
@@ -10,32 +12,32 @@ internal sealed record RenderPayload(string Name, object Data);
 /// <summary>
 /// Carries what a call wants drawn from the tool that produced it to the stream that writes it.
 /// </summary>
-internal sealed class RenderChannel
+internal sealed class RenderChannel : IRenderPort
 {
     private readonly ConcurrentQueue<RenderPayload> _pending = new();
 
-    /// <summary>Queues one thing to draw and answers the model with a receipt.</summary>
+    /// <summary>Queues one thing to draw.</summary>
     /// <param name="name">The renderer the browser looks up.</param>
     /// <param name="data">The payload. It goes to the browser and nowhere else.</param>
-    /// <returns>The one line the model sees.</returns>
-    public string Publish(string name, object data)
+    public void Publish(string name, object data)
     {
-        _pending.Enqueue(new RenderPayload(name, data));
+        ArgumentNullException.ThrowIfNull(name);
+        ArgumentNullException.ThrowIfNull(data);
 
-        return $"the caller can now see the {name}.";
+        _pending.Enqueue(new RenderPayload(name, data));
     }
 
-    /// <summary>Takes everything queued so far.</summary>
-    /// <returns>The payloads, oldest first. It is empty when nothing is waiting.</returns>
-    public IReadOnlyList<RenderPayload> Drain()
+    /// <summary>Takes the oldest payload waiting.</summary>
+    /// <param name="payload">The payload, when one was waiting.</param>
+    /// <returns><see langword="true"/> when one was taken.</returns>
+    public bool TryTake([NotNullWhen(true)] out RenderPayload? payload)
+        => _pending.TryDequeue(out payload);
+
+    /// <summary>Throws away everything queued.</summary>
+    public void Clear()
     {
-        List<RenderPayload> taken = [];
-
-        while (_pending.TryDequeue(out var payload))
+        while (_pending.TryDequeue(out _))
         {
-            taken.Add(payload);
         }
-
-        return taken;
     }
 }

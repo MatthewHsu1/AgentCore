@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Tests.Tools.Fakes;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Tools.Builtin;
 using Microsoft.Extensions.AI;
 using Xunit;
 
@@ -160,9 +161,17 @@ public sealed class BuiltinToolSchemaTests
     private static AIFunction Build(string uses, string toolId)
     {
         MapKnowledgePort store = new();
-        BuiltinToolFactory factory = new(store, store);
+        BuiltinToolSource source = new(new BuiltinToolPorts(store, store, static () => null));
         ToolConfiguration tool = new() { Id = toolId, Kind = ToolKind.Builtin, Uses = uses };
+        var context = new ToolSourceContext(new AgentCoreConfiguration
+        {
+            ApiVersion = "agentcore/v1",
+            Name = "test",
+            Tools = [tool],
+        });
 
-        return Assert.IsAssignableFrom<AIFunction>(factory.Create(tool));
+        var registrations = source.ProvideAsync(context).AsTask().GetAwaiter().GetResult();
+
+        return Assert.IsAssignableFrom<AIFunction>(Assert.Single(registrations).Materialise());
     }
 }

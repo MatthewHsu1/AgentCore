@@ -70,12 +70,12 @@ public sealed class ConfigurationLoaderTests
     [Fact]
     public void Example_BindsEveryToolKind()
     {
-        Assert.Equal(6, Example.Tools.Count);
+        Assert.Equal(7, Example.Tools.Count);
 
         Assert.Equal(ToolKind.Builtin, Example.Tools[0].Kind);
         Assert.Equal("knowledge.search", Example.Tools[0].Uses);
 
-        var binding = Example.Tools[5];
+        var binding = Example.Tools[6];
         Assert.Equal(ToolKind.Binding, binding.Kind);
         Assert.Equal("CreateCase", binding.Binds);
         Assert.NotNull(binding.Parameters);
@@ -85,7 +85,7 @@ public sealed class ConfigurationLoaderTests
     [Fact]
     public void Example_ReadsTheSecretReferenceAndResolvesNothing()
     {
-        var http = Example.Tools[4];
+        var http = Example.Tools[5];
 
         Assert.Equal(ToolKind.Http, http.Kind);
         Assert.NotNull(http.Request);

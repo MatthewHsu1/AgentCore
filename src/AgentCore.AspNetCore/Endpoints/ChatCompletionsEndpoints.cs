@@ -117,11 +117,19 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
             session = await sessions.OpenAsync(null, cancellationToken).ConfigureAwait(false);
         }
 
+        var streaming = request?.Stream == true;
+
+        // Only the stream has a chunk to carry a drawing, so only the stream gets a screen. Binding
+        // one on the whole-reply branch and clearing it afterwards would let the tool report a
+        // picture the caller never sees; with none bound it answers that it cannot draw. Set per
+        // request, not once: the session outlives a request and the branch can differ per turn.
+        session.SetRenderPort(streaming ? Channels.GetValue(session, _ => new RenderChannel()) : null);
+
         var model = request?.Model is { Length: > 0 } asked ? asked : session.Compiled.Name;
 
         try
         {
-            if (request?.Stream == true)
+            if (streaming)
             {
                 await StreamTurnAsync(http, session, input, model, cancellationToken).ConfigureAwait(false);
             }
@@ -160,7 +168,12 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
     {
         var turn = await session.RunTurnAsync(input, cancellationToken).ConfigureAwait(false);
 
-        Channels.GetValue(session, _ => new RenderChannel()).Drain();
+        // This branch bound no screen, so nothing this turn queued. What can still be waiting is the
+        // tail of an earlier stream that was cut off mid-write, and it must not surface later.
+        if (Channels.TryGetValue(session, out var stale))
+        {
+            stale.Clear();
+        }
 
         http.Response.StatusCode = StatusCodes.Status200OK;
         http.Response.Headers[SessionHeaderName] = session.CallId;
@@ -265,7 +278,7 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
         string model,
         CancellationToken cancellationToken)
     {
-        foreach (var payload in channel.Drain())
+        while (channel.TryTake(out var payload))
         {
             await WriteEventAsync(
                 http,

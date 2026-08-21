@@ -121,8 +121,8 @@ public static class AgentCoreHostBuilderExtensions
         options.UseSpeech(new TelnyxRelaySpeechAdapter());
 
         // kind: http. Every header resolved at startup, so no tool call costs a lookup.
-        options.AddToolFactory(startup =>
-            new HttpToolFactory(httpClients.CreateClient(HttpToolFactory.HttpClientName), startup.Secrets));
+        options.AddToolSource(startup =>
+            new HttpToolSource(httpClients.CreateClient(HttpToolSource.HttpClientName), startup.Secrets));
 
         // providers.audit.kind picks the adapter.
         options.UseAuditSinks(new PostgresAuditSinkAdapter());

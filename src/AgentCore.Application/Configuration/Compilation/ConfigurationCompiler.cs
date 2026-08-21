@@ -363,9 +363,14 @@ public static class ConfigurationCompiler
                 continue;
             }
 
-            if (context.Tools?.Create(tool) is { } built)
+            if (context.Tools is { } registry)
             {
-                tools.Add(built);
+                if (!registry.Contains(id))
+                {
+                    throw Fail(toolPointer, $"the tool id '{id}' is declared, and no tool source serves it.");
+                }
+
+                tools.Add(registry.Resolve(id));
             }
         }
 

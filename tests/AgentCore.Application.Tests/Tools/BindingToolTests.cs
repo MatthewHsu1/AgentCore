@@ -66,7 +66,7 @@ public sealed class BindingToolTests
             return ValueTask.FromResult<object?>(JsonNode.Parse("""{"caseId":"C-1"}"""));
         });
 
-        var result = await CallAsync(new BindingToolFactory(registry).Create(CreateCase), ("summary", "broken belt"));
+        var result = await CallAsync(await CreateAsync(registry, CreateCase), ("summary", "broken belt"));
 
         Assert.NotNull(seen);
         Assert.Equal("broken belt", seen["summary"]!.GetValue<string>());
@@ -85,7 +85,7 @@ public sealed class BindingToolTests
         });
 
         await CallAsync(
-            new BindingToolFactory(registry).Create(CreateCase),
+            await CreateAsync(registry, CreateCase),
             ("summary", "broken belt"),
             ("node", JsonNode.Parse("""{"a":1}""")),
             ("element", JsonDocument.Parse("""[1,2]""").RootElement),
@@ -124,7 +124,7 @@ public sealed class BindingToolTests
         });
 
         await CallAsync(
-            new BindingToolFactory(registry).Create(CreateCase),
+            await CreateAsync(registry, CreateCase),
             ("tags", Tags),
             ("id", Guid.Parse("2f1b7d64-0f4a-4f0a-9c1c-2b0b6a2b7c11")),
             ("ratio", 1.5f));
@@ -136,12 +136,12 @@ public sealed class BindingToolTests
     }
 
     [Fact]
-    public void TheDeclaredSchema_ReachesTheModelUnchanged()
+    public async Task TheDeclaredSchema_ReachesTheModelUnchanged()
     {
         ToolBindingRegistry registry = new();
         registry.Register("CreateCase", (arguments, cancellationToken) => ValueTask.FromResult<object?>(null));
 
-        var function = Assert.IsAssignableFrom<AIFunction>(new BindingToolFactory(registry).Create(CreateCase));
+        var function = Assert.IsAssignableFrom<AIFunction>(await CreateAsync(registry, CreateCase));
 
         Assert.Equal("create_case", function.Name);
         Assert.Equal("Open a service case for a human agent.", function.Description);
@@ -163,7 +163,7 @@ public sealed class BindingToolTests
             => throw new InvalidOperationException("the case system is down"));
 
         var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await CallAsync(new BindingToolFactory(registry).Create(CreateCase), ("summary", "broken belt")));
+            async () => await CallAsync(await CreateAsync(registry, CreateCase), ("summary", "broken belt")));
 
         Assert.Equal("the case system is down", thrown.Message);
     }
@@ -174,7 +174,7 @@ public sealed class BindingToolTests
         ToolBindingRegistry registry = new();
         registry.Register("CreateCase", (arguments, cancellationToken) => ValueTask.FromResult<object?>(null));
 
-        var result = await CallAsync(new BindingToolFactory(registry).Create(CreateCase), ("summary", "broken belt"));
+        var result = await CallAsync(await CreateAsync(registry, CreateCase), ("summary", "broken belt"));
 
         Assert.Null(result);
     }
@@ -183,22 +183,22 @@ public sealed class BindingToolTests
     // Failing at startup.
     // ---------------------------------------------------------------------------------------------
     [Fact]
-    public void ABindsNameTheHostNeverRegistered_FailsAtStartup()
+    public async Task ABindsNameTheHostNeverRegistered_FailsAtStartup()
     {
-        var failure = Assert.Throws<ConfigurationLoadException>(
-            () => new BindingToolFactory(new ToolBindingRegistry()).Create(CreateCase));
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+            async () => await CreateAsync(new ToolBindingRegistry(), CreateCase));
 
         Assert.Equal(ConfigurationCheck.ReferenceResolution, failure.Check);
         Assert.Contains("CreateCase", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void TheBindingFactory_ServesNoOtherKind()
+    public async Task TheBindingSource_ServesNoOtherKind()
     {
-        BindingToolFactory factory = new(new ToolBindingRegistry());
+        ToolBindingRegistry registry = new();
 
-        Assert.Null(factory.Create(new ToolConfiguration { Id = "s", Kind = ToolKind.Builtin, Uses = "knowledge.read" }));
-        Assert.Null(factory.Create(new ToolConfiguration { Id = "i", Kind = ToolKind.Agent, Agent = "a" }));
+        Assert.Null(await CreateAsync(registry, new ToolConfiguration { Id = "s", Kind = ToolKind.Builtin, Uses = "knowledge.read" }));
+        Assert.Null(await CreateAsync(registry, new ToolConfiguration { Id = "i", Kind = ToolKind.Agent, Agent = "a" }));
     }
 
     private static async Task<object?> CallAsync(AITool? tool, params (string Name, object? Value)[] arguments)
@@ -212,5 +212,61 @@ public sealed class BindingToolTests
         }
 
         return await function.InvokeAsync(new AIFunctionArguments(values), TestContext.Current.CancellationToken);
+    }
+
+    private static async Task<AITool?> CreateAsync(ToolBindingRegistry registry, ToolConfiguration tool)
+    {
+        BindingToolSource source = new(registry);
+        var context = new ToolSourceContext(new AgentCoreConfiguration
+        {
+            ApiVersion = "agentcore/v1",
+            Name = "test",
+            Tools = [tool],
+        });
+
+        var registrations = await source.ProvideAsync(context, TestContext.Current.CancellationToken);
+        return registrations.Count == 0 ? null : registrations[0].Materialise();
+    }
+
+    [Fact]
+    public async Task AnUnregisteredBindsName_FailsTheBoot()
+    {
+        ToolBindingRegistry bindings = new();
+        BindingToolSource source = new(bindings);
+        var context = new ToolSourceContext(new AgentCoreConfiguration
+        {
+            ApiVersion = "agentcore/v1",
+            Name = "test",
+            Tools = [new ToolConfiguration { Id = "open_case", Kind = ToolKind.Binding, Binds = "CreateCase" }],
+        });
+
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(async () =>
+            await source.ProvideAsync(context, TestContext.Current.CancellationToken));
+
+        Assert.Contains("CreateCase", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ARegisteredBinding_BecomesOneRegistration()
+    {
+        ToolBindingRegistry bindings = new();
+        bindings.Register("CreateCase", (_, _) => ValueTask.FromResult<object?>("done"));
+        BindingToolSource source = new(bindings);
+        var context = new ToolSourceContext(new AgentCoreConfiguration
+        {
+            ApiVersion = "agentcore/v1",
+            Name = "test",
+            Tools =
+            [
+                new ToolConfiguration
+                {
+                    Id = "open_case", Kind = ToolKind.Binding, Binds = "CreateCase", Description = "Open a case.",
+                },
+            ],
+        });
+
+        var registrations = await source.ProvideAsync(context, TestContext.Current.CancellationToken);
+
+        Assert.Equal("open_case", Assert.Single(registrations).Id);
     }
 }

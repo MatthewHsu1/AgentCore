@@ -730,7 +730,7 @@ public sealed class AddAgentCoreTests
             options =>
             {
                 options.SecretResolver = resolver;
-                options.AddToolFactory(startup => new HttpToolFactory(client, startup.Secrets));
+                options.AddToolSource(startup => new HttpToolSource(client, startup.Secrets));
             });
 
         var secrets = provider.GetRequiredService<ResolvedSecrets>();
@@ -748,7 +748,7 @@ public sealed class AddAgentCoreTests
 
         var failure = await Assert.ThrowsAsync<SecretResolutionException>(() => BuildAsync(
             SecretYaml,
-            options => options.AddToolFactory(startup => new HttpToolFactory(client, startup.Secrets))));
+            options => options.AddToolSource(startup => new HttpToolSource(client, startup.Secrets))));
 
         Assert.Equal("orders-api-key", failure.SecretName);
     }
@@ -1409,7 +1409,7 @@ public sealed class AddAgentCoreTests
             .Single(tool => string.Equals(tool.Id, toolId, StringComparison.Ordinal));
 
         var function = Assert.IsAssignableFrom<AIFunction>(
-            provider.GetRequiredService<IAgentToolFactory>().Create(declaration));
+            provider.GetRequiredService<ToolRegistry>().Resolve(declaration.Id));
 
         await function.InvokeAsync(
             new AIFunctionArguments { [argument] = value },

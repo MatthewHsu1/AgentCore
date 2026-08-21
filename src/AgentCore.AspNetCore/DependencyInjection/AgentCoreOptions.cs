@@ -11,7 +11,7 @@ namespace AgentCore.AspNetCore.DependencyInjection;
 /// </summary>
 public sealed class AgentCoreOptions
 {
-    private readonly List<Func<AgentCoreStartup, IAgentToolFactory>> _toolFactories = [];
+    private readonly List<Func<AgentCoreStartup, IToolSource>> _toolSources = [];
     private readonly List<ICallObserver> _observers = [];
 
     /// <summary>Gets the path of the configuration document, or <see langword="null"/>.</summary>
@@ -62,8 +62,8 @@ public sealed class AgentCoreOptions
     /// <summary>Gets the call transports this host supports, or <see langword="null"/>.</summary>
     internal IReadOnlyList<ICallAdapter>? Call { get; private set; }
 
-    /// <summary>Gets the extra tool factory links, in the order the composite asks them.</summary>
-    internal IReadOnlyList<Func<AgentCoreStartup, IAgentToolFactory>> ToolFactories => _toolFactories;
+    /// <summary>Gets the extra tool sources, in the order the registry asks them.</summary>
+    internal IReadOnlyList<Func<AgentCoreStartup, IToolSource>> ToolSources => _toolSources;
 
     /// <summary>Gets the observers the host registered, in the order it registered them.</summary>
     internal IReadOnlyList<ICallObserver> Observers => _observers;
@@ -218,13 +218,13 @@ public sealed class AgentCoreOptions
         return this;
     }
 
-    /// <summary>Adds one more link to the tool factory chain.</summary>
-    /// <param name="toolFactory">Builds the link from the loaded document and the resolved secrets.</param>
+    /// <summary>Adds one tool source the registry asks at startup.</summary>
+    /// <param name="toolSource">Builds the source from the loaded document.</param>
     /// <returns>These options, so a host chains its calls.</returns>
-    public AgentCoreOptions AddToolFactory(Func<AgentCoreStartup, IAgentToolFactory> toolFactory)
+    public AgentCoreOptions AddToolSource(Func<AgentCoreStartup, IToolSource> toolSource)
     {
-        ArgumentNullException.ThrowIfNull(toolFactory);
-        _toolFactories.Add(toolFactory);
+        ArgumentNullException.ThrowIfNull(toolSource);
+        _toolSources.Add(toolSource);
         return this;
     }
 

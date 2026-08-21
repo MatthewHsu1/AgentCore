@@ -5,6 +5,7 @@ using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Tools.Fakes;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Tools.Builtin;
 using Microsoft.Extensions.AI;
 using Xunit;
 
@@ -150,7 +151,7 @@ public sealed class AuditingFunctionInvokingChatClientErrorPolicyTests
     // ---------------------------------------------------------------------------------------
     // THE UNLOCK: a plain AIFunctionFactory.Create(...) tool is not a DeclaredTool at all, so
     // before Task 7a moved the policy into this middleware, nothing classified its faults — see
-    // ThrowingToolFactory in RuntimeFakes.cs, which throws straight at the framework today. After
+    // ThrowingToolBuilder in RuntimeFakes.cs, which throws straight at the framework today. After
     // the move it gets the identical answerable-fault treatment a DeclaredTool gets.
     // ---------------------------------------------------------------------------------------
     [Fact]
@@ -185,7 +186,7 @@ public sealed class AuditingFunctionInvokingChatClientErrorPolicyTests
             Kind = ToolKind.Builtin,
             Uses = BuiltinToolNames.KnowledgeSearch,
         };
-        var tool = Assert.IsAssignableFrom<AIFunction>(new BuiltinToolFactory(knowledge, null).Create(search));
+        var tool = await BuildAsync(search, knowledge);
 
         // A query the tool's own validation accepts, so the call actually reaches the adapter that
         // throws rather than stopping at the "no query" check first.
@@ -218,7 +219,7 @@ public sealed class AuditingFunctionInvokingChatClientErrorPolicyTests
             Kind = ToolKind.Builtin,
             Uses = BuiltinToolNames.KnowledgeSearch,
         };
-        var tool = Assert.IsAssignableFrom<AIFunction>(new BuiltinToolFactory(knowledge, null).Create(search));
+        var tool = await BuildAsync(search, knowledge);
 
         // No arguments at all: the model called the tool and filled nothing, which binding rejects
         // before the tool body runs.
@@ -248,7 +249,11 @@ public sealed class AuditingFunctionInvokingChatClientErrorPolicyTests
             Binds = "CreateCase",
             Description = "Open a service case for a human agent.",
         };
-        var tool = Assert.IsAssignableFrom<AIFunction>(new BindingToolFactory(registry).Create(createCase));
+        BindingToolSource source = new(registry);
+        var registrations = await source.ProvideAsync(
+            new ToolSourceContext(new AgentCoreConfiguration { ApiVersion = "agentcore/v1", Name = "test", Tools = [createCase] }),
+            TestContext.Current.CancellationToken);
+        var tool = Assert.IsAssignableFrom<AIFunction>(Assert.Single(registrations).Materialise());
 
         var result = await RunSingleRoundAsync(tool, TestContext.Current.CancellationToken);
 
@@ -258,6 +263,22 @@ public sealed class AuditingFunctionInvokingChatClientErrorPolicyTests
             "the case system is down",
             result[ToolErrorResult.MessageProperty]!.GetValue<string>(),
             StringComparison.Ordinal);
+    }
+
+    /// <summary>Builds one real <c>kind: builtin</c> tool through <see cref="BuiltinToolSource"/>.</summary>
+    private static async Task<AIFunction> BuildAsync(ToolConfiguration tool, IKnowledgeRetrievalPort retrieval)
+    {
+        BuiltinToolSource source = new(new BuiltinToolPorts(retrieval, null, static () => null));
+        var context = new ToolSourceContext(new AgentCoreConfiguration
+        {
+            ApiVersion = "agentcore/v1",
+            Name = "test",
+            Tools = [tool],
+        });
+
+        var registrations = await source.ProvideAsync(context, TestContext.Current.CancellationToken);
+
+        return Assert.IsAssignableFrom<AIFunction>(Assert.Single(registrations).Materialise());
     }
 
     /// <summary>Runs one request/response round and returns the JSON the tool result carried.</summary>

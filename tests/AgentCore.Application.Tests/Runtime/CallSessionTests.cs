@@ -125,7 +125,7 @@ public sealed class CallSessionTests
           model: { ref: fill }
           when: after_reply
         tools:
-          - { id: lookup_order, kind: builtin, uses: orders.read }
+          - { id: lookup_order, kind: builtin, uses: orders.read, description: "Look up an order by its id." }
         agents:
           defaults:
             model: { ref: reply }
@@ -361,7 +361,7 @@ public sealed class CallSessionTests
     {
         using ToolCallingChatClient reply = new("your order is on the way.");
         using SequencedChatClient fill = new(StayingNull);
-        var session = Build(ToolYaml, reply, fill, new StubToolFactory("""{ "status": "shipped" }""")).Create();
+        var session = Build(ToolYaml, reply, fill, new StubToolBuilder("""{ "status": "shipped" }""").Create).Create();
 
         var turn = await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
 
@@ -378,8 +378,8 @@ public sealed class CallSessionTests
     {
         using ToolCallingChatClient reply = new("your order is on the way.");
         using SequencedChatClient fill = new(StayingNull);
-        var tools = new StubToolFactory("""{ "status": "shipped" }""", asText: true);
-        var session = Build(ToolYaml, reply, fill, tools).Create();
+        var tools = new StubToolBuilder("""{ "status": "shipped" }""", asText: true);
+        var session = Build(ToolYaml, reply, fill, tools.Create).Create();
 
         await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
 
@@ -682,8 +682,8 @@ public sealed class CallSessionTests
     {
         using LoopingToolCallingChatClient reply = new();
         using SequencedChatClient fill = new(StayingNull);
-        ThrowingToolFactory tools = new();
-        var session = Build(ToolYaml, reply, fill, tools).Create();
+        ThrowingToolBuilder tools = new();
+        var session = Build(ToolYaml, reply, fill, tools.Create).Create();
 
         var turn = await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
 
@@ -692,7 +692,7 @@ public sealed class CallSessionTests
         Assert.Equal(CallSession.FallbackReply, turn.ReplyText);
         Assert.NotNull(turn.Failure);
         Assert.StartsWith(CallSession.ToolFailureReason, turn.Failure, StringComparison.Ordinal);
-        Assert.Contains(ThrowingToolFactory.Message, turn.Failure, StringComparison.Ordinal);
+        Assert.Contains(ThrowingToolBuilder.Message, turn.Failure, StringComparison.Ordinal);
 
         // The writers ran in their fixed order, and the machine picked the stage of the next turn.
         Assert.Equal(1, session.State.TurnIndex);
@@ -708,14 +708,14 @@ public sealed class CallSessionTests
     [Fact]
     public async Task ARealDeclaredToolThatCannotReachItsEndpoint_EndsTheTurnPerRowSixAndKeepsTheCall()
     {
-        // The same row, reached the way a shipped tool actually reaches it. ThrowingToolFactory
+        // The same row, reached the way a shipped tool actually reaches it. ThrowingToolBuilder
         // throws straight at the framework; this goes through DeclaredTool, so the classification
         // AuditingFunctionInvokingChatClient applies is what lets the fault out. Before the split
         // every fault became a result and this budget could never fire at all.
         using LoopingToolCallingChatClient reply = new();
         using SequencedChatClient fill = new(StayingNull);
-        UnreachableEndpointToolFactory tools = new();
-        var session = Build(ToolYaml, reply, fill, tools).Create();
+        UnreachableEndpointToolBuilder tools = new();
+        var session = Build(ToolYaml, reply, fill, tools.Create).Create();
 
         var turn = await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
 
@@ -724,7 +724,7 @@ public sealed class CallSessionTests
         Assert.Equal(CallSession.FallbackReply, turn.ReplyText);
         Assert.NotNull(turn.Failure);
         Assert.StartsWith(CallSession.ToolFailureReason, turn.Failure, StringComparison.Ordinal);
-        Assert.Contains(UnreachableEndpointToolFactory.Message, turn.Failure, StringComparison.Ordinal);
+        Assert.Contains(UnreachableEndpointToolBuilder.Message, turn.Failure, StringComparison.Ordinal);
 
         // The writers ran in their fixed order, the machine picked the stage of the next turn, and
         // the call is still alive.
@@ -740,8 +740,8 @@ public sealed class CallSessionTests
         // and nothing about the turn is a failure: no budget spent, no fallback, a real reply.
         using ToolCallingChatClient reply = new("That order is already closed.");
         using SequencedChatClient fill = new(StayingNull);
-        RefusedRequestToolFactory tools = new();
-        var session = Build(ToolYaml, reply, fill, tools).Create();
+        RefusedRequestToolBuilder tools = new();
+        var session = Build(ToolYaml, reply, fill, tools.Create).Create();
 
         var turn = await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
 
@@ -756,7 +756,7 @@ public sealed class CallSessionTests
     {
         using LoopingToolCallingChatClient reply = new();
         using SequencedChatClient fill = new(StayingNull);
-        var session = Build(ToolYaml, reply, fill, new ThrowingToolFactory()).Create();
+        var session = Build(ToolYaml, reply, fill, new ThrowingToolBuilder().Create).Create();
 
         await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
 
@@ -772,8 +772,8 @@ public sealed class CallSessionTests
     {
         using LoopingToolCallingChatClient reply = new();
         using SequencedChatClient fill = new(StayingNull);
-        ThrowingToolFactory tools = new();
-        var session = Build(ToolYaml, reply, fill, tools).Create();
+        ThrowingToolBuilder tools = new();
+        var session = Build(ToolYaml, reply, fill, tools.Create).Create();
 
         List<ChatResponseUpdate> updates = [];
         await foreach (var update in session.RunTurnStreamingAsync(
@@ -941,7 +941,7 @@ public sealed class CallSessionTests
     {
         using ToolCallingChatClient reply = new("your order is on the way.");
         using SequencedChatClient fill = new(StayingNull);
-        var session = Build(ToolYaml, reply, fill, new StubToolFactory("""{ "status": "shipped" }""")).Create();
+        var session = Build(ToolYaml, reply, fill, new StubToolBuilder("""{ "status": "shipped" }""").Create).Create();
 
         List<ChatResponseUpdate> updates = [];
         await foreach (var update in session.RunTurnStreamingAsync(
@@ -1062,7 +1062,7 @@ public sealed class CallSessionTests
         string yaml,
         IChatClient reply,
         IChatClient? fill,
-        IAgentToolFactory? tools = null,
+        Func<ToolConfiguration, AITool?>? tools = null,
         TimeProvider? timeProvider = null)
     {
         var compiled = Compile(yaml, reply, fill, tools);
@@ -1079,7 +1079,7 @@ public sealed class CallSessionTests
             timeProvider);
     }
 
-    private static CompiledAgent Compile(string yaml, IChatClient reply, IChatClient? fill, IAgentToolFactory? tools)
+    private static CompiledAgent Compile(string yaml, IChatClient reply, IChatClient? fill, Func<ToolConfiguration, AITool?>? tools)
     {
         var document = ConfigurationLoader.LoadYaml(yaml);
         var chatClients = new RoutingChatClientFactory(reply);
@@ -1088,6 +1088,11 @@ public sealed class CallSessionTests
             chatClients.Route("fill", fill);
         }
 
-        return ConfigurationCompiler.Compile(document, new AgentCompilationContext(chatClients) { Tools = tools });
+        return ConfigurationCompiler.Compile(
+            document,
+            new AgentCompilationContext(chatClients)
+            {
+                Tools = TestToolRegistry.From(document, tools, TestContext.Current.CancellationToken),
+            });
     }
 }

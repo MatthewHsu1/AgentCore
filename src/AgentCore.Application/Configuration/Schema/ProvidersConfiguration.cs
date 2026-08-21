@@ -15,6 +15,12 @@ public sealed record LlmProviderConfiguration
 
     /// <summary>Gets the name this entry answers to, such as <c>reply</c> or <c>fill</c>.</summary>
     public required string As { get; init; }
+
+    /// <summary>
+    /// Gets how hard a reasoning model thinks before it answers, or <see langword="null"/> to send
+    /// nothing and let the vendor decide.
+    /// </summary>
+    public string? ReasoningEffort { get; init; }
 }
 
 /// <summary>

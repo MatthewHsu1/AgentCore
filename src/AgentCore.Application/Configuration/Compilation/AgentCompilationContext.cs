@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Tools;
 
 namespace AgentCore.Application.Configuration.Compilation;
 
@@ -28,7 +29,7 @@ public sealed class AgentCompilationContext
     /// <summary>
     /// Gets or sets the seam that builds a tool. An agent advertises no tool when this is null.
     /// </summary>
-    public IAgentToolFactory? Tools { get; init; }
+    public ToolRegistry? Tools { get; init; }
 
     /// <summary>
     /// Gets or sets the evaluator a guarded graph edge calls.

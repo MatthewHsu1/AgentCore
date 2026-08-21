@@ -8,7 +8,7 @@ AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.CreateClient(strin
 AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.CreateHandler(string! name) -> System.Net.Http.HttpMessageHandler!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.Dispose() -> void
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions
-AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.AddToolFactory(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Ports.IAgentToolFactory!>! toolFactory) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.AddToolSource(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Ports.IToolSource!>! toolSource) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.AgentCoreOptions() -> void
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Bind(string! name, AgentCore.Application.Tools.ToolBinding! binding) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Bindings.get -> AgentCore.Application.Tools.ToolBindingRegistry!

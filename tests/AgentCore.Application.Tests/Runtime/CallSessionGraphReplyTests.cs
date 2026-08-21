@@ -3,6 +3,7 @@ using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Audit;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
+using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
@@ -54,7 +55,7 @@ public sealed class CallSessionGraphReplyTests
         apiVersion: agentcore/v1
         name: tool-turn
         tools:
-          - { id: lookup_order, kind: builtin, uses: orders.read }
+          - { id: lookup_order, kind: builtin, uses: orders.read, description: "Look up an order by its id." }
         agents:
           defaults:
             model: { ref: reply }
@@ -90,7 +91,7 @@ public sealed class CallSessionGraphReplyTests
         // Arrange. The model calls the tool once, reads the result, then answers.
         using ToolCallingChatClient reply = new(Spoken);
         InMemoryAuditSink sink = new();
-        var session = Build(ToolYaml, reply, null, sink, new StubToolFactory("""{ "status": "shipped" }"""))
+        var session = Build(ToolYaml, reply, null, sink, new StubToolBuilder("""{ "status": "shipped" }""").Create)
             .Create("call-tool");
 
         // Act.
@@ -191,7 +192,7 @@ public sealed class CallSessionGraphReplyTests
         IChatClient reply,
         IChatClient? responder,
         IAuditSinkPort sink,
-        IAgentToolFactory? tools = null)
+        Func<ToolConfiguration, AITool?>? tools = null)
     {
         var document = ConfigurationLoader.LoadYaml(yaml);
         RoutingChatClientFactory chatClients = new(reply);
@@ -202,7 +203,10 @@ public sealed class CallSessionGraphReplyTests
 
         var compiled = ConfigurationCompiler.Compile(
             document,
-            new AgentCompilationContext(chatClients) { Tools = tools });
+            new AgentCompilationContext(chatClients)
+            {
+                Tools = TestToolRegistry.From(document, tools, TestContext.Current.CancellationToken),
+            });
 
         return new CallSessionFactory(
             compiled,

@@ -28,7 +28,7 @@ internal static class CompilationStartup
     /// <param name="configuration">The loaded document.</param>
     /// <param name="options">The options the host filled. It carries the chat client seam.</param>
     /// <param name="startup">The loaded document and the resolved secrets, as the chat client seam reads them.</param>
-    /// <param name="tools">The chain step 4 built.</param>
+    /// <param name="tools">The registry step 4 built.</param>
     /// <param name="transcript">The store 1 backing step 4b opened. One store serves every call.</param>
     /// <param name="evaluators">
     /// The registry the moderator comes out of. R3 puts moderation in the chat pipeline of every
@@ -43,7 +43,7 @@ internal static class CompilationStartup
         AgentCoreConfiguration configuration,
         AgentCoreOptions options,
         AgentCoreStartup startup,
-        CompositeAgentToolFactory tools,
+        ToolRegistry tools,
         ITranscriptStore transcript,
         EvaluatorRegistry evaluators,
         ILoggerFactory loggers,

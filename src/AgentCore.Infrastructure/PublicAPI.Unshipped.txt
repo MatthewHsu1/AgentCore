@@ -68,9 +68,9 @@ AgentCore.Infrastructure.Telemetry.Grafana.GrafanaOtlpTelemetryAdapter
 AgentCore.Infrastructure.Telemetry.Grafana.GrafanaOtlpTelemetryAdapter.GrafanaOtlpTelemetryAdapter() -> void
 AgentCore.Infrastructure.Telemetry.Grafana.GrafanaOtlpTelemetryAdapter.Kind.get -> string!
 AgentCore.Infrastructure.Telemetry.Grafana.GrafanaOtlpTelemetryAdapter.StartAsync(AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.ITelemetrySession!>
-AgentCore.Infrastructure.Tools.HttpToolFactory
-AgentCore.Infrastructure.Tools.HttpToolFactory.Create(AgentCore.Application.Configuration.Schema.ToolConfiguration! tool) -> Microsoft.Extensions.AI.AITool?
-AgentCore.Infrastructure.Tools.HttpToolFactory.HttpToolFactory(System.Net.Http.HttpClient! client, AgentCore.Application.Secrets.ResolvedSecrets! secrets) -> void
+AgentCore.Infrastructure.Tools.HttpToolSource
+AgentCore.Infrastructure.Tools.HttpToolSource.HttpToolSource(System.Net.Http.HttpClient! client, AgentCore.Application.Secrets.ResolvedSecrets! secrets) -> void
+AgentCore.Infrastructure.Tools.HttpToolSource.ProvideAsync(AgentCore.Application.Tools.ToolSourceContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Application.Tools.ToolRegistration!>!>
 AgentCore.Infrastructure.Transcript.Postgres.PostgresTranscriptStoreAdapter
 AgentCore.Infrastructure.Transcript.Postgres.PostgresTranscriptStoreAdapter.Kind.get -> string!
 AgentCore.Infrastructure.Transcript.Postgres.PostgresTranscriptStoreAdapter.OpenAsync(AgentCore.Application.Configuration.Schema.VendorProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.ITranscriptStore!>
@@ -99,7 +99,7 @@ const AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.ApiKeyVariable
 const AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.ProviderKind = "openai" -> string!
 const AgentCore.Infrastructure.Secrets.FileSecretResolver.DefaultDirectory = "/run/secrets" -> string!
 const AgentCore.Infrastructure.Telemetry.Grafana.GrafanaOtlpTelemetryAdapter.GrafanaKind = "grafana" -> string!
-const AgentCore.Infrastructure.Tools.HttpToolFactory.HttpClientName = "agentcore.tools" -> string!
+const AgentCore.Infrastructure.Tools.HttpToolSource.HttpClientName = "agentcore.tools" -> string!
 const AgentCore.Infrastructure.Transcript.Postgres.PostgresTranscriptStoreAdapter.ProviderKind = "postgres" -> string!
 override AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord.Equals(object? obj) -> bool
 override AgentCore.Infrastructure.Knowledge.VectorData.Zilliz.ZillizChunkRecord.GetHashCode() -> int

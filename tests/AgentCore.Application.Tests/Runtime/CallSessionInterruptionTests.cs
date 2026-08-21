@@ -39,7 +39,7 @@ public sealed class CallSessionInterruptionTests
         apiVersion: agentcore/v1
         name: one-agent-with-tool
         tools:
-          - { id: price_lookup, kind: builtin, uses: orders.read }
+          - { id: price_lookup, kind: builtin, uses: orders.read, description: "Look up the price of an item." }
         agents:
           items:
             - { id: only, instructions: "quote the price", tools: [ price_lookup ] }
@@ -50,7 +50,7 @@ public sealed class CallSessionInterruptionTests
         apiVersion: agentcore/v1
         name: one-agent-with-parallel-tool
         tools:
-          - { id: quote, kind: builtin, uses: orders.read }
+          - { id: quote, kind: builtin, uses: orders.read, description: "Get a price quote for an item." }
         agents:
           items:
             - { id: only, instructions: "quote both items", tools: [ quote ] }
@@ -125,7 +125,7 @@ public sealed class CallSessionInterruptionTests
         // flight. The rule is per call id, so only the unfinished call is dropped.
         using ParallelToolCallChatClient reply = new();
         PartiallyAnsweredToolFactory tools = new();
-        var session = CreateSession(ParallelToolYaml, reply, tools);
+        var session = CreateSession(ParallelToolYaml, reply, tools.Create);
 
         using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(30));
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(
@@ -458,7 +458,7 @@ public sealed class CallSessionInterruptionTests
     private static CallSession CreateSession(
         string yaml,
         IChatClient reply,
-        IAgentToolFactory? tools = null,
+        Func<ToolConfiguration, AITool?>? tools = null,
         IAuditSinkPort? auditSink = null)
     {
         // There is always a sink now: CallObservers.Standard takes a required one, because the
@@ -472,7 +472,10 @@ public sealed class CallSessionInterruptionTests
         var chatClients = new FakeChatClientFactory(reply);
         var compiled = ConfigurationCompiler.Compile(
             document,
-            new AgentCompilationContext(chatClients) { Tools = tools });
+            new AgentCompilationContext(chatClients)
+            {
+                Tools = TestToolRegistry.From(document, tools, TestContext.Current.CancellationToken),
+            });
 
         var factory = new CallSessionFactory(
             compiled,
@@ -540,7 +543,7 @@ public sealed class CallSessionInterruptionTests
         public static InterruptionFixture StartWithFinishedTool(string reply)
         {
             GatedToolThenReplyChatClient client = new(reply);
-            var session = CreateSession(ToolYaml, client, new StubToolFactory("""{ "price": 50 }"""));
+            var session = CreateSession(ToolYaml, client, new StubToolBuilder("""{ "price": 50 }""").Create);
             return new InterruptionFixture(session, client, client.OpenGate, TestContext.Current.CancellationToken);
         }
 
@@ -548,7 +551,7 @@ public sealed class CallSessionInterruptionTests
         public static InterruptionFixture StartWithProseBesideTool(string reply)
         {
             ProseBesideToolChatClient client = new(reply);
-            var session = CreateSession(ToolYaml, client, new StubToolFactory("""{ "price": 50 }"""));
+            var session = CreateSession(ToolYaml, client, new StubToolBuilder("""{ "price": 50 }""").Create);
             return new InterruptionFixture(session, client, client.OpenGate, TestContext.Current.CancellationToken);
         }
 
@@ -1011,12 +1014,12 @@ public sealed class CallSessionInterruptionTests
     /// a test the first call already finished and the second is now the one in flight, which is the
     /// instant a test must interrupt to pin the per-call-id rule.
     /// </remarks>
-    private sealed class PartiallyAnsweredToolFactory : IAgentToolFactory
+    private sealed class PartiallyAnsweredToolFactory
     {
         /// <summary>Signals once the second call is in flight and blocked.</summary>
         public TaskCompletionSource SecondCallStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public AITool? Create(ToolConfiguration tool)
+        public AIFunction? Create(ToolConfiguration tool)
         {
             ArgumentNullException.ThrowIfNull(tool);
             return AIFunctionFactory.Create(AnswerAsync, tool.Id, tool.Description ?? tool.Id);

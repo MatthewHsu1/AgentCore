@@ -6,6 +6,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Tests.Configuration;
 using AgentCore.Application.Tests.Tools.Fakes;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Tools.Builtin;
 using Microsoft.Extensions.AI;
 using Xunit;
 
@@ -78,16 +79,6 @@ public sealed class BuiltinToolTests
 
         Assert.Equal("search_chunks", function.Name);
         Assert.Equal("Find a passage.", function.Description);
-    }
-
-    [Fact]
-    public void ADocumentThatDescribesNothing_AdvertisesNoDescription()
-    {
-        // Not null. The empty string is what this advertised before Task 7b, and a null description
-        // would let AIFunctionFactory fall back to describing the C# method instead.
-        var function = Assert.IsAssignableFrom<AIFunction>(Factory().Create(Search));
-
-        Assert.Equal(string.Empty, function.Description);
     }
 
     [Fact]
@@ -368,7 +359,7 @@ public sealed class BuiltinToolTests
     {
         MapKnowledgePort documents = new();
         documents.With("returns.md", "A refund takes five days.");
-        BuiltinToolFactory factory = new(retrieval: null, documents);
+        BuiltinFactory factory = new(retrieval: null, documents);
 
         var result = await CallAsync(factory.Create(Read), ("documentId", "returns.md"));
 
@@ -380,7 +371,7 @@ public sealed class BuiltinToolTests
     {
         // The failure lands while the document loads, and it names the port nothing binds. A tool
         // that went missing here would take a whole access path with it.
-        BuiltinToolFactory factory = new(retrieval: null, new MapKnowledgePort());
+        BuiltinFactory factory = new(retrieval: null, new MapKnowledgePort());
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => factory.Create(Search));
 
@@ -394,7 +385,7 @@ public sealed class BuiltinToolTests
     {
         MapKnowledgePort retrieval = new();
         retrieval.With("returns.md", "A refund takes five days.");
-        BuiltinToolFactory factory = new(retrieval, documents: null);
+        BuiltinFactory factory = new(retrieval, documents: null);
 
         var result = await CallAsync(factory.Create(Search), ("query", "refund"));
 
@@ -405,7 +396,7 @@ public sealed class BuiltinToolTests
     [Fact]
     public void AHostThatBindsOnlyRetrieval_FailsTheLoadOnKnowledgeRead()
     {
-        BuiltinToolFactory factory = new(new MapKnowledgePort(), documents: null);
+        BuiltinFactory factory = new(new MapKnowledgePort(), documents: null);
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => factory.Create(Read));
 
@@ -417,7 +408,7 @@ public sealed class BuiltinToolTests
     [Fact]
     public void AHostThatBindsOnlyRetrieval_FailsTheLoadOnKnowledgeList()
     {
-        BuiltinToolFactory factory = new(new MapKnowledgePort(), documents: null);
+        BuiltinFactory factory = new(new MapKnowledgePort(), documents: null);
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => factory.Create(ListDocs));
 
@@ -429,7 +420,7 @@ public sealed class BuiltinToolTests
     [Fact]
     public void AHostThatBindsOnlyRetrieval_FailsTheLoadOnKnowledgeGrep()
     {
-        BuiltinToolFactory factory = new(new MapKnowledgePort(), documents: null);
+        BuiltinFactory factory = new(new MapKnowledgePort(), documents: null);
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => factory.Create(GrepDocs));
 
@@ -443,7 +434,7 @@ public sealed class BuiltinToolTests
     {
         MapKnowledgePort documents = new();
         documents.With("returns.md", "A refund takes five days.");
-        BuiltinToolFactory factory = new(retrieval: null, documents);
+        BuiltinFactory factory = new(retrieval: null, documents);
 
         var listing = Assert.IsType<JsonObject>(await CallAsync(factory.Create(ListDocs)));
         var found = Assert.IsType<JsonObject>(await CallAsync(factory.Create(GrepDocs), ("pattern", "refund")));
@@ -462,10 +453,37 @@ public sealed class BuiltinToolTests
     // ---------------------------------------------------------------------------------------------
     // Helpers.
     // ---------------------------------------------------------------------------------------------
-    private static BuiltinToolFactory Factory(MapKnowledgePort? knowledge = null)
+    private static BuiltinFactory Factory(MapKnowledgePort? knowledge = null)
     {
         var store = knowledge ?? new MapKnowledgePort();
-        return new BuiltinToolFactory(store, store);
+        return new BuiltinFactory(store, store);
+    }
+
+    /// <summary>Builds one declared tool through <see cref="BuiltinToolSource"/>, synchronously.</summary>
+    private sealed class BuiltinFactory
+    {
+        private readonly BuiltinToolSource _source;
+
+        public BuiltinFactory(IKnowledgeRetrievalPort? retrieval, IDocumentStorePort? documents)
+            => _source = new BuiltinToolSource(new BuiltinToolPorts(retrieval, documents, static () => null));
+
+        public AITool? Create(ToolConfiguration tool)
+        {
+            if (tool.Kind != ToolKind.Builtin)
+            {
+                return null;
+            }
+
+            var context = new ToolSourceContext(new AgentCoreConfiguration
+            {
+                ApiVersion = "agentcore/v1",
+                Name = "test",
+                Tools = [tool],
+            });
+
+            var registrations = _source.ProvideAsync(context).AsTask().GetAwaiter().GetResult();
+            return Assert.Single(registrations).Materialise();
+        }
     }
 
     private static AIFunctionArguments Arguments(params (string Name, object? Value)[] arguments)
@@ -510,5 +528,124 @@ public sealed class BuiltinToolTests
         Assert.True(ToolErrorResult.IsError(error));
         Assert.Equal(toolId, error["tool"]!.GetValue<string>());
         Assert.Contains(fragment, error["message"]!.GetValue<string>(), StringComparison.Ordinal);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // BuiltinToolSource: description resolution.
+    // ---------------------------------------------------------------------------------------------
+    [Fact]
+    public async Task ABuiltinWithNoDeclaredDescription_TakesTheShippedDefault()
+    {
+        BuiltinToolSource source = new(new BuiltinToolPorts(new MapKnowledgePort(), null, static () => null));
+        var context = new ToolSourceContext(new AgentCoreConfiguration
+        {
+            ApiVersion = "agentcore/v1",
+            Name = "test",
+            Tools = [new ToolConfiguration { Id = "search_chunks", Kind = ToolKind.Builtin, Uses = "knowledge.search" }],
+        });
+
+        var registrations = await source.ProvideAsync(context, TestContext.Current.CancellationToken);
+
+        Assert.NotEqual(string.Empty, Assert.Single(registrations).Description);
+    }
+
+    [Fact]
+    public async Task ABuiltinWithADeclaredDescription_KeepsTheDocumentsWords()
+    {
+        const string Declared = "Find a passage.";
+        BuiltinToolSource source = new(new BuiltinToolPorts(new MapKnowledgePort(), null, static () => null));
+        var context = new ToolSourceContext(new AgentCoreConfiguration
+        {
+            ApiVersion = "agentcore/v1",
+            Name = "test",
+            Tools =
+            [
+                new ToolConfiguration
+                {
+                    Id = "search_chunks", Kind = ToolKind.Builtin, Uses = "knowledge.search", Description = Declared,
+                },
+            ],
+        });
+
+        var registrations = await source.ProvideAsync(context, TestContext.Current.CancellationToken);
+
+        Assert.Equal(Declared, registrations[0].Description);
+    }
+
+    [Fact]
+    public async Task ABuiltinWithNoDeclaredDescription_MaterialisesTheShippedDefault()
+    {
+        BuiltinToolSource source = new(new BuiltinToolPorts(new MapKnowledgePort(), null, static () => null));
+        var context = new ToolSourceContext(new AgentCoreConfiguration
+        {
+            ApiVersion = "agentcore/v1",
+            Name = "test",
+            Tools = [new ToolConfiguration { Id = "search_chunks", Kind = ToolKind.Builtin, Uses = "knowledge.search" }],
+        });
+
+        var registrations = await source.ProvideAsync(context, TestContext.Current.CancellationToken);
+        var registration = Assert.Single(registrations);
+        var function = Assert.IsAssignableFrom<AIFunction>(registration.Materialise());
+
+        Assert.Equal(new KnowledgeSearchDefinition().DefaultDescription, function.Description);
+    }
+
+    [Fact]
+    public async Task ABuiltinWithADeclaredDescription_MaterialisesTheDocumentsWords()
+    {
+        const string Declared = "Find a passage.";
+        BuiltinToolSource source = new(new BuiltinToolPorts(new MapKnowledgePort(), null, static () => null));
+        var context = new ToolSourceContext(new AgentCoreConfiguration
+        {
+            ApiVersion = "agentcore/v1",
+            Name = "test",
+            Tools =
+            [
+                new ToolConfiguration
+                {
+                    Id = "search_chunks", Kind = ToolKind.Builtin, Uses = "knowledge.search", Description = Declared,
+                },
+            ],
+        });
+
+        var registrations = await source.ProvideAsync(context, TestContext.Current.CancellationToken);
+        var registration = Assert.Single(registrations);
+        var function = Assert.IsAssignableFrom<AIFunction>(registration.Materialise());
+
+        Assert.Equal(Declared, function.Description);
+    }
+
+    [Fact]
+    public async Task ABuiltinWhosePortIsUnbound_FailsTheBoot()
+    {
+        BuiltinToolSource source = new(new BuiltinToolPorts(null, null, static () => null));
+        var context = new ToolSourceContext(new AgentCoreConfiguration
+        {
+            ApiVersion = "agentcore/v1",
+            Name = "test",
+            Tools = [new ToolConfiguration { Id = "search_chunks", Kind = ToolKind.Builtin, Uses = "knowledge.search" }],
+        });
+
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(async () =>
+            await source.ProvideAsync(context, TestContext.Current.CancellationToken));
+
+        Assert.Contains(nameof(IKnowledgeRetrievalPort), failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AUsesNameAgentCoreDoesNotShip_FailsTheBoot()
+    {
+        BuiltinToolSource source = new(new BuiltinToolPorts(new MapKnowledgePort(), null, static () => null));
+        var context = new ToolSourceContext(new AgentCoreConfiguration
+        {
+            ApiVersion = "agentcore/v1",
+            Name = "test",
+            Tools = [new ToolConfiguration { Id = "x", Kind = ToolKind.Builtin, Uses = "knowledge.invent" }],
+        });
+
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(async () =>
+            await source.ProvideAsync(context, TestContext.Current.CancellationToken));
+
+        Assert.Contains("knowledge.invent", failure.Message, StringComparison.Ordinal);
     }
 }

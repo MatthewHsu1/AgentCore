@@ -1,11 +1,13 @@
 using System.Runtime.CompilerServices;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
+using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime;
+using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
 
@@ -28,7 +30,7 @@ public sealed class CallSessionTranscriptTests
         apiVersion: agentcore/v1
         name: transcript-tool-check
         tools:
-          - { id: price_lookup, kind: builtin, uses: orders.read }
+          - { id: price_lookup, kind: builtin, uses: orders.read, description: "Look up the price of an item." }
         agents:
           items:
             - { id: only, instructions: "quote the price", tools: [ price_lookup ] }
@@ -97,7 +99,7 @@ public sealed class CallSessionTranscriptTests
         // Arrange
         RecordingTranscriptStore store = new();
         using ProseThenReplyChatClient reply = new("the price is fifty");
-        var session = CreateSession(ToolYaml, reply, store, new StubToolFactory(ToolResult));
+        var session = CreateSession(ToolYaml, reply, store, new StubToolBuilder(ToolResult).Create);
         await DrainAsync(session.RunTurnStreamingAsync("how much?", TestContext.Current.CancellationToken));
 
         // Act
@@ -187,13 +189,17 @@ public sealed class CallSessionTranscriptTests
     }
 
     private static CallSession CreateSession(
-        string yaml, IChatClient reply, ITranscriptStore store, IAgentToolFactory? tools = null)
+        string yaml, IChatClient reply, ITranscriptStore store, Func<ToolConfiguration, AITool?>? tools = null)
     {
         var document = ConfigurationLoader.LoadYaml(yaml);
         var chatClients = new FakeChatClientFactory(reply);
         var compiled = ConfigurationCompiler.Compile(
             document,
-            new AgentCompilationContext(chatClients) { TranscriptStore = store, Tools = tools });
+            new AgentCompilationContext(chatClients)
+            {
+                TranscriptStore = store,
+                Tools = TestToolRegistry.From(document, tools, TestContext.Current.CancellationToken),
+            });
 
         var factory = new CallSessionFactory(
             compiled,

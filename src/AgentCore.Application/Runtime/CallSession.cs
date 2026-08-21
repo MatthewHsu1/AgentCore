@@ -104,6 +104,8 @@ public sealed class CallSession : IConversationPort
 
     private (string ToolId, IReadOnlyList<AITool> Tools)? _delegatedTools;
 
+    private IRenderPort? _renderPort;
+
     /// <summary>
     /// Creates the session of one call.
     /// </summary>
@@ -204,6 +206,18 @@ public sealed class CallSession : IConversationPort
     }
 
     /// <summary>
+    /// Gives this call the screen its tools draw on, or takes it away.
+    /// </summary>
+    /// <param name="port">The screen, or <see langword="null"/> for a call that has none.</param>
+    /// <remarks>
+    /// A screen belongs to the request as much as to the call. One session can answer one request as
+    /// a stream and the next as a whole reply, and only the stream has anywhere to put a drawing, so
+    /// a host sets this per request rather than once. With nothing bound, a tool that would draw
+    /// answers the model that it cannot, instead of reporting a picture nobody will see.
+    /// </remarks>
+    public void SetRenderPort(IRenderPort? port) => _renderPort = port;
+
+    /// <summary>
     /// Runs one turn end to end, and returns what it did.
     /// </summary>
     /// <param name="userInput">What the caller said.</param>
@@ -223,11 +237,7 @@ public sealed class CallSession : IConversationPort
 
         try
         {
-            using var scope = CallStateScope.Enter(State);
-
-            using var faults = ToolFailureScope.Enter(failure => RecordToolFailure(turn.Index, failure));
-
-            using var context = TurnContextScope.Enter(TurnContextOf(turn));
+            using var ambients = EnterAmbients(turn);
 
             AgentResponse response;
             string? toolFault = null;
@@ -289,11 +299,7 @@ public sealed class CallSession : IConversationPort
             List<AgentResponseUpdate> updates = [];
             string? toolFault = null;
 
-            using var opening = CallStateScope.Enter(State);
-
-            using var openingFaults = ToolFailureScope.Enter(failure => RecordToolFailure(turn.Index, failure));
-
-            using var openingContext = TurnContextScope.Enter(TurnContextOf(turn));
+            using var opening = EnterAmbients(turn);
 
             var stream = turn.Agent
                 .RunStreamingAsync(
@@ -317,12 +323,7 @@ public sealed class CallSession : IConversationPort
                         // execution context of its caller at every yield, so the scope above reaches
                         // the first round only. The graph runs inside MoveNextAsync, so the scope
                         // opens again here and closes with the round.
-                        using var round = CallStateScope.Enter(State);
-
-                        using var roundFaults = ToolFailureScope.Enter(
-                            failure => RecordToolFailure(turn.Index, failure));
-
-                        using var roundContext = TurnContextScope.Enter(TurnContextOf(turn));
+                        using var round = EnterAmbients(turn);
 
                         if (!await stream.MoveNextAsync().ConfigureAwait(false))
                         {
@@ -497,6 +498,22 @@ public sealed class CallSession : IConversationPort
         => _sessionCarriesHistory
             ? turn.Session
             : await turn.Agent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
+
+    /// <summary>
+    /// Opens the ambients this turn runs under.
+    /// </summary>
+    /// <param name="turn">The turn about to run.</param>
+    /// <returns>The scope. Disposing it closes every ambient it opened.</returns>
+    /// <remarks>
+    /// A streaming turn calls this once for the turn and again for every round, because an async
+    /// iterator restores the execution context of its caller at each <c>yield return</c>.
+    /// </remarks>
+    private IDisposable EnterAmbients(Turn turn)
+        => TurnAmbients.Enter(
+            State,
+            _renderPort,
+            failure => RecordToolFailure(turn.Index, failure),
+            TurnContextOf(turn));
 
     /// <summary>
     /// Reads what one turn adds to its own model invocation.

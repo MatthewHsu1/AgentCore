@@ -71,6 +71,7 @@ internal static class ExampleDocument
           - { id: read_doc,      kind: builtin, uses: knowledge.read }
           - { id: list_docs,     kind: builtin, uses: knowledge.list }
           - { id: grep_docs,     kind: builtin, uses: knowledge.grep }
+          - { id: draw,          kind: builtin, uses: ui.draw }
           - id: lookup_order
             kind: http
             description: Read one order by its identifier.
@@ -314,6 +315,11 @@ internal static class ExampleDocument
               "id": "grep_docs",
               "kind": "builtin",
               "uses": "knowledge.grep"
+            },
+            {
+              "id": "draw",
+              "kind": "builtin",
+              "uses": "ui.draw"
             },
             {
               "id": "lookup_order",

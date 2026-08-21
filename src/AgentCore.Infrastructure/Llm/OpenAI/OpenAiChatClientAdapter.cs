@@ -1,9 +1,16 @@
+// The reasoning-effort type is marked for evaluation by the SDK (OPENAI001). It is pinned at
+// OpenAI 2.12.0 and covered by OpenAiReasoningEffortTests, which fail loudly if a bump moves it.
+#pragma warning disable OPENAI001
+
 using System.ClientModel;
+using System.Globalization;
+using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
 using Microsoft.Extensions.AI;
 using OpenAI;
+using OpenAI.Chat;
 
 namespace AgentCore.Infrastructure.Llm.OpenAI;
 
@@ -32,15 +39,9 @@ public sealed class OpenAiChatClientAdapter : IChatClientAdapter
     public const string ProviderKind = "openai";
 
     /// <summary>The <c>${secret:name}</c> name the resolver chain is asked for.</summary>
-    /// <remarks>
-    /// It forwards to <see cref="KnownSecrets.OpenAiApiKeyName"/>, which is where the name now lives.
-    /// This constant stays because callers already read it, and because an adapter publishing the
-    /// name of the credential it needs is worth keeping.
-    /// </remarks>
     public const string ApiKeySecretName = KnownSecrets.OpenAiApiKeyName;
 
     /// <summary>The standard OpenAI environment variable, read when the chain holds no name.</summary>
-    /// <remarks>It forwards to <see cref="KnownSecrets.OpenAiApiKeyVariable"/>.</remarks>
     public const string ApiKeyVariableName = KnownSecrets.OpenAiApiKeyVariable;
 
     private OpenAIClient? _client;
@@ -70,6 +71,48 @@ public sealed class OpenAiChatClientAdapter : IChatClientAdapter
                 .RequireAsync(KnownSecrets.OpenAi, cancellationToken: cancellationToken)
                 .ConfigureAwait(false)));
 
-        return _client.GetChatClient(entry.Model).AsIChatClient();
+        var client = _client.GetChatClient(entry.Model).AsIChatClient();
+
+        return entry.ReasoningEffort is { Length: > 0 } effort ? WithReasoningEffort(client, effort) : client;
     }
+
+    /// <summary>Puts <c>reasoning_effort</c> on every request this client sends.</summary>
+    /// <param name="client">The client of one entry.</param>
+    /// <param name="effort">The value the document wrote.</param>
+    /// <returns>The client the factory hands out.</returns>
+    /// <exception cref="ConfigurationLoadException">The value is not one this vendor knows.</exception>
+    internal static IChatClient WithReasoningEffort(IChatClient client, string effort)
+    {
+        var level = Level(effort);
+
+        return client
+            .AsBuilder()
+            .ConfigureOptions(options => options.RawRepresentationFactory ??=
+                _ => new ChatCompletionOptions { ReasoningEffortLevel = level })
+            .Build();
+    }
+
+    /// <summary>Reads one <c>reasoningEffort</c> value.</summary>
+    /// <param name="effort">The value the document wrote.</param>
+    /// <returns>The vendor level.</returns>
+    /// <exception cref="ConfigurationLoadException">The value is not one this vendor knows.</exception>
+    private static ChatReasoningEffortLevel Level(string effort)
+        => effort.ToLowerInvariant() switch
+        {
+            "none" => ChatReasoningEffortLevel.None,
+            "minimal" => ChatReasoningEffortLevel.Minimal,
+            "low" => ChatReasoningEffortLevel.Low,
+            "medium" => ChatReasoningEffortLevel.Medium,
+            "high" => ChatReasoningEffortLevel.High,
+            _ => throw new ConfigurationLoadException(new ConfigurationError
+            {
+                Pointer = "/providers/llm",
+                Message = string.Format(
+                    CultureInfo.InvariantCulture,
+                    "reasoningEffort '{0}' is not one this vendor knows. Write none, minimal, low, "
+                    + "medium or high.",
+                    effort),
+                Check = ConfigurationCheck.ReferenceResolution,
+            }),
+        };
 }

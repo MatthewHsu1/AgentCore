@@ -11,36 +11,21 @@ using Microsoft.Extensions.AI;
 namespace AgentCore.Infrastructure.Tools;
 
 /// <summary>
-/// Builds the <c>kind: http</c> tools.
+/// Serves the <c>kind: http</c> tools.
 /// </summary>
-/// <remarks>
-/// <para>
-/// The factory holds the one <see cref="HttpClient"/> the host gives it, and never builds one. The
-/// host owns the handler, the pool, the deadline, and the retry — it opens the client under
-/// <see cref="HttpClientName"/> on its pipeline — and a test owns the whole endpoint by handing over
-/// a client on its own <see cref="HttpMessageHandler"/>.
-/// </para>
-/// <para>
-/// Each header resolves once, here, when the document compiles. A tool that carried an unresolved
-/// <c>${secret:name}</c> into a call would fail on the telephone instead of at startup.
-/// </para>
-/// </remarks>
-public sealed class HttpToolFactory : IAgentToolFactory
+public sealed class HttpToolSource : IToolSource
 {
     /// <summary>The name a host opens the client of these tools under, on its HTTP pipeline.</summary>
-    /// <remarks>
-    /// The pipeline serves any name and gives each one the same defaults, so this name is chosen
-    /// here, beside the tools it belongs to, and no host registers it in advance.
-    /// </remarks>
     public const string HttpClientName = "agentcore.tools";
 
     private readonly HttpClient _client;
+
     private readonly ResolvedSecrets _secrets;
 
-    /// <summary>Creates the factory.</summary>
-    /// <param name="client">The client every tool of this factory sends on. The factory never disposes it.</param>
+    /// <summary>Creates the source.</summary>
+    /// <param name="client">The client every tool of this source sends on. The source never disposes it.</param>
     /// <param name="secrets">The values startup already resolved.</param>
-    public HttpToolFactory(HttpClient client, ResolvedSecrets secrets)
+    public HttpToolSource(HttpClient client, ResolvedSecrets secrets)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(secrets);
@@ -49,37 +34,37 @@ public sealed class HttpToolFactory : IAgentToolFactory
         _secrets = secrets;
     }
 
-    /// <summary>Builds one HTTP tool.</summary>
-    /// <param name="tool">The declared tool.</param>
-    /// <returns>The tool, or <see langword="null"/> when the kind is not <see cref="ToolKind.Http"/>.</returns>
-    /// <exception cref="ConfigurationLoadException">The tool declares no <c>request:</c>.</exception>
+    /// <inheritdoc />
+    /// <exception cref="ConfigurationLoadException">A <c>kind: http</c> tool declares no <c>request:</c>.</exception>
     /// <exception cref="SecretResolutionException">A header references a secret startup did not resolve.</exception>
-    public AITool? Create(ToolConfiguration tool)
+    public ValueTask<IReadOnlyList<ToolRegistration>> ProvideAsync(
+        ToolSourceContext context, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(tool);
+        ArgumentNullException.ThrowIfNull(context);
 
-        if (tool.Kind != ToolKind.Http)
+        List<ToolRegistration> registrations = [];
+        foreach (var declared in context.DeclarationsOf(ToolKind.Http))
         {
-            return null;
-        }
-
-        if (tool.Request is not { } request)
-        {
-            throw new ConfigurationLoadException(new ConfigurationError
+            if (declared.Request is not { } request)
             {
-                Pointer = "/tools",
-                Message = $"the tool '{tool.Id}' is kind: http and declares no request:, so there is no call to make.",
-                Check = ConfigurationCheck.ReferenceResolution,
-            });
+                throw ToolSourceError.Fail(
+                    $"the tool '{declared.Id}' is kind: http and declares no request:, so there is no "
+                    + "call to make.");
+            }
+
+            List<KeyValuePair<string, string>> headers = [];
+            foreach (var header in request.Headers)
+            {
+                headers.Add(new KeyValuePair<string, string>(header.Key, _secrets.Format(header.Value)));
+            }
+
+            registrations.Add(new ToolRegistration(
+                declared.Id,
+                declared.Description ?? string.Empty,
+                () => new HttpTool(declared, request, headers, _client)));
         }
 
-        List<KeyValuePair<string, string>> headers = [];
-        foreach (var header in request.Headers)
-        {
-            headers.Add(new KeyValuePair<string, string>(header.Key, _secrets.Format(header.Value)));
-        }
-
-        return new HttpTool(tool, request, headers, _client);
+        return ValueTask.FromResult<IReadOnlyList<ToolRegistration>>(registrations);
     }
 }
 
@@ -90,7 +75,9 @@ internal sealed class HttpTool : DeclaredTool
     private const int BodyQuoteLimit = 500;
 
     private readonly HttpRequestConfiguration _request;
+
     private readonly List<KeyValuePair<string, string>> _headers;
+
     private readonly HttpClient _client;
 
     internal HttpTool(
@@ -115,6 +102,7 @@ internal sealed class HttpTool : DeclaredTool
         }
 
         using HttpRequestMessage message = new(new HttpMethod(_request.Method), url);
+
         foreach (var header in _headers)
         {
             // TryAddWithoutValidation: a document writes the header the endpoint asks for, and the

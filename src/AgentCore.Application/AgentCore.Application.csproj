@@ -25,12 +25,11 @@
     <PackageReference Include="Microsoft.Extensions.AI.Evaluation.NLP" />
   </ItemGroup>
 
-  <!-- Check 1, section 8.5: the configuration schema ships inside the assembly. -->
   <ItemGroup>
     <EmbeddedResource Include="Configuration/Schema/agentcore-v1.schema.json" />
+    <EmbeddedResource Include="Tools/Drawing/vocabulary.md" />
   </ItemGroup>
 
-  <!-- Rule 2, section 5.1: guard the public surface. -->
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
     <AdditionalFiles Include="PublicAPI.Shipped.txt" />

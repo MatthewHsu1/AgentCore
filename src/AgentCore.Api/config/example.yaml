@@ -127,6 +127,15 @@ tools:
   - { id: list_docs,     kind: builtin, uses: knowledge.list }
   - { id: grep_docs,     kind: builtin, uses: knowledge.grep }
 
+  # Draws something for the caller to look at, when the host has a screen. The agent asks for it in
+  # words; a second, private model call turns that into a tree of cards, charts, tables and buttons
+  # and sends it to the browser. The vocabulary never reaches this agent, so listing this tool costs
+  # it 239 bytes rather than the 19,355 the drawing vocabulary would.
+  #
+  # A host with no screen — the telephone — answers the model that it cannot draw, and the agent
+  # says it in words instead. Leave this out of the tools: list of an agent that should only speak.
+  - { id: draw,          kind: builtin, uses: ui.draw }
+
   - id: lookup_order
     kind: http
     description: Read one order by its identifier.

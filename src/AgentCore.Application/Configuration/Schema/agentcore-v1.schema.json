@@ -692,6 +692,17 @@
         "as": {
           "$ref": "#/$defs/identifier",
           "description": "The name a modelRef points at."
+        },
+        "reasoningEffort": {
+          "type": "string",
+          "enum": [
+            "none",
+            "minimal",
+            "low",
+            "medium",
+            "high"
+          ],
+          "description": "How hard a reasoning model thinks before it answers. Omit it to send nothing and let the vendor decide. Some reasoning models refuse function tools on the chat-completions path unless this is 'none'."
         }
       }
     },

@@ -1,7 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using Microsoft.Extensions.AI;
 
@@ -291,7 +290,7 @@ internal sealed class LoopingToolCallingChatClient : IChatClient
 /// <see cref="LoopingToolCallingChatClient"/> would call the tool again forever.
 /// </para>
 /// </remarks>
-internal sealed class ThrowingToolFactory : IAgentToolFactory
+internal sealed class ThrowingToolBuilder
 {
     /// <summary>The message every fault carries.</summary>
     public const string Message = "the tool is down.";
@@ -322,7 +321,7 @@ internal sealed class ThrowingToolFactory : IAgentToolFactory
 /// The turn loop reads a tool result out of the finished turn and hands it to
 /// <c>ToolStateWriter</c>. This factory gives it something to read without an HTTP adapter.
 /// </remarks>
-internal sealed class StubToolFactory : IAgentToolFactory
+internal sealed class StubToolBuilder
 {
     private readonly string _result;
     private readonly bool _asText;
@@ -333,7 +332,7 @@ internal sealed class StubToolFactory : IAgentToolFactory
     /// Whether the tool answers the document as one string. A real tool answers either way, because a
     /// tool result has no declared shape.
     /// </param>
-    public StubToolFactory(string result, bool asText = false)
+    public StubToolBuilder(string result, bool asText = false)
     {
         _result = result;
         _asText = asText;
@@ -491,13 +490,13 @@ internal sealed class NamedToolCallingChatClient : IChatClient
 /// fault the model cannot answer.
 /// </summary>
 /// <remarks>
-/// <see cref="ThrowingToolFactory"/> builds a bare <c>AIFunctionFactory</c> delegate, which throws
+/// <see cref="ThrowingToolBuilder"/> builds a bare <c>AIFunctionFactory</c> delegate, which throws
 /// straight at the framework. This one goes through the base every shipped tool kind shares, so it
 /// exercises the classification <c>AuditingFunctionInvokingChatClient</c> applies and not just the
 /// framework's reaction to it. Section 8.7 row six is only reachable through a tool that lets a fault
 /// out.
 /// </remarks>
-internal sealed class UnreachableEndpointToolFactory : IAgentToolFactory
+internal sealed class UnreachableEndpointToolBuilder
 {
     /// <summary>The message every fault carries.</summary>
     public const string Message = "no such host";
@@ -517,9 +516,9 @@ internal sealed class UnreachableEndpointToolFactory : IAgentToolFactory
 
     private sealed class UnreachableEndpointTool : DeclaredTool
     {
-        private readonly UnreachableEndpointToolFactory _owner;
+        private readonly UnreachableEndpointToolBuilder _owner;
 
-        public UnreachableEndpointTool(ToolConfiguration tool, UnreachableEndpointToolFactory owner)
+        public UnreachableEndpointTool(ToolConfiguration tool, UnreachableEndpointToolBuilder owner)
             : base(tool) => _owner = owner;
 
         protected override ValueTask<object?> CallAsync(
@@ -537,11 +536,11 @@ internal sealed class UnreachableEndpointToolFactory : IAgentToolFactory
 /// fault the model CAN answer.
 /// </summary>
 /// <remarks>
-/// The counterpart of <see cref="UnreachableEndpointToolFactory"/>, and the half of section 8.7 that
+/// The counterpart of <see cref="UnreachableEndpointToolBuilder"/>, and the half of section 8.7 that
 /// must not regress: the tool answers with an error result, the model reads it, and the turn ends
 /// with a spoken reply and no failure at all.
 /// </remarks>
-internal sealed class RefusedRequestToolFactory : IAgentToolFactory
+internal sealed class RefusedRequestToolBuilder
 {
     /// <summary>The message every fault carries.</summary>
     public const string Message = "the order is already closed.";
@@ -561,9 +560,9 @@ internal sealed class RefusedRequestToolFactory : IAgentToolFactory
 
     private sealed class RefusedRequestTool : DeclaredTool
     {
-        private readonly RefusedRequestToolFactory _owner;
+        private readonly RefusedRequestToolBuilder _owner;
 
-        public RefusedRequestTool(ToolConfiguration tool, RefusedRequestToolFactory owner)
+        public RefusedRequestTool(ToolConfiguration tool, RefusedRequestToolBuilder owner)
             : base(tool) => _owner = owner;
 
         protected override ValueTask<object?> CallAsync(

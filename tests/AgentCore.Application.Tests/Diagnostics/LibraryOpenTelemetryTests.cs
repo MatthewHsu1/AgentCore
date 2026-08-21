@@ -1,9 +1,9 @@
 using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
+using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Diagnostics;
-using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime;
@@ -57,7 +57,7 @@ public sealed class LibraryOpenTelemetryTests
             apiVersion: agentcore/v1
             name: nesting-check
             tools:
-              - { id: lookup_order, kind: builtin, uses: orders.read }
+              - { id: lookup_order, kind: builtin, uses: orders.read, description: "Look up an order by its id." }
             agents:
               items:
                 - { id: {{agentId}}, instructions: "answer questions", tools: [ lookup_order ] }
@@ -67,9 +67,9 @@ public sealed class LibraryOpenTelemetryTests
         using var listener = ListenToLibrarySources(spans);
 
         using ToolCallingChatClient client = new("the order shipped.");
-        StubToolFactory tools = new("""{ "status": "shipped" }""");
+        StubToolBuilder tools = new("""{ "status": "shipped" }""");
 
-        var session = Build(yaml, client, tools).Create();
+        var session = Build(yaml, client, tools.Create).Create();
 
         await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
 
@@ -419,13 +419,17 @@ public sealed class LibraryOpenTelemetryTests
         }
     }
 
-    private static CallSessionFactory Build(string yaml, IChatClient client, IAgentToolFactory? tools)
+    private static CallSessionFactory Build(string yaml, IChatClient client, Func<ToolConfiguration, AITool?>? tools)
     {
         var document = ConfigurationLoader.LoadYaml(yaml);
         FakeChatClientFactory factory = new(client);
 
         var compiled = ConfigurationCompiler.Compile(
-            document, new AgentCompilationContext(factory) { Tools = tools });
+            document,
+            new AgentCompilationContext(factory)
+            {
+                Tools = TestToolRegistry.From(document, tools, TestContext.Current.CancellationToken),
+            });
 
         return new CallSessionFactory(
             compiled,

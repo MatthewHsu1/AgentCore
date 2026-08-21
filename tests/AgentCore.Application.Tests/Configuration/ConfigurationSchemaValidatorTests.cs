@@ -483,7 +483,7 @@ public sealed class ConfigurationSchemaValidatorTests
     [Fact]
     public void ABuiltinToolWithParameters_FailsWithThePointerOfTheTool()
     {
-        // The C# still reads fixed argument names for a builtin (BuiltinToolFactory). A document
+        // The C# still reads fixed argument names for a builtin (BuiltinToolSource). A document
         // that overrides the schema makes the model fill boxes the C# never reads.
         const string document = """
             apiVersion: agentcore/v1
