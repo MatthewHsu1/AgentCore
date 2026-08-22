@@ -15,6 +15,9 @@ public static class BuiltinToolNames
     /// <summary>Finds the knowledge-base lines one regular expression matches.</summary>
     public const string KnowledgeGrep = "knowledge.grep";
 
+    /// <summary>Searches the knowledge base over several hops and answers from what it read.</summary>
+    public const string KnowledgeAgentSearch = "knowledge.agent_search";
+
     /// <summary>Draws one thing for the caller to look at.</summary>
     public const string Draw = "ui.draw";
 }

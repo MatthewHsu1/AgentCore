@@ -23,6 +23,7 @@ public sealed class BuiltinToolSource : IToolSource
         new(StringComparer.Ordinal)
         {
             [BuiltinToolNames.Draw] = new DrawingAgentDefinition(),
+            [BuiltinToolNames.KnowledgeAgentSearch] = new KnowledgeAgentSearchDefinition(),
         };
 
     private readonly BuiltinToolPorts _ports;

@@ -1,4 +1,12 @@
+using AgentCore.Application.Configuration.Parsing;
+using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Ports;
+using AgentCore.Application.Tests.Tools.Fakes;
+using AgentCore.Application.Tools;
+using AgentCore.Application.Tools.Builtin;
 using AgentCore.Application.Tools.Shipped;
+using AgentCore.TestSupport;
+using Microsoft.Extensions.AI;
 using Xunit;
 
 namespace AgentCore.Application.Tests.Tools;
@@ -41,5 +49,101 @@ public sealed class KnowledgeAgentSearchTests
     public void Text_IsNotEmpty()
     {
         Assert.False(string.IsNullOrWhiteSpace(SearchVocabulary.Text));
+    }
+
+    private static ToolConfiguration Declared() => new()
+    {
+        Id = "search_files",
+        Kind = ToolKind.Builtin,
+        Uses = BuiltinToolNames.KnowledgeAgentSearch,
+    };
+
+    private static ValueTask<IReadOnlyList<ToolRegistration>> Provide(BuiltinToolPorts ports)
+        => new BuiltinToolSource(ports).ProvideAsync(
+            new ToolSourceContext(new AgentCoreConfiguration
+            {
+                ApiVersion = "agentcore/v1",
+                Name = "test",
+                Tools = [Declared()],
+            }),
+            TestContext.Current.CancellationToken);
+
+    [Fact]
+    public void Definition_UsesTheNameADocumentWrites()
+    {
+        Assert.Equal("knowledge.agent_search", BuiltinToolNames.KnowledgeAgentSearch);
+        Assert.Equal(BuiltinToolNames.KnowledgeAgentSearch, new KnowledgeAgentSearchDefinition().Name);
+    }
+
+    [Fact]
+    public void Definition_InstructionsAreTheVocabulary()
+    {
+        Assert.Equal(SearchVocabulary.Text, new KnowledgeAgentSearchDefinition().Instructions);
+    }
+
+    [Fact]
+    public void Definition_InnerToolsAreTheFourKnowledgeTools()
+    {
+        var port = new MapKnowledgePort();
+
+        var tools = new KnowledgeAgentSearchDefinition()
+            .InnerTools(Declared(), new BuiltinToolPorts(port, port, null));
+
+        Assert.Equal(KnowledgeAgentTools.Names, tools.OfType<AIFunction>().Select(tool => tool.Name).ToArray());
+    }
+
+    [Fact]
+    public void Definition_NoRetrievalPort_NamesThatPort()
+    {
+        var port = new MapKnowledgePort();
+
+        Assert.Equal(
+            nameof(IKnowledgeRetrievalPort),
+            new KnowledgeAgentSearchDefinition().MissingPort(new BuiltinToolPorts(null, port, null)));
+    }
+
+    [Fact]
+    public void Definition_NoDocumentStorePort_NamesThatPort()
+    {
+        var port = new MapKnowledgePort();
+
+        Assert.Equal(
+            nameof(IDocumentStorePort),
+            new KnowledgeAgentSearchDefinition().MissingPort(new BuiltinToolPorts(port, null, null)));
+    }
+
+    [Fact]
+    public void Definition_BothPortsBound_NamesNoMissingPort()
+    {
+        var port = new MapKnowledgePort();
+
+        Assert.Null(new KnowledgeAgentSearchDefinition().MissingPort(new BuiltinToolPorts(port, port, null)));
+    }
+
+    /// <summary>
+    /// It reaches the shipped-agent table, not the plain-function one. Landing in the wrong table
+    /// would boot clean and then reject the <c>maxRounds:</c> the spec's own example writes.
+    /// </summary>
+    [Fact]
+    public async Task ProvideAsync_ADocumentDeclaresIt_ServesItAsAShippedAgent()
+    {
+        var port = new MapKnowledgePort();
+
+        var registrations = await Provide(
+            new BuiltinToolPorts(port, port, new RecordingChatClientFactory()));
+
+        var registration = Assert.Single(registrations);
+        Assert.Equal("search_files", registration.Id);
+        Assert.False(string.IsNullOrWhiteSpace(registration.Description));
+    }
+
+    [Fact]
+    public async Task ProvideAsync_NoKnowledgePort_FailsTheBootNamingTheToolAndThePort()
+    {
+        var error = await Assert.ThrowsAsync<ConfigurationLoadException>(
+            async () => await Provide(new BuiltinToolPorts(null, null, new RecordingChatClientFactory())));
+
+        Assert.Contains("search_files", error.Message, StringComparison.Ordinal);
+        Assert.Contains(nameof(IKnowledgeRetrievalPort), error.Message, StringComparison.Ordinal);
     }
 }

@@ -894,6 +894,7 @@ const AgentCore.Application.State.StateExtractor.SchemaName = "agentcore_state" 
 const AgentCore.Application.State.UnfilledSlotReminder.CloseTag = "</system-reminder>" -> string!
 const AgentCore.Application.State.UnfilledSlotReminder.OpenTag = "<system-reminder>" -> string!
 const AgentCore.Application.Tools.Builtin.BuiltinToolNames.Draw = "ui.draw" -> string!
+const AgentCore.Application.Tools.Builtin.BuiltinToolNames.KnowledgeAgentSearch = "knowledge.agent_search" -> string!
 const AgentCore.Application.Tools.Builtin.BuiltinToolNames.KnowledgeGrep = "knowledge.grep" -> string!
 const AgentCore.Application.Tools.Builtin.BuiltinToolNames.KnowledgeList = "knowledge.list" -> string!
 const AgentCore.Application.Tools.Builtin.BuiltinToolNames.KnowledgeRead = "knowledge.read" -> string!
