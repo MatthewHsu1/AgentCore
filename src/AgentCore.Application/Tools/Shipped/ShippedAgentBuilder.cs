@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Runtime;
 using AgentCore.Application.Tools.Builtin;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -18,13 +19,12 @@ namespace AgentCore.Application.Tools.Shipped;
 /// <c>InnerAgentTranscriptTests</c> holds that.
 /// </para>
 /// <para>
-/// The pipeline is deliberately thinner than the one <c>ConfigurationCompiler</c> gives a document
-/// agent: client-level telemetry and a plain <c>UseFunctionInvocation</c>, with no
-/// <c>AuditingFunctionInvokingChatClient</c> and no agent-level span. The auditing loop exists to
-/// turn an inner tool's exception into a section 8.7 result, and the only shipped agent today is
-/// <c>ui.draw</c>, whose one inner tool never throws. The first shipped agent whose inner tools call
-/// ports that can throw — <c>knowledge.agent_search</c> is next — must move onto the auditing loop,
-/// because otherwise that exception ends the outer turn.
+/// It runs on <see cref="AuditingFunctionInvokingChatClient"/>, the same loop a document agent
+/// gets, so section 8.7 holds inside a shipped agent too: an inner tool's answerable fault becomes
+/// a result its own model reads, and a fault naming a dependency that is not there propagates to
+/// the outer agent's error budget. The knowledge ports document that an adapter may throw, so
+/// <c>knowledge.agent_search</c> depends on this. There is still no agent-level span, which is the
+/// one thing a document agent has and a shipped agent does not.
 /// </para>
 /// </remarks>
 internal static class ShippedAgentBuilder
@@ -54,11 +54,14 @@ internal static class ShippedAgentBuilder
         var rounds = tool.MaxRounds ?? definition.DefaultMaxRounds;
 
         var agent = new ChatClientAgent(
-            clients.GetChatClient(tool.Model)
-                   .AsBuilder()
-                   .UseFunctionInvocation(configure: invoking => invoking.MaximumIterationsPerRequest = rounds)
-                   .UseOpenTelemetry(configure: static client => client.EnableSensitiveData = false)
-                   .Build(),
+            new AuditingFunctionInvokingChatClient(
+                clients.GetChatClient(tool.Model)
+                       .AsBuilder()
+                       .UseOpenTelemetry(configure: static client => client.EnableSensitiveData = false)
+                       .Build())
+            {
+                MaximumIterationsPerRequest = rounds,
+            },
             new ChatClientAgentOptions
             {
                 Name = tool.Id,

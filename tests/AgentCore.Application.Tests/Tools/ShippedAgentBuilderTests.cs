@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Runtime;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Tools.Builtin;
@@ -189,6 +190,73 @@ public sealed class ShippedAgentBuilderTests
 
         Assert.Equal("{}", Assert.IsType<JsonElement>(result).GetString());
     }
+
+    /// <summary>
+    /// The knowledge ports say an adapter may throw, and a shipped agent's inner tool calls one
+    /// directly. The auditing loop turns a fault the model can answer into a result rather than an
+    /// exception, so the framework's consecutive-error budget — three, and lower than a shipped
+    /// agent's round cap can be — is never spent on it. Without the loop the fourth throw ends the
+    /// call, and the inner agent never gets its remaining rounds.
+    /// </summary>
+    [Fact]
+    public async Task Build_EveryRoundThrowsAFaultTheModelCanAnswer_TheInnerLoopStillSpendsEveryRound()
+    {
+        const int Rounds = 6;
+
+        var calls = 0;
+        var throwing = AIFunctionFactory.Create(
+            () =>
+            {
+                calls++;
+                throw new InvalidOperationException("the store said no");
+            },
+            "loop_tool");
+
+        var function = ShippedAgentBuilder.Build(
+            new FakeDefinition(innerTools: [throwing]),
+            Declared("draw") with { MaxRounds = Rounds },
+            new BuiltinToolPorts(null, null, new RecordingChatClientFactory(new LoopingToolCallingChatClient())));
+
+        await function.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "go" }),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(Rounds, calls);
+    }
+
+    /// <summary>
+    /// The other half of section 8.7. A fault naming a dependency that is not there must still
+    /// propagate, so the outer agent's error budget counts it and the turn can end on the fallback
+    /// line. It must also be reported: a plain loop never calls
+    /// <see cref="ToolFailureScope.Report"/> at all, so before this an inner tool could take the
+    /// knowledge store down mid-call and the audit chain would hold nothing about it.
+    /// </summary>
+    [Fact]
+    public async Task Build_AnInnerToolThrowsAFaultBeyondTheModel_ItIsReportedAndPropagates()
+    {
+        var throwing = AIFunctionFactory.Create(
+            () =>
+            {
+                throw new HttpRequestException("the store is not answering");
+            },
+            "loop_tool");
+
+        var function = ShippedAgentBuilder.Build(
+            new FakeDefinition(innerTools: [throwing]),
+            Declared("draw") with { MaxRounds = 4 },
+            new BuiltinToolPorts(null, null, new RecordingChatClientFactory(new LoopingToolCallingChatClient())));
+
+        List<ToolFailure> reported = [];
+        using var scope = ToolFailureScope.Enter(reported.Add);
+
+        await Assert.ThrowsAsync<HttpRequestException>(
+            () => function.InvokeAsync(
+                new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "go" }),
+                TestContext.Current.CancellationToken).AsTask());
+
+        Assert.Contains(reported, failure => failure.ToolName == "loop_tool");
+    }
+
 
     /// <summary>A shipped agent whose missing port and inner tools a test controls, so these tests can
     /// isolate each of <see cref="ShippedAgentBuilder"/>'s two port checks and the round cap in turn.</summary>
