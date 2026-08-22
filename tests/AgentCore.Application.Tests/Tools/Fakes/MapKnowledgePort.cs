@@ -33,6 +33,9 @@ internal sealed class MapKnowledgePort : IKnowledgeRetrievalPort, IDocumentStore
     /// <summary>Gets every query this port was asked for, in call order.</summary>
     public List<string> Queries { get; } = [];
 
+    /// <summary>Gets every document id this port was asked to read, in call order.</summary>
+    public List<string> Reads { get; } = [];
+
     /// <summary>Gets every limit this port was asked for, in call order.</summary>
     public List<int> Limits { get; } = [];
 
@@ -69,6 +72,7 @@ internal sealed class MapKnowledgePort : IKnowledgeRetrievalPort, IDocumentStore
     public ValueTask<KnowledgeDocument?> ReadAsync(string documentId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        Reads.Add(documentId);
 
         if (Failure is { } failure)
         {

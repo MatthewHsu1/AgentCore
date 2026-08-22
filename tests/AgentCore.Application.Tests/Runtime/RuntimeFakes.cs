@@ -724,9 +724,6 @@ internal sealed class ScriptedToolCallingChatClient : IChatClient
     /// <summary>Gets or sets the words the model ends on once the script is spent.</summary>
     public string? FinalText { get; set; }
 
-    /// <summary>Gets how many requests this client answered.</summary>
-    public int Calls => Volatile.Read(ref _calls);
-
     public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IEnumerable<ChatMessage> messages,
         ChatOptions? options = null,

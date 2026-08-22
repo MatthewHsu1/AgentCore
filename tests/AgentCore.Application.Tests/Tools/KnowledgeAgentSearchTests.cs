@@ -1,6 +1,7 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Runtime;
 using AgentCore.Application.Tests.Tools.Fakes;
 using AgentCore.Application.Tools;
@@ -150,10 +151,10 @@ public sealed class KnowledgeAgentSearchTests
 
     private static readonly string[] BeltThenRollersQueries = ["belt tension", "rear roller bolts"];
 
-    private static AIFunction BuildAgent(MapKnowledgePort port, IChatClient client, int? maxRounds = null)
+    private static AIFunction BuildAgent(MapKnowledgePort port, IChatClient client)
         => ShippedAgentBuilder.Build(
             new KnowledgeAgentSearchDefinition(),
-            maxRounds is { } rounds ? Declared() with { MaxRounds = rounds } : Declared(),
+            Declared(),
             new BuiltinToolPorts(port, port, new RecordingChatClientFactory(client)));
 
     /// <summary>
@@ -176,12 +177,12 @@ public sealed class KnowledgeAgentSearchTests
             FinalText = "Turn each rear roller bolt a quarter turn. See f63/rollers.md.",
         };
 
-        var result = await BuildAgent(port, client).InvokeAsync(
+        await BuildAgent(port, client).InvokeAsync(
             new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "how do I tension the belt" }),
             TestContext.Current.CancellationToken);
 
         Assert.Equal(BeltThenRollersQueries, port.Queries.ToArray());
-        Assert.Contains("quarter turn", Describe(result), StringComparison.Ordinal);
+        Assert.Equal("f63/belt.md", Assert.Single(port.Reads));
     }
 
     /// <summary>
@@ -208,13 +209,14 @@ public sealed class KnowledgeAgentSearchTests
             TestContext.Current.CancellationToken));
 
         Assert.Equal("Turn each rear roller bolt a quarter turn.", answer);
-        Assert.DoesNotContain("SECRET_PASSAGE", answer, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// The knowledge ports document that an adapter may throw. Task 1 put the auditing loop under a
-    /// shipped agent so that a fault the model can answer becomes a result it reads. Here the store
-    /// refuses one query, and the agent still answers rather than ending the outer turn.
+    /// The knowledge ports document that an adapter may throw. A shipped agent runs on the auditing
+    /// loop, so a fault the model can answer becomes the error result its own model reads and the
+    /// agent answers anyway. The empty <see cref="ToolFailureScope"/> is what makes that
+    /// classification-sensitive: the other branch reports the failure before it rethrows, so a
+    /// reclassification of this exception type fails here rather than passing silently.
     /// </summary>
     [Fact]
     public async Task Invoke_TheKnowledgeAdapterThrowsAFaultTheModelCanAnswer_TheAgentStillAnswers()
@@ -226,10 +228,15 @@ public sealed class KnowledgeAgentSearchTests
             FinalText = "I could not search the knowledge base just now.",
         };
 
+        List<ToolFailure> reported = [];
+        using var scope = ToolFailureScope.Enter(reported.Add);
+
         var answer = Describe(await BuildAgent(port, client).InvokeAsync(
             new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "belt" }),
             TestContext.Current.CancellationToken));
 
+        Assert.Equal("belt", Assert.Single(port.Queries));
+        Assert.Empty(reported);
         Assert.Contains("could not search", answer, StringComparison.Ordinal);
     }
 
