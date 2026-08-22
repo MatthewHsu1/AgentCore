@@ -704,3 +704,94 @@ internal sealed class PresentCallingChatClient : IChatClient
     {
     }
 }
+
+/// <summary>
+/// A model that calls a scripted list of tools by name, one per request, then answers in words.
+/// </summary>
+/// <remarks>
+/// <see cref="LoopingToolCallingChatClient"/> always calls the first tool it is offered and
+/// <see cref="PresentCallingChatClient"/> is wired to <c>present</c>, so neither can drive an agent
+/// whose behaviour IS which tool it picks next. This one names the tool and its arguments, which is
+/// what makes a multi-hop test assert on the hops rather than on the count.
+/// </remarks>
+internal sealed class ScriptedToolCallingChatClient : IChatClient
+{
+    private readonly (string Tool, string Arguments)[] _script;
+    private int _calls;
+
+    public ScriptedToolCallingChatClient(params (string Tool, string Arguments)[] script) => _script = script;
+
+    /// <summary>Gets or sets the words the model ends on once the script is spent.</summary>
+    public string? FinalText { get; set; }
+
+    /// <summary>Gets how many requests this client answered.</summary>
+    public int Calls => Volatile.Read(ref _calls);
+
+    public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        var index = Interlocked.Increment(ref _calls) - 1;
+        await Task.Yield();
+
+        var responseId = Guid.NewGuid().ToString("N");
+
+        // Past the end of the script, or offered no tool at all on the cap's last request, it
+        // answers in words. Answering with a call it cannot make would hang the loop.
+        if (index >= _script.Length || options?.Tools is not { Count: > 0 })
+        {
+            yield return new ChatResponseUpdate(ChatRole.Assistant, FinalText ?? string.Empty)
+            {
+                ResponseId = responseId,
+                MessageId = responseId,
+            };
+            yield break;
+        }
+
+        var (tool, arguments) = _script[index];
+        var parsed = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(arguments)
+            ?? throw new InvalidOperationException($"the script step for '{tool}' is not a JSON object.");
+
+        Dictionary<string, object?> callArguments = new(StringComparer.Ordinal);
+        foreach (var (name, value) in parsed)
+        {
+            callArguments[name] = value;
+        }
+
+        yield return new ChatResponseUpdate(
+            ChatRole.Assistant,
+            [new FunctionCallContent($"call_{index}", tool, callArguments)])
+        {
+            ResponseId = responseId,
+            MessageId = responseId,
+        };
+    }
+
+    public async Task<ChatResponse> GetResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        List<ChatResponseUpdate> updates = [];
+        await foreach (var update in GetStreamingResponseAsync(messages, options, cancellationToken)
+            .ConfigureAwait(false))
+        {
+            updates.Add(update);
+        }
+
+        return updates.ToChatResponse();
+    }
+
+    public object? GetService(Type serviceType, object? serviceKey = null)
+    {
+        ArgumentNullException.ThrowIfNull(serviceType);
+        return serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
+    }
+
+    public void Dispose()
+    {
+    }
+}

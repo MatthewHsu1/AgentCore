@@ -1,6 +1,7 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Tests.Runtime;
 using AgentCore.Application.Tests.Tools.Fakes;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Tools.Builtin;
@@ -146,4 +147,99 @@ public sealed class KnowledgeAgentSearchTests
         Assert.Contains("search_files", error.Message, StringComparison.Ordinal);
         Assert.Contains(nameof(IKnowledgeRetrievalPort), error.Message, StringComparison.Ordinal);
     }
+
+    private static readonly string[] BeltThenRollersQueries = ["belt tension", "rear roller bolts"];
+
+    private static AIFunction BuildAgent(MapKnowledgePort port, IChatClient client, int? maxRounds = null)
+        => ShippedAgentBuilder.Build(
+            new KnowledgeAgentSearchDefinition(),
+            maxRounds is { } rounds ? Declared() with { MaxRounds = rounds } : Declared(),
+            new BuiltinToolPorts(port, port, new RecordingChatClientFactory(client)));
+
+    /// <summary>
+    /// The reason this is an agent and not a bigger function: it searches, reads what it found, and
+    /// searches again. A single-call tool cannot do the second hop, because the second query is
+    /// written from the first result.
+    /// </summary>
+    [Fact]
+    public async Task Invoke_TheModelSearchesThenReadsThenSearchesAgain_EveryHopReachesThePorts()
+    {
+        var port = new MapKnowledgePort()
+            .With("f63/belt.md", "The belt tension is set by the rear roller bolts.")
+            .With("f63/rollers.md", "Turn each rear roller bolt a quarter turn.");
+
+        var client = new ScriptedToolCallingChatClient(
+            ("search", """{"query":"belt tension"}"""),
+            ("read", """{"documentId":"f63/belt.md"}"""),
+            ("search", """{"query":"rear roller bolts"}"""))
+        {
+            FinalText = "Turn each rear roller bolt a quarter turn. See f63/rollers.md.",
+        };
+
+        var result = await BuildAgent(port, client).InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "how do I tension the belt" }),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(BeltThenRollersQueries, port.Queries.ToArray());
+        Assert.Contains("quarter turn", Describe(result), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Decision 16's whole point. The outer agent is handed the answer and nothing else: not the
+    /// queries, not the document ids the inner agent opened, not the passages it rejected. If any of
+    /// those leaked, the context isolation that justifies a second search tool would not exist.
+    /// </summary>
+    [Fact]
+    public async Task Invoke_TheInnerAgentReadsSeveralDocuments_TheOuterAgentSeesOnlyTheAnswer()
+    {
+        var port = new MapKnowledgePort()
+            .With("f63/belt.md", "SECRET_PASSAGE_ONE the belt tension is set by the rear roller bolts.")
+            .With("f63/rollers.md", "SECRET_PASSAGE_TWO turn each rear roller bolt a quarter turn.");
+
+        var client = new ScriptedToolCallingChatClient(
+            ("search", """{"query":"belt"}"""),
+            ("read", """{"documentId":"f63/rollers.md"}"""))
+        {
+            FinalText = "Turn each rear roller bolt a quarter turn.",
+        };
+
+        var answer = Describe(await BuildAgent(port, client).InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "belt" }),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal("Turn each rear roller bolt a quarter turn.", answer);
+        Assert.DoesNotContain("SECRET_PASSAGE", answer, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The knowledge ports document that an adapter may throw. Task 1 put the auditing loop under a
+    /// shipped agent so that a fault the model can answer becomes a result it reads. Here the store
+    /// refuses one query, and the agent still answers rather than ending the outer turn.
+    /// </summary>
+    [Fact]
+    public async Task Invoke_TheKnowledgeAdapterThrowsAFaultTheModelCanAnswer_TheAgentStillAnswers()
+    {
+        var port = new MapKnowledgePort { Failure = new InvalidOperationException("the index is rebuilding") };
+
+        var client = new ScriptedToolCallingChatClient(("search", """{"query":"belt"}"""))
+        {
+            FinalText = "I could not search the knowledge base just now.",
+        };
+
+        var answer = Describe(await BuildAgent(port, client).InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "belt" }),
+            TestContext.Current.CancellationToken));
+
+        Assert.Contains("could not search", answer, StringComparison.Ordinal);
+    }
+
+    /// <summary>Reads the words out of whatever shape <c>AsAIFunction</c> handed back.</summary>
+    private static string Describe(object? result) => result switch
+    {
+        string text => text,
+        System.Text.Json.JsonElement element => element.ValueKind == System.Text.Json.JsonValueKind.String
+            ? element.GetString() ?? string.Empty
+            : element.ToString(),
+        _ => result?.ToString() ?? string.Empty,
+    };
 }
