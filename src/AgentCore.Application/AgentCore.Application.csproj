@@ -28,6 +28,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Configuration/Schema/agentcore-v1.schema.json" />
     <EmbeddedResource Include="Tools/Drawing/vocabulary.md" />
+    <EmbeddedResource Include="Tools/Shipped/search-vocabulary.md" />
   </ItemGroup>
 
   <ItemGroup>
