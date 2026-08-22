@@ -16,7 +16,8 @@ namespace AgentCore.Application.Tools.Shipped;
 /// The agent goes onto the same <c>AsAIFunction()</c> path <c>kind: agent</c> already uses, so
 /// there is one code path for every agent-as-tool. The inner agent runs on a session of its own
 /// that no <c>BeginCall</c> ever names, so none of its rounds reach store 1 —
-/// <c>InnerAgentTranscriptTests</c> holds that.
+/// <c>InnerAgentTranscriptTests</c> holds that for <c>kind: agent</c>, and a shipped agent holds it
+/// by the same mechanism.
 /// </para>
 /// <para>
 /// It runs on <see cref="AuditingFunctionInvokingChatClient"/>, the same loop a document agent

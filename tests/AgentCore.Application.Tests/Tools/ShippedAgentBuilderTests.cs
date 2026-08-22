@@ -257,7 +257,6 @@ public sealed class ShippedAgentBuilderTests
         Assert.Contains(reported, failure => failure.ToolName == "loop_tool");
     }
 
-
     /// <summary>A shipped agent whose missing port and inner tools a test controls, so these tests can
     /// isolate each of <see cref="ShippedAgentBuilder"/>'s two port checks and the round cap in turn.</summary>
     private sealed class FakeDefinition : IShippedAgentDefinition

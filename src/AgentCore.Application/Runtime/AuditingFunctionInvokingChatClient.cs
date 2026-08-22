@@ -234,7 +234,7 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
                 ToolName = result.CallContent.Name,
                 ToolCallId = result.CallContent.CallId,
                 Kind = ToolFailureKind.Undeclared,
-                Message = $"the model called '{result.CallContent.Name}', and the document declares no such tool.",
+                Message = $"the model called '{result.CallContent.Name}', and no such tool is declared.",
             });
         }
 

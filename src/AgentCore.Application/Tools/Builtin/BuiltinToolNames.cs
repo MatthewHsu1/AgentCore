@@ -15,7 +15,11 @@ public static class BuiltinToolNames
     /// <summary>Finds the knowledge-base lines one regular expression matches.</summary>
     public const string KnowledgeGrep = "knowledge.grep";
 
-    /// <summary>Searches the knowledge base over several hops and answers from what it read.</summary>
+    /// <summary>
+    /// Searches the knowledge base over several hops and answers from what it read. Not for a voice
+    /// document: several inner rounds is dead air on the line, which decision 17 puts out of scope
+    /// and makes a blocker.
+    /// </summary>
     public const string KnowledgeAgentSearch = "knowledge.agent_search";
 
     /// <summary>Draws one thing for the caller to look at.</summary>

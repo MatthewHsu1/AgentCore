@@ -19,8 +19,9 @@ namespace AgentCore.Application.Tools.Shipped;
 /// </para>
 /// <para>
 /// <b>It must not go on a live call yet.</b> Several rounds of inner work is several seconds of
-/// silence, and nothing in the codebase fills dead air on a telephone line. The design puts dead air
-/// out of scope and makes it a blocker on shipping this to a voice document. Text is fine.
+/// silence, and nothing in the codebase fills dead air on a telephone line. Decision 17 puts dead
+/// air out of scope (spec, "Out of scope") and makes it a blocker on shipping this to a voice
+/// document. Text is fine.
 /// </para>
 /// </remarks>
 internal sealed class KnowledgeAgentSearchDefinition : IShippedAgentDefinition
@@ -31,9 +32,9 @@ internal sealed class KnowledgeAgentSearchDefinition : IShippedAgentDefinition
     /// <inheritdoc />
     /// <remarks>
     /// The second sentence is the only place it can be said. <c>kind: builtin</c> forbids
-    /// <c>parameters:</c>, and the one argument <c>AsAIFunction()</c> generates carries the
-    /// framework's own wording, so a document has no lever on it. Without the clause a terse
-    /// request loses the detail the search needed.
+    /// <c>parameters:</c> (schema <c>$defs/tool.allOf[0]</c>), and the one argument
+    /// <c>AsAIFunction()</c> generates carries the framework's own wording, so a document has no
+    /// lever on it. Without the clause a terse request loses the detail the search needed.
     /// </remarks>
     public string DefaultDescription
         => "Search the knowledge base and answer one question from it. Whoever searches cannot see "

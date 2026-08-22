@@ -69,4 +69,24 @@ public sealed class KnowledgeAgentToolsTests
 
         Assert.Contains("IDocumentStorePort", error.Message, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The agent's instructions tell the model that a limit above 50 is treated as 50. Nothing else
+    /// holds that number, so changing the clamp without changing the prose would leave the shipped
+    /// instructions lying to the model, and no test would say so.
+    /// </summary>
+    [Fact]
+    public async Task Search_AnAbsurdLimit_IsClampedToTheNumberTheInstructionsPromise()
+    {
+        var port = new MapKnowledgePort();
+        var search = KnowledgeAgentTools.Build(Bound(port))
+            .OfType<AIFunction>()
+            .Single(tool => tool.Name == KnowledgeAgentTools.Search);
+
+        await search.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "belt", ["limit"] = 999 }),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(50, Assert.Single(port.Limits));
+    }
 }

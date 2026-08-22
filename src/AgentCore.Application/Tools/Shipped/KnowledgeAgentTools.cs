@@ -18,7 +18,7 @@ namespace AgentCore.Application.Tools.Shipped;
 /// <para>
 /// The names are short because the agent's instructions spell them, and they cost prompt tokens on
 /// every inner round. They are not the <c>knowledge.*</c> ids a document writes, and they never
-/// reach the outer agent.
+/// reach the outer agent's context; a propagating fault does name one in the audit chain.
 /// </para>
 /// </remarks>
 internal static class KnowledgeAgentTools
