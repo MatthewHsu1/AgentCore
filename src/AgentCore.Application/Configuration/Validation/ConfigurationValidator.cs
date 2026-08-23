@@ -303,7 +303,7 @@ public static class ConfigurationValidator
             {
                 errors.Add(Reference(
                     ConfigurationError.AppendPointer(Pointer.State(slot.Key), "from"),
-                    $"the tool '{from.ToolId}' is not declared in tools:"));
+                    $"nothing serves the tool '{from.ToolId}'. Declare it in tools:, or check that an mcp: server offers it."));
             }
         }
 
@@ -317,7 +317,7 @@ public static class ConfigurationValidator
                 {
                     errors.Add(Reference(
                         ConfigurationError.AppendPointer(ConfigurationError.AppendPointer(Pointer.Agent(index), "tools"), slot),
-                        $"the tool '{agent.Tools[slot]}' is not declared in tools:"));
+                        $"nothing serves the tool '{agent.Tools[slot]}'. Declare it in tools:, or check that an mcp: server offers it."));
                 }
             }
         }

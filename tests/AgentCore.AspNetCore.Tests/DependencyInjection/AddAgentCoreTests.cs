@@ -342,6 +342,27 @@ public sealed class AddAgentCoreTests
             - { kind: openai, model: gpt-4.1-mini, as: reply }
         """;
 
+    // A state slot's from: names a tool no tools: entry declares. Decision 15 moved this check out
+    // of the structural pass, and the boot restores it by running it against the declared ids right
+    // after: the fixture that pins that the restoration still bites.
+    private const string UndeclaredToolYaml =
+        """
+        apiVersion: agentcore/v1
+        name: broken-tool-reference
+        state:
+          orderStatus: { type: string, writer: tool, from: lookup_order.status }
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything" }
+        providers:
+          call:   { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        """;
+
     // -------------------------------------------------------------------------------------------
     // What it registers.
     // -------------------------------------------------------------------------------------------
@@ -1347,6 +1368,24 @@ public sealed class AddAgentCoreTests
         Assert.Equal(ConfigurationCheck.ReferenceResolution, error.Check);
         Assert.Equal("/policy/stages/0/to/0/stage", error.Pointer);
         Assert.Contains("'nowhere' is not declared", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Decision 15 moved tool-reference resolution out of the structural pass ConfigurationStartup
+    /// runs. Since nothing wires the discovery-fed pass in yet, the host restores the pre-split
+    /// behaviour by resolving against the declared ids right after the structural pass, so a state
+    /// slot's <c>from:</c> naming an undeclared tool still stops the boot rather than leaving the
+    /// slot silently unfilled.
+    /// </summary>
+    [Fact]
+    public async Task AnUndeclaredToolInAStateSlot_FailsTheStartAndNamesTheTool()
+    {
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(() => BuildAsync(UndeclaredToolYaml));
+
+        var error = Assert.Single(failure.Errors);
+        Assert.Equal(ConfigurationCheck.ReferenceResolution, error.Check);
+        Assert.Equal("/state/orderStatus/from", error.Pointer);
+        Assert.Contains("lookup_order", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]

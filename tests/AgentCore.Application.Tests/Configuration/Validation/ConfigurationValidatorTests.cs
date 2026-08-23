@@ -85,7 +85,7 @@ public sealed class ConfigurationValidatorTests
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.ReferenceResolution));
 
         Assert.Equal("/state/orderStatus/from", error.Pointer);
-        Assert.Equal("the tool 'lookup_order' is not declared in tools:", error.Message);
+        Assert.Equal("nothing serves the tool 'lookup_order'. Declare it in tools:, or check that an mcp: server offers it.", error.Message);
     }
 
     [Fact]
@@ -957,7 +957,9 @@ public sealed class ConfigurationValidatorTests
 
         var error = Assert.Single(failure.Errors);
         Assert.Equal("/agents/items/0/tools/0", error.Pointer);
-        Assert.Contains("jira.create_issue", error.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            "nothing serves the tool 'jira.create_issue'. Declare it in tools:, or check that an mcp: server offers it.",
+            error.Message);
     }
 
     [Fact]
