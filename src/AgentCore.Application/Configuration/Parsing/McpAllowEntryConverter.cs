@@ -9,12 +9,21 @@ namespace AgentCore.Application.Configuration.Parsing;
 /// Reads one <c>allow:</c> entry: a tool name, or a single-key object aliasing it.
 /// </summary>
 /// <remarks>
-/// Check 1 already holds an entry to one of the two shapes below, so the failure branches here exist
-/// for a hand-built node tree that reached the binder without the check — a host passing
-/// <c>options.Configuration</c> directly never went through check 1.
+/// Check 1 already holds an entry to one of the two shapes below. The failure branches here are kept
+/// for a hand-built tree that reached <see cref="ConfigurationBinder.Bind"/> without the check.
 /// </remarks>
 internal sealed class McpAllowEntryConverter : JsonConverter<McpAllowEntry>
 {
+    /// <summary>
+    /// Gets a value indicating that <see cref="Read"/> must run for a JSON <c>null</c> too.
+    /// </summary>
+    /// <remarks>
+    /// The default is <see langword="false"/> for a reference type, and <c>null</c> would then bind
+    /// straight into the list without ever reaching <see cref="Read"/> — the one input that would
+    /// silently produce a wrong entry instead of the loud failure every other shape gets here.
+    /// </remarks>
+    public override bool HandleNull => true;
+
     /// <inheritdoc />
     public override McpAllowEntry Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {

@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using Xunit;
@@ -9,8 +10,9 @@ namespace AgentCore.Application.Tests.Configuration;
 /// </summary>
 /// <remarks>
 /// Each test pins one rule check 1 of section 8.5 enforces over an <c>mcp:</c> server: the
-/// <c>allow:</c> entry shapes decision 6 permits, and the transport/command/url pairing decision 10's
-/// served ids depend on.
+/// <c>allow:</c> entry shapes decision 6 permits, and the transport/command/url pairing a server's
+/// connection depends on. Served ids depend on <c>id</c> and <c>allow[].as</c> (decision 10), not on
+/// the transport.
 /// </remarks>
 public sealed class McpConfigurationTests
 {
@@ -142,10 +144,98 @@ public sealed class McpConfigurationTests
         Assert.Contains(failure.Errors, error => error.Pointer.StartsWith("/mcp", StringComparison.Ordinal));
     }
 
-    /// <summary>Loads one <c>mcp:</c> section under the smallest complete document header.</summary>
-    /// <param name="mcp">The <c>mcp:</c> section, written at the document's own margin.</param>
+    [Fact]
+    public void AStdioServerWithAUrl_FailsTheLoad()
+    {
+        var failure = Assert.Throws<ConfigurationLoadException>(
+            () => Load("""
+                mcp:
+                  - id: jira
+                    transport: stdio
+                    command: [npx]
+                    url: https://example.test
+                """));
+
+        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+        Assert.Contains(failure.Errors, error => error.Pointer.StartsWith("/mcp", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AnHttpServerWithACommand_FailsTheLoad()
+    {
+        var failure = Assert.Throws<ConfigurationLoadException>(
+            () => Load("""
+                mcp:
+                  - id: jira
+                    transport: http
+                    url: https://example.test
+                    command: [npx]
+                """));
+
+        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+        Assert.Contains(failure.Errors, error => error.Pointer.StartsWith("/mcp", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A null <c>allow:</c> entry is check 1's job, and check 1 already refuses it (see
+    /// <see cref="AnAllowEntryMapWithTwoKeys_FailsTheLoad"/> and its neighbours). This test bypasses
+    /// check 1 and binds a hand-built tree directly, the route <see cref="McpAllowEntryConverter"/>'s
+    /// own failure branches exist for: without <c>HandleNull</c>, <c>JsonSerializer</c> never calls
+    /// <c>Read</c> for a null token and simply stores a null reference in the list.
+    /// </summary>
+    [Fact]
+    public void ANullAllowEntry_FailsThroughTheBinder()
+    {
+        var document = JsonNode.Parse("""
+            {
+                "apiVersion": "agentcore/v1",
+                "name": "mcp-schema",
+                "mcp": [
+                    { "id": "jira", "transport": "stdio", "command": ["npx"], "allow": [null] }
+                ]
+            }
+            """)!;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationBinder.Bind(document));
+
+        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+        Assert.Contains(failure.Errors, error => error.Pointer.StartsWith("/mcp", StringComparison.Ordinal));
+    }
+
+    /// <summary>Decision 10: a served MCP tool id carries the one dot that <c>tools:</c> otherwise forbids.</summary>
+    [Fact]
+    public void AnAgentReferencingADottedMcpToolId_PassesTheLoad()
+    {
+        var configuration = Load("""
+            agents:
+              items:
+                - id: front
+                  tools: [jira.create_issue]
+            """);
+
+        var agent = Assert.Single(configuration.Agents!.Items);
+        Assert.Equal("jira.create_issue", Assert.Single(agent.Tools));
+    }
+
+    /// <summary>A tool id carries at most one dot; a second dot is not a served MCP id and is refused.</summary>
+    [Fact]
+    public void AnAgentReferencingATwoDottedToolId_FailsTheLoad()
+    {
+        var failure = Assert.Throws<ConfigurationLoadException>(
+            () => Load("""
+                agents:
+                  items:
+                    - id: front
+                      tools: [jira.create.issue]
+                """));
+
+        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+    }
+
+    /// <summary>Loads a document section under the smallest complete document header.</summary>
+    /// <param name="section">The section, written at the document's own margin.</param>
     /// <returns>The loaded document.</returns>
-    private static AgentCoreConfiguration Load(string mcp)
+    private static AgentCoreConfiguration Load(string section)
         => ConfigurationLoader.LoadYaml(
-            "apiVersion: agentcore/v1\nname: mcp-schema\n" + mcp);
+            "apiVersion: agentcore/v1\nname: mcp-schema\n" + section);
 }

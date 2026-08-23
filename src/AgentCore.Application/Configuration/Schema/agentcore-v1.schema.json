@@ -98,6 +98,11 @@
       "type": "string",
       "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$"
     },
+    "toolReference": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_-]*(\\.[A-Za-z_][A-Za-z0-9_-]*)?$",
+      "description": "A tool id an agent references. It carries one optional dot because decision 10 serves an MCP tool as <server>.<tool>; a tools: entry's own id never has one."
+    },
     "rule": {
       "description": "A raw JSONLogic rule. Section 8.4 checks its operators, and this schema does not type it.",
       "type": [
@@ -469,7 +474,7 @@
             "properties": {
               "url": false
             },
-            "$comment": "transport: stdio launches a child process (McpToolSource); url names nothing there."
+            "$comment": "transport: stdio launches a child process; url names nothing there."
           }
         },
         {
@@ -507,7 +512,10 @@
           "type": "object",
           "minProperties": 1,
           "maxProperties": 1,
-          "description": "One tool name mapped to the object that aliases it.",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "description": "One tool name mapped to the object that aliases it. The key is the remote server's own tool name, whose shape this schema does not control.",
           "additionalProperties": {
             "type": "object",
             "required": [
@@ -516,9 +524,8 @@
             "additionalProperties": false,
             "properties": {
               "as": {
-                "type": "string",
-                "minLength": 1,
-                "description": "Decision 10: the id this tool is served under, instead of <server>.<tool>."
+                "$ref": "#/$defs/identifier",
+                "description": "Decision 10: the id this tool is served under, instead of <server>.<tool>. A bare id, like every other tools: entry."
               }
             }
           }
@@ -603,7 +610,7 @@
         "tools": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/identifier"
+            "$ref": "#/$defs/toolReference"
           }
         }
       }
