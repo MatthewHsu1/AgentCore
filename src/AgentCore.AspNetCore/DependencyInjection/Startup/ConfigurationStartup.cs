@@ -9,16 +9,20 @@ internal static class ConfigurationStartup
 {
     /// <summary>Loads and validates the one document the options name.</summary>
     /// <param name="options">The options the host filled.</param>
-    /// <returns>The loaded document, which has already passed checks 2 to 8.</returns>
+    /// <returns>
+    /// The loaded document, which has passed every check of section 8.5 except tool-reference
+    /// resolution. That check still owes a pass against the tool registry's served ids, once MCP
+    /// discovery has run; <see cref="ConfigurationValidator.ValidateToolReferences"/> is where it happens.
+    /// </returns>
     /// <exception cref="InvalidOperationException">The options name no document, or name two.</exception>
-    /// <exception cref="ConfigurationLoadException">The document fails one of the eight checks.</exception>
+    /// <exception cref="ConfigurationLoadException">The document fails one of the structural checks.</exception>
     /// <remarks>
     /// Checks 2 to 8 report every defect at once, so one start names them all.
     /// </remarks>
     internal static AgentCoreConfiguration Load(AgentCoreOptions options)
     {
         var configuration = LoadDocument(options);
-        ConfigurationValidator.Validate(configuration);
+        ConfigurationValidator.ValidateStructure(configuration);
         return configuration;
     }
 

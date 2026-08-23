@@ -906,6 +906,79 @@ public sealed class ConfigurationValidatorTests
         Assert.True(result.IsValid);
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Decision 15: structural, then tool references.
+    // ---------------------------------------------------------------------------------------------
+    /// <summary>
+    /// Decision 15's whole point: a YAML typo must not cost a round trip to every MCP server. The
+    /// structural pass therefore has to find a defect that has nothing to do with tool ids, on a
+    /// document whose tool references cannot possibly resolve yet.
+    /// </summary>
+    [Fact]
+    public void EvaluateStructure_ADefectThatIsNotAToolReference_IsFoundWithNoServedIds()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            guards:
+              ghost: { var: neverDeclared }
+            agents:
+              items:
+                - { id: planner, tools: [ jira.create_issue ] }
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+
+        var result = ConfigurationValidator.EvaluateStructure(configuration);
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(ConfigurationCheck.GuardOperators, error.Check);
+        Assert.Equal("/guards/ghost", error.Pointer);
+        Assert.Equal("the rule reads the slot 'neverDeclared', and state: does not declare it", error.Message);
+        Assert.DoesNotContain(result.Errors, e => e.Message.Contains("jira.create_issue", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ValidateToolReferences_AnIdNothingServes_FailsNamingTheIdAndThePointer()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            agents:
+              items:
+                - { id: planner, tools: [ jira.create_issue ] }
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+        var servedToolIds = new HashSet<string>(StringComparer.Ordinal);
+
+        var failure = Assert.Throws<ConfigurationLoadException>(
+            () => ConfigurationValidator.ValidateToolReferences(configuration, servedToolIds));
+
+        var error = Assert.Single(failure.Errors);
+        Assert.Equal("/agents/items/0/tools/0", error.Pointer);
+        Assert.Contains("jira.create_issue", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ValidateToolReferences_AnIdOnlyDiscoveryServes_Passes()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: fine
+            agents:
+              items:
+                - { id: planner, tools: [ jira.create_issue ] }
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+        var servedToolIds = new HashSet<string>(StringComparer.Ordinal) { "jira.create_issue" };
+
+        var exception = Record.Exception(() => ConfigurationValidator.ValidateToolReferences(configuration, servedToolIds));
+
+        Assert.Null(exception);
+    }
+
     /// <summary>Walks up from the test binaries to the directory that holds the solution file.</summary>
     /// <returns>The repository root.</returns>
     private static string RepositoryRoot()
