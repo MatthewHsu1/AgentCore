@@ -60,6 +60,13 @@
         "$ref": "#/$defs/tool"
       }
     },
+    "mcp": {
+      "type": "array",
+      "description": "Decision 13: declared MCP servers, each becoming many tools once discovery runs.",
+      "items": {
+        "$ref": "#/$defs/mcpServer"
+      }
+    },
     "agents": {
       "$ref": "#/$defs/agents"
     },
@@ -397,6 +404,123 @@
               "maxRounds": false
             },
             "$comment": "Only the kind: builtin path reads model and maxRounds (ShippedAgentBuilder). A kind: agent tool takes its model from its agents.items entry, and http and binding call no model at all, so either key there would be accepted and then ignored."
+          }
+        }
+      ]
+    },
+    "mcpServer": {
+      "type": "object",
+      "description": "Decision 13: one MCP server. One entry becomes many tools once discovery runs.",
+      "required": [
+        "id",
+        "transport"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier",
+          "description": "Decision 10: every tool this server offers is served as <id>.<tool>, unless allow[].as renames it."
+        },
+        "transport": {
+          "enum": [
+            "stdio",
+            "http"
+          ],
+          "description": "How AgentCore reaches the server: a child process over its standard streams, or an HTTP endpoint."
+        },
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "transport: stdio. The executable and its arguments that launch the server."
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "description": "transport: http. The server's URI."
+        },
+        "allow": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/mcpAllowEntry"
+          },
+          "description": "Decision 6: the tools this server is pinned to offer. Pinning is the default; [\"*\"] is the explicit opt-out."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "transport"
+            ],
+            "properties": {
+              "transport": {
+                "const": "stdio"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "command"
+            ],
+            "properties": {
+              "url": false
+            },
+            "$comment": "transport: stdio launches a child process (McpToolSource); url names nothing there."
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "transport"
+            ],
+            "properties": {
+              "transport": {
+                "const": "http"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "url"
+            ],
+            "properties": {
+              "command": false
+            },
+            "$comment": "transport: http reaches a server already running; nothing here launches a process."
+          }
+        }
+      ]
+    },
+    "mcpAllowEntry": {
+      "description": "Decision 6: a tool name, or a single-key object aliasing it to a served id.",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "description": "The tool name as the server offers it, or \"*\" for every tool it offers."
+        },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 1,
+          "description": "One tool name mapped to the object that aliases it.",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "as"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "as": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Decision 10: the id this tool is served under, instead of <server>.<tool>."
+              }
+            }
           }
         }
       ]

@@ -11,9 +11,10 @@ namespace AgentCore.Application.Configuration.Parsing;
 /// <remarks>
 /// <para>
 /// Check 1 of section 8.5 runs immediately before this and rejects every shape error, so the reader
-/// is asked only to move values across, never to validate them. The three converters below exist
-/// because three document values are written as strings and modelled as something richer: a tool
-/// result path, a secret template, and a guard reference.
+/// is asked only to move values across, never to validate them. The converters below exist because
+/// document values are written as strings, or as one of two interchangeable shapes, and modelled as
+/// something richer: a tool result path, a secret template, a guard reference, and an MCP
+/// <c>allow:</c> entry.
 /// </para>
 /// <para>
 /// The settings are deliberately strict where a default would be lax. Property names match
@@ -46,6 +47,7 @@ internal static class ConfigurationJson
             new ToolResultReferenceConverter(),
             new SecretTemplateConverter(),
             new GuardReferenceConverter(),
+            new McpAllowEntryConverter(),
         },
     };
 }

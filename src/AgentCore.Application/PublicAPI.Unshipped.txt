@@ -174,6 +174,8 @@ AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Graph.get -> A
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Graph.init -> void
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Guards.get -> System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode!>!
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Guards.init -> void
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Mcp.get -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Configuration.Schema.McpServerConfiguration!>!
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Mcp.init -> void
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Name.get -> string!
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Name.init -> void
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Policy.get -> AgentCore.Application.Configuration.Schema.PolicyConfiguration?
@@ -313,6 +315,31 @@ AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.Model.get ->
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.Model.init -> void
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.ReasoningEffort.get -> string?
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.ReasoningEffort.init -> void
+AgentCore.Application.Configuration.Schema.McpAllowEntry
+AgentCore.Application.Configuration.Schema.McpAllowEntry.<Clone>$() -> AgentCore.Application.Configuration.Schema.McpAllowEntry!
+AgentCore.Application.Configuration.Schema.McpAllowEntry.As.get -> string?
+AgentCore.Application.Configuration.Schema.McpAllowEntry.As.init -> void
+AgentCore.Application.Configuration.Schema.McpAllowEntry.Equals(AgentCore.Application.Configuration.Schema.McpAllowEntry? other) -> bool
+AgentCore.Application.Configuration.Schema.McpAllowEntry.McpAllowEntry() -> void
+AgentCore.Application.Configuration.Schema.McpAllowEntry.Name.get -> string!
+AgentCore.Application.Configuration.Schema.McpAllowEntry.Name.init -> void
+AgentCore.Application.Configuration.Schema.McpServerConfiguration
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.McpServerConfiguration!
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.Allow.get -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Configuration.Schema.McpAllowEntry!>!
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.Allow.init -> void
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.Command.get -> System.Collections.Generic.IReadOnlyList<string!>!
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.Command.init -> void
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.Equals(AgentCore.Application.Configuration.Schema.McpServerConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.Id.get -> string!
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.Id.init -> void
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.McpServerConfiguration() -> void
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.Transport.get -> AgentCore.Application.Configuration.Schema.McpTransport
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.Transport.init -> void
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.Url.get -> string?
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.Url.init -> void
+AgentCore.Application.Configuration.Schema.McpTransport
+AgentCore.Application.Configuration.Schema.McpTransport.Http = 1 -> AgentCore.Application.Configuration.Schema.McpTransport
+AgentCore.Application.Configuration.Schema.McpTransport.Stdio = 0 -> AgentCore.Application.Configuration.Schema.McpTransport
 AgentCore.Application.Configuration.Schema.ModelReference
 AgentCore.Application.Configuration.Schema.ModelReference.<Clone>$() -> AgentCore.Application.Configuration.Schema.ModelReference!
 AgentCore.Application.Configuration.Schema.ModelReference.Equals(AgentCore.Application.Configuration.Schema.ModelReference? other) -> bool
@@ -975,6 +1002,12 @@ override AgentCore.Application.Configuration.Schema.KnowledgeProviderConfigurati
 override AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.McpAllowEntry.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.McpAllowEntry.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.McpAllowEntry.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.McpServerConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.McpServerConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.McpServerConfiguration.ToString() -> string!
 override AgentCore.Application.Configuration.Schema.ModelReference.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.ModelReference.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.ModelReference.ToString() -> string!
@@ -1112,6 +1145,10 @@ static AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration
 static AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.operator ==(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.operator !=(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? left, AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.operator ==(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? left, AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.McpAllowEntry.operator !=(AgentCore.Application.Configuration.Schema.McpAllowEntry? left, AgentCore.Application.Configuration.Schema.McpAllowEntry? right) -> bool
+static AgentCore.Application.Configuration.Schema.McpAllowEntry.operator ==(AgentCore.Application.Configuration.Schema.McpAllowEntry? left, AgentCore.Application.Configuration.Schema.McpAllowEntry? right) -> bool
+static AgentCore.Application.Configuration.Schema.McpServerConfiguration.operator !=(AgentCore.Application.Configuration.Schema.McpServerConfiguration? left, AgentCore.Application.Configuration.Schema.McpServerConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.McpServerConfiguration.operator ==(AgentCore.Application.Configuration.Schema.McpServerConfiguration? left, AgentCore.Application.Configuration.Schema.McpServerConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.ModelReference.operator !=(AgentCore.Application.Configuration.Schema.ModelReference? left, AgentCore.Application.Configuration.Schema.ModelReference? right) -> bool
 static AgentCore.Application.Configuration.Schema.ModelReference.operator ==(AgentCore.Application.Configuration.Schema.ModelReference? left, AgentCore.Application.Configuration.Schema.ModelReference? right) -> bool
 static AgentCore.Application.Configuration.Schema.PolicyConfiguration.operator !=(AgentCore.Application.Configuration.Schema.PolicyConfiguration? left, AgentCore.Application.Configuration.Schema.PolicyConfiguration? right) -> bool

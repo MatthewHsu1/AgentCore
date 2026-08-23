@@ -88,6 +88,14 @@ public sealed record AgentCoreConfiguration
     /// <summary>Gets the declared tools, in document order.</summary>
     public IReadOnlyList<ToolConfiguration> Tools { get; init; } = [];
 
+    /// <summary>Gets the declared MCP servers, in document order.</summary>
+    /// <remarks>
+    /// One entry becomes many tools, whose names and schemas are only known once the server answers,
+    /// which is why they are not <c>tools:</c> entries. The ids they serve under are ordinary tool
+    /// ids, so an agent's <c>tools:</c> list references them like any other.
+    /// </remarks>
+    public IReadOnlyList<McpServerConfiguration> Mcp { get; init; } = [];
+
     /// <summary>Gets the agent section, or <see langword="null"/> when the document declares none.</summary>
     public AgentsConfiguration? Agents { get; init; }
 
