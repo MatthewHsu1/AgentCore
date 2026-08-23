@@ -16,6 +16,7 @@
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="Microsoft.Extensions.VectorData.Abstractions" />
+    <PackageReference Include="ModelContextProtocol.Core" />
     <PackageReference Include="OpenAI" />
     <PackageReference Include="Npgsql" />
     <PackageReference Include="AWSSDK.S3" />
