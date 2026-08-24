@@ -1,71 +1,95 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.State;
-using AgentCore.Domain.Audit;
 
 namespace AgentCore.Application.Runtime;
 
 /// <summary>
-/// The four ambients a turn runs under, opened and closed as one.
+/// Everything one turn makes ambient, carried as a single value on the flow of execution.
 /// </summary>
-/// <remarks>
-/// <para>
-/// <see cref="CallStateScope"/>, <see cref="CallRenderScope"/>, <see cref="ToolFailureScope"/> and
-/// <see cref="TurnContextScope"/> are separate seams, but no turn wants one without the others.
-/// <see cref="CallSession"/> opens them at three sites, so bundling them here is what keeps a fifth
-/// ambient a one-line change and stops one site from silently running with an ambient the other two
-/// have.
-/// </para>
-/// <para>
-/// An async iterator restores the execution context of its caller at every <c>yield return</c>, so
-/// no ambient survives one. A streaming turn opens this again for every round, and that re-entry is
-/// what <c>CallRenderScopeTests.ATurnThatStreams_ShowsItsToolsTheScreenToo</c> holds.
-/// </para>
-/// </remarks>
-internal static class TurnAmbients
+internal sealed record TurnAmbients
 {
+    private static readonly TurnAmbients None = new();
+
+    private static readonly AsyncLocal<TurnAmbients?> Ambient = new();
+
+    /// <summary>Gets what is ambient on this flow, or <see langword="null"/> when nothing is open.</summary>
+    internal static TurnAmbients? Current => Ambient.Value;
+
+    /// <summary>Gets the state document the call reads and writes.</summary>
+    public StateDocument? State { get; init; }
+
+    /// <summary>Gets the screen this call draws on, or <see langword="null"/> when it has none.</summary>
+    public IRenderPort? Screen { get; init; }
+
+    /// <summary>Gets what to do with a tool failure the run reports.</summary>
+    public Action<ToolFailure>? OnToolFailure { get; init; }
+
+    /// <summary>Gets the turn the tools are running inside.</summary>
+    public TurnContext? Context { get; init; }
+
     /// <summary>Opens all four over this flow of execution.</summary>
     /// <param name="state">The state document the call reads and writes.</param>
     /// <param name="screen">The screen this call draws on, or <see langword="null"/> when it has none.</param>
     /// <param name="onToolFailure">What to do with a tool failure the run reports.</param>
     /// <param name="context">The turn the tools are running inside.</param>
-    /// <returns>The scope. Disposing it closes all four, newest first.</returns>
+    /// <returns>The scope. Disposing it puts back what was ambient before.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     internal static IDisposable Enter(
         StateDocument state,
         IRenderPort? screen,
         Action<ToolFailure> onToolFailure,
         TurnContext context)
-        => new Scope(
-            CallStateScope.Enter(state),
-            CallRenderScope.Enter(screen),
-            ToolFailureScope.Enter(onToolFailure),
-            TurnContextScope.Enter(context));
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(onToolFailure);
+        ArgumentNullException.ThrowIfNull(context);
 
-    /// <summary>One open scope over all four ambients.</summary>
+        return Push(new TurnAmbients
+        {
+            State = state,
+            Screen = screen,
+            OnToolFailure = onToolFailure,
+            Context = context,
+        });
+    }
+
+    /// <summary>Opens one changed ambient over this flow, leaving the rest as they are.</summary>
+    /// <param name="change">What the open scope holds, given what is ambient now.</param>
+    /// <returns>The scope. Disposing it puts back what was ambient before.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="change"/> is <see langword="null"/>.</exception>
+    internal static IDisposable Amend(Func<TurnAmbients, TurnAmbients> change)
+    {
+        ArgumentNullException.ThrowIfNull(change);
+
+        return Push(change(Ambient.Value ?? None));
+    }
+
+    private static Scope Push(TurnAmbients next)
+    {
+        var previous = Ambient.Value;
+        Ambient.Value = next;
+        return new Scope(previous);
+    }
+
+    /// <summary>One open scope. Disposing it puts back what was ambient before.</summary>
     private sealed class Scope : IDisposable
     {
-        private readonly IDisposable _state;
-        private readonly IDisposable _screen;
-        private readonly IDisposable _faults;
-        private readonly IDisposable _context;
+        private readonly TurnAmbients? _previous;
 
-        public Scope(IDisposable state, IDisposable screen, IDisposable faults, IDisposable context)
-        {
-            _state = state;
-            _screen = screen;
-            _faults = faults;
-            _context = context;
-        }
+        private bool _closed;
 
-        /// <remarks>
-        /// Newest first, the order <c>using</c> would have closed them in. Each of the four already
-        /// refuses a second dispose, so this one needs no guard of its own.
-        /// </remarks>
+        public Scope(TurnAmbients? previous) => _previous = previous;
+
         public void Dispose()
         {
-            _context.Dispose();
-            _faults.Dispose();
-            _screen.Dispose();
-            _state.Dispose();
+            if (_closed)
+            {
+                // A second dispose must not put an older value back over a newer scope.
+                return;
+            }
+
+            _closed = true;
+            Ambient.Value = _previous;
         }
     }
 }

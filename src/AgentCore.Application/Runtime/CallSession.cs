@@ -1,3 +1,9 @@
+using System.Diagnostics;
+using System.Globalization;
+using System.Runtime.CompilerServices;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
@@ -6,16 +12,10 @@ using AgentCore.Application.Policy;
 using AgentCore.Application.Ports;
 using AgentCore.Application.State;
 using AgentCore.Application.Transcript;
-using AgentCore.Domain.Audit;
 using AgentCore.Domain;
+using AgentCore.Domain.Audit;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
-using System.Diagnostics;
-using System.Globalization;
-using System.Runtime.CompilerServices;
-using System.Text.Json.Nodes;
-using System.Text.Json;
-using System.Text;
 
 namespace AgentCore.Application.Runtime;
 
@@ -299,15 +299,19 @@ public sealed class CallSession : IConversationPort
             List<AgentResponseUpdate> updates = [];
             string? toolFault = null;
 
+            // This scope covers opening the run's session and building the stream, and reaches no
+            // round: an async iterator restores its caller's execution context at every yield.
             using var opening = EnterAmbients(turn);
 
-            var stream = turn.Agent
-                .RunStreamingAsync(
-                    turn.Request,
-                    await RunSessionAsync(turn, cancellation.Token).ConfigureAwait(false),
-                    options: null,
-                    cancellationToken: cancellation.Token)
-                .GetAsyncEnumerator(cancellation.Token);
+            var stream = ScopedEnumerator.Over(
+                turn.Agent
+                    .RunStreamingAsync(
+                        turn.Request,
+                        await RunSessionAsync(turn, cancellation.Token).ConfigureAwait(false),
+                        options: null,
+                        cancellationToken: cancellation.Token)
+                    .GetAsyncEnumerator(cancellation.Token),
+                () => EnterAmbients(turn));
 
             try
             {
@@ -319,12 +323,6 @@ public sealed class CallSession : IConversationPort
                     // no catch clause around the yield.
                     try
                     {
-                        // The second crossing, once for each round. An async iterator restores the
-                        // execution context of its caller at every yield, so the scope above reaches
-                        // the first round only. The graph runs inside MoveNextAsync, so the scope
-                        // opens again here and closes with the round.
-                        using var round = EnterAmbients(turn);
-
                         if (!await stream.MoveNextAsync().ConfigureAwait(false))
                         {
                             break;
@@ -504,10 +502,6 @@ public sealed class CallSession : IConversationPort
     /// </summary>
     /// <param name="turn">The turn about to run.</param>
     /// <returns>The scope. Disposing it closes every ambient it opened.</returns>
-    /// <remarks>
-    /// A streaming turn calls this once for the turn and again for every round, because an async
-    /// iterator restores the execution context of its caller at each <c>yield return</c>.
-    /// </remarks>
     private IDisposable EnterAmbients(Turn turn)
         => TurnAmbients.Enter(
             State,
