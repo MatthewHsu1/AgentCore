@@ -324,16 +324,36 @@ AgentCore.Application.Configuration.Schema.McpAllowEntry.Equals(AgentCore.Applic
 AgentCore.Application.Configuration.Schema.McpAllowEntry.McpAllowEntry() -> void
 AgentCore.Application.Configuration.Schema.McpAllowEntry.Name.get -> string!
 AgentCore.Application.Configuration.Schema.McpAllowEntry.Name.init -> void
+AgentCore.Application.Configuration.Schema.McpRetryConfiguration
+AgentCore.Application.Configuration.Schema.McpRetryConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.McpRetryConfiguration!
+AgentCore.Application.Configuration.Schema.McpRetryConfiguration.Attempts.get -> int?
+AgentCore.Application.Configuration.Schema.McpRetryConfiguration.Attempts.init -> void
+AgentCore.Application.Configuration.Schema.McpRetryConfiguration.BackoffMs.get -> int?
+AgentCore.Application.Configuration.Schema.McpRetryConfiguration.BackoffMs.init -> void
+AgentCore.Application.Configuration.Schema.McpRetryConfiguration.Equals(AgentCore.Application.Configuration.Schema.McpRetryConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.McpRetryConfiguration.McpRetryConfiguration() -> void
 AgentCore.Application.Configuration.Schema.McpServerConfiguration
 AgentCore.Application.Configuration.Schema.McpServerConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.McpServerConfiguration!
 AgentCore.Application.Configuration.Schema.McpServerConfiguration.Allow.get -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Configuration.Schema.McpAllowEntry!>!
 AgentCore.Application.Configuration.Schema.McpServerConfiguration.Allow.init -> void
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.CallTimeoutSeconds.get -> int?
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.CallTimeoutSeconds.init -> void
 AgentCore.Application.Configuration.Schema.McpServerConfiguration.Command.get -> System.Collections.Generic.IReadOnlyList<string!>!
 AgentCore.Application.Configuration.Schema.McpServerConfiguration.Command.init -> void
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.ConnectTimeoutSeconds.get -> int?
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.ConnectTimeoutSeconds.init -> void
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.Env.get -> System.Collections.Generic.IReadOnlyDictionary<string!, AgentCore.Application.Configuration.Parsing.SecretTemplate!>!
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.Env.init -> void
 AgentCore.Application.Configuration.Schema.McpServerConfiguration.Equals(AgentCore.Application.Configuration.Schema.McpServerConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.Headers.get -> System.Collections.Generic.IReadOnlyDictionary<string!, AgentCore.Application.Configuration.Parsing.SecretTemplate!>!
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.Headers.init -> void
 AgentCore.Application.Configuration.Schema.McpServerConfiguration.Id.get -> string!
 AgentCore.Application.Configuration.Schema.McpServerConfiguration.Id.init -> void
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.InheritEnv.get -> bool
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.InheritEnv.init -> void
 AgentCore.Application.Configuration.Schema.McpServerConfiguration.McpServerConfiguration() -> void
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.Retry.get -> AgentCore.Application.Configuration.Schema.McpRetryConfiguration?
+AgentCore.Application.Configuration.Schema.McpServerConfiguration.Retry.init -> void
 AgentCore.Application.Configuration.Schema.McpServerConfiguration.Transport.get -> AgentCore.Application.Configuration.Schema.McpTransport
 AgentCore.Application.Configuration.Schema.McpServerConfiguration.Transport.init -> void
 AgentCore.Application.Configuration.Schema.McpServerConfiguration.Url.get -> string?
@@ -818,6 +838,8 @@ AgentCore.Application.Tools.DeclaredTool
 AgentCore.Application.Tools.DeclaredTool.Declaration.get -> AgentCore.Application.Configuration.Schema.ToolConfiguration!
 AgentCore.Application.Tools.DeclaredTool.DeclaredTool(AgentCore.Application.Configuration.Schema.ToolConfiguration! tool) -> void
 AgentCore.Application.Tools.DeclaredTool.Failed(string! message) -> System.Text.Json.Nodes.JsonObject!
+AgentCore.Application.Tools.TimeLimitedTool
+AgentCore.Application.Tools.TimeLimitedTool.TimeLimitedTool(Microsoft.Extensions.AI.AIFunction! inner, System.TimeSpan limit) -> void
 AgentCore.Application.Tools.ToolBinding
 AgentCore.Application.Tools.ToolBindingRegistry
 AgentCore.Application.Tools.ToolBindingRegistry.Contains(string! name) -> bool
@@ -829,7 +851,9 @@ AgentCore.Application.Tools.ToolBindingRegistry.TryGetBinding(string! name, out 
 AgentCore.Application.Tools.ToolErrorResult
 AgentCore.Application.Tools.ToolRegistration
 AgentCore.Application.Tools.ToolRegistration.<Clone>$() -> AgentCore.Application.Tools.ToolRegistration!
-AgentCore.Application.Tools.ToolRegistration.Deconstruct(out string! Id, out string! Description, out System.Func<Microsoft.Extensions.AI.AITool!>! Materialise) -> void
+AgentCore.Application.Tools.ToolRegistration.CallTimeout.get -> System.TimeSpan?
+AgentCore.Application.Tools.ToolRegistration.CallTimeout.init -> void
+AgentCore.Application.Tools.ToolRegistration.Deconstruct(out string! Id, out string! Description, out System.Func<Microsoft.Extensions.AI.AITool!>! Materialise, out System.TimeSpan? CallTimeout) -> void
 AgentCore.Application.Tools.ToolRegistration.Description.get -> string!
 AgentCore.Application.Tools.ToolRegistration.Description.init -> void
 AgentCore.Application.Tools.ToolRegistration.Equals(AgentCore.Application.Tools.ToolRegistration? other) -> bool
@@ -837,7 +861,7 @@ AgentCore.Application.Tools.ToolRegistration.Id.get -> string!
 AgentCore.Application.Tools.ToolRegistration.Id.init -> void
 AgentCore.Application.Tools.ToolRegistration.Materialise.get -> System.Func<Microsoft.Extensions.AI.AITool!>!
 AgentCore.Application.Tools.ToolRegistration.Materialise.init -> void
-AgentCore.Application.Tools.ToolRegistration.ToolRegistration(string! Id, string! Description, System.Func<Microsoft.Extensions.AI.AITool!>! Materialise) -> void
+AgentCore.Application.Tools.ToolRegistration.ToolRegistration(string! Id, string! Description, System.Func<Microsoft.Extensions.AI.AITool!>! Materialise, System.TimeSpan? CallTimeout = null) -> void
 AgentCore.Application.Tools.ToolRegistry
 AgentCore.Application.Tools.ToolRegistry.Contains(string! id) -> bool
 AgentCore.Application.Tools.ToolRegistry.Ids.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
@@ -1006,6 +1030,9 @@ override AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.ToS
 override AgentCore.Application.Configuration.Schema.McpAllowEntry.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.McpAllowEntry.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.McpAllowEntry.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.McpRetryConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.McpRetryConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.McpRetryConfiguration.ToString() -> string!
 override AgentCore.Application.Configuration.Schema.McpServerConfiguration.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.McpServerConfiguration.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.McpServerConfiguration.ToString() -> string!
@@ -1067,6 +1094,12 @@ override AgentCore.Application.Tools.Builtin.BuiltinToolPorts.ToString() -> stri
 override AgentCore.Application.Tools.DeclaredTool.Description.get -> string!
 override AgentCore.Application.Tools.DeclaredTool.JsonSchema.get -> System.Text.Json.JsonElement
 override AgentCore.Application.Tools.DeclaredTool.Name.get -> string!
+override AgentCore.Application.Tools.TimeLimitedTool.AdditionalProperties.get -> System.Collections.Generic.IReadOnlyDictionary<string!, object?>!
+override AgentCore.Application.Tools.TimeLimitedTool.Description.get -> string!
+override AgentCore.Application.Tools.TimeLimitedTool.JsonSchema.get -> System.Text.Json.JsonElement
+override AgentCore.Application.Tools.TimeLimitedTool.JsonSerializerOptions.get -> System.Text.Json.JsonSerializerOptions!
+override AgentCore.Application.Tools.TimeLimitedTool.Name.get -> string!
+override AgentCore.Application.Tools.TimeLimitedTool.ReturnJsonSchema.get -> System.Text.Json.JsonElement?
 override AgentCore.Application.Tools.ToolRegistration.Equals(object? obj) -> bool
 override AgentCore.Application.Tools.ToolRegistration.GetHashCode() -> int
 override AgentCore.Application.Tools.ToolRegistration.ToString() -> string!
@@ -1148,6 +1181,8 @@ static AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.opera
 static AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.operator ==(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? left, AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.McpAllowEntry.operator !=(AgentCore.Application.Configuration.Schema.McpAllowEntry? left, AgentCore.Application.Configuration.Schema.McpAllowEntry? right) -> bool
 static AgentCore.Application.Configuration.Schema.McpAllowEntry.operator ==(AgentCore.Application.Configuration.Schema.McpAllowEntry? left, AgentCore.Application.Configuration.Schema.McpAllowEntry? right) -> bool
+static AgentCore.Application.Configuration.Schema.McpRetryConfiguration.operator !=(AgentCore.Application.Configuration.Schema.McpRetryConfiguration? left, AgentCore.Application.Configuration.Schema.McpRetryConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.McpRetryConfiguration.operator ==(AgentCore.Application.Configuration.Schema.McpRetryConfiguration? left, AgentCore.Application.Configuration.Schema.McpRetryConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.McpServerConfiguration.operator !=(AgentCore.Application.Configuration.Schema.McpServerConfiguration? left, AgentCore.Application.Configuration.Schema.McpServerConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.McpServerConfiguration.operator ==(AgentCore.Application.Configuration.Schema.McpServerConfiguration? left, AgentCore.Application.Configuration.Schema.McpServerConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.ModelReference.operator !=(AgentCore.Application.Configuration.Schema.ModelReference? left, AgentCore.Application.Configuration.Schema.ModelReference? right) -> bool

@@ -447,6 +447,57 @@
           "minLength": 1,
           "description": "transport: http. The server's URI."
         },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "transport: http. Headers sent on every request. A value may hold ${secret:name}. This is where an Authorization header goes."
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "transport: stdio. The environment the child process is launched with. A value may hold ${secret:name}. A credential goes here, never in command:, where it would land in ps."
+        },
+        "inheritEnv": {
+          "type": "boolean",
+          "default": false,
+          "description": "transport: stdio. Whether the child also inherits this process's own environment. Defaults to false: an MCP server is third-party code, and inheriting hands it every other credential this process holds."
+        },
+        "connectTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 10,
+          "description": "How long one connection attempt may take. Applied on every attempt, so the SDK's own 60s default never governs."
+        },
+        "callTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 30,
+          "description": "How long one tool call on this server may take before it is cancelled and the model is told it timed out."
+        },
+        "retry": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "What happens when a connection attempt fails. Exists for cold starts: npx fetching a package, or a container still warming up.",
+          "properties": {
+            "attempts": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10,
+              "default": 3,
+              "description": "The number of attempts, including the first."
+            },
+            "backoffMs": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 1000,
+              "description": "The wait before the second attempt. Each later one waits twice the last."
+            }
+          }
+        },
         "allow": {
           "type": "array",
           "items": {
@@ -472,9 +523,10 @@
               "command"
             ],
             "properties": {
-              "url": false
+              "url": false,
+              "headers": false
             },
-            "$comment": "transport: stdio launches a child process; url names nothing there."
+            "$comment": "transport: stdio launches a child process; url names nothing there, and a header belongs to no request it makes. Its credential goes in env:."
           }
         },
         {
@@ -493,9 +545,11 @@
               "url"
             ],
             "properties": {
-              "command": false
+              "command": false,
+              "env": false,
+              "inheritEnv": false
             },
-            "$comment": "transport: http reaches a server already running; nothing here launches a process."
+            "$comment": "transport: http reaches a server already running; nothing here launches a process, so there is no child environment to set. Its credential goes in headers:."
           }
         }
       ]

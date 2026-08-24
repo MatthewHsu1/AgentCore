@@ -88,6 +88,7 @@ public static class ConfigurationValidator
         CheckGraphWellFormedness(configuration, errors);
         CheckDelegationCycles(configuration, errors);
         CheckMcpServerIds(configuration, errors);
+        CheckMcpSecretPlacement(configuration, errors);
 
         if (errors.Count == 0 && warnings.Count == 0)
         {
@@ -341,6 +342,47 @@ public static class ConfigurationValidator
                     ConfigurationError.AppendPointer(Pointer.Mcp(index), "id"),
                     $"two mcp: entries declare the id '{server.Id}'. An id names one server, so rename "
                     + "one of them."));
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // mcp: secret placement. command: becomes the child's argv, which every user on the box can read
+    // out of ps, and url: is logged by proxies and reverse proxies along the way. Neither is a
+    // SecretTemplate, so a reference written there would be passed through as its literal characters
+    // and would leak while not even working. The schema cannot express "this string may not hold that
+    // substring", so it is checked here.
+    // ---------------------------------------------------------------------------------------------
+    private static void CheckMcpSecretPlacement(AgentCoreConfiguration configuration, List<ConfigurationError> errors)
+    {
+        for (var index = 0; index < configuration.Mcp.Count; index++)
+        {
+            var server = configuration.Mcp[index];
+
+            for (var word = 0; word < server.Command.Count; word++)
+            {
+                if (!server.Command[word].Contains(SecretReference.Prefix, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                errors.Add(Reference(
+                    ConfigurationError.AppendPointer(
+                        ConfigurationError.AppendPointer(Pointer.Mcp(index), "command"), word),
+                    $"the mcp: server '{server.Id}' writes a ${{secret:...}} reference in command:. A "
+                    + "command becomes the child process's argv, which every user on this machine can "
+                    + "read out of ps, and nothing resolves a reference there — it would be passed "
+                    + "through as its own characters. Put the credential in env: instead."));
+            }
+
+            if (server.Url is { } url && url.Contains(SecretReference.Prefix, StringComparison.Ordinal))
+            {
+                errors.Add(Reference(
+                    ConfigurationError.AppendPointer(Pointer.Mcp(index), "url"),
+                    $"the mcp: server '{server.Id}' writes a ${{secret:...}} reference in url:. A URL is "
+                    + "logged by every proxy it passes, and nothing resolves a reference there — it "
+                    + "would be passed through as its own characters. Put the credential in headers: "
+                    + "instead."));
             }
         }
     }

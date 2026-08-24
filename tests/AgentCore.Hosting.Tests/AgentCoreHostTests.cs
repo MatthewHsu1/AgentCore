@@ -476,4 +476,55 @@ public sealed class AgentCoreHostTests
             route,
             new StringContent("{\"messages\":[]}", System.Text.Encoding.UTF8, "application/json"),
             TestContext.Current.CancellationToken);
+
+    // ---------------------------------------------------------------------------------------------
+    // A transport: http MCP server is reached on this host's own pipeline, minus the one part of it
+    // that does not apply to a stream.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task AnMcpServerIsReachedOnThePipelinesOwnHandlerChain()
+    {
+        CountingHandler primary = new();
+        using AgentCoreHttpClients pipeline = new(primary);
+
+        using var client = AgentCoreHostBuilderExtensions.McpHttpClient(pipeline);
+        await client.GetAsync(new Uri("https://mcp.example.com/"), TestContext.Current.CancellationToken);
+
+        // The request reached the handler the pipeline was built around, so MCP shares its proxy
+        // settings, certificate configuration and logging rather than a client of its own.
+        Assert.Equal(1, primary.Sends);
+    }
+
+    /// <summary>
+    /// MCP over HTTP holds a stream open for the life of the session, so the pipeline's own
+    /// hundred-second request deadline would sever it every hundred seconds.
+    /// </summary>
+    [Fact]
+    public void AnMcpServersClientCarriesNoRequestDeadline()
+    {
+        CountingHandler primary = new();
+        using AgentCoreHttpClients pipeline = new(primary);
+
+        using var mcp = AgentCoreHostBuilderExtensions.McpHttpClient(pipeline);
+        using var ordinary = pipeline.CreateClient("agentcore.tools");
+
+        Assert.Equal(Timeout.InfiniteTimeSpan, mcp.Timeout);
+        Assert.Equal(AgentCoreHttpClients.RequestDeadline, ordinary.Timeout);
+    }
+
+    /// <summary>Answers everything, and counts how often it was asked.</summary>
+    private sealed class CountingHandler : HttpMessageHandler
+    {
+        private int _sends;
+
+        public int Sends => Volatile.Read(ref _sends);
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _sends);
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK));
+        }
+    }
 }

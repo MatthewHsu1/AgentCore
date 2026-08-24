@@ -32,6 +32,9 @@ public static class AgentCoreHostBuilderExtensions
     /// <summary>The <c>binds:</c> name the shipped example document declares.</summary>
     public const string CreateCaseBinding = "CreateCase";
 
+    /// <summary>The name a <c>transport: http</c> MCP server's handler chain is opened under.</summary>
+    public const string McpHttpClientName = "agentcore.mcp";
+
     /// <summary>Registers every vendor seam, and loads the document when the host starts.</summary>
     /// <param name="builder">The host being built.</param>
     /// <param name="configure">
@@ -59,9 +62,9 @@ public static class AgentCoreHostBuilderExtensions
         // before the container exists and then threaded through a closure to be found again.
         builder.Services
             .AddOptions<AgentCoreOptions>()
-            .Configure<AgentCoreHttpClients, IConfiguration>(
-                (options, httpClients, hostConfiguration) =>
-                    Configure(hostConfiguration, options, httpClients));
+            .Configure<AgentCoreHttpClients, IConfiguration, ILoggerFactory>(
+                (options, httpClients, hostConfiguration, loggers) =>
+                    Configure(hostConfiguration, options, httpClients, loggers));
 
         builder.Services.AddAgentCore(options => configure?.Invoke(options));
 
@@ -80,6 +83,7 @@ public static class AgentCoreHostBuilderExtensions
     /// <param name="hostConfiguration">The host's own configuration, read for the document path and for secrets.</param>
     /// <param name="options">The options <see cref="AgentCoreServiceCollectionExtensions.AddAgentCore"/> registered.</param>
     /// <param name="httpClients">The one outbound pipeline every adapter shares.</param>
+    /// <param name="loggers">The host's own logging, for the adapters that report what they are doing.</param>
     /// <remarks>
     /// The host's own <c>configure</c> callback is registered after this one, and configure
     /// callbacks run in registration order — so the host still has the last word, which it has to
@@ -88,7 +92,8 @@ public static class AgentCoreHostBuilderExtensions
     private static void Configure(
         IConfiguration hostConfiguration,
         AgentCoreOptions options,
-        AgentCoreHttpClients httpClients)
+        AgentCoreHttpClients httpClients,
+        ILoggerFactory loggers)
     {
         options.ConfigurationPath =
             hostConfiguration[ConfigurationPathKey] ?? DefaultConfigurationPath;
@@ -123,13 +128,35 @@ public static class AgentCoreHostBuilderExtensions
         options.AddToolSource(startup =>
             new HttpToolSource(httpClients.CreateClient(HttpToolSource.HttpClientName), startup.Secrets));
 
-        options.AddToolSource(_ => new McpToolSource());
+        // mcp:. headers: and env: resolved at startup like every other credential.
+        options.AddToolSource(startup => new McpToolSource(
+            startup.Secrets, () => McpHttpClient(httpClients), loggers));
 
         // providers.audit.kind picks the adapter.
         options.UseAuditSinks(new PostgresAuditSinkAdapter());
 
         // providers.transcript.kind picks the adapter.
         options.UseTranscriptStores(new PostgresTranscriptStoreAdapter());
+    }
+
+    /// <summary>Opens the client a <c>transport: http</c> MCP server is reached on.</summary>
+    /// <param name="pipeline">The one outbound pipeline every adapter shares.</param>
+    /// <returns>The client. The pipeline owns the handler under it, so nothing here disposes it.</returns>
+    /// <remarks>
+    /// This takes the handler chain rather than a whole client, so MCP keeps the proxy settings, the
+    /// certificate configuration, and the logging every other outbound call gets — but not
+    /// <see cref="AgentCoreHttpClients.RequestDeadline"/>. MCP over HTTP holds a stream open for as
+    /// long as the session lasts, and a hundred-second deadline on the client would cut that stream
+    /// every hundred seconds. What bounds an MCP call is <c>mcp[].callTimeoutSeconds</c>.
+    /// </remarks>
+    internal static HttpClient McpHttpClient(AgentCoreHttpClients pipeline)
+    {
+        ArgumentNullException.ThrowIfNull(pipeline);
+
+        return new HttpClient(pipeline.CreateHandler(McpHttpClientName), disposeHandler: false)
+        {
+            Timeout = Timeout.InfiniteTimeSpan,
+        };
     }
 
     /// <summary>Settles what only the last word can decide, once every seam has been written.</summary>

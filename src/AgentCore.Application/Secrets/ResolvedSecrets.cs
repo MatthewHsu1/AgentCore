@@ -8,24 +8,6 @@ namespace AgentCore.Application.Secrets;
 /// <summary>
 /// Every <c>${secret:name}</c> value one document needs, read once at startup.
 /// </summary>
-/// <remarks>
-/// <para>
-/// <see cref="ResolveAsync"/> walks the loaded document, collects each distinct name a
-/// <see cref="SecretTemplate"/> references, and asks <see cref="ISecretResolverPort"/> for it one
-/// time. The tool factory then formats its templates against this set, so a tool call costs no
-/// lookup and a missing credential fails before the first call rather than during one.
-/// </para>
-/// <para>
-/// Today one place in the document holds references: <c>tools[].request.headers</c>. The walk is
-/// written as a table over the document, so a later section that carries a template joins it in one
-/// place.
-/// </para>
-/// <para>
-/// The set reads out values through <see cref="Format(SecretTemplate)"/> and nothing else. It never
-/// enumerates them, and <see cref="ToString"/> reports the count alone, because a resolved set lands
-/// in a log line sooner or later.
-/// </para>
-/// </remarks>
 public sealed class ResolvedSecrets
 {
     private readonly Dictionary<string, string> _values;
@@ -133,12 +115,41 @@ public sealed class ResolvedSecrets
                     ConfigurationError.AppendPointer("/tools", index), "request"),
                 "headers");
 
-            foreach (var header in request.Headers)
+            foreach (var reference in In(request.Headers, headers))
             {
-                if (header.Value.HasSecretReferences)
-                {
-                    yield return (header.Value, ConfigurationError.AppendPointer(headers, header.Key));
-                }
+                yield return reference;
+            }
+        }
+
+        for (var index = 0; index < configuration.Mcp.Count; index++)
+        {
+            var server = configuration.Mcp[index];
+            var pointer = ConfigurationError.AppendPointer("/mcp", index);
+
+            // A server declares one or the other: the schema's transport branches reject env: on http
+            // and headers: on stdio. Both are walked because this walk answers "what does the document
+            // reference", not "which transport is this".
+            foreach (var reference in In(server.Headers, ConfigurationError.AppendPointer(pointer, "headers")))
+            {
+                yield return reference;
+            }
+
+            foreach (var reference in In(server.Env, ConfigurationError.AppendPointer(pointer, "env")))
+            {
+                yield return reference;
+            }
+        }
+    }
+
+    /// <summary>Yields every entry of one string map that references a secret.</summary>
+    private static IEnumerable<(SecretTemplate Template, string Pointer)> In(
+        IReadOnlyDictionary<string, SecretTemplate> entries, string pointer)
+    {
+        foreach (var entry in entries)
+        {
+            if (entry.Value.HasSecretReferences)
+            {
+                yield return (entry.Value, ConfigurationError.AppendPointer(pointer, entry.Key));
             }
         }
     }

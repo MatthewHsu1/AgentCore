@@ -1733,7 +1733,7 @@ public sealed class AddAgentCoreTests
                 // a true observer of whether ToolRegistryBuilder.BuildAsync began, not just of
                 // whether the MCP source in particular got asked.
                 options.AddToolSource(_ => new SpyToolSource(() => asked = true));
-                options.AddToolSource(_ => new McpToolSource());
+                options.AddToolSource(startup => new McpToolSource(startup.Secrets));
             }));
 
         var error = Assert.Single(failure.Errors);

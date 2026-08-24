@@ -10,4 +10,13 @@ namespace AgentCore.Application.Tools;
 /// <param name="Materialise">
 /// Builds the tool. It runs at most once, on the first resolve, and never during a call.
 /// </param>
-public sealed record ToolRegistration(string Id, string Description, Func<AITool> Materialise);
+/// <param name="CallTimeout">
+/// How long one call may take, or <see langword="null"/> for no deadline of its own. A source sets
+/// this when the document gives it one; <see cref="ToolRegistryBuilder"/> is what applies it, so
+/// every kind that wants a deadline gets the same one implementation and the same message.
+/// </param>
+public sealed record ToolRegistration(
+    string Id,
+    string Description,
+    Func<AITool> Materialise,
+    TimeSpan? CallTimeout = null);

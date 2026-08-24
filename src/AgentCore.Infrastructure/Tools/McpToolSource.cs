@@ -1,7 +1,10 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Secrets;
 using AgentCore.Application.Tools;
+using AgentCore.Infrastructure.Tools.Mcp;
+using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Client;
 
 namespace AgentCore.Infrastructure.Tools;
@@ -10,38 +13,89 @@ namespace AgentCore.Infrastructure.Tools;
 /// Connects to every declared <c>mcp:</c> server, discovers what it offers, and serves the tools
 /// <c>allow:</c> pins.
 /// </summary>
-/// <remarks>
-/// The MCP specification's lifecycle section makes shutdown a client obligation, and a stdio server
-/// is a child process nothing else can close. This source owns every client it opens, so it must be
-/// disposed for the process behind a <c>kind: stdio</c> server to ever be told to stop.
-/// </remarks>
 public sealed class McpToolSource : IToolSource, IAsyncDisposable
 {
-    private readonly Func<McpServerConfiguration, IClientTransport> _transports;
+    private readonly Func<McpServerConfiguration, McpServerSession> _sessions;
 
-    private readonly List<McpClient> _clients = [];
+    private readonly List<McpServerSession> _open = [];
 
-    /// <summary>Creates the source, connecting through the real MCP transports.</summary>
-    public McpToolSource()
-        : this(DefaultTransport)
+    /// <summary>Creates the source, connecting to the real servers the document declares.</summary>
+    /// <param name="secrets">The values startup already resolved, for <c>headers:</c> and <c>env:</c>.</param>
+    /// <param name="httpClients">
+    /// Opens the client a <c>transport: http</c> server is reached on, or <see langword="null"/> to
+    /// let the SDK build its own. See <see cref="McpConnectionFactory"/> for what a host gains by
+    /// passing one.
+    /// </param>
+    /// <param name="loggers">Where reconnects and dropped tools are reported, or <see langword="null"/> for nowhere.</param>
+    public McpToolSource(
+        ResolvedSecrets secrets,
+        Func<HttpClient>? httpClients = null,
+        ILoggerFactory? loggers = null)
     {
+        ArgumentNullException.ThrowIfNull(secrets);
+
+        McpConnectionFactory connections = new(secrets, httpClients, loggers);
+
+        _sessions = server => new McpServerSession(
+            server,
+            (timeout, cancellationToken) => connections.ConnectAsync(server, timeout, cancellationToken),
+            loggers);
     }
 
-    /// <summary>Creates the source over a transport factory a test substitutes.</summary>
-    /// <param name="transports">Builds the transport for one declared server.</param>
-    internal McpToolSource(Func<McpServerConfiguration, IClientTransport> transports)
+    /// <summary>Creates the source over a transport a test substitutes.</summary>
+    /// <param name="transports">
+    /// Builds the transport for one declared server. It is called once per connection attempt, so a
+    /// test that expects a reconnect must return a fresh transport each time — one that has already
+    /// carried a session cannot carry another.
+    /// </param>
+    /// <param name="loggers">Where reconnects and dropped tools are reported.</param>
+    internal McpToolSource(
+        Func<McpServerConfiguration, IClientTransport> transports,
+        ILoggerFactory? loggers = null)
+        : this(
+            (server, timeout, cancellationToken) => Open(transports(server), timeout, loggers, cancellationToken),
+            loggers)
     {
         ArgumentNullException.ThrowIfNull(transports);
-        _transports = transports;
     }
+
+    /// <summary>Creates the source over a connect step a test substitutes.</summary>
+    /// <param name="connect">
+    /// Opens one connection to one server, within the timeout given. It is called once per attempt
+    /// and again on every reconnect, so it must build a fresh transport each time. A test takes this
+    /// form rather than the transport one when it needs to hold the clients themselves — whether one
+    /// was closed is only visible on the client.
+    /// </param>
+    /// <param name="loggers">Where reconnects and dropped tools are reported.</param>
+    internal McpToolSource(
+        Func<McpServerConfiguration, TimeSpan, CancellationToken, ValueTask<McpClient>> connect,
+        ILoggerFactory? loggers = null)
+    {
+        ArgumentNullException.ThrowIfNull(connect);
+
+        _sessions = server => new McpServerSession(
+            server,
+            (timeout, cancellationToken) => connect(server, timeout, cancellationToken),
+            loggers);
+    }
+
+    /// <summary>Opens one client over one transport, under the session's own timeout.</summary>
+    private static async ValueTask<McpClient> Open(
+        IClientTransport transport, TimeSpan timeout, ILoggerFactory? loggers, CancellationToken cancellationToken)
+        => await McpClient.CreateAsync(
+            transport,
+            new McpClientOptions { InitializationTimeout = timeout },
+            loggers,
+            cancellationToken).ConfigureAwait(false);
 
     /// <inheritdoc />
     /// <exception cref="ConfigurationLoadException">
-    /// A server cannot be reached; an <c>allow:</c> entry names a tool the server does not offer, is
-    /// empty, or writes <c>"*"</c> alongside another entry or with an <c>as:</c>; or a kept tool has
-    /// no description. Every one of these names the server id, so a deployer knows which
-    /// <c>mcp:</c> entry is wrong. On any failure, every client this call already opened is disposed
-    /// before the exception leaves — a partly-booted document leaves no child process behind.
+    /// A server cannot be reached within its own retry and timeout; an <c>allow:</c> entry names a
+    /// tool the server does not offer, is empty, or writes <c>"*"</c> alongside another entry or with
+    /// an <c>as:</c>; or a kept tool has no description. Every one of these names the server id, so a
+    /// deployer knows which <c>mcp:</c> entry is wrong. On any failure, every session this call
+    /// already opened is closed before the exception leaves — a partly-booted document leaves no
+    /// child process behind.
     /// </exception>
     public async ValueTask<IReadOnlyList<ToolRegistration>> ProvideAsync(
         ToolSourceContext context, CancellationToken cancellationToken = default)
@@ -51,6 +105,7 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
         try
         {
             List<ToolRegistration> registrations = [];
+
             foreach (var server in context.Configuration.Mcp)
             {
                 registrations.AddRange(await DiscoverAsync(server, cancellationToken).ConfigureAwait(false));
@@ -68,54 +123,46 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        // Each dispose is guarded on its own, so one client's failure to close cannot abandon the
-        // rest, and _clients.Clear() always runs — the host's second call must find nothing left to
+        // Each dispose is guarded on its own, so one server's failure to close cannot abandon the
+        // rest, and _open.Clear() always runs — the host's second call must find nothing left to
         // re-touch.
-        foreach (var client in _clients)
+        foreach (var session in _open)
         {
             try
             {
-                await client.DisposeAsync().ConfigureAwait(false);
+                await session.DisposeAsync().ConfigureAwait(false);
             }
             catch
             {
             }
         }
 
-        _clients.Clear();
+        _open.Clear();
     }
 
-    /// <summary>Connects to one server, lists what it offers, and applies its <c>allow:</c>.</summary>
-    /// <remarks>
-    /// One try covers connecting, <c>tools/list</c>, and the <c>allow:</c> walk: a server that
-    /// connects and then fails to list (or offers two tools of one name, which
-    /// <see cref="Dictionary{TKey,TValue}"/> itself refuses) must fail the boot by the same route as
-    /// one that never connects at all — decision 4 does not stop mattering once a socket opens.
-    /// <see cref="ConfigurationLoadException"/> itself passes straight through: it already names the
-    /// server and the exact reason, and wrapping it again would only bury that under a second,
-    /// vaguer message.
-    /// </remarks>
+    /// <summary>Opens one server, and applies its <c>allow:</c> to what it offers.</summary>
     private async ValueTask<List<ToolRegistration>> DiscoverAsync(
         McpServerConfiguration server, CancellationToken cancellationToken)
     {
         ValidateAllow(server);
 
-        McpClient? client = null;
-        var listed = false;
+        var session = _sessions(server);
+
+        _open.Add(session);
+
+        var opened = false;
+
         try
         {
-            var transport = _transports(server);
-            client = await McpClient.CreateAsync(transport, cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-            _clients.Add(client);
+            var offered = await session.OpenAsync(cancellationToken).ConfigureAwait(false);
 
-            var offered = await client.ListToolsAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-            listed = true;
+            opened = true;
+
             var byName = offered.ToDictionary(tool => tool.Name, StringComparer.Ordinal);
 
             return server.Allow.Any(entry => entry.Name == "*")
-                ? [.. offered.Select(tool => Register(server, tool, $"{server.Id}.{tool.Name}"))]
-                : [.. server.Allow.Select(entry => RegisterAllowed(server, byName, entry))];
+                ? [.. offered.Select(tool => Register(session, server, tool, $"{server.Id}.{tool.Name}"))]
+                : [.. server.Allow.Select(entry => RegisterAllowed(session, server, byName, entry))];
         }
         catch (ConfigurationLoadException)
         {
@@ -123,23 +170,14 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            throw ToolSourceError.Fail(client is null
-                ? $"the MCP server '{server.Id}' could not be reached: {Describe(ex)}"
-                : listed
-                    ? $"the MCP server '{server.Id}' listed its tools, but failed before it could "
-                        + $"serve them: {Describe(ex)}"
-                    : $"the MCP server '{server.Id}' connected, but failed before it could list what "
-                        + $"it offers: {Describe(ex)}");
+            throw ToolSourceError.Fail(opened
+                ? $"the MCP server '{server.Id}' listed its tools, but failed before it could serve "
+                    + $"them: {Describe(ex)}"
+                : $"the MCP server '{server.Id}' could not be reached: {Describe(ex)}");
         }
     }
 
     /// <summary>Checks the shape of <c>allow:</c> itself, before any connection is opened.</summary>
-    /// <remarks>
-    /// Decisions 4 and 8 fail the boot rather than silently doing nothing: an empty <c>allow:</c>
-    /// would serve nothing and say nothing. Decision 6 makes <c>"*"</c> the explicit opt-out, and an
-    /// opt-out that silently swallows a neighbouring entry — <c>["*", {x: {as: y}}]</c> — or that
-    /// carries its own <c>as:</c> is not explicit; it is a wrong document that happened not to fail.
-    /// </remarks>
     private static void ValidateAllow(McpServerConfiguration server)
     {
         if (server.Allow.Count == 0)
@@ -150,6 +188,7 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
         }
 
         var star = server.Allow.FirstOrDefault(entry => entry.Name == "*");
+
         if (star is not null && (server.Allow.Count > 1 || star.As is not null))
         {
             throw ToolSourceError.Fail(
@@ -160,7 +199,10 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
     }
 
     private static ToolRegistration RegisterAllowed(
-        McpServerConfiguration server, Dictionary<string, McpClientTool> offered, McpAllowEntry entry)
+        McpServerSession session,
+        McpServerConfiguration server,
+        Dictionary<string, McpToolDescriptor> offered,
+        McpAllowEntry entry)
     {
         if (!offered.TryGetValue(entry.Name, out var tool))
         {
@@ -169,23 +211,14 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
                 + "allow: list names.");
         }
 
-        return Register(server, tool, entry.As ?? $"{server.Id}.{tool.Name}");
+        return Register(session, server, tool, entry.As ?? $"{server.Id}.{tool.Name}");
     }
 
     /// <summary>
     /// Builds the registration for one kept tool, under its final served id.
     /// </summary>
-    /// <remarks>
-    /// Decision 3's chain for every other kind is a document's own <c>description:</c>, then the
-    /// source's default, then a boot failure on empty. A <c>kind: mcp</c> tool has only the second
-    /// and third links: the server's own description is the only source there is, MCP makes it
-    /// optional — a tool can offer none at all, and then <see cref="McpClientTool.Description"/> is
-    /// <c>""</c>, never <see langword="null"/> — and a document has no override today. So this fails
-    /// the boot itself on an empty description, before <see cref="ToolRegistryBuilder"/> ever sees
-    /// it: that builder's own message tells a deployer to write a <c>description:</c> the
-    /// <c>mcp:</c> shape has nowhere to hold, which is advice a deployer could never follow.
-    /// </remarks>
-    private static ToolRegistration Register(McpServerConfiguration server, McpClientTool tool, string id)
+    private static ToolRegistration Register(
+        McpServerSession session, McpServerConfiguration server, McpToolDescriptor tool, string id)
     {
         if (tool.Description.Length == 0)
         {
@@ -196,8 +229,8 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
                 + "out), or ask whoever runs that server to describe it.");
         }
 
-        var renamed = tool.WithName(id);
-        return new ToolRegistration(id, tool.Description, () => renamed);
+        return new ToolRegistration(
+            id, tool.Description, () => new McpTool(session, tool, id), session.CallTimeout);
     }
 
     /// <summary>Names the innermost cause, so a wrapped SDK message never buries the real one.</summary>
@@ -212,20 +245,4 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
         var cause = ex.GetBaseException();
         return ReferenceEquals(cause, ex) ? ex.Message : $"{ex.Message} ({cause.Message})";
     }
-
-    private static IClientTransport DefaultTransport(McpServerConfiguration server)
-        => server.Transport switch
-        {
-            McpTransport.Http => new HttpClientTransport(new HttpClientTransportOptions
-            {
-                Endpoint = new Uri(server.Url!),
-                Name = server.Id,
-            }),
-            _ => new StdioClientTransport(new StdioClientTransportOptions
-            {
-                Name = server.Id,
-                Command = server.Command[0],
-                Arguments = [.. server.Command.Skip(1)],
-            }),
-        };
 }

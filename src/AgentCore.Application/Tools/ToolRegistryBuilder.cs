@@ -56,7 +56,7 @@ public static class ToolRegistryBuilder
 
         // Every resolve runs on the single startup flow that compiles the document. Nothing resolves
         // once the host is serving, so no request thread can race the Lazy.
-        Lazy<AITool> lazy = new(registration.Materialise, LazyThreadSafetyMode.None);
+        Lazy<AITool> lazy = new(() => Limit(registration), LazyThreadSafetyMode.None);
 
         if (!tools.TryAdd(registration.Id, lazy))
         {
@@ -64,6 +64,28 @@ public static class ToolRegistryBuilder
                 $"two tools claim the id '{registration.Id}'. An id names one tool, so rename one of "
                 + "them or take one out of the document.");
         }
+    }
+
+    /// <summary>Builds one tool, with its deadline on it when the source asked for one.</summary>
+    private static AITool Limit(ToolRegistration registration)
+    {
+        var tool = registration.Materialise();
+
+        if (registration.CallTimeout is not { } limit)
+        {
+            return tool;
+        }
+
+        // A source that asked for a deadline and quietly did not get one is the worst of both: the
+        // document says the call is bounded and nothing bounds it. Only an AIFunction has a call to
+        // put a deadline around, so a source that names one for anything else is wrong about its own
+        // tool, and says so at boot rather than on a live call.
+        return tool is AIFunction function
+            ? new TimeLimitedTool(function, limit)
+            : throw ToolSourceError.Fail(
+                $"the tool '{registration.Id}' declares a call timeout, but the source built a "
+                + $"{tool.GetType().Name} rather than an AIFunction, which has no call to time. Take "
+                + "the timeout off the registration, or serve the tool as an AIFunction.");
     }
 
     private static void VerifyEveryDeclarationIsServed(
