@@ -1,5 +1,6 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions.Memory;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -9,12 +10,19 @@ namespace AgentCore.AspNetCore.Sessions;
 /// Runs the idle sweep of <see cref="InMemoryCallSessions"/> for as long as the host is up.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Expiry needs something to drive it: a store that only sweeps when it is read never drops the
 /// call nobody comes back to, which is the one that grows. A host that registered a session store
 /// of its own gets nothing from this — that store owns its own expiry, wherever it keeps them.
+/// </para>
+/// <para>
+/// The session store is resolved inside <see cref="ExecuteAsync"/> and not through the constructor.
+/// A host builds every <see cref="IHostedService"/> before it starts any of them, and the default
+/// store reaches back through the compiled graph — which does not exist until the boot has run.
+/// </para>
 /// </remarks>
 internal sealed class CallSessionSweeper(
-    ICallSessions sessions, TimeProvider timeProvider, ILogger<CallSessionSweeper> logger) : BackgroundService
+    IServiceProvider services, TimeProvider timeProvider, ILogger<CallSessionSweeper> logger) : BackgroundService
 {
     /// <summary>How often the sweep runs.</summary>
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(5);
@@ -22,7 +30,7 @@ internal sealed class CallSessionSweeper(
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (sessions is not InMemoryCallSessions memory)
+        if (services.GetRequiredService<ICallSessions>() is not InMemoryCallSessions memory)
         {
             return;
         }

@@ -24,6 +24,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Text.Json.Nodes;
 using Xunit;
+using AgentCore.AspNetCore.DependencyInjection.Startup;
 
 namespace AgentCore.AspNetCore.Tests.DependencyInjection;
 
@@ -31,8 +32,8 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection;
 /// The composition root. It loads, validates, resolves, compiles, and registers, in that order.
 /// </summary>
 /// <remarks>
-/// A configuration defect stops the host here and never on the first call. Every test proves that by
-/// calling AddAgentCoreAsync alone, with no request anywhere.
+/// A configuration defect stops the host at start and never on the first call. Every test proves
+/// that by starting a host and nothing else, with no request anywhere.
 /// </remarks>
 public sealed class AddAgentCoreTests
 {
@@ -403,6 +404,38 @@ public sealed class AddAgentCoreTests
     // A kind: agent tool reaches no source at all: the compiler builds it once the agent it names
     // has compiled, so the registry never holds it. The reference pass must still let front's
     // tools: [ ask_specialist ] through, or every delegating document fails to boot.
+    // A declared kind: agent tool whose id a registered source also discovers. The collision is only
+    // found after every source has answered, so by then the source is open.
+    private const string CollidingAgentToolYaml =
+        """
+        apiVersion: agentcore/v1
+        name: colliding
+        tools:
+          - id: shared_id
+            kind: agent
+            agent: specialist
+            description: Ask the specialist one product question.
+            parameters:
+              type: object
+              properties: { question: { type: string } }
+              required: [ question ]
+        agents:
+          items:
+            - { id: front, instructions: "the caller talks to me", tools: [ shared_id ] }
+            - { id: specialist, instructions: "I answer product questions" }
+        policy:
+          initial: talk
+          stages:
+            - { id: talk, agent: front, terminal: true }
+        providers:
+          call:   { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        """;
+
     private const string DelegatingAgentToolYaml =
         """
         apiVersion: agentcore/v1
@@ -535,25 +568,46 @@ public sealed class AddAgentCoreTests
             service => service is CallSessionSweeper);
     }
 
+    /// <summary>
+    /// The one thing deferring the boot to host start has to guarantee: a service the document
+    /// produced cannot be read before the document has been read. A provider nobody started answers
+    /// with a refusal that names the fix, and never with a half-built graph or a null.
+    /// </summary>
+    [Fact]
+    public void AServiceReadFromAProviderNobodyStarted_RefusesAndSaysWhatToDo()
+    {
+        ServiceCollection services = new();
+        ConfigureServices(services, OneAgentYaml, null);
+
+        using var provider = services.BuildServiceProvider();
+
+        var failure = Assert.Throws<InvalidOperationException>(
+            provider.GetRequiredService<CompiledAgent>);
+
+        Assert.Contains("has not booted", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("StartAsync", failure.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task AddAgentCore_KeepsSessionsTheHostRegisteredFirst()
     {
         CountingCallSessions mine = new();
-        ServiceCollection services = new();
-        services.AddSingleton<ICallSessions>(mine);
-        await ConfigureAsync(services, OneAgentYaml, null);
+        HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+        builder.Services.AddSingleton<ICallSessions>(mine);
+        ConfigureServices(builder.Services, OneAgentYaml, null);
 
-        using var provider = services.BuildServiceProvider();
+        using var provider = await StartAsync(builder.Build());
 
         // A distributed store replaces the default one, and the default steps aside.
         Assert.Same(mine, provider.GetRequiredService<ICallSessions>());
     }
 
     // -------------------------------------------------------------------------------------------
-    // Telemetry shuts down with the host. Disposal is the flush, so something has to trigger it.
+    // Telemetry shuts down with the host. The container owns the session, so its disposal is the
+    // flush — which is the one path a start that failed also reaches.
     // -------------------------------------------------------------------------------------------
     [Fact]
-    public async Task AddAgentCore_FlushesTheTelemetrySessionWhenTheHostStops()
+    public async Task AddAgentCore_RegistersTheTelemetrySessionTheDocumentNames()
     {
         var (host, adapter) = await BuildTelemetryHostAsync();
 
@@ -561,24 +615,46 @@ public sealed class AddAgentCoreTests
         {
             await host.StartAsync(TestContext.Current.CancellationToken);
 
-            Assert.Equal(0, adapter.Session.Flushes);
-
-            await host.StopAsync(TestContext.Current.CancellationToken);
-
-            Assert.Equal(1, adapter.Session.Flushes);
+            // A host that reads its own spans and metrics resolves this. Nothing in this library
+            // does, so only a test holds it to being there at all.
+            Assert.Same(adapter.Session, host.Services.GetRequiredService<ITelemetrySession>());
         }
     }
 
     [Fact]
-    public async Task AddAgentCore_FlushesTheTelemetrySessionOnceWhenTheHostStopsAndIsThenDisposed()
+    public async Task AddAgentCore_RegistersNoTelemetrySessionWhenTheHostBindsNoVendor()
+    {
+        using var provider = await BuildAsync(OneAgentYaml);
+
+        Assert.Null(provider.GetService<ITelemetrySession>());
+    }
+
+    [Fact]
+    public async Task AddAgentCore_FlushesTheTelemetrySessionWhenTheHostShutsDown()
+    {
+        var (host, adapter) = await BuildTelemetryHostAsync();
+
+        await host.StartAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, adapter.Session.Flushes);
+
+        await host.StopAsync(TestContext.Current.CancellationToken);
+        host.Dispose();
+
+        Assert.Equal(1, adapter.Session.Flushes);
+    }
+
+    [Fact]
+    public async Task AddAgentCore_FlushesTheTelemetrySessionOnceWhenTheHostIsDisposedTwice()
     {
         var (host, adapter) = await BuildTelemetryHostAsync();
 
         await host.StartAsync(TestContext.Current.CancellationToken);
         await host.StopAsync(TestContext.Current.CancellationToken);
 
-        // Stop drains, and the dispose that follows reaches the same owner. An adapter's session is
-        // not required to survive being drained twice, so the second call has to be a no-op.
+        // An adapter's session is not required to survive being drained twice, so the second call
+        // has to be a no-op.
+        host.Dispose();
         host.Dispose();
 
         Assert.Equal(1, adapter.Session.Flushes);
@@ -589,22 +665,20 @@ public sealed class AddAgentCoreTests
     // stop that does not drain the queue loses every row still in it.
     // -------------------------------------------------------------------------------------------
     [Fact]
-    public async Task AddAgentCore_DrainsTheAuditQueueWhenTheHostStops()
+    public async Task AddAgentCore_DrainsTheAuditQueueWhenTheHostShutsDown()
     {
         var (host, store) = await BuildAuditHostAsync();
 
-        using (host)
-        {
-            await host.StartAsync(TestContext.Current.CancellationToken);
+        await host.StartAsync(TestContext.Current.CancellationToken);
 
-            await host.Services
-                .GetRequiredService<IAuditSinkPort>()
-                .AppendAsync(AuditRow(1), TestContext.Current.CancellationToken);
+        await host.Services
+            .GetRequiredService<IAuditSinkPort>()
+            .AppendAsync(AuditRow(1), TestContext.Current.CancellationToken);
 
-            await host.StopAsync(TestContext.Current.CancellationToken);
+        await host.StopAsync(TestContext.Current.CancellationToken);
+        host.Dispose();
 
-            Assert.Equal(1, store.Written);
-        }
+        Assert.Equal(1, store.Written);
     }
 
     [Fact]
@@ -612,62 +686,64 @@ public sealed class AddAgentCoreTests
     {
         var (host, store) = await BuildAuditHostAsync();
 
-        using (host)
-        {
-            await host.StartAsync(TestContext.Current.CancellationToken);
+        await host.StartAsync(TestContext.Current.CancellationToken);
 
-            await host.Services
-                .GetRequiredService<IAuditSinkPort>()
-                .AppendAsync(AuditRow(1), TestContext.Current.CancellationToken);
+        await host.Services
+            .GetRequiredService<IAuditSinkPort>()
+            .AppendAsync(AuditRow(1), TestContext.Current.CancellationToken);
 
-            await host.StopAsync(TestContext.Current.CancellationToken);
+        await host.StopAsync(TestContext.Current.CancellationToken);
 
-            // The store the queue writes into is closed by the same shutdown. Closing it first would
-            // hand the drain a store that can no longer accept the rows it already promised to keep.
-            Assert.True(store.Closed);
-            Assert.Equal(1, store.WrittenWhenClosed);
-        }
+        // The container closes what it resolved before it closes the boot that still owns the store
+        // behind the queue. Closing that store first would hand the drain a store which can no
+        // longer accept the rows it already promised to keep.
+        host.Dispose();
+
+        Assert.True(store.Closed);
+        Assert.Equal(1, store.WrittenWhenClosed);
     }
 
     [Fact]
-    public async Task AddAgentCore_ClosesTheTranscriptStoreWhenTheHostStops()
+    public async Task AddAgentCore_ClosesTheTranscriptStoreWhenTheHostShutsDown()
     {
         RecordingTranscriptStore store = new();
         HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
-        await ConfigureAsync(
-            (ServiceCollection)builder.Services,
+        ConfigureServices(
+            builder.Services,
             VendorTranscriptYaml,
             options => options.UseTranscriptStores(new TestTranscriptStoreAdapter(store)));
 
-        using IHost host = builder.Build();
+        IHost host = builder.Build();
         await host.StartAsync(TestContext.Current.CancellationToken);
         await host.StopAsync(TestContext.Current.CancellationToken);
+        host.Dispose();
 
         Assert.True(store.Closed);
     }
 
     [Fact]
-    public async Task AHostRegisteredDisposableToolSource_IsClosedWhenTheHostStops()
+    public async Task AHostRegisteredDisposableToolSource_IsClosedWhenTheHostShutsDown()
     {
-        // Disposal happens once, at host stop, when the resource is going away regardless — the
-        // same route McpToolSource is closed through, proved here with no MCP server involved. The
+        // Disposal happens once, when the container closes the boot that owns the source — the same
+        // route McpToolSource is closed through, proved here with no MCP server involved. The
         // reference kept below is exactly the case that makes the risk small rather than zero:
         // AddToolSource's factory could be called more than once by a host that keeps its own
         // reference to what it returns, and closing it anyway costs little because the host was
         // about to lose it either way.
         DisposeTrackingToolSource source = new();
         HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
-        await ConfigureAsync(
-            (ServiceCollection)builder.Services,
+        ConfigureServices(
+            builder.Services,
             OneAgentYaml,
             options => options.AddToolSource(_ => source));
 
-        using IHost host = builder.Build();
+        IHost host = builder.Build();
         await host.StartAsync(TestContext.Current.CancellationToken);
 
         Assert.False(source.Disposed);
 
         await host.StopAsync(TestContext.Current.CancellationToken);
+        host.Dispose();
 
         Assert.True(source.Disposed);
     }
@@ -1146,11 +1222,11 @@ public sealed class AddAgentCoreTests
     public async Task AddAgentCore_KeepsAnEvaluationServiceTheHostRegisteredFirst()
     {
         EvaluationSampler mine = new(rate: 1);
-        ServiceCollection services = new();
-        services.AddSingleton(mine);
-        await ConfigureAsync(services, OneAgentYaml, null);
+        HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+        builder.Services.AddSingleton(mine);
+        ConfigureServices(builder.Services, OneAgentYaml, null);
 
-        using var provider = services.BuildServiceProvider();
+        using var provider = await StartAsync(builder.Build());
 
         // The in-memory publisher grows without a bound, and a long-running host replaces it. Every
         // registration therefore steps aside, exactly as the session store does.
@@ -1225,7 +1301,7 @@ public sealed class AddAgentCoreTests
         // them has a working default rather than a null. That is what lets every reading of a call be
         // unconditional, and what lets a first run and a test work with no database.
         Assert.NotNull(provider.GetService<IAuditSinkPort>());
-        Assert.NotNull(provider.GetService<InMemoryAuditSink>());
+        Assert.IsType<InMemoryAuditSink>(provider.GetRequiredService<QueuedAuditSink>().Store);
     }
 
     [Fact]
@@ -1235,7 +1311,7 @@ public sealed class AddAgentCoreTests
 
         // memory is this library's own name and it needs no registered vendor, so writing it says out
         // loud what leaving the block out does quietly. The startup warning is the difference.
-        Assert.NotNull(provider.GetService<InMemoryAuditSink>());
+        Assert.IsType<InMemoryAuditSink>(provider.GetRequiredService<QueuedAuditSink>().Store);
     }
 
     [Fact]
@@ -1252,7 +1328,7 @@ public sealed class AddAgentCoreTests
 
         // The host lists its vendors once and providers.audit.kind picks one, exactly as the five
         // seams beside it. Nothing but the document decides which store the chain lands in.
-        Assert.Same(store, provider.GetRequiredService<RecordingAuditSink>());
+        Assert.Same(store, provider.GetRequiredService<QueuedAuditSink>().Store);
         Assert.Equal(
             [AuditEventKind.CallStarted, AuditEventKind.TurnCompleted],
             store.Events.Select(item => item.Kind).ToArray());
@@ -1291,7 +1367,7 @@ public sealed class AddAgentCoreTests
     /// queue instead, because that is the only registration that honours the port's contract.
     /// </remarks>
     private static InMemoryAuditSink Sink(IServiceProvider provider)
-        => provider.GetRequiredService<InMemoryAuditSink>();
+        => Assert.IsType<InMemoryAuditSink>(provider.GetRequiredService<QueuedAuditSink>().Store);
 
     // -------------------------------------------------------------------------------------------
     // The transcript store: named by providers.transcript, and never absent.
@@ -1315,6 +1391,27 @@ public sealed class AddAgentCoreTests
           transcript: { kind: test }
         """;
 
+    // The transcript store opens at step 4b and the moderation vendor is built at step 4c, so a
+    // document that names both puts a failure strictly after an open. Nothing else in the boot has
+    // that shape.
+    private const string TranscriptThenModerationFailureYaml =
+        """
+        apiVersion: agentcore/v1
+        name: composed
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything" }
+        providers:
+          call:   { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: reply }
+          transcript: { kind: test }
+          moderation: { kind: test }
+        """;
+
     [Fact]
     public async Task ADocumentThatNamesNoTranscriptProvider_StillOpensTheMemoryStore()
     {
@@ -1323,7 +1420,7 @@ public sealed class AddAgentCoreTests
         // The turn loop writes the words of every call whatever a document says, so this seam has a
         // working default rather than a null, and a first run needs no database.
         Assert.NotNull(provider.GetService<ITranscriptStore>());
-        Assert.NotNull(provider.GetService<InMemoryTranscriptStore>());
+        Assert.IsType<InMemoryTranscriptStore>(provider.GetRequiredService<ITranscriptStore>());
     }
 
     [Fact]
@@ -1340,7 +1437,7 @@ public sealed class AddAgentCoreTests
 
         // The host lists its vendors once and providers.transcript.kind picks one. Nothing but the
         // document decides where the words of a call land.
-        Assert.Same(store, provider.GetRequiredService<RecordingTranscriptStore>());
+        Assert.Same(store, provider.GetRequiredService<ITranscriptStore>());
         Assert.Equal(["user", "assistant"], store.Roles);
     }
 
@@ -1526,11 +1623,9 @@ public sealed class AddAgentCoreTests
     /// <summary>
     /// A source's own discovery can succeed while the boot still fails later: here, an agent's
     /// <c>tools:</c> names an id nothing serves, so <c>ValidateToolReferences</c> throws after
-    /// <see cref="ToolRegistryStartup.BuildAsync"/> already returned. That throw sits between the
-    /// registry being built and <c>StartupResourceOwner.Own</c> ever registering the source for the
-    /// host to close, so nothing but
-    /// <see cref="AgentCoreServiceCollectionExtensions.AddAgentCoreAsync"/>'s own guard around that
-    /// span would ever dispose it.
+    /// <see cref="ToolRegistryStartup.BuildAsync"/> already returned. <c>AgentCoreBoot</c> tracked
+    /// the source as it was built, before any discovery ran, so the failed start closes it however
+    /// far the boot had got.
     /// </summary>
     [Fact]
     public async Task AToolReferenceFailureAfterDiscoverySucceeds_StillDisposesTheSource()
@@ -1545,8 +1640,44 @@ public sealed class AddAgentCoreTests
     }
 
     /// <summary>
+    /// The transcript store is opened at step 4b, and the moderation vendor is built after it. A
+    /// document that names a moderation kind this host does not register therefore fails with the
+    /// store already open, and nothing between the two steps has taken ownership of it.
+    /// </summary>
+    [Fact]
+    public async Task AFailureAfterTheTranscriptStoreOpens_StillClosesTheStore()
+    {
+        RecordingTranscriptStore store = new();
+
+        await Assert.ThrowsAsync<ConfigurationLoadException>(() => BuildAsync(
+            TranscriptThenModerationFailureYaml,
+            options => options
+                .UseTranscriptStores(new TestTranscriptStoreAdapter(store))
+                .UseModeration(new FakeModerationAdapter("other", new AlwaysFlagsEvaluator()))));
+
+        Assert.True(store.Closed);
+    }
+
+    /// <summary>
+    /// The id collision between a discovered tool and a declared <c>kind: agent</c> tool is only
+    /// found once every source has answered, so the source that served the colliding id is open by
+    /// then. It must not be left running.
+    /// </summary>
+    [Fact]
+    public async Task AnIdCollisionFoundAfterDiscovery_StillClosesTheSource()
+    {
+        DisposeTrackingToolSource source = new("shared_id");
+
+        await Assert.ThrowsAsync<ConfigurationLoadException>(() => BuildAsync(
+            CollidingAgentToolYaml,
+            options => options.AddToolSource(_ => source)));
+
+        Assert.True(source.Disposed);
+    }
+
+    /// <summary>
     /// An id no <c>tools:</c> entry names, served only by a discovering source, still satisfies an
-    /// agent's reference through <see cref="AgentCoreServiceCollectionExtensions.AddAgentCoreAsync"/>
+    /// agent's reference through <see cref="AgentCoreServiceCollectionExtensions.AddAgentCore"/>
     /// end to end, public API only. An <c>mcp:</c> server's tools work exactly this way: decision 15
     /// requires the reference pass to resolve against what got discovered, not just what got declared.
     /// </summary>
@@ -1619,14 +1750,12 @@ public sealed class AddAgentCoreTests
     [Fact]
     public async Task ADocumentThatDoesNotParse_FailsTheStart()
     {
-        ServiceCollection services = new();
-
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
-            async () => await services.AddAgentCoreAsync(options =>
+            () => StartBareAsync(options =>
             {
                 options.ConfigurationPath = "no-such-extension.txt";
                 options.UseChatClients(_ => new RoutingChatClientFactory(new FragmentingChatClient("hello")));
-            }, TestContext.Current.CancellationToken));
+            }));
 
         Assert.Equal(ConfigurationCheck.Syntax, failure.Check);
     }
@@ -1634,12 +1763,9 @@ public sealed class AddAgentCoreTests
     [Fact]
     public async Task NoDocumentAtAll_FailsTheStartAndSaysWhatToSet()
     {
-        ServiceCollection services = new();
-
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await services.AddAgentCoreAsync(
-                options => options.UseChatClients(_ => new RoutingChatClientFactory(new FragmentingChatClient("hello"))),
-                TestContext.Current.CancellationToken));
+            () => StartBareAsync(
+                options => options.UseChatClients(_ => new RoutingChatClientFactory(new FragmentingChatClient("hello")))));
 
         Assert.Contains("names no document", failure.Message, StringComparison.Ordinal);
     }
@@ -1647,15 +1773,13 @@ public sealed class AddAgentCoreTests
     [Fact]
     public async Task TwoDocuments_FailTheStart()
     {
-        ServiceCollection services = new();
-
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await services.AddAgentCoreAsync(options =>
+            () => StartBareAsync(options =>
             {
                 options.Configuration = ConfigurationLoader.LoadYaml(OneAgentYaml);
                 options.ConfigurationPath = "config/example.yaml";
                 options.UseChatClients(_ => new RoutingChatClientFactory(new FragmentingChatClient("hello")));
-            }, TestContext.Current.CancellationToken));
+            }));
 
         Assert.Contains("names two documents", failure.Message, StringComparison.Ordinal);
     }
@@ -1663,12 +1787,8 @@ public sealed class AddAgentCoreTests
     [Fact]
     public async Task NoChatClientAdapter_FailsTheStart()
     {
-        ServiceCollection services = new();
-
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await services.AddAgentCoreAsync(
-                options => options.Configuration = ConfigurationLoader.LoadYaml(OneAgentYaml),
-                TestContext.Current.CancellationToken));
+            () => StartBareAsync(options => options.Configuration = ConfigurationLoader.LoadYaml(OneAgentYaml)));
 
         Assert.Contains("UseChatClients", failure.Message, StringComparison.Ordinal);
     }
@@ -1678,7 +1798,7 @@ public sealed class AddAgentCoreTests
     // -------------------------------------------------------------------------------------------
     /// <summary>Composes the guarded graph over one offline model for each node.</summary>
     /// <returns>The provider a test resolves from.</returns>
-    private static Task<ServiceProvider> BuildGuardedGraphAsync()
+    private static Task<StartedHost> BuildGuardedGraphAsync()
     {
         RoutingChatClientFactory models = new(new FragmentingChatClient("ROUTED"));
         models.Route("human", new FragmentingChatClient("ESCALATED"));
@@ -1692,7 +1812,7 @@ public sealed class AddAgentCoreTests
     /// <param name="toolId">The tool id the document declares.</param>
     /// <param name="argument">The one argument name the built-in fills.</param>
     /// <param name="value">The value that argument carries.</param>
-    private static async Task CallToolAsync(ServiceProvider provider, string toolId, string argument, string value)
+    private static async Task CallToolAsync(StartedHost provider, string toolId, string argument, string value)
     {
         var declaration = provider
             .GetRequiredService<AgentCoreConfiguration>()
@@ -1711,8 +1831,8 @@ public sealed class AddAgentCoreTests
     {
         FlushRecordingTelemetryAdapter adapter = new("test");
         HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
-        await ConfigureAsync(
-            (ServiceCollection)builder.Services,
+        ConfigureServices(
+            builder.Services,
             TelemetryYaml,
             options => options.UseTelemetry(adapter));
 
@@ -1723,8 +1843,8 @@ public sealed class AddAgentCoreTests
     {
         ClosingAuditSink store = new();
         HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
-        await ConfigureAsync(
-            (ServiceCollection)builder.Services,
+        ConfigureServices(
+            builder.Services,
             VendorAuditYaml,
             options => options.UseAuditSinks(new TestAuditSinkAdapter(store)));
 
@@ -1742,15 +1862,56 @@ public sealed class AddAgentCoreTests
         OccurredAt = DateTimeOffset.UnixEpoch.AddSeconds(sequence),
     };
 
-    private static async Task<ServiceProvider> BuildAsync(string yaml, Action<AgentCoreOptions>? configure = null)
+    /// <summary>Starts a host on one document, which is where the whole boot happens.</summary>
+    /// <param name="yaml">The document to boot.</param>
+    /// <param name="configure">The host's own word on the options.</param>
+    /// <returns>The started host, read as the container it is.</returns>
+    private static async Task<StartedHost> BuildAsync(string yaml, Action<AgentCoreOptions>? configure = null)
     {
-        ServiceCollection services = new();
-        await ConfigureAsync(services, yaml, configure);
-        return services.BuildServiceProvider();
+        HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+        ConfigureServices(builder.Services, yaml, configure);
+
+        return await StartAsync(builder.Build());
     }
 
-    private static async Task ConfigureAsync(ServiceCollection services, string yaml, Action<AgentCoreOptions>? configure)
-        => await services.AddAgentCoreAsync(options =>
+    /// <summary>Starts one host, and closes it itself when the start fails.</summary>
+    /// <param name="host">The host to start.</param>
+    /// <returns>The started host.</returns>
+    /// <remarks>
+    /// A failed start never stops what already started, so disposal is the only cleanup path — and
+    /// it is the one a real host takes too, inside <c>RunAsync</c>'s own finally. StopAsync is
+    /// deliberately not called here: on net10 a host that failed to start throws
+    /// <see cref="ArgumentNullException"/> out of StopAsync when the failure was a constructor.
+    /// </remarks>
+    private static async Task<StartedHost> StartAsync(IHost host)
+    {
+        try
+        {
+            await host.StartAsync(TestContext.Current.CancellationToken);
+        }
+        catch
+        {
+            host.Dispose();
+            throw;
+        }
+
+        return new StartedHost(host);
+    }
+
+    /// <summary>Starts a host on nothing but the options a test writes, with no document default.</summary>
+    /// <param name="configure">The only word on the options.</param>
+    /// <returns>The started host, for the tests that expect it never to get one.</returns>
+    private static async Task<StartedHost> StartBareAsync(Action<AgentCoreOptions> configure)
+    {
+        HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+        builder.Services.AddAgentCore(configure);
+
+        return await StartAsync(builder.Build());
+    }
+
+    private static void ConfigureServices(
+        IServiceCollection services, string yaml, Action<AgentCoreOptions>? configure)
+        => services.AddAgentCore(options =>
         {
             options.Configuration = ConfigurationLoader.LoadYaml(yaml);
             options.UseChatClients(_ => new RoutingChatClientFactory(new FragmentingChatClient("hello")));
@@ -1975,15 +2136,32 @@ public sealed class AddAgentCoreTests
         }
     }
 
+    /// <summary>A started host, read as the container it is.</summary>
+    /// <param name="host">The host to read services from, and to close on the way out.</param>
+    /// <remarks>
+    /// Disposing this disposes the host, which disposes the container. That is the whole shutdown
+    /// path: nothing here calls StopAsync, because a host that failed to start never gets one.
+    /// </remarks>
+    private sealed class StartedHost(IHost host) : IServiceProvider, IDisposable
+    {
+        public object? GetService(Type serviceType) => host.Services.GetService(serviceType);
+
+        public void Dispose() => host.Dispose();
+    }
+
     /// <summary>A tool source a host registers, which records whether it was ever closed.</summary>
-    private sealed class DisposeTrackingToolSource : IToolSource, IAsyncDisposable
+    /// <param name="servedId">One id to serve, or <see langword="null"/> to serve nothing.</param>
+    private sealed class DisposeTrackingToolSource(string? servedId = null) : IToolSource, IAsyncDisposable
     {
         /// <summary>Gets whether this source was disposed.</summary>
         public bool Disposed { get; private set; }
 
         public ValueTask<IReadOnlyList<ToolRegistration>> ProvideAsync(
             ToolSourceContext context, CancellationToken cancellationToken = default)
-            => ValueTask.FromResult<IReadOnlyList<ToolRegistration>>([]);
+            => ValueTask.FromResult<IReadOnlyList<ToolRegistration>>(
+                servedId is null
+                    ? []
+                    : [new ToolRegistration(servedId, "A tool discovered under a claimed id.", () => AIFunctionFactory.Create(() => "ok", servedId))]);
 
         public ValueTask DisposeAsync()
         {

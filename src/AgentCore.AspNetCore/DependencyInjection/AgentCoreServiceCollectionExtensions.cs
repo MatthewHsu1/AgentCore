@@ -1,16 +1,15 @@
-using AgentCore.Application.Configuration.Parsing;
-using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Audit;
+using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Secrets;
 using AgentCore.Application.Sessions.Memory;
-using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.AspNetCore.Sessions;
 using Microsoft.AspNetCore.WebSockets;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace AgentCore.AspNetCore.DependencyInjection;
 
@@ -19,142 +18,51 @@ namespace AgentCore.AspNetCore.DependencyInjection;
 /// </summary>
 public static class AgentCoreServiceCollectionExtensions
 {
-    /// <summary>Loads one document and registers everything a call needs to run on it.</summary>
+    /// <summary>Registers everything a call needs, and loads the document when the host starts.</summary>
     /// <param name="services">The service collection of the host.</param>
     /// <param name="configure">Binds the document and the adapters the document names.</param>
-    /// <param name="cancellationToken">Cancels the start: the secret reads and the adapter builds.</param>
     /// <returns>The same collection, so a host chains its calls.</returns>
-    /// <exception cref="InvalidOperationException">
-    /// The options name no document, name two, or bind no chat client adapter.
-    /// </exception>
-    /// <exception cref="ConfigurationLoadException">
-    /// The document fails one of the eight checks, names a knowledge <c>kind</c> no registered
-    /// adapter serves, or does not compile.
-    /// </exception>
-    /// <exception cref="SecretResolutionException">One <c>${secret:name}</c> reference resolves to nothing.</exception>
-    public static async ValueTask<IServiceCollection> AddAgentCoreAsync(
+    public static IServiceCollection AddAgentCore(
         this IServiceCollection services,
-        Action<AgentCoreOptions> configure,
-        CancellationToken cancellationToken = default)
+        Action<AgentCoreOptions> configure)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configure);
 
-        AgentCoreOptions options = new();
-        configure(options);
+        services.AddOptions();
+        services.Configure(configure);
+        services.AddLogging();
 
-        ILoggerFactory loggers = options.LoggerFactory ?? NullLoggerFactory.Instance;
+        services.AddSingleton<AgentCoreBoot>();
+        services.AddHostedService<AgentCoreBootService>();
 
-        var configuration = ConfigurationStartup.Load(options);
+        services.AddSingleton(Boot(boot => boot.Configuration));
+        services.AddSingleton(Boot(boot => boot.Secrets));
+        services.AddSingleton(Boot(boot => boot.Bindings));
+        services.AddSingleton(Boot(boot => boot.CompiledRegistry));
+        services.AddSingleton(Boot(boot => boot.Compiled));
+        services.AddSingleton(Boot(boot => boot.ChatClients));
+        services.AddSingleton(Boot(boot => boot.Guards));
+        services.AddSingleton(Boot(boot => boot.Tools));
+        services.AddSingleton(Boot(boot => boot.Transcript));
+        services.AddSingleton(Boot(boot => boot.Sessions));
+        services.AddSingleton(Boot(boot => boot.Agent));
+        services.AddSingleton(Boot(boot => boot.AuditQueue));
 
-        await TelemetryStartup
-            .StartAsync(services, configuration, options, loggers, cancellationToken)
-            .ConfigureAwait(false);
+        // Through the concrete registration, so one factory builds the queue and both service types
+        // answer with the same instance.
+        services.AddSingleton<IAuditSinkPort>(provider => provider.GetRequiredService<QueuedAuditSink>());
 
-        var secrets = await SecretsStartup
-            .ResolveAsync(configuration, options, cancellationToken)
-            .ConfigureAwait(false);
+        // Each of these is null when the host registered no vendor for it, and a factory that
+        // returns null makes GetService answer null — which is what a caller of an optional seam
+        // reads them with.
+        services.AddSingleton(Boot(boot => boot.Telemetry!));
+        services.AddSingleton(Boot(boot => boot.CallAdapters!));
+        services.AddSingleton(Boot(boot => boot.SpeechAdapters!));
 
-        AgentCoreStartup startup = new(configuration, secrets);
-
-        var knowledge = await KnowledgeStartup
-            .OpenAsync(configuration, options, cancellationToken)
-            .ConfigureAwait(false);
-
-        var chatClients = await ChatClientStartup
-            .BuildAsync(options, startup, cancellationToken)
-            .ConfigureAwait(false);
-
-        var toolsBuilt = await ToolRegistryStartup
-            .BuildAsync(options, startup, knowledge, chatClients, configuration, cancellationToken)
-            .ConfigureAwait(false);
-        var tools = toolsBuilt.Registry;
-
-        ITranscriptStore transcript;
-        CompiledGraph graph;
-        EvaluatorRegistry evaluators;
-        try
-        {
-            // Decision 15: the reference pass runs after discovery, against ServedIds — the
-            // registry's own ids unioned with every kind: agent tool id, computed once in
-            // ToolRegistryStartup alongside the carve-out VerifyEveryDeclarationIsServed applies for
-            // the same reason, so the two can never silently disagree about which ids count as
-            // served.
-            ConfigurationValidator.ValidateToolReferences(configuration, toolsBuilt.ServedIds);
-
-            transcript = await TranscriptStartup
-                .OpenAsync(configuration, options, loggers, cancellationToken)
-                .ConfigureAwait(false);
-
-            evaluators = await EvaluationStartup
-                .CreateRegistryAsync(configuration, options, cancellationToken)
-                .ConfigureAwait(false);
-
-            graph = await CompilationStartup
-                .CompileAsync(configuration, chatClients, tools, transcript, evaluators, loggers)
-                .ConfigureAwait(false);
-
-            services.AddSingleton(configuration);
-            services.AddSingleton(secrets);
-
-            CallSeamStartup.Register(services, configuration, options);
-
-            services.AddSingleton(options.Bindings);
-            services.AddSingleton(graph.Registry);
-            services.AddSingleton(graph.Compiled);
-            services.AddSingleton<IChatClientFactory>(_ => graph.ChatClients);
-            services.AddSingleton(tools);
-            services.AddSingleton<IGuardEvaluator>(graph.Guards);
-            services.AddSingleton(transcript);
-            services.AddSingleton(transcript.GetType(), transcript);
-
-            StartupResourceOwner.Own(services, transcript);
-
-            // Nothing one owned tool source opens ever writes into another, so the order they close
-            // in here carries none of the load-bearing weight StartupResourceOwner's own doc comment
-            // warns about; document order is fine.
-            if (toolsBuilt.Owned.Count > 0)
-            {
-                StartupResourceOwner.Own(services, [.. toolsBuilt.Owned]);
-            }
-        }
-        catch
-        {
-            // Nothing after tool discovery has taken ownership of toolsBuilt.Owned yet — Own only
-            // registers a hosted service, and no provider is ever built from a collection this method
-            // never returns. A throw here would otherwise leave every MCP client (and the stdio child
-            // process behind it) running with nothing left to close it. Each dispose is guarded on
-            // its own, so one source's failure to close cannot abandon the rest or replace the
-            // exception a deployer actually needs to read.
-            foreach (var source in toolsBuilt.Owned)
-            {
-                try
-                {
-                    switch (source)
-                    {
-                        case IAsyncDisposable asyncDisposable:
-                            await asyncDisposable.DisposeAsync().ConfigureAwait(false);
-                            break;
-                        case IDisposable disposable:
-                            disposable.Dispose();
-                            break;
-                    }
-                }
-                catch
-                {
-                    // The original failure is the one a deployer needs; a source that also fails to
-                    // close must not replace or hide it.
-                }
-            }
-
-            throw;
-        }
-
-        await CallSessionStartup
-              .RegisterAsync(services, configuration, options, graph, loggers, cancellationToken)
-              .ConfigureAwait(false);
-
-        services.TryAddSingleton(options.TimeProvider ?? TimeProvider.System);
+        services.TryAddSingleton(provider =>
+            provider.GetRequiredService<IOptions<AgentCoreOptions>>().Value.TimeProvider
+            ?? TimeProvider.System);
 
         services.TryAddSingleton<ICallSessions>(provider => new InMemoryCallSessions(
             provider.GetRequiredService<ICallSessionFactory>(),
@@ -162,12 +70,16 @@ public static class AgentCoreServiceCollectionExtensions
             provider.GetRequiredService<TimeProvider>()));
 
         services.AddHostedService(provider => new CallSessionSweeper(
-            provider.GetRequiredService<ICallSessions>(),
+            provider,
             provider.GetRequiredService<TimeProvider>(),
             provider.GetService<ILoggerFactory>()?.CreateLogger<CallSessionSweeper>()
                 ?? NullLogger<CallSessionSweeper>.Instance));
 
-        EvaluationStartup.Register(services, configuration, evaluators);
+        services.TryAddSingleton(Boot(boot => boot.Evaluators));
+        services.TryAddSingleton(provider => new EvaluationSampler(
+            provider.GetRequiredService<AgentCoreConfiguration>().Evaluation?.SampleRate
+            ?? EvaluationConfiguration.DefaultSampleRate));
+        services.TryAddSingleton<IEvaluationScorePublisher, InMemoryEvaluationScorePublisher>();
 
         return services;
     }
@@ -185,4 +97,16 @@ public static class AgentCoreServiceCollectionExtensions
             options.KeepAliveTimeout = TimeSpan.FromSeconds(20);
         });
     }
+
+    /// <summary>Reads one thing out of the boot, once the host has started it.</summary>
+    /// <typeparam name="T">What the caller is registering.</typeparam>
+    /// <param name="read">Picks it off the started boot.</param>
+    /// <returns>A factory the container calls on first resolve.</returns>
+    private static Func<IServiceProvider, T> Boot<T>(Func<AgentCoreBoot, T> read)
+        where T : class
+        => provider =>
+        {
+            var boot = provider.GetRequiredService<AgentCoreBoot>();
+            return boot.Release(read(boot));
+        };
 }

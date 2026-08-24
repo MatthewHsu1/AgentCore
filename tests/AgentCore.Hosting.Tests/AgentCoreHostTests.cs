@@ -123,7 +123,7 @@ public sealed class AgentCoreHostTests
         // block before it reads the adapter list, and this is the line that holds it to that.
         using var host = await StartAsync();
 
-        Assert.NotNull(host.Services.GetService<InMemoryAuditSink>());
+        Assert.IsType<InMemoryAuditSink>(host.Services.GetRequiredService<QueuedAuditSink>().Store);
         Assert.IsType<InMemoryTranscriptStore>(host.Services.GetRequiredService<ITranscriptStore>());
     }
 
@@ -137,7 +137,7 @@ public sealed class AgentCoreHostTests
             Audit);
 
         Assert.IsType<QueuedAuditSink>(host.Services.GetRequiredService<IAuditSinkPort>());
-        Assert.NotNull(host.Services.GetService<InMemoryAuditSink>());
+        Assert.IsType<InMemoryAuditSink>(host.Services.GetRequiredService<QueuedAuditSink>().Store);
     }
 
     [Fact]
@@ -189,13 +189,16 @@ public sealed class AgentCoreHostTests
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Logging.ClearProviders();
 
-        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(() => builder.AddAgentCoreHostAsync(
-            options =>
-            {
-                options.Configuration = ConfigurationLoader.LoadYaml(McpDocument);
-                options.UseChatClients(_ => new FakeChatClientFactory());
-            },
-            TestContext.Current.CancellationToken).AsTask());
+        builder.AddAgentCoreHost(options =>
+        {
+            options.Configuration = ConfigurationLoader.LoadYaml(McpDocument);
+            options.UseChatClients(_ => new FakeChatClientFactory());
+        });
+
+        await using var app = builder.Build();
+
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+            () => app.StartAsync(TestContext.Current.CancellationToken));
 
         Assert.Contains("no-such-server", failure.Message, StringComparison.Ordinal);
     }
@@ -244,7 +247,7 @@ public sealed class AgentCoreHostTests
     }
 
     // ---------------------------------------------------------------------------------------------
-    // What this extension opened before the container existed, it has to close with the container.
+    // What this extension registered, the container has to close.
     // ---------------------------------------------------------------------------------------------
 
     [Fact]
@@ -268,7 +271,7 @@ public sealed class AgentCoreHostTests
 
         await host.DisposeAsync();
 
-        // This factory is built before the container, so nothing else can be holding its providers.
+        // The container built this factory, so nothing else can be holding its providers.
         Assert.Throws<ObjectDisposedException>(() => loggers.CreateLogger("after"));
     }
 
@@ -365,7 +368,7 @@ public sealed class AgentCoreHostTests
 
         var document = providers is null ? Document : Document + Environment.NewLine + providers;
 
-        await builder.AddAgentCoreHostAsync(options =>
+        builder.AddAgentCoreHost(options =>
         {
             options.Configuration = ConfigurationLoader.LoadYaml(document);
             options.UseChatClients(_ => new FakeChatClientFactory());
@@ -375,14 +378,34 @@ public sealed class AgentCoreHostTests
         return builder.Build();
     }
 
-    /// <summary>Builds a host and reads its container, with nothing mapped and nothing listening.</summary>
+    /// <summary>Starts a host and reads its container, with nothing mapped and nothing listening.</summary>
     /// <param name="configure">Anything else the test says on the options.</param>
     /// <param name="providers">A further line under <c>providers</c>, or null for the plain document.</param>
-    /// <returns>The built host.</returns>
-    private static Task<WebApplication> StartAsync(
+    /// <returns>The started host.</returns>
+    /// <remarks>
+    /// It really starts: the document is read, and every adapter it names is opened, by the hosted
+    /// lifecycle service the composition root registers. Building alone opens nothing.
+    /// </remarks>
+    private static async Task<WebApplication> StartAsync(
         Action<AgentCoreOptions>? configure = null,
         string? providers = null)
-        => BuildAsync(configure, providers);
+    {
+        var app = await BuildAsync(configure, providers);
+
+        try
+        {
+            await app.StartAsync(TestContext.Current.CancellationToken);
+        }
+        catch
+        {
+            // A failed start never stops what started, so disposal is the only cleanup path — and it
+            // is the one a real host takes too, inside RunAsync's own finally.
+            await app.DisposeAsync();
+            throw;
+        }
+
+        return app;
+    }
 
     /// <summary>A chain that holds the connection string and answers nothing for it.</summary>
     /// <remarks>

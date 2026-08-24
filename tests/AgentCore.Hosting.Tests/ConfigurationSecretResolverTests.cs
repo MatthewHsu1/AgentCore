@@ -146,7 +146,7 @@ public sealed class ConfigurationSecretResolverTests
         builder.Configuration.AddInMemoryCollection(
             settings.Select(entry => new KeyValuePair<string, string?>(entry.Key, entry.Value)));
 
-        await builder.AddAgentCoreHostAsync(options =>
+        builder.AddAgentCoreHost(options =>
         {
             options.Configuration = ConfigurationLoader.LoadYaml(Document);
             options.UseChatClients(_ => new FakeSecretChainChatClientFactory());

@@ -11,6 +11,7 @@ AgentCore.Application.Audit.QueuedAuditSink.Dispose() -> void
 AgentCore.Application.Audit.QueuedAuditSink.DisposeAsync() -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Audit.QueuedAuditSink.FlushAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Audit.QueuedAuditSink.QueuedAuditSink(AgentCore.Application.Ports.IAuditSinkPort! inner, Microsoft.Extensions.Logging.ILogger? logger = null, int capacity = 10000, int batchSize = 100) -> void
+AgentCore.Application.Audit.QueuedAuditSink.Store.get -> AgentCore.Application.Ports.IAuditSinkPort!
 AgentCore.Application.Call.CallChannel
 AgentCore.Application.Call.CallChannel.<Clone>$() -> AgentCore.Application.Call.CallChannel!
 AgentCore.Application.Call.CallChannel.CallChannel(AgentCore.Application.Ports.ICallInputPort! Input, AgentCore.Application.Ports.ICallOutputPort! Output) -> void

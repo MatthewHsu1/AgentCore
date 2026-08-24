@@ -543,7 +543,7 @@ public sealed class TelnyxRelayCallEndTests
 
     /// <summary>Reads back the store the chain lands in.</summary>
     private static InMemoryAuditSink Sink(RelayConnectionHarness harness)
-        => harness.Services.GetRequiredService<InMemoryAuditSink>();
+        => Assert.IsType<InMemoryAuditSink>(harness.Services.GetRequiredService<QueuedAuditSink>().Store);
 
     /// <summary>Reads back the live sessions.</summary>
     private static ICallSessions Sessions(RelayConnectionHarness harness)

@@ -1,8 +1,5 @@
-using AgentCore.Application.Ports;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Evaluation;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace AgentCore.AspNetCore.DependencyInjection.Startup;
 
@@ -31,22 +28,5 @@ internal static class EvaluationStartup
         }
 
         return evaluators;
-    }
-
-    /// <summary>Registers the evaluation seam of D13, at the rate the document sets.</summary>
-    /// <param name="services">The service collection of the host.</param>
-    /// <param name="configuration">The loaded document. It carries <c>evaluation.sampleRate</c>.</param>
-    /// <param name="evaluators">
-    /// The registry <see cref="CreateRegistryAsync"/> built, which already holds <c>fault_code</c>
-    /// and, when the host bound one, the moderation evaluator.
-    /// </param>
-    internal static void Register(
-        IServiceCollection services,
-        AgentCoreConfiguration configuration,
-        EvaluatorRegistry evaluators)
-    {
-        services.TryAddSingleton(evaluators);
-        services.TryAddSingleton(new EvaluationSampler(configuration.Evaluation?.SampleRate ?? EvaluationConfiguration.DefaultSampleRate));
-        services.TryAddSingleton<IEvaluationScorePublisher, InMemoryEvaluationScorePublisher>();
     }
 }

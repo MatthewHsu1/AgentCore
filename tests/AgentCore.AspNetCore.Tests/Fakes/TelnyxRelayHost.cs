@@ -139,7 +139,7 @@ internal sealed class TelnyxRelayHost : IAsyncDisposable
         ErrorCapturingLoggerProvider errors = new();
         builder.Logging.AddProvider(errors);
 
-        await builder.Services.AddAgentCoreAsync(options =>
+        builder.Services.AddAgentCore(options =>
         {
             options.Configuration = ConfigurationLoader.LoadYaml(yaml);
             options.UseChatClients(_ => new RoutingChatClientFactory(reply));

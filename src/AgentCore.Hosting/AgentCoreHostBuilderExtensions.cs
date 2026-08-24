@@ -32,7 +32,7 @@ public static class AgentCoreHostBuilderExtensions
     /// <summary>The <c>binds:</c> name the shipped example document declares.</summary>
     public const string CreateCaseBinding = "CreateCase";
 
-    /// <summary>Loads the document, binds every vendor seam, and registers the call services.</summary>
+    /// <summary>Registers every vendor seam, and loads the document when the host starts.</summary>
     /// <param name="builder">The host being built.</param>
     /// <param name="configure">
     /// The host's own word on the options, run after the defaults below and therefore winning over
@@ -40,33 +40,33 @@ public static class AgentCoreHostBuilderExtensions
     /// this library does not name, or to replace the document, the secret resolver, the logger
     /// factory, or any vendor seam.
     /// </param>
-    /// <param name="cancellationToken">Cancels the start: the secret reads and the adapter builds.</param>
     /// <returns>The same builder, so a host chains its calls.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="builder"/> is <see langword="null"/>.</exception>
-    public static async ValueTask<WebApplicationBuilder> AddAgentCoreHostAsync(
+    public static WebApplicationBuilder AddAgentCoreHost(
         this WebApplicationBuilder builder,
-        Action<AgentCoreOptions>? configure = null,
-        CancellationToken cancellationToken = default)
+        Action<AgentCoreOptions>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        var loggers = LoggerFactory.Create(logging => logging
-            .AddConfiguration(builder.Configuration.GetSection("Logging"))
-            .AddConsole());
+        builder.Logging.AddConsole();
 
-        // Through a factory and not as an instance: a container disposes only what it built, so an
-        // instance handed to AddSingleton is never closed. Both of these are opened before the
-        // container exists, and container disposal runs after every hosted service has stopped — so
-        // the audit drain still has somewhere to log.
-        builder.Services.AddSingleton(_ => loggers);
+        // One outbound HTTP pipeline for the life of the process, built by the container so the
+        // container closes it.
+        builder.Services.AddSingleton(provider => new AgentCoreHttpClients(
+            loggers: provider.GetRequiredService<ILoggerFactory>()));
 
-        // One outbound HTTP pipeline for the life of the process.
-        AgentCoreHttpClients httpClients = new(loggers: loggers);
-        builder.Services.AddSingleton(_ => httpClients);
+        // The container's own services reach the defaults here, so nothing has to be built by hand
+        // before the container exists and then threaded through a closure to be found again.
+        builder.Services
+            .AddOptions<AgentCoreOptions>()
+            .Configure<AgentCoreHttpClients, IConfiguration>(
+                (options, httpClients, hostConfiguration) =>
+                    Configure(hostConfiguration, options, httpClients));
 
-        await builder.Services.AddAgentCoreAsync(
-            options => Configure(builder, options, httpClients, loggers, configure),
-            cancellationToken).ConfigureAwait(false);
+        builder.Services.AddAgentCore(options => configure?.Invoke(options));
+
+        // Runs after every seam above has been written, and only settles what needs the final word.
+        builder.Services.PostConfigure<AgentCoreOptions>(FinishConfiguring);
 
         // The relay socket is the inbound path of a real call, and a dead peer must not hold a
         // session for the shipped two-minute default. This sets the twenty-second keep-alive
@@ -76,30 +76,29 @@ public static class AgentCoreHostBuilderExtensions
         return builder;
     }
 
-    /// <summary>Fills the options: this library's defaults first, then the host's word.</summary>
-    /// <param name="builder">The host being built, read for the document path.</param>
-    /// <param name="options">The options <see cref="AgentCoreServiceCollectionExtensions.AddAgentCoreAsync"/> passed in.</param>
+    /// <summary>Fills the options with this library's defaults.</summary>
+    /// <param name="hostConfiguration">The host's own configuration, read for the document path and for secrets.</param>
+    /// <param name="options">The options <see cref="AgentCoreServiceCollectionExtensions.AddAgentCore"/> registered.</param>
     /// <param name="httpClients">The one outbound pipeline every adapter shares.</param>
-    /// <param name="loggers">The factory built before the container exists.</param>
-    /// <param name="configure">The host's own word, or <see langword="null"/>.</param>
+    /// <remarks>
+    /// The host's own <c>configure</c> callback is registered after this one, and configure
+    /// callbacks run in registration order — so the host still has the last word, which it has to
+    /// have: every <c>Use*</c> seam is a setter rather than a list, so whoever writes last wins.
+    /// </remarks>
     private static void Configure(
-        WebApplicationBuilder builder,
+        IConfiguration hostConfiguration,
         AgentCoreOptions options,
-        AgentCoreHttpClients httpClients,
-        ILoggerFactory loggers,
-        Action<AgentCoreOptions>? configure)
+        AgentCoreHttpClients httpClients)
     {
         options.ConfigurationPath =
-            builder.Configuration[ConfigurationPathKey] ?? DefaultConfigurationPath;
+            hostConfiguration[ConfigurationPathKey] ?? DefaultConfigurationPath;
 
         options.SecretResolver = new ChainedSecretResolver(
         [
             new EnvironmentSecretResolver(),
             new FileSecretResolver(),
-            new ConfigurationSecretResolver(builder.Configuration),
+            new ConfigurationSecretResolver(hostConfiguration),
         ]);
-
-        options.LoggerFactory = loggers;
 
         // providers.llm[].kind picks the adapter for each entry.
         options.UseChatClients(new OpenAiChatClientAdapter());
@@ -124,10 +123,6 @@ public static class AgentCoreHostBuilderExtensions
         options.AddToolSource(startup =>
             new HttpToolSource(httpClients.CreateClient(HttpToolSource.HttpClientName), startup.Secrets));
 
-        // The mcp: block. McpToolSource lives in AgentCore.Infrastructure, not AgentCore.AspNetCore:
-        // that project is packable, and every consumer of it would otherwise transitively acquire
-        // every adapter package this host links (Npgsql, AWSSDK.S3, LibGit2Sharp, OpenAI, the Zilliz
-        // and OpenTelemetry exporters) for a feature they may never declare.
         options.AddToolSource(_ => new McpToolSource());
 
         // providers.audit.kind picks the adapter.
@@ -135,12 +130,12 @@ public static class AgentCoreHostBuilderExtensions
 
         // providers.transcript.kind picks the adapter.
         options.UseTranscriptStores(new PostgresTranscriptStoreAdapter());
+    }
 
-        // The host has the last word, and it has to be the last word: every Use* seam above is a
-        // setter and not a list, so whoever writes last wins. A host that binds its own chat client
-        // factory, or its own moderation vendor, would lose it to the defaults if this ran earlier.
-        configure?.Invoke(options);
-
+    /// <summary>Settles what only the last word can decide, once every seam has been written.</summary>
+    /// <param name="options">The options every configure callback has now filled.</param>
+    private static void FinishConfiguring(AgentCoreOptions options)
+    {
         if (options.Configuration is not null)
         {
             options.ConfigurationPath = null;

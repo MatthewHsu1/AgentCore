@@ -15,10 +15,11 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay;
 /// read the same contract, so D8 holds and the core never learns a vendor frame schema.
 /// </para>
 /// <para>
-/// <b>Nothing here decides whether this transport is in use.</b> That belongs to
-/// <see cref="Call.CallEndpointRouteBuilderExtensions.MapCall(IEndpointRouteBuilder, string)"/>,
-/// which reads <c>providers.call</c>, picks the one transport it names, and calls
-/// <see cref="TelnyxRelayCallAdapter.Map"/>. This type maps whatever it is handed, and it is
+/// <b>Nothing here decides whether this transport is in use.</b> The composition root reads
+/// <c>providers.call</c> while the host starts, picks the one transport it names, and asks it for a
+/// handler through <see cref="TelnyxRelayCallAdapter.CreateHandler"/>;
+/// <see cref="Call.CallEndpointRouteBuilderExtensions.MapCall(IEndpointRouteBuilder, string)"/>
+/// owns only the route string. This type maps whatever it is handed, and it is
 /// <see langword="internal"/> so that <see cref="TelnyxRelayCallAdapter"/> is the only thing that
 /// hands it anything, apart from the test host, through <c>InternalsVisibleTo</c>: a host names its
 /// route once and changes vendors in the document.
@@ -68,7 +69,7 @@ internal static class TelnyxRelayEndpointRouteBuilderExtensions
         return endpoints.Map(pattern, (HttpContext http) => HandleAsync(http, options));
     }
 
-    private static async Task HandleAsync(HttpContext http, TelnyxRelayOptions options)
+    internal static async Task HandleAsync(HttpContext http, TelnyxRelayOptions options)
     {
         if (http.Features.Get<IHttpWebSocketFeature>() is null)
         {

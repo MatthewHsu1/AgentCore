@@ -22,14 +22,24 @@ public sealed class QueuedAuditSink : IAuditSinkPort, IAsyncDisposable, IDisposa
     private static readonly TimeSpan DisposeTimeout = TimeSpan.FromSeconds(5);
 
     private readonly IAuditSinkPort _inner;
+
     private readonly ILogger _logger;
+
     private readonly Channel<AuditEvent> _queue;
+
     private readonly CancellationTokenSource _stopping = new();
+
     private readonly Task _writer;
+
     private readonly int _batchSize;
 
     /// <summary>The events accepted and not yet handed to the store. <see cref="FlushAsync"/> reads it.</summary>
     private int _pending;
+
+    /// <summary>Gets the store this queue writes into.</summary>
+    public IAuditSinkPort Store => _inner;
+
+    private int _closed;
 
     /// <summary>Puts a queue in front of one sink.</summary>
     /// <param name="inner">The store the writer hands each batch to. It may block and it may be slow.</param>
@@ -58,11 +68,11 @@ public sealed class QueuedAuditSink : IAuditSinkPort, IAsyncDisposable, IDisposa
         ArgumentOutOfRangeException.ThrowIfLessThan(batchSize, 1);
 
         _inner = inner;
+
         _logger = logger ?? NullLogger.Instance;
+
         _batchSize = batchSize;
 
-        // FullMode.Wait with TryWrite rather than DropWrite: both refuse the event, and this one says
-        // so. A silent drop in an audit chain is the failure mode the whole of D23 exists to prevent.
         _queue = Channel.CreateBounded<AuditEvent>(new BoundedChannelOptions(capacity)
         {
             FullMode = BoundedChannelFullMode.Wait,
@@ -89,7 +99,9 @@ public sealed class QueuedAuditSink : IAuditSinkPort, IAsyncDisposable, IDisposa
         // Either the queue is full or the sink is disposed. Both are a drop, and both are reported:
         // the caller is a turn loop, and a turn is never told that its record was lost.
         Interlocked.Decrement(ref _pending);
+
         Report(auditEvent);
+
         return ValueTask.CompletedTask;
     }
 
@@ -109,6 +121,14 @@ public sealed class QueuedAuditSink : IAuditSinkPort, IAsyncDisposable, IDisposa
     /// <returns>A task that completes when the drain is done.</returns>
     public async ValueTask DisposeAsync()
     {
+        // A container captures this once per service type it is registered under, and it answers to
+        // two. Without this guard the second close cancels a CancellationTokenSource the first one
+        // already disposed.
+        if (Interlocked.Exchange(ref _closed, 1) != 0)
+        {
+            return;
+        }
+
         // Completing the writer is what ends the drain loop, and it is also what makes every later
         // TryWrite return false. The queue keeps whatever is already in it, so the drain is honest.
         _queue.Writer.TryComplete();

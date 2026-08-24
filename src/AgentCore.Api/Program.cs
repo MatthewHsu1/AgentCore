@@ -3,7 +3,7 @@ using AgentCore.Hosting;
 
 var builder = WebApplication.CreateBuilder(args);
 
-await builder.AddAgentCoreHostAsync();
+builder.AddAgentCoreHost();
 
 var app = builder.Build();
 

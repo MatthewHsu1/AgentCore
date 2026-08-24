@@ -4,39 +4,49 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
 using AgentCore.Application.Tools;
 using AgentCore.AspNetCore.DependencyInjection;
+using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.AspNetCore.Tests.Fakes;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace AgentCore.AspNetCore.Tests.DependencyInjection;
 
 /// <summary>
-/// Step 4 of the composition root: build every tool source's registrations into one registry, and
-/// report back every source among them that the composition root must own.
+/// Step 4 of the composition root: build every tool source's registrations into one registry, with
+/// every source tracked against the boot that must close it.
 /// </summary>
 public sealed class ToolRegistryStartupTests
 {
     [Fact]
-    public async Task BuildAsync_ADocumentWithNoMcpBlockAndNoHostSource_OwnsNothing()
+    public async Task BuildAsync_ADocumentWithNoMcpBlockAndNoHostSource_ServesOnlyTheBuiltInIds()
     {
         var built = await BuildAsync(NoMcpConfiguration(), new AgentCoreOptions());
 
-        Assert.Empty(built.Owned);
+        Assert.NotNull(built.Registry);
     }
 
+    /// <summary>
+    /// A source's own <c>ProvideAsync</c> can succeed — it has already opened whatever it opens —
+    /// and the overall build still fail later, here on an undeclared tool
+    /// <c>VerifyEveryDeclarationIsServed</c> only catches once every source has answered. The source
+    /// is tracked against the boot as it is built, before any of that, so a failed start closes it.
+    /// </summary>
     [Fact]
-    public async Task BuildAsync_TheBuilderThrowsAfterASourceAlreadyOpened_ClosesThatSourceBeforeRethrowing()
+    public async Task BuildAsync_TheBuilderThrowsAfterASourceAlreadyOpened_LeavesTheSourceWithTheBootToClose()
     {
-        // Simulates the real failure this fix closes: a source's own ProvideAsync can succeed (it has
-        // already opened whatever it opens) and the overall build can still fail later — here, on an
-        // undeclared tool VerifyEveryDeclarationIsServed only catches once every source has answered.
         OpenTrackingToolSource source = new();
         AgentCoreOptions options = new();
         options.AddToolSource(_ => source);
 
+        var boot = Boot();
+
         await Assert.ThrowsAsync<ConfigurationLoadException>(
-            () => BuildAsync(UndeclaredToolConfiguration(), options).AsTask());
+            () => BuildAsync(UndeclaredToolConfiguration(), options, boot).AsTask());
+
+        await boot.DisposeAsync();
 
         Assert.True(source.Disposed);
     }
@@ -63,7 +73,7 @@ public sealed class ToolRegistryStartupTests
 
     /// <summary>
     /// AgentCore.Hosting registers <c>McpToolSource</c> into <c>options.ToolSources</c>; a host that
-    /// calls <c>AddAgentCoreAsync</c> directly never does. Without this guard, a document with an
+    /// calls <c>AddAgentCore</c> directly never does. Without this guard, a document with an
     /// <c>mcp:</c> block and no registered source at all would boot clean and just serve fewer tools
     /// than it declares, with no error anywhere — the silent no-op this codebase rejects everywhere
     /// else. This deliberately checks a plain count, never <c>McpToolSource</c> by type: this project
@@ -78,7 +88,7 @@ public sealed class ToolRegistryStartupTests
             () => BuildAsync(McpWithNoSourceConfiguration(), options).AsTask());
 
         var error = Assert.Single(failure.Errors);
-        Assert.Contains("AddAgentCoreHostAsync", error.Message, StringComparison.Ordinal);
+        Assert.Contains("AddAgentCoreHost", error.Message, StringComparison.Ordinal);
         Assert.Contains("AddToolSource", error.Message, StringComparison.Ordinal);
     }
 
@@ -119,11 +129,12 @@ public sealed class ToolRegistryStartupTests
         };
 
     private static ValueTask<ToolRegistryBuildResult> BuildAsync(
-        AgentCoreConfiguration configuration, AgentCoreOptions options)
+        AgentCoreConfiguration configuration, AgentCoreOptions options, AgentCoreBoot? boot = null)
     {
         AgentCoreStartup startup = new(configuration, ResolvedSecrets.Empty);
 
         return ToolRegistryStartup.BuildAsync(
+            boot ?? Boot(),
             options,
             startup,
             (null, null),
@@ -131,6 +142,11 @@ public sealed class ToolRegistryStartupTests
             configuration,
             TestContext.Current.CancellationToken);
     }
+
+    /// <summary>The owner every source this step builds is tracked against.</summary>
+    /// <returns>A boot that has run nothing, which is all this step needs of it.</returns>
+    private static AgentCoreBoot Boot()
+        => new(Options.Create(new AgentCoreOptions()), NullLoggerFactory.Instance);
 
     /// <summary>A tool source that tracks whether it was disposed, and serves nothing.</summary>
     private sealed class OpenTrackingToolSource : IToolSource, IAsyncDisposable
