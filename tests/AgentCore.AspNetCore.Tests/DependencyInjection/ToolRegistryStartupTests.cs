@@ -9,17 +9,17 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection;
 
 /// <summary>
 /// Step 4 of the composition root. A document's <c>mcp:</c> block, when present, must hand back the
-/// <see cref="AgentCore.Infrastructure.Tools.McpToolSource"/> it built so the composition root can
-/// own it: nothing else closes the child processes and sessions behind it.
+/// <see cref="AgentCore.Infrastructure.Tools.McpToolSource"/> it built among the sources the
+/// composition root owns: nothing else closes the child processes and sessions behind it.
 /// </summary>
 public sealed class ToolRegistryStartupTests
 {
     [Fact]
-    public async Task BuildAsync_ADocumentWithNoMcpBlock_BuildsNoMcpSource()
+    public async Task BuildAsync_ADocumentWithNoMcpBlockAndNoHostSource_OwnsNothing()
     {
         var built = await BuildAsync(NoMcpConfiguration());
 
-        Assert.Null(built.McpSource);
+        Assert.Empty(built.Owned);
     }
 
     private static AgentCoreConfiguration NoMcpConfiguration()

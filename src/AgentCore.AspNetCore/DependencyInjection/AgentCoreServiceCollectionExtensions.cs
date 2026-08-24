@@ -97,9 +97,12 @@ public static class AgentCoreServiceCollectionExtensions
 
         StartupResourceOwner.Own(services, transcript);
 
-        if (toolsBuilt.McpSource is { } mcpSource)
+        // Nothing one owned tool source opens ever writes into another, so the order they close in
+        // here carries none of the load-bearing weight StartupResourceOwner's own doc comment warns
+        // about; document order is fine.
+        if (toolsBuilt.Owned.Count > 0)
         {
-            StartupResourceOwner.Own(services, mcpSource);
+            StartupResourceOwner.Own(services, [.. toolsBuilt.Owned]);
         }
 
         await CallSessionStartup

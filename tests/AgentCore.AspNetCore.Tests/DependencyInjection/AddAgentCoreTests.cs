@@ -546,6 +546,29 @@ public sealed class AddAgentCoreTests
         Assert.True(store.Closed);
     }
 
+    [Fact]
+    public async Task AHostRegisteredDisposableToolSource_IsClosedWhenTheHostStops()
+    {
+        // AddToolSource hands the composition root a factory it alone calls, so it holds the only
+        // reference to what that factory returns — the same route McpToolSource is closed through,
+        // proved here with no MCP server involved.
+        DisposeTrackingToolSource source = new();
+        HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+        await ConfigureAsync(
+            (ServiceCollection)builder.Services,
+            OneAgentYaml,
+            options => options.AddToolSource(_ => source));
+
+        using IHost host = builder.Build();
+        await host.StartAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(source.Disposed);
+
+        await host.StopAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(source.Disposed);
+    }
+
     // -------------------------------------------------------------------------------------------
     // The document picks the vendor, and no code names one: the point of the adapter seam.
     // -------------------------------------------------------------------------------------------
@@ -1730,6 +1753,23 @@ public sealed class AddAgentCoreTests
         {
             onProvide();
             return ValueTask.FromResult<IReadOnlyList<ToolRegistration>>([]);
+        }
+    }
+
+    /// <summary>A tool source a host registers, which records whether it was ever closed.</summary>
+    private sealed class DisposeTrackingToolSource : IToolSource, IAsyncDisposable
+    {
+        /// <summary>Gets whether this source was disposed.</summary>
+        public bool Disposed { get; private set; }
+
+        public ValueTask<IReadOnlyList<ToolRegistration>> ProvideAsync(
+            ToolSourceContext context, CancellationToken cancellationToken = default)
+            => ValueTask.FromResult<IReadOnlyList<ToolRegistration>>([]);
+
+        public ValueTask DisposeAsync()
+        {
+            Disposed = true;
+            return ValueTask.CompletedTask;
         }
     }
 }
