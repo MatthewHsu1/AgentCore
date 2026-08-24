@@ -1,5 +1,4 @@
 using AgentCore.Application.Configuration.Parsing;
-using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
@@ -70,21 +69,11 @@ public static class AgentCoreServiceCollectionExtensions
             .ConfigureAwait(false);
         var tools = toolsBuilt.Registry;
 
-        // Decision 15: the reference pass runs after discovery, against what the registry actually
-        // serves, so an MCP-discovered id can satisfy a reference. A kind: agent tool reaches no
-        // source — the compiler builds it once the agent it names has compiled — so the registry
-        // never holds it; VerifyEveryDeclarationIsServed carves out the same kind for the same
-        // reason, and this union must match it or every delegating document would fail to boot.
-        var servedToolIds = tools.Ids.ToHashSet(StringComparer.Ordinal);
-        foreach (var tool in configuration.Tools)
-        {
-            if (tool.Kind == ToolKind.Agent)
-            {
-                servedToolIds.Add(tool.Id);
-            }
-        }
-
-        ConfigurationValidator.ValidateToolReferences(configuration, servedToolIds);
+        // Decision 15: the reference pass runs after discovery, against ServedIds — the registry's
+        // own ids unioned with every kind: agent tool id, computed once in ToolRegistryStartup
+        // alongside the carve-out VerifyEveryDeclarationIsServed applies for the same reason, so the
+        // two can never silently disagree about which ids count as served.
+        ConfigurationValidator.ValidateToolReferences(configuration, toolsBuilt.ServedIds);
 
         var transcript = await TranscriptStartup
             .OpenAsync(configuration, options, loggers, cancellationToken)

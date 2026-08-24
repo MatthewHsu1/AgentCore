@@ -346,13 +346,24 @@ public static class ConfigurationCompiler
 
             if (!declared.TryGetValue(id, out var tool))
             {
+                // Decision 15: an mcp: server's discovery is the only source for an id like this —
+                // it is never a tools: entry at all. ConfigurationValidator.ValidateToolReferences
+                // already proved, before compilation ever starts, that something serves every id an
+                // agent names, so a registry hit here is the expected shape of a discovered id, not
+                // a coincidence to double-check.
+                if (context.Tools is { } discovered && discovered.Contains(id))
+                {
+                    tools.Add(discovered.Resolve(id));
+                    continue;
+                }
+
                 if (context.Tools is null)
                 {
                     // No factory, so nothing this loop could have built anyway.
                     continue;
                 }
 
-                throw Fail(toolPointer, $"the tool id '{id}' is not declared in tools:.");
+                throw Fail(toolPointer, $"the tool id '{id}' is not declared in tools:, and no tool source serves it.");
             }
 
             if (tool.Kind == ToolKind.Agent)

@@ -7,6 +7,14 @@ namespace AgentCore.AspNetCore.DependencyInjection;
 
 /// <summary>Everything step 4 built: the registry, and every source it must close at shutdown.</summary>
 /// <param name="Registry">The registry the compile table reads. Its own <c>Ids</c> are every id it serves.</param>
+/// <param name="ServedIds">
+/// Every id decision 15's reference pass may treat as satisfied: <paramref name="Registry"/>'s own
+/// <c>Ids</c>, unioned with every declared <c>kind: agent</c> tool id. That kind reaches no source —
+/// the compile table builds it once the agent it names has compiled — so <see cref="ToolRegistry"/>
+/// never holds it, the same reason <see cref="ToolRegistryBuilder.BuildAsync"/> carves it out of its
+/// own "every declaration is served" check. Computed once, here, so the composition root's reference
+/// pass and that check can never silently disagree about which ids count as served.
+/// </param>
 /// <param name="Owned">
 /// Every source among <c>options.ToolSources</c> — <c>AddToolSource</c>'s own doc comment covers
 /// <c>McpToolSource</c>, registered this way by <c>AgentCore.Hosting</c> — that implements
@@ -15,7 +23,8 @@ namespace AgentCore.AspNetCore.DependencyInjection;
 /// small even though <c>AddToolSource</c>'s factory could in principle be called more than once by a
 /// host that keeps its own reference to what it returns.
 /// </param>
-internal readonly record struct ToolRegistryBuildResult(ToolRegistry Registry, IReadOnlyList<IToolSource> Owned);
+internal readonly record struct ToolRegistryBuildResult(
+    ToolRegistry Registry, IReadOnlySet<string> ServedIds, IReadOnlyList<IToolSource> Owned);
 
 /// <summary>Step 4: build the one tool registry the compile table reads.</summary>
 internal static class ToolRegistryStartup
@@ -27,7 +36,7 @@ internal static class ToolRegistryStartup
     /// <param name="chatClients">The factory a shipped agent runs on. Step 3c fails the boot rather than returning none.</param>
     /// <param name="configuration">The loaded document.</param>
     /// <param name="cancellationToken">Cancels the discovery.</param>
-    /// <returns>The registry, and every source among them the composition root must own.</returns>
+    /// <returns>The registry, the served-ids union decision 15's reference pass reads, and every source among them the composition root must own.</returns>
     /// <exception cref="AgentCore.Application.Configuration.Parsing.ConfigurationLoadException">
     /// A source's own discovery fails, an id collision is found, or the document declares a tool no
     /// source serves. Every source already open by then is closed before this rethrows, so a boot
@@ -97,8 +106,17 @@ internal static class ToolRegistryStartup
             throw;
         }
 
+        var servedIds = registry.Ids.ToHashSet(StringComparer.Ordinal);
+        foreach (var tool in configuration.Tools)
+        {
+            if (tool.Kind == ToolKind.Agent)
+            {
+                servedIds.Add(tool.Id);
+            }
+        }
+
         List<IToolSource> owned = [.. sources.Where(source => source is IAsyncDisposable or IDisposable)];
 
-        return new ToolRegistryBuildResult(registry, owned);
+        return new ToolRegistryBuildResult(registry, servedIds, owned);
     }
 }

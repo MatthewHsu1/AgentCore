@@ -381,6 +381,25 @@ public sealed class AddAgentCoreTests
             - { kind: openai, model: gpt-4.1-mini, as: reply }
         """;
 
+    // Declares no tools: at all. 'discovered_only' is served only by a fake IToolSource the test
+    // registers, never named anywhere in the document itself, so the only way this boots is if the
+    // reference pass resolves against what got discovered rather than what got declared.
+    private const string DiscoveredOnlyToolYaml =
+        """
+        apiVersion: agentcore/v1
+        name: discovered-only-tool
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything", tools: [ discovered_only ] }
+        providers:
+          call:   { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        """;
+
     // A kind: agent tool reaches no source at all: the compiler builds it once the agent it names
     // has compiled, so the registry never holds it. The reference pass must still let front's
     // tools: [ ask_specialist ] through, or every delegating document fails to boot.
@@ -1502,6 +1521,24 @@ public sealed class AddAgentCoreTests
     }
 
     /// <summary>
+    /// The capability decision 15 and this whole stage exist for: an id no <c>tools:</c> entry ever
+    /// names, served only by discovery, still satisfies an agent's reference through the real boot —
+    /// <see cref="AgentCoreServiceCollectionExtensions.AddAgentCoreAsync"/> end to end, public API
+    /// only. Before this task, <c>ConfigurationStartup.Load</c> resolved references immediately after
+    /// loading, against declared ids alone, so a purely-discovered id could never satisfy one.
+    /// </summary>
+    [Fact]
+    public async Task ADiscoveredOnlyTool_SatisfiesAnAgentsReferenceThroughTheRealBoot()
+    {
+        using var provider = await BuildAsync(
+            DiscoveredOnlyToolYaml,
+            options => options.AddToolSource(_ => new DiscoveredOnlyToolSource("discovered_only")));
+
+        Assert.NotNull(provider.GetRequiredService<CompiledAgent>());
+        Assert.True(provider.GetRequiredService<ToolRegistry>().Contains("discovered_only"));
+    }
+
+    /// <summary>
     /// <see cref="ToolRegistryBuilder.VerifyEveryDeclarationIsServed"/> carves <see cref="ToolKind.Agent"/>
     /// out of its own "every declaration is served" rule, because that kind reaches no source — the
     /// compile table builds it once the agent it names has compiled. The reference pass in the
@@ -1523,24 +1560,37 @@ public sealed class AddAgentCoreTests
     /// not exist, so the two possible orderings are observably different: structure-first reports
     /// the policy fault and never touches the server; discovery-first would instead report that the
     /// server could not be reached, because <c>Process.Start</c> on a missing executable fails
-    /// synchronously, well before any structural error would ever be found.
+    /// synchronously, well before any structural error would ever be found. The error alone only
+    /// infers the order; <see cref="SpyToolSource"/> observes it directly by recording whether
+    /// <c>ProvideAsync</c> was ever called on any source at all — structure-first means
+    /// <see cref="AgentCore.Application.Tools.ToolRegistryBuilder.BuildAsync"/> never runs, so nothing
+    /// is ever asked, not even a source that serves nothing.
     /// </summary>
     [Fact]
     public async Task AddAgentCore_TheStructuralFaultSurfaces_BeforeMcpIsEverAsked()
     {
+        var asked = false;
+
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(() => BuildAsync(
             StructuralFaultPlusUnreachableMcpYaml,
-            options => options.AddToolSource(_ => new McpToolSource())));
+            options =>
+            {
+                // Registered before McpToolSource, so this is asked first if discovery runs at all —
+                // a true observer of whether ToolRegistryBuilder.BuildAsync began, not just of
+                // whether the MCP source in particular got asked.
+                options.AddToolSource(_ => new SpyToolSource(() => asked = true));
+                options.AddToolSource(_ => new McpToolSource());
+            }));
 
         var error = Assert.Single(failure.Errors);
         Assert.Equal(ConfigurationCheck.ReferenceResolution, error.Check);
         Assert.Equal("/policy/stages/0/to/0/stage", error.Pointer);
         Assert.Contains("'nowhere' is not declared", error.Message, StringComparison.Ordinal);
 
-        // Distinguishes the orders directly: an MCP connection failure would name the server and
-        // the word this project's own McpToolSource always uses for it.
+        // Distinguishes the orders directly: an MCP connection failure would name the server id.
         Assert.DoesNotContain("bogus-server", failure.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain("MCP", failure.Message, StringComparison.OrdinalIgnoreCase);
+
+        Assert.False(asked);
     }
 
     [Fact]
@@ -1875,6 +1925,20 @@ public sealed class AddAgentCoreTests
 
         public ValueTask CloseAsync(string callId, CancellationToken cancellationToken = default)
             => ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// A tool source that serves one id no document ever declares in <c>tools:</c>, standing in for
+    /// what an MCP server's discovery would supply. <see cref="ToolRegistryBuilder"/> imposes no rule
+    /// that a served id be declared, so this alone is enough to prove the reference pass runs against
+    /// what got discovered.
+    /// </summary>
+    private sealed class DiscoveredOnlyToolSource(string id) : IToolSource
+    {
+        public ValueTask<IReadOnlyList<ToolRegistration>> ProvideAsync(
+            ToolSourceContext context, CancellationToken cancellationToken = default)
+            => ValueTask.FromResult<IReadOnlyList<ToolRegistration>>(
+                [new ToolRegistration(id, "A tool discovered but never declared.", () => AIFunctionFactory.Create(() => "ok", id))]);
     }
 
     /// <summary>A tool source that serves nothing, and tells a test when it was asked to.</summary>
