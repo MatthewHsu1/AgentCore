@@ -281,6 +281,38 @@ public sealed class ConfigurationValidatorTests
     }
 
     // ---------------------------------------------------------------------------------------------
+    // Check 2, mcp: ids: two servers must not share one id.
+    // ---------------------------------------------------------------------------------------------
+    /// <summary>
+    /// Two <c>mcp:</c> entries with disjoint <c>allow:</c> sets would otherwise boot silently — nothing
+    /// in the schema, this validator, or <c>McpToolSource</c> catches it until an overlapping pair
+    /// happens to collide on a served tool id, and even then the failure names the tool, never the
+    /// duplicated server id. This runs before any connection opens.
+    /// </summary>
+    [Fact]
+    public void TwoMcpEntriesSharingAnId_FailCheckTwoNamingTheId()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            mcp:
+              - id: jira
+                transport: stdio
+                command: [npx]
+                allow: [create_issue]
+              - id: jira
+                transport: stdio
+                command: [npx]
+                allow: [search_issues]
+            """;
+
+        var error = Assert.Single(Evaluate(document, ConfigurationCheck.ReferenceResolution));
+
+        Assert.Equal("/mcp/1/id", error.Pointer);
+        Assert.Contains("jira", error.Message, StringComparison.Ordinal);
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // Check 3: one writer for each slot.
     // ---------------------------------------------------------------------------------------------
     [Fact]

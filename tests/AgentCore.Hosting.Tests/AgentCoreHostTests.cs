@@ -151,9 +151,9 @@ public sealed class AgentCoreHostTests
     }
 
     // ---------------------------------------------------------------------------------------------
-    // The mcp: block. McpToolSource is registered from this project, not from AgentCore.AspNetCore
-    // (task 4's fix 2) — this is the only test that would notice if that wiring went missing, since
-    // an mcp: block with no source behind it fails silently rather than failing the boot.
+    // The mcp: block. McpToolSource is registered from this project, not from AgentCore.AspNetCore —
+    // this test is what actually proves that wiring runs a real connection attempt, naming the
+    // server that failed to connect.
     // ---------------------------------------------------------------------------------------------
 
     /// <summary>A document naming an <c>mcp:</c> server whose command does not exist.</summary>

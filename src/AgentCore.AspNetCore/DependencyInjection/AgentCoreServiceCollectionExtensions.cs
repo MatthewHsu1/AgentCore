@@ -1,5 +1,6 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Evaluation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
 using AgentCore.Application.Sessions.Memory;
@@ -69,46 +70,84 @@ public static class AgentCoreServiceCollectionExtensions
             .ConfigureAwait(false);
         var tools = toolsBuilt.Registry;
 
-        // Decision 15: the reference pass runs after discovery, against ServedIds — the registry's
-        // own ids unioned with every kind: agent tool id, computed once in ToolRegistryStartup
-        // alongside the carve-out VerifyEveryDeclarationIsServed applies for the same reason, so the
-        // two can never silently disagree about which ids count as served.
-        ConfigurationValidator.ValidateToolReferences(configuration, toolsBuilt.ServedIds);
-
-        var transcript = await TranscriptStartup
-            .OpenAsync(configuration, options, loggers, cancellationToken)
-            .ConfigureAwait(false);
-
-        var evaluators = await EvaluationStartup
-            .CreateRegistryAsync(configuration, options, cancellationToken)
-            .ConfigureAwait(false);
-
-        var graph = await CompilationStartup
-            .CompileAsync(configuration, chatClients, tools, transcript, evaluators, loggers)
-            .ConfigureAwait(false);
-
-        services.AddSingleton(configuration);
-        services.AddSingleton(secrets);
-
-        CallSeamStartup.Register(services, configuration, options);
-
-        services.AddSingleton(options.Bindings);
-        services.AddSingleton(graph.Registry);
-        services.AddSingleton(graph.Compiled);
-        services.AddSingleton<IChatClientFactory>(_ => graph.ChatClients);
-        services.AddSingleton(tools);
-        services.AddSingleton<IGuardEvaluator>(graph.Guards);
-        services.AddSingleton(transcript);
-        services.AddSingleton(transcript.GetType(), transcript);
-
-        StartupResourceOwner.Own(services, transcript);
-
-        // Nothing one owned tool source opens ever writes into another, so the order they close in
-        // here carries none of the load-bearing weight StartupResourceOwner's own doc comment warns
-        // about; document order is fine.
-        if (toolsBuilt.Owned.Count > 0)
+        ITranscriptStore transcript;
+        CompiledGraph graph;
+        EvaluatorRegistry evaluators;
+        try
         {
-            StartupResourceOwner.Own(services, [.. toolsBuilt.Owned]);
+            // Decision 15: the reference pass runs after discovery, against ServedIds — the
+            // registry's own ids unioned with every kind: agent tool id, computed once in
+            // ToolRegistryStartup alongside the carve-out VerifyEveryDeclarationIsServed applies for
+            // the same reason, so the two can never silently disagree about which ids count as
+            // served.
+            ConfigurationValidator.ValidateToolReferences(configuration, toolsBuilt.ServedIds);
+
+            transcript = await TranscriptStartup
+                .OpenAsync(configuration, options, loggers, cancellationToken)
+                .ConfigureAwait(false);
+
+            evaluators = await EvaluationStartup
+                .CreateRegistryAsync(configuration, options, cancellationToken)
+                .ConfigureAwait(false);
+
+            graph = await CompilationStartup
+                .CompileAsync(configuration, chatClients, tools, transcript, evaluators, loggers)
+                .ConfigureAwait(false);
+
+            services.AddSingleton(configuration);
+            services.AddSingleton(secrets);
+
+            CallSeamStartup.Register(services, configuration, options);
+
+            services.AddSingleton(options.Bindings);
+            services.AddSingleton(graph.Registry);
+            services.AddSingleton(graph.Compiled);
+            services.AddSingleton<IChatClientFactory>(_ => graph.ChatClients);
+            services.AddSingleton(tools);
+            services.AddSingleton<IGuardEvaluator>(graph.Guards);
+            services.AddSingleton(transcript);
+            services.AddSingleton(transcript.GetType(), transcript);
+
+            StartupResourceOwner.Own(services, transcript);
+
+            // Nothing one owned tool source opens ever writes into another, so the order they close
+            // in here carries none of the load-bearing weight StartupResourceOwner's own doc comment
+            // warns about; document order is fine.
+            if (toolsBuilt.Owned.Count > 0)
+            {
+                StartupResourceOwner.Own(services, [.. toolsBuilt.Owned]);
+            }
+        }
+        catch
+        {
+            // Nothing after tool discovery has taken ownership of toolsBuilt.Owned yet — Own only
+            // registers a hosted service, and no provider is ever built from a collection this method
+            // never returns. A throw here would otherwise leave every MCP client (and the stdio child
+            // process behind it) running with nothing left to close it. Each dispose is guarded on
+            // its own, so one source's failure to close cannot abandon the rest or replace the
+            // exception a deployer actually needs to read.
+            foreach (var source in toolsBuilt.Owned)
+            {
+                try
+                {
+                    switch (source)
+                    {
+                        case IAsyncDisposable asyncDisposable:
+                            await asyncDisposable.DisposeAsync().ConfigureAwait(false);
+                            break;
+                        case IDisposable disposable:
+                            disposable.Dispose();
+                            break;
+                    }
+                }
+                catch
+                {
+                    // The original failure is the one a deployer needs; a source that also fails to
+                    // close must not replace or hide it.
+                }
+            }
+
+            throw;
         }
 
         await CallSessionStartup

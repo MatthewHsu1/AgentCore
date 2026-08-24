@@ -87,6 +87,7 @@ public static class ConfigurationValidator
         CheckReachability(configuration, errors);
         CheckGraphWellFormedness(configuration, errors);
         CheckDelegationCycles(configuration, errors);
+        CheckMcpServerIds(configuration, errors);
 
         if (errors.Count == 0 && warnings.Count == 0)
         {
@@ -319,6 +320,27 @@ public static class ConfigurationValidator
                         ConfigurationError.AppendPointer(ConfigurationError.AppendPointer(Pointer.Agent(index), "tools"), slot),
                         $"nothing serves the tool '{agent.Tools[slot]}'. Declare it in tools:, or check that an mcp: server offers it."));
                 }
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Check 2, mcp: ids: a duplicate connects twice and its collision surfaces only at boot, naming
+    // the served tool id rather than the mcp: entry that caused it. This runs before any connection
+    // opens, so it costs nothing to check here.
+    // ---------------------------------------------------------------------------------------------
+    private static void CheckMcpServerIds(AgentCoreConfiguration configuration, List<ConfigurationError> errors)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        for (var index = 0; index < configuration.Mcp.Count; index++)
+        {
+            var server = configuration.Mcp[index];
+            if (!seen.Add(server.Id))
+            {
+                errors.Add(Reference(
+                    ConfigurationError.AppendPointer(Pointer.Mcp(index), "id"),
+                    $"two mcp: entries declare the id '{server.Id}'. An id names one server, so rename "
+                    + "one of them."));
             }
         }
     }
@@ -865,6 +887,8 @@ public static class ConfigurationValidator
         public static string Agent(int index) => ConfigurationError.AppendPointer("/agents/items", index);
 
         public static string Tool(int index) => ConfigurationError.AppendPointer("/tools", index);
+
+        public static string Mcp(int index) => ConfigurationError.AppendPointer("/mcp", index);
 
         public static string Stage(int index) => ConfigurationError.AppendPointer("/policy/stages", index);
 

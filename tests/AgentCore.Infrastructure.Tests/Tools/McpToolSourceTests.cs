@@ -111,6 +111,27 @@ public sealed class McpToolSourceTests
         Assert.Contains("No such file or directory", failure.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The server's own tool collection refuses a same-named second entry, so this is the one route
+    /// left to reproduce a <c>tools/list</c> answer that repeats a name: the listing itself succeeds,
+    /// and the client's own <c>ToDictionary</c> is what fails afterward. The message must say the
+    /// listing succeeded, not that the connection "failed before it could list what it offers" — that
+    /// wording would be false here.
+    /// </summary>
+    [Fact]
+    public async Task ProvideAsync_TheServerListsOneNameTwice_FailsTheBootSayingListingSucceeded()
+    {
+        await using var fake = InProcessMcpServer.OfferingTheSameToolNameTwice("create_issue");
+        await using McpToolSource source = new(_ => fake.ClientTransport);
+
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+            async () => await source.ProvideAsync(ContextFor(Jira(Allow("*"))), Token));
+
+        Assert.Contains("jira", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("listed its tools", failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("failed before it could list", failure.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task DisposeAsync_AfterProvide_ClosesTheClient()
     {
@@ -185,6 +206,38 @@ public sealed class McpToolSourceTests
         Assert.Contains("jira", failure.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// One client's own <c>DisposeAsync</c> throwing must not abandon the rest, and must not stop
+    /// <c>_clients.Clear()</c> from running: the host's own shutdown calls <c>DisposeAsync</c> exactly
+    /// once, but this source's own failure path (<see cref="ProvideAsync"/> on a later server) already
+    /// disposes everything once, so a clean second call must find nothing left to re-touch.
+    /// </summary>
+    [Fact]
+    public async Task DisposeAsync_WhenOneClientThrows_StillDisposesTheOthersAndStaysIdempotent()
+    {
+        await using InProcessMcpServer jiraFake = new("create_issue");
+        await using InProcessMcpServer githubFake = new("open_pr");
+
+        CountingTransport throwing = new(jiraFake.ClientTransport, throwOnDispose: true);
+        CountingTransport clean = new(githubFake.ClientTransport);
+
+        McpToolSource source = new(server => server.Id == "jira" ? throwing : clean);
+
+        await source.ProvideAsync(
+            ContextFor(Jira(Allow("create_issue")), ServerConfig("github", Allow("*"))), Token);
+
+        var exception = await Record.ExceptionAsync(async () => await source.DisposeAsync());
+
+        Assert.Null(exception);
+        Assert.Equal(1, throwing.DisposeCount);
+        Assert.Equal(1, clean.DisposeCount);
+
+        await source.DisposeAsync();
+
+        Assert.Equal(1, throwing.DisposeCount);
+        Assert.Equal(1, clean.DisposeCount);
+    }
+
     [Fact]
     public async Task ProvideAsync_TheSecondServerFails_DisposesTheFirstServersClient()
     {
@@ -234,6 +287,40 @@ public sealed class McpToolSourceTests
             => throw new InvalidOperationException(
                 "Failed to connect transport.",
                 new Win32Exception(2, "No such file or directory"));
+    }
+
+    /// <summary>Wraps a transport to count how many times the session it connects is disposed, optionally throwing on each.</summary>
+    private sealed class CountingTransport(IClientTransport inner, bool throwOnDispose = false) : IClientTransport
+    {
+        public int DisposeCount { get; private set; }
+
+        public string Name => inner.Name;
+
+        public async Task<ITransport> ConnectAsync(CancellationToken cancellationToken)
+        {
+            var session = await inner.ConnectAsync(cancellationToken).ConfigureAwait(false);
+            return new CountingSession(session, this, throwOnDispose);
+        }
+
+        private sealed class CountingSession(ITransport inner, CountingTransport owner, bool throwOnDispose) : ITransport
+        {
+            public string? SessionId => inner.SessionId;
+
+            public ChannelReader<JsonRpcMessage> MessageReader => inner.MessageReader;
+
+            public Task SendMessageAsync(JsonRpcMessage message, CancellationToken cancellationToken)
+                => inner.SendMessageAsync(message, cancellationToken);
+
+            public async ValueTask DisposeAsync()
+            {
+                owner.DisposeCount++;
+                await inner.DisposeAsync().ConfigureAwait(false);
+                if (throwOnDispose)
+                {
+                    throw new InvalidOperationException("the session failed to close.");
+                }
+            }
+        }
     }
 
     /// <summary>Wraps a transport to record whether the session it connects is ever disposed.</summary>

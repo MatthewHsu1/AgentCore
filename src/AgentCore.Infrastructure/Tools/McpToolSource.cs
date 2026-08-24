@@ -68,9 +68,18 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
+        // Each dispose is guarded on its own, so one client's failure to close cannot abandon the
+        // rest, and _clients.Clear() always runs — the host's second call must find nothing left to
+        // re-touch.
         foreach (var client in _clients)
         {
-            await client.DisposeAsync().ConfigureAwait(false);
+            try
+            {
+                await client.DisposeAsync().ConfigureAwait(false);
+            }
+            catch
+            {
+            }
         }
 
         _clients.Clear();
@@ -92,6 +101,7 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
         ValidateAllow(server);
 
         McpClient? client = null;
+        var listed = false;
         try
         {
             var transport = _transports(server);
@@ -100,6 +110,7 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
             _clients.Add(client);
 
             var offered = await client.ListToolsAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+            listed = true;
             var byName = offered.ToDictionary(tool => tool.Name, StringComparer.Ordinal);
 
             return server.Allow.Any(entry => entry.Name == "*")
@@ -114,8 +125,11 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
         {
             throw ToolSourceError.Fail(client is null
                 ? $"the MCP server '{server.Id}' could not be reached: {Describe(ex)}"
-                : $"the MCP server '{server.Id}' connected, but failed before it could list what it "
-                    + $"offers: {Describe(ex)}");
+                : listed
+                    ? $"the MCP server '{server.Id}' listed its tools, but failed before it could "
+                        + $"serve them: {Describe(ex)}"
+                    : $"the MCP server '{server.Id}' connected, but failed before it could list what "
+                        + $"it offers: {Describe(ex)}");
         }
     }
 
@@ -178,7 +192,8 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
             throw ToolSourceError.Fail(
                 $"the MCP server '{server.Id}' offers a tool '{tool.Name}' with no description, so "
                 + "the model has nothing to read when it decides whether to call it. Take it out of "
-                + "allow:, or ask whoever runs that server to describe it.");
+                + "allow: (or, under allow: [\"*\"], replace \"*\" with an explicit list that leaves it "
+                + "out), or ask whoever runs that server to describe it.");
         }
 
         var renamed = tool.WithName(id);

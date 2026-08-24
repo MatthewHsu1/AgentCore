@@ -649,9 +649,12 @@ public sealed class AddAgentCoreTests
     [Fact]
     public async Task AHostRegisteredDisposableToolSource_IsClosedWhenTheHostStops()
     {
-        // AddToolSource hands the composition root a factory it alone calls, so it holds the only
-        // reference to what that factory returns — the same route McpToolSource is closed through,
-        // proved here with no MCP server involved.
+        // Disposal happens once, at host stop, when the resource is going away regardless — the
+        // same route McpToolSource is closed through, proved here with no MCP server involved. The
+        // reference kept below is exactly the case that makes the risk small rather than zero:
+        // AddToolSource's factory could be called more than once by a host that keeps its own
+        // reference to what it returns, and closing it anyway costs little because the host was
+        // about to lose it either way.
         DisposeTrackingToolSource source = new();
         HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
         await ConfigureAsync(
@@ -1518,6 +1521,27 @@ public sealed class AddAgentCoreTests
         Assert.Equal(ConfigurationCheck.ReferenceResolution, error.Check);
         Assert.Equal("/agents/items/0/tools/0", error.Pointer);
         Assert.Contains("no_such_tool", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A source's own discovery can succeed while the boot still fails later: here, an agent's
+    /// <c>tools:</c> names an id nothing serves, so <c>ValidateToolReferences</c> throws after
+    /// <see cref="ToolRegistryStartup.BuildAsync"/> already returned. That throw sits between the
+    /// registry being built and <c>StartupResourceOwner.Own</c> ever registering the source for the
+    /// host to close, so nothing but
+    /// <see cref="AgentCoreServiceCollectionExtensions.AddAgentCoreAsync"/>'s own guard around that
+    /// span would ever dispose it.
+    /// </summary>
+    [Fact]
+    public async Task AToolReferenceFailureAfterDiscoverySucceeds_StillDisposesTheSource()
+    {
+        var source = new DisposeTrackingToolSource();
+
+        await Assert.ThrowsAsync<ConfigurationLoadException>(() => BuildAsync(
+            UndeclaredAgentToolYaml,
+            options => options.AddToolSource(_ => source)));
+
+        Assert.True(source.Disposed);
     }
 
     /// <summary>

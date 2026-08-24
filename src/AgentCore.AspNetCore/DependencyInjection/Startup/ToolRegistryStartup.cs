@@ -69,6 +69,18 @@ internal static class ToolRegistryStartup
             sources.Add(extra(startup));
         }
 
+        // AgentCore.AspNetCore must not reference AgentCore.Infrastructure, so this cannot check for
+        // McpToolSource by type — a host that calls AddAgentCoreAsync directly, with an mcp: block but
+        // no registered tool source, would otherwise boot clean and simply serve fewer tools than the
+        // document declares, with no error anywhere.
+        if (configuration.Mcp.Count > 0 && options.ToolSources.Count == 0)
+        {
+            throw ToolSourceError.Fail(
+                "the document declares mcp:, and nothing registered a tool source to connect to it. Call "
+                + "AddAgentCoreHostAsync (AgentCore.Hosting), or register one yourself with "
+                + "options.AddToolSource(...).");
+        }
+
         ToolRegistry registry;
         try
         {
@@ -109,10 +121,24 @@ internal static class ToolRegistryStartup
         var servedIds = registry.Ids.ToHashSet(StringComparer.Ordinal);
         foreach (var tool in configuration.Tools)
         {
-            if (tool.Kind == ToolKind.Agent)
+            if (tool.Kind != ToolKind.Agent)
             {
-                servedIds.Add(tool.Id);
+                continue;
             }
+
+            // A kind: agent tool reaches no source, so the builder above never sees its id and
+            // ToolRegistryBuilder's own collision check never runs for it. Without this, a discovered
+            // tool and a declared agent tool could claim the same id and the document would boot with
+            // ConfigurationCompiler silently preferring the declared entry over the discovered one.
+            if (registry.Ids.Contains(tool.Id))
+            {
+                throw ToolSourceError.Fail(
+                    $"two tools claim the id '{tool.Id}': a discovered tool serves it, and the "
+                    + "document's own kind: agent declaration claims it too. An id names one tool, so "
+                    + "rename one of them.");
+            }
+
+            servedIds.Add(tool.Id);
         }
 
         List<IToolSource> owned = [.. sources.Where(source => source is IAsyncDisposable or IDisposable)];

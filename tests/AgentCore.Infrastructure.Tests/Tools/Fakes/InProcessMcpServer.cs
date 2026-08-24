@@ -32,7 +32,13 @@ internal sealed class InProcessMcpServer : IAsyncDisposable
     /// MCP makes it optional — which is how <see cref="OfferingAToolWithNoDescription"/> reproduces a
     /// server that describes nothing.
     /// </param>
-    private InProcessMcpServer(IReadOnlyList<(string Name, string? Description)> tools)
+    /// <param name="duplicateToolName">
+    /// A tool name to list a second time through <see cref="McpServerHandlers.ListToolsHandler"/>, or
+    /// <see langword="null"/> for none. <see cref="McpServerPrimitiveCollection{T}"/> itself refuses
+    /// two tools of one name, so this is the only route left to reproduce a server whose
+    /// <c>tools/list</c> answer repeats a name — <see cref="OfferingTheSameToolNameTwice"/> uses it.
+    /// </param>
+    private InProcessMcpServer(IReadOnlyList<(string Name, string? Description)> tools, string? duplicateToolName = null)
     {
         var clientToServer = new Pipe();
         var serverToClient = new Pipe();
@@ -45,6 +51,14 @@ internal sealed class InProcessMcpServer : IAsyncDisposable
         {
             options.ToolCollection.Add(McpServerTool.Create(
                 AIFunctionFactory.Create(() => "ok", name, description)));
+        }
+
+        if (duplicateToolName is not null)
+        {
+            options.Handlers.ListToolsHandler = (_, _) => ValueTask.FromResult(new ListToolsResult
+            {
+                Tools = [new Tool { Name = duplicateToolName, Description = DescriptionOf(duplicateToolName) }],
+            });
         }
 
         _server = McpServer.Create(serverTransport, options);
@@ -64,6 +78,12 @@ internal sealed class InProcessMcpServer : IAsyncDisposable
     /// <returns>The server.</returns>
     public static InProcessMcpServer OfferingAToolWithNoDescription(string toolName)
         => new([(toolName, null)]);
+
+    /// <summary>Starts a server whose <c>tools/list</c> response lists one tool name twice.</summary>
+    /// <param name="toolName">The name every listed tool shares.</param>
+    /// <returns>The server.</returns>
+    public static InProcessMcpServer OfferingTheSameToolNameTwice(string toolName)
+        => new([(toolName, DescriptionOf(toolName))], toolName);
 
     /// <summary>Gets the transport a client connects through to reach this server.</summary>
     public IClientTransport ClientTransport { get; }
