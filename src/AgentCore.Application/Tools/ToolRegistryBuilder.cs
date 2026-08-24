@@ -61,8 +61,8 @@ public static class ToolRegistryBuilder
         if (!tools.TryAdd(registration.Id, lazy))
         {
             throw ToolSourceError.Fail(
-                $"two tool sources both serve the tool id '{registration.Id}'. An id names one tool, so "
-                + "rename one of them or take one out of the document.");
+                $"two tools claim the id '{registration.Id}'. An id names one tool, so rename one of "
+                + "them or take one out of the document.");
         }
     }
 

@@ -37,30 +37,32 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
 
     /// <inheritdoc />
     /// <exception cref="ConfigurationLoadException">
-    /// A server cannot be reached, or an <c>allow:</c> entry names a tool the server does not offer.
-    /// Either way the message names the server id, so a deployer knows which <c>mcp:</c> entry is
-    /// wrong.
+    /// A server cannot be reached; an <c>allow:</c> entry names a tool the server does not offer, is
+    /// empty, or writes <c>"*"</c> alongside another entry or with an <c>as:</c>; or a kept tool has
+    /// no description. Every one of these names the server id, so a deployer knows which
+    /// <c>mcp:</c> entry is wrong. On any failure, every client this call already opened is disposed
+    /// before the exception leaves — a partly-booted document leaves no child process behind.
     /// </exception>
     public async ValueTask<IReadOnlyList<ToolRegistration>> ProvideAsync(
         ToolSourceContext context, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        List<ToolRegistration> registrations = [];
-        foreach (var server in context.Configuration.Mcp)
+        try
         {
-            var client = await ConnectAsync(server, cancellationToken).ConfigureAwait(false);
-            _clients.Add(client);
+            List<ToolRegistration> registrations = [];
+            foreach (var server in context.Configuration.Mcp)
+            {
+                registrations.AddRange(await DiscoverAsync(server, cancellationToken).ConfigureAwait(false));
+            }
 
-            var offered = await client.ListToolsAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-            var byName = offered.ToDictionary(tool => tool.Name, StringComparer.Ordinal);
-
-            registrations.AddRange(server.Allow.Any(entry => entry.Name == "*")
-                ? offered.Select(tool => Register(tool, $"{server.Id}.{tool.Name}"))
-                : server.Allow.Select(entry => RegisterAllowed(server, byName, entry)));
+            return registrations;
         }
-
-        return registrations;
+        catch
+        {
+            await DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
     }
 
     /// <inheritdoc />
@@ -74,18 +76,72 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
         _clients.Clear();
     }
 
-    private async ValueTask<McpClient> ConnectAsync(McpServerConfiguration server, CancellationToken cancellationToken)
+    /// <summary>Connects to one server, lists what it offers, and applies its <c>allow:</c>.</summary>
+    /// <remarks>
+    /// One try covers connecting, <c>tools/list</c>, and the <c>allow:</c> walk: a server that
+    /// connects and then fails to list (or offers two tools of one name, which
+    /// <see cref="Dictionary{TKey,TValue}"/> itself refuses) must fail the boot by the same route as
+    /// one that never connects at all — decision 4 does not stop mattering once a socket opens.
+    /// <see cref="ConfigurationLoadException"/> itself passes straight through: it already names the
+    /// server and the exact reason, and wrapping it again would only bury that under a second,
+    /// vaguer message.
+    /// </remarks>
+    private async ValueTask<List<ToolRegistration>> DiscoverAsync(
+        McpServerConfiguration server, CancellationToken cancellationToken)
     {
+        ValidateAllow(server);
+
+        McpClient? client = null;
         try
         {
             var transport = _transports(server);
-            return await McpClient.CreateAsync(transport, cancellationToken: cancellationToken)
+            client = await McpClient.CreateAsync(transport, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
+            _clients.Add(client);
+
+            var offered = await client.ListToolsAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+            var byName = offered.ToDictionary(tool => tool.Name, StringComparer.Ordinal);
+
+            return server.Allow.Any(entry => entry.Name == "*")
+                ? [.. offered.Select(tool => Register(server, tool, $"{server.Id}.{tool.Name}"))]
+                : [.. server.Allow.Select(entry => RegisterAllowed(server, byName, entry))];
+        }
+        catch (ConfigurationLoadException)
+        {
+            throw;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            throw ToolSourceError.Fail(client is null
+                ? $"the MCP server '{server.Id}' could not be reached: {Describe(ex)}"
+                : $"the MCP server '{server.Id}' connected, but failed before it could list what it "
+                    + $"offers: {Describe(ex)}");
+        }
+    }
+
+    /// <summary>Checks the shape of <c>allow:</c> itself, before any connection is opened.</summary>
+    /// <remarks>
+    /// Decisions 4 and 8 fail the boot rather than silently doing nothing: an empty <c>allow:</c>
+    /// would serve nothing and say nothing. Decision 6 makes <c>"*"</c> the explicit opt-out, and an
+    /// opt-out that silently swallows a neighbouring entry — <c>["*", {x: {as: y}}]</c> — or that
+    /// carries its own <c>as:</c> is not explicit; it is a wrong document that happened not to fail.
+    /// </remarks>
+    private static void ValidateAllow(McpServerConfiguration server)
+    {
+        if (server.Allow.Count == 0)
+        {
             throw ToolSourceError.Fail(
-                $"the MCP server '{server.Id}' could not be reached: {ex.Message}");
+                $"the MCP server '{server.Id}' declares no allow:, so it would serve nothing. Pin at "
+                + "least one tool, or write allow: [\"*\"] to take every tool it offers.");
+        }
+
+        var star = server.Allow.FirstOrDefault(entry => entry.Name == "*");
+        if (star is not null && (server.Allow.Count > 1 || star.As is not null))
+        {
+            throw ToolSourceError.Fail(
+                $"the MCP server '{server.Id}' writes \"*\" in allow: alongside another entry, or "
+                + "gives \"*\" an as:. \"*\" is the explicit opt-out for every tool the server offers, "
+                + "so it must stand alone with no alias.");
         }
     }
 
@@ -99,7 +155,7 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
                 + "allow: list names.");
         }
 
-        return Register(tool, entry.As ?? $"{server.Id}.{tool.Name}");
+        return Register(server, tool, entry.As ?? $"{server.Id}.{tool.Name}");
     }
 
     /// <summary>
@@ -107,15 +163,45 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
     /// </summary>
     /// <remarks>
     /// Decision 3's chain for every other kind is a document's own <c>description:</c>, then the
-    /// source's default, then a boot failure on empty. An <c>mcp:</c> server has no document
-    /// override today — the <c>allow:</c> shape Task 1 built carries no key for one (see Test 7 in
-    /// <c>McpToolSourceTests</c>) — so this always takes the server's own description, and an empty
-    /// one still fails the boot, in <see cref="ToolRegistryBuilder"/>.
+    /// source's default, then a boot failure on empty. A <c>kind: mcp</c> tool has only the second
+    /// and third links: the server's own description is the only source there is, MCP makes it
+    /// optional — a tool can offer none at all, and then <see cref="McpClientTool.Description"/> is
+    /// <c>""</c>, never <see langword="null"/> — and a document has no override today. So this fails
+    /// the boot itself on an empty description, before <see cref="ToolRegistryBuilder"/> ever sees
+    /// it: that builder's own message tells a deployer to write a <c>description:</c> the
+    /// <c>mcp:</c> shape has nowhere to hold, which is advice a deployer could never follow.
     /// </remarks>
-    private static ToolRegistration Register(McpClientTool tool, string id)
+    private static ToolRegistration Register(McpServerConfiguration server, McpClientTool tool, string id)
     {
+        if (tool.Description.Length == 0)
+        {
+            throw ToolSourceError.Fail(
+                $"the MCP server '{server.Id}' offers a tool '{tool.Name}' with no description, so "
+                + "the model has nothing to read when it decides whether to call it. Take it out of "
+                + "allow:, or ask whoever runs that server to describe it.");
+        }
+
         var renamed = tool.WithName(id);
-        return new ToolRegistration(id, tool.Description ?? string.Empty, () => renamed);
+        return new ToolRegistration(id, tool.Description, () => renamed);
+    }
+
+    /// <summary>Walks to the innermost cause, so a wrapped SDK message never buries the real one.</summary>
+    /// <param name="ex">The exception a transport or connection step threw.</param>
+    /// <returns>
+    /// <paramref name="ex"/>'s own message, plus the deepest <see cref="Exception.InnerException"/>'s
+    /// message when one exists and differs — the SDK's own text ("Failed to connect transport.")
+    /// names no cause, and the actual one (a missing executable, a refused socket) is what a
+    /// deployer needs to fix.
+    /// </returns>
+    private static string Describe(Exception ex)
+    {
+        var cause = ex;
+        while (cause.InnerException is not null)
+        {
+            cause = cause.InnerException;
+        }
+
+        return ReferenceEquals(cause, ex) ? ex.Message : $"{ex.Message} ({cause.Message})";
     }
 
     private static IClientTransport DefaultTransport(McpServerConfiguration server)

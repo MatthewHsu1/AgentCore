@@ -22,6 +22,17 @@ internal sealed class InProcessMcpServer : IAsyncDisposable
     /// <summary>Starts a server offering one tool per name given, each with a fixed description.</summary>
     /// <param name="toolNames">The tools the server lists.</param>
     public InProcessMcpServer(params string[] toolNames)
+        : this([.. toolNames.Select(name => (name, (string?)DescriptionOf(name)))])
+    {
+    }
+
+    /// <summary>Starts a server offering exactly the tools given, each with its own description.</summary>
+    /// <param name="tools">
+    /// Each tool's name and description. A <see langword="null"/> description is never sent at all —
+    /// MCP makes it optional — which is how <see cref="OfferingAToolWithNoDescription"/> reproduces a
+    /// server that describes nothing.
+    /// </param>
+    private InProcessMcpServer(IReadOnlyList<(string Name, string? Description)> tools)
     {
         var clientToServer = new Pipe();
         var serverToClient = new Pipe();
@@ -30,10 +41,10 @@ internal sealed class InProcessMcpServer : IAsyncDisposable
             clientToServer.Reader.AsStream(), serverToClient.Writer.AsStream());
 
         var options = new McpServerOptions { ToolCollection = new McpServerPrimitiveCollection<McpServerTool>() };
-        foreach (var name in toolNames)
+        foreach (var (name, description) in tools)
         {
             options.ToolCollection.Add(McpServerTool.Create(
-                AIFunctionFactory.Create(() => "ok", name, DescriptionOf(name))));
+                AIFunctionFactory.Create(() => "ok", name, description)));
         }
 
         _server = McpServer.Create(serverTransport, options);
@@ -47,6 +58,12 @@ internal sealed class InProcessMcpServer : IAsyncDisposable
     /// <param name="toolName">The tool name.</param>
     /// <returns>The description the server reports for it.</returns>
     public static string DescriptionOf(string toolName) => $"The '{toolName}' tool.";
+
+    /// <summary>Starts a server offering one tool that carries no description at all.</summary>
+    /// <param name="toolName">The tool's name.</param>
+    /// <returns>The server.</returns>
+    public static InProcessMcpServer OfferingAToolWithNoDescription(string toolName)
+        => new([(toolName, null)]);
 
     /// <summary>Gets the transport a client connects through to reach this server.</summary>
     public IClientTransport ClientTransport { get; }
