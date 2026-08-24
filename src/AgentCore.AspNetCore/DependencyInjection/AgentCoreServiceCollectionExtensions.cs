@@ -64,9 +64,10 @@ public static class AgentCoreServiceCollectionExtensions
             .BuildAsync(options, startup, cancellationToken)
             .ConfigureAwait(false);
 
-        var tools = await ToolRegistryStartup
+        var toolsBuilt = await ToolRegistryStartup
             .BuildAsync(options, startup, knowledge, chatClients, configuration, cancellationToken)
             .ConfigureAwait(false);
+        var tools = toolsBuilt.Registry;
 
         var transcript = await TranscriptStartup
             .OpenAsync(configuration, options, loggers, cancellationToken)
@@ -95,6 +96,11 @@ public static class AgentCoreServiceCollectionExtensions
         services.AddSingleton(transcript.GetType(), transcript);
 
         StartupResourceOwner.Own(services, transcript);
+
+        if (toolsBuilt.McpSource is { } mcpSource)
+        {
+            StartupResourceOwner.Own(services, mcpSource);
+        }
 
         await CallSessionStartup
               .RegisterAsync(services, configuration, options, graph, loggers, cancellationToken)
