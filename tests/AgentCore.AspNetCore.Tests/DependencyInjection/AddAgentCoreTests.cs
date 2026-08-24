@@ -1521,11 +1521,10 @@ public sealed class AddAgentCoreTests
     }
 
     /// <summary>
-    /// The capability decision 15 and this whole stage exist for: an id no <c>tools:</c> entry ever
-    /// names, served only by discovery, still satisfies an agent's reference through the real boot —
-    /// <see cref="AgentCoreServiceCollectionExtensions.AddAgentCoreAsync"/> end to end, public API
-    /// only. Before this task, <c>ConfigurationStartup.Load</c> resolved references immediately after
-    /// loading, against declared ids alone, so a purely-discovered id could never satisfy one.
+    /// An id no <c>tools:</c> entry names, served only by a discovering source, still satisfies an
+    /// agent's reference through <see cref="AgentCoreServiceCollectionExtensions.AddAgentCoreAsync"/>
+    /// end to end, public API only. An <c>mcp:</c> server's tools work exactly this way: decision 15
+    /// requires the reference pass to resolve against what got discovered, not just what got declared.
     /// </summary>
     [Fact]
     public async Task ADiscoveredOnlyTool_SatisfiesAnAgentsReferenceThroughTheRealBoot()

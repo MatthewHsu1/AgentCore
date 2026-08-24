@@ -347,10 +347,10 @@ public static class ConfigurationCompiler
             if (!declared.TryGetValue(id, out var tool))
             {
                 // Decision 15: an mcp: server's discovery is the only source for an id like this —
-                // it is never a tools: entry at all. ConfigurationValidator.ValidateToolReferences
-                // already proved, before compilation ever starts, that something serves every id an
-                // agent names, so a registry hit here is the expected shape of a discovered id, not
-                // a coincidence to double-check.
+                // it is never a tools: entry at all. The composition root proves every agent tool id
+                // resolves before it ever calls Compile, but Compile is public and a caller that
+                // builds its own AgentCompilationContext proves nothing on its own; this Contains
+                // check is what actually keeps that caller safe, not a belt-and-suspenders repeat.
                 if (context.Tools is { } discovered && discovered.Contains(id))
                 {
                     tools.Add(discovered.Resolve(id));
