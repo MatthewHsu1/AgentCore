@@ -342,9 +342,8 @@ public sealed class AddAgentCoreTests
             - { kind: openai, model: gpt-4.1-mini, as: reply }
         """;
 
-    // A state slot's from: names a tool no tools: entry declares. Decision 15 moved this check out
-    // of the structural pass, and the boot restores it by running it against the declared ids right
-    // after: the fixture that pins that the restoration still bites.
+    // A state slot's from: names a tool no tools: entry declares, and no mcp: server offers it
+    // either, so nothing in the served set ever resolves it.
     private const string UndeclaredToolYaml =
         """
         apiVersion: agentcore/v1
@@ -354,6 +353,88 @@ public sealed class AddAgentCoreTests
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
+        providers:
+          call:   { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        """;
+
+    // An agent's tools: names an id nothing serves. Unlike UndeclaredToolYaml, the fault sits in
+    // agents.items[].tools rather than state:, so the pointer must name the agent and not a bare
+    // /tools.
+    private const string UndeclaredAgentToolYaml =
+        """
+        apiVersion: agentcore/v1
+        name: broken-agent-tool-reference
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything", tools: [ no_such_tool ] }
+        providers:
+          call:   { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        """;
+
+    // A kind: agent tool reaches no source at all: the compiler builds it once the agent it names
+    // has compiled, so the registry never holds it. The reference pass must still let front's
+    // tools: [ ask_specialist ] through, or every delegating document fails to boot.
+    private const string DelegatingAgentToolYaml =
+        """
+        apiVersion: agentcore/v1
+        name: delegating
+        tools:
+          - id: ask_specialist
+            kind: agent
+            agent: specialist
+            description: Ask the specialist one product question.
+            parameters:
+              type: object
+              properties: { question: { type: string } }
+              required: [ question ]
+        agents:
+          items:
+            - { id: front, instructions: "the caller talks to me", tools: [ ask_specialist ] }
+            - { id: specialist, instructions: "I answer product questions" }
+        policy:
+          initial: talk
+          stages:
+            - { id: talk, agent: front, terminal: true }
+        providers:
+          call:   { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        """;
+
+    // BrokenYaml's structural defect (an unreachable policy transition), plus an mcp: server whose
+    // command names a binary that does not exist. Decision 15's whole point is that the structural
+    // error below must surface without AgentCore ever trying to reach that server: a missing
+    // executable fails Process.Start synchronously, so if discovery ran first this would instead
+    // report the MCP failure. See AddAgentCore_TheStructuralFaultSurfaces_BeforeMcpIsEverAsked.
+    private const string StructuralFaultPlusUnreachableMcpYaml =
+        """
+        apiVersion: agentcore/v1
+        name: broken-plus-mcp
+        mcp:
+          - id: bogus-server
+            transport: stdio
+            command: ["/definitely-not-a-real-binary-agentcore-task5-test"]
+            allow: ["*"]
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything" }
+        policy:
+          initial: start
+          stages:
+            - { id: start, agent: only, to: [ { stage: nowhere } ] }
         providers:
           call:   { kind: telnyx-relay }
           speech:
@@ -1394,11 +1475,9 @@ public sealed class AddAgentCoreTests
     }
 
     /// <summary>
-    /// Decision 15 moved tool-reference resolution out of the structural pass ConfigurationStartup
-    /// runs. Since nothing wires the discovery-fed pass in yet, the host restores the pre-split
-    /// behaviour by resolving against the declared ids right after the structural pass, so a state
-    /// slot's <c>from:</c> naming an undeclared tool still stops the boot rather than leaving the
-    /// slot silently unfilled.
+    /// The reference pass runs after discovery, against what the tool registry actually serves. A
+    /// state slot's <c>from:</c> naming a tool nothing serves — not declared, and no <c>mcp:</c>
+    /// server offers it either — still stops the boot rather than leaving the slot silently unfilled.
     /// </summary>
     [Fact]
     public async Task AnUndeclaredToolInAStateSlot_FailsTheStartAndNamesTheTool()
@@ -1409,6 +1488,59 @@ public sealed class AddAgentCoreTests
         Assert.Equal(ConfigurationCheck.ReferenceResolution, error.Check);
         Assert.Equal("/state/orderStatus/from", error.Pointer);
         Assert.Contains("lookup_order", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnAgentToolReferencingAnIdNothingServes_FailsTheStartNamingTheAgent()
+    {
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(() => BuildAsync(UndeclaredAgentToolYaml));
+
+        var error = Assert.Single(failure.Errors);
+        Assert.Equal(ConfigurationCheck.ReferenceResolution, error.Check);
+        Assert.Equal("/agents/items/0/tools/0", error.Pointer);
+        Assert.Contains("no_such_tool", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <see cref="ToolRegistryBuilder.VerifyEveryDeclarationIsServed"/> carves <see cref="ToolKind.Agent"/>
+    /// out of its own "every declaration is served" rule, because that kind reaches no source — the
+    /// compile table builds it once the agent it names has compiled. The reference pass in the
+    /// composition root has to carve the same kind out of its own served-ids set for the same reason,
+    /// or a document exactly like this one — the shape section 8.1 calls agent-as-tool — fails to
+    /// boot even though it declares nothing wrong.
+    /// </summary>
+    [Fact]
+    public async Task ADelegatingAgentTool_BootsBecauseKindAgentReachesNoSource()
+    {
+        using var provider = await BuildAsync(DelegatingAgentToolYaml);
+
+        Assert.NotNull(provider.GetRequiredService<CompiledAgent>());
+    }
+
+    /// <summary>
+    /// Decision 15's whole justification: a YAML typo must never cost a round trip to an MCP server.
+    /// This document carries both a structural defect and an <c>mcp:</c> server whose command does
+    /// not exist, so the two possible orderings are observably different: structure-first reports
+    /// the policy fault and never touches the server; discovery-first would instead report that the
+    /// server could not be reached, because <c>Process.Start</c> on a missing executable fails
+    /// synchronously, well before any structural error would ever be found.
+    /// </summary>
+    [Fact]
+    public async Task AddAgentCore_TheStructuralFaultSurfaces_BeforeMcpIsEverAsked()
+    {
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(() => BuildAsync(
+            StructuralFaultPlusUnreachableMcpYaml,
+            options => options.AddToolSource(_ => new McpToolSource())));
+
+        var error = Assert.Single(failure.Errors);
+        Assert.Equal(ConfigurationCheck.ReferenceResolution, error.Check);
+        Assert.Equal("/policy/stages/0/to/0/stage", error.Pointer);
+        Assert.Contains("'nowhere' is not declared", error.Message, StringComparison.Ordinal);
+
+        // Distinguishes the orders directly: an MCP connection failure would name the server and
+        // the word this project's own McpToolSource always uses for it.
+        Assert.DoesNotContain("bogus-server", failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("MCP", failure.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
