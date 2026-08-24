@@ -124,6 +124,12 @@ public static class AgentCoreHostBuilderExtensions
         options.AddToolSource(startup =>
             new HttpToolSource(httpClients.CreateClient(HttpToolSource.HttpClientName), startup.Secrets));
 
+        // The mcp: block. McpToolSource lives in AgentCore.Infrastructure, not AgentCore.AspNetCore:
+        // that project is packable, and every consumer of it would otherwise transitively acquire
+        // every adapter package this host links (Npgsql, AWSSDK.S3, LibGit2Sharp, OpenAI, the Zilliz
+        // and OpenTelemetry exporters) for a feature they may never declare.
+        options.AddToolSource(_ => new McpToolSource());
+
         // providers.audit.kind picks the adapter.
         options.UseAuditSinks(new PostgresAuditSinkAdapter());
 

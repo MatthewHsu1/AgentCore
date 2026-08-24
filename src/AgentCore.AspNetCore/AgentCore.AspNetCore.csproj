@@ -7,7 +7,6 @@
 
   <ItemGroup>
     <ProjectReference Include="../AgentCore.Application/AgentCore.Application.csproj" />
-    <ProjectReference Include="../AgentCore.Infrastructure/AgentCore.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

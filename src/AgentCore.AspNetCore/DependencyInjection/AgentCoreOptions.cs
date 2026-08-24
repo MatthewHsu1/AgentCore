@@ -219,7 +219,12 @@ public sealed class AgentCoreOptions
     }
 
     /// <summary>Adds one tool source the registry asks at startup.</summary>
-    /// <param name="toolSource">Builds the source from the loaded document.</param>
+    /// <param name="toolSource">
+    /// Builds the source from the loaded document. The composition root calls this once and keeps
+    /// what it returns: when the source it builds implements <see cref="IAsyncDisposable"/> or
+    /// <see cref="IDisposable"/>, the composition root closes it when the host stops. Do not return an
+    /// instance the host still needs after that.
+    /// </param>
     /// <returns>These options, so a host chains its calls.</returns>
     public AgentCoreOptions AddToolSource(Func<AgentCoreStartup, IToolSource> toolSource)
     {

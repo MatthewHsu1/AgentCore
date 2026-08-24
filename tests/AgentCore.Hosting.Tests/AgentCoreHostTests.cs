@@ -151,6 +151,56 @@ public sealed class AgentCoreHostTests
     }
 
     // ---------------------------------------------------------------------------------------------
+    // The mcp: block. McpToolSource is registered from this project, not from AgentCore.AspNetCore
+    // (task 4's fix 2) — this is the only test that would notice if that wiring went missing, since
+    // an mcp: block with no source behind it fails silently rather than failing the boot.
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>A document naming an <c>mcp:</c> server whose command does not exist.</summary>
+    /// <remarks>
+    /// A missing executable fails <c>Process.Start</c> synchronously, so this reaches
+    /// <see cref="ConfigurationLoadException"/> immediately rather than waiting out any MCP
+    /// initialization timeout — the fast, offline failure this test needs.
+    /// </remarks>
+    private const string McpDocument = """
+        apiVersion: agentcore/v1
+        name: hosting-tests-mcp
+        mcp:
+          - id: no-such-server
+            transport: stdio
+            command: ["/definitely-not-a-real-binary-agentcore-test"]
+            allow: ["*"]
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything" }
+        providers:
+          call:   { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
+          llm:
+            - { kind: fake, model: fake-model, as: reply }
+        """;
+
+    [Fact]
+    public async Task AnMcpServerThatCannotBeReachedFailsTheStartNamingTheServer()
+    {
+        var builder = WebApplication.CreateSlimBuilder();
+        builder.WebHost.UseUrls("http://127.0.0.1:0");
+        builder.Logging.ClearProviders();
+
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(() => builder.AddAgentCoreHostAsync(
+            options =>
+            {
+                options.Configuration = ConfigurationLoader.LoadYaml(McpDocument);
+                options.UseChatClients(_ => new FakeChatClientFactory());
+            },
+            TestContext.Current.CancellationToken).AsTask());
+
+        Assert.Contains("no-such-server", failure.Message, StringComparison.Ordinal);
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // The CreateCase stub. It fills a gap and never takes a name the host wanted.
     // ---------------------------------------------------------------------------------------------
 
