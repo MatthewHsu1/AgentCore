@@ -200,22 +200,16 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
         return new ToolRegistration(id, tool.Description, () => renamed);
     }
 
-    /// <summary>Walks to the innermost cause, so a wrapped SDK message never buries the real one.</summary>
+    /// <summary>Names the innermost cause, so a wrapped SDK message never buries the real one.</summary>
     /// <param name="ex">The exception a transport or connection step threw.</param>
     /// <returns>
-    /// <paramref name="ex"/>'s own message, plus the deepest <see cref="Exception.InnerException"/>'s
-    /// message when one exists and differs — the SDK's own text ("Failed to connect transport.")
-    /// names no cause, and the actual one (a missing executable, a refused socket) is what a
-    /// deployer needs to fix.
+    /// <paramref name="ex"/>'s own message, plus <see cref="Exception.GetBaseException"/>'s message
+    /// when that differs — the SDK's own text ("Failed to connect transport.") names no cause, and
+    /// the actual one (a missing executable, a refused socket) is what a deployer needs to fix.
     /// </returns>
     private static string Describe(Exception ex)
     {
-        var cause = ex;
-        while (cause.InnerException is not null)
-        {
-            cause = cause.InnerException;
-        }
-
+        var cause = ex.GetBaseException();
         return ReferenceEquals(cause, ex) ? ex.Message : $"{ex.Message} ({cause.Message})";
     }
 
