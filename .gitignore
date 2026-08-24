@@ -509,6 +509,6 @@ CLAUDE.md
 docs/
 .superpowers/
 
-# A deployment's own document. The shipped example stays generic; a real endpoint,
-# stack, and knowledge base belong to a deployment and never to this repository.
 src/AgentCore.Api/config/local.yaml
+
+.serena
