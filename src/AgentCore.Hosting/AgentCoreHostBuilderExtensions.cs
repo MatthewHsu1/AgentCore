@@ -4,8 +4,7 @@ using AgentCore.AspNetCore.Vendors.TelnyxRelay;
 using AgentCore.Hosting.Secrets;
 using AgentCore.Infrastructure.Audit.Postgres;
 using AgentCore.Infrastructure.Evaluation.OpenAiModeration;
-using AgentCore.Infrastructure.Knowledge.FileStore;
-using AgentCore.Infrastructure.Knowledge.VectorData.Zilliz;
+using AgentCore.Infrastructure.Knowledge.VectorData.Qdrant;
 using AgentCore.Infrastructure.Llm.OpenAI;
 using AgentCore.Infrastructure.Secrets;
 using AgentCore.Infrastructure.Telemetry.Grafana;
@@ -53,13 +52,9 @@ public static class AgentCoreHostBuilderExtensions
 
         builder.Logging.AddConsole();
 
-        // One outbound HTTP pipeline for the life of the process, built by the container so the
-        // container closes it.
         builder.Services.AddSingleton(provider => new AgentCoreHttpClients(
             loggers: provider.GetRequiredService<ILoggerFactory>()));
 
-        // The container's own services reach the defaults here, so nothing has to be built by hand
-        // before the container exists and then threaded through a closure to be found again.
         builder.Services
             .AddOptions<AgentCoreOptions>()
             .Configure<AgentCoreHttpClients, IConfiguration, ILoggerFactory>(
@@ -68,12 +63,8 @@ public static class AgentCoreHostBuilderExtensions
 
         builder.Services.AddAgentCore(options => configure?.Invoke(options));
 
-        // Runs after every seam above has been written, and only settles what needs the final word.
         builder.Services.PostConfigure<AgentCoreOptions>(FinishConfiguring);
 
-        // The relay socket is the inbound path of a real call, and a dead peer must not hold a
-        // session for the shipped two-minute default. This sets the twenty-second keep-alive
-        // numbers a call needs.
         builder.Services.AddAgentCoreWebSockets();
 
         return builder;
@@ -108,9 +99,11 @@ public static class AgentCoreHostBuilderExtensions
         // providers.llm[].kind picks the adapter for each entry.
         options.UseChatClients(new OpenAiChatClientAdapter());
 
-        // providers.knowledge.search and providers.knowledge.documents pick the adapter for each
-        // port.
-        options.UseKnowledgeStores(new FileSystemKnowledgeAdapter(), new ZillizKnowledgeAdapter(httpClients));
+        // providers.embeddings.kind picks the adapter.
+        options.UseEmbeddings(new OpenAiEmbeddingGeneratorAdapter());
+
+        // providers.knowledge.kind picks the adapter.
+        options.UseKnowledgeStores(new QdrantKnowledgeAdapter());
 
         // providers.moderation.kind picks the adapter.
         options.UseModeration(new OpenAiModerationAdapter(httpClients));
@@ -142,13 +135,6 @@ public static class AgentCoreHostBuilderExtensions
     /// <summary>Opens the client a <c>transport: http</c> MCP server is reached on.</summary>
     /// <param name="pipeline">The one outbound pipeline every adapter shares.</param>
     /// <returns>The client. The pipeline owns the handler under it, so nothing here disposes it.</returns>
-    /// <remarks>
-    /// This takes the handler chain rather than a whole client, so MCP keeps the proxy settings, the
-    /// certificate configuration, and the logging every other outbound call gets — but not
-    /// <see cref="AgentCoreHttpClients.RequestDeadline"/>. MCP over HTTP holds a stream open for as
-    /// long as the session lasts, and a hundred-second deadline on the client would cut that stream
-    /// every hundred seconds. What bounds an MCP call is <c>mcp[].callTimeoutSeconds</c>.
-    /// </remarks>
     internal static HttpClient McpHttpClient(AgentCoreHttpClients pipeline)
     {
         ArgumentNullException.ThrowIfNull(pipeline);
@@ -173,11 +159,6 @@ public static class AgentCoreHostBuilderExtensions
 
     /// <summary>Registers the example document's binding, when the host registered none.</summary>
     /// <param name="options">The options to bind the name on.</param>
-    /// <remarks>
-    /// This is scaffolding for the shipped example document and not a feature. Replace it by binding
-    /// <see cref="CreateCaseBinding"/> in the <c>configure</c> callback, or drop it by pointing
-    /// <see cref="ConfigurationPathKey"/> at a document that declares no <c>create_case</c> tool.
-    /// </remarks>
     private static void AddCreateCaseStub(AgentCoreOptions options)
     {
         if (options.Bindings.Names.Contains(CreateCaseBinding, StringComparer.Ordinal))

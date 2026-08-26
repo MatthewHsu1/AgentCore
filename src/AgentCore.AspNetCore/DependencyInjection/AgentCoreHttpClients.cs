@@ -79,12 +79,12 @@ public sealed class AgentCoreHttpClients : IHttpClientFactory, IHttpMessageHandl
     }
 
     /// <summary>Opens one client of this pipeline.</summary>
-    /// <param name="name">The vendor name, such as <c>agentcore.zilliz</c>. Any name is served.</param>
+    /// <param name="name">The vendor name, such as <c>agentcore.openai</c>. Any name is served.</param>
     /// <returns>The client. It carries the deadline and the retry, and no base address.</returns>
     public HttpClient CreateClient(string name) => _clients.CreateClient(name);
 
     /// <summary>Opens the handler chain of one client, for a caller that adds a handler of its own.</summary>
-    /// <param name="name">The vendor name, such as <c>agentcore.zilliz</c>. Any name is served.</param>
+    /// <param name="name">The vendor name, such as <c>agentcore.openai</c>. Any name is served.</param>
     /// <returns>The chain. This pipeline owns it, so a caller never disposes it.</returns>
     public HttpMessageHandler CreateHandler(string name)
         => ((IHttpMessageHandlerFactory)_clients).CreateHandler(name);

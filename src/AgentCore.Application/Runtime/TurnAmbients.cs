@@ -1,5 +1,6 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.State;
+using AgentCore.Domain.Knowledge;
 
 namespace AgentCore.Application.Runtime;
 
@@ -27,7 +28,10 @@ internal sealed record TurnAmbients
     /// <summary>Gets the turn the tools are running inside.</summary>
     public TurnContext? Context { get; init; }
 
-    /// <summary>Opens all four over this flow of execution.</summary>
+    /// <summary>Gets what the turn may see of the knowledge base, or <see langword="null"/>.</summary>
+    public KnowledgeScope? Knowledge { get; init; }
+
+    /// <summary>Opens the four a turn owns, and carries every other ambient through unchanged.</summary>
     /// <param name="state">The state document the call reads and writes.</param>
     /// <param name="screen">The screen this call draws on, or <see langword="null"/> when it has none.</param>
     /// <param name="onToolFailure">What to do with a tool failure the run reports.</param>
@@ -44,7 +48,7 @@ internal sealed record TurnAmbients
         ArgumentNullException.ThrowIfNull(onToolFailure);
         ArgumentNullException.ThrowIfNull(context);
 
-        return Push(new TurnAmbients
+        return Push((Ambient.Value ?? None) with
         {
             State = state,
             Screen = screen,

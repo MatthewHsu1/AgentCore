@@ -633,6 +633,9 @@
             "instructions": {
               "type": "string",
               "description": "The stable cached prefix. Each stage appends a delta below it."
+            },
+            "knowledge": {
+              "$ref": "#/$defs/agentKnowledge"
             }
           }
         },
@@ -642,6 +645,30 @@
           "items": {
             "$ref": "#/$defs/agent"
           }
+        }
+      }
+    },
+    "agentKnowledge": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": [
+            "prefetch",
+            "tool"
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "description": "How many cards to retrieve. The store fetches once per search and every agent shares that one fetch, so no agent may ask for more than the store itself retrieves."
+        },
+        "citations": {
+          "type": "boolean"
+        },
+        "scoped": {
+          "type": "boolean"
         }
       }
     },
@@ -660,6 +687,9 @@
         },
         "model": {
           "$ref": "#/$defs/modelRef"
+        },
+        "knowledge": {
+          "$ref": "#/$defs/agentKnowledge"
         },
         "tools": {
           "type": "array",
@@ -870,6 +900,10 @@
           "$ref": "#/$defs/vendorProvider",
           "description": "The adapter that reads what the caller said through a moderation endpoint, such as openai. A document that names none moderates nothing."
         },
+        "embeddings": {
+          "$ref": "#/$defs/embeddingProvider",
+          "description": "The vendor that turns a query into a vector, such as openai. A knowledge store that ranks by vector needs one."
+        },
         "knowledge": {
           "$ref": "#/$defs/knowledgeProvider"
         },
@@ -1001,39 +1035,53 @@
         }
       }
     },
-    "knowledgeProvider": {
+    "embeddingProvider": {
       "type": "object",
-      "description": "One adapter for each knowledge port, and what those adapters read.",
+      "description": "The vendor that turns a query into a vector, and the model it uses.",
+      "required": [
+        "kind",
+        "model"
+      ],
       "additionalProperties": false,
       "properties": {
-        "search": {
+        "kind": {
           "type": "string",
           "minLength": 1,
-          "default": "filesystem",
-          "description": "The adapter that answers IKnowledgeRetrievalPort, such as filesystem or zilliz."
+          "description": "The vendor, such as openai."
         },
-        "documents": {
+        "model": {
           "type": "string",
           "minLength": 1,
-          "default": "filesystem",
-          "description": "The adapter that answers IDocumentStorePort, such as filesystem."
+          "description": "The model name the vendor knows, such as text-embedding-3-small."
         },
-        "root": {
+        "dimensions": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The vector width to ask the vendor for. Omit it for the model's own width. It must match the width the knowledge collection was built with."
+        }
+      }
+    },
+    "knowledgeProvider": {
+      "type": "object",
+      "description": "The adapter that answers IKnowledgeRetrievalPort, and what it reads.",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
           "type": "string",
           "minLength": 1,
-          "default": "./kb",
-          "description": "The root of the knowledge-base tree. The tree is its own Git repository."
+          "default": "qdrant",
+          "description": "The adapter that answers IKnowledgeRetrievalPort, such as qdrant."
         },
         "endpoint": {
           "type": "string",
           "minLength": 1,
-          "description": "The cluster URL the zilliz adapter reads."
+          "description": "The Qdrant endpoint, such as https://qdrant.example.com:6334."
         },
         "collection": {
           "type": "string",
           "minLength": 1,
-          "default": "kb_chunks",
-          "description": "The collection the zilliz adapter reads."
+          "default": "kb",
+          "description": "The collection to read. Always the alias, never a concrete collection."
         }
       }
     },

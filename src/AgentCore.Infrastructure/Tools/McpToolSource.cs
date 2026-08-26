@@ -2,7 +2,7 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
-using AgentCore.Application.Tools;
+using AgentCore.Application.Tools.Registry;
 using AgentCore.Infrastructure.Tools.Mcp;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Client;

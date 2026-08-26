@@ -37,6 +37,16 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      qdrant:
+        image: qdrant/qdrant:v1.19.0
+        ports:
+          - 6334:6334
+        options: >-
+          --health-cmd "bash -c '</dev/tcp/127.0.0.1/6333'"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
 
@@ -59,8 +69,6 @@ jobs:
           dotnet restore
           dotnet tool restore
 
-      # TreatWarningsAsErrors and the public API analyzer both run here. A new public member with no
-      # line in PublicAPI.Unshipped.txt fails this step, which is rule 2 of section 5.1.
       - name: Build
         run: dotnet build --no-restore -c Release
 
@@ -76,15 +84,12 @@ jobs:
              --filter "FullyQualifiedName!~AgentCore.Evals"
         env:
           AGENTCORE_TEST_POSTGRES: Host=localhost;Port=5432;Username=postgres;Password=ci
+          AGENTCORE_TEST_QDRANT: localhost:6334
 
-      # The harness self-test. The golden-set suites skip here, because this repository names no
-      # dataset. A recall below 1 on the fixture means the harness broke, not that retrieval is weak.
       - name: Offline evals
         run: dotnet test --no-build -c Release tests/AgentCore.Evals
              --filter "Category!=Gate"
 
-      # The gate reads what the step above wrote, so it runs as a second command. A test run gives no
-      # order, and the gate needs the results to exist.
       - name: Score gate
         run: dotnet test --no-build -c Release tests/AgentCore.Evals
              --filter "Category=Gate"

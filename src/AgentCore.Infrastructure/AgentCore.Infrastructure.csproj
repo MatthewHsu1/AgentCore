@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <IsPackable>true</IsPackable>
-    <Description>Outbound adapters: OpenAI, Zilliz, Telnyx call control, Postgres, B2, Git.</Description>
+    <Description>Outbound adapters</Description>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,6 +16,8 @@
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="Microsoft.Extensions.VectorData.Abstractions" />
+    <PackageReference Include="Qdrant.Client" />
+    <PackageReference Include="CommunityToolkit.VectorData.Qdrant" />
     <PackageReference Include="ModelContextProtocol.Core" />
     <PackageReference Include="OpenAI" />
     <PackageReference Include="Npgsql" />

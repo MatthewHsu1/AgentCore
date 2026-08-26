@@ -19,7 +19,7 @@ public sealed class CompiledAgent
 
     internal CompiledAgent(
         AgentCoreConfiguration configuration,
-        CompiledAgentShape shape,
+        CompileTableRow row,
         AIAgent entry,
         Dictionary<string, AIAgent> byAgentId,
         Dictionary<string, string> agentIdByStage,
@@ -28,7 +28,8 @@ public sealed class CompiledAgent
         Func<AIAgent, AIAgent> turnLayers)
     {
         Configuration = configuration;
-        Shape = shape;
+        Shape = row.Shape;
+        SessionCarriesHistory = row.SessionCarriesHistory;
         Agent = entry;
         SpokenBy = spokenBy;
         History = history;
@@ -45,11 +46,11 @@ public sealed class CompiledAgent
         }
     }
 
-    /// <summary>Whether a row answers its runs out of store 1 on its own session.</summary>
-    /// <param name="shape">The row of the compile table.</param>
-    /// <returns>Whether the call rides the session, rather than the request messages.</returns>
-    internal static bool SessionCarriesHistory(CompiledAgentShape shape)
-        => shape is CompiledAgentShape.SingleAgent or CompiledAgentShape.Policy;
+    /// <summary>
+    /// Gets whether the row answers its runs out of store 1 on its own session, rather than the
+    /// request messages.
+    /// </summary>
+    internal bool SessionCarriesHistory { get; }
 
     /// <summary>Gets the document this agent was compiled from.</summary>
     public AgentCoreConfiguration Configuration { get; }

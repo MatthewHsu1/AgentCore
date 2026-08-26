@@ -5,14 +5,9 @@ using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Tools.Builtin;
 
-/// <summary>The adapters a built-in may need. A built-in uses none, one, or two of them.</summary>
-/// <param name="Retrieval">The adapter <c>knowledge.search</c> ranks with, or <see langword="null"/>.</param>
-/// <param name="Documents">The adapter the three document built-ins open, or <see langword="null"/>.</param>
+/// <summary>The adapters a built-in may need. A built-in uses none or more of them.</summary>
 /// <param name="ChatClients">The factory a shipped agent runs on, or <see langword="null"/> when the host bound none.</param>
-public sealed record BuiltinToolPorts(
-    IKnowledgeRetrievalPort? Retrieval,
-    IDocumentStorePort? Documents,
-    IChatClientFactory? ChatClients);
+public sealed record BuiltinToolPorts(IChatClientFactory? ChatClients);
 
 /// <summary>What every <c>uses:</c> name AgentCore ships has, whatever kind of thing it builds.</summary>
 internal interface IToolDefinition

@@ -1,9 +1,5 @@
 using System.Diagnostics;
-using System.Globalization;
 using System.Runtime.CompilerServices;
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
@@ -55,21 +51,6 @@ public sealed class CallSession : IConversationPort
     internal const string ModerationFaultedReason = "the moderation endpoint threw.";
 
     /// <summary>
-    /// What opens the <c>system</c> message a graph row's history rides on.
-    /// </summary>
-    internal const string HistoryPreamble = "Conversation so far:\n";
-
-    /// <summary>
-    /// What names the caller in that message.
-    /// </summary>
-    internal const string CallerLinePrefix = "Caller: ";
-
-    /// <summary>
-    /// What names this agent in that message.
-    /// </summary>
-    internal const string AgentLinePrefix = "You: ";
-
-    /// <summary>
     /// How long the work after the reply may take before it is abandoned.
     /// </summary>
     private static readonly TimeSpan TurnCompletionTimeout = TimeSpan.FromSeconds(5);
@@ -79,7 +60,7 @@ public sealed class CallSession : IConversationPort
     private readonly StateExtractor? _extractor;
     private readonly CounterStateWriter _counters;
     private readonly TimeProvider _time;
-    private readonly CallObserverDispatcher _observers;
+    private readonly CallEventChain _events;
     private readonly DateTimeOffset _startedAt;
     private readonly AgentCoreChatHistoryProvider _history;
     private readonly bool _sessionCarriesHistory;
@@ -88,9 +69,7 @@ public sealed class CallSession : IConversationPort
     private CancellationTokenSource? _runCancellation;
     private Interruption? _interruption;
     private long? _amendableOrdinal;
-    private long _ordinal;
     private int _running;
-    private int _ended;
 
     // Whether the running turn has already handed the host something to speak. One rule for both
     // run shapes: a run that has handed the host nothing cannot be the turn the caller was hearing,
@@ -128,7 +107,7 @@ public sealed class CallSession : IConversationPort
 
         _history = compiled.History;
 
-        _sessionCarriesHistory = CompiledAgent.SessionCarriesHistory(compiled.Shape);
+        _sessionCarriesHistory = compiled.SessionCarriesHistory;
 
         _extractor = extractor;
 
@@ -138,7 +117,7 @@ public sealed class CallSession : IConversationPort
 
         // The seam is optional and it has a working default. A host that binds nothing to watch the
         // call still answers it, and the library never throws for want of an observer.
-        _observers = observers ?? new CallObserverDispatcher([]);
+        _events = new CallEventChain(callId, observers ?? new CallObserverDispatcher([]), timeProvider);
 
         _startedAt = timeProvider.GetUtcNow();
 
@@ -148,11 +127,14 @@ public sealed class CallSession : IConversationPort
 
         State = new StateDocument(compiled.Configuration, _policy?.Stage);
 
-        // Writer order, step 1.
+        // The writers run in a fixed order, and this is its only record: const slots land before
+        // any turn, then each turn applies tool results, the extractor, the clock fields and the
+        // counters, in CompleteTurnAsync. Guards read the finished document, so the order is
+        // load-bearing.
         ConstStateWriter.Apply(State);
 
         // Ordinal 0 of the call. It started, and no turn has run.
-        _ = Raise(CallEventKind.CallStarted, _startedAt, turnIndex: null);
+        _ = _events.Raise(CallEventKind.CallStarted, _startedAt, turnIndex: null);
     }
 
     /// <summary>
@@ -346,7 +328,7 @@ public sealed class CallSession : IConversationPort
                     updates.Add(update);
 
                     var content = update.AsChatResponseUpdate();
-                    if (CarriesContent(content) && Speaks(update))
+                    if (TurnMessages.CarriesContent(content) && Speaks(update))
                     {
                         // Marked before the yield, not after it: an async iterator only resumes past
                         // a yield once the host comes back for the next update, and by then the host
@@ -411,7 +393,7 @@ public sealed class CallSession : IConversationPort
             // Both conditions, and in this order. The adapter's answer only ever removes the
             // in-flight path: an adapter that knows the caller was hearing an earlier turn skips it
             // outright, and one that says nothing leaves this session's own audibility test to
-            // decide, exactly as before.
+            // decide.
             if (cutsRunningTurn && _runCancellation is { } cancellation && _runIsAudible)
             {
                 _interruption = new Interruption(utteranceUntilInterrupt, durationUntilInterrupt);
@@ -419,7 +401,7 @@ public sealed class CallSession : IConversationPort
                 return true;
             }
 
-            return AmendLastTurn(utteranceUntilInterrupt, durationUntilInterrupt);
+            return AmendLastTurn(new Interruption(utteranceUntilInterrupt, durationUntilInterrupt));
         }
     }
 
@@ -436,7 +418,7 @@ public sealed class CallSession : IConversationPort
     {
         // The event is written before the flag moves. A value outside the closed set therefore ends
         // no call and writes nothing.
-        var wrote = EndCall(reason, _time.GetUtcNow());
+        var wrote = _events.EndCall(reason, _time.GetUtcNow());
         IsComplete = true;
         return wrote;
     }
@@ -466,25 +448,12 @@ public sealed class CallSession : IConversationPort
                 // The provider serves every call, so it is told here which call this session
                 // carries and where THIS call's dropped writes go. A session that lost the race
                 // above opens nothing: it is discarded, and no write was ever queued against it.
-                _history.BeginCall(session, CallId, RecordDroppedTranscriptWrite);
+                _history.BeginCall(session, CallId, _events.RaiseDroppedTranscriptWrite);
             }
 
             return _agentSession;
         }
     }
-
-    /// <summary>
-    /// Raises the fact of one store 1 write the backing store refused.
-    /// </summary>
-    private void RecordDroppedTranscriptWrite(int turnIndex, Exception exception)
-        => RaiseDiagnostic(
-            CallEventKind.TranscriptWriteFailed,
-            _time.GetUtcNow(),
-            turnIndex,
-            payload: new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                [CallEventPayloadKeys.Reason] = $"{exception.GetType().Name}: {exception.Message}",
-            });
 
     /// <summary>
     /// Reads the session one run is handed.
@@ -506,7 +475,7 @@ public sealed class CallSession : IConversationPort
         => TurnAmbients.Enter(
             State,
             _renderPort,
-            failure => RecordToolFailure(turn.Index, failure),
+            failure => _events.RaiseToolFailure(turn.Index, failure),
             TurnContextOf(turn));
 
     /// <summary>
@@ -588,7 +557,7 @@ public sealed class CallSession : IConversationPort
         // prompt already in it.
         List<ChatMessage> request = _sessionCarriesHistory
             ? [spoken]
-            : GraphHistory(_history.Read(session)) is { } rendered ? [rendered, spoken] : [spoken];
+            : TurnMessages.GraphHistory(_history.Read(session)) is { } rendered ? [rendered, spoken] : [spoken];
 
         // One turn is one span. The call id rides here, on a span attribute, because T61 refuses it
         // on a metric. The span is disposed in the finally of whichever run method opened the turn.
@@ -603,33 +572,6 @@ public sealed class CallSession : IConversationPort
             State.TurnIndex,
             activity,
             _time.GetTimestamp());
-    }
-
-    /// <summary>
-    /// Renders the call so far into the one role a workflow node still recognises.
-    /// </summary>
-    /// <param name="history">The caller-facing history of this call, oldest first.</param>
-    /// <returns>One <c>system</c> message, or <see langword="null"/> on the first turn of a call.</returns>
-    private static ChatMessage? GraphHistory(IReadOnlyList<ChatMessage> history)
-    {
-        StringBuilder rendered = new();
-
-        foreach (var message in history)
-        {
-            if (message.Text is not { Length: > 0 } text)
-            {
-                continue;
-            }
-
-            rendered
-                .Append(message.Role == ChatRole.User ? CallerLinePrefix : AgentLinePrefix)
-                .Append(text)
-                .Append('\n');
-        }
-
-        return rendered.Length == 0
-            ? null
-            : new ChatMessage(ChatRole.System, HistoryPreamble + rendered.ToString().TrimEnd('\n'));
     }
 
     /// <summary>
@@ -672,16 +614,15 @@ public sealed class CallSession : IConversationPort
     /// <summary>
     /// Records a barge-in against the turn that finished last, and corrects its record.
     /// </summary>
-    /// <param name="utteranceUntilInterrupt">The text the caller actually heard.</param>
-    /// <param name="durationUntilInterrupt">How much of the reply played, as the relay reported it.</param>
+    /// <param name="cut">What the relay reported: the heard text and the played duration.</param>
     /// <returns>
     /// <see langword="true"/> when the turn was amended, and <see langword="false"/> when there was
     /// no turn to amend.
     /// </returns>
-    private bool AmendLastTurn(string utteranceUntilInterrupt, TimeSpan durationUntilInterrupt)
+    private bool AmendLastTurn(Interruption cut)
     {
         // The chain has already closed, so nothing may be appended behind call.ended.
-        if (Volatile.Read(ref _ended) == 1
+        if (_events.HasEnded
             || _amendableOrdinal is not { } completedOrdinal
             || LastTurn is not { InterruptedAfter: null } finished
             || Session() is not { } session)
@@ -689,7 +630,7 @@ public sealed class CallSession : IConversationPort
             return false;
         }
 
-        var heard = utteranceUntilInterrupt.Trim();
+        var heard = cut.HeardText.Trim();
 
         // Store 1 keeps the reply row and rewrites its words, rather than replacing the turn's
         // messages. The turn it corrects ran to its end, so every tool call it made is already
@@ -699,24 +640,15 @@ public sealed class CallSession : IConversationPort
         // turn that completed with words left a reply row holding them. The answer is still read,
         // because the row below names a HASH of those words — a chain that proves words store 1
         // does not hold proves nothing, so no cut means no amendment.
-        if (!_history.TruncateLastReply(session, heard, durationUntilInterrupt))
+        if (!_history.TruncateLastReply(session, heard, cut.PlayedDuration))
         {
             return false;
         }
 
-        LastTurn = finished with { ReplyText = heard, InterruptedAfter = durationUntilInterrupt };
+        LastTurn = finished with { ReplyText = heard, InterruptedAfter = cut.PlayedDuration };
 
-        _ = Raise(
-            CallEventKind.ReplyInterrupted,
-            _time.GetUtcNow(),
-            finished.TurnIndex,
-            amends: completedOrdinal,
-            payload: new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                [AuditPayloadKeys.UtteranceUntilInterruptSha256] = AuditHash.OfText(heard).Value,
-                [AuditPayloadKeys.DurationUntilInterruptMs] =
-                    ((long)durationUntilInterrupt.TotalMilliseconds).ToString(CultureInfo.InvariantCulture),
-            });
+        _events.RaiseReplyInterrupted(
+            finished.TurnIndex, _time.GetUtcNow(), completedOrdinal, heard, cut.PlayedDuration);
 
         return true;
     }
@@ -750,17 +682,6 @@ public sealed class CallSession : IConversationPort
         => _compiled.SpokenBy is not { } spoken
             || (update.AuthorName is { } author && spoken.Contains(author))
             || update.AdditionalProperties?.Contains<TurnDisposition>() is true;
-
-    /// <summary>Reads whether one update carries something a host needs.</summary>
-    /// <param name="update">One update of the run.</param>
-    /// <returns>Whether the host reads it.</returns>
-    /// <remarks>
-    /// Section 8.6: seven of the 47 updates of one 40-fragment reply are lifecycle events and carry
-    /// no content. This drops those, and it drops an update whose only content is empty text. Every
-    /// other content passes, so a tool call still reaches a host that shows one.
-    /// </remarks>
-    private static bool CarriesContent(ChatResponseUpdate update)
-        => update.Contents.Any(content => content is not TextContent text || text.Text.Length > 0);
 
     /// <summary>Runs every writer, then lets the machine pick the stage of the next turn.</summary>
     /// <param name="turn">The turn that just spoke.</param>
@@ -808,10 +729,10 @@ public sealed class CallSession : IConversationPort
         // takes the lower ordinal. The verdict is known before the model runs, which is the one rule
         // that separates prompt.flagged from reply.interrupted: it amends nothing.
         var refused = disposition?.Moderation is ModerationOutcome.Flagged;
-        RaiseModeration(turn, disposition);
+        _events.RaiseModeration(turn.Index, disposition);
 
-        // R1 reaches the turn through the fallback layer now, and a fault above every chat client —
-        // a graph that matched no edge — still reaches the catch in the run methods. Both are the
+        // R1 reaches the turn through the fallback layer, and a fault above every chat client — a
+        // graph that matched no edge — still reaches the catch in the run methods. Both are the
         // same row-six fact.
         toolFault ??= disposition is { Fallback: FallbackCause.Faulted, FallbackReason: { } caught }
             ? caught
@@ -847,7 +768,7 @@ public sealed class CallSession : IConversationPort
         // the same endedAt every other event of the turn carries.
         if (toolFault is null && failure is not null)
         {
-            RaiseDiagnostic(CallEventKind.EmptyReply, _time.GetUtcNow(), turn.Index);
+            _events.RaiseDiagnostic(CallEventKind.EmptyReply, _time.GetUtcNow(), turn.Index);
         }
 
         // What this turn adds to the transcript. It is built here and written at the end of the
@@ -860,36 +781,38 @@ public sealed class CallSession : IConversationPort
         // one value, so what counts as words the caller heard is decided once.
         var heard = reply.Length > 0 ? new ChatMessage(ChatRole.Assistant, reply) : null;
 
+        // Rows 3 and 4 record the caller-facing turn alone, so `written` stays empty for them: a
+        // node's tool pair and a node's line to the next node are neither said nor heard, and the
+        // commit below takes the heard reply straight.
         List<ChatMessage> written = [];
-        if (!_sessionCarriesHistory)
+        if (_sessionCarriesHistory)
         {
-            // Rows 3 and 4 record the caller-facing turn alone, so they keep none of the run's own
-            // messages: a node's tool pair and a node's line to the next node are neither said nor
-            // heard. The write below takes the heard reply straight.
-        }
-        else if (interruptedAfter is not null || failure is not null)
-        {
-            // The transcript holds what the caller heard. A run that stopped mid-round would otherwise
-            // leave a tool call with no result behind, and the next turn would send it. So the pairs
-            // that finished are kept and only an unpaired call is dropped: a side effect that ran must
-            // stay visible to the next turn. livekit/agents fixed the same defect in issue 3702.
-            written = [.. FinishedToolMessages(response.Messages)];
-
-            if (heard is not null)
+            if (interruptedAfter is not null || failure is not null)
             {
-                written.Add(heard);
+                // The transcript holds what the caller heard. A run that stopped mid-round would
+                // otherwise leave a tool call with no result behind, and the next turn would send
+                // it. So the pairs that finished are kept and only an unpaired call is dropped: a
+                // side effect that ran must stay visible to the next turn. livekit/agents fixed the
+                // same defect in issue 3702.
+                written = [.. TurnMessages.FinishedToolMessages(response.Messages)];
+
+                if (heard is not null)
+                {
+                    written.Add(heard);
+                }
+            }
+            else
+            {
+                written = [.. response.Messages];
             }
         }
-        else
-        {
-            written = [.. response.Messages];
-        }
 
-        // Writer order, step 2.
+        // The per-turn writers run from here, in the order the constructor documents: tool results
+        // first.
         ApplyToolResults(response.Messages);
 
-        // Writer order, step 3. The deadline is here and not on the whole method, because the raise
-        // of the turn's events and the stage advance must always run.
+        // The extractor writes next. Its deadline is here and not on the whole method, because the
+        // raise of the turn's events and the stage advance must always run.
         string? extractionFailure = null;
 
         // A refused turn runs no extractor. The words moderation flagged are the extractor's only
@@ -915,7 +838,7 @@ public sealed class CallSession : IConversationPort
             // Section 8.7, row two: leave the slots unchanged, report once for the turn, and continue
             // the call. State extraction must never drop a call. The reason rides on the event
             // because the line an operator reads is the same one the turn loop used to write itself.
-            RaiseDiagnostic(
+            _events.RaiseDiagnostic(
                 CallEventKind.ExtractionFailed,
                 _time.GetUtcNow(),
                 turn.Index,
@@ -925,13 +848,13 @@ public sealed class CallSession : IConversationPort
                 });
         }
 
-        // Writer order, step 4. The clock comes from the injected provider, so a test owns it. The
-        // same read stamps every audit event of this turn.
+        // The clock fields write next. The clock comes from the injected provider, so a test owns
+        // it. The same read stamps every audit event of this turn.
         var endedAt = _time.GetUtcNow();
         State.TurnIndex++;
         State.CallDurationSeconds = (endedAt - _startedAt).TotalSeconds;
 
-        // Writer order, step 5.
+        // The counters write last.
         _counters.Apply(State);
 
         var stageAfter = turn.StageBefore;
@@ -974,8 +897,8 @@ public sealed class CallSession : IConversationPort
 
             // Only now. The chain stores a hash of the spoken text and store 1 stores the text, so a
             // reply.interrupted raised before the append would name a hash of words nothing holds.
-            var completedOrdinal = WriteTurnEvents(
-                turn, endedAt, stageAfter, reply, spokenReply, toolFault, interruptedAfter);
+            var completedOrdinal = _events.WriteTurnEvents(
+                turn.Index, endedAt, turn.StageBefore, stageAfter, reply, spokenReply, toolFault, interruptedAfter);
 
             // A turn one barge-in already cut is not amendable again, so it is not published here.
             _amendableOrdinal = interruptedAfter is null ? completedOrdinal : null;
@@ -997,7 +920,7 @@ public sealed class CallSession : IConversationPort
             // is the only state this window can be reached in.
             if (interruption is null
                 && _interruption is { } late
-                && AmendLastTurn(late.HeardText, late.PlayedDuration)
+                && AmendLastTurn(late)
                 && LastTurn is { } amended)
             {
                 // The amendment republished LastTurn, so the turn this method returns and the
@@ -1034,7 +957,7 @@ public sealed class CallSession : IConversationPort
             // The machine reached a terminal stage, so the call is over and the chain closes here.
             // The stage rides as detail, because the reason a report counts is the same one for
             // every terminal stage the document declares.
-            EndCall(CallEndReason.AgentCompleted, endedAt, stageAfter);
+            _events.EndCall(CallEndReason.AgentCompleted, endedAt, stageAfter);
         }
 
         return result;
@@ -1050,242 +973,6 @@ public sealed class CallSession : IConversationPort
         (_, not null) => AgentCoreTelemetry.OutcomeInterrupted,
         _ => AgentCoreTelemetry.OutcomeCompleted,
     };
-
-    /// <summary>Raises the durable facts of one finished turn, in the order they happened.</summary>
-    /// <param name="turn">The turn that just spoke.</param>
-    /// <param name="endedAt">The moment the turn ended.</param>
-    /// <param name="stageAfter">The stage the machine holds after the turn.</param>
-    /// <param name="reply">The text the caller heard.</param>
-    /// <param name="spokenReply">The whole reply the model produced.</param>
-    /// <param name="toolFault">The message of the fault, or <see langword="null"/>.</param>
-    /// <param name="interruptedAfter">The played duration, or <see langword="null"/>.</param>
-    /// <returns>
-    /// The ordinal of the <c>turn.completed</c> fact, so a barge-in that arrives after this turn
-    /// already ended can name it through <see cref="CallEvent.AmendsOrdinal"/>.
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// A barge-in raises two facts and not one. T23: the chain is append-only, so an amendment is a
-    /// second event that references the first, and <c>reply.interrupted</c> names the ordinal of the
-    /// <c>turn.completed</c> event it corrects. It carries the text the caller ACTUALLY HEARD, which
-    /// the relay reported and nothing here estimated. See item 6a. A barge-in the vendor reports
-    /// only after this turn ended raises the very same pair, from <see cref="AmendLastTurn"/>.
-    /// </para>
-    /// <para>
-    /// The tool fault of section 8.7 row six is raised here rather than where the run caught it,
-    /// because the chain stores it: every stored fact of one turn carries the single
-    /// <paramref name="endedAt"/> read, and its ordinal is allocated in the order the chain holds
-    /// the facts.
-    /// </para>
-    /// </remarks>
-    private long WriteTurnEvents(
-        Turn turn,
-        DateTimeOffset endedAt,
-        string stageAfter,
-        string reply,
-        string spokenReply,
-        string? toolFault,
-        TimeSpan? interruptedAfter)
-    {
-        if (toolFault is not null)
-        {
-            // Section 8.7 row six, at TURN altitude: this run ended, the caller heard the fallback,
-            // and the call lives. It is a different fact from the tool calls that failed inside it,
-            // which AuditingFunctionInvokingChatClient named one by one as they happened, and it is
-            // the only fact that says the TURN ended — no per-call row says that, and a fault that
-            // was never a tool call at all, such as the model transport, reaches only here.
-            //
-            // It carries no toolName and no toolCallId, and that absence is load-bearing rather than
-            // a gap. The fault arrives through ExceptionDispatchInfo with no function name on it, so
-            // a missing fact stays an absent key rather than reading "unknown". The same absence is
-            // what tells the two altitudes apart: LoggingCallObserver writes the one "log once" line
-            // of row six for this row and stays silent for the per-call rows, so an operator still
-            // reads exactly one line for one turn.
-            _ = Raise(
-                CallEventKind.ToolFailed,
-                endedAt,
-                turn.Index,
-                payload: new Dictionary<string, string>(StringComparer.Ordinal)
-                {
-                    [AuditPayloadKeys.ToolError] = toolFault,
-                });
-        }
-
-        var completed = Raise(
-            CallEventKind.TurnCompleted,
-            endedAt,
-            turn.Index,
-            payload: new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                [AuditPayloadKeys.ReplyTextSha256] = AuditHash.OfText(spokenReply).Value,
-                [AuditPayloadKeys.StageBefore] = turn.StageBefore,
-                [AuditPayloadKeys.StageAfter] = stageAfter,
-            });
-
-        if (interruptedAfter is not { } played)
-        {
-            return completed;
-        }
-
-        _ = Raise(
-            CallEventKind.ReplyInterrupted,
-            endedAt,
-            turn.Index,
-            amends: completed,
-            payload: new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                [AuditPayloadKeys.UtteranceUntilInterruptSha256] = AuditHash.OfText(reply).Value,
-                [AuditPayloadKeys.DurationUntilInterruptMs] =
-                    ((long)played.TotalMilliseconds).ToString(CultureInfo.InvariantCulture),
-            });
-
-        return completed;
-    }
-
-    /// <summary>Raises the fact of one tool call that did not run to completion.</summary>
-    /// <param name="turnIndex">The turn the call belongs to.</param>
-    /// <param name="failure">What the function-invocation loop saw.</param>
-    /// <remarks>
-    /// <para>
-    /// It is raised the moment it happens rather than at the end of the turn, so the ordinal it takes
-    /// sits before the <c>turn.completed</c> of the same turn and a reader walks the turn in the order
-    /// it ran. The clock is read here for the same reason: the failure happened now, and the turn may
-    /// still run for several more rounds.
-    /// </para>
-    /// <para>
-    /// It is called on the framework's own tool flow, which is not the flow the turn is awaiting.
-    /// Nothing here needs a lock for that: the ordinal is taken with an interlocked increment, the
-    /// dispatch never blocks and never propagates, and one session runs one turn at a time so no
-    /// second turn is allocating ordinals beside it.
-    /// </para>
-    /// <para>
-    /// Every fact of the failure goes in, because §9 makes this chain the only long-term record and
-    /// nothing else holds any of them. The tool call id is what tells two calls to the same tool in
-    /// one turn apart, and <see cref="AuditPayloadKeys.ToolFailureKind"/> is what lets a report count
-    /// an invented tool name apart from a tool that ran and threw.
-    /// </para>
-    /// </remarks>
-    private void RecordToolFailure(int turnIndex, ToolFailure failure)
-        => _ = Raise(
-            CallEventKind.ToolFailed,
-            _time.GetUtcNow(),
-            turnIndex,
-            payload: new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                [AuditPayloadKeys.ToolName] = failure.ToolName,
-                [AuditPayloadKeys.ToolCallId] = failure.ToolCallId,
-                [AuditPayloadKeys.ToolFailureKind] = ToolFailureKinds.ToToken(failure.Kind),
-                [AuditPayloadKeys.ToolError] = failure.Message,
-            });
-
-    /// <summary>Raises one durable fact of this call, and takes the next ordinal.</summary>
-    /// <param name="kind">What happened. The chain of D23 stores this one.</param>
-    /// <param name="occurredAt">When it happened.</param>
-    /// <param name="turnIndex">The turn it belongs to, or <see langword="null"/> for a call fact.</param>
-    /// <param name="amends">The ordinal this fact corrects, or <see langword="null"/>.</param>
-    /// <param name="payload">The detail the fact carries.</param>
-    /// <returns>The ordinal this fact took, so a later amendment can name it.</returns>
-    /// <remarks>
-    /// The session allocates the ordinal and not the sink, because the sink answers long after the
-    /// turn moved on. The counter is monotonic within one call and starts at zero, and a
-    /// diagnostic-only fact takes none, which is what keeps it gap-free.
-    /// </remarks>
-    private long Raise(
-        CallEventKind kind,
-        DateTimeOffset occurredAt,
-        int? turnIndex,
-        long? amends = null,
-        IReadOnlyDictionary<string, string>? payload = null)
-    {
-        var ordinal = Interlocked.Increment(ref _ordinal) - 1;
-
-        Dispatch(kind, occurredAt, turnIndex, ordinal, amends, payload);
-
-        return ordinal;
-    }
-
-    /// <summary>Raises one fact that is counted and logged and stored nowhere.</summary>
-    /// <param name="kind">What happened. The chain of D23 holds no row for it.</param>
-    /// <param name="occurredAt">When it happened.</param>
-    /// <param name="turnIndex">The turn it belongs to.</param>
-    /// <param name="payload">The detail the fact carries.</param>
-    /// <remarks>
-    /// It takes no ordinal on purpose. A diagnostic fact that consumed a number would leave a gap in
-    /// the chain the moment nothing stored it, so <see cref="CallEvent.Ordinal"/> stays null and the
-    /// numbers are the ones the chain held before the hook existed.
-    /// </remarks>
-    private void RaiseDiagnostic(
-        CallEventKind kind,
-        DateTimeOffset occurredAt,
-        int? turnIndex,
-        IReadOnlyDictionary<string, string>? payload = null)
-        => Dispatch(kind, occurredAt, turnIndex, ordinal: null, amends: null, payload);
-
-    /// <summary>Hands one fact to everything watching the call, and never waits for it.</summary>
-    /// <param name="kind">What happened.</param>
-    /// <param name="occurredAt">When it happened.</param>
-    /// <param name="turnIndex">The turn it belongs to, or <see langword="null"/>.</param>
-    /// <param name="ordinal">The number it took, or <see langword="null"/> when it took none.</param>
-    /// <param name="amends">The ordinal it corrects, or <see langword="null"/>.</param>
-    /// <param name="payload">The detail it carries.</param>
-    /// <remarks>
-    /// Nothing here propagates and nothing here blocks: <see cref="CallObserverDispatcher"/> owns
-    /// both rules, once, for every observer. Section 7 measures a durable insert at 13 ms p50 and 32
-    /// ms p99 against 91 nanoseconds to enqueue, so <b>an observer must never sit on the turn</b>,
-    /// and one that throws is reported once while the turn goes on.
-    /// </remarks>
-    private void Dispatch(
-        CallEventKind kind,
-        DateTimeOffset occurredAt,
-        int? turnIndex,
-        long? ordinal,
-        long? amends,
-        IReadOnlyDictionary<string, string>? payload)
-        => _observers.Dispatch(new CallEvent
-        {
-            CallId = CallId,
-            Kind = kind,
-            OccurredAt = occurredAt,
-            Ordinal = ordinal,
-            TurnIndex = turnIndex,
-            AmendsOrdinal = amends,
-            Payload = payload ?? new Dictionary<string, string>(StringComparer.Ordinal),
-        });
-
-    /// <summary>Closes the chain of this call, once.</summary>
-    /// <param name="reason">Why the call ended.</param>
-    /// <param name="endedAt">The moment it ended.</param>
-    /// <param name="terminalStage">The stage the machine stopped in, or <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> when this call wrote the event, and <see langword="false"/> when it already had.</returns>
-    /// <remarks>
-    /// The payload carries the wire token of the reason and never its .NET name, for the reason
-    /// <see cref="CallEndReasons"/> gives. The terminal stage rides beside it rather than inside it,
-    /// because a stage name is detail and the reason is what a report counts.
-    /// </remarks>
-    private bool EndCall(CallEndReason reason, DateTimeOffset endedAt, string? terminalStage = null)
-    {
-        // The token is read first, so a value outside the closed set writes no event at all.
-        var token = CallEndReasons.ToToken(reason);
-
-        if (Interlocked.Exchange(ref _ended, 1) == 1)
-        {
-            return false;
-        }
-
-        Dictionary<string, string> payload = new(StringComparer.Ordinal)
-        {
-            [AuditPayloadKeys.EndReason] = token,
-        };
-
-        if (terminalStage is { Length: > 0 })
-        {
-            payload[AuditPayloadKeys.StageAfter] = terminalStage;
-        }
-
-        _ = Raise(CallEventKind.CallEnded, endedAt, turnIndex: null, payload: payload);
-
-        return true;
-    }
 
     /// <summary>Reads what the turn layers reported about one finished turn.</summary>
     /// <param name="response">What the agent answered.</param>
@@ -1320,83 +1007,6 @@ public sealed class CallSession : IConversationPort
 
         return found;
     }
-
-    /// <summary>Raises the moderation facts of one turn, before the turn's own events.</summary>
-    /// <param name="turn">The turn that just ran.</param>
-    /// <param name="disposition">What the layers reported, or <see langword="null"/>.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>The owner decided on 2026-08-13 that moderation reads what the CALLER said and refuses the
-    /// turn</b>, rather than reading the agent's reply and recording it as section 11 item 11 asks.
-    /// Recording a harmful reply protects nobody, because the caller already heard it.
-    /// </para>
-    /// <para>
-    /// The flag is raised BEFORE the <c>turn.completed</c> fact of this turn, and it therefore takes
-    /// the lower ordinal, because the verdict is known before the model runs. It amends nothing, and
-    /// <see cref="CallEvent.TurnIndex"/> names the turn it belongs to. That is the one rule that
-    /// separates <see cref="CallEventKind.PromptFlagged"/> from
-    /// <see cref="CallEventKind.ReplyInterrupted"/>, which must amend under T23.
-    /// </para>
-    /// <para>
-    /// A refused turn speaks <see cref="AgentCoreConfiguration.RefusalReply"/> and NOT
-    /// <see cref="AgentCoreConfiguration.FallbackReply"/>. The fallback is the section 8.7 line for a
-    /// turn that failed, and it asks the caller to say it again, which would invite the flagged words
-    /// back. A refusal is not a failure: nothing broke, and the model was never asked.
-    /// </para>
-    /// <para>
-    /// A host that moderates nothing compiles no <see cref="ModerationAgent"/>, so the outcome
-    /// is null and no moderation fact is raised at all.
-    /// </para>
-    /// </remarks>
-    private void RaiseModeration(Turn turn, TurnDisposition? disposition)
-    {
-        switch (disposition?.Moderation)
-        {
-            case ModerationOutcome.Flagged:
-                // One fact, three readings: the row of D23, the flagged count of section 8.6, and the
-                // refusal line of section 8.7 all come from this one raise.
-                _ = Raise(
-                    CallEventKind.PromptFlagged,
-                    _time.GetUtcNow(),
-                    turn.Index,
-                    payload: new Dictionary<string, string>(StringComparer.Ordinal)
-                    {
-                        [AuditPayloadKeys.ModerationCategories] = disposition.FlaggedCategories ?? string.Empty,
-                    });
-                break;
-
-            case ModerationOutcome.Unavailable:
-                RaiseUnavailable(turn, disposition.ModerationReason ?? ModerationFaultedReason);
-                break;
-
-            case ModerationOutcome.Clean:
-                // Counted and not even logged. The clean verdict is what makes the flagged count
-                // readable as a rate, and a clean turn is not a fact about the call worth a row.
-                RaiseDiagnostic(CallEventKind.ModerationClean, _time.GetUtcNow(), turn.Index);
-                break;
-
-            default:
-                break;
-        }
-    }
-
-    /// <summary>Reports that the turn ran unchecked, because moderation could not answer.</summary>
-    /// <param name="turn">The turn that ran unchecked.</param>
-    /// <param name="reason">Why the endpoint did not answer, in the words the turn loop uses.</param>
-    /// <remarks>
-    /// Diagnostic only: it is counted and logged and stored nowhere, so it takes no ordinal.
-    /// Moderation fails open, and this fact is the only record that a turn went unchecked, so an
-    /// operator alerts on the metric beside the line.
-    /// </remarks>
-    private void RaiseUnavailable(Turn turn, string reason)
-        => RaiseDiagnostic(
-            CallEventKind.ModerationUnavailable,
-            _time.GetUtcNow(),
-            turn.Index,
-            payload: new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                [CallEventPayloadKeys.Reason] = reason,
-            });
 
     /// <summary>Runs the extractor against the finished turn.</summary>
     /// <param name="turn">The turn that just spoke.</param>
@@ -1440,77 +1050,10 @@ public sealed class CallSession : IConversationPort
                 if (content is FunctionResultContent result
                     && toolIdByCall.TryGetValue(result.CallId, out var toolId))
                 {
-                    ToolStateWriter.Apply(State, toolId, ToNode(result.Result));
+                    ToolStateWriter.Apply(State, toolId, ToolResultJson.ToNode(result.Result));
                 }
             }
         }
-    }
-
-    /// <summary>Keeps the tool calls whose results arrived, and drops every unpaired call and every word.</summary>
-    /// <param name="messages">Every message the round produced.</param>
-    /// <returns>The tool content that carries a complete call-and-result pair, in its original order.</returns>
-    /// <remarks>
-    /// <para>
-    /// A model refuses a history that holds a tool call with no result, so an interrupted round
-    /// cannot simply keep everything. It must not silently forget a side effect either. The rule is
-    /// therefore per call id: keep the call when its result is present.
-    /// </para>
-    /// <para>
-    /// No prose survives, wherever it sits. A real model routinely writes a line and puts the tool
-    /// call it announces on the same assistant message — "Let me check that for you", then the call
-    /// — and the caller heard only as much of that line as the vendor played. The heard text is
-    /// added as its own assistant message afterwards, so keeping the prose here would put the reply
-    /// in the transcript twice: once as the model wrote it, once as the caller heard it.
-    /// </para>
-    /// </remarks>
-    private static List<ChatMessage> FinishedToolMessages(IList<ChatMessage> messages)
-    {
-        HashSet<string> answered = [];
-        foreach (var message in messages)
-        {
-            foreach (var result in message.Contents.OfType<FunctionResultContent>())
-            {
-                answered.Add(result.CallId);
-            }
-        }
-
-        List<ChatMessage> kept = [];
-        foreach (var message in messages)
-        {
-            // A parallel round can finish one call and leave a sibling call in the same message
-            // mid-flight. The rule is per call id and not per message, so only the unfinished call
-            // is stripped out; the finished one, whose side effect already ran, stays in place.
-            List<AIContent> tools =
-            [
-                .. message.Contents.Where(content => content switch
-                {
-                    TextContent => false,
-                    FunctionCallContent call => answered.Contains(call.CallId),
-                    _ => true,
-                }),
-            ];
-
-            if (!tools.Any(content => content is FunctionCallContent or FunctionResultContent))
-            {
-                // Plain prose, or a message whose every call is still in flight. Neither belongs in
-                // the next turn.
-                continue;
-            }
-
-            if (tools.Count == message.Contents.Count)
-            {
-                // Nothing was stripped, so the message is already the finished shape. Keep it whole,
-                // contents and order unchanged.
-                kept.Add(message);
-                continue;
-            }
-
-            var trimmed = message.Clone();
-            trimmed.Contents = tools;
-            kept.Add(trimmed);
-        }
-
-        return kept;
     }
 
     /// <summary>Picks the agent that speaks this turn.</summary>
@@ -1531,44 +1074,6 @@ public sealed class CallSession : IConversationPort
         }
 
         return agent;
-    }
-
-    /// <summary>Carries one tool result into the node tree the tool writer reads.</summary>
-    /// <param name="value">Whatever the tool returned.</param>
-    /// <returns>The node tree, or <see langword="null"/> when the tool returned nothing.</returns>
-    private static JsonNode? ToNode(object? value) => value switch
-    {
-        null => null,
-        JsonNode node => node.DeepClone(),
-
-        // A tool result has no declared shape. A tool that answers with a JSON document as one
-        // string still reaches its slot, and a tool that answers with prose reads as that prose.
-        JsonElement element when element.ValueKind is JsonValueKind.String
-            => ParseOrText(element.GetString() ?? string.Empty),
-        JsonElement element => JsonNode.Parse(element.GetRawText()),
-        string text => ParseOrText(text),
-        bool flag => JsonValue.Create(flag),
-        int number => JsonValue.Create(number),
-        long number => JsonValue.Create(number),
-        double number => JsonValue.Create(number),
-        decimal number => JsonValue.Create(number),
-        _ => JsonValue.Create(value.ToString()),
-    };
-
-    /// <summary>Reads one string as JSON, and falls back to the string itself.</summary>
-    /// <param name="text">The text the tool returned.</param>
-    /// <returns>The node tree.</returns>
-    private static JsonNode? ParseOrText(string text)
-    {
-        try
-        {
-            return JsonNode.Parse(text);
-        }
-        catch (JsonException)
-        {
-            // Section 8.7: a tool result has no declared shape, and a tool never drops a turn.
-            return JsonValue.Create(text);
-        }
     }
 
     /// <summary>Everything one turn carries from its start to its end.</summary>

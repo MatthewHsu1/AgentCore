@@ -122,11 +122,6 @@ guards:
 # A builtin tool returns an error result and does not throw. See section 8.7.
 # ---------------------------------------------------------------------------------------------
 tools:
-  - { id: search_chunks, kind: builtin, uses: knowledge.search }
-  - { id: read_doc,      kind: builtin, uses: knowledge.read }
-  - { id: list_docs,     kind: builtin, uses: knowledge.list }
-  - { id: grep_docs,     kind: builtin, uses: knowledge.grep }
-
   # Draws something for the caller to look at, when the host has a screen. The agent asks for it in
   # words; a private agent of its own turns that into a tree of cards, charts, tables and buttons
   # and sends it to the browser. The vocabulary never reaches this agent, so listing this tool costs
@@ -193,12 +188,25 @@ agents:
     model: { ref: reply, temperature: 0.3 }
     instructions: |
       <the stable cached prefix: persona, safety, transfer rules, and tool etiquette>
+    # citations defaults to false and scoped defaults to true. A forgotten flag is then silent
+    # and safe, and the dangerous direction is the one you type on purpose.
+    knowledge: { mode: prefetch, limit: 5, citations: false }
   items:
+    # voice, scripted — one model round trip, no source labels spoken aloud. Inherits mode:
+    # prefetch, limit: 5, citations: false from defaults above.
     - { id: greeter,    instructions: "<stage delta>", tools: [] }
     - { id: identifier, instructions: "<stage delta>", tools: [ lookup_order ] }
-    - { id: resolver,   instructions: "<stage delta>", tools: [ search_chunks, read_doc, list_docs, grep_docs ] }
+    - { id: resolver,   instructions: "<stage delta>", tools: [] }
     - { id: escalator,  instructions: "<stage delta>", tools: [ create_case ] }
     - { id: closer,     instructions: "<stage delta>", tools: [] }
+
+    # internal — everything on, and it searches every product on purpose
+    - { id: analyst, instructions: "<stage delta>", tools: [ lookup_order, create_case ],
+        knowledge: { mode: tool, limit: 8, citations: true, scoped: false } }
+
+    # customer facing — tools yes, citations no. It sets two keys and inherits limit: 5.
+    - { id: webchat, instructions: "<stage delta>", tools: [ lookup_order ],
+        knowledge: { mode: tool, citations: false } }
 
 # ---------------------------------------------------------------------------------------------
 # policy: the stage machine, run by Stateless over string stages.
@@ -260,9 +268,13 @@ providers:
   # a flagged turn never reaches the model and speaks refusalReply instead. It needs the
   # openai-api-key secret, the same one the llm entries above read. Remove this line to moderate
   # nothing: the adapter is then never asked to build, and no key is read for it.
-  knowledge: { search: filesystem, documents: filesystem, root: ./kb }
-  # search: zilliz needs endpoint (cluster URL) and the zilliz-api-key secret; collection defaults to kb_chunks
-  # it also embeds every query, so it needs the openai-api-key secret as well; documents stays filesystem
+  embeddings: { kind: openai, model: text-embedding-3-small }
+  # the model that turns a query into a vector. It must be the model kb sync built the collection
+  # with, or the startup width check refuses to open the store. It reads the same openai-api-key
+  # secret the llm entries read. dimensions: is optional; write it only if kb sync narrowed the
+  # model's own width.
+  knowledge: { kind: qdrant, endpoint: https://qdrant.example.com:6334, collection: kb }
+  # collection is always the alias; kb sync --rebuild swaps it and this document never changes
 
   # telemetry is absent here on purpose, and this host therefore exports nothing. Spans and
   # measurements are still written, where they cost almost nothing with nobody listening, and log

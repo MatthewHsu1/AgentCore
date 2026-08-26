@@ -1,6 +1,8 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Tools.Drawing;
+using AgentCore.Application.Tools.Registry;
 using AgentCore.Application.Tools.Shipped;
 
 namespace AgentCore.Application.Tools.Builtin;
@@ -11,20 +13,13 @@ namespace AgentCore.Application.Tools.Builtin;
 public sealed class BuiltinToolSource : IToolSource
 {
     private static readonly Dictionary<string, IBuiltinToolDefinition> Definitions =
-        new(StringComparer.Ordinal)
-        {
-            [BuiltinToolNames.KnowledgeSearch] = new KnowledgeSearchDefinition(),
-            [BuiltinToolNames.KnowledgeRead] = new KnowledgeReadDefinition(),
-            [BuiltinToolNames.KnowledgeList] = new KnowledgeListDefinition(),
-            [BuiltinToolNames.KnowledgeGrep] = new KnowledgeGrepDefinition(),
-        };
+        new(StringComparer.Ordinal);
 
     private static readonly Dictionary<string, IShippedAgentDefinition> ShippedAgents =
-        new(StringComparer.Ordinal)
+        new IShippedAgentDefinition[]
         {
-            [BuiltinToolNames.Draw] = new DrawingAgentDefinition(),
-            [BuiltinToolNames.KnowledgeAgentSearch] = new KnowledgeAgentSearchDefinition(),
-        };
+            new DrawingAgentDefinition(),
+        }.ToDictionary(definition => definition.Name, StringComparer.Ordinal);
 
     private readonly BuiltinToolPorts _ports;
 
@@ -88,12 +83,6 @@ public sealed class BuiltinToolSource : IToolSource
     /// <param name="declared">The declaration the document holds.</param>
     /// <param name="definition">The shipped thing that name serves.</param>
     /// <returns>The declaration with a description on it.</returns>
-    /// <remarks>
-    /// Resolved here and nowhere else, so the value the boot validates and the value
-    /// <c>AIFunctionFactory</c> advertises to the model are the same string. Every builder calls
-    /// this rather than falling back on its own, and calling it twice on one declaration is a
-    /// no-op.
-    /// </remarks>
     internal static ToolConfiguration Described(ToolConfiguration declared, IToolDefinition definition)
         => declared.Description is null ? declared with { Description = definition.DefaultDescription } : declared;
 
@@ -105,12 +94,6 @@ public sealed class BuiltinToolSource : IToolSource
     /// <summary>Names a dial the document set on a built-in that has nothing to spend it on.</summary>
     /// <param name="tool">The declaration the document holds.</param>
     /// <returns>The key, or <see langword="null"/> when the declaration sets neither.</returns>
-    /// <remarks>
-    /// The schema keeps <c>model:</c> and <c>maxRounds:</c> to <c>kind: builtin</c>, which is as far
-    /// as it can go: whether one <c>uses:</c> name is a shipped agent is known here and nowhere
-    /// else. Accepting either on a plain function built-in would boot clean and change nothing,
-    /// which is the silent failure decisions 4 and 8 reject.
-    /// </remarks>
     private static string? UnreadDial(ToolConfiguration tool)
         => tool.Model is not null ? "model:" : tool.MaxRounds is not null ? "maxRounds:" : null;
 

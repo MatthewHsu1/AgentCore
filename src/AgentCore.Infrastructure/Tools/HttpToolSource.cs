@@ -6,6 +6,7 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Tools.Registry;
 using Microsoft.Extensions.AI;
 
 namespace AgentCore.Infrastructure.Tools;

@@ -10,8 +10,8 @@ AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.Dispose() -> void
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.AddToolSource(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Ports.IToolSource!>! toolSource) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.AgentCoreOptions() -> void
-AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Bind(string! name, AgentCore.Application.Tools.ToolBinding! binding) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
-AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Bindings.get -> AgentCore.Application.Tools.ToolBindingRegistry!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Bind(string! name, AgentCore.Application.Tools.Binding.ToolBinding! binding) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Bindings.get -> AgentCore.Application.Tools.Binding.ToolBindingRegistry!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Configuration.get -> AgentCore.Application.Configuration.Schema.AgentCoreConfiguration?
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Configuration.set -> void
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.ConfigurationPath.get -> string?
@@ -27,8 +27,7 @@ AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseCall(params AgentCo
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseChatClients(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Ports.IChatClientFactory!>! chatClients) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseChatClients(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IChatClientFactory!>>! chatClients) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseChatClients(params AgentCore.Application.Ports.IChatClientAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
-AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseDocumentStore(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Ports.IDocumentStorePort!>! documents) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
-AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseKnowledge<TKnowledge>(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, TKnowledge!>! knowledge) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseEmbeddings(params AgentCore.Application.Ports.IEmbeddingGeneratorAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseKnowledgeRetrieval(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Ports.IKnowledgeRetrievalPort!>! retrieval) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseKnowledgeStores(params AgentCore.Application.Ports.IKnowledgeStoreAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseModeration(params AgentCore.Application.Ports.IModerationAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
@@ -43,8 +42,8 @@ AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup.Secrets.get -> AgentCo
 AgentCore.AspNetCore.Endpoints.ChatCompletionsEndpointRouteBuilderExtensions
 AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayCallAdapter
 AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayCallAdapter.CarriesText.get -> bool
-AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayCallAdapter.Kind.get -> string!
 AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayCallAdapter.CreateHandler(AgentCore.Application.Configuration.Schema.CallProviderConfiguration! configuration) -> Microsoft.AspNetCore.Http.RequestDelegate!
+AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayCallAdapter.Kind.get -> string!
 AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayCallAdapter.TelnyxRelayCallAdapter() -> void
 AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelaySpeechAdapter
 AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelaySpeechAdapter.Kind.get -> string!

@@ -1,7 +1,7 @@
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Llm;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Tools;
+using AgentCore.Application.Tools.Binding;
 using Microsoft.Extensions.Logging;
 
 namespace AgentCore.AspNetCore.DependencyInjection;
@@ -35,14 +35,14 @@ public sealed class AgentCoreOptions
     /// <summary>Gets the seam that resolves a model reference, or <see langword="null"/>.</summary>
     internal Func<AgentCoreStartup, CancellationToken, ValueTask<IChatClientFactory>>? ChatClients { get; private set; }
 
+    /// <summary>Gets the embedding vendors the host registered, or <see langword="null"/>.</summary>
+    internal IReadOnlyList<IEmbeddingGeneratorAdapter>? Embeddings { get; private set; }
+
     /// <summary>Gets the knowledge vendors the host registered, or <see langword="null"/>.</summary>
     internal IReadOnlyList<IKnowledgeStoreAdapter>? KnowledgeStores { get; private set; }
 
-    /// <summary>Gets the seam <c>knowledge.search</c> ranks with, or <see langword="null"/>.</summary>
+    /// <summary>Gets the seam that beats the <c>providers.knowledge.kind</c> registry, or <see langword="null"/>.</summary>
     internal Func<AgentCoreStartup, IKnowledgeRetrievalPort>? KnowledgeRetrieval { get; private set; }
-
-    /// <summary>Gets the seam <c>knowledge.read</c> opens, or <see langword="null"/>.</summary>
-    internal Func<AgentCoreStartup, IDocumentStorePort>? DocumentStore { get; private set; }
 
     /// <summary>Gets the moderation vendors the host registered, or <see langword="null"/>.</summary>
     internal IReadOnlyList<IModerationAdapter>? Moderation { get; private set; }
@@ -98,7 +98,17 @@ public sealed class AgentCoreOptions
         return this;
     }
 
-    /// <summary>Binds the knowledge vendors, and the document picks one for each knowledge port.</summary>
+    /// <summary>Binds the embedding vendors, and the document picks one by <c>providers.embeddings.kind</c>.</summary>
+    /// <param name="adapters">One adapter for each embedding vendor this host supports.</param>
+    /// <returns>These options, so a host chains its calls.</returns>
+    public AgentCoreOptions UseEmbeddings(params IEmbeddingGeneratorAdapter[] adapters)
+    {
+        ArgumentNullException.ThrowIfNull(adapters);
+        Embeddings = adapters;
+        return this;
+    }
+
+    /// <summary>Binds the knowledge vendors, and the document picks one by <c>providers.knowledge.kind</c>.</summary>
     /// <param name="adapters">One adapter for each knowledge vendor this host supports.</param>
     /// <returns>These options, so a host chains its calls.</returns>
     public AgentCoreOptions UseKnowledgeStores(params IKnowledgeStoreAdapter[] adapters)
@@ -108,40 +118,13 @@ public sealed class AgentCoreOptions
         return this;
     }
 
-    /// <summary>Binds one adapter that answers both halves of the knowledge base.</summary>
-    /// <typeparam name="TKnowledge">The adapter type, which implements both knowledge ports.</typeparam>
-    /// <param name="knowledge">Builds the adapter from the loaded document.</param>
-    /// <returns>These options, so a host chains its calls.</returns>
-    public AgentCoreOptions UseKnowledge<TKnowledge>(Func<AgentCoreStartup, TKnowledge> knowledge)
-        where TKnowledge : class, IKnowledgeRetrievalPort, IDocumentStorePort
-    {
-        ArgumentNullException.ThrowIfNull(knowledge);
-
-        TKnowledge? built = null;
-        TKnowledge Once(AgentCoreStartup startup) => built ??= knowledge(startup);
-
-        KnowledgeRetrieval = Once;
-        DocumentStore = Once;
-        return this;
-    }
-
-    /// <summary>Binds the adapter <c>knowledge.search</c> ranks with.</summary>
+    /// <summary>Binds the adapter that beats the <c>providers.knowledge.kind</c> registry.</summary>
     /// <param name="retrieval">Builds the adapter from the loaded document.</param>
     /// <returns>These options, so a host chains its calls.</returns>
     public AgentCoreOptions UseKnowledgeRetrieval(Func<AgentCoreStartup, IKnowledgeRetrievalPort> retrieval)
     {
         ArgumentNullException.ThrowIfNull(retrieval);
         KnowledgeRetrieval = retrieval;
-        return this;
-    }
-
-    /// <summary>Binds the adapter <c>knowledge.read</c> opens.</summary>
-    /// <param name="documents">Builds the adapter from the loaded document.</param>
-    /// <returns>These options, so a host chains its calls.</returns>
-    public AgentCoreOptions UseDocumentStore(Func<AgentCoreStartup, IDocumentStorePort> documents)
-    {
-        ArgumentNullException.ThrowIfNull(documents);
-        DocumentStore = documents;
         return this;
     }
 

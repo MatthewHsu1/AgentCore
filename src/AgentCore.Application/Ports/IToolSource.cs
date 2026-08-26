@@ -1,4 +1,4 @@
-using AgentCore.Application.Tools;
+using AgentCore.Application.Tools.Registry;
 
 namespace AgentCore.Application.Ports;
 

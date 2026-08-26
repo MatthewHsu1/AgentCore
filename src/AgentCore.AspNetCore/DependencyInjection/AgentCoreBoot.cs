@@ -7,7 +7,8 @@ using AgentCore.Application.Evaluation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Secrets;
-using AgentCore.Application.Tools;
+using AgentCore.Application.Tools.Binding;
+using AgentCore.Application.Tools.Registry;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
@@ -161,22 +162,31 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
 
         AgentCoreStartup startup = new(configuration, secrets);
 
-        var knowledge = await KnowledgeStartup
+        var agents = configuration.Agents ?? new AgentsConfiguration { Items = [] };
+
+        var embeddings = Track(await EmbeddingStartup
             .OpenAsync(configuration, _options, cancellationToken)
-            .ConfigureAwait(false);
+            .ConfigureAwait(false));
+
+        var knowledge = Track(await KnowledgeStartup
+            .OpenAsync(
+                configuration,
+                _options,
+                startup,
+                embeddings,
+                scopeDeclared: AgentKnowledge.AnyScoped(agents),
+                requireScope: AgentKnowledge.AllScoped(agents),
+                cancellationToken)
+            .ConfigureAwait(false));
 
         var chatClients = Track(await ChatClientStartup
             .BuildAsync(_options, startup, cancellationToken)
             .ConfigureAwait(false));
 
         var tools = await ToolRegistryStartup
-            .BuildAsync(this, _options, startup, knowledge, chatClients, configuration, cancellationToken)
+            .BuildAsync(this, _options, startup, chatClients, configuration, cancellationToken)
             .ConfigureAwait(false);
 
-        // Decision 15: the reference pass runs after discovery, against ServedIds — the registry's
-        // own ids unioned with every kind: agent tool id, computed once in ToolRegistryStartup
-        // alongside the carve-out VerifyEveryDeclarationIsServed applies for the same reason, so the
-        // two can never silently disagree about which ids count as served.
         ConfigurationValidator.ValidateToolReferences(configuration, tools.ServedIds);
 
         var transcript = Track(await TranscriptStartup
@@ -188,7 +198,7 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
             .ConfigureAwait(false);
 
         var graph = await CompilationStartup
-            .CompileAsync(configuration, chatClients, tools.Registry, transcript, evaluators, _loggers)
+            .CompileAsync(configuration, chatClients, tools.Registry, transcript, evaluators, knowledge, _loggers)
             .ConfigureAwait(false);
 
         var seams = CallSeamStartup.Build(configuration, _options);
@@ -215,20 +225,9 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
     }
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// Reverse of the order things were opened in, so a writer always closes before its target.
-    /// Each close is guarded on its own: one resource that fails to close must not abandon the rest,
-    /// nor replace the exception a deployer actually needs to read.
-    /// </remarks>
     public async ValueTask DisposeAsync() => await CloseAsync().ConfigureAwait(false);
 
     /// <summary>Closes everything, blocking until it is done.</summary>
-    /// <remarks>
-    /// A container disposed synchronously reaches this, and it must not be the path that loses
-    /// writes. Without it, a provider holding this — which implements only
-    /// <see cref="IAsyncDisposable"/> — throws on a synchronous <c>Dispose</c> rather than draining.
-    /// There is no synchronization context to deadlock against in a host.
-    /// </remarks>
     public void Dispose() => CloseAsync().AsTask().GetAwaiter().GetResult();
 
     private async ValueTask CloseAsync()

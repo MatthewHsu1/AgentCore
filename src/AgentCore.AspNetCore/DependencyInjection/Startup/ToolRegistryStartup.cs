@@ -1,7 +1,8 @@
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Tools;
+using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Tools.Builtin;
+using AgentCore.Application.Tools.Registry;
 
 namespace AgentCore.AspNetCore.DependencyInjection.Startup;
 
@@ -25,7 +26,6 @@ internal static class ToolRegistryStartup
     /// <param name="boot">The owner every source is tracked against, the moment it is built.</param>
     /// <param name="options">The options the host filled.</param>
     /// <param name="startup">The loaded document and the resolved secrets.</param>
-    /// <param name="knowledge">The two ports the knowledge registry opened, each one or <see langword="null"/>.</param>
     /// <param name="chatClients">The factory a shipped agent runs on. Step 3c fails the boot rather than returning none.</param>
     /// <param name="configuration">The loaded document.</param>
     /// <param name="cancellationToken">Cancels the discovery.</param>
@@ -39,22 +39,13 @@ internal static class ToolRegistryStartup
         AgentCoreBoot boot,
         AgentCoreOptions options,
         AgentCoreStartup startup,
-        (IKnowledgeRetrievalPort? Search, IDocumentStorePort? Documents) knowledge,
         IChatClientFactory chatClients,
         AgentCoreConfiguration configuration,
         CancellationToken cancellationToken)
     {
-        // An explicit UseKnowledgeRetrieval, UseDocumentStore, or UseKnowledge call wins over the
-        // UseKnowledgeStores registry, for the port it sets. A host that wants one half of its own
-        // and one half from the document writes both calls, and neither one hides the other. Step 3b
-        // already left the shadowed half unresolved and unbuilt, so the half it did open is the only
-        // one this reads.
-        var retrieval = options.KnowledgeRetrieval is { } bound ? bound(startup) : knowledge.Search;
-        var documents = options.DocumentStore is { } boundDocuments ? boundDocuments(startup) : knowledge.Documents;
-
         List<IToolSource> sources =
         [
-            new BuiltinToolSource(new BuiltinToolPorts(retrieval, documents, chatClients)),
+            new BuiltinToolSource(new BuiltinToolPorts(chatClients)),
             new BindingToolSource(options.Bindings),
         ];
 
@@ -84,10 +75,6 @@ internal static class ToolRegistryStartup
                 continue;
             }
 
-            // A kind: agent tool reaches no source, so the builder above never sees its id and
-            // ToolRegistryBuilder's own collision check never runs for it. Without this, a discovered
-            // tool and a declared agent tool could claim the same id and the document would boot with
-            // ConfigurationCompiler silently preferring the declared entry over the discovered one.
             if (registry.Ids.Contains(tool.Id))
             {
                 throw ToolSourceError.Fail(

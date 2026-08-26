@@ -3,6 +3,7 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tools.Builtin;
+using AgentCore.Application.Tools.Registry;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -11,23 +12,6 @@ namespace AgentCore.Application.Tools.Shipped;
 /// <summary>
 /// Turns one shipped agent into the function the outer agent calls.
 /// </summary>
-/// <remarks>
-/// <para>
-/// The agent goes onto the same <c>AsAIFunction()</c> path <c>kind: agent</c> already uses, so
-/// there is one code path for every agent-as-tool. The inner agent runs on a session of its own
-/// that no <c>BeginCall</c> ever names, so none of its rounds reach store 1 —
-/// <c>InnerAgentTranscriptTests</c> holds that for <c>kind: agent</c>, and a shipped agent holds it
-/// by the same mechanism.
-/// </para>
-/// <para>
-/// It runs on <see cref="AuditingFunctionInvokingChatClient"/>, the same loop a document agent
-/// gets, so section 8.7 holds inside a shipped agent too: an inner tool's answerable fault becomes
-/// a result its own model reads, and a fault naming a dependency that is not there propagates to
-/// the outer agent's error budget. The knowledge ports document that an adapter may throw, so
-/// <c>knowledge.agent_search</c> depends on this. There is still no agent-level span, which is the
-/// one thing a document agent has and a shipped agent does not.
-/// </para>
-/// </remarks>
 internal static class ShippedAgentBuilder
 {
     /// <summary>Builds the function one shipped agent is advertised as.</summary>
@@ -88,27 +72,10 @@ internal static class ShippedAgentBuilder
     /// <summary>
     /// Answers the outer agent a section 8.7 error when the inner agent finished with no words.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <c>AsAIFunction</c> hands back the inner agent's final text. Reaching
-    /// <c>MaximumIterationsPerRequest</c> costs <c>FunctionInvokingChatClient</c> one further
-    /// request with the tools removed, so a model willing to answer in words still gets the last
-    /// word and those words ride back. A model that asks for a tool even then leaves a response
-    /// whose only content is the call it refused to invoke, and its text arrives here as a
-    /// <c>JsonElement</c> of kind <c>String</c> holding <c>""</c>. Handed that, the outer agent
-    /// cannot tell a spent round cap from a success and will tell the caller the work is done.
-    /// </para>
-    /// <para>
-    /// The signal available is the empty text, not the cap itself: MEAI surfaces no "I stopped
-    /// early" flag on the response. An inner agent that legitimately ends with no words is
-    /// therefore reported the same way, which is right — it has given the outer agent nothing to
-    /// use either. Whatever the inner agent did find comes back as its text, and text is never
-    /// replaced.
-    /// </para>
-    /// </remarks>
     private sealed class SpentRoundsAreAnError : DelegatingAIFunction
     {
         private readonly string _toolId;
+
         private readonly int _rounds;
 
         internal SpentRoundsAreAnError(AIFunction inner, string toolId, int rounds)

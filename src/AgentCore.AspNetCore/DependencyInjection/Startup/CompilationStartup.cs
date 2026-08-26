@@ -5,7 +5,7 @@ using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
-using AgentCore.Application.Tools;
+using AgentCore.Application.Tools.Registry;
 using Microsoft.Extensions.Logging;
 
 namespace AgentCore.AspNetCore.DependencyInjection;
@@ -33,7 +33,8 @@ internal static class CompilationStartup
     /// The registry the moderator comes out of. R3 puts moderation in the chat pipeline of every
     /// compiled agent, so it is bound here rather than on the session factory.
     /// </param>
-    /// <param name="loggers">The factory the guard evaluator takes its logger from.</param>
+    /// <param name="knowledge">The port step 3b opened, or <see langword="null"/> when the host bound no knowledge vendor.</param>
+    /// <param name="loggers">The factory the guard evaluator and the knowledge provider take their loggers from.</param>
     /// <returns>The compiled graph, and the seams that made it.</returns>
     /// <exception cref="ConfigurationLoadException">The document does not compile.</exception>
     internal static ValueTask<CompiledGraph> CompileAsync(
@@ -42,6 +43,7 @@ internal static class CompilationStartup
         ToolRegistry tools,
         ITranscriptStore transcript,
         EvaluatorRegistry evaluators,
+        IKnowledgeRetrievalPort? knowledge,
         ILoggerFactory loggers)
     {
         GuardEvaluator guards = new(configuration.Guards, loggers.CreateLogger<GuardEvaluator>());
@@ -56,6 +58,8 @@ internal static class CompilationStartup
                 Moderation = PromptModerator.FromRegistry(evaluators),
                 TranscriptStore = transcript,
                 StateSnapshot = CallStateScope.Snapshot,
+                Knowledge = knowledge,
+                Loggers = loggers,
             });
 
         return ValueTask.FromResult(new CompiledGraph(chatClients, guards, registry, compiled));

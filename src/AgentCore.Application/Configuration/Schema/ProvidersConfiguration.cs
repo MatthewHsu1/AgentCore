@@ -63,35 +63,45 @@ public sealed record CallProviderConfiguration
 }
 
 /// <summary>
-/// The knowledge provider: one adapter for each knowledge port, and what those adapters read.
+/// The embedding provider: the vendor that turns a query into a vector, and the model it uses.
+/// </summary>
+public sealed record EmbeddingProviderConfiguration
+{
+    /// <summary>Gets the vendor, such as <c>openai</c>.</summary>
+    public required string Kind { get; init; }
+
+    /// <summary>Gets the model name the vendor knows, such as <c>text-embedding-3-small</c>.</summary>
+    public required string Model { get; init; }
+
+    /// <summary>
+    /// Gets the vector width to ask the vendor for, or <see langword="null"/> for the model's own.
+    /// It must match the width the knowledge collection was built with.
+    /// </summary>
+    public int? Dimensions { get; init; }
+}
+
+/// <summary>
+/// The knowledge provider: the adapter that answers <c>IKnowledgeRetrievalPort</c>, and what it reads.
 /// </summary>
 public sealed record KnowledgeProviderConfiguration
 {
-    /// <summary>The search adapter used when the document names none.</summary>
-    public const string DefaultSearch = "filesystem";
-
-    /// <summary>The document adapter used when the document names none.</summary>
-    public const string DefaultDocuments = "filesystem";
-
-    /// <summary>The root used when the document sets none.</summary>
-    public const string DefaultRoot = "./kb";
+    /// <summary>The adapter used when the document names none.</summary>
+    public const string DefaultKind = "qdrant";
 
     /// <summary>The collection used when the document names none.</summary>
-    public const string DefaultCollection = "kb_chunks";
+    public const string DefaultCollection = "kb";
 
-    /// <summary>Gets the adapter that answers <c>IKnowledgeRetrievalPort</c>, such as <c>zilliz</c>.</summary>
-    public string Search { get; init; } = DefaultSearch;
+    /// <summary>Gets the adapter that answers <c>IKnowledgeRetrievalPort</c>, such as <c>qdrant</c>.</summary>
+    public string Kind { get; init; } = DefaultKind;
 
-    /// <summary>Gets the adapter that answers <c>IDocumentStorePort</c>, such as <c>filesystem</c>.</summary>
-    public string Documents { get; init; } = DefaultDocuments;
-
-    /// <summary>Gets the root of the knowledge-base tree. The tree is its own Git repository.</summary>
-    public string Root { get; init; } = DefaultRoot;
-
-    /// <summary>Gets the cluster URL the <c>zilliz</c> adapter reads, or <see langword="null"/>.</summary>
+    /// <summary>Gets the Qdrant endpoint, such as <c>https://qdrant.example.com:6334</c>.</summary>
     public string? Endpoint { get; init; }
 
-    /// <summary>Gets the collection the <c>zilliz</c> adapter reads.</summary>
+    /// <summary>Gets the collection to read.</summary>
+    /// <remarks>
+    /// Always the alias, never a concrete collection. <c>kb sync --rebuild</c> swaps the alias and
+    /// AgentCore never notices.
+    /// </remarks>
     public string Collection { get; init; } = DefaultCollection;
 }
 
@@ -168,6 +178,9 @@ public sealed record ProvidersConfiguration
 
     /// <summary>Gets the moderation provider, or <see langword="null"/>.</summary>
     public VendorProviderConfiguration? Moderation { get; init; }
+
+    /// <summary>Gets the embedding provider, or <see langword="null"/>.</summary>
+    public EmbeddingProviderConfiguration? Embeddings { get; init; }
 
     /// <summary>Gets the knowledge provider, or <see langword="null"/>.</summary>
     public KnowledgeProviderConfiguration? Knowledge { get; init; }
