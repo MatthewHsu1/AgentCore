@@ -17,18 +17,19 @@ internal sealed class CallTranscript
     /// <summary>Gets or sets the reply a barge-in would cut, or null when the call has spoken none.</summary>
     public int? LastAssistantOrdinal { get; set; }
 
-    /// <summary>Gets the live history of the call, oldest first.</summary>
-    public List<StoredMessage> Messages { get; } = [];
+    /// <summary>
+    /// Gets or sets the live history of the call, oldest first. It needs a setter, not just a getter:
+    /// with no setter, System.Text.Json silently skips it on deserialize instead of populating it.
+    /// </summary>
+    public List<StoredMessage> Messages { get; set; } = [];
 
     /// <summary>Opens a turn, so the rows it appends carry its index.</summary>
-    /// <param name="turnIndex">The zero-based index of the turn about to run.</param>
     public void BeginTurn(int turnIndex) => TurnIndex = turnIndex;
 
     /// <summary>Reads the whole call, oldest message first.</summary>
     public IReadOnlyList<ChatMessage> Read() => [.. Messages.Select(stored => stored.Message)];
 
     /// <summary>Adds new messages to the call, and returns the rows they became.</summary>
-    /// <param name="messages">The new messages, oldest first.</param>
     public IReadOnlyList<CallMessage> Append(IReadOnlyList<ChatMessage> messages)
     {
         ArgumentNullException.ThrowIfNull(messages);
@@ -37,8 +38,18 @@ internal sealed class CallTranscript
         foreach (var message in messages)
         {
             var ordinal = NextOrdinal++;
-            Messages.Add(new StoredMessage { Ordinal = ordinal, TurnIndex = TurnIndex, Message = message });
+
+            // The row is what the store persists, so it keeps the full message, drawing included.
+            // Messages is the live history, serialised into the session state bag every turn, so it
+            // never sees a drawing: a multi-kilobyte RenderContent has no business growing that bag.
             rows.Add(new CallMessage(CallId, ordinal, TurnIndex, message));
+
+            Messages.Add(new StoredMessage
+            {
+                Ordinal = ordinal,
+                TurnIndex = TurnIndex,
+                Message = message.WithoutRenders(),
+            });
 
             // A tool-calling turn produces two assistant messages and only the second is spoken.
             // The textless one is not a reply anybody can be cut off in the middle of.
@@ -52,8 +63,6 @@ internal sealed class CallTranscript
     }
 
     /// <summary>Cuts the turn the caller was hearing down to the words the caller actually heard.</summary>
-    /// <param name="heard">The text the caller heard, as the vendor reported it. Nothing is estimated.</param>
-    /// <returns>The rows to rewrite, oldest first, or empty when the call has no reply to cut.</returns>
     public IReadOnlyList<CallMessage> TruncateLastReply(string heard)
     {
         ArgumentNullException.ThrowIfNull(heard);

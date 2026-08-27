@@ -1,7 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
+using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
-using AgentCore.AspNetCore.Sessions;
+using AgentCore.Application.Transcript;
 using AgentCore.Domain;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -13,27 +14,6 @@ namespace AgentCore.AspNetCore.Endpoints;
 /// <summary>
 /// The text path: an OpenAI-compatible <c>POST /v1/chat/completions</c> over the turn loop.
 /// </summary>
-/// <remarks>
-/// <para>
-/// One request runs one turn. The endpoint reads the last <c>user</c> message of the request, hands
-/// it to <see cref="CallSession.RunTurnAsync"/>, and answers the reply. With <c>stream: true</c> it
-/// runs <see cref="CallSession.RunTurnStreamingAsync"/> instead and writes one server-sent event for
-/// each update, so the first word leaves the host as soon as the model produced it.
-/// </para>
-/// <para>
-/// A request names its session in the <see cref="SessionHeaderName"/> header. The OpenAI request
-/// shape carries no session field, so adding one would break a strict client; a header rides beside
-/// the shape and every client can set one. A request that sets no header starts a new call, and the
-/// answer carries the id in the same header and in the <c>agentcore.session</c> field of the body. A
-/// request that names an id the store does not hold is answered <c>404</c> and starts nothing,
-/// because a silently new call would lose the stage the caller was in.
-/// </para>
-/// <para>
-/// The session lives in <see cref="ICallSessionStore"/> between two requests. The default store is
-/// <see cref="InMemoryCallSessionStore"/>, which does not survive a restart and does not span
-/// instances.
-/// </para>
-/// </remarks>
 public static class ChatCompletionsEndpointRouteBuilderExtensions
 {
     /// <summary>The route this endpoint answers on when the host names none.</summary>
@@ -43,14 +23,13 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
     public const string SessionHeaderName = "X-AgentCore-Session";
 
     /// <summary>The answer header that reports the stage the machine holds after the turn.</summary>
-    /// <remarks>
-    /// The streaming path writes its headers before the turn ends, so it reports the stage the turn
-    /// spoke in. Read <c>agentcore.stage_after</c> of the last chunk for the stage after the turn.
-    /// </remarks>
+
     public const string StageHeaderName = "X-AgentCore-Stage";
 
     private const string EventPrefix = "data: ";
+
     private const string EventSuffix = "\n\n";
+
     private const string DoneEvent = "data: [DONE]\n\n";
 
     /// <summary>Maps the endpoint on <see cref="DefaultPattern"/>.</summary>
@@ -109,13 +88,13 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
             return;
         }
 
-        var store = http.RequestServices.GetRequiredService<ICallSessionStore>();
+        var sessions = http.RequestServices.GetRequiredService<ICallSessions>();
         var named = http.Request.Headers[SessionHeaderName].ToString();
 
         CallSession session;
         if (named is { Length: > 0 })
         {
-            if (await store.TryGetAsync(named, cancellationToken).ConfigureAwait(false) is not { } found)
+            if (await sessions.TryGetAsync(named, cancellationToken).ConfigureAwait(false) is not { } found)
             {
                 await WriteErrorAsync(
                     http,
@@ -132,15 +111,22 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
         }
         else
         {
-            session = http.RequestServices.GetRequiredService<ICallSessionFactory>().Create();
-            await store.AddAsync(session, cancellationToken).ConfigureAwait(false);
+            session = await sessions.OpenAsync(null, cancellationToken).ConfigureAwait(false);
         }
+
+        var streaming = request?.Stream == true;
+
+        // Only the stream has a chunk to carry a drawing, so only the stream gets a screen. Binding
+        // one on the whole-reply branch would let the tool report a picture the caller never sees;
+        // with none bound it answers that it cannot draw. Set per request, not once: the session
+        // outlives a request and the branch can differ per turn.
+        session.SetHasScreen(streaming);
 
         var model = request?.Model is { Length: > 0 } asked ? asked : session.Compiled.Name;
 
         try
         {
-            if (request?.Stream == true)
+            if (streaming)
             {
                 await StreamTurnAsync(http, session, input, model, cancellationToken).ConfigureAwait(false);
             }
@@ -237,6 +223,15 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
 
         await foreach (var update in session.RunTurnStreamingAsync(input, cancellationToken).ConfigureAwait(false))
         {
+            foreach (var drawn in update.Contents.OfType<RenderContent>())
+            {
+                await WriteEventAsync(
+                    http,
+                    Chunk(id, created, model, new ChatCompletionMessage(), finishReason: null, turn: null)
+                        with { AgentCoreData = new RenderedPayload { Name = drawn.Name, Data = drawn.Data } },
+                    cancellationToken).ConfigureAwait(false);
+            }
+
             if (update.Text is not { Length: > 0 } text)
             {
                 // A tool call and a tool result arrive as updates too, and neither is speech.

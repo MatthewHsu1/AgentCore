@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using AgentCore.Application.Knowledge;
 
 namespace AgentCore.Application.Configuration.Schema;
 
@@ -15,6 +16,12 @@ public sealed record LlmProviderConfiguration
 
     /// <summary>Gets the name this entry answers to, such as <c>reply</c> or <c>fill</c>.</summary>
     public required string As { get; init; }
+
+    /// <summary>
+    /// Gets how hard a reasoning model thinks before it answers, or <see langword="null"/> to send
+    /// nothing and let the vendor decide.
+    /// </summary>
+    public string? ReasoningEffort { get; init; }
 }
 
 /// <summary>
@@ -57,36 +64,170 @@ public sealed record CallProviderConfiguration
 }
 
 /// <summary>
-/// The knowledge provider: one adapter for each knowledge port, and what those adapters read.
+/// The embedding provider: the vendor that turns a query into a vector, and the model it uses.
+/// </summary>
+public sealed record EmbeddingProviderConfiguration
+{
+    /// <summary>Gets the vendor, such as <c>openai</c>.</summary>
+    public required string Kind { get; init; }
+
+    /// <summary>Gets the model name the vendor knows, such as <c>text-embedding-3-small</c>.</summary>
+    public required string Model { get; init; }
+
+    /// <summary>
+    /// Gets the vector width to ask the vendor for, or <see langword="null"/> for the model's own.
+    /// It must match the width the knowledge collection was built with.
+    /// </summary>
+    public int? Dimensions { get; init; }
+}
+
+/// <summary>How a card's payload is named in the collection this deployment reads.</summary>
+public sealed record KnowledgeFieldsConfiguration
+{
+    /// <summary>The id field used when the document names none.</summary>
+    public const string DefaultId = "card_id";
+
+    /// <summary>The body field used when the document names none.</summary>
+    public const string DefaultBody = "body";
+
+    /// <summary>The full-text field used when the document names none.</summary>
+    public const string DefaultLexical = "text";
+
+    /// <summary>The citation source field used when the document names none.</summary>
+    public const string DefaultSource = "source.ref";
+
+    /// <summary>The citation locator field used when the document names none.</summary>
+    public const string DefaultLocator = "source.locator";
+
+    /// <summary>The trust-rank field used when the document names none.</summary>
+    public const string DefaultAuthority = "authority";
+
+    /// <summary>Gets the field holding the card id, or null when the collection carries none.</summary>
+    public string? Id { get; init; } = DefaultId;
+
+    /// <summary>Gets the field holding what the model reads.</summary>
+    public string Body { get; init; } = DefaultBody;
+
+    /// <summary>Gets the full-text-indexed field the required-term leg matches on.</summary>
+    public string? Lexical { get; init; } = DefaultLexical;
+
+    /// <summary>Gets the field holding the citation's source label. Empty output omits the citation.</summary>
+    public string? Source { get; init; } = DefaultSource;
+
+    /// <summary>Gets the field holding where in that source the card sits.</summary>
+    public string? Locator { get; init; } = DefaultLocator;
+
+    /// <summary>Gets the field holding the trust rank. Read by the audit record only.</summary>
+    public string? Authority { get; init; } = DefaultAuthority;
+}
+
+/// <summary>How an open <c>KnowledgeScope</c>'s facet keys become payload paths.</summary>
+public sealed record KnowledgeScopeConfiguration
+{
+    /// <summary>The template used when the document names none.</summary>
+    public const string DefaultTemplate = "facets.{key}";
+
+    /// <summary>
+    /// Gets the payload path each facet key becomes, with <c>{key}</c> standing for the key.
+    /// </summary>
+    public string Template { get; init; } = DefaultTemplate;
+}
+
+/// <summary>How a card id becomes something Qdrant can fetch.</summary>
+public enum KnowledgeLinkLookup
+{
+    /// <summary>The point key is <c>uuid5(namespace, prefix + id)</c>. One fetch by key.</summary>
+    Uuid5,
+
+    /// <summary>The point key is the card id itself. One fetch by key.</summary>
+    Direct,
+
+    /// <summary>The point key is unrelated to the id. One scroll, matching on the id field.</summary>
+    Filter,
+}
+
+/// <summary>How a card's links to other cards are read and followed.</summary>
+/// <remarks>
+/// The whole block is opt-in: a document without <c>links:</c> never expands. On a configured
+/// block, a collection carrying nothing at <see cref="Field"/> is still inert.
+/// </remarks>
+public sealed record KnowledgeLinksConfiguration
+{
+    /// <summary>The links field used when the document names none.</summary>
+    public const string DefaultField = "see_also";
+
+    /// <summary>The namespace used when the document names none.</summary>
+    public const string DefaultNamespace = "url";
+
+    /// <summary>The prefix used when the document names none.</summary>
+    public const string DefaultPrefix = "kb:";
+
+    /// <summary>Gets the payload field holding the ids of the cards this card links to.</summary>
+    public string Field { get; init; } = DefaultField;
+
+    /// <summary>Gets how a linked id becomes a point to fetch. <c>filter</c> works on any collection.</summary>
+    public KnowledgeLinkLookup Lookup { get; init; } = KnowledgeLinkLookup.Filter;
+
+    /// <summary>Gets the uuid5 namespace: <c>url</c>, <c>dns</c>, <c>oid</c>, <c>x500</c>, or a GUID.</summary>
+    public string Namespace { get; init; } = DefaultNamespace;
+
+    /// <summary>Gets what the ingester puts in front of the id before hashing. May be empty.</summary>
+    public string Prefix { get; init; } = DefaultPrefix;
+}
+
+/// <summary>
+/// The knowledge provider: the adapter that answers <c>IKnowledgeRetrievalPort</c>, and what it reads.
 /// </summary>
 public sealed record KnowledgeProviderConfiguration
 {
-    /// <summary>The search adapter used when the document names none.</summary>
-    public const string DefaultSearch = "filesystem";
-
-    /// <summary>The document adapter used when the document names none.</summary>
-    public const string DefaultDocuments = "filesystem";
-
-    /// <summary>The root used when the document sets none.</summary>
-    public const string DefaultRoot = "./kb";
+    /// <summary>The adapter used when the document names none.</summary>
+    public const string DefaultKind = "qdrant";
 
     /// <summary>The collection used when the document names none.</summary>
-    public const string DefaultCollection = "kb_chunks";
+    public const string DefaultCollection = "kb";
 
-    /// <summary>Gets the adapter that answers <c>IKnowledgeRetrievalPort</c>, such as <c>zilliz</c>.</summary>
-    public string Search { get; init; } = DefaultSearch;
+    /// <summary>The analyzer used when the document names none.</summary>
+    public const string DefaultAnalyzer = IdentifierCodeAnalyzer.AnalyzerName;
 
-    /// <summary>Gets the adapter that answers <c>IDocumentStorePort</c>, such as <c>filesystem</c>.</summary>
-    public string Documents { get; init; } = DefaultDocuments;
+    /// <summary>The score floor used when the document sets none.</summary>
+    public const double DefaultScoreFloor = 0.25;
 
-    /// <summary>Gets the root of the knowledge-base tree. The tree is its own Git repository.</summary>
-    public string Root { get; init; } = DefaultRoot;
+    /// <summary>Gets the adapter that answers <c>IKnowledgeRetrievalPort</c>, such as <c>qdrant</c>.</summary>
+    public string Kind { get; init; } = DefaultKind;
 
-    /// <summary>Gets the cluster URL the <c>zilliz</c> adapter reads, or <see langword="null"/>.</summary>
+    /// <summary>Gets the Qdrant endpoint, such as <c>https://qdrant.example.com:6334</c>.</summary>
     public string? Endpoint { get; init; }
 
-    /// <summary>Gets the collection the <c>zilliz</c> adapter reads.</summary>
+    /// <summary>Gets the collection to read.</summary>
     public string Collection { get; init; } = DefaultCollection;
+
+    /// <summary>
+    /// Gets the named vector every query searches, or <see langword="null"/> for the collection's
+    /// single anonymous vector — the default shape most Qdrant tooling creates.
+    /// </summary>
+    public string? Vector { get; init; }
+
+    /// <summary>Gets how a card's payload is named.</summary>
+    public KnowledgeFieldsConfiguration Fields { get; init; } = new();
+
+    /// <summary>Gets how facet keys become payload paths.</summary>
+    public KnowledgeScopeConfiguration Scope { get; init; } = new();
+
+    /// <summary>Gets how links between cards are read and followed, or <see langword="null"/> for no link expansion.</summary>
+    public KnowledgeLinksConfiguration? Links { get; init; }
+
+    /// <summary>Gets the <c>IKnowledgeQueryAnalyzer</c> name that picks required terms.</summary>
+    public string Analyzer { get; init; } = DefaultAnalyzer;
+
+    /// <summary>
+    /// Gets the <c>IKnowledgePointMapper</c> name that turns a point into a card, or
+    /// <see langword="null"/> for the <c>fields:</c> mapping above.
+    /// </summary>
+
+    public string? Mapper { get; init; }
+
+    /// <summary>Gets the smallest fused score a card may carry, in the range 0 to 1.</summary>
+    public double ScoreFloor { get; init; } = DefaultScoreFloor;
 }
 
 /// <summary>
@@ -162,6 +303,9 @@ public sealed record ProvidersConfiguration
 
     /// <summary>Gets the moderation provider, or <see langword="null"/>.</summary>
     public VendorProviderConfiguration? Moderation { get; init; }
+
+    /// <summary>Gets the embedding provider, or <see langword="null"/>.</summary>
+    public EmbeddingProviderConfiguration? Embeddings { get; init; }
 
     /// <summary>Gets the knowledge provider, or <see langword="null"/>.</summary>
     public KnowledgeProviderConfiguration? Knowledge { get; init; }

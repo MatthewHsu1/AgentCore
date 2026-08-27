@@ -4,21 +4,25 @@ using AgentCore.Application.Configuration.Validation;
 
 namespace AgentCore.AspNetCore.DependencyInjection;
 
-/// <summary>Steps 1 and 2: read the one document the options name, and check it.</summary>
+/// <summary>Steps 1 and 2: read the one document the options name, and check its structure.</summary>
 internal static class ConfigurationStartup
 {
-    /// <summary>Loads and validates the one document the options name.</summary>
+    /// <summary>Loads the one document the options name, and runs every structural check on it.</summary>
     /// <param name="options">The options the host filled.</param>
-    /// <returns>The loaded document, which has already passed checks 2 to 8.</returns>
+    /// <returns>
+    /// The loaded document, which has passed every check of section 8.5 except tool-reference
+    /// resolution. Decision 15 runs that check after discovery, in the composition root, against the
+    /// ids the tool registry actually serves — so an MCP-discovered id can satisfy a reference.
+    /// </returns>
     /// <exception cref="InvalidOperationException">The options name no document, or name two.</exception>
-    /// <exception cref="ConfigurationLoadException">The document fails one of the eight checks.</exception>
+    /// <exception cref="ConfigurationLoadException">The document fails one of the structural checks.</exception>
     /// <remarks>
-    /// Checks 2 to 8 report every defect at once, so one start names them all.
+    /// The structural checks report every defect at once, so one start names them all.
     /// </remarks>
     internal static AgentCoreConfiguration Load(AgentCoreOptions options)
     {
         var configuration = LoadDocument(options);
-        ConfigurationValidator.Validate(configuration);
+        ConfigurationValidator.ValidateStructure(configuration);
         return configuration;
     }
 

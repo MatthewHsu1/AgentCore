@@ -11,11 +11,11 @@ public static class KnownSecrets
     /// <summary>The standard OpenAI environment variable, read when the chain holds no name.</summary>
     public const string OpenAiApiKeyVariable = "OPENAI_API_KEY";
 
-    /// <summary>The <c>${secret:name}</c> name the Zilliz key resolves under.</summary>
-    public const string ZillizApiKeyName = "zilliz-api-key";
+    /// <summary>The <c>${secret:name}</c> name the Qdrant key resolves under.</summary>
+    public const string QdrantApiKeyName = "qdrant-api-key";
 
-    /// <summary>The standard Zilliz environment variable, read when the chain holds no name.</summary>
-    public const string ZillizApiKeyVariable = "ZILLIZ_API_KEY";
+    /// <summary>The standard Qdrant environment variable, read when the chain holds no name.</summary>
+    public const string QdrantApiKeyVariable = "QDRANT_API_KEY";
 
     /// <summary>The <c>${secret:name}</c> name the Grafana Cloud instance id resolves under.</summary>
     public const string GrafanaCloudInstanceIdName = "grafana-cloud-instance-id";
@@ -38,8 +38,8 @@ public static class KnownSecrets
     /// <summary>The one OpenAI credential, which chat, embedding, and moderation all read.</summary>
     public static readonly SecretName OpenAi = new(OpenAiApiKeyName, OpenAiApiKeyVariable);
 
-    /// <summary>The Zilliz Cloud credential the vector store sends on every search.</summary>
-    public static readonly SecretName Zilliz = new(ZillizApiKeyName, ZillizApiKeyVariable);
+    /// <summary> The Qdrant API key the vector store sends on every call. </summary>
+    public static readonly SecretName Qdrant = new(QdrantApiKeyName, QdrantApiKeyVariable);
 
     /// <summary>The PostgreSQL connection string the audit chain and the transcript are written through.</summary>
     public static readonly SecretName PostgresConnectionString =

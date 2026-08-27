@@ -2,7 +2,8 @@
 
   <PropertyGroup>
     <IsPackable>true</IsPackable>
-    <Description>Inbound adapters as Map* extensions: Telnyx Conversation Relay, Telnyx webhooks, chat completions.</Description>
+    <Description>Inbound adapters as Map* extensions: Conversation Relay, webhooks, chat completions.</Description>
+    <PackageTags>agent;ai;aspnetcore;chat-completions</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,16 +14,10 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
-  <!--
-    The one outbound HTTP pipeline of the composition root: pooling, deadline, and retry.
-    Microsoft.Extensions.Http itself ships in the shared framework above, so only the retry is a
-    package here.
-  -->
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
   </ItemGroup>
 
-  <!-- Rule 2, section 5.1: guard the public surface. -->
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
     <AdditionalFiles Include="PublicAPI.Shipped.txt" />
@@ -31,6 +26,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="AgentCore.AspNetCore.Tests" />
+    <InternalsVisibleTo Include="AgentCore.Hosting" />
   </ItemGroup>
 
 </Project>

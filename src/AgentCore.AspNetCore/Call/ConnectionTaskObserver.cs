@@ -12,11 +12,8 @@ internal enum ConnectionTaskKind
     /// <summary>The loop that writes the transport.</summary>
     WriteLoop,
 
-    /// <summary>The wait for the words of the call to reach store 1.</summary>
-    TranscriptFlush,
-
-    /// <summary>The wait for the session to leave the store.</summary>
-    SessionRemove,
+    /// <summary>The wait for the call to end: its words reach store 1, then its session goes.</summary>
+    SessionClose,
 }
 
 /// <summary>
@@ -131,8 +128,7 @@ internal sealed class ConnectionTaskObserver(
         ConnectionTaskKind.ReadLoop => "the read loop",
         ConnectionTaskKind.Turn => "the last turn",
         ConnectionTaskKind.WriteLoop => "the write loop",
-        ConnectionTaskKind.TranscriptFlush => "the transcript flush",
-        ConnectionTaskKind.SessionRemove => "the session removal",
+        ConnectionTaskKind.SessionClose => "the session close",
         _ => "a task",
     };
 

@@ -60,6 +60,13 @@
         "$ref": "#/$defs/tool"
       }
     },
+    "mcp": {
+      "type": "array",
+      "description": "Decision 13: declared MCP servers, each becoming many tools once discovery runs.",
+      "items": {
+        "$ref": "#/$defs/mcpServer"
+      }
+    },
     "agents": {
       "$ref": "#/$defs/agents"
     },
@@ -90,6 +97,11 @@
     "identifier": {
       "type": "string",
       "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$"
+    },
+    "toolReference": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_-]*(\\.[A-Za-z_][A-Za-z0-9_-]*)?$",
+      "description": "A tool id an agent references. It carries one optional dot because decision 10 serves an MCP tool as <server>.<tool>; a tools: entry's own id never has one."
     },
     "rule": {
       "description": "A raw JSONLogic rule. Section 8.4 checks its operators, and this schema does not type it.",
@@ -294,6 +306,15 @@
         },
         "request": {
           "$ref": "#/$defs/httpRequest"
+        },
+        "model": {
+          "$ref": "#/$defs/modelRef",
+          "description": "kind: builtin naming a shipped agent. The model that inner agent runs on. Omitted, the host default applies."
+        },
+        "maxRounds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "kind: builtin naming a shipped agent. The round cap inside that tool, not the calling agent's turn budget."
         }
       },
       "allOf": [
@@ -315,7 +336,7 @@
             "properties": {
               "parameters": false
             },
-            "$comment": "kind: builtin reads fixed argument names in C# (BuiltinToolFactory). A document that overrides the schema makes the model fill boxes the C# never reads, so parameters is forbidden here."
+            "$comment": "kind: builtin reads fixed argument names in C# (BuiltinToolSource). A document that overrides the schema makes the model fill boxes the C# never reads, so parameters is forbidden here."
           }
         },
         {
@@ -368,6 +389,200 @@
               "agent"
             ]
           }
+        },
+        {
+          "if": {
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "not": {
+                  "const": "builtin"
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "model": false,
+              "maxRounds": false
+            },
+            "$comment": "Only the kind: builtin path reads model and maxRounds (ShippedAgentBuilder). A kind: agent tool takes its model from its agents.items entry, and http and binding call no model at all, so either key there would be accepted and then ignored."
+          }
+        }
+      ]
+    },
+    "mcpServer": {
+      "type": "object",
+      "description": "Decision 13: one MCP server. One entry becomes many tools once discovery runs.",
+      "required": [
+        "id",
+        "transport"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier",
+          "description": "Decision 10: every tool this server offers is served as <id>.<tool>, unless allow[].as renames it."
+        },
+        "transport": {
+          "enum": [
+            "stdio",
+            "http"
+          ],
+          "description": "How AgentCore reaches the server: a child process over its standard streams, or an HTTP endpoint."
+        },
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "transport: stdio. The executable and its arguments that launch the server."
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "description": "transport: http. The server's URI."
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "transport: http. Headers sent on every request. A value may hold ${secret:name}. This is where an Authorization header goes."
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "transport: stdio. The environment the child process is launched with. A value may hold ${secret:name}. A credential goes here, never in command:, where it would land in ps."
+        },
+        "inheritEnv": {
+          "type": "boolean",
+          "default": false,
+          "description": "transport: stdio. Whether the child also inherits this process's own environment. Defaults to false: an MCP server is third-party code, and inheriting hands it every other credential this process holds."
+        },
+        "connectTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 10,
+          "description": "How long one connection attempt may take. Applied on every attempt, so the SDK's own 60s default never governs."
+        },
+        "callTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 30,
+          "description": "How long one tool call on this server may take before it is cancelled and the model is told it timed out."
+        },
+        "retry": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "What happens when a connection attempt fails. Exists for cold starts: npx fetching a package, or a container still warming up.",
+          "properties": {
+            "attempts": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10,
+              "default": 3,
+              "description": "The number of attempts, including the first."
+            },
+            "backoffMs": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 1000,
+              "description": "The wait before the second attempt. Each later one waits twice the last."
+            }
+          }
+        },
+        "allow": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/mcpAllowEntry"
+          },
+          "description": "Decision 6: the tools this server is pinned to offer. Pinning is the default; [\"*\"] is the explicit opt-out."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "transport"
+            ],
+            "properties": {
+              "transport": {
+                "const": "stdio"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "command"
+            ],
+            "properties": {
+              "url": false,
+              "headers": false
+            },
+            "$comment": "transport: stdio launches a child process; url names nothing there, and a header belongs to no request it makes. Its credential goes in env:."
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "transport"
+            ],
+            "properties": {
+              "transport": {
+                "const": "http"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "url"
+            ],
+            "properties": {
+              "command": false,
+              "env": false,
+              "inheritEnv": false
+            },
+            "$comment": "transport: http reaches a server already running; nothing here launches a process, so there is no child environment to set. Its credential goes in headers:."
+          }
+        }
+      ]
+    },
+    "mcpAllowEntry": {
+      "description": "Decision 6: a tool name, or a single-key object aliasing it to a served id.",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "description": "The tool name as the server offers it, or \"*\" for every tool it offers."
+        },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 1,
+          "propertyNames": {
+            "minLength": 1
+          },
+          "description": "One tool name mapped to the object that aliases it. The key is the remote server's own tool name, whose shape this schema does not control.",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "as"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "as": {
+                "$ref": "#/$defs/identifier",
+                "description": "Decision 10: the id this tool is served under, instead of <server>.<tool>. A bare id, like every other tools: entry."
+              }
+            }
+          }
         }
       ]
     },
@@ -418,6 +633,9 @@
             "instructions": {
               "type": "string",
               "description": "The stable cached prefix. Each stage appends a delta below it."
+            },
+            "knowledge": {
+              "$ref": "#/$defs/agentKnowledge"
             }
           }
         },
@@ -427,6 +645,30 @@
           "items": {
             "$ref": "#/$defs/agent"
           }
+        }
+      }
+    },
+    "agentKnowledge": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": [
+            "prefetch",
+            "tool"
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "description": "How many cards to retrieve. The store fetches once per search and every agent shares that one fetch, so no agent may ask for more than the store itself retrieves."
+        },
+        "citations": {
+          "type": "boolean"
+        },
+        "scoped": {
+          "type": "boolean"
         }
       }
     },
@@ -446,10 +688,13 @@
         "model": {
           "$ref": "#/$defs/modelRef"
         },
+        "knowledge": {
+          "$ref": "#/$defs/agentKnowledge"
+        },
         "tools": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/identifier"
+            "$ref": "#/$defs/toolReference"
           }
         }
       }
@@ -655,6 +900,10 @@
           "$ref": "#/$defs/vendorProvider",
           "description": "The adapter that reads what the caller said through a moderation endpoint, such as openai. A document that names none moderates nothing."
         },
+        "embeddings": {
+          "$ref": "#/$defs/embeddingProvider",
+          "description": "The vendor that turns a query into a vector, such as openai. A knowledge store that ranks by vector needs one."
+        },
         "knowledge": {
           "$ref": "#/$defs/knowledgeProvider"
         },
@@ -692,6 +941,17 @@
         "as": {
           "$ref": "#/$defs/identifier",
           "description": "The name a modelRef points at."
+        },
+        "reasoningEffort": {
+          "type": "string",
+          "enum": [
+            "none",
+            "minimal",
+            "low",
+            "medium",
+            "high"
+          ],
+          "description": "How hard a reasoning model thinks before it answers. Omit it to send nothing and let the vendor decide. Some reasoning models refuse function tools on the chat-completions path unless this is 'none'."
         }
       }
     },
@@ -775,39 +1035,128 @@
         }
       }
     },
-    "knowledgeProvider": {
+    "embeddingProvider": {
       "type": "object",
-      "description": "One adapter for each knowledge port, and what those adapters read.",
+      "description": "The vendor that turns a query into a vector, and the model it uses.",
+      "required": [
+        "kind",
+        "model"
+      ],
       "additionalProperties": false,
       "properties": {
-        "search": {
+        "kind": {
           "type": "string",
           "minLength": 1,
-          "default": "filesystem",
-          "description": "The adapter that answers IKnowledgeRetrievalPort, such as filesystem or zilliz."
+          "description": "The vendor, such as openai."
         },
-        "documents": {
+        "model": {
           "type": "string",
           "minLength": 1,
-          "default": "filesystem",
-          "description": "The adapter that answers IDocumentStorePort, such as filesystem."
+          "description": "The model name the vendor knows, such as text-embedding-3-small."
         },
-        "root": {
+        "dimensions": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The vector width to ask the vendor for. Omit it for the model's own width. It must match the width the knowledge collection was built with."
+        }
+      }
+    },
+    "knowledgeProvider": {
+      "type": "object",
+      "description": "The adapter that answers IKnowledgeRetrievalPort, and what it reads.",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
           "type": "string",
           "minLength": 1,
-          "default": "./kb",
-          "description": "The root of the knowledge-base tree. The tree is its own Git repository."
+          "default": "qdrant",
+          "description": "The adapter that answers IKnowledgeRetrievalPort, such as qdrant."
         },
         "endpoint": {
           "type": "string",
           "minLength": 1,
-          "description": "The cluster URL the zilliz adapter reads."
+          "description": "The Qdrant endpoint, such as https://qdrant.example.com:6334."
         },
         "collection": {
           "type": "string",
           "minLength": 1,
-          "default": "kb_chunks",
-          "description": "The collection the zilliz adapter reads."
+          "default": "kb",
+          "description": "The collection to read. Always the alias, never a concrete collection."
+        },
+        "vector": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "description": "The named vector every query searches. Omitted or null, the collection's single anonymous vector is searched; a kb sync collection needs vector: dense."
+        },
+        "fields": {
+          "type": "object",
+          "description": "How a card's payload is named. A dotted name walks into a nested struct. Only body must stay mapped; null disables a role the collection does not carry.",
+          "additionalProperties": false,
+          "properties": {
+            "id": { "type": ["string", "null"], "minLength": 1, "default": "card_id" },
+            "body": { "type": "string", "minLength": 1, "default": "body" },
+            "lexical": { "type": ["string", "null"], "minLength": 1, "default": "text" },
+            "source": { "type": ["string", "null"], "minLength": 1, "default": "source.ref" },
+            "locator": { "type": ["string", "null"], "minLength": 1, "default": "source.locator" },
+            "authority": { "type": ["string", "null"], "minLength": 1, "default": "authority" }
+          }
+        },
+        "scope": {
+          "type": "object",
+          "description": "How an open KnowledgeScope's facet keys become payload paths.",
+          "additionalProperties": false,
+          "properties": {
+            "template": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\{key\\}",
+              "default": "facets.{key}",
+              "description": "The payload path each facet key becomes, with {key} standing for the key."
+            }
+          }
+        },
+        "links": {
+          "type": "object",
+          "description": "How a card's links to other cards are read and followed. Writing the block turns link expansion on and requires a mapped fields.id; omitting it turns the feature off.",
+          "additionalProperties": false,
+          "properties": {
+            "field": { "type": "string", "minLength": 1, "default": "see_also" },
+            "lookup": {
+              "type": "string",
+              "enum": ["uuid5", "direct", "filter"],
+              "default": "filter",
+              "description": "How a linked id becomes a point to fetch. filter works on any collection; uuid5 is the kb sync scheme."
+            },
+            "namespace": {
+              "type": "string",
+              "minLength": 1,
+              "default": "url",
+              "description": "The uuid5 namespace: url, dns, oid, x500, or a GUID."
+            },
+            "prefix": {
+              "type": "string",
+              "default": "kb:",
+              "description": "What the ingester puts in front of the id before hashing. May be empty."
+            }
+          }
+        },
+        "analyzer": {
+          "type": "string",
+          "minLength": 1,
+          "default": "identifier-codes",
+          "description": "The IKnowledgeQueryAnalyzer name that picks required terms."
+        },
+        "mapper": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The IKnowledgePointMapper name that turns a point into a card. Omitted, the fields: block is the mapper."
+        },
+        "scoreFloor": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.25,
+          "description": "The smallest fused score a card may carry."
         }
       }
     },

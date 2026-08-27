@@ -1,8 +1,8 @@
+using AgentCore.TestSupport;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
 using AgentCore.Application.Tests.Configuration;
-using AgentCore.Application.Tests.Secrets.Fakes;
 using Xunit;
 
 namespace AgentCore.Application.Tests.Secrets;
@@ -26,7 +26,7 @@ public sealed class ResolvedSecretsTests
     public async Task TheWorkedExample_ResolvesItsOneSecret()
     {
         var document = ConfigurationLoader.LoadYaml(ExampleDocument.Yaml);
-        MapSecretResolver resolver = new(MapSecretResolver.Secret(ApiKeyName, ApiKeyValue));
+        MapSecretResolver resolver = new MapSecretResolver().With(ApiKeyName, ApiKeyValue);
 
         var secrets = await ResolvedSecrets.ResolveAsync(
             document,
@@ -65,7 +65,7 @@ public sealed class ResolvedSecretsTests
                 - { id: only }
             """;
 
-        MapSecretResolver resolver = new(MapSecretResolver.Secret(ApiKeyName, ApiKeyValue));
+        MapSecretResolver resolver = new MapSecretResolver().With(ApiKeyName, ApiKeyValue);
 
         var secrets = await ResolvedSecrets.ResolveAsync(
             ConfigurationLoader.LoadYaml(document),
@@ -123,13 +123,13 @@ public sealed class ResolvedSecretsTests
 
         Assert.Equal(ApiKeyName, failure.SecretName);
         Assert.Contains(ApiKeyName, failure.Message, StringComparison.Ordinal);
-        Assert.Contains("/tools/4/request/headers/Authorization", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("/tools/1/request/headers/Authorization", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public void FormattingAnUnknownName_Fails()
     {
-        var secrets = ResolvedSecrets.Create([MapSecretResolver.Secret(ApiKeyName, ApiKeyValue)]);
+        var secrets = ResolvedSecrets.Create([KeyValuePair.Create(ApiKeyName, ApiKeyValue)]);
         var template = SecretTemplate.Parse("${secret:missing-name}");
 
         var failure = Assert.Throws<SecretResolutionException>(() => secrets.Format(template));
@@ -143,7 +143,7 @@ public sealed class ResolvedSecretsTests
     [Fact]
     public void NoFailureMessage_EverHoldsAValue()
     {
-        var secrets = ResolvedSecrets.Create([MapSecretResolver.Secret(ApiKeyName, ApiKeyValue)]);
+        var secrets = ResolvedSecrets.Create([KeyValuePair.Create(ApiKeyName, ApiKeyValue)]);
         var template = SecretTemplate.Parse("Bearer ${secret:orders-api-key} and ${secret:missing-name}");
 
         var failure = Assert.Throws<SecretResolutionException>(() => secrets.Format(template));
@@ -154,7 +154,7 @@ public sealed class ResolvedSecretsTests
     [Fact]
     public void TheResolvedSet_NeverWritesAValueInItsOwnText()
     {
-        var secrets = ResolvedSecrets.Create([MapSecretResolver.Secret(ApiKeyName, ApiKeyValue)]);
+        var secrets = ResolvedSecrets.Create([KeyValuePair.Create(ApiKeyName, ApiKeyValue)]);
 
         // A resolved set lands in a log line, a diagnostic dump, or a debugger tooltip sooner or
         // later. It reports how many names it holds, and never what they are worth.
@@ -177,8 +177,8 @@ public sealed class ResolvedSecretsTests
     {
         var secrets = ResolvedSecrets.Create(
         [
-            MapSecretResolver.Secret("left", "L"),
-            MapSecretResolver.Secret("right", "R"),
+            KeyValuePair.Create("left", "L"),
+            KeyValuePair.Create("right", "R"),
         ]);
 
         Assert.Equal("<L|R>", secrets.Format(SecretTemplate.Parse("<${secret:left}|${secret:right}>")));

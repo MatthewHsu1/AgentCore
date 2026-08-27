@@ -18,6 +18,12 @@ public sealed class AgentCoreChatHistoryProviderTests
 {
     private const string CallId = "call-1";
 
+    /// <summary>
+    /// The key the call's transcript is filed under in <see cref="AgentSession.StateBag"/>. Changing
+    /// it orphans the state of any session already persisted under the old one.
+    /// </summary>
+    private const string StateKey = "AgentCoreChatHistoryProvider";
+
     [Fact]
     public async Task ProvideChatHistory_AfterAppend_ReturnsMessagesInOrder()
     {
@@ -310,6 +316,60 @@ public sealed class AgentCoreChatHistoryProviderTests
         Assert.Equal(["b said", "b heard"], (await ProvideAsync(provider, second)).Select(message => message.Text));
     }
 
+    /// <summary>
+    /// The framework validates this set at agent construction and again on every run, and refuses a
+    /// collision. The value is also the name a persisted session's state is filed under, so a change
+    /// here is a silent data loss rather than a rename.
+    /// </summary>
+    [Fact]
+    public void StateKeys_IsTheSingleKeyTheTranscriptIsFiledUnder()
+    {
+        // Arrange
+        var provider = new AgentCoreChatHistoryProvider();
+
+        // Assert
+        Assert.Equal([StateKey], provider.StateKeys);
+    }
+
+    [Fact]
+    public void AppendTurn_PutsTheTranscriptInTheSessionStateBagUnderTheProviderKey()
+    {
+        // Arrange
+        var (provider, _, session) = NewCall();
+
+        // Act
+        AppendTurn(provider, session, turnIndex: 0, "order 41?", "it ships Friday");
+
+        // Assert
+        Assert.True(session.StateBag.TryGetValue<CallTranscript>(StateKey, out var transcript, StateOptions));
+        Assert.NotNull(transcript);
+        Assert.Equal(CallId, transcript.CallId);
+        Assert.Equal(["order 41?", "it ships Friday"], transcript.Read().Select(message => message.Text));
+    }
+
+    /// <summary>
+    /// The provider is one object shared by every call, so the same key on two sessions must reach
+    /// two transcripts. A key resolved against the provider rather than the session would merge them.
+    /// </summary>
+    [Fact]
+    public void AppendTurn_TwoSessions_EachHoldsItsOwnTranscriptUnderThatKey()
+    {
+        // Arrange
+        var provider = new AgentCoreChatHistoryProvider(new RecordingTranscriptStore());
+        var first = new StubSession();
+        var second = new StubSession();
+        provider.BeginCall(first, "call-a");
+        provider.BeginCall(second, "call-b");
+
+        // Act
+        AppendTurn(provider, first, turnIndex: 0, "a said", "a heard");
+        AppendTurn(provider, second, turnIndex: 0, "b said", "b heard");
+
+        // Assert
+        Assert.Equal(["a said", "a heard"], TranscriptIn(first).Read().Select(message => message.Text));
+        Assert.Equal(["b said", "b heard"], TranscriptIn(second).Read().Select(message => message.Text));
+    }
+
     [Fact]
     public async Task AppendTurn_BackingStoreThrows_DoesNotFailTheTurn()
     {
@@ -383,6 +443,17 @@ public sealed class AgentCoreChatHistoryProviderTests
         provider.AppendTurn(
             session,
             [new ChatMessage(ChatRole.User, said), new ChatMessage(ChatRole.Assistant, replied)]);
+    }
+
+    /// <summary>The converters the provider files the transcript with.</summary>
+    private static JsonSerializerOptions StateOptions => AIJsonUtilities.DefaultOptions;
+
+    /// <summary>Reads one session's transcript straight out of its state bag, past the provider.</summary>
+    private static CallTranscript TranscriptIn(AgentSession session)
+    {
+        Assert.True(session.StateBag.TryGetValue<CallTranscript>(StateKey, out var transcript, StateOptions));
+        Assert.NotNull(transcript);
+        return transcript;
     }
 
     private static async Task<IReadOnlyList<ChatMessage>> ProvideAsync(

@@ -19,7 +19,7 @@ public sealed class CompiledAgent
 
     internal CompiledAgent(
         AgentCoreConfiguration configuration,
-        CompiledAgentShape shape,
+        CompileTableRow row,
         AIAgent entry,
         Dictionary<string, AIAgent> byAgentId,
         Dictionary<string, string> agentIdByStage,
@@ -28,7 +28,8 @@ public sealed class CompiledAgent
         Func<AIAgent, AIAgent> turnLayers)
     {
         Configuration = configuration;
-        Shape = shape;
+        Shape = row.Shape;
+        SessionCarriesHistory = row.SessionCarriesHistory;
         Agent = entry;
         SpokenBy = spokenBy;
         History = history;
@@ -44,6 +45,12 @@ public sealed class CompiledAgent
             _turnByAgentId[id] = turnLayers(agent);
         }
     }
+
+    /// <summary>
+    /// Gets whether the row answers its runs out of store 1 on its own session, rather than the
+    /// request messages.
+    /// </summary>
+    internal bool SessionCarriesHistory { get; }
 
     /// <summary>Gets the document this agent was compiled from.</summary>
     public AgentCoreConfiguration Configuration { get; }
@@ -99,7 +106,6 @@ public sealed class CompiledAgent
     /// <param name="stageId">The stage id.</param>
     /// <returns>The agent, or <see langword="null"/> when the stage names none.</returns>
     /// <exception cref="KeyNotFoundException">The stage is not declared.</exception>
-    /// <remarks>See <see cref="TurnAgent"/> for why a turn runs this one and not <see cref="ForStage"/>.</remarks>
     internal AIAgent? TurnAgentForStage(string stageId)
     {
         ArgumentNullException.ThrowIfNull(stageId);
@@ -115,7 +121,6 @@ public sealed class CompiledAgent
     /// <summary>Builds one stage machine for one call.</summary>
     /// <param name="guards">The evaluator that runs each exit guard.</param>
     /// <returns>The machine, in the initial stage.</returns>
-    /// <exception cref="InvalidOperationException">The document declares no <c>policy:</c>.</exception>
     public StagePolicy CreatePolicy(IGuardEvaluator guards)
     {
         if (Configuration.Policy is not { } policy)

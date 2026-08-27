@@ -1,6 +1,6 @@
+using AgentCore.TestSupport;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
-using AgentCore.Application.Tests.Secrets.Fakes;
 using Xunit;
 
 namespace AgentCore.Application.Tests.Secrets;
@@ -39,7 +39,7 @@ public sealed class SecretOptionalReadTests
 
         try
         {
-            MapSecretResolver resolver = new(MapSecretResolver.Secret(secret.Name, SecretValue));
+            MapSecretResolver resolver = new MapSecretResolver().With(secret.Name, SecretValue);
 
             var value = await resolver.TryReadAsync(secret, TestContext.Current.CancellationToken);
 
@@ -130,7 +130,7 @@ public sealed class SecretOptionalReadTests
 
         try
         {
-            MapSecretResolver resolver = new(MapSecretResolver.Secret(secret.Name, string.Empty));
+            MapSecretResolver resolver = new MapSecretResolver().With(secret.Name, string.Empty);
 
             var value = await resolver.TryReadAsync(secret, TestContext.Current.CancellationToken);
 
@@ -154,7 +154,7 @@ public sealed class SecretOptionalReadTests
 
         try
         {
-            MapSecretResolver resolver = new(MapSecretResolver.Secret(secret.Name, string.Empty));
+            MapSecretResolver resolver = new MapSecretResolver().With(secret.Name, string.Empty);
 
             // RequireAsync is now written in terms of TryReadAsync. This is the test that fails if
             // that refactor ever changes what a blank answer means on the required path: a mounted

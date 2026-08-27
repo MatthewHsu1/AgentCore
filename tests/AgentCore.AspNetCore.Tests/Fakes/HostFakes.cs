@@ -1,7 +1,4 @@
 using System.Runtime.CompilerServices;
-using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Ports;
-using AgentCore.Domain.Knowledge;
 using Microsoft.Extensions.AI;
 
 namespace AgentCore.AspNetCore.Tests.Fakes;
@@ -15,12 +12,12 @@ namespace AgentCore.AspNetCore.Tests.Fakes;
 /// out. The streaming path yields one update for each word, so a test can see the reply arrive in
 /// pieces rather than in one block.
 /// </remarks>
-internal sealed class SequencedChatClient : IChatClient
+internal sealed class FragmentingChatClient : IChatClient
 {
     private readonly string[] _replies;
     private int _calls;
 
-    public SequencedChatClient(params string[] replies) => _replies = replies;
+    public FragmentingChatClient(params string[] replies) => _replies = replies;
 
     /// <summary>Gets how many requests this client answered.</summary>
     public int Calls => Volatile.Read(ref _calls);
@@ -346,173 +343,4 @@ internal sealed class HeldPromptChatClient : IChatClient
     /// <summary>Cuts one reply into the pieces the streaming path yields.</summary>
     private static IEnumerable<string> Fragments(string reply)
         => reply.Split(' ').Select((word, index) => index == 0 ? word : " " + word);
-}
-
-/// <summary>
-/// Hands one client to the reply model and another to the extractor model.
-/// </summary>
-/// <remarks>
-/// <c>providers.llm[].as</c> names each model, and the document points <c>extractor.model</c> at one
-/// of those names. This factory routes on that name, so a test scripts the two models apart. No test
-/// in this project reaches a network or needs an API key.
-/// </remarks>
-internal sealed class RoutingChatClientFactory : IChatClientFactory
-{
-    private readonly Dictionary<string, IChatClient> _byName = new(StringComparer.Ordinal);
-    private readonly IChatClient _fallback;
-
-    public RoutingChatClientFactory(IChatClient fallback) => _fallback = fallback;
-
-    /// <summary>Binds one client to one <c>as</c> name.</summary>
-    public RoutingChatClientFactory Route(string name, IChatClient client)
-    {
-        _byName[name] = client;
-        return this;
-    }
-
-    public IChatClient GetChatClient(ModelReference? model)
-        => model is not null && _byName.TryGetValue(model.Ref, out var client) ? client : _fallback;
-}
-
-/// <summary>
-/// An offline knowledge adapter that answers both knowledge ports and holds nothing.
-/// </summary>
-/// <remarks>
-/// The file store of section 7 answers both ports the same way, so this fake stands in for it and
-/// this test project keeps its reference list short. A test that binds one port passes this object
-/// as one argument and leaves the other unbound.
-/// </remarks>
-internal sealed class EmptyKnowledgeStore : IKnowledgeRetrievalPort, IDocumentStorePort
-{
-    public ValueTask<IReadOnlyList<KnowledgeChunk>> SearchAsync(
-        string query,
-        int limit,
-        CancellationToken cancellationToken = default)
-        => ValueTask.FromResult<IReadOnlyList<KnowledgeChunk>>([]);
-
-    public ValueTask<KnowledgeDocument?> ReadAsync(string documentId, CancellationToken cancellationToken = default)
-        => ValueTask.FromResult<KnowledgeDocument?>(null);
-
-    public ValueTask<DocumentListing> ListAsync(string? pattern = null, CancellationToken cancellationToken = default)
-        => ValueTask.FromResult(new DocumentListing { DocumentIds = [], Truncated = false });
-
-    public ValueTask<GrepResult> GrepAsync(
-        string pattern,
-        string? glob = null,
-        CancellationToken cancellationToken = default)
-        => ValueTask.FromResult(new GrepResult { Matches = [], Truncated = false });
-}
-
-/// <summary>
-/// A resolver over a map a test writes. It holds no file and no environment variable.
-/// </summary>
-internal sealed class MapSecretResolver : ISecretResolverPort
-{
-    private readonly Dictionary<string, string> _values = new(StringComparer.Ordinal);
-
-    /// <summary>Adds one name and its value.</summary>
-    public MapSecretResolver With(string name, string value)
-    {
-        _values[name] = value;
-        return this;
-    }
-
-    public ValueTask<string?> TryResolveAsync(string name, CancellationToken cancellationToken = default)
-        => ValueTask.FromResult(_values.TryGetValue(name, out var value) ? value : null);
-}
-
-/// <summary>
-/// An offline knowledge vendor. The document names it by its kind, exactly as it names a model.
-/// </summary>
-/// <remarks>
-/// It builds one <see cref="RecordingKnowledgeStore"/> and hands the same object to both ports, so a
-/// test reads which store a built-in tool actually reached. Which halves it serves is settable,
-/// because the Zilliz connector of section 7 ranks and reads nothing.
-/// </remarks>
-internal sealed class FakeKnowledgeStoreAdapter : IKnowledgeStoreAdapter
-{
-    public FakeKnowledgeStoreAdapter(string kind) => Kind = kind;
-
-    public string Kind { get; }
-
-    public bool CanServeSearch { get; init; } = true;
-
-    public bool CanServeDocuments { get; init; } = true;
-
-    /// <summary>Gets the one store this vendor opened.</summary>
-    public RecordingKnowledgeStore Store { get; } = new();
-
-    /// <summary>Gets how many times the registry asked this vendor to rank.</summary>
-    public int SearchBuilds { get; private set; }
-
-    /// <summary>Gets how many times the registry asked this vendor to read.</summary>
-    public int DocumentBuilds { get; private set; }
-
-    public ValueTask<IKnowledgeRetrievalPort> CreateSearchAsync(
-        KnowledgeProviderConfiguration entry,
-        ISecretResolverPort? secrets,
-        CancellationToken cancellationToken = default)
-    {
-        if (!CanServeSearch)
-        {
-            throw new NotSupportedException($"the '{Kind}' adapter does not rank.");
-        }
-
-        SearchBuilds++;
-        return ValueTask.FromResult<IKnowledgeRetrievalPort>(Store);
-    }
-
-    public ValueTask<IDocumentStorePort> CreateDocumentsAsync(
-        KnowledgeProviderConfiguration entry,
-        ISecretResolverPort? secrets,
-        CancellationToken cancellationToken = default)
-    {
-        if (!CanServeDocuments)
-        {
-            throw new NotSupportedException($"the '{Kind}' adapter does not read.");
-        }
-
-        DocumentBuilds++;
-        return ValueTask.FromResult<IDocumentStorePort>(Store);
-    }
-}
-
-/// <summary>
-/// A knowledge store that answers nothing and remembers what it was asked.
-/// </summary>
-/// <remarks>
-/// A built-in tool holds its port privately, so a test proves which port it holds by calling the
-/// tool and reading what arrived here.
-/// </remarks>
-internal sealed class RecordingKnowledgeStore : IKnowledgeRetrievalPort, IDocumentStorePort
-{
-    /// <summary>Gets every query knowledge.search sent here, in call order.</summary>
-    public List<string> Queries { get; } = [];
-
-    /// <summary>Gets every document id knowledge.read sent here, in call order.</summary>
-    public List<string> Reads { get; } = [];
-
-    public ValueTask<IReadOnlyList<KnowledgeChunk>> SearchAsync(
-        string query,
-        int limit,
-        CancellationToken cancellationToken = default)
-    {
-        Queries.Add(query);
-        return ValueTask.FromResult<IReadOnlyList<KnowledgeChunk>>([]);
-    }
-
-    public ValueTask<KnowledgeDocument?> ReadAsync(string documentId, CancellationToken cancellationToken = default)
-    {
-        Reads.Add(documentId);
-        return ValueTask.FromResult<KnowledgeDocument?>(null);
-    }
-
-    public ValueTask<DocumentListing> ListAsync(string? pattern = null, CancellationToken cancellationToken = default)
-        => ValueTask.FromResult(new DocumentListing { DocumentIds = [], Truncated = false });
-
-    public ValueTask<GrepResult> GrepAsync(
-        string pattern,
-        string? glob = null,
-        CancellationToken cancellationToken = default)
-        => ValueTask.FromResult(new GrepResult { Matches = [], Truncated = false });
 }

@@ -1,7 +1,8 @@
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Knowledge;
 using AgentCore.Application.Llm;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Tools;
+using AgentCore.Application.Tools.Binding;
 using Microsoft.Extensions.Logging;
 
 namespace AgentCore.AspNetCore.DependencyInjection;
@@ -11,7 +12,8 @@ namespace AgentCore.AspNetCore.DependencyInjection;
 /// </summary>
 public sealed class AgentCoreOptions
 {
-    private readonly List<Func<AgentCoreStartup, IAgentToolFactory>> _toolFactories = [];
+    private readonly List<Func<AgentCoreStartup, IToolSource>> _toolSources = [];
+
     private readonly List<ICallObserver> _observers = [];
 
     /// <summary>Gets the path of the configuration document, or <see langword="null"/>.</summary>
@@ -35,14 +37,20 @@ public sealed class AgentCoreOptions
     /// <summary>Gets the seam that resolves a model reference, or <see langword="null"/>.</summary>
     internal Func<AgentCoreStartup, CancellationToken, ValueTask<IChatClientFactory>>? ChatClients { get; private set; }
 
+    /// <summary>Gets the embedding vendors the host registered, or <see langword="null"/>.</summary>
+    internal IReadOnlyList<IEmbeddingGeneratorAdapter>? Embeddings { get; private set; }
+
     /// <summary>Gets the knowledge vendors the host registered, or <see langword="null"/>.</summary>
     internal IReadOnlyList<IKnowledgeStoreAdapter>? KnowledgeStores { get; private set; }
 
-    /// <summary>Gets the seam <c>knowledge.search</c> ranks with, or <see langword="null"/>.</summary>
+    /// <summary>Gets the seam that beats the <c>providers.knowledge.kind</c> registry, or <see langword="null"/>.</summary>
     internal Func<AgentCoreStartup, IKnowledgeRetrievalPort>? KnowledgeRetrieval { get; private set; }
 
-    /// <summary>Gets the seam <c>knowledge.read</c> opens, or <see langword="null"/>.</summary>
-    internal Func<AgentCoreStartup, IDocumentStorePort>? DocumentStore { get; private set; }
+    /// <summary>Gets the analyzers <c>providers.knowledge.analyzer</c> may name.</summary>
+    internal IReadOnlyList<IKnowledgeQueryAnalyzer> KnowledgeAnalyzers { get; private set; } = [];
+
+    /// <summary>Gets the mappers <c>providers.knowledge.mapper</c> may name.</summary>
+    internal IReadOnlyList<IKnowledgePointMapper> KnowledgeMappers { get; private set; } = [];
 
     /// <summary>Gets the moderation vendors the host registered, or <see langword="null"/>.</summary>
     internal IReadOnlyList<IModerationAdapter>? Moderation { get; private set; }
@@ -62,8 +70,8 @@ public sealed class AgentCoreOptions
     /// <summary>Gets the call transports this host supports, or <see langword="null"/>.</summary>
     internal IReadOnlyList<ICallAdapter>? Call { get; private set; }
 
-    /// <summary>Gets the extra tool factory links, in the order the composite asks them.</summary>
-    internal IReadOnlyList<Func<AgentCoreStartup, IAgentToolFactory>> ToolFactories => _toolFactories;
+    /// <summary>Gets the extra tool sources, in the order the registry asks them.</summary>
+    internal IReadOnlyList<Func<AgentCoreStartup, IToolSource>> ToolSources => _toolSources;
 
     /// <summary>Gets the observers the host registered, in the order it registered them.</summary>
     internal IReadOnlyList<ICallObserver> Observers => _observers;
@@ -98,7 +106,17 @@ public sealed class AgentCoreOptions
         return this;
     }
 
-    /// <summary>Binds the knowledge vendors, and the document picks one for each knowledge port.</summary>
+    /// <summary>Binds the embedding vendors, and the document picks one by <c>providers.embeddings.kind</c>.</summary>
+    /// <param name="adapters">One adapter for each embedding vendor this host supports.</param>
+    /// <returns>These options, so a host chains its calls.</returns>
+    public AgentCoreOptions UseEmbeddings(params IEmbeddingGeneratorAdapter[] adapters)
+    {
+        ArgumentNullException.ThrowIfNull(adapters);
+        Embeddings = adapters;
+        return this;
+    }
+
+    /// <summary>Binds the knowledge vendors, and the document picks one by <c>providers.knowledge.kind</c>.</summary>
     /// <param name="adapters">One adapter for each knowledge vendor this host supports.</param>
     /// <returns>These options, so a host chains its calls.</returns>
     public AgentCoreOptions UseKnowledgeStores(params IKnowledgeStoreAdapter[] adapters)
@@ -108,24 +126,7 @@ public sealed class AgentCoreOptions
         return this;
     }
 
-    /// <summary>Binds one adapter that answers both halves of the knowledge base.</summary>
-    /// <typeparam name="TKnowledge">The adapter type, which implements both knowledge ports.</typeparam>
-    /// <param name="knowledge">Builds the adapter from the loaded document.</param>
-    /// <returns>These options, so a host chains its calls.</returns>
-    public AgentCoreOptions UseKnowledge<TKnowledge>(Func<AgentCoreStartup, TKnowledge> knowledge)
-        where TKnowledge : class, IKnowledgeRetrievalPort, IDocumentStorePort
-    {
-        ArgumentNullException.ThrowIfNull(knowledge);
-
-        TKnowledge? built = null;
-        TKnowledge Once(AgentCoreStartup startup) => built ??= knowledge(startup);
-
-        KnowledgeRetrieval = Once;
-        DocumentStore = Once;
-        return this;
-    }
-
-    /// <summary>Binds the adapter <c>knowledge.search</c> ranks with.</summary>
+    /// <summary>Binds the adapter that beats the <c>providers.knowledge.kind</c> registry.</summary>
     /// <param name="retrieval">Builds the adapter from the loaded document.</param>
     /// <returns>These options, so a host chains its calls.</returns>
     public AgentCoreOptions UseKnowledgeRetrieval(Func<AgentCoreStartup, IKnowledgeRetrievalPort> retrieval)
@@ -135,13 +136,19 @@ public sealed class AgentCoreOptions
         return this;
     }
 
-    /// <summary>Binds the adapter <c>knowledge.read</c> opens.</summary>
-    /// <param name="documents">Builds the adapter from the loaded document.</param>
-    /// <returns>These options, so a host chains its calls.</returns>
-    public AgentCoreOptions UseDocumentStore(Func<AgentCoreStartup, IDocumentStorePort> documents)
+    /// <summary>Binds the query analyzers, and the document picks one by <c>providers.knowledge.analyzer</c>.</summary>
+    public AgentCoreOptions UseKnowledgeQueryAnalyzers(params IKnowledgeQueryAnalyzer[] analyzers)
     {
-        ArgumentNullException.ThrowIfNull(documents);
-        DocumentStore = documents;
+        ArgumentNullException.ThrowIfNull(analyzers);
+        KnowledgeAnalyzers = analyzers;
+        return this;
+    }
+
+    /// <summary>Binds the point mappers, and the document picks one by <c>providers.knowledge.mapper</c>.</summary>
+    public AgentCoreOptions UseKnowledgePointMappers(params IKnowledgePointMapper[] mappers)
+    {
+        ArgumentNullException.ThrowIfNull(mappers);
+        KnowledgeMappers = mappers;
         return this;
     }
 
@@ -218,13 +225,18 @@ public sealed class AgentCoreOptions
         return this;
     }
 
-    /// <summary>Adds one more link to the tool factory chain.</summary>
-    /// <param name="toolFactory">Builds the link from the loaded document and the resolved secrets.</param>
+    /// <summary>Adds one tool source the registry asks at startup.</summary>
+    /// <param name="toolSource">
+    /// Builds the source from the loaded document. The composition root calls this once and keeps
+    /// what it returns: when the source it builds implements <see cref="IAsyncDisposable"/> or
+    /// <see cref="IDisposable"/>, the composition root closes it when the host stops. Do not return an
+    /// instance the host still needs after that.
+    /// </param>
     /// <returns>These options, so a host chains its calls.</returns>
-    public AgentCoreOptions AddToolFactory(Func<AgentCoreStartup, IAgentToolFactory> toolFactory)
+    public AgentCoreOptions AddToolSource(Func<AgentCoreStartup, IToolSource> toolSource)
     {
-        ArgumentNullException.ThrowIfNull(toolFactory);
-        _toolFactories.Add(toolFactory);
+        ArgumentNullException.ThrowIfNull(toolSource);
+        _toolSources.Add(toolSource);
         return this;
     }
 

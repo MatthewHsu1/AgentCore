@@ -1,3 +1,4 @@
+using AgentCore.TestSupport;
 using System.Diagnostics.Metrics;
 using System.Runtime.CompilerServices;
 using AgentCore.Application.Diagnostics;
@@ -133,7 +134,7 @@ public sealed class TelnyxRelayFrameCostTests
         // one log record, the same one, in both runs.
         EventObservedLoggerProvider sentinel = new("DtmfReceived");
 
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         var host = await TelnyxRelayHost.StartAsync(
             TelnyxRelayTurnTests.PolicyYaml,
             reply,

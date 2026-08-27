@@ -1,7 +1,9 @@
+using AgentCore.TestSupport;
 using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Audit;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
+using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Ports;
@@ -49,7 +51,7 @@ public sealed class TurnPipelineTests
         name: pipeline-tools
         refusalReply: "I am sorry. I cannot help with that request."
         tools:
-          - { id: lookup_order, kind: builtin, uses: orders.read }
+          - { id: lookup_order, kind: builtin, uses: orders.read, description: "Look up an order by its id." }
         agents:
           defaults:
             model: { ref: reply }
@@ -102,8 +104,8 @@ public sealed class TurnPipelineTests
     {
         // Arrange. The model would call the tool if it ever ran.
         using ToolCallingChatClient model = new("never spoken");
-        StubToolFactory tools = new("""{ "status": "shipped" }""");
-        var session = Build(ToolYaml, model, tools: tools, moderation: ScriptedModerationEvaluator.Flagging("hate"))
+        StubToolBuilder tools = new("""{ "status": "shipped" }""");
+        var session = Build(ToolYaml, model, tools: tools.Create, moderation: ScriptedModerationEvaluator.Flagging("hate"))
             .Create("call-1");
 
         // Act.
@@ -340,7 +342,7 @@ public sealed class TurnPipelineTests
         string yaml,
         IChatClient reply,
         out RoutingChatClientFactory chatClients,
-        IAgentToolFactory? tools = null,
+        Func<ToolConfiguration, AITool?>? tools = null,
         ScriptedModerationEvaluator? moderation = null)
     {
         var document = ConfigurationLoader.LoadYaml(yaml);
@@ -350,7 +352,7 @@ public sealed class TurnPipelineTests
             document,
             new AgentCompilationContext(chatClients)
             {
-                Tools = tools,
+                Tools = TestToolRegistry.From(document, tools, TestContext.Current.CancellationToken),
                 Moderation = moderation is null ? null : new PromptModerator(moderation),
             });
     }
@@ -359,7 +361,7 @@ public sealed class TurnPipelineTests
         string yaml,
         IChatClient reply,
         IAuditSinkPort? sink = null,
-        IAgentToolFactory? tools = null,
+        Func<ToolConfiguration, AITool?>? tools = null,
         ScriptedModerationEvaluator? moderation = null)
     {
         var compiled = Compile(yaml, reply, out _, tools, moderation);

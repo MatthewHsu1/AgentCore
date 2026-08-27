@@ -1,34 +1,16 @@
+using System.Text.Json;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Transcript;
 using AgentCore.Domain.Audit;
 using Microsoft.Extensions.AI;
 using Npgsql;
 using NpgsqlTypes;
-using System.Text.Json;
 
 namespace AgentCore.Infrastructure.Transcript.Postgres;
 
 /// <summary>
 /// Store 1, the words of a call, in PostgreSQL. One row for each message.
 /// </summary>
-/// <remarks>
-/// <para>
-/// One row for each message and never one blob for each call: a blob write costs 17.5 times the WAL
-/// of a row write, and 434 times on a barge-in, because a barge-in rewrites the whole blob to correct
-/// one sentence.
-/// </para>
-/// <para>
-/// <b>This store blocks on its database, and that is correct.</b> Nothing here queues, retries, or
-/// swallows: <c>AgentCoreChatHistoryProvider</c> queues each write on a per-call chain and catches
-/// what it throws, so a call outlives a store that refuses and the rows of one call still reach the
-/// database in the order the call made them.
-/// </para>
-/// <para>
-/// <b>Words, and only words, live here.</b> The audit chain holds a SHA-256 of what was spoken, so
-/// erasing a caller is a <c>DELETE</c> against this table and leaves no hole in the chain.
-/// </para>
-/// </remarks>
 internal sealed class PostgresTranscriptStore : ITranscriptStore, IAsyncDisposable
 {
     private const string AppendSql = """
@@ -133,26 +115,6 @@ internal sealed class PostgresTranscriptStore : ITranscriptStore, IAsyncDisposab
           FROM spoken m JOIN completed a USING (call_id, turn_index)
          ORDER BY m.turn_index
         """;
-
-    /// <summary>
-    /// The framework's own converters, taught to read a row back out of <c>jsonb</c>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <see cref="AIJsonUtilities.DefaultOptions"/> ships the polymorphic converters, so a tool call, a
-    /// tool result, text, and usage all round-trip with no code of ours.
-    /// </para>
-    /// <para>
-    /// <b><c>AllowOutOfOrderMetadataProperties</c> is what makes the column type work.</b> <c>jsonb</c>
-    /// keeps no key order — it sorts the keys of an object — so the <c>$type</c> discriminator a
-    /// content part is written with does not come back first. Without this, every read of a stored
-    /// message throws: measured, on the first run of these tests. The alternative was the <c>json</c>
-    /// column type, which keeps the text verbatim and gives up every <c>jsonb</c> operator the verify
-    /// query above is written in, <c>@&gt;</c> among them.
-    /// </para>
-    /// </remarks>
-    private static readonly JsonSerializerOptions StoredMessageOptions =
-        new(AIJsonUtilities.DefaultOptions) { AllowOutOfOrderMetadataProperties = true };
 
     private readonly NpgsqlDataSource _dataSource;
 
@@ -355,11 +317,19 @@ internal sealed class PostgresTranscriptStore : ITranscriptStore, IAsyncDisposab
     /// <returns>A task that completes when the pool is closed.</returns>
     public ValueTask DisposeAsync() => _dataSource.DisposeAsync();
 
+    /// <remarks>
+    /// <see cref="TranscriptJson.Options"/> is required here, not merely convenient: the column is
+    /// <c>jsonb</c>, which keeps no key order, so a stored <c>$type</c> discriminator does not come
+    /// back first and every read throws without <c>AllowOutOfOrderMetadataProperties</c> — measured, on
+    /// the first run of these tests. The alternative was the <c>json</c> column type, which keeps the
+    /// text verbatim and gives up every <c>jsonb</c> operator the verify query above is written in,
+    /// <c>@&gt;</c> among them.
+    /// </remarks>
     private static string Serialise(ChatMessage message)
-        => JsonSerializer.Serialize(message, StoredMessageOptions);
+        => JsonSerializer.Serialize(message, TranscriptJson.Options);
 
     private static ChatMessage Deserialise(string content)
-        => JsonSerializer.Deserialize<ChatMessage>(content, StoredMessageOptions)
+        => JsonSerializer.Deserialize<ChatMessage>(content, TranscriptJson.Options)
             ?? throw new InvalidOperationException("A call_message row holds JSON null in content.");
 }
 

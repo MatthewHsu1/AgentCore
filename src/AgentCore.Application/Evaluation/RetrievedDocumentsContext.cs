@@ -5,18 +5,6 @@ namespace AgentCore.Application.Evaluation;
 /// <summary>
 /// The documents one search returned, and the documents the golden row expects.
 /// </summary>
-/// <remarks>
-/// <para>
-/// The measurement is the file and not the passage, so both sides hold
-/// <see cref="AgentCore.Domain.Knowledge.KnowledgeChunk.DocumentId"/> values. A chunk boundary belongs
-/// to the store: a knowledge base that re-chunks the same text answers the same question, and a score
-/// that moved would report a failure that is not there.
-/// </para>
-/// <para>
-/// The context carries what the row expects, which a person wrote, and what the search returned, which
-/// the store decided. <see cref="DocumentRecallEvaluator"/> is the only reader of it.
-/// </para>
-/// </remarks>
 public sealed class RetrievedDocumentsContext : EvaluationContext
 {
     /// <summary>The name this context carries.</summary>

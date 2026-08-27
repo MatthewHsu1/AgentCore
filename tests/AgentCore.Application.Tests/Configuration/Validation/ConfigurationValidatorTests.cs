@@ -31,7 +31,7 @@ public sealed class ConfigurationValidatorTests
     [Fact]
     public void TheShippedExampleFile_PassesEveryCheck()
     {
-        var path = Path.Combine(RepositoryRoot(), "src", "AgentCore.Api", "config", "example.yaml");
+        var path = Path.Combine(RepositoryRoot(), "demo", "AgentCore.Demo", "config", "example.yaml");
         Assert.True(File.Exists(path), $"The shipped example is missing at '{path}'.");
 
         var result = ConfigurationValidator.Evaluate(ConfigurationLoader.LoadFile(path));
@@ -85,7 +85,7 @@ public sealed class ConfigurationValidatorTests
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.ReferenceResolution));
 
         Assert.Equal("/state/orderStatus/from", error.Pointer);
-        Assert.Equal("the tool 'lookup_order' is not declared in tools:", error.Message);
+        Assert.Equal("nothing serves the tool 'lookup_order'. Declare it in tools:, or check that an mcp: server offers it.", error.Message);
     }
 
     [Fact]
@@ -278,6 +278,38 @@ public sealed class ConfigurationValidatorTests
 
         Assert.Equal("/tools/0/agent", error.Pointer);
         Assert.Equal("the agent 'ghost' is not declared in agents.items", error.Message);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Check 2, mcp: ids: two servers must not share one id.
+    // ---------------------------------------------------------------------------------------------
+    /// <summary>
+    /// Two <c>mcp:</c> entries with disjoint <c>allow:</c> sets would otherwise boot silently — nothing
+    /// in the schema, this validator, or <c>McpToolSource</c> catches it until an overlapping pair
+    /// happens to collide on a served tool id, and even then the failure names the tool, never the
+    /// duplicated server id. This runs before any connection opens.
+    /// </summary>
+    [Fact]
+    public void TwoMcpEntriesSharingAnId_FailCheckTwoNamingTheId()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            mcp:
+              - id: jira
+                transport: stdio
+                command: [npx]
+                allow: [create_issue]
+              - id: jira
+                transport: stdio
+                command: [npx]
+                allow: [search_issues]
+            """;
+
+        var error = Assert.Single(Evaluate(document, ConfigurationCheck.ReferenceResolution));
+
+        Assert.Equal("/mcp/1/id", error.Pointer);
+        Assert.Contains("jira", error.Message, StringComparison.Ordinal);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -904,6 +936,81 @@ public sealed class ConfigurationValidatorTests
         var result = ConfigurationValidator.Validate(configuration);
 
         Assert.True(result.IsValid);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Decision 15: structural, then tool references.
+    // ---------------------------------------------------------------------------------------------
+    /// <summary>
+    /// Decision 15's whole point: a YAML typo must not cost a round trip to every MCP server. The
+    /// structural pass therefore has to find a defect that has nothing to do with tool ids, on a
+    /// document whose tool references cannot possibly resolve yet.
+    /// </summary>
+    [Fact]
+    public void EvaluateStructure_ADefectThatIsNotAToolReference_IsFoundWithNoServedIds()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            guards:
+              ghost: { var: neverDeclared }
+            agents:
+              items:
+                - { id: planner, tools: [ jira.create_issue ] }
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+
+        var result = ConfigurationValidator.EvaluateStructure(configuration);
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(ConfigurationCheck.GuardOperators, error.Check);
+        Assert.Equal("/guards/ghost", error.Pointer);
+        Assert.Equal("the rule reads the slot 'neverDeclared', and state: does not declare it", error.Message);
+        Assert.DoesNotContain(result.Errors, e => e.Message.Contains("jira.create_issue", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ValidateToolReferences_AnIdNothingServes_FailsNamingTheIdAndThePointer()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            agents:
+              items:
+                - { id: planner, tools: [ jira.create_issue ] }
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+        var servedToolIds = new HashSet<string>(StringComparer.Ordinal);
+
+        var failure = Assert.Throws<ConfigurationLoadException>(
+            () => ConfigurationValidator.ValidateToolReferences(configuration, servedToolIds));
+
+        var error = Assert.Single(failure.Errors);
+        Assert.Equal("/agents/items/0/tools/0", error.Pointer);
+        Assert.Equal(
+            "nothing serves the tool 'jira.create_issue'. Declare it in tools:, or check that an mcp: server offers it.",
+            error.Message);
+    }
+
+    [Fact]
+    public void ValidateToolReferences_AnIdOnlyDiscoveryServes_Passes()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: fine
+            agents:
+              items:
+                - { id: planner, tools: [ jira.create_issue ] }
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+        var servedToolIds = new HashSet<string>(StringComparer.Ordinal) { "jira.create_issue" };
+
+        var exception = Record.Exception(() => ConfigurationValidator.ValidateToolReferences(configuration, servedToolIds));
+
+        Assert.Null(exception);
     }
 
     /// <summary>Walks up from the test binaries to the directory that holds the solution file.</summary>

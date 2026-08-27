@@ -46,6 +46,17 @@ internal sealed class SequencedChatClient : IChatClient
     /// <summary>Gets how many requests this client answered.</summary>
     public int Calls => Volatile.Read(ref _calls);
 
+    /// <summary>Gets the text of the system messages of one request, joined by a newline.</summary>
+    public string SystemText(int request)
+    {
+        lock (Requests)
+        {
+            return string.Join(
+                '\n',
+                Requests[request].Where(message => message.Role == ChatRole.System).Select(message => message.Text));
+        }
+    }
+
     /// <summary>Gets the text of the last user message of one request.</summary>
     public string LastUserText(int request)
     {
@@ -280,7 +291,7 @@ internal sealed class LoopingToolCallingChatClient : IChatClient
 /// <see cref="LoopingToolCallingChatClient"/> would call the tool again forever.
 /// </para>
 /// </remarks>
-internal sealed class ThrowingToolFactory : IAgentToolFactory
+internal sealed class ThrowingToolBuilder
 {
     /// <summary>The message every fault carries.</summary>
     public const string Message = "the tool is down.";
@@ -303,30 +314,6 @@ internal sealed class ThrowingToolFactory : IAgentToolFactory
     }
 }
 
-/// <summary>
-/// Hands one client to the reply model and another to the extractor model.
-/// </summary>
-/// <remarks>
-/// <c>providers.llm[].as</c> names each model, and the document points <c>extractor.model</c> at one
-/// of those names. This factory routes on that name, so a test scripts the two models apart.
-/// </remarks>
-internal sealed class RoutingChatClientFactory : IChatClientFactory
-{
-    private readonly Dictionary<string, IChatClient> _byName = new(StringComparer.Ordinal);
-    private readonly IChatClient _fallback;
-
-    public RoutingChatClientFactory(IChatClient fallback) => _fallback = fallback;
-
-    /// <summary>Binds one client to one <c>as</c> name.</summary>
-    public RoutingChatClientFactory Route(string name, IChatClient client)
-    {
-        _byName[name] = client;
-        return this;
-    }
-
-    public IChatClient GetChatClient(ModelReference? model)
-        => model is not null && _byName.TryGetValue(model.Ref, out var client) ? client : _fallback;
-}
 
 /// <summary>
 /// Builds one function for each declared tool, and answers it with a fixed JSON document.
@@ -335,7 +322,7 @@ internal sealed class RoutingChatClientFactory : IChatClientFactory
 /// The turn loop reads a tool result out of the finished turn and hands it to
 /// <c>ToolStateWriter</c>. This factory gives it something to read without an HTTP adapter.
 /// </remarks>
-internal sealed class StubToolFactory : IAgentToolFactory
+internal sealed class StubToolBuilder
 {
     private readonly string _result;
     private readonly bool _asText;
@@ -346,7 +333,7 @@ internal sealed class StubToolFactory : IAgentToolFactory
     /// Whether the tool answers the document as one string. A real tool answers either way, because a
     /// tool result has no declared shape.
     /// </param>
-    public StubToolFactory(string result, bool asText = false)
+    public StubToolBuilder(string result, bool asText = false)
     {
         _result = result;
         _asText = asText;
@@ -504,13 +491,13 @@ internal sealed class NamedToolCallingChatClient : IChatClient
 /// fault the model cannot answer.
 /// </summary>
 /// <remarks>
-/// <see cref="ThrowingToolFactory"/> builds a bare <c>AIFunctionFactory</c> delegate, which throws
+/// <see cref="ThrowingToolBuilder"/> builds a bare <c>AIFunctionFactory</c> delegate, which throws
 /// straight at the framework. This one goes through the base every shipped tool kind shares, so it
 /// exercises the classification <c>AuditingFunctionInvokingChatClient</c> applies and not just the
 /// framework's reaction to it. Section 8.7 row six is only reachable through a tool that lets a fault
 /// out.
 /// </remarks>
-internal sealed class UnreachableEndpointToolFactory : IAgentToolFactory
+internal sealed class UnreachableEndpointToolBuilder
 {
     /// <summary>The message every fault carries.</summary>
     public const string Message = "no such host";
@@ -530,9 +517,9 @@ internal sealed class UnreachableEndpointToolFactory : IAgentToolFactory
 
     private sealed class UnreachableEndpointTool : DeclaredTool
     {
-        private readonly UnreachableEndpointToolFactory _owner;
+        private readonly UnreachableEndpointToolBuilder _owner;
 
-        public UnreachableEndpointTool(ToolConfiguration tool, UnreachableEndpointToolFactory owner)
+        public UnreachableEndpointTool(ToolConfiguration tool, UnreachableEndpointToolBuilder owner)
             : base(tool) => _owner = owner;
 
         protected override ValueTask<object?> CallAsync(
@@ -550,11 +537,11 @@ internal sealed class UnreachableEndpointToolFactory : IAgentToolFactory
 /// fault the model CAN answer.
 /// </summary>
 /// <remarks>
-/// The counterpart of <see cref="UnreachableEndpointToolFactory"/>, and the half of section 8.7 that
+/// The counterpart of <see cref="UnreachableEndpointToolBuilder"/>, and the half of section 8.7 that
 /// must not regress: the tool answers with an error result, the model reads it, and the turn ends
 /// with a spoken reply and no failure at all.
 /// </remarks>
-internal sealed class RefusedRequestToolFactory : IAgentToolFactory
+internal sealed class RefusedRequestToolBuilder
 {
     /// <summary>The message every fault carries.</summary>
     public const string Message = "the order is already closed.";
@@ -574,9 +561,9 @@ internal sealed class RefusedRequestToolFactory : IAgentToolFactory
 
     private sealed class RefusedRequestTool : DeclaredTool
     {
-        private readonly RefusedRequestToolFactory _owner;
+        private readonly RefusedRequestToolBuilder _owner;
 
-        public RefusedRequestTool(ToolConfiguration tool, RefusedRequestToolFactory owner)
+        public RefusedRequestTool(ToolConfiguration tool, RefusedRequestToolBuilder owner)
             : base(tool) => _owner = owner;
 
         protected override ValueTask<object?> CallAsync(
@@ -625,5 +612,184 @@ internal sealed class ThrowingChatClient : IChatClient
     public void Dispose()
     {
         // Nothing to release.
+    }
+}
+
+/// <summary>A screen that records everything it was asked to show, in the order it was shown.</summary>
+internal sealed class RecordingRenderPort : IRenderPort
+{
+    public List<(string Name, string RenderId, object Data, bool Transient)> Published { get; } = [];
+
+    public void Publish(string name, string renderId, object data, bool transient = false)
+        => Published.Add((name, renderId, data, transient));
+}
+
+/// <summary>
+/// A drawing model: it answers each request with one call to <c>present</c> carrying the next
+/// scripted tree, and answers with plain text once the script runs out.
+/// </summary>
+/// <remarks>
+/// Enough to drive a real <c>ChatClientAgent</c> end to end, including recovery: a tree the
+/// validator rejects comes back to the agent as <c>present</c>'s error result, the agent asks again,
+/// and this client hands it the next tree. The text answer is what ends the run.
+/// </remarks>
+internal sealed class PresentCallingChatClient : IChatClient
+{
+    private readonly string[] _trees;
+    private int _calls;
+
+    public PresentCallingChatClient(params string[] trees) => _trees = trees;
+
+    /// <summary>Gets how many requests this client answered.</summary>
+    public int Calls => Volatile.Read(ref _calls);
+
+    public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        var index = Interlocked.Increment(ref _calls) - 1;
+        await Task.Yield();
+
+        var responseId = Guid.NewGuid().ToString("N");
+
+        if (index >= _trees.Length)
+        {
+            yield return new ChatResponseUpdate(ChatRole.Assistant, "drawn.")
+            {
+                ResponseId = responseId,
+                MessageId = responseId,
+            };
+            yield break;
+        }
+
+        yield return new ChatResponseUpdate(
+            ChatRole.Assistant,
+            [new FunctionCallContent(
+                $"call_{index}",
+                "present",
+                new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["tree"] = JsonSerializer.Deserialize<JsonElement>(_trees[index]),
+                })])
+        {
+            ResponseId = responseId,
+            MessageId = responseId,
+        };
+    }
+
+    public async Task<ChatResponse> GetResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        List<ChatResponseUpdate> updates = [];
+        await foreach (var update in GetStreamingResponseAsync(messages, options, cancellationToken)
+            .ConfigureAwait(false))
+        {
+            updates.Add(update);
+        }
+
+        return updates.ToChatResponse();
+    }
+
+    public object? GetService(Type serviceType, object? serviceKey = null)
+    {
+        ArgumentNullException.ThrowIfNull(serviceType);
+        return serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
+    }
+
+    public void Dispose()
+    {
+    }
+}
+
+/// <summary>
+/// A model that calls a scripted list of tools by name, one per request, then answers in words.
+/// </summary>
+/// <remarks>
+/// <see cref="LoopingToolCallingChatClient"/> always calls the first tool it is offered and
+/// <see cref="PresentCallingChatClient"/> is wired to <c>present</c>, so neither can drive an agent
+/// whose behaviour IS which tool it picks next. This one names the tool and its arguments, which is
+/// what makes a multi-hop test assert on the hops rather than on the count.
+/// </remarks>
+internal sealed class ScriptedToolCallingChatClient : IChatClient
+{
+    private readonly (string Tool, string Arguments)[] _script;
+    private int _calls;
+
+    public ScriptedToolCallingChatClient(params (string Tool, string Arguments)[] script) => _script = script;
+
+    /// <summary>Gets or sets the words the model ends on once the script is spent.</summary>
+    public string? FinalText { get; set; }
+
+    public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        var index = Interlocked.Increment(ref _calls) - 1;
+        await Task.Yield();
+
+        var responseId = Guid.NewGuid().ToString("N");
+
+        // Past the end of the script, or offered no tool at all on the cap's last request, it
+        // answers in words. Answering with a call it cannot make would hang the loop.
+        if (index >= _script.Length || options?.Tools is not { Count: > 0 })
+        {
+            yield return new ChatResponseUpdate(ChatRole.Assistant, FinalText ?? string.Empty)
+            {
+                ResponseId = responseId,
+                MessageId = responseId,
+            };
+            yield break;
+        }
+
+        var (tool, arguments) = _script[index];
+        var parsed = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(arguments)
+            ?? throw new InvalidOperationException($"the script step for '{tool}' is not a JSON object.");
+
+        Dictionary<string, object?> callArguments = new(StringComparer.Ordinal);
+        foreach (var (name, value) in parsed)
+        {
+            callArguments[name] = value;
+        }
+
+        yield return new ChatResponseUpdate(
+            ChatRole.Assistant,
+            [new FunctionCallContent($"call_{index}", tool, callArguments)])
+        {
+            ResponseId = responseId,
+            MessageId = responseId,
+        };
+    }
+
+    public async Task<ChatResponse> GetResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        List<ChatResponseUpdate> updates = [];
+        await foreach (var update in GetStreamingResponseAsync(messages, options, cancellationToken)
+            .ConfigureAwait(false))
+        {
+            updates.Add(update);
+        }
+
+        return updates.ToChatResponse();
+    }
+
+    public object? GetService(Type serviceType, object? serviceKey = null)
+    {
+        ArgumentNullException.ThrowIfNull(serviceType);
+        return serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
+    }
+
+    public void Dispose()
+    {
     }
 }

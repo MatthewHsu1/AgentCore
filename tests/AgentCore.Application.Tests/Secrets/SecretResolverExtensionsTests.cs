@@ -1,6 +1,6 @@
+using AgentCore.TestSupport;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
-using AgentCore.Application.Tests.Secrets.Fakes;
 using Xunit;
 
 namespace AgentCore.Application.Tests.Secrets;
@@ -37,7 +37,7 @@ public sealed class SecretResolverExtensionsTests
 
         try
         {
-            MapSecretResolver resolver = new(MapSecretResolver.Secret(secret.Name, SecretValue));
+            MapSecretResolver resolver = new MapSecretResolver().With(secret.Name, SecretValue);
 
             var value = await resolver.RequireAsync(
                 secret,
@@ -94,7 +94,7 @@ public sealed class SecretResolverExtensionsTests
             // A store that answers the empty string held the name: a mounted file that renders
             // empty is a broken deployment and never a miss. Reading the variable instead would
             // start the host on a key it was never told to use, and nothing would report it.
-            MapSecretResolver resolver = new(MapSecretResolver.Secret(secret.Name, string.Empty));
+            MapSecretResolver resolver = new MapSecretResolver().With(secret.Name, string.Empty);
 
             var failure = await Assert.ThrowsAsync<SecretResolutionException>(
                 async () => await resolver.RequireAsync(
@@ -220,7 +220,7 @@ public sealed class SecretResolverExtensionsTests
         try
         {
             SecretName missing = new("missing-api-key", "AGENTCORE_TEST_NO_LEAK_UNSET");
-            MapSecretResolver resolver = new(MapSecretResolver.Secret(secret.Name, OtherValue));
+            MapSecretResolver resolver = new MapSecretResolver().With(secret.Name, OtherValue);
 
             var failure = await Assert.ThrowsAsync<SecretResolutionException>(
                 async () => await resolver.RequireAsync(
@@ -262,9 +262,9 @@ public sealed class SecretResolverExtensionsTests
         Assert.Equal("OPENAI_API_KEY", KnownSecrets.OpenAiApiKeyVariable);
         Assert.Equal(new SecretName("openai-api-key", "OPENAI_API_KEY"), KnownSecrets.OpenAi);
 
-        Assert.Equal("zilliz-api-key", KnownSecrets.ZillizApiKeyName);
-        Assert.Equal("ZILLIZ_API_KEY", KnownSecrets.ZillizApiKeyVariable);
-        Assert.Equal(new SecretName("zilliz-api-key", "ZILLIZ_API_KEY"), KnownSecrets.Zilliz);
+        Assert.Equal("qdrant-api-key", KnownSecrets.QdrantApiKeyName);
+        Assert.Equal("QDRANT_API_KEY", KnownSecrets.QdrantApiKeyVariable);
+        Assert.Equal(new SecretName("qdrant-api-key", "QDRANT_API_KEY"), KnownSecrets.Qdrant);
     }
 
     [Theory]

@@ -6,8 +6,10 @@ namespace AgentCore.Infrastructure.Tests.Fakes;
 /// An embedding generator that answers one fixed vector, so a test reaches no OpenAI endpoint.
 /// </summary>
 /// <remarks>
-/// The Zilliz retrieval store takes its generator from its constructor for exactly this reason, and
-/// the Zilliz adapter takes one too. No test here embeds anything for real.
+/// <c>QdrantKnowledgeStore</c> and <c>QdrantKnowledgeAdapter</c> both take their generator from a
+/// constructor for exactly this reason: the store embeds every query and the adapter embeds one probe
+/// at startup, and neither should mean an OpenAI key to run a test. The vector is fixed, so a test's
+/// ranking is decided by the corpus it wrote and by nothing else.
 /// </remarks>
 internal sealed class FakeEmbeddingGenerator : IEmbeddingGenerator<string, Embedding<float>>
 {

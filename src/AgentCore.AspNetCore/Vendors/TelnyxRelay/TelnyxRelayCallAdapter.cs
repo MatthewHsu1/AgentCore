@@ -1,8 +1,7 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.AspNetCore.Call;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Http;
 
 namespace AgentCore.AspNetCore.Vendors.TelnyxRelay;
 
@@ -42,17 +41,12 @@ public sealed class TelnyxRelayCallAdapter : ICallTransportAdapter
     public bool CarriesText => true;
 
     /// <inheritdoc/>
-    public IEndpointConventionBuilder Map(
-        IEndpointRouteBuilder endpoints,
-        string pattern,
-        CallProviderConfiguration configuration)
+    public RequestDelegate CreateHandler(CallProviderConfiguration configuration)
     {
-        ArgumentNullException.ThrowIfNull(endpoints);
-        ArgumentException.ThrowIfNullOrEmpty(pattern);
         ArgumentNullException.ThrowIfNull(configuration);
 
-        return TelnyxRelayEndpointRouteBuilderExtensions.MapTelnyxRelay(
-            endpoints, pattern, BuildOptions(configuration));
+        var options = BuildOptions(configuration);
+        return http => TelnyxRelayEndpointRouteBuilderExtensions.HandleAsync(http, options);
     }
 
     /// <summary>Turns the document's limits into the options the endpoint runs on.</summary>

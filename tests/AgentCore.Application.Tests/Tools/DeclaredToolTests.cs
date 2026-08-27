@@ -21,7 +21,7 @@ namespace AgentCore.Application.Tests.Tools;
 /// <para>
 /// What these tests pin instead is narrower and still real: a <see cref="DeclaredTool"/> body may
 /// still answer a fault itself by returning <see cref="ToolErrorResult"/> directly without throwing —
-/// <c>BuiltinToolFactory</c> does exactly that for an argument it already validated — and everything
+/// a builtin tool definition does exactly that for an argument it already validated — and everything
 /// this base class does NOT catch keeps its original stack, cancellation included, all the way out to
 /// whatever calls <see cref="AIFunction.InvokeAsync"/>.
 /// </para>
@@ -104,7 +104,7 @@ public sealed class DeclaredToolTests
     public async Task ABodyThatAnswersItself_StillReturnsTheErrorResultDirectly()
     {
         // The one half of the old rule that still lives here: a tool body may choose to answer a
-        // fault itself, without throwing at all, exactly as BuiltinToolFactory does today.
+        // fault itself, without throwing at all, exactly as a builtin tool definition does today.
         var result = await new SelfAnsweringTool().InvokeAsync(
             new AIFunctionArguments(),
             TestContext.Current.CancellationToken);

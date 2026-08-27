@@ -1,11 +1,14 @@
 using System.Runtime.CompilerServices;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
+using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime;
+using AgentCore.Application.Transcript;
+using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
 
@@ -28,7 +31,7 @@ public sealed class CallSessionTranscriptTests
         apiVersion: agentcore/v1
         name: transcript-tool-check
         tools:
-          - { id: price_lookup, kind: builtin, uses: orders.read }
+          - { id: price_lookup, kind: builtin, uses: orders.read, description: "Look up the price of an item." }
         agents:
           items:
             - { id: only, instructions: "quote the price", tools: [ price_lookup ] }
@@ -97,7 +100,7 @@ public sealed class CallSessionTranscriptTests
         // Arrange
         RecordingTranscriptStore store = new();
         using ProseThenReplyChatClient reply = new("the price is fifty");
-        var session = CreateSession(ToolYaml, reply, store, new StubToolFactory(ToolResult));
+        var session = CreateSession(ToolYaml, reply, store, new StubToolBuilder(ToolResult).Create);
         await DrainAsync(session.RunTurnStreamingAsync("how much?", TestContext.Current.CancellationToken));
 
         // Act
@@ -118,6 +121,73 @@ public sealed class CallSessionTranscriptTests
             ["how much?", "the price"],
             rows.Select(row => row.Content.Text).Where(text => text.Length > 0));
     }
+
+    /// <summary>
+    /// A barge-in rewrites the assistant reply in place, but a drawing rides the tool-result
+    /// message from earlier in the same turn — a different row entirely. Correcting the reply must
+    /// leave that row, and what it carries, alone.
+    /// </summary>
+    [Fact]
+    public async Task InterruptAfterTheTurnEnded_ToolTurnThatDrew_LeavesTheRenderContentOnTheToolResultRow()
+    {
+        // Arrange
+        RecordingTranscriptStore store = new();
+        using ProseThenReplyChatClient reply = new("the price is fifty");
+        var session = CreateSession(ToolYaml, reply, store, DrawingTool);
+        session.SetHasScreen(true);
+        await DrainAsync(session.RunTurnStreamingAsync("how much?", TestContext.Current.CancellationToken));
+
+        // Act
+        var recorded = session.Interrupt("the price", TimeSpan.FromMilliseconds(400));
+
+        // Assert
+        Assert.True(recorded);
+        await session.FlushTranscriptAsync();
+        var rows = store.Live(session.CallId);
+        Assert.Equal(
+            ["how much?", "the price"],
+            rows.Select(row => row.Content.Text).Where(text => text.Length > 0));
+
+        var toolResultRow = Assert.Single(rows, row => row.Content.Contents.OfType<FunctionResultContent>().Any());
+        var render = Assert.Single(toolResultRow.Content.Contents.OfType<RenderContent>());
+        Assert.Equal("chart-1", render.RenderId);
+    }
+
+    /// <summary>
+    /// Drives a real turn end to end through <see cref="CallSession"/>, with a screen bound and a
+    /// real tool that draws through it, and reads what store 1 actually kept. Every other render
+    /// test in this suite hand-rolls the ambient with <c>TurnAmbients.Amend</c>, so none of them
+    /// would notice a broken wire between <see cref="CallSession.EnterAmbients"/> and
+    /// <see cref="TurnAmbients.Renders"/> — this is the one test that goes through that wire itself.
+    /// </summary>
+    [Fact]
+    public async Task ATurnThatDrawsWithAScreenBound_StoresTheRenderContentOnTheToolResultRow()
+    {
+        // Arrange
+        RecordingTranscriptStore store = new();
+        ToolCallingChatClient reply = new("drew it.");
+        var session = CreateSession(ToolYaml, reply, store, DrawingTool);
+        session.SetHasScreen(true);
+
+        // Act
+        await session.RunTurnAsync("how much?", TestContext.Current.CancellationToken);
+
+        // Assert
+        await session.FlushTranscriptAsync();
+        var rows = store.Live(session.CallId);
+        Assert.Contains(rows.SelectMany(row => row.Content.Contents), content => content is RenderContent);
+    }
+
+    /// <summary>Builds a real tool that draws through the ambient screen, for <see cref="ToolYaml"/>.</summary>
+    private static AITool? DrawingTool(ToolConfiguration tool)
+        => AIFunctionFactory.Create(
+            () =>
+            {
+                CallRenderScope.Current!.Publish("generative-ui", "chart-1", new { title = "Q3 revenue" });
+                return "drew it.";
+            },
+            tool.Id,
+            tool.Description ?? tool.Id);
 
     /// <summary>
     /// Step 1's second failure mode: a cut that reached back a turn would replace a sentence the
@@ -163,9 +233,8 @@ public sealed class CallSessionTranscriptTests
     }
 
     /// <summary>
-    /// The reminder rides exactly one request. Stored, it would repeat in every later prompt of the
-    /// call, which is why the turn loop writes store 1 itself rather than letting the framework
-    /// store the request verbatim.
+    /// The reminder rides exactly one invocation, as instructions the framework merges and stores
+    /// nowhere. Nothing of it reaches the caller's own message, so store 1 keeps what was said.
     /// </summary>
     [Fact]
     public async Task RunTurn_WithAnUnfilledSlot_KeepsTheReminderOutOfTheStoredTranscript()
@@ -179,19 +248,26 @@ public sealed class CallSessionTranscriptTests
         _ = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Contains("<system-reminder>", reply.Requests[0][^1], StringComparison.Ordinal);
+        // The reminder rides a message of its own, below the transcript, so the instructions block
+        // stays byte-identical across turns and the vendor's cacheable prefix covers the transcript.
+        Assert.DoesNotContain("<system-reminder>", reply.Instructions[0] ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains(reply.Requests[0], message => message.Contains("<system-reminder>", StringComparison.Ordinal));
         await session.FlushTranscriptAsync();
         Assert.Equal(["hello", "which order?"], store.Live(session.CallId).Select(row => row.Content.Text));
     }
 
     private static CallSession CreateSession(
-        string yaml, IChatClient reply, ITranscriptStore store, IAgentToolFactory? tools = null)
+        string yaml, IChatClient reply, ITranscriptStore store, Func<ToolConfiguration, AITool?>? tools = null)
     {
         var document = ConfigurationLoader.LoadYaml(yaml);
         var chatClients = new FakeChatClientFactory(reply);
         var compiled = ConfigurationCompiler.Compile(
             document,
-            new AgentCompilationContext(chatClients) { TranscriptStore = store, Tools = tools });
+            new AgentCompilationContext(chatClients)
+            {
+                TranscriptStore = store,
+                Tools = TestToolRegistry.From(document, tools, TestContext.Current.CancellationToken),
+            });
 
         var factory = new CallSessionFactory(
             compiled,

@@ -1,3 +1,4 @@
+using AgentCore.TestSupport;
 using System.Runtime.CompilerServices;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
@@ -85,9 +86,9 @@ public sealed class CallSessionGraphTranscriptTests
             second,
             message => message.Role == ChatRole.System
                 && message.Text.Contains(
-                    CallSession.HistoryPreamble + CallSession.CallerLinePrefix + "where is my order",
+                    TurnMessages.HistoryPreamble + TurnMessages.CallerLinePrefix + "where is my order",
                     StringComparison.Ordinal)
-                && message.Text.Contains(CallSession.AgentLinePrefix + Spoken, StringComparison.Ordinal));
+                && message.Text.Contains(TurnMessages.AgentLinePrefix + Spoken, StringComparison.Ordinal));
         Assert.DoesNotContain(second, message => message.Text.Contains(Thinking, StringComparison.Ordinal));
         Assert.Contains(second, message => message.Role == ChatRole.User && message.Text == "and the second one?");
     }

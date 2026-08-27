@@ -483,7 +483,7 @@ public sealed class ConfigurationSchemaValidatorTests
     [Fact]
     public void ABuiltinToolWithParameters_FailsWithThePointerOfTheTool()
     {
-        // The C# still reads fixed argument names for a builtin (BuiltinToolFactory). A document
+        // The C# still reads fixed argument names for a builtin (BuiltinToolSource). A document
         // that overrides the schema makes the model fill boxes the C# never reads.
         const string document = """
             apiVersion: agentcore/v1
@@ -496,6 +496,45 @@ public sealed class ConfigurationSchemaValidatorTests
 
         Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
         Assert.Contains(failure.Errors, error => error.Pointer == "/tools/0/parameters");
+    }
+
+    [Fact]
+    public void AToolWithMaxRoundsBelowOne_FailsWithThePointerOfTheTool()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            tools:
+              - { id: draw, kind: builtin, uses: ui.draw, maxRounds: 0 }
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+        Assert.Contains(failure.Errors, error => error.Pointer.Contains("maxRounds", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Only the <c>kind: builtin</c> path reads <c>model:</c> and <c>maxRounds:</c>. On any other
+    /// kind they would be accepted and then never looked at, which is the silent failure decisions 4
+    /// and 8 of the tool registry design reject.
+    /// </summary>
+    [Theory]
+    [InlineData("model: { ref: cheap }", "model")]
+    [InlineData("maxRounds: 4", "maxRounds")]
+    public void AShippedAgentDialOnAKindThatNeverReadsIt_FailsWithThePointerOfTheKey(string key, string name)
+    {
+        var document = $$"""
+            apiVersion: agentcore/v1
+            name: broken
+            tools:
+              - { id: lookup, kind: http, request: { method: GET, url: "https://example.test" }, {{key}} }
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+        Assert.Contains(failure.Errors, error => error.Pointer.Contains(name, StringComparison.Ordinal));
     }
 
     [Fact]

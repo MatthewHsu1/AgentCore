@@ -1,20 +1,17 @@
+using System.Runtime.CompilerServices;
 using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Transcript.Memory;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging;
-using System.Runtime.CompilerServices;
-using System.Text.Json;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AgentCore.Application.Transcript;
 
 /// <summary>
 /// Reports one store 1 write that was dropped, so the call can raise a diagnostic for it.
 /// </summary>
-/// <param name="turnIndex">The turn whose words were lost.</param>
-/// <param name="exception">Why the store refused the write.</param>
 internal delegate void TranscriptWriteDropped(int turnIndex, Exception exception);
 
 /// <summary>
@@ -23,16 +20,21 @@ internal delegate void TranscriptWriteDropped(int turnIndex, Exception exception
 internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
 {
     private readonly ConditionalWeakTable<AgentSession, CallGate> _gates = [];
+
+    private readonly ProviderSessionState<CallTranscript> _state;
+
     private readonly ITranscriptStore _store;
+
     private readonly ILogger _logger;
 
     /// <summary>Creates the provider over a backing store.</summary>
-    /// <param name="store">Where the words are written, or <see langword="null"/> for memory.</param>
-    /// <param name="logger">Where a dropped write is reported, or <see langword="null"/> for none.</param>
     public AgentCoreChatHistoryProvider(ITranscriptStore? store = null, ILogger? logger = null)
     {
         _store = store ?? new InMemoryTranscriptStore();
+
         _logger = logger ?? NullLogger.Instance;
+
+        _state = new(static _ => new CallTranscript(), StateKeys[0], TranscriptJson.Options);
     }
 
     /// <summary>
@@ -205,9 +207,9 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
 
         lock (gate.Sync)
         {
-            var transcript = TranscriptOf(session);
+            var transcript = _state.GetOrInitializeState(session);
             var result = work(transcript, gate);
-            Save(session, transcript);
+            _state.SaveState(session, transcript);
             return result;
         }
     }
@@ -216,27 +218,6 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
         => UnderLock(session, (transcript, _) => work(transcript));
 
     private CallGate GateFor(AgentSession session) => _gates.GetValue(session, static _ => new CallGate());
-
-    private CallTranscript TranscriptOf(AgentSession session)
-    {
-        if (session.StateBag.TryGetValue<CallTranscript>(StateKeys[0], out var transcript, StateOptions)
-            && transcript is not null)
-        {
-            return transcript;
-        }
-
-        transcript = new CallTranscript();
-
-        Save(session, transcript);
-
-        return transcript;
-    }
-
-    private void Save(AgentSession session, CallTranscript transcript)
-        => session.StateBag.SetValue(StateKeys[0], transcript, StateOptions);
-
-    /// <summary>Serialises a stored <see cref="ChatMessage"/> with the converters the framework ships.</summary>
-    private static JsonSerializerOptions StateOptions => AIJsonUtilities.DefaultOptions;
 
     /// <summary>What one call holds outside its state bag: its lock, and its queue of store writes.</summary>
     private sealed class CallGate

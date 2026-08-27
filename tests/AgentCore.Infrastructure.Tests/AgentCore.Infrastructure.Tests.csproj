@@ -7,10 +7,12 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/AgentCore.Infrastructure/AgentCore.Infrastructure.csproj" />
+    <ProjectReference Include="../AgentCore.TestSupport/AgentCore.TestSupport.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="ModelContextProtocol.Core" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />
 

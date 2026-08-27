@@ -1,3 +1,5 @@
+using AgentCore.Application.Tools.Binding;
+using AgentCore.Application.Tools.Registry;
 using System.Net;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
@@ -7,7 +9,7 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
 using AgentCore.Application.Tools;
-using AgentCore.Infrastructure.Knowledge;
+using AgentCore.Application.Tools.Builtin;
 using AgentCore.Infrastructure.Secrets;
 using AgentCore.Infrastructure.Tests.Tools;
 using AgentCore.Infrastructure.Tools;
@@ -21,8 +23,8 @@ namespace AgentCore.Infrastructure.Tests;
 /// </summary>
 /// <remarks>
 /// The worked example of section 8.1 declares all four tool kinds. This test walks the three that
-/// need a factory, in the order a host starts them: resolve every <c>${secret:name}</c> once, build
-/// the factory over the resolved values, then compile.
+/// need a source, in the order a host starts them: resolve every <c>${secret:name}</c> once, build
+/// the sources over the resolved values, then compile.
 /// </remarks>
 public sealed class ToolSeamTests
 {
@@ -31,8 +33,6 @@ public sealed class ToolSeamTests
         apiVersion: agentcore/v1
         name: service-voice
         tools:
-          - { id: search_chunks, kind: builtin, uses: knowledge.search }
-          - { id: read_doc,      kind: builtin, uses: knowledge.read }
           - id: lookup_order
             kind: http
             description: Read one order by its identifier.
@@ -55,7 +55,7 @@ public sealed class ToolSeamTests
         agents:
           items:
             - { id: identifier, instructions: "<stage delta>", tools: [ lookup_order ] }
-            - { id: resolver,   instructions: "<stage delta>", tools: [ search_chunks, read_doc ] }
+            - { id: resolver,   instructions: "<stage delta>", tools: [] }
             - { id: escalator,  instructions: "<stage delta>", tools: [ create_case ] }
         policy:
           initial: identify
@@ -68,7 +68,6 @@ public sealed class ToolSeamTests
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
-          knowledge: { search: filesystem, documents: filesystem, root: ./kb }
         """;
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
@@ -82,7 +81,6 @@ public sealed class ToolSeamTests
         ChainedSecretResolver chain = new([new EnvironmentSecretResolver(_ => "sk-live-0123456789")]);
         var secrets = await ResolvedSecrets.ResolveAsync(document, chain, Token);
 
-        // Step two: build the factory over the resolved values.
         using var handler = StubHttpMessageHandler.Answering(HttpStatusCode.OK, """{"status":"shipped"}""");
         using HttpClient client = new(handler);
 
@@ -90,28 +88,25 @@ public sealed class ToolSeamTests
         bindings.Register("CreateCase", (arguments, cancellationToken)
             => ValueTask.FromResult<object?>(JsonNode.Parse("""{"caseId":"C-1"}""")));
 
-        // One file store answers both knowledge ports, so it binds to both halves of the built-in
-        // link. A Zilliz retrieval adapter would take the first argument and leave this one reading.
-        FileSystemKnowledgeStore store = new(document.Providers?.Knowledge);
-
-        CompositeAgentToolFactory tools = new(
-        [
-            new BuiltinToolFactory(store, store),
-            new HttpToolFactory(client, secrets),
-            new BindingToolFactory(bindings),
-        ]);
+        // Step two: build the sources over the resolved values.
+        var registry = await ToolRegistryBuilder.BuildAsync(
+            [
+                new BuiltinToolSource(new BuiltinToolPorts(null)),
+                new HttpToolSource(client, secrets),
+                new BindingToolSource(bindings),
+            ],
+            new ToolSourceContext(document), Token);
 
         // Step three: compile.
         using OneReplyChatClient model = new("done");
         var compiled = ConfigurationCompiler.Compile(
             document,
-            new AgentCompilationContext(new OneClientFactory(model)) { Tools = tools });
+            new AgentCompilationContext(new OneClientFactory(model)) { Tools = registry });
 
         Assert.Equal(3, compiled.Agents.Count);
 
         // The HTTP tool now makes its call. Before this seam existed it could not.
-        var lookup = Assert.IsAssignableFrom<AIFunction>(
-            tools.Create(document.Tools.Single(tool => tool.Id == "lookup_order")));
+        var lookup = Assert.IsAssignableFrom<AIFunction>(registry.Resolve("lookup_order"));
 
         var result = await lookup.InvokeAsync(
             new AIFunctionArguments(new Dictionary<string, object?>(StringComparer.Ordinal) { ["orderId"] = "A-42" }),

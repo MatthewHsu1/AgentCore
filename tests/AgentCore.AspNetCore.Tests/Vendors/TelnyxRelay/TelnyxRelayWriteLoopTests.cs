@@ -1,3 +1,4 @@
+using AgentCore.TestSupport;
 using System.Net.WebSockets;
 using System.Text.Json;
 using AgentCore.AspNetCore.Tests.Fakes;
@@ -90,7 +91,7 @@ public sealed class TelnyxRelayWriteLoopTests
     {
         // A real socket aborts before this status can be observed on the wire, so the assertion is
         // made on the arguments CloseOutputAsync was called with instead.
-        using SequencedChatClient reply = new("hello");
+        using FragmentingChatClient reply = new("hello");
         await using var harness = await RelayConnectionHarness.StartAsync(TelnyxRelayTurnTests.PolicyYaml, reply);
 
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
@@ -119,7 +120,7 @@ public sealed class TelnyxRelayWriteLoopTests
     {
         // Nothing on a healthy loopback socket makes a send throw, so the fault is injected here.
         // The status is this endpoint's own report of its own defect, and a real call would see it.
-        using SequencedChatClient reply = new("hello there caller");
+        using FragmentingChatClient reply = new("hello there caller");
         await using var harness = await RelayConnectionHarness.StartAsync(TelnyxRelayTurnTests.PolicyYaml, reply);
 
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
@@ -154,7 +155,7 @@ public sealed class TelnyxRelayWriteLoopTests
         // documents in one message. Three spoken fragments in one turn is the smallest reply that
         // would show any of the three, and the assertions below read each frame back as JSON rather
         // than counting sends, so a corrupted frame fails here instead of passing as "four sends".
-        using SequencedChatClient reply = new("alpha bravo charlie");
+        using FragmentingChatClient reply = new("alpha bravo charlie");
         await using var harness = await RelayConnectionHarness.StartAsync(TelnyxRelayTurnTests.PolicyYaml, reply);
 
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));

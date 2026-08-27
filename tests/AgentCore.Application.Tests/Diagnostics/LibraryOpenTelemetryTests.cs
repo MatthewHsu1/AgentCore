@@ -1,12 +1,13 @@
 using AgentCore.Application.Audit.Memory;
-using AgentCore.Application.Audit;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
+using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Ports;
+using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime;
+using AgentCore.TestSupport;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using System.Diagnostics;
@@ -56,7 +57,7 @@ public sealed class LibraryOpenTelemetryTests
             apiVersion: agentcore/v1
             name: nesting-check
             tools:
-              - { id: lookup_order, kind: builtin, uses: orders.read }
+              - { id: lookup_order, kind: builtin, uses: orders.read, description: "Look up an order by its id." }
             agents:
               items:
                 - { id: {{agentId}}, instructions: "answer questions", tools: [ lookup_order ] }
@@ -66,9 +67,9 @@ public sealed class LibraryOpenTelemetryTests
         using var listener = ListenToLibrarySources(spans);
 
         using ToolCallingChatClient client = new("the order shipped.");
-        StubToolFactory tools = new("""{ "status": "shipped" }""");
+        StubToolBuilder tools = new("""{ "status": "shipped" }""");
 
-        var session = Build(yaml, client, tools).Create();
+        var session = Build(yaml, client, tools.Create).Create();
 
         await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
 
@@ -209,11 +210,24 @@ public sealed class LibraryOpenTelemetryTests
     }
 
     // -------------------------------------------------------------------------------------------
-    // gen_ai.conversation.id "for free": CallSession names the call as the conversation, and both
-    // library layers pick it up through ChatOptions.ConversationId with no plumbing beyond that.
+    // gen_ai.conversation.id: the parent span carries it, and the library children do not.
     // -------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The call id reaches a trace once, from <c>AgentCoreTelemetry.StartTurn</c>.
+    /// </summary>
+    /// <remarks>
+    /// Naming the call on <c>ChatOptions.ConversationId</c> would put the attribute on the library's
+    /// children as well, and it is the one thing that must not be done to get it. To
+    /// <c>ChatClientAgent</c> a conversation id means the SERVICE keeps the history, so it answers by
+    /// ignoring the agent's own <c>ChatHistoryProvider</c> for the whole run — store 1, silently
+    /// gone. Keeping it then costs a per-run override of the provider and
+    /// <c>ThrowOnChatHistoryProviderConflict = false</c> on every compiled agent. The attribute is
+    /// not worth a disabled safety check: a reader that wants the call id of a child span walks up
+    /// the trace to <c>agentcore.turn</c>.
+    /// </remarks>
     [Fact]
-    public async Task ASingleAgentTurn_CarriesTheCallIdAsGenAiConversationIdOnBothLibrarySpans()
+    public async Task ASingleAgentTurn_CarriesTheCallIdOnTheTurnSpanAndOnNeitherLibrarySpan()
     {
         var agentId = "agent-" + Guid.NewGuid().ToString("N");
         var yaml = $$"""
@@ -225,7 +239,8 @@ public sealed class LibraryOpenTelemetryTests
             """;
 
         List<Activity> spans = [];
-        using var listener = ListenToLibrarySources(spans);
+        using var libraries = ListenToLibrarySources(spans);
+        using var turns = ListenTo(spans, AgentCoreTelemetry.ActivitySourceName);
 
         using ToolCallingChatClient client = new("hello there.");
         var callId = "call-" + Guid.NewGuid().ToString("N");
@@ -243,8 +258,114 @@ public sealed class LibraryOpenTelemetryTests
         var chat = Assert.Single(
             mine, span => IsChatRoundSpan(span) && string.Equals(span.ParentId, invokeAgent.Id, StringComparison.Ordinal));
 
-        Assert.Equal(callId, invokeAgent.GetTagItem("gen_ai.conversation.id"));
-        Assert.Equal(callId, chat.GetTagItem("gen_ai.conversation.id"));
+        var turn = Assert.Single(
+            mine,
+            span => span.DisplayName == AgentCoreTelemetry.TurnActivityName
+                && string.Equals(span.Id, invokeAgent.ParentId, StringComparison.Ordinal));
+
+        Assert.Equal(callId, turn.GetTagItem("gen_ai.conversation.id"));
+        Assert.Null(invokeAgent.GetTagItem("gen_ai.conversation.id"));
+        Assert.Null(chat.GetTagItem("gen_ai.conversation.id"));
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // The extractor is a model call too, and a model call the trace does not show is a model call
+    // nobody pays attention to until the bill arrives.
+    // -------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// One turn makes two model calls, and both of them emit a chat span.
+    /// </summary>
+    /// <remarks>
+    /// <c>CallSessionTests.ATurn_MakesTwoModelCalls_TheReplyAndTheExtractor</c> proves the two calls
+    /// happen. This proves both are instrumented. Until <c>CallSessionFactory.CreateExtractor</c>
+    /// wrapped the client it resolves, only the reply had a span: the extractor's duration, its token
+    /// usage, and its failures reached no exporter at all, so a two-turn call reported half the model
+    /// calls it made and roughly a third less spend than it cost.
+    /// </remarks>
+    [Fact]
+    public async Task ATurnWithAnExtractor_EmitsAChatSpanForTheExtractorCallAndNotOnlyForTheReply()
+    {
+        var greeterId = "greeter-" + Guid.NewGuid().ToString("N");
+        var closerId = "closer-" + Guid.NewGuid().ToString("N");
+        var yaml = $$"""
+            apiVersion: agentcore/v1
+            name: extractor-telemetry-check
+            state:
+              callerSaidGoodbye:
+                type: boolean
+                default: false
+                writer: extractor
+                description: whether the caller said goodbye
+            guards:
+              saidGoodbye: { var: callerSaidGoodbye }
+            extractor:
+              model: { ref: fill }
+              when: after_reply
+            agents:
+              defaults:
+                model: { ref: reply }
+              items:
+                - { id: {{greeterId}}, instructions: "greet the caller" }
+                - { id: {{closerId}},  instructions: "close the call" }
+            policy:
+              initial: greeting
+              stages:
+                - id: greeting
+                  agent: {{greeterId}}
+                  to: [ { stage: close, when: saidGoodbye } ]
+                - id: close
+                  agent: {{closerId}}
+                  terminal: true
+            """;
+
+        List<Activity> spans = [];
+        using var libraries = ListenToLibrarySources(spans);
+        using var turns = ListenTo(spans, AgentCoreTelemetry.ActivitySourceName);
+
+        using SequencedChatClient reply = new("hello there.");
+        using SequencedChatClient fill = new("""{ "callerSaidGoodbye": null }""");
+
+        var callId = "call-" + Guid.NewGuid().ToString("N");
+        var session = BuildWithExtractor(yaml, reply, fill).Create(callId);
+
+        await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+
+        // The premise: two clients, one call each. If this ever reads differently the span counts
+        // below mean nothing.
+        Assert.Equal(1, reply.Calls);
+        Assert.Equal(1, fill.Calls);
+
+        var mine = Snapshot(spans);
+
+        // Scoped by this run's own call id, because the listener subscribes to the whole process.
+        var turn = Assert.Single(
+            mine,
+            span => span.DisplayName == AgentCoreTelemetry.TurnActivityName
+                && string.Equals((string?)span.GetTagItem("gen_ai.conversation.id"), callId, StringComparison.Ordinal));
+
+        var invokeAgent = Assert.Single(
+            mine,
+            span => span.DisplayName.StartsWith("invoke_agent " + greeterId, StringComparison.Ordinal)
+                && string.Equals(span.ParentId, turn.Id, StringComparison.Ordinal));
+
+        // The reply's chat span sits under invoke_agent, where ConfigurationCompiler puts it.
+        Assert.Single(
+            mine,
+            span => IsChatRoundSpan(span) && string.Equals(span.ParentId, invokeAgent.Id, StringComparison.Ordinal));
+
+        // The extractor's chat span is the one this test exists for. It hangs directly off the turn
+        // span and not off invoke_agent, because CallSession runs the extractor after the agent's run
+        // has finished and its spans have closed, with Activity.Current back at agentcore.turn.
+        var extractorChat = Assert.Single(
+            mine,
+            span => IsChatRoundSpan(span) && string.Equals(span.ParentId, turn.Id, StringComparison.Ordinal));
+
+        // Instrumented the same way as every other model call in this library: the default source
+        // name, so a host already receiving agent chat spans receives this one with no second
+        // AddSource, and no message content on the span.
+        Assert.Equal(ChatSourceName, extractorChat.Source.Name);
+        Assert.Null(extractorChat.GetTagItem("gen_ai.input.messages"));
     }
 
     // -------------------------------------------------------------------------------------------
@@ -266,12 +387,14 @@ public sealed class LibraryOpenTelemetryTests
 
     /// <summary>Subscribes to the two library sources this task turns on.</summary>
     private static ActivityListener ListenToLibrarySources(List<Activity> spans)
+        => ListenTo(spans, ChatSourceName, AgentSourceName);
+
+    /// <summary>Subscribes to the named sources, collecting every span each one closes.</summary>
+    private static ActivityListener ListenTo(List<Activity> spans, params string[] sources)
     {
         ActivityListener listener = new()
         {
-            ShouldListenTo = source =>
-                string.Equals(source.Name, ChatSourceName, StringComparison.Ordinal)
-                || string.Equals(source.Name, AgentSourceName, StringComparison.Ordinal),
+            ShouldListenTo = source => Array.Exists(sources, name => string.Equals(source.Name, name, StringComparison.Ordinal)),
             Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
             ActivityStopped = activity =>
             {
@@ -296,13 +419,34 @@ public sealed class LibraryOpenTelemetryTests
         }
     }
 
-    private static CallSessionFactory Build(string yaml, IChatClient client, IAgentToolFactory? tools)
+    private static CallSessionFactory Build(string yaml, IChatClient client, Func<ToolConfiguration, AITool?>? tools)
     {
         var document = ConfigurationLoader.LoadYaml(yaml);
         FakeChatClientFactory factory = new(client);
 
         var compiled = ConfigurationCompiler.Compile(
-            document, new AgentCompilationContext(factory) { Tools = tools });
+            document,
+            new AgentCompilationContext(factory)
+            {
+                Tools = TestToolRegistry.From(document, tools, TestContext.Current.CancellationToken),
+            });
+
+        return new CallSessionFactory(
+            compiled,
+            new GuardEvaluator(compiled.Configuration.Guards),
+            CallSessionFactory.CreateExtractor(compiled, factory),
+            timeProvider: null,
+            logger: null,
+            CallObservers.Standard(new InMemoryAuditSink(), logger: null));
+    }
+    /// <summary>Builds a factory for a document that declares an extractor, scripting the two models
+    /// apart on the <c>ref</c> names the document uses.</summary>
+    private static CallSessionFactory BuildWithExtractor(string yaml, IChatClient reply, IChatClient fill)
+    {
+        var document = ConfigurationLoader.LoadYaml(yaml);
+        var factory = new RoutingChatClientFactory(reply).Route("fill", fill);
+
+        var compiled = ConfigurationCompiler.Compile(document, new AgentCompilationContext(factory));
 
         return new CallSessionFactory(
             compiled,

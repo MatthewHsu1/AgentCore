@@ -1,14 +1,15 @@
-using AgentCore.Application.Configuration.Parsing;
-using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Audit;
+using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Evaluation;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Secrets;
-using AgentCore.AspNetCore.DependencyInjection.Startup;
+using AgentCore.Application.Sessions.Memory;
 using AgentCore.AspNetCore.Sessions;
 using Microsoft.AspNetCore.WebSockets;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace AgentCore.AspNetCore.DependencyInjection;
 
@@ -17,112 +18,68 @@ namespace AgentCore.AspNetCore.DependencyInjection;
 /// </summary>
 public static class AgentCoreServiceCollectionExtensions
 {
-    /// <summary>Loads one document and registers everything a call needs to run on it.</summary>
+    /// <summary>Registers everything a call needs, and loads the document when the host starts.</summary>
     /// <param name="services">The service collection of the host.</param>
     /// <param name="configure">Binds the document and the adapters the document names.</param>
-    /// <param name="cancellationToken">Cancels the start: the secret reads and the adapter builds.</param>
     /// <returns>The same collection, so a host chains its calls.</returns>
-    /// <exception cref="InvalidOperationException">
-    /// The options name no document, name two, or bind no chat client adapter.
-    /// </exception>
-    /// <exception cref="ConfigurationLoadException">
-    /// The document fails one of the eight checks, names a knowledge <c>kind</c> no registered
-    /// adapter serves, or does not compile.
-    /// </exception>
-    /// <exception cref="SecretResolutionException">One <c>${secret:name}</c> reference resolves to nothing.</exception>
-    public static async ValueTask<IServiceCollection> AddAgentCoreAsync(
+    public static IServiceCollection AddAgentCore(
         this IServiceCollection services,
-        Action<AgentCoreOptions> configure,
-        CancellationToken cancellationToken = default)
+        Action<AgentCoreOptions> configure)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configure);
 
-        AgentCoreOptions options = new();
-        configure(options);
+        services.AddOptions();
+        services.Configure(configure);
+        services.AddLogging();
 
-        // Step 0: take the loggers. Every seam below is bound while the host starts, so nothing can
-        // be resolved from a provider yet. A host that bound no factory gets loggers that write
-        // nowhere, and the library never throws for want of one.
-        ILoggerFactory loggers = options.LoggerFactory ?? NullLoggerFactory.Instance;
+        services.AddSingleton<AgentCoreBoot>();
+        services.AddHostedService<AgentCoreBootService>();
 
-        // Steps 1 and 2: load, then validate.
-        var configuration = ConfigurationStartup.Load(options);
+        services.AddSingleton(Boot(boot => boot.Configuration));
+        services.AddSingleton(Boot(boot => boot.Secrets));
+        services.AddSingleton(Boot(boot => boot.Bindings));
+        services.AddSingleton(Boot(boot => boot.CompiledRegistry));
+        services.AddSingleton(Boot(boot => boot.Compiled));
+        services.AddSingleton(Boot(boot => boot.ChatClients));
+        services.AddSingleton(Boot(boot => boot.Guards));
+        services.AddSingleton(Boot(boot => boot.Tools));
+        services.AddSingleton(Boot(boot => boot.Transcript));
+        services.AddSingleton(Boot(boot => boot.Sessions));
+        services.AddSingleton(Boot(boot => boot.Agent));
+        services.AddSingleton(Boot(boot => boot.AuditQueue));
 
-        // Step 2b: start the telemetry export, before anything below writes a line worth keeping.
-        await TelemetryStartup
-            .StartAsync(services, configuration, options, loggers, cancellationToken)
-            .ConfigureAwait(false);
+        // Through the concrete registration, so one factory builds the queue and both service types
+        // answer with the same instance.
+        services.AddSingleton<IAuditSinkPort>(provider => provider.GetRequiredService<QueuedAuditSink>());
 
-        // Step 3: resolve every secret once.
-        var secrets = await SecretsStartup
-            .ResolveAsync(configuration, options, cancellationToken)
-            .ConfigureAwait(false);
+        // Each of these is null when the host registered no vendor for it, and a factory that
+        // returns null makes GetService answer null — which is what a caller of an optional seam
+        // reads them with.
+        services.AddSingleton(Boot(boot => boot.Telemetry!));
+        services.AddSingleton(Boot(boot => boot.CallAdapters!));
+        services.AddSingleton(Boot(boot => boot.SpeechAdapters!));
 
-        AgentCoreStartup startup = new(configuration, secrets);
+        services.TryAddSingleton(provider =>
+            provider.GetRequiredService<IOptions<AgentCoreOptions>>().Value.TimeProvider
+            ?? TimeProvider.System);
 
-        // Step 3b: open the knowledge base the document names.
-        var knowledge = await KnowledgeStartup
-            .OpenAsync(configuration, options, cancellationToken)
-            .ConfigureAwait(false);
+        services.TryAddSingleton<ICallSessions>(provider => new InMemoryCallSessions(
+            provider.GetRequiredService<ICallSessionFactory>(),
+            InMemoryCallSessions.DefaultIdleTimeout,
+            provider.GetRequiredService<TimeProvider>()));
 
-        // Step 4: build the tool factory chain.
-        var tools = ToolFactoryStartup.Build(options, startup, knowledge);
+        services.AddHostedService(provider => new CallSessionSweeper(
+            provider,
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetService<ILoggerFactory>()?.CreateLogger<CallSessionSweeper>()
+                ?? NullLogger<CallSessionSweeper>.Instance));
 
-        // Step 4b: open store 1. The compile below builds the history provider around it, and that
-        // provider is one instance for the whole process under R7.
-        var transcript = await TranscriptStartup
-            .OpenAsync(configuration, options, loggers, cancellationToken)
-            .ConfigureAwait(false);
-
-        // The evaluator registry is built before the compile, because the moderator that guards each
-        // agent's chat pipeline comes out of it and is wired in at compile time.
-        var evaluators = await EvaluationStartup
-            .CreateRegistryAsync(configuration, options, cancellationToken)
-            .ConfigureAwait(false);
-
-        // Step 5: compile. The registry compiles once and every call shares the result.
-        var graph = await CompilationStartup
-            .CompileAsync(configuration, options, startup, tools, transcript, evaluators, loggers, cancellationToken)
-            .ConfigureAwait(false);
-
-        // Step 6: register. Everything above is shared and read-only for the life of the process.
-        services.AddSingleton(configuration);
-        services.AddSingleton(secrets);
-
-        CallSeamStartup.Register(services, configuration, options);
-
-        services.AddSingleton(options.Bindings);
-        services.AddSingleton(graph.Registry);
-        services.AddSingleton(graph.Compiled);
-        services.AddSingleton<IChatClientFactory>(_ => graph.ChatClients);
-        services.AddSingleton<IAgentToolFactory>(tools);
-        services.AddSingleton<IGuardEvaluator>(graph.Guards);
-
-        // Under the port, so a host reads the seam it bound, and under its own type, so a test or an
-        // operator asks the thing that holds the rows — the in-process store's Read is how the words
-        // of one call are read back when no database is named.
-        services.AddSingleton(transcript);
-        services.AddSingleton(transcript.GetType(), transcript);
-
-        await CallSessionStartup
-            .RegisterAsync(services, configuration, options, graph, loggers, cancellationToken)
-            .ConfigureAwait(false);
-
-        // The same clock CallSessionFactory already reads off options.TimeProvider, now resolvable
-        // from the request's own service provider too. TelnyxRelayConnection reads it here for its
-        // idle deadline, so a test that owns options.TimeProvider owns that deadline as well.
-        // TryAdd, matching ICallSessionStore below: a host that registered its own TimeProvider
-        // before calling AddAgentCore keeps it, rather than this line silently overriding it —
-        // AddSingleton would have made the last registration win regardless of which one a
-        // GetRequiredService<TimeProvider>() caller actually wanted.
-        services.TryAddSingleton(options.TimeProvider ?? TimeProvider.System);
-
-        // The default store holds every call in this process. A host that registered another one
-        // before this call keeps it.
-        services.TryAddSingleton<ICallSessionStore, InMemoryCallSessionStore>();
-
-        EvaluationStartup.Register(services, configuration, evaluators);
+        services.TryAddSingleton(Boot(boot => boot.Evaluators));
+        services.TryAddSingleton(provider => new EvaluationSampler(
+            provider.GetRequiredService<AgentCoreConfiguration>().Evaluation?.SampleRate
+            ?? EvaluationConfiguration.DefaultSampleRate));
+        services.TryAddSingleton<IEvaluationScorePublisher, InMemoryEvaluationScorePublisher>();
 
         return services;
     }
@@ -140,4 +97,16 @@ public static class AgentCoreServiceCollectionExtensions
             options.KeepAliveTimeout = TimeSpan.FromSeconds(20);
         });
     }
+
+    /// <summary>Reads one thing out of the boot, once the host has started it.</summary>
+    /// <typeparam name="T">What the caller is registering.</typeparam>
+    /// <param name="read">Picks it off the started boot.</param>
+    /// <returns>A factory the container calls on first resolve.</returns>
+    private static Func<IServiceProvider, T> Boot<T>(Func<AgentCoreBoot, T> read)
+        where T : class
+        => provider =>
+        {
+            var boot = provider.GetRequiredService<AgentCoreBoot>();
+            return boot.Release(read(boot));
+        };
 }

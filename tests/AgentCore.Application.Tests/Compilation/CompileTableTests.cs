@@ -2,6 +2,7 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Tests.Fakes;
+using AgentCore.Application.Tests.Knowledge.Fakes;
 using Microsoft.Agents.AI;
 using Xunit;
 
@@ -129,7 +130,8 @@ public sealed class CompileTableTests
         var compiled = Compile(Tests.Configuration.ExampleDocument.Yaml);
 
         Assert.Equal(CompiledAgentShape.Policy, compiled.Shape);
-        Assert.Equal(5, compiled.Agents.Count);
+        // 5 agents on the stage machine, plus analyst and webchat, which policy: never reaches.
+        Assert.Equal(7, compiled.Agents.Count);
 
         // The initial stage is greeting, and greeting names greeter.
         Assert.Equal("greeter", compiled.Agent.Name);
@@ -361,9 +363,12 @@ public sealed class CompileTableTests
         using ScriptedChatClient client = new("ok");
         FakeChatClientFactory factory = new(client);
 
-        ConfigurationCompiler.Compile(document, new AgentCompilationContext(factory));
+        ConfigurationCompiler.Compile(
+            document,
+            new AgentCompilationContext(factory) { Knowledge = new StubKnowledgePort([]) });
 
-        Assert.Equal(5, factory.Requested.Count);
+        // 5 agents on the stage machine, plus analyst and webchat, which policy: never reaches.
+        Assert.Equal(7, factory.Requested.Count);
         Assert.All(factory.Requested, model => Assert.Equal("reply", model!.Ref));
     }
 
@@ -371,6 +376,8 @@ public sealed class CompileTableTests
     {
         var document = ConfigurationLoader.LoadYaml(yaml);
         var client = new ScriptedChatClient("ok");
-        return ConfigurationCompiler.Compile(document, new AgentCompilationContext(new FakeChatClientFactory(client)));
+        return ConfigurationCompiler.Compile(
+            document,
+            new AgentCompilationContext(new FakeChatClientFactory(client)) { Knowledge = new StubKnowledgePort([]) });
     }
 }

@@ -23,10 +23,15 @@
     <PackageVersion Include="Microsoft.Agents.AI.Workflows" Version="1.17.0" />
   </ItemGroup>
   <ItemGroup>
+    <PackageVersion Include="ModelContextProtocol.Core" Version="2.2.0" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageVersion Include="OpenAI" Version="2.12.0" />
   </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="Microsoft.Extensions.VectorData.Abstractions" Version="10.8.2" />
+    <PackageVersion Include="Qdrant.Client" Version="1.19.0" />
+    <PackageVersion Include="CommunityToolkit.VectorData.Qdrant" Version="1.0.0" />
   </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="Stateless" Version="5.20.1" />
@@ -55,10 +60,6 @@
   </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="5.6.0" />
-  </ItemGroup>
-  <!-- The chat UI travels inside AgentCore.Chat.dll rather than as loose files beside it. -->
-  <ItemGroup>
-    <PackageVersion Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.11" />
   </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />

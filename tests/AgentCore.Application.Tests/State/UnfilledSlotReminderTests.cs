@@ -104,19 +104,17 @@ public sealed class UnfilledSlotReminderTests
     }
 
     [Fact]
-    public void TheReminder_GoesAboveTheReplyAgentsInput()
+    public void TheReminder_IsOneTaggedBlockAndNothingElse()
     {
+        // It travels as per-invocation instructions, not as part of the caller's message, so the
+        // tags are what separate it from the agent's own instructions in the merged prompt.
         StateDocument state = new(Document);
 
-        var input = UnfilledSlotReminder.Prepend(UnfilledSlotReminder.Build(state, Identify), "the caller said hello");
+        var reminder = UnfilledSlotReminder.Build(state, Identify);
 
-        Assert.StartsWith(UnfilledSlotReminder.OpenTag, input, StringComparison.Ordinal);
-        Assert.EndsWith("the caller said hello", input, StringComparison.Ordinal);
+        Assert.StartsWith(UnfilledSlotReminder.OpenTag, reminder, StringComparison.Ordinal);
+        Assert.EndsWith(UnfilledSlotReminder.CloseTag, reminder, StringComparison.Ordinal);
     }
-
-    [Fact]
-    public void NoReminder_LeavesTheInputAlone()
-        => Assert.Equal("hello", UnfilledSlotReminder.Prepend(null, "hello"));
 
     [Fact]
     public void AnExitGuardedByMissing_RemindsOnTheMissingSlot()

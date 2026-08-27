@@ -1,0 +1,117 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    # workflow_dispatch can run against any ref, including a branch with no v* tag, which MinVer
+    # would read as 0.0.0-alpha — a version nuget.org can never delete or reuse. This guard keeps
+    # workflow_dispatch usable for re-running a release, but only when re-run against a tag ref
+    # already under refs/tags/v.
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    # Job-level permissions replace the workflow-level block entirely, so contents: read has to be
+    # repeated here. id-token: write is what lets NuGet/login mint a GitHub OIDC token; without it
+    # that step fails with a token request error, not an auth error, which reads misleadingly.
+    permissions:
+      contents: read
+      id-token: write
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      # MinVer reads tag history to derive the version. A shallow clone gives it none, and every
+      # package would ship as 0.0.0-alpha.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      # SkipClientAppBuild keeps the demo's npm target from running. It would build a browser
+      # bundle that no package contains, and it is the only reason this job would need Node.
+      - name: Build
+        run: dotnet build --no-restore -c Release -p:SkipClientAppBuild=true
+
+      - name: Unit tests
+        run: dotnet test --no-build -c Release
+             --filter "FullyQualifiedName!~AgentCore.Evals"
+        env:
+          AGENTCORE_TEST_POSTGRES: Host=localhost;Port=5432;Username=postgres;Password=ci
+
+      - name: Pack
+        run: dotnet pack --no-build -c Release -o artifacts
+
+      # IsPackable decides what becomes a package; this asserts that decision rather than trusting
+      # it. Five, not six, is what proves nothing under demo/ leaked into a release.
+      - name: Exactly five packages
+        run: |
+          count=$(ls artifacts/*.nupkg | wc -l)
+          if [ "$count" -ne 5 ]; then
+            echo "Expected 5 packages, found $count:"
+            ls artifacts/
+            exit 1
+          fi
+
+      # The minted key lives one hour, so this runs after the build and the tests rather than at the
+      # top of the job. NUGET_USER is the nuget.org profile name, not the account email.
+      #
+      # The trusted publishing policy on nuget.org names this file as release.yml. Renaming or moving
+      # this workflow breaks publishing until the policy is edited to match.
+      - name: NuGet login
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      # --skip-duplicate means a version nuget.org already holds is reported as success rather than
+      # failure. That is right for re-running this workflow against the same tag, but it also means
+      # deleting and re-pushing a tag to change its bits reports success while nuget.org quietly
+      # keeps the bits from the first push.
+      - name: Push packages
+        run: dotnet nuget push "artifacts/*.nupkg"
+             --source https://api.nuget.org/v3/index.json
+             --api-key "${{ steps.login.outputs.NUGET_API_KEY }}"
+             --skip-duplicate
+
+      # Pushed by their own command. Some versions of dotnet nuget push pick up a sibling .snupkg
+      # and some do not, and symbols going missing is a failure nobody notices until they try to
+      # step into the source.
+      - name: Push symbols
+        run: dotnet nuget push "artifacts/*.snupkg"
+             --source https://api.nuget.org/v3/index.json
+             --api-key "${{ steps.login.outputs.NUGET_API_KEY }}"
+             --skip-duplicate

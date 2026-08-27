@@ -13,7 +13,7 @@ namespace AgentCore.Application.Evaluation;
 /// name, so the composition root reads the same as it does for a tool or a binding.
 /// </para>
 /// <para>
-/// This registry takes the shape <see cref="Tools.ToolBindingRegistry"/> takes, because D13 asks the
+/// This registry takes the shape <see cref="Tools.Binding.ToolBindingRegistry"/> takes, because D13 asks the
 /// registries to be one shape. A name is compared with <see cref="StringComparer.Ordinal"/>.
 /// Registration happens at startup and reading happens later, so the registry is safe to read from
 /// many turns at once once the host stops writing to it.

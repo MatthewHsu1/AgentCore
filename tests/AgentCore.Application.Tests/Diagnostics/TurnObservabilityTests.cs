@@ -1,7 +1,9 @@
+using AgentCore.TestSupport;
 using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Audit;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
+using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Ports;
@@ -64,7 +66,7 @@ public sealed class TurnObservabilityTests
         apiVersion: agentcore/v1
         name: observed-tools
         tools:
-          - { id: lookup_order, kind: builtin, uses: orders.read }
+          - { id: lookup_order, kind: builtin, uses: orders.read, description: "Look up an order by its id." }
         agents:
           defaults:
             model: { ref: reply }
@@ -252,7 +254,7 @@ public sealed class TurnObservabilityTests
     {
         RecordingLogger logger = new();
         using LoopingToolCallingChatClient reply = new();
-        var session = Build(ToolYaml, reply, null, new ThrowingToolFactory(), logger: logger).Create("call-x");
+        var session = Build(ToolYaml, reply, null, new ThrowingToolBuilder().Create, logger: logger).Create("call-x");
 
         await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
 
@@ -263,7 +265,7 @@ public sealed class TurnObservabilityTests
         // fact alone, so the volume an operator pays Grafana Cloud for did not move.
         var line = Assert.Single(logger.Of(2));
         Assert.Equal(LogLevel.Error, line.Level);
-        Assert.Contains(ThrowingToolFactory.Message, line.Message, StringComparison.Ordinal);
+        Assert.Contains(ThrowingToolBuilder.Message, line.Message, StringComparison.Ordinal);
         Assert.False(session.IsComplete);
 
         // The tool row and the empty-reply row are different failures, and only one of them fired.
@@ -421,7 +423,7 @@ public sealed class TurnObservabilityTests
         string yaml,
         IChatClient reply,
         IChatClient? fill,
-        IAgentToolFactory? tools = null,
+        Func<ToolConfiguration, AITool?>? tools = null,
         TimeProvider? timeProvider = null,
         IAuditSinkPort? auditSink = null,
         ILogger? logger = null)
@@ -442,7 +444,10 @@ public sealed class TurnObservabilityTests
 
         var compiled = ConfigurationCompiler.Compile(
             document,
-            new AgentCompilationContext(chatClients) { Tools = tools });
+            new AgentCompilationContext(chatClients)
+            {
+                Tools = TestToolRegistry.From(document, tools, TestContext.Current.CancellationToken),
+            });
 
         return new CallSessionFactory(
             compiled,

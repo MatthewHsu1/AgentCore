@@ -1,3 +1,4 @@
+using AgentCore.TestSupport;
 using System.Net.WebSockets;
 using System.Text;
 using System.Threading.Channels;
@@ -358,7 +359,7 @@ internal sealed class RelayConnectionHarness : IAsyncDisposable
 
         TestHostLifetime lifetime = new();
         collection.AddSingleton<IHostApplicationLifetime>(lifetime);
-        await collection.AddAgentCoreAsync(options =>
+        collection.AddAgentCore(options =>
         {
             options.Configuration = ConfigurationLoader.LoadYaml(yaml);
             options.UseChatClients(_ => new RoutingChatClientFactory(reply));
@@ -368,6 +369,15 @@ internal sealed class RelayConnectionHarness : IAsyncDisposable
         services?.Invoke(collection);
 
         var provider = collection.BuildServiceProvider();
+
+        // There is no host here, so nothing else would run the boot. This is the same hook a host
+        // uses, in the same order, so the harness reaches a graph composed exactly as production
+        // composes it.
+        foreach (var service in provider.GetServices<IHostedService>().OfType<IHostedLifecycleService>())
+        {
+            await service.StartingAsync(CancellationToken.None);
+        }
+
         DefaultHttpContext http = new() { RequestServices = provider };
 
         TelnyxRelayOptions options = new();

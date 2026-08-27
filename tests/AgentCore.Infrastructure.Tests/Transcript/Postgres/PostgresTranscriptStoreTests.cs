@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Transcript;
 using AgentCore.Domain.Audit;
@@ -335,6 +336,23 @@ public sealed class PostgresTranscriptStoreTests : PostgresDatabaseTest
     }
 
     [PostgresFact]
+    public async Task ReadSpokenTurnsAsync_AToolCallingTurnThatAlsoDrew_MatchesTheHashTheChainHolds()
+    {
+        // Arrange — a RenderContent rides the tool-result message alongside its FunctionResultContent.
+        // The verify query never looks at that row's role, but jsonb round-tripping a second content
+        // type on it must not upset the DISTINCT ON guard or the hash comparison.
+        PostgresTranscriptStore store = new(DataSource);
+        await WriteToolCallingTurnAsync(store, "C1", turnIndex: 0, spoken: "Order 41 ships Friday.", drew: true);
+
+        // Act
+        var turns = await store.ReadSpokenTurnsAsync("C1", Token);
+
+        // Assert
+        var turn = Assert.Single(turns);
+        Assert.Equal(AuditHash.OfText(turn.Spoken).Value, turn.ReplyTextSha256);
+    }
+
+    [PostgresFact]
     public async Task ReadSpokenTurnsAsync_ATurnWhoseWordsWereErased_ReturnsNoRowForIt()
     {
         // Arrange — the erasure working, and not a tamper. The chain keeps its row and goes on
@@ -382,15 +400,25 @@ public sealed class PostgresTranscriptStoreTests : PostgresDatabaseTest
     /// no words the caller heard, and only the second was spoken.
     /// </remarks>
     private async Task WriteToolCallingTurnAsync(
-        PostgresTranscriptStore store, string callId, int turnIndex, string spoken)
+        PostgresTranscriptStore store, string callId, int turnIndex, string spoken, bool drew = false)
     {
+        List<AIContent> toolResultContents = [new FunctionResultContent("id1", "Friday")];
+        if (drew)
+        {
+            toolResultContents.Add(new RenderContent
+            {
+                Name = "generative-ui",
+                RenderId = "chart-1",
+                Data = JsonSerializer.SerializeToElement(new { title = "Q3 revenue" }),
+            });
+        }
+
         await store.AppendAsync(
             [
                 new CallMessage(callId, 0, turnIndex, new ChatMessage(ChatRole.User, "what about order 41")),
                 new CallMessage(callId, 1, turnIndex, new ChatMessage(
                     ChatRole.Assistant, [new FunctionCallContent("id1", "lookup", null)])),
-                new CallMessage(callId, 2, turnIndex, new ChatMessage(
-                    ChatRole.Tool, [new FunctionResultContent("id1", "Friday")])),
+                new CallMessage(callId, 2, turnIndex, new ChatMessage(ChatRole.Tool, toolResultContents)),
                 new CallMessage(callId, 3, turnIndex, new ChatMessage(ChatRole.Assistant, spoken)),
             ],
             Token);

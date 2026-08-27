@@ -20,6 +20,7 @@
     <Company>N/A</Company>
     <Product>AgentCore</Product>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/MatthewHsu1/AgentCore</RepositoryUrl>
     <PackageProjectUrl>https://github.com/MatthewHsu1/AgentCore</PackageProjectUrl>
     <RepositoryType>git</RepositoryType>
@@ -31,7 +32,17 @@
     <Deterministic>true</Deterministic>
   </PropertyGroup>
   <PropertyGroup>
-    <MinVerTagPrefix>agentcore-v</MinVerTagPrefix>
+    <MinVerTagPrefix>v</MinVerTagPrefix>
   </PropertyGroup>
+
+  <!--
+    Packed into every package, not compiled into any. Unconditional on purpose: Directory.Build.props
+    is imported at the top of each csproj, before that csproj sets IsPackable, so a condition on
+    IsPackable here reads the default and is false for every project including the five that pack.
+    A project that produces no package never runs pack, so the item is simply inert there.
+  -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
 
 </Project>

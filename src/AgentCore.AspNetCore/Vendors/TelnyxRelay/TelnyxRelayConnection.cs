@@ -2,10 +2,9 @@ using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading.Channels;
+using AgentCore.Application.Call;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
-using AgentCore.Application.Call;
-using AgentCore.AspNetCore.Sessions;
 using AgentCore.AspNetCore.Call;
 using AgentCore.Domain.Audit;
 using Microsoft.AspNetCore.Http;
@@ -185,7 +184,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
         finally
         {
             // The disposal below must run on every exit from here down, including a throw out of
-            // Cancel() itself or store.RemoveAsync: _cancellation links to ApplicationStopping,
+            // Cancel() itself or ICallSessions.CloseAsync: _cancellation links to ApplicationStopping,
             // which lives for the whole process, and only Dispose() releases that registration.
             try
             {
@@ -279,9 +278,9 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
                     // give one call two endings.
                     //
                     // Guarded for the same reason CloseAsync above is. §7.1 forbids teardown
-                    // throwing out of the request handler, and the removal below must run whatever
-                    // happens here — InMemoryCallSessionStore evicts nothing on its own, so a
-                    // session skipped here would live for the rest of the process. The event is
+                    // throwing out of the request handler, and the close below must run whatever
+                    // happens here — it is what waits for the words the last turn still owed
+                    // store 1, and nothing else can. The event is
                     // handed to observers that swallow their own faults and the reason is a member
                     // of a closed set this class picks itself, so the only cause left is the clock
                     // the session reads; a missing last event is a gap in one chain, and losing the
@@ -298,26 +297,16 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
                             fault));
                     }
 
-                    // The words of the call reach store 1 before the session leaves the store, and
-                    // never after. A turn queues its rows and speaks, so a call can end with its
-                    // last turn still in flight, and this session is the only thing that can wait
-                    // for those writes — once it is dropped nothing can, and the durable record
-                    // loses the turn the caller just had with no error anywhere to say so.
+                    // Closing waits for the words this call still owes store 1 and only then drops
+                    // the session; ICallSessions.CloseAsync owns that order.
                     //
                     // Bounded and swallowed for the same reason the close above is: a store that
                     // stops answering must cost this call its last rows, not wedge teardown and
                     // strand the session in the store for the life of the process.
                     await _observer
                         .ObserveAsync(
-                            session.FlushTranscriptAsync(),
-                            ConnectionTaskKind.TranscriptFlush,
-                            _options.CloseTimeout)
-                        .ConfigureAwait(false);
-
-                    await _observer
-                        .ObserveAsync(
-                            RemoveSessionAsync(session.CallId),
-                            ConnectionTaskKind.SessionRemove,
+                            CloseSessionAsync(session.CallId),
+                            ConnectionTaskKind.SessionClose,
                             _options.CloseTimeout)
                         .ConfigureAwait(false);
                 }
@@ -329,13 +318,13 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
         }
     }
 
-    /// <summary>Drops one session from the store, as a task the observer can bound and watch.</summary>
-    /// <param name="callId">The session to drop.</param>
-    /// <returns>A task that completes once the store has answered.</returns>
-    private async Task RemoveSessionAsync(string callId)
+    /// <summary>Ends one call, as a task the observer can bound and watch.</summary>
+    /// <param name="callId">The call that ended.</param>
+    /// <returns>A task that completes once the words are written and the session is gone.</returns>
+    private async Task CloseSessionAsync(string callId)
     {
-        var store = _http.RequestServices.GetRequiredService<ICallSessionStore>();
-        _ = await store.RemoveAsync(callId, CancellationToken.None).ConfigureAwait(false);
+        var sessions = _http.RequestServices.GetRequiredService<ICallSessions>();
+        await sessions.CloseAsync(callId, CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <summary>Works out the status and the description the vendor sees on the close frame.</summary>
@@ -538,12 +527,8 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
                 TelnyxRelayLog.WriteLoopFaulted(_logger, callId, fault);
                 break;
 
-            case ConnectionTaskKind.TranscriptFlush:
-                TelnyxRelayLog.TranscriptFlushFaulted(_logger, callId, fault);
-                break;
-
-            case ConnectionTaskKind.SessionRemove:
-                TelnyxRelayLog.SessionRemoveFaulted(_logger, callId, fault);
+            case ConnectionTaskKind.SessionClose:
+                TelnyxRelayLog.CallCloseFaulted(_logger, callId, fault);
                 break;
 
             case ConnectionTaskKind.ReadLoop:
@@ -655,17 +640,16 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
 
     private async Task StartCallAsync(RelayFrame.Setup setup)
     {
-        var factory = _http.RequestServices.GetRequiredService<ICallSessionFactory>();
-        var store = _http.RequestServices.GetRequiredService<ICallSessionStore>();
+        var sessions = _http.RequestServices.GetRequiredService<ICallSessions>();
 
         // One socket carries one call, and the vendor sends one setup frame. A second one replaces
         // the session rather than refusing the socket, because section 7.1 forbids dropping a call
         // over a frame the vendor got wrong, and because the vendor's latest word about the call is
-        // the one to answer. The first session is removed here and not left behind: teardown only
-        // ever removes the session this connection currently holds, and InMemoryCallSessionStore
-        // documents that it evicts nothing on its own, so a session skipped here would live for the
-        // rest of the process. CancellationToken.None, because the removal must still run while the
-        // connection is tearing down.
+        // the one to answer. The first session is closed here and not left behind: teardown only
+        // ever closes the session this connection currently holds, so this is the last moment
+        // anything waits for the words the replaced call still owed store 1.
+        // CancellationToken.None, because the close must still run while the connection is
+        // tearing down.
         if (_session is { } replaced)
         {
             if (!_loggedSecondSetup)
@@ -674,25 +658,26 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
                 TelnyxRelayLog.SecondSetupFrame(_logger, replaced.CallId);
             }
 
-            // Its words reach store 1 first, by the rule teardown obeys for the same reason: this
-            // session is the only thing that can wait for the writes it queued, and teardown will
-            // later flush the session that replaced it and never this one. Bounded and swallowed by
-            // the observer, so a store that stopped answering costs the replaced call its last rows
-            // rather than stalling the read loop for the rest of the connection.
+            // Teardown will later close the session that replaced this one and never this one, so
+            // this is the last moment anything can wait for the writes it queued. Bounded and
+            // swallowed by the observer, so a store that stopped answering costs the replaced call
+            // its last rows rather than stalling the read loop for the rest of the connection.
+            // Through CloseSessionAsync, and never CloseAsync(...).AsTask(): a store that throws
+            // synchronously throws before AsTask() is ever reached, so the observer would not see
+            // it and §7.1's rule against dropping a call over a bad frame would be broken by the
+            // very frame that rule is about. An async method turns that throw into the task the
+            // observer bounds.
             await _observer
                 .ObserveAsync(
-                    replaced.FlushTranscriptAsync(),
-                    ConnectionTaskKind.TranscriptFlush,
+                    CloseSessionAsync(replaced.CallId),
+                    ConnectionTaskKind.SessionClose,
                     _options.CloseTimeout)
                 .ConfigureAwait(false);
-
-            await store.RemoveAsync(replaced.CallId, CancellationToken.None).ConfigureAwait(false);
         }
 
         // callSessionId groups the legs of one logical call, so the id survives the warm transfer
         // that slice 2 adds. A leg id would break there.
-        _session = factory.Create(setup.CallSessionId);
-        await store.AddAsync(_session, _cancellation.Token).ConfigureAwait(false);
+        _session = await sessions.OpenAsync(setup.CallSessionId, _cancellation.Token).ConfigureAwait(false);
 
         // Built on the first setup frame and never again: a later one only tells the arbiter which
         // call to answer from now on. One socket runs one turn at a time, and that promise belongs
@@ -722,7 +707,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
             _connectionToken);
     }
 
-    private Task StartTurnAsync(string text)
+    private async Task StartTurnAsync(string text)
     {
         if (_arbiter is not { } arbiter)
         {
@@ -733,15 +718,49 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
                 TelnyxRelayLog.PromptBeforeSetup(_logger);
             }
 
-            return Task.CompletedTask;
+            return;
         }
+
+        await KeepSessionAliveAsync().ConfigureAwait(false);
 
         // Discarded, never awaited. The arbiter's own task follows the turn to its end, and the read
         // loop is what calls this: a read loop that waited for a turn could not receive the
         // interrupt frame that ends it. The turn itself stays visible on CurrentTurn, which the next
         // turn and teardown both observe.
         _ = arbiter.StartTurnAsync(text);
-        return Task.CompletedTask;
+    }
+
+    /// <summary>Tells the store this call is still being had.</summary>
+    /// <returns>A task that completes once the store has been read.</returns>
+    /// <remarks>
+    /// This connection opens its session once and holds it for the whole call, so nothing else ever
+    /// reads it back. A store that expires an idle session counts a read as the one sign the call is
+    /// still live, so without this a call longer than that timeout is swept out from under the turn
+    /// about to run: its words are flushed, its session is dropped, and every turn after it runs on
+    /// an object no close can reach. A call nobody speaks on is ended by this socket's own
+    /// <c>IdleTimeout</c> instead, which is a real end and closes the chain.
+    /// The result is not used. It is the read itself that matters, and the session this connection
+    /// holds is the one the arbiter must keep running whatever the store answers.
+    /// </remarks>
+    private async Task KeepSessionAliveAsync()
+    {
+        if (_session is not { } session)
+        {
+            return;
+        }
+
+        // §7.1 forbids dropping a call over one frame, and this runs on the read loop. A store that
+        // throws costs this call its place in the sweep, never the call itself.
+        try
+        {
+            var sessions = _http.RequestServices.GetRequiredService<ICallSessions>();
+            _ = await sessions.TryGetAsync(session.CallId, _connectionToken).ConfigureAwait(false);
+        }
+        catch (Exception fault) when (fault is not OperationCanceledException)
+        {
+            ConnectionTaskObserver.SafeLog(() => TelnyxRelayLog.SessionTouchFaulted(
+                _logger, session.CallId, fault));
+        }
     }
 
     private void HandleInterrupt(RelayFrame.Interrupt interrupt)

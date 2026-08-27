@@ -11,6 +11,10 @@ namespace AgentCore.Application.Tests.Configuration.Validation;
 /// </summary>
 public sealed class GuardEvaluatorTests
 {
+    private static readonly string[] OrderingOperators = [">", ">=", "<", "<="];
+
+    private static readonly string[] NonOrderingOperators = ["===", "!==", "in", "var", "+"];
+
     private static readonly Dictionary<string, JsonNode?> State = new(StringComparer.Ordinal)
     {
         ["yes"] = JsonValue.Create(true),
@@ -136,6 +140,29 @@ public sealed class GuardEvaluatorTests
 
         Assert.All(GuardOperators.Rejected, name => Assert.False(GuardOperators.IsAllowed(name)));
         Assert.All(GuardOperators.Allowed, name => Assert.False(GuardOperators.IsNamedRejected(name)));
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // An operator name is matched exactly. A table that folded case would let 'VAR' through check 4
+    // and then fail at run time, where JsonLogic knows no such operator.
+    // ---------------------------------------------------------------------------------------------
+    [Fact]
+    public void TheOperatorTables_MatchAnOperatorNameCaseSensitively()
+    {
+        Assert.True(GuardOperators.IsAllowed("var"));
+        Assert.False(GuardOperators.IsAllowed("VAR"));
+        Assert.False(GuardOperators.IsAllowed("Missing"));
+
+        Assert.True(GuardOperators.IsNamedRejected("log"));
+        Assert.False(GuardOperators.IsNamedRejected("LOG"));
+        Assert.False(GuardOperators.IsNamedRejected("Filter"));
+    }
+
+    [Fact]
+    public void TheNumericComparisons_AreTheFourOrderingOperators()
+    {
+        Assert.All(OrderingOperators, name => Assert.True(GuardOperators.IsNumericComparison(name)));
+        Assert.All(NonOrderingOperators, name => Assert.False(GuardOperators.IsNumericComparison(name)));
     }
 
     [Fact]

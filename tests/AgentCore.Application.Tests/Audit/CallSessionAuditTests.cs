@@ -1,7 +1,9 @@
+using AgentCore.TestSupport;
 using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Audit;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
+using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
@@ -53,7 +55,7 @@ public sealed class CallSessionAuditTests
         apiVersion: agentcore/v1
         name: audited-tools
         tools:
-          - { id: lookup_order, kind: builtin, uses: orders.read }
+          - { id: lookup_order, kind: builtin, uses: orders.read, description: "Look up an order by its id." }
         agents:
           defaults:
             model: { ref: reply }
@@ -149,7 +151,7 @@ public sealed class CallSessionAuditTests
     {
         using LoopingToolCallingChatClient reply = new();
         InMemoryAuditSink sink = new();
-        var session = Build(ToolYaml, reply, null, new ThrowingToolFactory(), auditSink: sink).Create("call-1");
+        var session = Build(ToolYaml, reply, null, new ThrowingToolBuilder().Create, auditSink: sink).Create("call-1");
 
         await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
 
@@ -172,7 +174,7 @@ public sealed class CallSessionAuditTests
             failure => !failure.Payload.ContainsKey(AuditPayloadKeys.ToolCallId));
         Assert.False(turnLevel.Payload.ContainsKey(AuditPayloadKeys.ToolName));
         Assert.Contains(
-            ThrowingToolFactory.Message,
+            ThrowingToolBuilder.Message,
             turnLevel.Payload[AuditPayloadKeys.ToolError],
             StringComparison.Ordinal);
 
@@ -190,7 +192,7 @@ public sealed class CallSessionAuditTests
         Assert.All(
             calls,
             call => Assert.Contains(
-                ThrowingToolFactory.Message,
+                ThrowingToolBuilder.Message,
                 call.Payload[AuditPayloadKeys.ToolError],
                 StringComparison.Ordinal));
 
@@ -213,8 +215,8 @@ public sealed class CallSessionAuditTests
         // that could ever have recorded the tool is the observer.
         using NamedToolCallingChatClient reply = new("lookup_order", "I could not reach the order system.");
         InMemoryAuditSink sink = new();
-        UnreachableEndpointToolFactory tools = new();
-        var session = Build(ToolYaml, reply, null, tools, auditSink: sink).Create("call-1");
+        UnreachableEndpointToolBuilder tools = new();
+        var session = Build(ToolYaml, reply, null, tools.Create, auditSink: sink).Create("call-1");
 
         var turn = await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
 
@@ -225,7 +227,7 @@ public sealed class CallSessionAuditTests
             ToolFailureKinds.ToToken(ToolFailureKind.Faulted),
             failed.Payload[AuditPayloadKeys.ToolFailureKind]);
         Assert.Contains(
-            UnreachableEndpointToolFactory.Message,
+            UnreachableEndpointToolBuilder.Message,
             failed.Payload[AuditPayloadKeys.ToolError],
             StringComparison.Ordinal);
 
@@ -242,7 +244,7 @@ public sealed class CallSessionAuditTests
         // why nothing else in the system would ever have recorded that it happened.
         using NamedToolCallingChatClient reply = new("lookup_ordar", "Let me try that again.");
         InMemoryAuditSink sink = new();
-        var session = Build(ToolYaml, reply, null, new StubToolFactory("""{"status":"shipped"}"""), auditSink: sink)
+        var session = Build(ToolYaml, reply, null, new StubToolBuilder("""{"status":"shipped"}""").Create, auditSink: sink)
             .Create("call-1");
 
         var turn = await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
@@ -269,7 +271,7 @@ public sealed class CallSessionAuditTests
         // written twice, and a reader cannot tell which call failed.
         using NamedToolCallingChatClient reply = new("lookup_order", "Both lookups failed.", callsPerTurn: 2);
         InMemoryAuditSink sink = new();
-        var session = Build(ToolYaml, reply, null, new UnreachableEndpointToolFactory(), auditSink: sink)
+        var session = Build(ToolYaml, reply, null, new UnreachableEndpointToolBuilder().Create, auditSink: sink)
             .Create("call-1");
 
         await session.RunTurnAsync("where are my two orders", TestContext.Current.CancellationToken);
@@ -293,7 +295,7 @@ public sealed class CallSessionAuditTests
         // and no exception, so nothing failed as far as it is concerned and no row is written.
         using NamedToolCallingChatClient reply = new("lookup_order", "That order is already closed.");
         InMemoryAuditSink sink = new();
-        var session = Build(ToolYaml, reply, null, new RefusedRequestToolFactory(), auditSink: sink)
+        var session = Build(ToolYaml, reply, null, new RefusedRequestToolBuilder().Create, auditSink: sink)
             .Create("call-1");
 
         var turn = await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
@@ -312,7 +314,7 @@ public sealed class CallSessionAuditTests
 
         // One factory, one document, one compiled agent behind the sessions — the shape T44 pins.
         using NamedToolCallingChatClient reply = new("lookup_order", "I could not reach the order system.");
-        var factory = Build(ToolYaml, reply, null, new UnreachableEndpointToolFactory(), auditSink: sink);
+        var factory = Build(ToolYaml, reply, null, new UnreachableEndpointToolBuilder().Create, auditSink: sink);
 
         var token = TestContext.Current.CancellationToken;
         using Barrier gate = new(FanOut);
@@ -536,7 +538,7 @@ public sealed class CallSessionAuditTests
         string yaml,
         IChatClient reply,
         IChatClient? fill,
-        IAgentToolFactory? tools = null,
+        Func<ToolConfiguration, AITool?>? tools = null,
         TimeProvider? timeProvider = null,
         IAuditSinkPort? auditSink = null,
         ILogger? logger = null)
@@ -557,7 +559,10 @@ public sealed class CallSessionAuditTests
 
         var compiled = ConfigurationCompiler.Compile(
             document,
-            new AgentCompilationContext(chatClients) { Tools = tools });
+            new AgentCompilationContext(chatClients)
+            {
+                Tools = TestToolRegistry.From(document, tools, TestContext.Current.CancellationToken),
+            });
 
         return new CallSessionFactory(
             compiled,

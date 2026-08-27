@@ -70,12 +70,12 @@ public sealed class ConfigurationLoaderTests
     [Fact]
     public void Example_BindsEveryToolKind()
     {
-        Assert.Equal(6, Example.Tools.Count);
+        Assert.Equal(3, Example.Tools.Count);
 
         Assert.Equal(ToolKind.Builtin, Example.Tools[0].Kind);
-        Assert.Equal("knowledge.search", Example.Tools[0].Uses);
+        Assert.Equal("ui.draw", Example.Tools[0].Uses);
 
-        var binding = Example.Tools[5];
+        var binding = Example.Tools[2];
         Assert.Equal(ToolKind.Binding, binding.Kind);
         Assert.Equal("CreateCase", binding.Binds);
         Assert.NotNull(binding.Parameters);
@@ -85,7 +85,7 @@ public sealed class ConfigurationLoaderTests
     [Fact]
     public void Example_ReadsTheSecretReferenceAndResolvesNothing()
     {
-        var http = Example.Tools[4];
+        var http = Example.Tools[1];
 
         Assert.Equal(ToolKind.Http, http.Kind);
         Assert.NotNull(http.Request);
@@ -107,9 +107,9 @@ public sealed class ConfigurationLoaderTests
         Assert.Equal(0.3, Example.Agents.Defaults.Model.Temperature);
         Assert.StartsWith("<the stable cached prefix", Example.Agents.Defaults.Instructions, StringComparison.Ordinal);
 
-        Assert.Equal(5, Example.Agents.Items.Count);
+        Assert.Equal(7, Example.Agents.Items.Count);
         Assert.Equal("resolver", Example.Agents.Items[2].Id);
-        Assert.Equal(["search_chunks", "read_doc", "list_docs", "grep_docs"], Example.Agents.Items[2].Tools);
+        Assert.Empty(Example.Agents.Items[2].Tools);
         Assert.Empty(Example.Agents.Items[0].Tools);
     }
 
@@ -143,18 +143,17 @@ public sealed class ConfigurationLoaderTests
     public void Example_BindsProviders()
     {
         Assert.NotNull(Example.Providers);
-        Assert.Equal(3, Example.Providers!.Llm.Count);
+        Assert.Equal(4, Example.Providers!.Llm.Count);
         Assert.Equal("gpt-4.1-mini", Example.Providers.Llm[0].Model);
         Assert.Equal("reply", Example.Providers.Llm[0].As);
         Assert.Equal("fill", Example.Providers.Llm[1].As);
         Assert.Equal("judge", Example.Providers.Llm[2].As);
+        Assert.Equal("cheap", Example.Providers.Llm[3].As);
         Assert.Equal("telnyx-relay", Example.Providers.Speech!.Stt.Kind);
         Assert.Equal("telnyx-relay", Example.Providers.Speech.Tts.Kind);
         Assert.Equal("telnyx", Example.Providers.Telephony!.Kind);
-        Assert.Equal("filesystem", Example.Providers.Knowledge!.Search);
-        Assert.Equal("filesystem", Example.Providers.Knowledge.Documents);
-        Assert.Equal("./kb", Example.Providers.Knowledge.Root);
-        Assert.Null(Example.Providers.Knowledge.Endpoint);
+        Assert.Equal("qdrant", Example.Providers.Knowledge!.Kind);
+        Assert.Equal("https://qdrant.example.com:6334", Example.Providers.Knowledge.Endpoint);
         Assert.Equal(KnowledgeProviderConfiguration.DefaultCollection, Example.Providers.Knowledge.Collection);
     }
 
@@ -175,11 +174,54 @@ public sealed class ConfigurationLoaderTests
         var configuration = ConfigurationLoader.LoadYaml(document);
 
         var knowledge = configuration.Providers!.Knowledge!;
-        Assert.Equal(KnowledgeProviderConfiguration.DefaultSearch, knowledge.Search);
-        Assert.Equal(KnowledgeProviderConfiguration.DefaultDocuments, knowledge.Documents);
-        Assert.Equal(KnowledgeProviderConfiguration.DefaultRoot, knowledge.Root);
+        Assert.Equal(KnowledgeProviderConfiguration.DefaultKind, knowledge.Kind);
         Assert.Null(knowledge.Endpoint);
         Assert.Equal(KnowledgeProviderConfiguration.DefaultCollection, knowledge.Collection);
+    }
+
+    [Fact]
+    public void AKnowledgeFieldSetToNull_BindsNullAndKeepsTheOtherDefaults()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: foreign
+            providers:
+              call:   { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
+              knowledge:
+                fields: { id: null, body: page_content }
+            """;
+
+        var knowledge = ConfigurationLoader.LoadYaml(document).Providers!.Knowledge!;
+
+        Assert.Null(knowledge.Fields.Id);
+        Assert.Equal("page_content", knowledge.Fields.Body);
+        Assert.Equal(KnowledgeFieldsConfiguration.DefaultLexical, knowledge.Fields.Lexical);
+        Assert.Equal(KnowledgeFieldsConfiguration.DefaultSource, knowledge.Fields.Source);
+    }
+
+    [Fact]
+    public void ABodyFieldSetToNull_FailsTheLoad()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            providers:
+              call:   { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
+              knowledge:
+                fields: { body: null }
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Contains(
+            failure.Errors,
+            error => error.Pointer!.StartsWith("/providers/knowledge/fields", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -194,21 +236,54 @@ public sealed class ConfigurationLoaderTests
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
               knowledge:
-                search: zilliz
-                documents: filesystem
-                root: ./docs
-                endpoint: https://cluster.example.com
+                kind: qdrant
+                endpoint: https://cluster.example.com:6334
                 collection: manuals
             """;
 
         var configuration = ConfigurationLoader.LoadYaml(document);
 
         var knowledge = configuration.Providers!.Knowledge!;
-        Assert.Equal("zilliz", knowledge.Search);
-        Assert.Equal("filesystem", knowledge.Documents);
-        Assert.Equal("./docs", knowledge.Root);
-        Assert.Equal("https://cluster.example.com", knowledge.Endpoint);
+        Assert.Equal("qdrant", knowledge.Kind);
+        Assert.Equal("https://cluster.example.com:6334", knowledge.Endpoint);
         Assert.Equal("manuals", knowledge.Collection);
+    }
+
+    [Fact]
+    public void AKnowledgeProviderWithNoVector_BindsNullMeaningTheAnonymousVector()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: plainvec
+            providers:
+              call:   { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
+              knowledge: {}
+            """;
+
+        var knowledge = ConfigurationLoader.LoadYaml(document).Providers!.Knowledge!;
+
+        Assert.Null(knowledge.Vector);
+    }
+
+    [Fact]
+    public void AKnowledgeProviderNamingAMapper_BindsIt()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: mapped
+            providers:
+              call:   { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
+              knowledge:
+                mapper: acme-catalog
+            """;
+
+        Assert.Equal("acme-catalog", ConfigurationLoader.LoadYaml(document).Providers!.Knowledge!.Mapper);
     }
 
     [Fact]
@@ -482,9 +557,79 @@ public sealed class ConfigurationLoaderTests
     }
 
     [Fact]
+    public void Load_AToolWithAModelRef_ReadsIt()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: plain
+            tools:
+              - { id: draw, kind: builtin, uses: ui.draw, description: d, model: { ref: cheap } }
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+
+        Assert.Equal("cheap", configuration.Tools[0].Model!.Ref);
+    }
+
+    [Fact]
+    public void Load_AToolWithMaxRounds_ReadsIt()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: plain
+            tools:
+              - { id: draw, kind: builtin, uses: ui.draw, description: d, maxRounds: 4 }
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+
+        Assert.Equal(4, configuration.Tools[0].MaxRounds);
+    }
+
+    [Fact]
+    public void NoLinksBlock_LeavesLinksNullAndTheFeatureOff()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: unlinked
+            providers:
+              call:   { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
+              knowledge: {}
+            """;
+
+        Assert.Null(ConfigurationLoader.LoadYaml(document).Providers!.Knowledge!.Links);
+    }
+
+    [Fact]
+    public void ALinksBlockWithoutLookup_DefaultsToFilter()
+    {
+        // filter is the only mode that works on any collection; uuid5 is now Spirit's explicit spelling.
+        const string document = """
+            apiVersion: agentcore/v1
+            name: linked
+            providers:
+              call:   { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
+              knowledge:
+                links: { field: related }
+            """;
+
+        var links = ConfigurationLoader.LoadYaml(document).Providers!.Knowledge!.Links;
+
+        Assert.NotNull(links);
+        Assert.Equal(KnowledgeLinkLookup.Filter, links!.Lookup);
+        Assert.Equal("related", links.Field);
+    }
+
+    [Fact]
     public void ShippedExampleFile_Loads()
     {
-        var path = Path.Combine(RepositoryRoot(), "src", "AgentCore.Api", "config", "example.yaml");
+        var path = Path.Combine(RepositoryRoot(), "demo", "AgentCore.Demo", "config", "example.yaml");
         Assert.True(File.Exists(path), $"The shipped example is missing at '{path}'.");
 
         var shipped = ConfigurationLoader.LoadFile(path);

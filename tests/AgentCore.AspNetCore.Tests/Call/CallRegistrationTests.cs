@@ -1,3 +1,4 @@
+using AgentCore.TestSupport;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
@@ -5,6 +6,7 @@ using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Tests.Fakes;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Xunit;
 
 namespace AgentCore.AspNetCore.Tests.Call;
@@ -15,7 +17,7 @@ namespace AgentCore.AspNetCore.Tests.Call;
 /// <remarks>
 /// <para>
 /// Registering a vendor is what turns this seam on, exactly as it is for telemetry, knowledge,
-/// moderation, and speech. Every test here calls <c>AddAgentCoreAsync</c> alone, with no route
+/// moderation, and speech. Every test here starts a host alone, with no route
 /// mapped anywhere, because agreement between two document entries is a document fact and is true
 /// or false whether or not anything is ever routed.
 /// </para>
@@ -42,7 +44,7 @@ public sealed class CallRegistrationTests
             speechKind: "telnyx-relay",
             new FakeCallAdapter("telnyx-relay", carriesText: true));
 
-        Assert.NotNull(provider.GetService<IReadOnlyList<ICallAdapter>>());
+        Assert.NotNull(provider.Services.GetService<IReadOnlyList<ICallAdapter>>());
     }
 
     [Fact]
@@ -64,7 +66,7 @@ public sealed class CallRegistrationTests
         // registered for them. A contradictory document is not read, and the start succeeds.
         using var provider = await BuildAsync(callKind: "telnyx-relay", speechKind: "deepgram");
 
-        Assert.Null(provider.GetService<IReadOnlyList<ICallAdapter>>());
+        Assert.Null(provider.Services.GetService<IReadOnlyList<ICallAdapter>>());
     }
 
     [Fact]
@@ -168,7 +170,7 @@ public sealed class CallRegistrationTests
     /// <param name="speechKind">The value both speech roles carry, <c>stt</c> and <c>tts</c> alike.</param>
     /// <param name="adapters">The call transports this host registers, if any.</param>
     /// <returns>The composed container.</returns>
-    private static Task<ServiceProvider> BuildAsync(
+    private static Task<IHost> BuildAsync(
         string callKind,
         string speechKind,
         params ICallAdapter[] adapters)
@@ -183,26 +185,36 @@ public sealed class CallRegistrationTests
     /// empty list would turn the seam on for a host that registered no vendor, which is the one
     /// thing these tests prove does not happen.
     /// </remarks>
-    private static async Task<ServiceProvider> BuildFromAsync(
+    private static async Task<IHost> BuildFromAsync(
         AgentCoreConfiguration configuration,
         params ICallAdapter[] adapters)
     {
-        ServiceCollection services = new();
+        HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
 
-        await services.AddAgentCoreAsync(
-            options =>
+        builder.Services.AddAgentCore(options =>
+        {
+            options.Configuration = configuration;
+            options.UseChatClients(_ => new RoutingChatClientFactory(new FragmentingChatClient("hello")));
+            options.UseSpeech(new TelnyxRelaySpeechAdapter());
+
+            if (adapters.Length > 0)
             {
-                options.Configuration = configuration;
-                options.UseChatClients(_ => new RoutingChatClientFactory(new SequencedChatClient("hello")));
-                options.UseSpeech(new TelnyxRelaySpeechAdapter());
+                options.UseCall(adapters);
+            }
+        });
 
-                if (adapters.Length > 0)
-                {
-                    options.UseCall(adapters);
-                }
-            },
-            TestContext.Current.CancellationToken);
+        var host = builder.Build();
+        try
+        {
+            await host.StartAsync(TestContext.Current.CancellationToken);
+        }
+        catch
+        {
+            // A failed start never stops what started, so disposal is the only cleanup path.
+            host.Dispose();
+            throw;
+        }
 
-        return services.BuildServiceProvider();
+        return host;
     }
 }

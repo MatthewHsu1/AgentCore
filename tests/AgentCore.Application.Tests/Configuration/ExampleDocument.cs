@@ -67,10 +67,7 @@ internal static class ExampleDocument
                       - { ">=": [ { var: failedResolveTurns }, 3 ] }
 
         tools:
-          - { id: search_chunks, kind: builtin, uses: knowledge.search }
-          - { id: read_doc,      kind: builtin, uses: knowledge.read }
-          - { id: list_docs,     kind: builtin, uses: knowledge.list }
-          - { id: grep_docs,     kind: builtin, uses: knowledge.grep }
+          - { id: draw,          kind: builtin, uses: ui.draw, model: { ref: cheap } }
           - id: lookup_order
             kind: http
             description: Read one order by its identifier.
@@ -96,12 +93,17 @@ internal static class ExampleDocument
             model: { ref: reply, temperature: 0.3 }
             instructions: |
               <the stable cached prefix: persona, safety, transfer rules, and tool etiquette>
+            knowledge: { mode: prefetch, limit: 5, citations: false }
           items:
             - { id: greeter,    instructions: "<stage delta>", tools: [] }
             - { id: identifier, instructions: "<stage delta>", tools: [ lookup_order ] }
-            - { id: resolver,   instructions: "<stage delta>", tools: [ search_chunks, read_doc, list_docs, grep_docs ] }
+            - { id: resolver,   instructions: "<stage delta>", tools: [] }
             - { id: escalator,  instructions: "<stage delta>", tools: [ create_case ] }
             - { id: closer,     instructions: "<stage delta>", tools: [] }
+            - { id: analyst, instructions: "<stage delta>", tools: [ lookup_order, create_case ],
+                knowledge: { mode: tool, limit: 8, citations: true, scoped: false } }
+            - { id: webchat, instructions: "<stage delta>", tools: [ lookup_order ],
+                knowledge: { mode: tool, citations: false } }
 
         policy:
           initial: greeting
@@ -132,13 +134,15 @@ internal static class ExampleDocument
             - { kind: openai, model: gpt-4.1-mini, as: reply }      # the voice path, chosen on latency
             - { kind: openai, model: gpt-5.4-nano, as: fill }       # the extractor, chosen on null discipline
             - { kind: openai, model: gpt-4.1,      as: judge }      # evaluation only, chosen on judgement
+            - { kind: openai, model: gpt-4.1-nano, as: cheap }      # ui.draw only, chosen on price
           call:      { kind: telnyx-relay }        # the pipe: who carries the call and owns /v1/call
           speech:                                  # the ears and the mouth, named one role at a time
             stt: { kind: telnyx-relay }            # recognition. Bundled here, so it matches call
             tts: { kind: telnyx-relay }            # synthesis. Bundled here, so it matches call
           telephony: { kind: telnyx }              # dial, transfer, hang up. Not the pipe — that is call
           moderation: { kind: openai }             # reads what the CALLER said, before the model runs
-          knowledge: { search: filesystem, documents: filesystem, root: ./kb }
+          embeddings: { kind: openai, model: text-embedding-3-small }
+          knowledge: { kind: qdrant, endpoint: https://qdrant.example.com:6334, collection: kb, vector: dense, links: { lookup: uuid5 } }
 
         evaluation:
           sampleRate: 0
@@ -296,24 +300,12 @@ internal static class ExampleDocument
           },
           "tools": [
             {
-              "id": "search_chunks",
+              "id": "draw",
               "kind": "builtin",
-              "uses": "knowledge.search"
-            },
-            {
-              "id": "read_doc",
-              "kind": "builtin",
-              "uses": "knowledge.read"
-            },
-            {
-              "id": "list_docs",
-              "kind": "builtin",
-              "uses": "knowledge.list"
-            },
-            {
-              "id": "grep_docs",
-              "kind": "builtin",
-              "uses": "knowledge.grep"
+              "uses": "ui.draw",
+              "model": {
+                "ref": "cheap"
+              }
             },
             {
               "id": "lookup_order",
@@ -362,7 +354,12 @@ internal static class ExampleDocument
                 "ref": "reply",
                 "temperature": 0.3
               },
-              "instructions": "<the stable cached prefix: persona, safety, transfer rules, and tool etiquette>\n"
+              "instructions": "<the stable cached prefix: persona, safety, transfer rules, and tool etiquette>\n",
+              "knowledge": {
+                "mode": "prefetch",
+                "limit": 5,
+                "citations": false
+              }
             },
             "items": [
               {
@@ -380,12 +377,7 @@ internal static class ExampleDocument
               {
                 "id": "resolver",
                 "instructions": "<stage delta>",
-                "tools": [
-                  "search_chunks",
-                  "read_doc",
-                  "list_docs",
-                  "grep_docs"
-                ]
+                "tools": []
               },
               {
                 "id": "escalator",
@@ -398,6 +390,31 @@ internal static class ExampleDocument
                 "id": "closer",
                 "instructions": "<stage delta>",
                 "tools": []
+              },
+              {
+                "id": "analyst",
+                "instructions": "<stage delta>",
+                "tools": [
+                  "lookup_order",
+                  "create_case"
+                ],
+                "knowledge": {
+                  "mode": "tool",
+                  "limit": 8,
+                  "citations": true,
+                  "scoped": false
+                }
+              },
+              {
+                "id": "webchat",
+                "instructions": "<stage delta>",
+                "tools": [
+                  "lookup_order"
+                ],
+                "knowledge": {
+                  "mode": "tool",
+                  "citations": false
+                }
               }
             ]
           },
@@ -477,6 +494,11 @@ internal static class ExampleDocument
                 "kind": "openai",
                 "model": "gpt-4.1",
                 "as": "judge"
+              },
+              {
+                "kind": "openai",
+                "model": "gpt-4.1-nano",
+                "as": "cheap"
               }
             ],
             "call": {
@@ -496,10 +518,18 @@ internal static class ExampleDocument
             "moderation": {
               "kind": "openai"
             },
+            "embeddings": {
+              "kind": "openai",
+              "model": "text-embedding-3-small"
+            },
             "knowledge": {
-              "search": "filesystem",
-              "documents": "filesystem",
-              "root": "./kb"
+              "kind": "qdrant",
+              "endpoint": "https://qdrant.example.com:6334",
+              "collection": "kb",
+              "vector": "dense",
+              "links": {
+                "lookup": "uuid5"
+              }
             }
           },
           "evaluation": {

@@ -8,54 +8,9 @@ namespace AgentCore.Application.Runtime;
 /// <summary>
 /// Refuses a turn whose caller text the moderation endpoint flagged, before the agent runs.
 /// </summary>
-/// <remarks>
-/// <para>
-/// R3: moderation judges the caller, not the reply. The owner decided this on 2026-08-13, over
-/// section 11 item 11. Recording a harmful reply protects nobody, because the caller already heard
-/// it, so reply moderation is withdrawn and the model carries its own safety training.
-/// </para>
-/// <para>
-/// <b>It fails open.</b> An endpoint that times out or throws lets the turn run, and the layer
-/// reports <see cref="ModerationOutcome.Unavailable"/> so an operator can alert on the rate. A
-/// vendor outage must not refuse every caller on a support line.
-/// </para>
-/// <para>
-/// <b>It wraps an AGENT and not a chat client, and that altitude is load-bearing.</b> A graph row
-/// runs several chat clients for one turn, so a chat-pipeline layer would moderate the caller once
-/// per node and hand a refusal to the next node instead of to the caller. One turn is one run of one
-/// agent on every row of the compile table, which is the altitude R3 is written at.
-/// </para>
-/// <para>
-/// It sits outside <see cref="FallbackAgent"/>, so the verdict survives a run that then threw: the
-/// disposition is attached after the inner run, and this layer folds whatever the fallback layer
-/// reported into one marker.
-/// </para>
-/// <para>
-/// It holds no per-call state: one instance is compiled once and shared by every call under T44 and
-/// R7.
-/// </para>
-/// </remarks>
 internal sealed class ModerationAgent : DelegatingAIAgent
 {
     /// <summary>How long a turn waits for the moderation endpoint before it answers anyway.</summary>
-    /// <remarks>
-    /// <para>
-    /// <b>This bound sits in front of the caller, so it is far tighter than the deadline on the work
-    /// after the reply.</b> Moderation reads what the caller said before the model runs, so the
-    /// caller hears silence for as long as it takes. Two seconds is already long on a voice call.
-    /// The endpoint answers in a fraction of that, and a wait this long means it is not answering at
-    /// all.
-    /// </para>
-    /// <para>
-    /// The design permits this wait where it would refuse a judge. Section 9 says "moderation is not
-    /// a judge, it is one free HTTP POST", which exempts it from the D9 rule that keeps a judge off
-    /// the turn.
-    /// </para>
-    /// <para>
-    /// It is not a document setting: it guards against a slow vendor and is not a product knob, so
-    /// it carries no JSON Schema field and no configuration key.
-    /// </para>
-    /// </remarks>
     internal static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(2);
 
     private readonly PromptModerator _moderator;
@@ -182,12 +137,6 @@ internal sealed class ModerationAgent : DelegatingAIAgent
     /// <summary>Reads the words the caller spoke this turn out of the whole request.</summary>
     /// <param name="messages">The request the turn is about to run.</param>
     /// <returns>The text of the last user message, or an empty string when the request holds none.</returns>
-    /// <remarks>
-    /// The turn loop appends the caller's words as the last message of the request, so the last user
-    /// message is what this turn is about and everything before it was already moderated on the turn
-    /// that carried it. An unfilled-slot reminder rides that same message, so it is moderated too;
-    /// the library wrote it, so it is never what a verdict turns on.
-    /// </remarks>
     private static string CallerText(IEnumerable<ChatMessage> messages)
     {
         string? spoken = null;

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Transcript;
 using Microsoft.Extensions.AI;
@@ -8,6 +9,41 @@ namespace AgentCore.Application.Tests.Transcript;
 /// <summary>Pins the rules of store 1: ordinals, which reply a barge-in cuts, and what a cut keeps.</summary>
 public sealed class CallTranscriptTests
 {
+    private static readonly JsonElement Payload = JsonDocument.Parse("""{"x":1}""").RootElement.Clone();
+
+    [Fact]
+    public void Append_ToolResultCarriesARender_RowKeepsItAndMessagesStripsIt()
+    {
+        // Arrange
+        var transcript = new CallTranscript { CallId = "call-1" };
+        var render = new RenderContent { Name = "order-card", RenderId = "order-41", Data = Payload };
+        var toolResult = new ChatMessage(
+            ChatRole.Tool,
+            [new FunctionResultContent("call-1", "50"), render]);
+        var plain = Assistant("the price is fifty");
+
+        // Act
+        var rows = transcript.Append([toolResult, plain]);
+
+        // Assert
+        var storedToolResult = transcript.Messages[0].Message;
+
+        // The row is untouched: Append never rebuilds the message it hands to the store, so the
+        // row is the exact original object, drawing and tool result both.
+        Assert.Same(toolResult, rows[0].Content);
+        Assert.Contains(render, rows[0].Content.Contents);
+        Assert.Single(rows[0].Content.Contents.OfType<FunctionResultContent>());
+
+        Assert.DoesNotContain(storedToolResult.Contents, content => content is RenderContent);
+        Assert.Single(storedToolResult.Contents.OfType<FunctionResultContent>());
+        Assert.Equal(rows[0].Content.Role, storedToolResult.Role);
+        Assert.Equal(rows[0].Ordinal, transcript.Messages[0].Ordinal);
+        Assert.Equal(rows[0].TurnIndex, transcript.Messages[0].TurnIndex);
+
+        Assert.Same(plain, rows[1].Content);
+        Assert.Same(plain, transcript.Messages[1].Message);
+    }
+
     [Fact]
     public void Append_TwoTurns_AllocatesDenseUniqueOrdinals()
     {

@@ -17,59 +17,9 @@ namespace AgentCore.Infrastructure.Evaluation.OpenAiModeration;
 /// <summary>
 /// Checks one piece of text against the OpenAI moderations endpoint.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Decision D13 makes <see cref="IEvaluator"/> the moderation port, so this class is the port rather
-/// than a factory for one. It posts to <see cref="ModerationPath"/> with
-/// <see cref="ModerationModel"/>, and it produces one <see cref="BooleanMetric"/> named
-/// <see cref="ContentSafetyMetricName"/> with one <see cref="ModerationVerdict"/> attached to it. The
-/// caller reads <see cref="ModerationVerdict.TryRead"/> and parses no string.
-/// </para>
-/// <para>
-/// <b>This evaluator moderates whatever text it is given, and the caller decides which text that
-/// is.</b> The text arrives through <c>modelResponse.Text</c> because that is the shape
-/// <see cref="IEvaluator"/> fixes, and the name of that parameter is not a statement about whose
-/// words they are. The host checks what the caller said, before the model runs, so the agent can
-/// refuse rather than answer and retract.
-/// </para>
-/// <para>
-/// <b>It never throws for a vendor problem.</b> D9 says a judge must never block a turn, and
-/// moderation runs on every turn. A 5xx, a 429, a timeout, a body that is not JSON, and an empty
-/// <c>results</c> array all give a metric with no value, <see cref="EvaluationRating.Inconclusive"/>,
-/// <c>failed: false</c>, and one <see cref="EvaluationDiagnostic"/> of severity
-/// <see cref="EvaluationDiagnosticSeverity.Error"/>. No verdict is attached, so the presence of a
-/// verdict is what says the endpoint answered. A cancel by the caller is not a vendor problem, and it
-/// still throws.
-/// </para>
-/// <para>
-/// The value of the metric is <see langword="true"/> when the endpoint flagged nothing. That is the
-/// <c>FaultCodeEvaluator</c> convention, where <see langword="true"/> means the reply is right, and
-/// the name of this metric is a safety name rather than a harm name.
-/// </para>
-/// <para>
-/// No key appears in this file. <see cref="SecretResolverExtensions.RequireAsync"/> reads
-/// <see cref="KnownSecrets.OpenAi"/> through the chain and then through the variable of that vendor,
-/// and <see cref="CreateAsync"/> hands it to an <see cref="ApiKeyCredential"/> that
-/// <see cref="OpenAIClient"/> owns from there. D13 gives one key to all four OpenAI calls, so this
-/// class declares no name of its own and asks the catalog rather than another adapter. The read
-/// happens once, in <see cref="CreateAsync"/>, while the host starts, and it opens no socket.
-/// </para>
-/// <para>
-/// This class sends through <see cref="ModerationClient"/>'s protocol method, not its typed one, and
-/// keeps the hand-rolled reader below: the SDK gives credentials and transport, and this class still
-/// builds the body and reads the answer, exactly as it did before this class used the SDK at all.
-/// </para>
-/// </remarks>
 public sealed class OpenAiModerationEvaluator : IEvaluator
 {
     /// <summary>The name this evaluator is registered under, beside <c>fault_code</c>.</summary>
-    /// <remarks>
-    /// It is the name <see cref="PromptModerator"/> looks the moderator up by, and never a second
-    /// name for the same thing. The turn loop finds no moderator at all if the two ever drift, and
-    /// every turn would then reach the model unchecked with nothing reporting it, so this constant
-    /// forwards rather than repeats. Application owns the name because the reader lives there;
-    /// Infrastructure already references Application under D3.
-    /// </remarks>
     public const string EvaluatorName = PromptModerator.ModerationEvaluatorName;
 
     /// <summary>The name of the one metric this evaluator produces.</summary>
@@ -82,28 +32,16 @@ public sealed class OpenAiModerationEvaluator : IEvaluator
     public const string ModerationPath = "/v1/moderations";
 
     /// <summary>The name this evaluator opens its client under, on the pipeline of the host.</summary>
-    /// <remarks>
-    /// The pipeline serves any name and gives each one the same defaults, so this name is chosen
-    /// here, beside the vendor it belongs to, and no host registers it in advance.
-    /// </remarks>
+
     public const string HttpClientName = "agentcore.openai.moderation";
 
     /// <summary>The host every moderation request goes to.</summary>
     public static readonly Uri ApiEndpoint = new("https://api.openai.com", UriKind.Absolute);
 
     /// <summary>The deadline of one check, over every attempt the pipeline makes.</summary>
-    /// <remarks>
-    /// A caller is waiting on the telephone while this runs. The shipped default of 100 seconds is
-    /// longer than the call would survive.
-    /// </remarks>
     public static readonly TimeSpan ModerationDeadline = TimeSpan.FromSeconds(10);
 
     /// <summary>The thirteen category names D13 counts, in the order the endpoint writes them.</summary>
-    /// <remarks>
-    /// Nothing in the run-time path indexes by this list. The reader enumerates whatever the endpoint
-    /// answered, so a fourteenth category reaches the audit chain with no code change. The list is
-    /// here so the vocabulary of the vendor is written down once, with its slashes and hyphens.
-    /// </remarks>
     public static readonly IReadOnlyList<string> Categories =
     [
         "harassment",
@@ -141,12 +79,6 @@ public sealed class OpenAiModerationEvaluator : IEvaluator
     /// <param name="deadline">
     /// The deadline <paramref name="client"/> was built with, read back by <see cref="Deadline"/>.
     /// </param>
-    /// <remarks>
-    /// This is internal for the reason <c>ZillizCollection.Deadline</c> is internal. A
-    /// <see cref="ModerationClient"/> in a public signature would put the vendor SDK into the D15
-    /// promise. A host builds through <see cref="CreateAsync"/>, and a test reaches this through
-    /// <c>InternalsVisibleTo</c>.
-    /// </remarks>
     internal OpenAiModerationEvaluator(ModerationClient client, TimeSpan deadline)
     {
         ArgumentNullException.ThrowIfNull(client);
@@ -159,10 +91,6 @@ public sealed class OpenAiModerationEvaluator : IEvaluator
     public IReadOnlyCollection<string> EvaluationMetricNames => [ContentSafetyMetricName];
 
     /// <summary>Gets the deadline of one check, which <see cref="CreateAsync"/> set on the client.</summary>
-    /// <remarks>
-    /// The build sets the deadline and this class sends through the client, so a test reads it back
-    /// here. It is internal, so it adds nothing to the public surface.
-    /// </remarks>
     internal TimeSpan Deadline => _deadline;
 
     /// <summary>Builds the evaluator, over the pipeline the host built.</summary>
@@ -174,32 +102,6 @@ public sealed class OpenAiModerationEvaluator : IEvaluator
     /// <returns>The evaluator.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="handlers"/> is <see langword="null"/>.</exception>
     /// <exception cref="SecretResolutionException">Neither the chain nor the environment holds a key.</exception>
-    /// <remarks>
-    /// <para>
-    /// This runs once, while the host starts. It opens no socket: the first check is the first
-    /// request, so a host with no route to <see cref="ApiEndpoint"/> still starts.
-    /// </para>
-    /// <para>
-    /// <b>The pipeline is required rather than optional.</b> <see cref="HttpClientPipelineTransport"/>
-    /// carries the <see cref="HttpClient"/> this method takes from <paramref name="handlers"/> into
-    /// <c>OpenAIClientOptions.Transport</c>, so every request this evaluator sends still goes through
-    /// the host's connection pooling and the resilience handler <c>AgentCoreHttpClients</c>
-    /// registered under <see cref="HttpClientName"/>, rather than through a transport the SDK builds
-    /// for itself. A client built here instead would send with no retry and no rate limit answer, and
-    /// nothing would say so.
-    /// </para>
-    /// <para>
-    /// <b>The SDK's own retry loop is turned off.</b> Left at its default of three, it would retry a
-    /// persistent failure on top of whatever <c>AgentCoreHttpClients</c> already allows for the
-    /// request's method — and because each retry gets its own fresh <c>NetworkTimeout</c> budget, it
-    /// would stretch the wait past <see cref="ModerationDeadline"/>. <c>AgentCoreHttpClients</c> is
-    /// the one place D13 gives retry to, so this class asks the SDK for none of its own, the same way
-    /// it asks the SDK for none of its own connection lifetime.
-    /// </para>
-    /// <para>
-    /// The evaluator holds no per-call state, so one instance serves every turn of every call.
-    /// </para>
-    /// </remarks>
     public static async ValueTask<OpenAiModerationEvaluator> CreateAsync(
         IHttpMessageHandlerFactory handlers,
         ISecretResolverPort? secrets = null,
@@ -322,10 +224,6 @@ public sealed class OpenAiModerationEvaluator : IEvaluator
     /// <summary>Writes the body the moderations route expects.</summary>
     /// <param name="text">The text to check.</param>
     /// <returns>The JSON body.</returns>
-    /// <remarks>
-    /// The route takes a string, an array of strings, or an array of content parts. D13 asks for one
-    /// POST, and this host checks one piece of text, so it sends one string.
-    /// </remarks>
     private static string Body(string text)
     {
         JsonObject body = new()
@@ -390,11 +288,6 @@ public sealed class OpenAiModerationEvaluator : IEvaluator
     /// <summary>Collects the names the endpoint flagged, in the order it returned them.</summary>
     /// <param name="result">The first element of <c>results</c>.</param>
     /// <returns>The names.</returns>
-    /// <remarks>
-    /// <c>illicit</c> and <c>illicit/violent</c> may be JSON <c>null</c>, so this tests for
-    /// <see cref="JsonValueKind.True"/> and treats every other kind as not flagged. The taxonomy
-    /// belongs to the endpoint and it is open, so a name this library never listed still travels.
-    /// </remarks>
     private static List<string> Flags(JsonElement result)
     {
         List<string> names = [];
@@ -455,10 +348,6 @@ public sealed class OpenAiModerationEvaluator : IEvaluator
 
     /// <summary>Builds the metric text with nothing in it produces.</summary>
     /// <returns>The metric, with a verdict that flags nothing.</returns>
-    /// <remarks>
-    /// A verdict is attached, because the answer is known: there is nothing to flag. That is a
-    /// different fact from an endpoint that did not answer, which carries no verdict.
-    /// </remarks>
     private static BooleanMetric NothingToCheck()
     {
         const string reason = "the text is empty, so nothing was posted.";
@@ -477,11 +366,6 @@ public sealed class OpenAiModerationEvaluator : IEvaluator
     /// <summary>Builds the metric every failure of this evaluator produces.</summary>
     /// <param name="what">What went wrong, named for the diagnostic.</param>
     /// <returns>The metric, with no value and no verdict.</returns>
-    /// <remarks>
-    /// <c>failed</c> is false, because an endpoint that did not answer is no evidence about the text.
-    /// A reader tells this apart from a clean check by <see cref="ModerationVerdict.TryRead"/>
-    /// answering <see langword="false"/>.
-    /// </remarks>
     private static BooleanMetric Unchecked(string what)
     {
         BooleanMetric metric = new(ContentSafetyMetricName, value: null);
