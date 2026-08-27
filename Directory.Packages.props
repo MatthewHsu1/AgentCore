@@ -54,7 +54,6 @@
   <ItemGroup>
     <PackageVersion Include="Microsoft.Extensions.AI.Evaluation" Version="10.8.0" />
     <PackageVersion Include="Microsoft.Extensions.AI.Evaluation.Quality" Version="10.8.0" />
-    <PackageVersion Include="Microsoft.Extensions.AI.Evaluation.NLP" Version="10.8.0-preview.1.26364.2" />
     <PackageVersion Include="Microsoft.Extensions.AI.Evaluation.Reporting" Version="10.8.0" />
     <PackageVersion Include="Microsoft.Extensions.AI.Evaluation.Console" Version="10.8.0" />
   </ItemGroup>

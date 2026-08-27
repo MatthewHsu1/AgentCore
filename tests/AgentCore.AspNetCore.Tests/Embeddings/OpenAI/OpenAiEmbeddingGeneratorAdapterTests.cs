@@ -3,11 +3,11 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Embeddings;
 using AgentCore.Application.Secrets;
-using AgentCore.Infrastructure.Llm.OpenAI;
+using AgentCore.Infrastructure.Embeddings.OpenAI;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentCore.AspNetCore.Tests.Llm.OpenAI;
+namespace AgentCore.AspNetCore.Tests.Embeddings.OpenAI;
 
 /// <summary>
 /// The OpenAI embedding adapter. It owns the vendor only: the SDK client, the key, the model name.

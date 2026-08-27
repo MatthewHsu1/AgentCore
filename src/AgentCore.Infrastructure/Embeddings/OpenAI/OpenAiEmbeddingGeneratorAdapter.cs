@@ -5,7 +5,7 @@ using AgentCore.Application.Secrets;
 using Microsoft.Extensions.AI;
 using OpenAI;
 
-namespace AgentCore.Infrastructure.Llm.OpenAI;
+namespace AgentCore.Infrastructure.Embeddings.OpenAI;
 
 /// <summary>
 /// The OpenAI adapter behind <see cref="IEmbeddingGeneratorAdapter"/>.

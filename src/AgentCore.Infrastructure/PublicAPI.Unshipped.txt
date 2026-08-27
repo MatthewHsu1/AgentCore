@@ -4,6 +4,10 @@ AgentCore.Infrastructure.Audit.Postgres.PostgresAuditSinkAdapter.Kind.get -> str
 AgentCore.Infrastructure.Audit.Postgres.PostgresAuditSinkAdapter.OpenAsync(AgentCore.Application.Configuration.Schema.VendorProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IAuditSinkPort!>
 AgentCore.Infrastructure.Audit.Postgres.PostgresAuditSinkAdapter.PostgresAuditSinkAdapter() -> void
 AgentCore.Infrastructure.Database.Postgres.PostgresSchema
+AgentCore.Infrastructure.Embeddings.OpenAI.OpenAiEmbeddingGeneratorAdapter
+AgentCore.Infrastructure.Embeddings.OpenAI.OpenAiEmbeddingGeneratorAdapter.CreateGeneratorAsync(AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.IEmbeddingGenerator<string!, Microsoft.Extensions.AI.Embedding<float>!>!>
+AgentCore.Infrastructure.Embeddings.OpenAI.OpenAiEmbeddingGeneratorAdapter.Kind.get -> string!
+AgentCore.Infrastructure.Embeddings.OpenAI.OpenAiEmbeddingGeneratorAdapter.OpenAiEmbeddingGeneratorAdapter() -> void
 AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationAdapter
 AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationAdapter.CreateAsync(AgentCore.Application.Configuration.Schema.VendorProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.Evaluation.IEvaluator!>
 AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationAdapter.Kind.get -> string!
@@ -22,10 +26,6 @@ AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter
 AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.CreateClientAsync(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.IChatClient!>
 AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.Kind.get -> string!
 AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.OpenAiChatClientAdapter() -> void
-AgentCore.Infrastructure.Llm.OpenAI.OpenAiEmbeddingGeneratorAdapter
-AgentCore.Infrastructure.Llm.OpenAI.OpenAiEmbeddingGeneratorAdapter.CreateGeneratorAsync(AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.IEmbeddingGenerator<string!, Microsoft.Extensions.AI.Embedding<float>!>!>
-AgentCore.Infrastructure.Llm.OpenAI.OpenAiEmbeddingGeneratorAdapter.Kind.get -> string!
-AgentCore.Infrastructure.Llm.OpenAI.OpenAiEmbeddingGeneratorAdapter.OpenAiEmbeddingGeneratorAdapter() -> void
 AgentCore.Infrastructure.Secrets.ChainedSecretResolver
 AgentCore.Infrastructure.Secrets.ChainedSecretResolver.ChainedSecretResolver(System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ISecretResolverPort!>! links) -> void
 AgentCore.Infrastructure.Secrets.ChainedSecretResolver.Count.get -> int
@@ -54,6 +54,9 @@ AgentCore.Infrastructure.Transcript.Postgres.PostgresTranscriptStoreAdapter.Kind
 AgentCore.Infrastructure.Transcript.Postgres.PostgresTranscriptStoreAdapter.OpenAsync(AgentCore.Application.Configuration.Schema.VendorProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.ITranscriptStore!>
 AgentCore.Infrastructure.Transcript.Postgres.PostgresTranscriptStoreAdapter.PostgresTranscriptStoreAdapter() -> void
 const AgentCore.Infrastructure.Audit.Postgres.PostgresAuditSinkAdapter.ProviderKind = "postgres" -> string!
+const AgentCore.Infrastructure.Embeddings.OpenAI.OpenAiEmbeddingGeneratorAdapter.ApiKeySecretName = "openai-api-key" -> string!
+const AgentCore.Infrastructure.Embeddings.OpenAI.OpenAiEmbeddingGeneratorAdapter.ApiKeyVariableName = "OPENAI_API_KEY" -> string!
+const AgentCore.Infrastructure.Embeddings.OpenAI.OpenAiEmbeddingGeneratorAdapter.ProviderKind = "openai" -> string!
 const AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationAdapter.ProviderKind = "openai" -> string!
 const AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator.ContentSafetyMetricName = "Content Safety" -> string!
 const AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator.EvaluatorName = "moderation" -> string!
@@ -68,9 +71,6 @@ AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter.UseM
 const AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.ApiKeySecretName = "openai-api-key" -> string!
 const AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.ApiKeyVariableName = "OPENAI_API_KEY" -> string!
 const AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.ProviderKind = "openai" -> string!
-const AgentCore.Infrastructure.Llm.OpenAI.OpenAiEmbeddingGeneratorAdapter.ApiKeySecretName = "openai-api-key" -> string!
-const AgentCore.Infrastructure.Llm.OpenAI.OpenAiEmbeddingGeneratorAdapter.ApiKeyVariableName = "OPENAI_API_KEY" -> string!
-const AgentCore.Infrastructure.Llm.OpenAI.OpenAiEmbeddingGeneratorAdapter.ProviderKind = "openai" -> string!
 const AgentCore.Infrastructure.Secrets.FileSecretResolver.DefaultDirectory = "/run/secrets" -> string!
 const AgentCore.Infrastructure.Telemetry.Grafana.GrafanaOtlpTelemetryAdapter.GrafanaKind = "grafana" -> string!
 const AgentCore.Infrastructure.Tools.HttpToolSource.HttpClientName = "agentcore.tools" -> string!
