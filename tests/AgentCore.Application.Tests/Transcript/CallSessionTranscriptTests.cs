@@ -7,6 +7,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime;
+using AgentCore.Application.Transcript;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
@@ -120,6 +121,73 @@ public sealed class CallSessionTranscriptTests
             ["how much?", "the price"],
             rows.Select(row => row.Content.Text).Where(text => text.Length > 0));
     }
+
+    /// <summary>
+    /// A barge-in rewrites the assistant reply in place, but a drawing rides the tool-result
+    /// message from earlier in the same turn — a different row entirely. Correcting the reply must
+    /// leave that row, and what it carries, alone.
+    /// </summary>
+    [Fact]
+    public async Task InterruptAfterTheTurnEnded_ToolTurnThatDrew_LeavesTheRenderContentOnTheToolResultRow()
+    {
+        // Arrange
+        RecordingTranscriptStore store = new();
+        using ProseThenReplyChatClient reply = new("the price is fifty");
+        var session = CreateSession(ToolYaml, reply, store, DrawingTool);
+        session.SetHasScreen(true);
+        await DrainAsync(session.RunTurnStreamingAsync("how much?", TestContext.Current.CancellationToken));
+
+        // Act
+        var recorded = session.Interrupt("the price", TimeSpan.FromMilliseconds(400));
+
+        // Assert
+        Assert.True(recorded);
+        await session.FlushTranscriptAsync();
+        var rows = store.Live(session.CallId);
+        Assert.Equal(
+            ["how much?", "the price"],
+            rows.Select(row => row.Content.Text).Where(text => text.Length > 0));
+
+        var toolResultRow = Assert.Single(rows, row => row.Content.Contents.OfType<FunctionResultContent>().Any());
+        var render = Assert.Single(toolResultRow.Content.Contents.OfType<RenderContent>());
+        Assert.Equal("chart-1", render.RenderId);
+    }
+
+    /// <summary>
+    /// Drives a real turn end to end through <see cref="CallSession"/>, with a screen bound and a
+    /// real tool that draws through it, and reads what store 1 actually kept. Every other render
+    /// test in this suite hand-rolls the ambient with <c>TurnAmbients.Amend</c>, so none of them
+    /// would notice a broken wire between <see cref="CallSession.EnterAmbients"/> and
+    /// <see cref="TurnAmbients.Renders"/> — this is the one test that goes through that wire itself.
+    /// </summary>
+    [Fact]
+    public async Task ATurnThatDrawsWithAScreenBound_StoresTheRenderContentOnTheToolResultRow()
+    {
+        // Arrange
+        RecordingTranscriptStore store = new();
+        ToolCallingChatClient reply = new("drew it.");
+        var session = CreateSession(ToolYaml, reply, store, DrawingTool);
+        session.SetHasScreen(true);
+
+        // Act
+        await session.RunTurnAsync("how much?", TestContext.Current.CancellationToken);
+
+        // Assert
+        await session.FlushTranscriptAsync();
+        var rows = store.Live(session.CallId);
+        Assert.Contains(rows.SelectMany(row => row.Content.Contents), content => content is RenderContent);
+    }
+
+    /// <summary>Builds a real tool that draws through the ambient screen, for <see cref="ToolYaml"/>.</summary>
+    private static AITool? DrawingTool(ToolConfiguration tool)
+        => AIFunctionFactory.Create(
+            () =>
+            {
+                CallRenderScope.Current!.Publish("generative-ui", "chart-1", new { title = "Q3 revenue" });
+                return "drew it.";
+            },
+            tool.Id,
+            tool.Description ?? tool.Id);
 
     /// <summary>
     /// Step 1's second failure mode: a cut that reached back a turn would replace a sentence the

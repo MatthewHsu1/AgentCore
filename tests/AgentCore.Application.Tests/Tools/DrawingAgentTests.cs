@@ -82,7 +82,7 @@ public sealed class DrawingAgentTests
     public async Task ADrawingAgent_ThatCallsPresentWithAValidTree_PublishesToTheScreen()
     {
         RecordingRenderPort screen = new();
-        using var scope = CallRenderScope.Enter(screen);
+        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen });
 
         var function = Build(new RecordingChatClientFactory(new PresentCallingChatClient(Card)));
 
@@ -104,7 +104,7 @@ public sealed class DrawingAgentTests
         // The whole reason the hand-rolled retry loop could be deleted. Nothing in C# notices the
         // bad tree: present answers a section 8.7 error, the agent reads it, and asks again.
         RecordingRenderPort screen = new();
-        using var scope = CallRenderScope.Enter(screen);
+        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen });
 
         var result = await Draw("""{ "$type": "Wombat" }""", Card);
 
@@ -124,7 +124,7 @@ public sealed class DrawingAgentTests
     public async Task TheDefaultRoundCap_AllowsThreeTriesAndNoFourth(int rejected, bool drawn)
     {
         RecordingRenderPort screen = new();
-        using var scope = CallRenderScope.Enter(screen);
+        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen });
 
         string[] trees = [.. Enumerable.Repeat("""{ "$type": "Wombat" }""", rejected), Card];
 
@@ -140,7 +140,7 @@ public sealed class DrawingAgentTests
         // holds only the tool call it refused to invoke, so the text is "". Handed that, the calling
         // agent would tell the caller their drawing is on screen.
         RecordingRenderPort screen = new();
-        using var scope = CallRenderScope.Enter(screen);
+        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen });
 
         var result = await Draw("""{ "$type": "Wombat" }""", """{ "$type": "Wombat" }""", """{ "$type": "Wombat" }""", Card);
 

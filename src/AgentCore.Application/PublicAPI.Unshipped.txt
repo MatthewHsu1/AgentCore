@@ -780,7 +780,7 @@ AgentCore.Application.Ports.IKnowledgeStoreAdapter.CreateSearchAsync(AgentCore.A
 AgentCore.Application.Ports.IModerationAdapter
 AgentCore.Application.Ports.IModerationAdapter.CreateAsync(AgentCore.Application.Configuration.Schema.VendorProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.Evaluation.IEvaluator!>
 AgentCore.Application.Ports.IRenderPort
-AgentCore.Application.Ports.IRenderPort.Publish(string! name, object! data) -> void
+AgentCore.Application.Ports.IRenderPort.Publish(string! name, string! renderId, object! data, bool transient = false) -> void
 AgentCore.Application.Ports.ISecretResolverPort
 AgentCore.Application.Ports.ISecretResolverPort.TryResolveAsync(string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string?>
 AgentCore.Application.Ports.ISpeechAdapter
@@ -858,7 +858,7 @@ AgentCore.Application.Runtime.CallSession.LastTurn.get -> AgentCore.Domain.TurnR
 AgentCore.Application.Runtime.CallSession.RunTurnAsync(string! userInput, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<AgentCore.Domain.TurnResult!>!
 AgentCore.Application.Runtime.CallSession.RunTurnStreamingAsync(string! userInput, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
 AgentCore.Application.Runtime.CallSession.SetDelegatedTools(string! delegatingToolId, System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.AITool!>! tools) -> void
-AgentCore.Application.Runtime.CallSession.SetRenderPort(AgentCore.Application.Ports.IRenderPort? port) -> void
+AgentCore.Application.Runtime.CallSession.SetHasScreen(bool hasScreen) -> void
 AgentCore.Application.Runtime.CallSession.Stage.get -> string!
 AgentCore.Application.Runtime.CallSession.State.get -> AgentCore.Application.State.StateDocument!
 AgentCore.Application.Runtime.CallSession.Transcript.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatMessage!>!
@@ -1010,6 +1010,15 @@ AgentCore.Application.Transcript.Memory.InMemoryTranscriptStore.AppendAsync(Syst
 AgentCore.Application.Transcript.Memory.InMemoryTranscriptStore.InMemoryTranscriptStore() -> void
 AgentCore.Application.Transcript.Memory.InMemoryTranscriptStore.Read(string! callId) -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.CallMessage!>!
 AgentCore.Application.Transcript.Memory.InMemoryTranscriptStore.RewriteAsync(string! callId, int ordinal, Microsoft.Extensions.AI.ChatMessage! content, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Transcript.RenderContent
+AgentCore.Application.Transcript.RenderContent.Data.get -> System.Text.Json.JsonElement
+AgentCore.Application.Transcript.RenderContent.Data.set -> void
+AgentCore.Application.Transcript.RenderContent.Name.get -> string!
+AgentCore.Application.Transcript.RenderContent.Name.set -> void
+AgentCore.Application.Transcript.RenderContent.RenderContent() -> void
+AgentCore.Application.Transcript.RenderContent.RenderId.get -> string!
+AgentCore.Application.Transcript.RenderContent.RenderId.set -> void
+AgentCore.Application.Transcript.TranscriptJson
 AgentCore.Application.Transcript.TranscriptStoreFactory
 abstract AgentCore.Application.Call.CallInput.<Clone>$() -> AgentCore.Application.Call.CallInput!
 abstract AgentCore.Application.Tools.DeclaredTool.CallAsync(Microsoft.Extensions.AI.AIFunctionArguments! arguments, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<object?>
@@ -1404,7 +1413,6 @@ static AgentCore.Application.Runtime.CallEvent.operator !=(AgentCore.Application
 static AgentCore.Application.Runtime.CallEvent.operator ==(AgentCore.Application.Runtime.CallEvent? left, AgentCore.Application.Runtime.CallEvent? right) -> bool
 static AgentCore.Application.Runtime.CallObservers.Standard(AgentCore.Application.Ports.IAuditSinkPort! auditSink, Microsoft.Extensions.Logging.ILogger? logger, System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ICallObserver!>? hostObservers = null) -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.ICallObserver!>!
 static AgentCore.Application.Runtime.CallRenderScope.Current.get -> AgentCore.Application.Ports.IRenderPort?
-static AgentCore.Application.Runtime.CallRenderScope.Enter(AgentCore.Application.Ports.IRenderPort? port) -> System.IDisposable!
 static AgentCore.Application.Runtime.CallSessionFactory.CreateExtractor(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Ports.IChatClientFactory! chatClients) -> AgentCore.Application.State.StateExtractor?
 static AgentCore.Application.Runtime.CallStateScope.Enter(AgentCore.Application.State.StateDocument! state) -> System.IDisposable!
 static AgentCore.Application.Runtime.CallStateScope.Snapshot() -> System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>!
@@ -1442,6 +1450,7 @@ static AgentCore.Application.Tools.ToolErrorResult.Create(string! tool, string! 
 static AgentCore.Application.Tools.ToolErrorResult.IsError(System.Text.Json.Nodes.JsonNode? result) -> bool
 static AgentCore.Application.Transcript.CallMessage.operator !=(AgentCore.Application.Transcript.CallMessage? left, AgentCore.Application.Transcript.CallMessage? right) -> bool
 static AgentCore.Application.Transcript.CallMessage.operator ==(AgentCore.Application.Transcript.CallMessage? left, AgentCore.Application.Transcript.CallMessage? right) -> bool
+static AgentCore.Application.Transcript.TranscriptJson.Options.get -> System.Text.Json.JsonSerializerOptions!
 static AgentCore.Application.Transcript.TranscriptStoreFactory.OpenAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.ITranscriptStoreAdapter!>! adapters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.ITranscriptStore!>
 static readonly AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.DefaultMeters -> System.Collections.Generic.IReadOnlyList<string!>!
 static readonly AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.DefaultSources -> System.Collections.Generic.IReadOnlyList<string!>!

@@ -309,11 +309,10 @@ public static class ConfigurationCompiler
     }
 
     /// <summary>Puts the auditing function-invocation loop into the pipeline of one agent.</summary>
-    /// <param name="model">The client <c>providers.llm</c> resolved for this agent.</param>
-    /// <returns>The client the agent sends on.</returns>
     private static AuditingFunctionInvokingChatClient WithToolFailureAuditing(IChatClient model)
         => new(model.AsBuilder()
                     .UseOpenTelemetry(configure: static client => client.EnableSensitiveData = false)
+                    .Use(static innerClient => new ModelFacingChatClient(innerClient))
                     .Build());
 
     private static List<AITool>? BuildTools(

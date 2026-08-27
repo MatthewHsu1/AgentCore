@@ -20,27 +20,6 @@ public sealed class CallSessionFactory : ICallSessionFactory
     private readonly ILogger? _logger;
 
     /// <summary>Creates the factory.</summary>
-    /// <param name="compiled">The compiled agent. Every call shares it.</param>
-    /// <param name="guards">The evaluator that runs each exit guard and each increment rule.</param>
-    /// <param name="extractor">
-    /// The extractor, or <see langword="null"/> when the document declares none.
-    /// <see cref="CreateExtractor"/> builds it from a chat client factory.
-    /// </param>
-    /// <param name="timeProvider">
-    /// The clock the reserved <c>callDurationSeconds</c> slot reads, or <see langword="null"/> for
-    /// <see cref="TimeProvider.System"/>.
-    /// </param>
-    /// <param name="logger">
-    /// The logger the <see cref="CallObserverDispatcher"/> of each session reports a failed observer
-    /// to, or <see langword="null"/> for a logger that writes nowhere. The library never throws for
-    /// want of one.
-    /// </param>
-    /// <param name="observers">
-    /// The readings of a call, in the order the dispatcher offers each fact to them, or
-    /// <see langword="null"/> for a host that wants none at all.
-    /// <see cref="CallObservers.Standard"/> builds the list this library expects. Each observer
-    /// holds no per-call state, so one instance serves every call.
-    /// </param>
     public CallSessionFactory(
         CompiledAgent compiled,
         IGuardEvaluator guards,
@@ -79,6 +58,7 @@ public sealed class CallSessionFactory : ICallSessionFactory
                 chatClients.GetChatClient(declared.Model)
                            .AsBuilder()
                            .UseOpenTelemetry(configure: static client => client.EnableSensitiveData = false)
+                           .Use(static innerClient => new ModelFacingChatClient(innerClient))
                            .Build())
             : null;
     }
@@ -91,7 +71,5 @@ public sealed class CallSessionFactory : ICallSessionFactory
             _guards,
             _extractor,
             _time,
-
-            // One dispatcher for each session, over the shared observers. See the remarks above.
             new CallObserverDispatcher(_observers, _logger));
 }

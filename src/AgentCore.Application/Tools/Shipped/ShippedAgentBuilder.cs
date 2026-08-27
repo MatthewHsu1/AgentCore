@@ -1,5 +1,4 @@
 using System.Text.Json;
-using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tools.Builtin;
@@ -15,11 +14,6 @@ namespace AgentCore.Application.Tools.Shipped;
 internal static class ShippedAgentBuilder
 {
     /// <summary>Builds the function one shipped agent is advertised as.</summary>
-    /// <param name="definition">The shipped agent.</param>
-    /// <param name="tool">The declaration the document holds.</param>
-    /// <param name="ports">The adapters the host bound.</param>
-    /// <returns>The function.</returns>
-    /// <exception cref="ConfigurationLoadException">A port this agent reads is unbound.</exception>
     internal static AIFunction Build(
         IShippedAgentDefinition definition, ToolConfiguration tool, BuiltinToolPorts ports)
     {
@@ -43,6 +37,7 @@ internal static class ShippedAgentBuilder
                 clients.GetChatClient(tool.Model)
                        .AsBuilder()
                        .UseOpenTelemetry(configure: static client => client.EnableSensitiveData = false)
+                       .Use(static innerClient => new ModelFacingChatClient(innerClient))
                        .Build())
             {
                 MaximumIterationsPerRequest = rounds,

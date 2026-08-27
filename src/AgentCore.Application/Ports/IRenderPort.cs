@@ -6,7 +6,5 @@ namespace AgentCore.Application.Ports;
 public interface IRenderPort
 {
     /// <summary>Sends one thing to be shown to the caller of the running call.</summary>
-    /// <param name="name">The renderer the host looks up.</param>
-    /// <param name="data">The payload that renderer reads.</param>
-    void Publish(string name, object data);
+    void Publish(string name, string renderId, object data, bool transient = false);
 }

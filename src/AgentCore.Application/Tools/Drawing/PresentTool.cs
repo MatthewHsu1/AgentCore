@@ -9,18 +9,6 @@ namespace AgentCore.Application.Tools.Drawing;
 /// <summary>
 /// The inner tool the drawing agent calls. It is never declared in a document.
 /// </summary>
-/// <remarks>
-/// <para>
-/// The argument is one free-form object. The shape it must hold is in the agent's instructions, not
-/// here: a declared shape would cost the 19 KB the prose vocabulary avoids. Nothing constrains the
-/// model's output as a result, so <see cref="DrawingTree.Validate"/> is the only thing standing
-/// between the model and the renderer.
-/// </para>
-/// <para>
-/// A bad tree comes back as a section 8.7 error rather than as a thrown exception, which is what
-/// lets the agent's own tool loop retry it.
-/// </para>
-/// </remarks>
 internal static class PresentTool
 {
     /// <summary>The name the drawing agent calls.</summary>
@@ -30,8 +18,6 @@ internal static class PresentTool
     internal const string RendererName = "generative-ui";
 
     /// <summary>Builds the inner tool for one declared drawing tool.</summary>
-    /// <param name="toolId">The declared tool id, so an error result names what the caller declared.</param>
-    /// <returns>The tool.</returns>
     internal static AIFunction Create(string toolId)
         => AIFunctionFactory.Create(
             ([Description("The tree to draw. One object with $type and its props, nested with children.")]
@@ -68,7 +54,12 @@ internal static class PresentTool
             // still answer the model an error.
             var receipt = DrawingReceipt.Describe(node);
 
-            screen.Publish(RendererName, node);
+            // The outer tool call is stable across every retry the drawing agent's own tool loop
+            // makes for this one call, so a rejected tree followed by an accepted one replaces the
+            // drawing rather than leaving both behind. The ?? toolId fallback only matters to a port
+            // with no rule against an absent outer call: the shipped TurnRenders discards a publish
+            // with none open regardless of the id, so in production this key is never read back.
+            screen.Publish(RendererName, OuterToolCall.Current ?? toolId, node);
 
             return new JsonObject { ["drew"] = receipt };
         }
@@ -78,8 +69,6 @@ internal static class PresentTool
         }
         catch (Exception exception)
         {
-            // Section 8.7: nothing here may end the turn, including a fault DrawingTree.Validate
-            // itself did not anticipate.
             return ToolErrorResult.Create(toolId, $"the tree could not be drawn: {exception.Message}");
         }
     }

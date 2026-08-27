@@ -1,13 +1,5 @@
 using System.Globalization;
-using System.Runtime.CompilerServices;
 using System.Text.Json;
-using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
-using AgentCore.Domain;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Routing;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace AgentCore.AspNetCore.Endpoints;
 
@@ -25,9 +17,6 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
     /// <summary>The answer header that reports the stage the machine holds after the turn.</summary>
 
     public const string StageHeaderName = "X-AgentCore-Stage";
-
-    /// <summary>The render channel of each open call.</summary>
-    private static readonly ConditionalWeakTable<CallSession, RenderChannel> Channels = [];
 
     private const string EventPrefix = "data: ";
 
@@ -120,10 +109,10 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
         var streaming = request?.Stream == true;
 
         // Only the stream has a chunk to carry a drawing, so only the stream gets a screen. Binding
-        // one on the whole-reply branch and clearing it afterwards would let the tool report a
-        // picture the caller never sees; with none bound it answers that it cannot draw. Set per
-        // request, not once: the session outlives a request and the branch can differ per turn.
-        session.SetRenderPort(streaming ? Channels.GetValue(session, _ => new RenderChannel()) : null);
+        // one on the whole-reply branch would let the tool report a picture the caller never sees;
+        // with none bound it answers that it cannot draw. Set per request, not once: the session
+        // outlives a request and the branch can differ per turn.
+        session.SetHasScreen(streaming);
 
         var model = request?.Model is { Length: > 0 } asked ? asked : session.Compiled.Name;
 
@@ -167,13 +156,6 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
         CancellationToken cancellationToken)
     {
         var turn = await session.RunTurnAsync(input, cancellationToken).ConfigureAwait(false);
-
-        // This branch bound no screen, so nothing this turn queued. What can still be waiting is the
-        // tail of an earlier stream that was cut off mid-write, and it must not surface later.
-        if (Channels.TryGetValue(session, out var stale))
-        {
-            stale.Clear();
-        }
 
         http.Response.StatusCode = StatusCodes.Status200OK;
         http.Response.Headers[SessionHeaderName] = session.CallId;
@@ -231,11 +213,16 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
             Chunk(id, created, model, new ChatCompletionMessage { Role = "assistant" }, finishReason: null, turn: null),
             cancellationToken).ConfigureAwait(false);
 
-        var channel = Channels.GetValue(session, _ => new RenderChannel());
-
         await foreach (var update in session.RunTurnStreamingAsync(input, cancellationToken).ConfigureAwait(false))
         {
-            await DrainAsync(http, channel, id, created, model, cancellationToken).ConfigureAwait(false);
+            foreach (var drawn in update.Contents.OfType<RenderContent>())
+            {
+                await WriteEventAsync(
+                    http,
+                    Chunk(id, created, model, new ChatCompletionMessage(), finishReason: null, turn: null)
+                        with { AgentCoreData = new RenderedPayload { Name = drawn.Name, Data = drawn.Data } },
+                    cancellationToken).ConfigureAwait(false);
+            }
 
             if (update.Text is not { Length: > 0 } text)
             {
@@ -249,8 +236,6 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
                 cancellationToken).ConfigureAwait(false);
         }
 
-        await DrainAsync(http, channel, id, created, model, cancellationToken).ConfigureAwait(false);
-
         // The turn is finished once the enumeration is, so the last chunk is the first place that
         // knows the stage the machine moved to.
         await WriteEventAsync(
@@ -260,33 +245,6 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
 
         await http.Response.WriteAsync(DoneEvent, cancellationToken).ConfigureAwait(false);
         await http.Response.Body.FlushAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <summary>Writes one event for each thing the call queued to draw.</summary>
-    /// <param name="http">The request.</param>
-    /// <param name="channel">The channel of the call.</param>
-    /// <param name="id">The id every chunk of one reply shares.</param>
-    /// <param name="created">When the reply started.</param>
-    /// <param name="model">The model name the answer reports.</param>
-    /// <param name="cancellationToken">Cancels the writes.</param>
-    /// <returns>A task that completes when every queued payload has been written.</returns>
-    private static async Task DrainAsync(
-        HttpContext http,
-        RenderChannel channel,
-        string id,
-        long created,
-        string model,
-        CancellationToken cancellationToken)
-    {
-        while (channel.TryTake(out var payload))
-        {
-            await WriteEventAsync(
-                http,
-                Chunk(id, created, model, new ChatCompletionMessage(), finishReason: null, turn: null)
-                    with
-                { AgentCoreData = payload },
-                cancellationToken).ConfigureAwait(false);
-        }
     }
 
     /// <summary>Builds one chunk of a stream.</summary>

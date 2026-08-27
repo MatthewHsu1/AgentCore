@@ -19,7 +19,7 @@ public sealed class PresentToolTests
     public async Task Present_AValidTree_PublishesItAndReturnsTheReceipt()
     {
         RecordingRenderPort screen = new();
-        using var scope = CallRenderScope.Enter(screen);
+        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen });
 
         var result = await Invoke(PresentTool.Create("draw"), """
             { "$type": "Card", "children": [{ "$type": "Text", "children": ["hi"] }] }
@@ -33,7 +33,7 @@ public sealed class PresentToolTests
     public async Task Present_AnUnknownComponent_ReturnsAnErrorAndDrawsNothing()
     {
         RecordingRenderPort screen = new();
-        using var scope = CallRenderScope.Enter(screen);
+        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen });
 
         var result = await Invoke(PresentTool.Create("draw"), """{ "$type": "Wombat" }""");
 
@@ -54,7 +54,7 @@ public sealed class PresentToolTests
     public async Task Present_ATreeThatIsNotAnObject_ReturnsAnErrorAndDrawsNothing()
     {
         RecordingRenderPort screen = new();
-        using var scope = CallRenderScope.Enter(screen);
+        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen });
 
         var result = await Invoke(PresentTool.Create("draw"), "[1, 2, 3]");
 
@@ -74,7 +74,7 @@ public sealed class PresentToolTests
     public async Task Present_ANumericType_ReturnsAnActionableErrorAndDrawsNothing()
     {
         RecordingRenderPort screen = new();
-        using var scope = CallRenderScope.Enter(screen);
+        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen });
 
         var result = await Invoke(PresentTool.Create("draw"), """{ "$type": 123 }""");
 
@@ -89,7 +89,7 @@ public sealed class PresentToolTests
     public async Task Present_ANonStringActionType_ReturnsAnActionableErrorAndDrawsNothing()
     {
         RecordingRenderPort screen = new();
-        using var scope = CallRenderScope.Enter(screen);
+        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen });
 
         var result = await Invoke(
             PresentTool.Create("draw"),
@@ -112,7 +112,7 @@ public sealed class PresentToolTests
     public async Task Present_ANonStringActionTypeUnderAReservedKey_FinishesWithoutThrowing()
     {
         RecordingRenderPort screen = new();
-        using var scope = CallRenderScope.Enter(screen);
+        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen });
 
         var result = await Invoke(
             PresentTool.Create("draw"), """{ "$type": "Card", "$key": { "$action": { "type": 42 } } }""");

@@ -12,8 +12,6 @@ namespace AgentCore.Application.Transcript;
 /// <summary>
 /// Reports one store 1 write that was dropped, so the call can raise a diagnostic for it.
 /// </summary>
-/// <param name="turnIndex">The turn whose words were lost.</param>
-/// <param name="exception">Why the store refused the write.</param>
 internal delegate void TranscriptWriteDropped(int turnIndex, Exception exception);
 
 /// <summary>
@@ -30,18 +28,13 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
     private readonly ILogger _logger;
 
     /// <summary>Creates the provider over a backing store.</summary>
-    /// <param name="store">Where the words are written, or <see langword="null"/> for memory.</param>
-    /// <param name="logger">Where a dropped write is reported, or <see langword="null"/> for none.</param>
     public AgentCoreChatHistoryProvider(ITranscriptStore? store = null, ILogger? logger = null)
     {
         _store = store ?? new InMemoryTranscriptStore();
 
         _logger = logger ?? NullLogger.Instance;
 
-        // StateKeys is what the framework validates for collisions, so the bag must be keyed on the
-        // same string. The options are named rather than left to default because the default adds a
-        // string enum converter, which would change how an existing stored ChatMessage reads back.
-        _state = new(static _ => new CallTranscript(), StateKeys[0], AIJsonUtilities.DefaultOptions);
+        _state = new(static _ => new CallTranscript(), StateKeys[0], TranscriptJson.Options);
     }
 
     /// <summary>

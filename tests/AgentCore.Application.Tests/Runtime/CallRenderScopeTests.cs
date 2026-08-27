@@ -57,11 +57,11 @@ public sealed class CallRenderScopeTests
         RecordingRenderPort outer = new();
         RecordingRenderPort inner = new();
 
-        using (CallRenderScope.Enter(outer))
+        using (TurnAmbients.Amend(ambients => ambients with { Screen = outer }))
         {
             Assert.Same(outer, CallRenderScope.Current);
 
-            using (CallRenderScope.Enter(inner))
+            using (TurnAmbients.Amend(ambients => ambients with { Screen = inner }))
             {
                 Assert.Same(inner, CallRenderScope.Current);
             }
@@ -78,10 +78,10 @@ public sealed class CallRenderScopeTests
         RecordingRenderPort first = new();
         RecordingRenderPort second = new();
 
-        var scope = CallRenderScope.Enter(first);
+        var scope = TurnAmbients.Amend(ambients => ambients with { Screen = first });
         scope.Dispose();
 
-        using var later = CallRenderScope.Enter(second);
+        using var later = TurnAmbients.Amend(ambients => ambients with { Screen = second });
         scope.Dispose();
 
         Assert.Same(second, CallRenderScope.Current);
@@ -90,12 +90,16 @@ public sealed class CallRenderScopeTests
     [Fact]
     public async Task ATurnThatDoesNotStream_ShowsItsToolsTheScreen()
     {
-        var (session, screen, probe) = NewCall();
+        var (session, probe) = NewCall();
 
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
-        Assert.Same(screen, probe.Seen);
-        Assert.Single(screen.Published);
+        // The screen a tool finds must be the SAME recorder TurnAmbients.Renders holds, not merely
+        // some TurnRenders or other: a regression that handed the tool a different instance would
+        // still draw, and would still lose the drawing, since CreateResponseMessages drains Renders
+        // and not whatever the tool happened to see.
+        Assert.IsType<TurnRenders>(probe.Seen);
+        Assert.Same(probe.AmbientRenders, probe.Seen);
     }
 
     [Fact]
@@ -105,14 +109,14 @@ public sealed class CallRenderScopeTests
         // yield, and the framework streams the tool-call update BEFORE it invokes the function, so a
         // scope opened once reaches no round at all. Only the per-round re-entry in
         // RunTurnStreamingAsync keeps the screen alive across it.
-        var (session, screen, probe) = NewCall();
+        var (session, probe) = NewCall();
 
         await foreach (var _ in session.RunTurnStreamingAsync("hi", TestContext.Current.CancellationToken))
         {
         }
 
-        Assert.Same(screen, probe.Seen);
-        Assert.Single(screen.Published);
+        Assert.IsType<TurnRenders>(probe.Seen);
+        Assert.Same(probe.AmbientRenders, probe.Seen);
     }
 
     [Fact]
@@ -120,7 +124,7 @@ public sealed class CallRenderScopeTests
     {
         // The voice path. The tool reads the null and tells the model it cannot draw, rather than
         // claiming a picture a telephone caller will never see.
-        var (session, _, probe) = NewCall(withScreen: false);
+        var (session, probe) = NewCall(withScreen: false);
 
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
@@ -134,20 +138,18 @@ public sealed class CallRenderScopeTests
         // A host sets this per request, and the whole-reply branch of the chat endpoint sets none.
         // Taking it back has to reach the tool, or a session that streamed once keeps a screen the
         // next answer has nowhere to write.
-        var (session, screen, probe) = NewCall();
+        var (session, probe) = NewCall();
 
-        session.SetRenderPort(null);
+        session.SetHasScreen(false);
 
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
         Assert.True(probe.Ran);
         Assert.Null(probe.Seen);
-        Assert.Empty(screen.Published);
     }
 
     /// <summary>Opens a call whose specialist is handed one tool that reports the screen it found.</summary>
-    private static (CallSession Session, RecordingRenderPort Screen, ScreenProbe Probe) NewCall(
-        bool withScreen = true)
+    private static (CallSession Session, ScreenProbe Probe) NewCall(bool withScreen = true)
     {
         ToolCallingChatClient greeter = new(
             "hello there.",
@@ -167,19 +169,14 @@ public sealed class CallRenderScopeTests
             extractor: null).Create();
 
         ScreenProbe probe = new();
-        RecordingRenderPort screen = new();
 
-        if (withScreen)
-        {
-            session.SetRenderPort(screen);
-        }
-
+        session.SetHasScreen(withScreen);
         session.SetDelegatedTools("ask_specialist", [probe.Tool]);
 
-        return (session, screen, probe);
+        return (session, probe);
     }
 
-    /// <summary>A tool that reports the screen it found when it ran, from wherever it ran.</summary>
+    /// <summary>A tool that reports the screen and the ambient recorder it found, from wherever it ran.</summary>
     private sealed class ScreenProbe
     {
         public ScreenProbe()
@@ -188,7 +185,7 @@ public sealed class CallRenderScopeTests
                 {
                     Ran = true;
                     Seen = CallRenderScope.Current;
-                    Seen?.Publish("generative-ui", new { drawn = true });
+                    AmbientRenders = TurnAmbients.Current?.Renders;
                     return "drawn.";
                 },
                 "build_ui",
@@ -199,5 +196,8 @@ public sealed class CallRenderScopeTests
         public bool Ran { get; private set; }
 
         public IRenderPort? Seen { get; private set; }
+
+        /// <summary>What <see cref="TurnAmbients.Renders"/> held at the same moment <see cref="Seen"/> was read.</summary>
+        public TurnRenders? AmbientRenders { get; private set; }
     }
 }

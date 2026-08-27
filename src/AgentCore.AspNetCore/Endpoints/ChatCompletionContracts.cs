@@ -6,18 +6,9 @@ namespace AgentCore.AspNetCore.Endpoints;
 /// <summary>
 /// The wire shapes of <c>POST /v1/chat/completions</c>.
 /// </summary>
-/// <remarks>
-/// The shapes are the OpenAI ones, so an existing client speaks to this host without a change. They
-/// stay internal because they are a wire format and not a seam: a host that wants another shape maps
-/// another endpoint rather than reshaping this one.
-/// </remarks>
 internal static class ChatCompletionJson
 {
     /// <summary>The one serializer setting both directions use.</summary>
-    /// <remarks>
-    /// The OpenAI shape is snake case, and a null field is absent rather than null. That is what a
-    /// strict client reads, and it is what this endpoint writes.
-    /// </remarks>
     public static JsonSerializerOptions Options { get; } = new(JsonSerializerDefaults.Web)
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
@@ -49,10 +40,6 @@ internal sealed record ChatCompletionRequest
 }
 
 /// <summary>What one finished turn did, carried beside the OpenAI shape.</summary>
-/// <remarks>
-/// The OpenAI shape has no stage and no session, and both are what a caller of AgentCore needs. They
-/// ride in one extension object, which every strict client ignores.
-/// </remarks>
 internal sealed record AgentCoreTurnInfo
 {
     /// <summary>Gets the id that names this session on the next request.</summary>
@@ -115,7 +102,17 @@ internal sealed record ChatCompletionResponse
 
     /// <summary>Gets what this chunk asks the browser to draw, or <see langword="null"/> when nothing.</summary>
     [JsonPropertyName("agentcore_data")]
-    public RenderPayload? AgentCoreData { get; init; }
+    public RenderedPayload? AgentCoreData { get; init; }
+}
+
+/// <summary>One thing a chunk asks the browser to draw.</summary>
+internal sealed record RenderedPayload
+{
+    /// <summary>Gets the renderer the browser looks up.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the payload that renderer reads.</summary>
+    public required JsonElement Data { get; init; }
 }
 
 /// <summary>The body of one failure.</summary>

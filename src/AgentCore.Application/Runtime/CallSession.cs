@@ -83,7 +83,7 @@ public sealed class CallSession : IConversationPort
 
     private (string ToolId, IReadOnlyList<AITool> Tools)? _delegatedTools;
 
-    private IRenderPort? _renderPort;
+    private bool _hasScreen;
 
     /// <summary>
     /// Creates the session of one call.
@@ -190,25 +190,11 @@ public sealed class CallSession : IConversationPort
     /// <summary>
     /// Gives this call the screen its tools draw on, or takes it away.
     /// </summary>
-    /// <param name="port">The screen, or <see langword="null"/> for a call that has none.</param>
-    /// <remarks>
-    /// A screen belongs to the request as much as to the call. One session can answer one request as
-    /// a stream and the next as a whole reply, and only the stream has anywhere to put a drawing, so
-    /// a host sets this per request rather than once. With nothing bound, a tool that would draw
-    /// answers the model that it cannot, instead of reporting a picture nobody will see.
-    /// </remarks>
-    public void SetRenderPort(IRenderPort? port) => _renderPort = port;
+    public void SetHasScreen(bool hasScreen) => _hasScreen = hasScreen;
 
     /// <summary>
     /// Runs one turn end to end, and returns what it did.
     /// </summary>
-    /// <param name="userInput">What the caller said.</param>
-    /// <param name="cancellationToken">Cancels the model calls.</param>
-    /// <returns>The finished turn. It always carries a spoken line.</returns>
-    /// <exception cref="InvalidOperationException">
-    /// The call already reached a terminal stage, another turn of this call is still running, or the
-    /// stage the machine holds names no agent.
-    /// </exception>
     public async Task<TurnResult> RunTurnAsync(string userInput, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(userInput);
@@ -474,7 +460,7 @@ public sealed class CallSession : IConversationPort
     private IDisposable EnterAmbients(Turn turn)
         => TurnAmbients.Enter(
             State,
-            _renderPort,
+            turn.Renders,
             failure => _events.RaiseToolFailure(turn.Index, failure),
             TurnContextOf(turn));
 
@@ -571,7 +557,8 @@ public sealed class CallSession : IConversationPort
             State.Stage,
             State.TurnIndex,
             activity,
-            _time.GetTimestamp());
+            _time.GetTimestamp(),
+            _hasScreen ? new TurnRenders() : null);
     }
 
     /// <summary>
@@ -1086,11 +1073,12 @@ public sealed class CallSession : IConversationPort
     /// <param name="Index">The zero-based index of the turn.</param>
     /// <param name="Activity">The span of this turn, or <see langword="null"/> when nothing listens.</param>
     /// <param name="StartedAt">The timestamp the duration is measured from.</param>
-    /// <remarks>
-    /// The span travels on this record rather than through <see cref="Activity.Current"/>. An async
-    /// iterator restores the execution context of its caller at every yield, so the streaming turn
-    /// would otherwise lose the span it opened at the first update it hands the host.
-    /// </remarks>
+    /// <param name="Renders">
+    /// What this turn draws into, or <see langword="null"/> when it has no screen. Built once per
+    /// turn for the same reason <see cref="Activity"/> is: <see cref="EnterAmbients"/> reopens its
+    /// scope on every step of a streaming turn, and a fresh collector each time would lose whatever
+    /// an earlier step drew before a later step could attach it to a message.
+    /// </param>
     private sealed record Turn(
         AIAgent Agent,
         AgentSession Session,
@@ -1100,7 +1088,8 @@ public sealed class CallSession : IConversationPort
         string StageBefore,
         int Index,
         Activity? Activity,
-        long StartedAt);
+        long StartedAt,
+        TurnRenders? Renders);
 
     /// <summary>The session a graph row's call holds, so store 1 has somewhere to live.</summary>
     /// <remarks>

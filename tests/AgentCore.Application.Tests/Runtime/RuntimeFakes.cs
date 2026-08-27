@@ -618,9 +618,10 @@ internal sealed class ThrowingChatClient : IChatClient
 /// <summary>A screen that records everything it was asked to show, in the order it was shown.</summary>
 internal sealed class RecordingRenderPort : IRenderPort
 {
-    public List<(string Name, object Data)> Published { get; } = [];
+    public List<(string Name, string RenderId, object Data, bool Transient)> Published { get; } = [];
 
-    public void Publish(string name, object data) => Published.Add((name, data));
+    public void Publish(string name, string renderId, object data, bool transient = false)
+        => Published.Add((name, renderId, data, transient));
 }
 
 /// <summary>
