@@ -1,3 +1,4 @@
+using AgentCore.Application.Tools.Registry;
 using System.Net;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;

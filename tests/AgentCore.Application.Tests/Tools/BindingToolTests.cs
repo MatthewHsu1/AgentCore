@@ -1,8 +1,10 @@
+using AgentCore.Application.Tools.Registry;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Tools.Binding;
 using Microsoft.Extensions.AI;
 using Xunit;
 

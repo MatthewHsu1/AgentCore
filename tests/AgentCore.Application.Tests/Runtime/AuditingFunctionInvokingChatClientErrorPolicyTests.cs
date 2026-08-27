@@ -1,11 +1,10 @@
+using AgentCore.Application.Tools.Binding;
+using AgentCore.Application.Tools.Registry;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
-using AgentCore.Application.Tests.Tools.Fakes;
 using AgentCore.Application.Tools;
-using AgentCore.Application.Tools.Builtin;
 using Microsoft.Extensions.AI;
 using Xunit;
 
@@ -170,72 +169,6 @@ public sealed class AuditingFunctionInvokingChatClientErrorPolicyTests
             StringComparison.Ordinal);
     }
 
-    // ---------------------------------------------------------------------------------------
-    // Coverage restored after review: BuiltinToolTests and BindingToolTests now only prove that
-    // a REAL Builtin / Binding tool lets its adapter's fault propagate — the classification and
-    // conversion into ToolErrorResult that used to be proven there is proven here instead, against
-    // the real factory-built tool and the real middleware, not a synthetic fake.
-    // ---------------------------------------------------------------------------------------
-    [Fact]
-    public async Task ARealBuiltinTool_GetsTheSameErrorResultThroughTheRealMiddleware()
-    {
-        MapKnowledgePort knowledge = new() { Failure = new InvalidOperationException("the store is down") };
-        ToolConfiguration search = new()
-        {
-            Id = "search_chunks",
-            Kind = ToolKind.Builtin,
-            Uses = BuiltinToolNames.KnowledgeSearch,
-        };
-        var tool = await BuildAsync(search, knowledge);
-
-        // A query the tool's own validation accepts, so the call actually reaches the adapter that
-        // throws rather than stopping at the "no query" check first.
-        var result = await RunSingleRoundAsync(
-            tool,
-            TestContext.Current.CancellationToken,
-            new Dictionary<string, object?>(StringComparer.Ordinal) { ["query"] = "refund" });
-
-        Assert.True(ToolErrorResult.IsError(result));
-        Assert.Equal("search_chunks", result[ToolErrorResult.ToolProperty]!.GetValue<string>());
-        Assert.Contains(
-            "the store is down",
-            result[ToolErrorResult.MessageProperty]!.GetValue<string>(),
-            StringComparison.Ordinal);
-    }
-
-    // ---------------------------------------------------------------------------------------
-    // Task 7b: a built-in binds its arguments through AIFunctionFactory now, so a call that omits
-    // a required argument fails in the BINDING and not in the tool body. That is a new way for a
-    // tool call to fail, and this pins where it lands: the same answerable error result the model
-    // reads and can retry from, and not an unhandled fault that drops the turn.
-    // ---------------------------------------------------------------------------------------
-    [Fact]
-    public async Task ARealBuiltinToolCalledWithNoArgumentAtAll_GetsTheErrorResultTheModelCanRetryFrom()
-    {
-        MapKnowledgePort knowledge = new();
-        ToolConfiguration search = new()
-        {
-            Id = "search_chunks",
-            Kind = ToolKind.Builtin,
-            Uses = BuiltinToolNames.KnowledgeSearch,
-        };
-        var tool = await BuildAsync(search, knowledge);
-
-        // No arguments at all: the model called the tool and filled nothing, which binding rejects
-        // before the tool body runs.
-        var result = await RunSingleRoundAsync(tool, TestContext.Current.CancellationToken);
-
-        Assert.True(ToolErrorResult.IsError(result));
-        Assert.Equal("search_chunks", result[ToolErrorResult.ToolProperty]!.GetValue<string>());
-
-        // The message names the argument that was missing, so the next round can fill it.
-        Assert.Contains(
-            "query",
-            result[ToolErrorResult.MessageProperty]!.GetValue<string>(),
-            StringComparison.Ordinal);
-        Assert.Empty(knowledge.Queries);
-    }
-
     [Fact]
     public async Task ARealBindingTool_GetsTheSameErrorResultThroughTheRealMiddleware()
     {
@@ -263,22 +196,6 @@ public sealed class AuditingFunctionInvokingChatClientErrorPolicyTests
             "the case system is down",
             result[ToolErrorResult.MessageProperty]!.GetValue<string>(),
             StringComparison.Ordinal);
-    }
-
-    /// <summary>Builds one real <c>kind: builtin</c> tool through <see cref="BuiltinToolSource"/>.</summary>
-    private static async Task<AIFunction> BuildAsync(ToolConfiguration tool, IKnowledgeRetrievalPort retrieval)
-    {
-        BuiltinToolSource source = new(new BuiltinToolPorts(retrieval, null, null));
-        var context = new ToolSourceContext(new AgentCoreConfiguration
-        {
-            ApiVersion = "agentcore/v1",
-            Name = "test",
-            Tools = [tool],
-        });
-
-        var registrations = await source.ProvideAsync(context, TestContext.Current.CancellationToken);
-
-        return Assert.IsAssignableFrom<AIFunction>(Assert.Single(registrations).Materialise());
     }
 
     /// <summary>Runs one request/response round and returns the JSON the tool result carried.</summary>

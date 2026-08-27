@@ -9,10 +9,6 @@ namespace AgentCore.Application.Knowledge;
 internal static class KnowledgeCardMapper
 {
     /// <summary>Maps one card.</summary>
-    /// <param name="card">The card the port returned.</param>
-    /// <param name="citations">Whether the model may see the source label.</param>
-    /// <returns>The result the framework formats into the turn.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="card"/> is <see langword="null"/>.</exception>
     internal static TextSearchProvider.TextSearchResult ToResult(KnowledgeCard card, bool citations)
     {
         ArgumentNullException.ThrowIfNull(card);
@@ -20,9 +16,32 @@ internal static class KnowledgeCardMapper
         return new TextSearchProvider.TextSearchResult
         {
             Text = card.Text,
-            SourceName = citations ? $"{card.SourceRef}, {card.SourceLocator}" : null,
+            SourceName = citations ? SourceName(card) : null,
             SourceLink = null,
             RawRepresentation = card,
         };
+    }
+
+    private static string? SourceName(KnowledgeCard card)
+    {
+        var hasRef = card.SourceRef.Length > 0;
+        var hasLocator = card.SourceLocator.Length > 0;
+
+        if (hasRef && hasLocator)
+        {
+            return $"{card.SourceRef}, {card.SourceLocator}";
+        }
+
+        if (hasRef)
+        {
+            return card.SourceRef;
+        }
+
+        if (hasLocator)
+        {
+            return card.SourceLocator;
+        }
+
+        return null;
     }
 }

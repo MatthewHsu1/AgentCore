@@ -63,7 +63,8 @@ const AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvalu
 const AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter.ApiKeySecretName = "qdrant-api-key" -> string!
 const AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter.ApiKeyVariableName = "QDRANT_API_KEY" -> string!
 const AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter.ProviderKind = "qdrant" -> string!
-const AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter.VectorName = "dense" -> string!
+AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter.UseAnalyzers(params AgentCore.Application.Knowledge.IKnowledgeQueryAnalyzer![]! analyzers) -> AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter!
+AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter.UseMappers(params AgentCore.Application.Knowledge.IKnowledgePointMapper![]! mappers) -> AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter!
 const AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.ApiKeySecretName = "openai-api-key" -> string!
 const AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.ApiKeyVariableName = "OPENAI_API_KEY" -> string!
 const AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.ProviderKind = "openai" -> string!

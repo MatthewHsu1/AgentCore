@@ -8,11 +8,6 @@
   <ItemGroup>
     <ProjectReference Include="../../src/AgentCore.Application/AgentCore.Application.csproj" />
     <ProjectReference Include="../../src/AgentCore.Infrastructure/AgentCore.Infrastructure.csproj" />
-    <!--
-      The one outbound HTTP pipeline the host builds. A vendor knowledge adapter needs it, so the
-      offline set composes the adapters exactly as a deployment does and measures the same stack.
-    -->
-    <ProjectReference Include="../../src/AgentCore.AspNetCore/AgentCore.AspNetCore.csproj" />
   </ItemGroup>
 
   <ItemGroup>

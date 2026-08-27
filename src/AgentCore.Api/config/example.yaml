@@ -273,8 +273,37 @@ providers:
   # with, or the startup width check refuses to open the store. It reads the same openai-api-key
   # secret the llm entries read. dimensions: is optional; write it only if kb sync narrowed the
   # model's own width.
-  knowledge: { kind: qdrant, endpoint: https://qdrant.example.com:6334, collection: kb }
-  # collection is always the alias; kb sync --rebuild swaps it and this document never changes
+  knowledge:
+    kind: qdrant
+    endpoint: https://qdrant.example.com:6334
+    collection: kb
+    # collection is always the alias; kb sync --rebuild swaps it and this document never changes
+    #
+    # This deployment reads the collection `kb sync` writes: a NAMED dense vector and uuid5 point
+    # keys. Both are opt-in spellings now, so they are written out. Omitting vector: searches a
+    # collection's single anonymous vector; omitting links: turns link expansion off entirely.
+    vector: dense
+    links:
+      lookup: uuid5         # uuid5 | direct | filter. A links: block without lookup: gets filter.
+      # field: see_also
+      # namespace: url       # url | dns | oid | x500 | <guid>
+      # prefix: "kb:"
+    #
+    # Everything below is optional and defaults to the names kb sync writes. Only fields.body must
+    # stay mapped; write null to declare a role the collection does not carry, e.g. id: null.
+    # fields:
+    #   id: card_id
+    #   body: body
+    #   lexical: text
+    #   source: source.ref
+    #   locator: source.locator
+    #   authority: authority
+    # scope:
+    #   template: "facets.{key}"
+    # mapper: my-mapper      # an IKnowledgePointMapper registered with UseKnowledgePointMappers;
+    #                        # omitted, the fields: block above is the mapper
+    # analyzer: identifier-codes
+    # scoreFloor: 0.25
 
   # telemetry is absent here on purpose, and this host therefore exports nothing. Spans and
   # measurements are still written, where they cost almost nothing with nobody listening, and log

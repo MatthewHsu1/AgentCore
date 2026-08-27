@@ -36,16 +36,6 @@ internal sealed record KnowledgeAuditRecord
     public string? Failure { get; init; }
 
     /// <summary>Builds the record of one retrieval.</summary>
-    /// <param name="turnId">The turn the retrieval ran inside, or <see langword="null"/> when nothing names it.</param>
-    /// <param name="agent">The id of the agent that asked.</param>
-    /// <param name="mode">The mode the agent's <c>knowledge:</c> block declared.</param>
-    /// <param name="query">The search text.</param>
-    /// <param name="scope">The turn's open scope, or <see langword="null"/> when none was open.</param>
-    /// <param name="cards">The cards the search returned, ranked cards first.</param>
-    /// <param name="latencyMs">How long the whole retrieval took, in milliseconds.</param>
-    /// <param name="failure">What the port threw, or <see langword="null"/> when it succeeded.</param>
-    /// <returns>The record.</returns>
-    /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
     public static KnowledgeAuditRecord For(
         string? turnId,
         string agent,
@@ -122,8 +112,8 @@ internal sealed record KnowledgeAuditRecord
         /// <summary>Gets the fused score, or <see langword="null"/> when a link pulled the card in.</summary>
         public double? Score { get; init; }
 
-        /// <summary>Gets how much the source is trusted: 3 a manual, 2 a note, 1 an email.</summary>
-        public required int Authority { get; init; }
+        /// <summary>Gets how much the source is trusted, or null when the store maps no such field.</summary>
+        public int? Authority { get; init; }
 
         /// <summary>Gets the manifest row the card came from.</summary>
         public required string SourceRef { get; init; }

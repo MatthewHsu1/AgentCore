@@ -155,6 +155,43 @@ public static class AgentCoreHostBuilderExtensions
         }
 
         AddCreateCaseStub(options);
+        ApplyKnowledgeQueryAnalyzers(options);
+        ApplyKnowledgePointMappers(options);
+    }
+
+    /// <summary>
+    /// Hands a host's <see cref="AgentCoreOptions.UseKnowledgeQueryAnalyzers"/> call to the
+    /// <see cref="QdrantKnowledgeAdapter"/> the defaults registered.
+    /// </summary>
+    private static void ApplyKnowledgeQueryAnalyzers(AgentCoreOptions options)
+    {
+        if (options.KnowledgeAnalyzers.Count == 0)
+        {
+            return;
+        }
+
+        if (options.KnowledgeStores?.OfType<QdrantKnowledgeAdapter>().FirstOrDefault() is { } knowledge)
+        {
+            knowledge.UseAnalyzers([.. options.KnowledgeAnalyzers]);
+        }
+    }
+
+    /// <summary>
+    /// Hands a host's <see cref="AgentCoreOptions.UseKnowledgePointMappers"/> call to the
+    /// <see cref="QdrantKnowledgeAdapter"/> the defaults registered. Same post-configure timing
+    /// rationale as <see cref="ApplyKnowledgeQueryAnalyzers"/>.
+    /// </summary>
+    private static void ApplyKnowledgePointMappers(AgentCoreOptions options)
+    {
+        if (options.KnowledgeMappers.Count == 0)
+        {
+            return;
+        }
+
+        if (options.KnowledgeStores?.OfType<QdrantKnowledgeAdapter>().FirstOrDefault() is { } knowledge)
+        {
+            knowledge.UseMappers([.. options.KnowledgeMappers]);
+        }
     }
 
     /// <summary>Registers the example document's binding, when the host registered none.</summary>

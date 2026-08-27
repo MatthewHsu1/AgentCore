@@ -1082,6 +1082,81 @@
           "minLength": 1,
           "default": "kb",
           "description": "The collection to read. Always the alias, never a concrete collection."
+        },
+        "vector": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "description": "The named vector every query searches. Omitted or null, the collection's single anonymous vector is searched; a kb sync collection needs vector: dense."
+        },
+        "fields": {
+          "type": "object",
+          "description": "How a card's payload is named. A dotted name walks into a nested struct. Only body must stay mapped; null disables a role the collection does not carry.",
+          "additionalProperties": false,
+          "properties": {
+            "id": { "type": ["string", "null"], "minLength": 1, "default": "card_id" },
+            "body": { "type": "string", "minLength": 1, "default": "body" },
+            "lexical": { "type": ["string", "null"], "minLength": 1, "default": "text" },
+            "source": { "type": ["string", "null"], "minLength": 1, "default": "source.ref" },
+            "locator": { "type": ["string", "null"], "minLength": 1, "default": "source.locator" },
+            "authority": { "type": ["string", "null"], "minLength": 1, "default": "authority" }
+          }
+        },
+        "scope": {
+          "type": "object",
+          "description": "How an open KnowledgeScope's facet keys become payload paths.",
+          "additionalProperties": false,
+          "properties": {
+            "template": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\{key\\}",
+              "default": "facets.{key}",
+              "description": "The payload path each facet key becomes, with {key} standing for the key."
+            }
+          }
+        },
+        "links": {
+          "type": "object",
+          "description": "How a card's links to other cards are read and followed. Writing the block turns link expansion on and requires a mapped fields.id; omitting it turns the feature off.",
+          "additionalProperties": false,
+          "properties": {
+            "field": { "type": "string", "minLength": 1, "default": "see_also" },
+            "lookup": {
+              "type": "string",
+              "enum": ["uuid5", "direct", "filter"],
+              "default": "filter",
+              "description": "How a linked id becomes a point to fetch. filter works on any collection; uuid5 is the kb sync scheme."
+            },
+            "namespace": {
+              "type": "string",
+              "minLength": 1,
+              "default": "url",
+              "description": "The uuid5 namespace: url, dns, oid, x500, or a GUID."
+            },
+            "prefix": {
+              "type": "string",
+              "default": "kb:",
+              "description": "What the ingester puts in front of the id before hashing. May be empty."
+            }
+          }
+        },
+        "analyzer": {
+          "type": "string",
+          "minLength": 1,
+          "default": "identifier-codes",
+          "description": "The IKnowledgeQueryAnalyzer name that picks required terms."
+        },
+        "mapper": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The IKnowledgePointMapper name that turns a point into a card. Omitted, the fields: block is the mapper."
+        },
+        "scoreFloor": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.25,
+          "description": "The smallest fused score a card may carry."
         }
       }
     },

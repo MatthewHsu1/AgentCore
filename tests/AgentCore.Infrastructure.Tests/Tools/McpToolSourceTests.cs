@@ -1,3 +1,4 @@
+using AgentCore.Application.Tools.Registry;
 using System.ComponentModel;
 using System.Threading.Channels;
 using AgentCore.Application.Configuration.Parsing;

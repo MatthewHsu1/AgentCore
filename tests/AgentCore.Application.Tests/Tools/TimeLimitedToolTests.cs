@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Tools.Registry;
 using Microsoft.Extensions.AI;
 using Xunit;
 

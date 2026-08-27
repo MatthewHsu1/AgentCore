@@ -1,5 +1,6 @@
 using AgentCore.TestSupport;
 using AgentCore.Application.Configuration.Parsing;
+using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tests.Knowledge.Fakes;
@@ -8,14 +9,12 @@ using Xunit;
 namespace AgentCore.Application.Tests.Knowledge;
 
 /// <summary>
-/// The composite behind <c>UseKnowledgeStores</c>. It routes <c>providers.knowledge.search</c> and
-/// <c>providers.knowledge.documents</c> to the adapters whose <see cref="IKnowledgeStoreAdapter.Kind"/>
-/// matches, and it opens one store when both fields name one kind.
+/// The composite behind <c>UseKnowledgeStores</c>. It routes <c>providers.knowledge.kind</c> to the
+/// adapter whose <see cref="IKnowledgeStoreAdapter.Kind"/> matches.
 /// </summary>
 /// <remarks>
 /// Every adapter here is a fake, so every test runs offline. The document names the vendor and the
-/// host registers the adapters; these tests prove the document alone decides which adapter answers
-/// which port.
+/// host registers the adapters; these tests prove the document alone decides which adapter answers.
 /// </remarks>
 public sealed class CompositeKnowledgeStoreFactoryTests
 {
@@ -41,28 +40,9 @@ public sealed class CompositeKnowledgeStoreFactoryTests
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
           knowledge:
-            search: filesystem
-            documents: filesystem
-            root: ./kb
-        """;
-
-    private const string TwoKindsYaml =
-        """
-        apiVersion: agentcore/v1
-        name: two-stores
-        agents:
-          items:
-            - { id: only, instructions: "I answer everything" }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          knowledge:
-            search: zilliz
-            documents: filesystem
+            kind: qdrant
             endpoint: https://cluster.example.com
-            collection: kb_chunks
+            collection: manuals
         """;
 
     private const string ShoutedKindYaml =
@@ -78,190 +58,105 @@ public sealed class CompositeKnowledgeStoreFactoryTests
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
           knowledge:
-            search: FileSystem
-            documents: FILESYSTEM
+            kind: QDRANT
         """;
 
     // ---------------------------------------------------------------------------------------------
-    // Routing: the document names the vendor of each port, and the matching adapter builds it.
+    // Routing: the document names the vendor, and the matching adapter builds it.
     // ---------------------------------------------------------------------------------------------
-    [Fact]
-    public async Task TwoKinds_RouteToTheTwoAdaptersTheHostRegistered()
-    {
-        RecordingKnowledgeStoreAdapter zilliz = new("zilliz") { CanServeDocuments = false, ReadsWhatItRanks = false };
-        RecordingKnowledgeStoreAdapter files = new("filesystem");
-
-        var (search, documents) = await Create(TwoKindsYaml, zilliz, files);
-
-        // This is the shape the Zilliz connector arrives in: one adapter ranks and another reads.
-        Assert.Same(zilliz.Search, search);
-        Assert.Same(files.Documents, documents);
-        Assert.Equal(0, zilliz.DocumentBuilds);
-        Assert.Equal(0, files.SearchBuilds);
-    }
-
     [Fact]
     public async Task AKindWrittenInAnotherCase_StillFindsItsAdapter()
     {
-        RecordingKnowledgeStoreAdapter files = new("filesystem");
+        RecordingKnowledgeStoreAdapter qdrant = new("qdrant");
 
-        var (search, documents) = await Create(ShoutedKindYaml, files);
+        var port = await Create(ShoutedKindYaml, qdrant);
 
-        Assert.Same(files.Search, search);
-        Assert.Same(files.Search, documents);
+        Assert.Same(qdrant.Search, port);
     }
 
     [Fact]
-    public async Task NoKnowledgeBlockAtAll_TakesTheDefaultOfBothPorts()
+    public async Task NoKnowledgeBlockAtAll_TakesTheDefaultKind()
     {
-        RecordingKnowledgeStoreAdapter files = new("filesystem");
+        RecordingKnowledgeStoreAdapter qdrant = new(KnowledgeProviderConfiguration.DefaultKind);
 
-        var (search, documents) = await Create(NoKnowledgeYaml, files);
+        var port = await Create(NoKnowledgeYaml, qdrant);
 
-        // Both defaults are 'filesystem', so a document that says nothing still binds both ports.
-        Assert.NotNull(search);
-        Assert.NotNull(documents);
-        Assert.Equal(1, files.SearchBuilds);
+        Assert.NotNull(port);
+        Assert.True(qdrant.CreateSearchCalled);
+    }
+
+    [Fact]
+    public async Task TheAdapter_ReceivesTheGeneratorTheHostBuilt()
+    {
+        RecordingKnowledgeStoreAdapter qdrant = new("qdrant");
+        Embeddings.Fakes.FakeEmbeddingGenerator embeddings = new();
+
+        await CompositeKnowledgeStoreFactory.CreateAsync(
+            ConfigurationLoader.LoadYaml(OneKindYaml),
+            secrets: null,
+            [qdrant],
+            embeddings,
+            scopeDeclared: false,
+            requireScope: false,
+            TestContext.Current.CancellationToken);
+
+        Assert.Same(embeddings, qdrant.LastEmbeddings);
     }
 
     [Fact]
     public async Task TheAdapter_ReceivesTheEntryAndTheResolverChainTheHostBound()
     {
-        RecordingKnowledgeStoreAdapter files = new("filesystem");
+        RecordingKnowledgeStoreAdapter qdrant = new("qdrant");
         MapSecretResolver resolver = new();
 
-        await Create(OneKindYaml, resolver, files);
+        await Create(OneKindYaml, resolver, qdrant);
 
-        Assert.Same(resolver, files.LastSecrets);
-        Assert.Equal("./kb", files.LastEntry?.Root);
-    }
-
-    // ---------------------------------------------------------------------------------------------
-    // One kind for both ports opens one store, exactly as the UseKnowledge overload did.
-    // ---------------------------------------------------------------------------------------------
-    [Fact]
-    public async Task OneKindForBothPorts_OpensOneStoreAndBindsItTwice()
-    {
-        RecordingKnowledgeStoreAdapter files = new("filesystem");
-
-        var (search, documents) = await Create(OneKindYaml, files);
-
-        Assert.Same(search, documents);
-        Assert.Equal(1, files.SearchBuilds);
-        Assert.Equal(0, files.DocumentBuilds);
+        Assert.Same(resolver, qdrant.LastSecrets);
+        Assert.Equal("manuals", qdrant.LastEntry?.Collection);
     }
 
     [Fact]
-    public async Task OneKindWhoseRankerDoesNotRead_StillOpensTheDocumentStore()
+    public async Task TheAdapter_ReceivesRequireScopeSeparatelyFromScopeDeclared()
     {
-        RecordingKnowledgeStoreAdapter files = new("filesystem") { ReadsWhatItRanks = false };
+        // Ruling 14(a): requireScope (ALL agents scoped) is a different question from the
+        // scopeDeclared this factory already validates CanScope against (ANY agent scoped), and it
+        // must reach the adapter even when scopeDeclared itself is false.
+        RecordingKnowledgeStoreAdapter qdrant = new("qdrant") { CanScope = true };
 
-        var (search, documents) = await Create(OneKindYaml, files);
+        var port = await CompositeKnowledgeStoreFactory.CreateAsync(
+            Document(kind: "qdrant"), secrets: null, [qdrant], embeddings: null, scopeDeclared: false, requireScope: true, CancellationToken.None);
 
-        // The memoization reuses the ranked object only when that object reads as well.
-        Assert.NotSame(search, documents);
-        Assert.Equal(1, files.SearchBuilds);
-        Assert.Equal(1, files.DocumentBuilds);
-    }
-
-    // ---------------------------------------------------------------------------------------------
-    // A port the caller already holds is read nowhere. This is what makes the precedence rule of
-    // UseKnowledgeStores cost nothing.
-    // ---------------------------------------------------------------------------------------------
-    [Fact]
-    public async Task APortTheCallerDidNotAskFor_IsNeitherResolvedNorBuilt()
-    {
-        RecordingKnowledgeStoreAdapter files = new("filesystem");
-
-        var (search, documents) = await CreateFor(OneKindYaml, includeSearch: false, includeDocuments: true, null, files);
-
-        Assert.Null(search);
-        Assert.Same(files.Documents, documents);
-        Assert.Equal(0, files.SearchBuilds);
-        Assert.Equal(1, files.DocumentBuilds);
-    }
-
-    [Fact]
-    public async Task AKindNoAdapterServes_FailsNothingWhenTheCallerDidNotAskForThatPort()
-    {
-        // The document reads from 'filesystem' and this host registers only the ranker. The caller
-        // holds the document port itself, so the field that names 'filesystem' is never looked up.
-        RecordingKnowledgeStoreAdapter zilliz = new("zilliz") { CanServeDocuments = false, ReadsWhatItRanks = false };
-
-        var (search, documents) = await CreateFor(TwoKindsYaml, includeSearch: true, includeDocuments: false, null, zilliz);
-
-        Assert.Same(zilliz.Search, search);
-        Assert.Null(documents);
-        Assert.Equal(0, zilliz.DocumentBuilds);
-    }
-
-    [Fact]
-    public async Task ACallerThatHoldsBothPorts_BuildsNothingAtAll()
-    {
-        RecordingKnowledgeStoreAdapter files = new("filesystem");
-
-        var (search, documents) = await CreateFor(TwoKindsYaml, includeSearch: false, includeDocuments: false, null, files);
-
-        // Not one field is read, so a document this host cannot serve does not stop the start.
-        Assert.Null(search);
-        Assert.Null(documents);
-        Assert.Equal(0, files.SearchBuilds);
-        Assert.Equal(0, files.DocumentBuilds);
+        Assert.NotNull(port);
+        Assert.True(qdrant.LastRequireScope);
     }
 
     // ---------------------------------------------------------------------------------------------
     // What it refuses, at startup and never on the first call.
     // ---------------------------------------------------------------------------------------------
     [Fact]
-    public async Task ASearchKindNoAdapterServes_FailsAndNamesTheRegisteredKinds()
+    public async Task AKindNoAdapterServes_FailsAndNamesTheRegisteredKinds()
     {
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
-            async () => await Create(TwoKindsYaml, new RecordingKnowledgeStoreAdapter("filesystem")));
+            async () => await Create(OneKindYaml, new RecordingKnowledgeStoreAdapter("filesystem")));
 
         var error = Assert.Single(failure.Errors);
-        Assert.Equal("/providers/knowledge/search", error.Pointer);
-        Assert.Contains("zilliz", error.Message, StringComparison.Ordinal);
+        Assert.Equal("/providers/knowledge/kind", error.Pointer);
+        Assert.Contains("qdrant", error.Message, StringComparison.Ordinal);
         Assert.Contains("'filesystem'", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task ADocumentKindNoAdapterServes_FailsAndNamesTheRegisteredKinds()
+    public async Task AnAdapterThatDoesNotServeSearch_FailsAndNamesThePort()
     {
-        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
-            async () => await Create(TwoKindsYaml, new RecordingKnowledgeStoreAdapter("zilliz")));
-
-        var error = Assert.Single(failure.Errors);
-        Assert.Equal("/providers/knowledge/documents", error.Pointer);
-        Assert.Contains("filesystem", error.Message, StringComparison.Ordinal);
-        Assert.Contains("'zilliz'", error.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task AnAdapterThatDoesNotServeThatPort_FailsAndNamesThePort()
-    {
-        // The Zilliz connector ranks and reads nothing, so a document that reads from it is a fault.
-        RecordingKnowledgeStoreAdapter zilliz = new("zilliz") { CanServeDocuments = false };
+        RecordingKnowledgeStoreAdapter qdrant = new("qdrant") { CanServeSearch = false };
 
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
-            async () => await Create(BothPortsOn("zilliz"), zilliz));
+            async () => await Create(OneKindYaml, qdrant));
 
         var error = Assert.Single(failure.Errors);
-        Assert.Equal("/providers/knowledge/documents", error.Pointer);
-        Assert.Contains("'zilliz'", error.Message, StringComparison.Ordinal);
-        Assert.Contains(nameof(IDocumentStorePort), error.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task AnAdapterThatDoesNotRank_FailsTheSearchPort()
-    {
-        RecordingKnowledgeStoreAdapter files = new("filesystem") { CanServeSearch = false };
-
-        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
-            async () => await Create(OneKindYaml, files));
-
-        var error = Assert.Single(failure.Errors);
-        Assert.Equal("/providers/knowledge/search", error.Pointer);
+        Assert.Equal("/providers/knowledge/kind", error.Pointer);
         Assert.Contains(nameof(IKnowledgeRetrievalPort), error.Message, StringComparison.Ordinal);
+        Assert.False(qdrant.CreateSearchCalled);
     }
 
     [Fact]
@@ -269,12 +164,12 @@ public sealed class CompositeKnowledgeStoreFactoryTests
     {
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(async () => await Create(
             OneKindYaml,
-            new RecordingKnowledgeStoreAdapter("filesystem"),
-            new RecordingKnowledgeStoreAdapter("FileSystem")));
+            new RecordingKnowledgeStoreAdapter("qdrant"),
+            new RecordingKnowledgeStoreAdapter("QDrant")));
 
         var error = Assert.Single(failure.Errors);
-        Assert.Equal("/providers/knowledge/search", error.Pointer);
-        Assert.Contains("filesystem", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("/providers/knowledge/kind", error.Pointer);
+        Assert.Contains("qdrant", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -284,67 +179,129 @@ public sealed class CompositeKnowledgeStoreFactoryTests
             async () => await Create(OneKindYaml));
 
         var error = Assert.Single(failure.Errors);
-        Assert.Equal("/providers/knowledge/search", error.Pointer);
+        Assert.Equal("/providers/knowledge/kind", error.Pointer);
         Assert.Contains("no adapter", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task NothingIsBuilt_UntilBothPortsFoundTheirAdapter()
+    public async Task CitationsWithBothCitationFieldsDisabled_FailsTheLoadPointingAtFieldsSource()
     {
-        RecordingKnowledgeStoreAdapter files = new("filesystem");
-
-        await Assert.ThrowsAsync<ConfigurationLoadException>(
-            async () => await Create(TwoKindsYaml, files));
-
-        // The document names 'zilliz' for search and no adapter serves it, so the reading half is
-        // never opened either. A failed start opens no store at all.
-        Assert.Equal(0, files.DocumentBuilds);
-        Assert.Equal(0, files.SearchBuilds);
-    }
-
-    // ---------------------------------------------------------------------------------------------
-    // Helpers.
-    // ---------------------------------------------------------------------------------------------
-    /// <summary>Writes a document that binds both ports to one kind.</summary>
-    private static string BothPortsOn(string kind)
-        => $$"""
+        const string yaml =
+            """
             apiVersion: agentcore/v1
-            name: one-kind
+            name: cited
             agents:
               items:
-                - { id: only, instructions: "I answer everything" }
+                - id: only
+                  instructions: "I answer everything"
+                  knowledge: { citations: true }
             providers:
               call:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
               knowledge:
-                search: {{kind}}
-                documents: {{kind}}
+                kind: qdrant
+                fields: { source: null, locator: null }
             """;
+        RecordingKnowledgeStoreAdapter qdrant = new("qdrant");
 
-    private static ValueTask<(IKnowledgeRetrievalPort? Search, IDocumentStorePort? Documents)> Create(
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+            async () => await Create(yaml, qdrant));
+
+        Assert.Equal("/providers/knowledge/fields/source", failure.Pointer);
+        Assert.False(qdrant.CreateSearchCalled);
+    }
+
+    [Fact]
+    public async Task CitationsWithOnlyTheLocatorMapped_StillLoads()
+    {
+        const string yaml =
+            """
+            apiVersion: agentcore/v1
+            name: cited-locator
+            agents:
+              items:
+                - id: only
+                  instructions: "I answer everything"
+                  knowledge: { citations: true }
+            providers:
+              call:   { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
+              knowledge:
+                kind: qdrant
+                fields: { source: null }
+            """;
+        RecordingKnowledgeStoreAdapter qdrant = new("qdrant");
+
+        var port = await Create(yaml, qdrant);
+
+        Assert.NotNull(port);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // The CanScope startup rule.
+    // ---------------------------------------------------------------------------------------------
+    [Fact]
+    public async Task CreateAsync_ScopeDeclaredAndAdapterCannotScope_FailsTheStart()
+    {
+        var configuration = Document(kind: "flat");
+        var adapter = new RecordingKnowledgeStoreAdapter("flat") { CanScope = false };
+
+        var thrown = await Assert.ThrowsAsync<ConfigurationLoadException>(
+            async () => await CompositeKnowledgeStoreFactory.CreateAsync(
+                configuration, secrets: null, [adapter], embeddings: null, scopeDeclared: true, requireScope: true, CancellationToken.None));
+
+        Assert.Contains("/providers/knowledge/kind", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("cannot apply a scope", thrown.Message, StringComparison.Ordinal);
+        Assert.False(adapter.CreateSearchCalled);
+    }
+
+    [Fact]
+    public async Task CreateAsync_ScopeDeclaredAndAdapterCanScope_Opens()
+    {
+        var configuration = Document(kind: "scoped");
+        var adapter = new RecordingKnowledgeStoreAdapter("scoped") { CanScope = true };
+
+        var port = await CompositeKnowledgeStoreFactory.CreateAsync(
+            configuration, secrets: null, [adapter], embeddings: null, scopeDeclared: true, requireScope: true, CancellationToken.None);
+
+        Assert.NotNull(port);
+        Assert.True(adapter.CreateSearchCalled);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Helpers.
+    // ---------------------------------------------------------------------------------------------
+    /// <summary>Builds a document whose only knowledge-relevant field is <c>providers.knowledge.kind</c>.</summary>
+    private static AgentCoreConfiguration Document(string kind)
+        => new()
+        {
+            ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
+            Name = "test",
+            Providers = new ProvidersConfiguration
+            {
+                Knowledge = new KnowledgeProviderConfiguration { Kind = kind },
+            },
+        };
+
+    private static ValueTask<IKnowledgeRetrievalPort?> Create(
         string yaml,
         params IKnowledgeStoreAdapter[] adapters)
         => Create(yaml, null, adapters);
 
-    private static ValueTask<(IKnowledgeRetrievalPort? Search, IDocumentStorePort? Documents)> Create(
+    private static ValueTask<IKnowledgeRetrievalPort?> Create(
         string yaml,
-        ISecretResolverPort? secrets,
-        params IKnowledgeStoreAdapter[] adapters)
-        => CreateFor(yaml, includeSearch: true, includeDocuments: true, secrets, adapters);
-
-    private static ValueTask<(IKnowledgeRetrievalPort? Search, IDocumentStorePort? Documents)> CreateFor(
-        string yaml,
-        bool includeSearch,
-        bool includeDocuments,
         ISecretResolverPort? secrets,
         params IKnowledgeStoreAdapter[] adapters)
         => CompositeKnowledgeStoreFactory.CreateAsync(
             ConfigurationLoader.LoadYaml(yaml),
             secrets,
             adapters,
-            includeSearch,
-            includeDocuments,
+            embeddings: null,
+            scopeDeclared: false,
+            requireScope: false,
             TestContext.Current.CancellationToken);
 }

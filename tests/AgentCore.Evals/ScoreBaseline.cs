@@ -28,9 +28,6 @@ public sealed record ScoreBaseline
     /// <summary>The environment variable that names the baseline of the real set.</summary>
     public const string BaselineVariable = "AGENTCORE_EVAL_BASELINE";
 
-    /// <summary>The baseline of the fixture suite, which travels with this repository.</summary>
-    public const string FixtureBaselinePath = "golden/baseline.json";
-
     /// <summary>Gets the day a person recorded these scores.</summary>
     [JsonPropertyName("recordedAt")]
     public string RecordedAt { get; init; } = string.Empty;

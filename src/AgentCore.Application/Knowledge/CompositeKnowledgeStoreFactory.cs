@@ -17,32 +17,6 @@ public static class CompositeKnowledgeStoreFactory
         new("providers.knowledge.kind", "/providers/knowledge/kind", "options.UseKnowledgeStores(...)", "stores");
 
     /// <summary>Builds the knowledge port the document names.</summary>
-    /// <param name="configuration">The loaded document.</param>
-    /// <param name="secrets">The chain the adapter resolves its credential through, or <see langword="null"/>.</param>
-    /// <param name="adapters">The adapters the host registers, one for each vendor it supports.</param>
-    /// <param name="embeddings">
-    /// The generator <c>providers.embeddings</c> built, or <see langword="null"/> when the document
-    /// names none. Forwarded to the matched adapter unread.
-    /// </param>
-    /// <param name="scopeDeclared">
-    /// Whether ANY agent in the document declares <c>knowledge: { scoped: true }</c>. When
-    /// <see langword="true"/>, the matched adapter must report <see cref="IKnowledgeStoreAdapter.CanScope"/>,
-    /// or the start fails rather than search every customer's cards. This governs only that
-    /// capability check; it is not the same question as <paramref name="requireScope"/>.
-    /// </param>
-    /// <param name="requireScope">
-    /// Whether EVERY agent in the document declares <c>knowledge: { scoped: true }</c>, forwarded to
-    /// <see cref="IKnowledgeStoreAdapter.CreateSearchAsync"/> as the store's own runtime guard. It is
-    /// deliberately ANY vs ALL: one store is shared by every agent that reads it, so the store can
-    /// only fail closed on a missing ambient scope when every reader wants one -- a mixed deployment
-    /// must leave the store permissive and enforce scoping per agent one layer up instead.
-    /// </param>
-    /// <param name="cancellationToken">Cancels the build.</param>
-    /// <returns>The port.</returns>
-    /// <exception cref="ConfigurationLoadException">
-    /// <c>providers.knowledge.kind</c> names a kind no adapter serves, a kind two adapters answer
-    /// to, or a kind whose adapter cannot apply a scope an agent declares.
-    /// </exception>
     public static async ValueTask<IKnowledgeRetrievalPort?> CreateAsync(
         AgentCoreConfiguration configuration,
         ISecretResolverPort? secrets,
@@ -56,6 +30,19 @@ public static class CompositeKnowledgeStoreFactory
         ArgumentNullException.ThrowIfNull(adapters);
 
         var entry = configuration.Providers?.Knowledge ?? new KnowledgeProviderConfiguration();
+
+        if (entry.Mapper is null
+            && CitationsDeclared(configuration)
+            && entry.Fields.Source is not { Length: > 0 }
+            && entry.Fields.Locator is not { Length: > 0 })
+        {
+            throw Fail(
+                "/providers/knowledge/fields/source",
+                "an agent declares knowledge: { citations: true } and providers.knowledge.fields maps "
+                + "neither source nor locator, so every citation would be silently empty. Map one of "
+                + "the two fields, or set citations: false on every agent.");
+        }
+
         var adapter = Resolve(adapters, entry.Kind, scopeDeclared);
 
         return await adapter
@@ -64,10 +51,6 @@ public static class CompositeKnowledgeStoreFactory
     }
 
     /// <summary>Finds the one adapter <c>providers.knowledge.kind</c> names, and proves it serves.</summary>
-    /// <param name="adapters">The adapters the host registers, one for each vendor it supports.</param>
-    /// <param name="kind">The kind the document wrote.</param>
-    /// <param name="scopeDeclared">Whether any agent in the document declares <c>scoped: true</c>.</param>
-    /// <returns>The adapter.</returns>
     private static IKnowledgeStoreAdapter Resolve(
         IReadOnlyList<IKnowledgeStoreAdapter> adapters,
         string kind,
@@ -96,9 +79,13 @@ public static class CompositeKnowledgeStoreFactory
         return adapter;
     }
 
+    /// <summary>Whether any agent in the document turns citations on, directly or through defaults.</summary>
+    private static bool CitationsDeclared(AgentCoreConfiguration configuration)
+        => configuration.Agents is { } agents
+            && (agents.Defaults?.Knowledge?.Citations == true
+                || agents.Items.Any(agent => agent.Knowledge?.Citations == true));
+
     /// <summary>Writes the registered kinds, so a failure names what the host does register.</summary>
-    /// <param name="adapters">The adapters the host registers, one for each vendor it supports.</param>
-    /// <returns>The kinds, or a phrase for a host with none.</returns>
     private static string Registered(IReadOnlyList<IKnowledgeStoreAdapter> adapters)
     {
         HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
@@ -115,9 +102,6 @@ public static class CompositeKnowledgeStoreFactory
     }
 
     /// <summary>Builds the one exception every failure of this factory uses.</summary>
-    /// <param name="pointer">The JSON Pointer into the document.</param>
-    /// <param name="message">What is wrong.</param>
-    /// <returns>The exception.</returns>
     private static ConfigurationLoadException Fail(string pointer, string message)
         => new(new ConfigurationError
         {

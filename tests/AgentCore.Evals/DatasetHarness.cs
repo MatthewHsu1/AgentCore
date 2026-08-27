@@ -1,157 +1,126 @@
+using System.ClientModel;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Knowledge;
-using AgentCore.Application.Llm;
 using AgentCore.Application.Ports;
-using AgentCore.AspNetCore.DependencyInjection;
-using AgentCore.Infrastructure.Knowledge.FileStore;
-using AgentCore.Infrastructure.Knowledge.VectorData.Zilliz;
-using AgentCore.Infrastructure.Llm.OpenAI;
+using AgentCore.Application.Secrets;
+using AgentCore.Infrastructure.Knowledge.VectorData.Qdrant;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.AI.Evaluation;
-using Microsoft.Extensions.AI.Evaluation.Quality;
 using Microsoft.Extensions.AI.Evaluation.Reporting;
 using Microsoft.Extensions.AI.Evaluation.Reporting.Storage;
+using OpenAI;
 
 namespace AgentCore.Evals;
 
 /// <summary>
-/// Everything one golden-set run needs, built once from one configuration document.
+/// Everything one golden-set retrieval run needs, built once from one configuration document.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The harness composes the adapters the shipped host composes, so the score describes the stack the
-/// deployment runs. It builds the chat clients, the knowledge ports, and the reporting configuration
-/// together, because all three read the same document and the chat clients outlive the build.
+/// The harness composes the adapter the shipped host composes, so the score describes the retrieval
+/// stack a deployment runs: one <see cref="QdrantKnowledgeAdapter"/>, built from
+/// <c>providers.knowledge</c> of the document <c>AGENTCORE_EVAL_CONFIG</c> names.
 /// </para>
 /// <para>
-/// Response caching is on whenever a judge exists. The cache key covers the model and the request, so
-/// a rerun that changed neither costs nothing and returns the same score. A changed prompt or a
-/// changed model misses the cache and calls the endpoint again, which is correct.
+/// Ruling 14: <see cref="CreateAsync"/> passes <see langword="false"/> for <c>requireScope</c>. A
+/// golden set measures recall against the whole corpus a deployment holds, and <see cref="GoldenRow"/>
+/// carries no facet a row could be checked against. Forcing every search through one fixed
+/// <c>KnowledgeScope</c> would either filter rows about a different facet out of the corpus, or need
+/// per-row facet data the row format does not have -- either way the recall number would describe
+/// that one scope rather than the corpus the set exists to measure. <c>scopeDeclared</c> stays
+/// <see langword="true"/> regardless: it costs nothing here, since <see cref="QdrantKnowledgeAdapter"/>
+/// always reports <see cref="IKnowledgeStoreAdapter.CanScope"/>, and it is the safer default if this
+/// harness is ever pointed at a second adapter that does not.
 /// </para>
 /// </remarks>
 public sealed class DatasetHarness : IDisposable
 {
-    private readonly CompositeChatClientFactory? _clients;
-    private readonly AgentCoreHttpClients _httpClients;
+    /// <summary>The environment variable naming the embedding model this harness queries with.</summary>
+    /// <remarks>
+    /// <c>providers.knowledge</c> names the store and never the embedder -- the width check in
+    /// <see cref="QdrantKnowledgeAdapter.CreateSearchAsync"/> is what proves a deployment's chosen
+    /// model matches the collection, not a document field, matching the "AgentCore never creates"
+    /// stance <see cref="KnowledgeProviderConfiguration.Collection"/> documents for the store itself.
+    /// A deployment's own <c>kb sync</c> run is what actually fixes the model, so this harness has to
+    /// be told the same value some other way. It reads it here rather than inventing a schema field
+    /// no production host would ever read.
+    /// </remarks>
+    public const string EmbeddingModelVariable = "AGENTCORE_EVAL_EMBEDDING_MODEL";
+
+    /// <summary>The model used when the environment names none.</summary>
+    public const string DefaultEmbeddingModel = "text-embedding-3-small";
+
+    private readonly IKnowledgeRetrievalPort _search;
 
     private DatasetHarness(
-        AgentCoreConfiguration configuration,
-        AgentCoreHttpClients httpClients,
-        CompositeChatClientFactory? clients,
-        IKnowledgeRetrievalPort search,
-        IDocumentStorePort documents,
-        ReportingConfiguration reporting)
+        AgentCoreConfiguration configuration, IKnowledgeRetrievalPort search, ReportingConfiguration reporting)
     {
         Configuration = configuration;
-        _httpClients = httpClients;
-        _clients = clients;
-        Search = search;
-        Documents = documents;
+        _search = search;
         Reporting = reporting;
     }
 
     /// <summary>Gets the document this run reads.</summary>
     public AgentCoreConfiguration Configuration { get; }
 
-    /// <summary>Gets the ranking port <c>providers.knowledge.search</c> names.</summary>
-    public IKnowledgeRetrievalPort Search { get; }
-
-    /// <summary>Gets the document port <c>providers.knowledge.documents</c> names.</summary>
-    public IDocumentStorePort Documents { get; }
+    /// <summary>Gets the ranking port <c>providers.knowledge</c> names.</summary>
+    public IKnowledgeRetrievalPort Search => _search;
 
     /// <summary>Gets the reporting configuration the scenario runs write through.</summary>
     public ReportingConfiguration Reporting { get; }
-
-    /// <summary>Gets whether the document names a judge, so a judged metric can run.</summary>
-    public bool HasJudge => Configuration.Evaluation?.Judge is not null;
-
-    /// <summary>Gets the client that writes a reply, or <see langword="null"/> when no judge exists.</summary>
-    /// <remarks>
-    /// The reply model is the one the agents already read. The generation metric measures the reply
-    /// this model writes over the passages the search returned, which is the generation half of the
-    /// same pipeline the deployment runs.
-    /// </remarks>
-    public IChatClient? Reply
-        => _clients?.GetChatClient(Configuration.Agents?.Defaults?.Model);
 
     /// <summary>Builds the harness from the document <c>AGENTCORE_EVAL_CONFIG</c> names.</summary>
     public static async ValueTask<DatasetHarness> CreateAsync(CancellationToken cancellationToken = default)
     {
         var configuration = EvalHarness.LoadConfiguration();
+        var embeddings = await BuildEmbeddingsAsync(cancellationToken).ConfigureAwait(false);
 
-        // The one outbound pipeline the host builds. A vendor knowledge adapter needs it, and an
-        // adapter no field names is never asked to build anything, so a document that reads a
-        // directory still opens no socket.
-        AgentCoreHttpClients httpClients = new();
-
-        try
-        {
-            var (search, documents) = await CompositeKnowledgeStoreFactory
-                .CreateAsync(
-                    configuration,
-                    EvalHarness.Secrets,
-                    [new FileSystemKnowledgeAdapter(), new ZillizKnowledgeAdapter(httpClients)],
-                    includeSearch: true,
-                    includeDocuments: true,
-                    cancellationToken)
-                .ConfigureAwait(false);
-
-            if (search is null || documents is null)
-            {
-                throw new InvalidOperationException(
-                    "providers.knowledge has to name both search and documents for the offline set to run.");
-            }
-
-            List<IEvaluator> evaluators = [new DocumentRecallEvaluator(), new FaultCodeEvaluator()];
-
-            if (configuration.Evaluation?.Judge is not { } judge)
-            {
-                // A document that names no judge still measures retrieval and fault codes. It reads
-                // no key for evaluation, and it calls nothing.
-                return new DatasetHarness(
-                    configuration,
-                    httpClients,
-                    clients: null,
-                    search,
-                    documents,
-                    DiskBasedReportingConfiguration.Create(
-                        storageRootPath: EvalHarness.StorageRoot,
-                        evaluators: evaluators,
-                        enableResponseCaching: false,
-                        executionName: EvalHarness.DatasetExecution));
-            }
-
-            var clients = await CompositeChatClientFactory
-                .CreateAsync(configuration, EvalHarness.Secrets, [new OpenAiChatClientAdapter()], cancellationToken)
-                .ConfigureAwait(false);
-
-            evaluators.Add(new GroundednessEvaluator());
-
-            return new DatasetHarness(
+        var search = await CompositeKnowledgeStoreFactory
+            .CreateAsync(
                 configuration,
-                httpClients,
-                clients,
-                search,
-                documents,
-                DiskBasedReportingConfiguration.Create(
-                    storageRootPath: EvalHarness.StorageRoot,
-                    evaluators: evaluators,
-                    chatConfiguration: new ChatConfiguration(clients.GetChatClient(judge)),
-                    enableResponseCaching: true,
-                    executionName: EvalHarness.DatasetExecution));
-        }
-        catch
+                EvalHarness.Secrets,
+                [new QdrantKnowledgeAdapter(embeddings)],
+                embeddings: null,
+                scopeDeclared: true,
+                requireScope: false,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (search is null)
         {
-            httpClients.Dispose();
-            throw;
+            throw new InvalidOperationException(
+                "providers.knowledge has to name a store for the golden set to run.");
         }
+
+        return new DatasetHarness(
+            configuration,
+            search,
+            DiskBasedReportingConfiguration.Create(
+                storageRootPath: EvalHarness.StorageRoot,
+                evaluators: [new DocumentRecallEvaluator()],
+                enableResponseCaching: false,
+                executionName: EvalHarness.DatasetExecution));
     }
 
     /// <inheritdoc />
-    public void Dispose()
+    public void Dispose() => (_search as IDisposable)?.Dispose();
+
+    /// <summary>Builds the embedder this harness queries with, over the OpenAI credential the chat clients share.</summary>
+    private static async ValueTask<IEmbeddingGenerator<string, Embedding<float>>> BuildEmbeddingsAsync(
+        CancellationToken cancellationToken)
     {
-        _clients?.Dispose();
-        _httpClients.Dispose();
+        var apiKey = await EvalHarness.Secrets
+            .RequireAsync(
+                KnownSecrets.OpenAi,
+                because: "The golden set embeds each query before it searches Qdrant.",
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+        var model = Environment.GetEnvironmentVariable(EmbeddingModelVariable) is { Length: > 0 } named
+            ? named
+            : DefaultEmbeddingModel;
+
+        return new OpenAIClient(new ApiKeyCredential(apiKey)).GetEmbeddingClient(model).AsIEmbeddingGenerator();
     }
 }

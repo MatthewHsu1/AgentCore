@@ -32,7 +32,7 @@ public sealed class ShippedAgentBuilderTests
     [Fact]
     public void Build_NoChatClientFactory_FailsTheBootNamingThePort()
     {
-        var ports = new BuiltinToolPorts(null, null, null);
+        var ports = new BuiltinToolPorts(null);
 
         var error = Assert.Throws<ConfigurationLoadException>(
             () => ShippedAgentBuilder.Build(new FakeDefinition(), Declared("draw"), ports));
@@ -47,7 +47,7 @@ public sealed class ShippedAgentBuilderTests
 
         var error = Assert.Throws<ConfigurationLoadException>(
             () => ShippedAgentBuilder.Build(
-                definition, Declared("draw"), new BuiltinToolPorts(null, null, new RecordingChatClientFactory())));
+                definition, Declared("draw"), new BuiltinToolPorts(new RecordingChatClientFactory())));
 
         Assert.Contains("draw", error.Message, StringComparison.Ordinal);
         Assert.Contains("IKnowledgeRetrievalPort", error.Message, StringComparison.Ordinal);
@@ -61,7 +61,7 @@ public sealed class ShippedAgentBuilderTests
         ShippedAgentBuilder.Build(
             new FakeDefinition(),
             Declared("draw") with { Model = new ModelReference { Ref = "cheap" } },
-            new BuiltinToolPorts(null, null, factory));
+            new BuiltinToolPorts(factory));
 
         Assert.Equal("cheap", factory.Asked!.Ref);
     }
@@ -71,7 +71,7 @@ public sealed class ShippedAgentBuilderTests
     {
         RecordingChatClientFactory factory = new();
 
-        ShippedAgentBuilder.Build(new FakeDefinition(), Declared("draw"), new BuiltinToolPorts(null, null, factory));
+        ShippedAgentBuilder.Build(new FakeDefinition(), Declared("draw"), new BuiltinToolPorts(factory));
 
         Assert.Null(factory.Asked);
     }
@@ -82,7 +82,7 @@ public sealed class ShippedAgentBuilderTests
         var function = ShippedAgentBuilder.Build(
             new FakeDefinition(),
             Declared("draw") with { Description = null },
-            new BuiltinToolPorts(null, null, new RecordingChatClientFactory()));
+            new BuiltinToolPorts(new RecordingChatClientFactory()));
 
         Assert.Equal(FakeDefinition.Description, function.Description);
     }
@@ -108,7 +108,7 @@ public sealed class ShippedAgentBuilderTests
         var function = ShippedAgentBuilder.Build(
             definition,
             Declared("draw") with { MaxRounds = rounds },
-            new BuiltinToolPorts(null, null, new RecordingChatClientFactory(new LoopingToolCallingChatClient())));
+            new BuiltinToolPorts(new RecordingChatClientFactory(new LoopingToolCallingChatClient())));
 
         await function.InvokeAsync(
             new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "go" }),
@@ -127,7 +127,7 @@ public sealed class ShippedAgentBuilderTests
         var function = ShippedAgentBuilder.Build(
             definition,
             Declared("draw"),
-            new BuiltinToolPorts(null, null, new RecordingChatClientFactory(new LoopingToolCallingChatClient())));
+            new BuiltinToolPorts(new RecordingChatClientFactory(new LoopingToolCallingChatClient())));
 
         await function.InvokeAsync(
             new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "go" }),
@@ -154,8 +154,7 @@ public sealed class ShippedAgentBuilderTests
         var function = ShippedAgentBuilder.Build(
             definition,
             Declared("draw") with { MaxRounds = 2 },
-            new BuiltinToolPorts(
-                null, null, new RecordingChatClientFactory(new PresentCallingChatClient(Tree, Tree, Tree))));
+            new BuiltinToolPorts(new RecordingChatClientFactory(new PresentCallingChatClient(Tree, Tree, Tree))));
 
         var result = await function.InvokeAsync(
             new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "go" }),
@@ -182,7 +181,7 @@ public sealed class ShippedAgentBuilderTests
         var function = ShippedAgentBuilder.Build(
             definition,
             Declared("draw") with { MaxRounds = 2 },
-            new BuiltinToolPorts(null, null, new RecordingChatClientFactory(new LoopingToolCallingChatClient())));
+            new BuiltinToolPorts(new RecordingChatClientFactory(new LoopingToolCallingChatClient())));
 
         var result = await function.InvokeAsync(
             new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "go" }),
@@ -215,7 +214,7 @@ public sealed class ShippedAgentBuilderTests
         var function = ShippedAgentBuilder.Build(
             new FakeDefinition(innerTools: [throwing]),
             Declared("draw") with { MaxRounds = Rounds },
-            new BuiltinToolPorts(null, null, new RecordingChatClientFactory(new LoopingToolCallingChatClient())));
+            new BuiltinToolPorts(new RecordingChatClientFactory(new LoopingToolCallingChatClient())));
 
         await function.InvokeAsync(
             new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "go" }),
@@ -244,7 +243,7 @@ public sealed class ShippedAgentBuilderTests
         var function = ShippedAgentBuilder.Build(
             new FakeDefinition(innerTools: [throwing]),
             Declared("draw") with { MaxRounds = 4 },
-            new BuiltinToolPorts(null, null, new RecordingChatClientFactory(new LoopingToolCallingChatClient())));
+            new BuiltinToolPorts(new RecordingChatClientFactory(new LoopingToolCallingChatClient())));
 
         List<ToolFailure> reported = [];
         using var scope = ToolFailureScope.Enter(reported.Add);

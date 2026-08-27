@@ -262,9 +262,9 @@ public sealed class SecretResolverExtensionsTests
         Assert.Equal("OPENAI_API_KEY", KnownSecrets.OpenAiApiKeyVariable);
         Assert.Equal(new SecretName("openai-api-key", "OPENAI_API_KEY"), KnownSecrets.OpenAi);
 
-        Assert.Equal("zilliz-api-key", KnownSecrets.ZillizApiKeyName);
-        Assert.Equal("ZILLIZ_API_KEY", KnownSecrets.ZillizApiKeyVariable);
-        Assert.Equal(new SecretName("zilliz-api-key", "ZILLIZ_API_KEY"), KnownSecrets.Zilliz);
+        Assert.Equal("qdrant-api-key", KnownSecrets.QdrantApiKeyName);
+        Assert.Equal("QDRANT_API_KEY", KnownSecrets.QdrantApiKeyVariable);
+        Assert.Equal(new SecretName("qdrant-api-key", "QDRANT_API_KEY"), KnownSecrets.Qdrant);
     }
 
     [Theory]

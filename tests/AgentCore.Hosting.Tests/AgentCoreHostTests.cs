@@ -3,11 +3,13 @@ using AgentCore.Application.Audit;
 using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
 using AgentCore.Application.Transcript.Memory;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Endpoints;
+using AgentCore.Domain.Knowledge;
 using AgentCore.Infrastructure.Audit.Postgres;
 using AgentCore.Infrastructure.Transcript.Postgres;
 using Microsoft.AspNetCore.Builder;
@@ -148,6 +150,47 @@ public sealed class AgentCoreHostTests
             Transcript);
 
         Assert.IsType<InMemoryTranscriptStore>(host.Services.GetRequiredService<ITranscriptStore>());
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // providers.knowledge.analyzer. The default QdrantKnowledgeAdapter is registered inside
+    // Configure, before the host's own callback runs, so a host analyzer only reaches it if the
+    // wiring reapplies it afterward in FinishConfiguring. If that ordering regresses, the failure
+    // below reads "no registered IKnowledgeQueryAnalyzer" instead of a network error.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task AHostKnowledgeQueryAnalyzerReachesTheDefaultAdapter()
+    {
+        // ResolveAnalyzer runs before the Qdrant client is built, so nothing on this loopback port
+        // is ever contacted unless the stub analyzer already resolved. Reaching a network failure,
+        // rather than "no registered IKnowledgeQueryAnalyzer", is the proof it did.
+        var failure = await Assert.ThrowsAnyAsync<Exception>(() => StartAsync(
+            options =>
+            {
+                options.UseEmbeddings(new FakeEmbeddingAdapter());
+                options.UseKnowledgeQueryAnalyzers(new StubQueryAnalyzer());
+            },
+            Knowledge));
+
+        Assert.DoesNotContain("no registered", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AHostKnowledgePointMapperReachesTheDefaultAdapter()
+    {
+        // ResolveMapper runs before the Qdrant client is built, so nothing on this loopback port is
+        // ever contacted unless the stub mapper already resolved. Reaching a network failure, rather
+        // than "no registered IKnowledgePointMapper", is the proof it did.
+        var failure = await Assert.ThrowsAnyAsync<Exception>(() => StartAsync(
+            options =>
+            {
+                options.UseEmbeddings(new FakeEmbeddingAdapter());
+                options.UseKnowledgePointMappers(new StubPointMapper());
+            },
+            KnowledgeMapper));
+
+        Assert.DoesNotContain("no registered", failure.Message, StringComparison.Ordinal);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -354,6 +397,21 @@ public sealed class AgentCoreHostTests
     /// <summary>The <c>providers</c> line that asks for the durable transcript vendor.</summary>
     private const string Transcript = "  transcript: { kind: postgres }";
 
+    /// <summary>
+    /// The <c>providers</c> lines for a knowledge store on an endpoint nothing listens on, so the
+    /// only question a test against it can settle is whether the analyzer resolved.
+    /// </summary>
+    private const string Knowledge =
+        "  embeddings: { kind: " + FakeEmbeddingAdapter.ProviderKind + ", model: n/a }\n"
+        + "  knowledge: { kind: qdrant, endpoint: \"https://127.0.0.1:1\", collection: \"missing\", "
+        + "analyzer: " + StubQueryAnalyzer.AnalyzerName + " }";
+
+    /// <summary>Like <see cref="Knowledge"/>, but naming a mapper instead of an analyzer.</summary>
+    private const string KnowledgeMapper =
+        "  embeddings: { kind: " + FakeEmbeddingAdapter.ProviderKind + ", model: n/a }\n"
+        + "  knowledge: { kind: qdrant, endpoint: \"https://127.0.0.1:1\", collection: \"missing\", "
+        + "mapper: " + StubPointMapper.MapperName + " }";
+
     /// <summary>Builds a host the way a deployable does, over a fake model and no key.</summary>
     /// <param name="configure">Anything else the test says on the options.</param>
     /// <param name="providers">A further line under <c>providers</c>, or null for the document above.</param>
@@ -443,6 +501,60 @@ public sealed class AgentCoreHostTests
             ISecretResolverPort? secrets,
             CancellationToken cancellationToken = default)
             => ValueTask.FromResult<ITranscriptStore>(new InMemoryTranscriptStore());
+    }
+
+    /// <summary>An embedding vendor whose generator is never actually asked to embed anything.</summary>
+    /// <remarks>
+    /// <c>QdrantKnowledgeAdapter.CreateSearchAsync</c> only needs a non-null generator to get past
+    /// its own <c>providers.embeddings</c> check; the analyzer resolves right after, and every test
+    /// using this adapter fails before either could reach the generator itself.
+    /// </remarks>
+    private sealed class FakeEmbeddingAdapter : IEmbeddingGeneratorAdapter
+    {
+        public const string ProviderKind = "hosting-tests-embed";
+
+        public string Kind => ProviderKind;
+
+        public ValueTask<IEmbeddingGenerator<string, Embedding<float>>> CreateGeneratorAsync(
+            EmbeddingProviderConfiguration entry,
+            ISecretResolverPort? secrets,
+            CancellationToken cancellationToken = default)
+            => ValueTask.FromResult<IEmbeddingGenerator<string, Embedding<float>>>(new NeverUsedEmbeddingGenerator());
+
+        private sealed class NeverUsedEmbeddingGenerator : IEmbeddingGenerator<string, Embedding<float>>
+        {
+            public Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
+                IEnumerable<string> values,
+                EmbeddingGenerationOptions? options = null,
+                CancellationToken cancellationToken = default)
+                => throw new InvalidOperationException("Nothing in these tests should ever embed a query.");
+
+            public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+            public void Dispose()
+            {
+            }
+        }
+    }
+
+    /// <summary>An analyzer a host registers by name, distinct from either built-in.</summary>
+    private sealed class StubQueryAnalyzer : IKnowledgeQueryAnalyzer
+    {
+        public const string AnalyzerName = "hosting-tests-stub-analyzer";
+
+        public string Name => AnalyzerName;
+
+        public IReadOnlyList<string> RequiredTerms(string query) => [];
+    }
+
+    /// <summary>A mapper a host registers by name, distinct from either built-in.</summary>
+    private sealed class StubPointMapper : IKnowledgePointMapper
+    {
+        public const string MapperName = "hosting-tests-stub-mapper";
+
+        public string Name => MapperName;
+
+        public KnowledgeCard? Map(KnowledgePoint point) => null;
     }
 
     /// <summary>Builds a host, maps every route, and puts it on a real socket.</summary>

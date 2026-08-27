@@ -30,9 +30,6 @@ public static class GoldenSet
     /// <summary>The synthetic set that travels with this repository.</summary>
     public const string FixturePath = "golden/fixture.jsonl";
 
-    /// <summary>The synthetic knowledge base the fixture rows name.</summary>
-    public const string FixtureKnowledgeRoot = "golden/kb";
-
     private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web);
 
     /// <summary>Gets the path of the real set, or <see langword="null"/> when none is named.</summary>

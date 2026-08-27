@@ -1,3 +1,4 @@
+using AgentCore.Application.Tools.Registry;
 using System.Diagnostics;
 using System.IO.Pipelines;
 using System.Text.Json.Nodes;

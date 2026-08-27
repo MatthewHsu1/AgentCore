@@ -30,28 +30,20 @@ namespace AgentCore.Evals;
 /// measured to <c>eval-results/measured.json</c>, so a person who accepts a change copies the numbers
 /// into the baseline by hand.
 /// </para>
+/// <para>
+/// There is no fixture-execution gate. The synthetic knowledge base and the retrieval self-test that
+/// wrote to the "fixture" execution were both deleted with the old filesystem store (Ruling 9): the
+/// store that replaced it needs a real embedding model for its dense leg, which the offline fixture
+/// suite has no key for, so nothing writes a "Document Recall" score outside a real, key-gated golden
+/// set. A gate that always skips is worse than no gate, so this class reads only the "golden-set"
+/// execution below.
+/// </para>
 /// </remarks>
 [Trait("Category", "Gate")]
 [Collection(EvalGateCollection.Name)]
 public sealed class BaselineGateTests
 {
     private const string MeasuredPath = "eval-results/measured.json";
-
-    [Fact]
-    public async Task FixtureExecution_HoldsItsRecordedScores()
-    {
-        // Arrange
-        var baseline = ScoreBaseline.Load(ScoreBaseline.FixtureBaselinePath);
-
-        // Act
-        var measured = await ScoreBaseline.MeasureAsync(
-            EvalHarness.StorageRoot,
-            EvalHarness.FixtureExecution,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        AssertNoDrop(baseline, measured, EvalHarness.FixtureExecution);
-    }
 
     [Fact]
     public async Task DatasetExecution_HoldsItsRecordedScores()

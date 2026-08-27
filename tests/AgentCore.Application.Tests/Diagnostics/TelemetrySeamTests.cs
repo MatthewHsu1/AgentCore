@@ -180,7 +180,7 @@ public sealed class TelemetrySeamTests
 
     /// <summary>The <c>providers.knowledge</c> line the telemetry block is written after.</summary>
     private const string KnowledgeLine =
-        "  knowledge: { search: filesystem, documents: filesystem, root: ./kb }";
+        "  knowledge: { kind: qdrant, endpoint: https://qdrant.example.com:6334, collection: kb, vector: dense, links: { lookup: uuid5 } }";
 
     /// <summary>Builds the section 8.1 document with one telemetry block written into it.</summary>
     /// <param name="entries">

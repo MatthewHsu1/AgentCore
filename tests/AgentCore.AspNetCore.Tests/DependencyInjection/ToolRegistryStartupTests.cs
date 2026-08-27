@@ -2,6 +2,7 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
+using AgentCore.Application.Tools.Registry;
 using AgentCore.Application.Tools;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
@@ -137,7 +138,6 @@ public sealed class ToolRegistryStartupTests
             boot ?? Boot(),
             options,
             startup,
-            (null, null),
             new RoutingChatClientFactory(new FragmentingChatClient("hello")),
             configuration,
             TestContext.Current.CancellationToken);

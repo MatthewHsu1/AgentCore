@@ -2,6 +2,7 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Tools.Registry;
 using Microsoft.Extensions.AI;
 using Xunit;
 

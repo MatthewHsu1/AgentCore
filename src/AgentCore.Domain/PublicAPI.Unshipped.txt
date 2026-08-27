@@ -43,7 +43,7 @@ AgentCore.Domain.Audit.ToolFailureKind.Undeclared = 0 -> AgentCore.Domain.Audit.
 AgentCore.Domain.Audit.ToolFailureKinds
 AgentCore.Domain.Knowledge.KnowledgeCard
 AgentCore.Domain.Knowledge.KnowledgeCard.<Clone>$() -> AgentCore.Domain.Knowledge.KnowledgeCard!
-AgentCore.Domain.Knowledge.KnowledgeCard.Authority.get -> int
+AgentCore.Domain.Knowledge.KnowledgeCard.Authority.get -> int?
 AgentCore.Domain.Knowledge.KnowledgeCard.Authority.init -> void
 AgentCore.Domain.Knowledge.KnowledgeCard.CardId.get -> string!
 AgentCore.Domain.Knowledge.KnowledgeCard.CardId.init -> void

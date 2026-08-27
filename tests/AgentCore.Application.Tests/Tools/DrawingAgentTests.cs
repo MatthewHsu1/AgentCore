@@ -7,6 +7,7 @@ using AgentCore.Application.Tests.Runtime;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Tools.Builtin;
 using AgentCore.Application.Tools.Drawing;
+using AgentCore.Application.Tools.Registry;
 using AgentCore.Application.Tools.Shipped;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
@@ -249,12 +250,12 @@ public sealed class DrawingAgentTests
 
     private static AIFunction Build(RecordingChatClientFactory factory)
         => ShippedAgentBuilder.Build(
-            new DrawingAgentDefinition(), Declaration, new BuiltinToolPorts(null, null, factory));
+            new DrawingAgentDefinition(), Declaration, new BuiltinToolPorts(factory));
 
     /// <summary>Builds one declared tool through <see cref="BuiltinToolSource"/>.</summary>
     private static async Task<ToolRegistration> Provide(ToolConfiguration tool, RecordingChatClientFactory? factory)
     {
-        BuiltinToolSource source = new(new BuiltinToolPorts(null, null, factory));
+        BuiltinToolSource source = new(new BuiltinToolPorts(factory));
         var context = new ToolSourceContext(new AgentCoreConfiguration
         {
             ApiVersion = "agentcore/v1",

@@ -1,3 +1,5 @@
+using AgentCore.Application.Tools.Binding;
+using AgentCore.Application.Tools.Registry;
 using AgentCore.TestSupport;
 using AgentCore.Application.Sessions.Memory;
 using AgentCore.Application.Audit.Memory;
@@ -16,6 +18,7 @@ using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Sessions;
 using AgentCore.AspNetCore.Tests.Fakes;
 using AgentCore.Domain.Audit;
+using AgentCore.Domain.Knowledge;
 using AgentCore.Infrastructure.Tools;
 using Microsoft.Extensions.AI.Evaluation;
 using Microsoft.Extensions.AI;
@@ -149,114 +152,6 @@ public sealed class AddAgentCoreTests
             tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
-        """;
-
-    // Both built-in tools, so one document reaches both knowledge ports.
-    private const string KnowledgeYaml =
-        """
-        apiVersion: agentcore/v1
-        name: with-knowledge
-        tools:
-          - { id: search_chunks, kind: builtin, uses: knowledge.search }
-          - { id: read_doc,      kind: builtin, uses: knowledge.read }
-        agents:
-          items:
-            - { id: only, instructions: "I answer everything", tools: [ search_chunks, read_doc ] }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
-        """;
-
-    // Only the tool the document store answers, so a host that binds no retrieval adapter starts.
-    private const string ReadOnlyKnowledgeYaml =
-        """
-        apiVersion: agentcore/v1
-        name: with-document-store
-        tools:
-          - { id: read_doc, kind: builtin, uses: knowledge.read }
-        agents:
-          items:
-            - { id: only, instructions: "I answer everything", tools: [ read_doc ] }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
-        """;
-
-    // Both built-in tools, with a different vendor named for each knowledge port.
-    private const string TwoKnowledgeVendorsYaml =
-        """
-        apiVersion: agentcore/v1
-        name: with-two-knowledge-vendors
-        tools:
-          - { id: search_chunks, kind: builtin, uses: knowledge.search }
-          - { id: read_doc,      kind: builtin, uses: knowledge.read }
-        agents:
-          items:
-            - { id: only, instructions: "I answer everything", tools: [ search_chunks, read_doc ] }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
-          knowledge:
-            search: fake-ranker
-            documents: fake-reader
-        """;
-
-    // Both built-in tools, with one vendor behind both knowledge ports.
-    private const string OneKnowledgeVendorYaml =
-        """
-        apiVersion: agentcore/v1
-        name: with-one-knowledge-vendor
-        tools:
-          - { id: search_chunks, kind: builtin, uses: knowledge.search }
-          - { id: read_doc,      kind: builtin, uses: knowledge.read }
-        agents:
-          items:
-            - { id: only, instructions: "I answer everything", tools: [ search_chunks, read_doc ] }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
-          knowledge:
-            search: fake-store
-            documents: fake-store
-        """;
-
-    // Both built-in tools, with a ranking vendor the host registers and a document kind it does not.
-    private const string RankerOnlyKnowledgeYaml =
-        """
-        apiVersion: agentcore/v1
-        name: with-a-ranker-only
-        tools:
-          - { id: search_chunks, kind: builtin, uses: knowledge.search }
-          - { id: read_doc,      kind: builtin, uses: knowledge.read }
-        agents:
-          items:
-            - { id: only, instructions: "I answer everything", tools: [ search_chunks, read_doc ] }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
-          knowledge:
-            search: fake-ranker
-            documents: filesystem
         """;
 
     private const string SecretYaml =
@@ -722,6 +617,32 @@ public sealed class AddAgentCoreTests
     }
 
     [Fact]
+    public async Task AddAgentCore_ClosesTheKnowledgePortWhenTheHostShutsDown()
+    {
+        // KnowledgeStartup.OpenAsync's result used to be discarded with `_ = await ...`, so a
+        // successful open -- a QdrantClient in production -- was never tracked against the boot and
+        // outlived host shutdown. This proves the port the adapter built is closed the same way the
+        // transcript store above is.
+        DisposeTrackingKnowledgeAdapter adapter = new();
+        HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+        ConfigureServices(
+            builder.Services,
+            VendorKnowledgeYaml,
+            options => options.UseKnowledgeStores(adapter));
+
+        IHost host = builder.Build();
+        await host.StartAsync(TestContext.Current.CancellationToken);
+
+        Assert.NotNull(adapter.Built);
+        Assert.False(adapter.Built.Closed);
+
+        await host.StopAsync(TestContext.Current.CancellationToken);
+        host.Dispose();
+
+        Assert.True(adapter.Built.Closed);
+    }
+
+    [Fact]
     public async Task AHostRegisteredDisposableToolSource_IsClosedWhenTheHostShutsDown()
     {
         // Disposal happens once, when the container closes the boot that owns the source — the same
@@ -843,126 +764,6 @@ public sealed class AddAgentCoreTests
 
         Assert.Contains("CreateCase", failure.Message, StringComparison.Ordinal);
         Assert.Contains("did not register", failure.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task OneStoreThatAnswersBothPorts_BindsInOneLineAndIsBuiltOnce()
-    {
-        var built = 0;
-
-        using var provider = await BuildAsync(KnowledgeYaml, options => options.UseKnowledge(_ =>
-        {
-            built++;
-            return new EmptyKnowledgeStore();
-        }));
-
-        // Both built-in tools compiled, and the one adapter behind them was opened once.
-        Assert.NotNull(provider.GetRequiredService<CompiledAgent>());
-        Assert.Equal(1, built);
-    }
-
-    [Fact]
-    public async Task AHostThatBindsOnlyTheDocumentStore_Starts()
-    {
-        // Section 7 splits the two ports so a vendor that supplies only one is enough. This host has
-        // the reading half and no retrieval adapter, and knowledge.read still reaches the model.
-        using var provider = await BuildAsync(
-            ReadOnlyKnowledgeYaml,
-            options => options.UseDocumentStore(_ => new EmptyKnowledgeStore()));
-
-        Assert.NotNull(provider.GetRequiredService<CompiledAgent>());
-    }
-
-    [Fact]
-    public async Task AHostThatBindsOnlyTheDocumentStore_FailsTheStartAndNamesTheUnboundPort()
-    {
-        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(() => BuildAsync(
-            KnowledgeYaml,
-            options => options.UseDocumentStore(_ => new EmptyKnowledgeStore())));
-
-        Assert.Contains("search_chunks", failure.Message, StringComparison.Ordinal);
-        Assert.Contains(nameof(IKnowledgeRetrievalPort), failure.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task TwoAdapters_BindToTheTwoPortsApart()
-    {
-        EmptyKnowledgeStore retrieval = new();
-        EmptyKnowledgeStore documents = new();
-
-        using var provider = await BuildAsync(KnowledgeYaml, options => options
-            .UseKnowledgeRetrieval(_ => retrieval)
-            .UseDocumentStore(_ => documents));
-
-        // This is the shape the Zilliz connector arrives in: one adapter ranks and another reads.
-        Assert.NotNull(provider.GetRequiredService<CompiledAgent>());
-    }
-
-    [Fact]
-    public async Task TheKnowledgeRegistry_LetsTheDocumentPickTheStoreOfEachPort()
-    {
-        // The host lists what it supports, once. providers.knowledge.search and
-        // providers.knowledge.documents then bind the two ports apart, with no code named here.
-        FakeKnowledgeStoreAdapter ranker = new("fake-ranker") { CanServeDocuments = false };
-        FakeKnowledgeStoreAdapter reader = new("fake-reader") { CanServeSearch = false };
-
-        using var provider = await BuildAsync(
-            TwoKnowledgeVendorsYaml,
-            options => options.UseKnowledgeStores(ranker, reader));
-
-        await CallToolAsync(provider, "search_chunks", "query", "shipping");
-        await CallToolAsync(provider, "read_doc", "documentId", "policies/shipping.md");
-
-        Assert.Equal(["shipping"], ranker.Store.Queries);
-        Assert.Equal(["policies/shipping.md"], reader.Store.Reads);
-        Assert.Empty(ranker.Store.Reads);
-        Assert.Empty(reader.Store.Queries);
-    }
-
-    [Fact]
-    public async Task AnExplicitKnowledgeSeam_BeatsTheRegistryForThePortItSets()
-    {
-        FakeKnowledgeStoreAdapter registry = new("fake-store");
-        RecordingKnowledgeStore mine = new();
-
-        using var provider = await BuildAsync(OneKnowledgeVendorYaml, options => options
-            .UseKnowledgeStores(registry)
-            .UseKnowledgeRetrieval(_ => mine));
-
-        await CallToolAsync(provider, "search_chunks", "query", "shipping");
-        await CallToolAsync(provider, "read_doc", "documentId", "policies/shipping.md");
-
-        // The explicit call wins the port it sets, and the registry keeps the port it does not.
-        Assert.Equal(["shipping"], mine.Queries);
-        Assert.Empty(registry.Store.Queries);
-        Assert.Equal(["policies/shipping.md"], registry.Store.Reads);
-
-        // The shadowed port is not built either. A vendor that opens a client on its search build
-        // must not open one this host then throws away.
-        Assert.Equal(0, registry.SearchBuilds);
-        Assert.Equal(1, registry.DocumentBuilds);
-    }
-
-    [Fact]
-    public async Task AnExplicitKnowledgeSeam_SparesTheRegistryAKindItCannotServe()
-    {
-        // The document reads from 'filesystem' and this host registers only the ranker, exactly as a
-        // host with the Zilliz connector and a document store of its own does. The explicit call
-        // answers the document port, so the registry never looks that kind up and the start holds.
-        FakeKnowledgeStoreAdapter ranker = new("fake-ranker") { CanServeDocuments = false };
-        RecordingKnowledgeStore mine = new();
-
-        using var provider = await BuildAsync(RankerOnlyKnowledgeYaml, options => options
-            .UseKnowledgeStores(ranker)
-            .UseDocumentStore(_ => mine));
-
-        await CallToolAsync(provider, "search_chunks", "query", "shipping");
-        await CallToolAsync(provider, "read_doc", "documentId", "policies/shipping.md");
-
-        Assert.Equal(["shipping"], ranker.Store.Queries);
-        Assert.Equal(["policies/shipping.md"], mine.Reads);
-        Assert.Equal(1, ranker.SearchBuilds);
-        Assert.Equal(0, ranker.DocumentBuilds);
     }
 
     [Fact]
@@ -1391,6 +1192,24 @@ public sealed class AddAgentCoreTests
           transcript: { kind: test }
         """;
 
+    // The same agent, served by a knowledge vendor the host registers itself.
+    private const string VendorKnowledgeYaml =
+        """
+        apiVersion: agentcore/v1
+        name: composed
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything" }
+        providers:
+          call:   { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: reply }
+          knowledge: { kind: test }
+        """;
+
     // The transcript store opens at step 4b and the moderation vendor is built at step 4c, so a
     // document that names both puts a failure strictly after an open. Nothing else in the boot has
     // that shape.
@@ -1505,6 +1324,43 @@ public sealed class AddAgentCoreTests
             Closed = true;
             return ValueTask.CompletedTask;
         }
+    }
+
+    /// <summary>A knowledge vendor that hands back one port and keeps a reference to it.</summary>
+    private sealed class DisposeTrackingKnowledgeAdapter : IKnowledgeStoreAdapter
+    {
+        public string Kind => "test";
+
+        public bool CanServeSearch => true;
+
+        public bool CanScope => true;
+
+        /// <summary>Gets the port the last build returned, or <see langword="null"/> before one built.</summary>
+        public DisposeTrackingKnowledgePort? Built { get; private set; }
+
+        public ValueTask<IKnowledgeRetrievalPort> CreateSearchAsync(
+            KnowledgeProviderConfiguration entry,
+            ISecretResolverPort? secrets,
+            IEmbeddingGenerator<string, Embedding<float>>? embeddings,
+            bool requireScope,
+            CancellationToken cancellationToken = default)
+        {
+            Built = new DisposeTrackingKnowledgePort();
+            return ValueTask.FromResult<IKnowledgeRetrievalPort>(Built);
+        }
+    }
+
+    /// <summary>A knowledge port that answers with nothing and tracks whether it was closed.</summary>
+    private sealed class DisposeTrackingKnowledgePort : IKnowledgeRetrievalPort, IDisposable
+    {
+        /// <summary>Gets whether this port was closed.</summary>
+        public bool Closed { get; private set; }
+
+        public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
+            string query, CancellationToken cancellationToken = default)
+            => ValueTask.FromResult<IReadOnlyList<KnowledgeCard>>([]);
+
+        public void Dispose() => Closed = true;
     }
 
     [Fact]
@@ -1805,26 +1661,6 @@ public sealed class AddAgentCoreTests
         models.Route("bot", new FragmentingChatClient("HANDLED"));
 
         return BuildAsync(GuardedGraphYaml, options => options.UseChatClients(_ => models));
-    }
-
-    /// <summary>Calls one declared tool, so a test reads which port the built-in holds.</summary>
-    /// <param name="provider">The composed container.</param>
-    /// <param name="toolId">The tool id the document declares.</param>
-    /// <param name="argument">The one argument name the built-in fills.</param>
-    /// <param name="value">The value that argument carries.</param>
-    private static async Task CallToolAsync(StartedHost provider, string toolId, string argument, string value)
-    {
-        var declaration = provider
-            .GetRequiredService<AgentCoreConfiguration>()
-            .Tools
-            .Single(tool => string.Equals(tool.Id, toolId, StringComparison.Ordinal));
-
-        var function = Assert.IsAssignableFrom<AIFunction>(
-            provider.GetRequiredService<ToolRegistry>().Resolve(declaration.Id));
-
-        await function.InvokeAsync(
-            new AIFunctionArguments { [argument] = value },
-            TestContext.Current.CancellationToken);
     }
 
     private static async Task<(IHost Host, FlushRecordingTelemetryAdapter Adapter)> BuildTelemetryHostAsync()

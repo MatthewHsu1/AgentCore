@@ -1,4 +1,5 @@
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Knowledge;
 using AgentCore.Application.Llm;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools.Binding;
@@ -12,6 +13,7 @@ namespace AgentCore.AspNetCore.DependencyInjection;
 public sealed class AgentCoreOptions
 {
     private readonly List<Func<AgentCoreStartup, IToolSource>> _toolSources = [];
+
     private readonly List<ICallObserver> _observers = [];
 
     /// <summary>Gets the path of the configuration document, or <see langword="null"/>.</summary>
@@ -43,6 +45,12 @@ public sealed class AgentCoreOptions
 
     /// <summary>Gets the seam that beats the <c>providers.knowledge.kind</c> registry, or <see langword="null"/>.</summary>
     internal Func<AgentCoreStartup, IKnowledgeRetrievalPort>? KnowledgeRetrieval { get; private set; }
+
+    /// <summary>Gets the analyzers <c>providers.knowledge.analyzer</c> may name.</summary>
+    internal IReadOnlyList<IKnowledgeQueryAnalyzer> KnowledgeAnalyzers { get; private set; } = [];
+
+    /// <summary>Gets the mappers <c>providers.knowledge.mapper</c> may name.</summary>
+    internal IReadOnlyList<IKnowledgePointMapper> KnowledgeMappers { get; private set; } = [];
 
     /// <summary>Gets the moderation vendors the host registered, or <see langword="null"/>.</summary>
     internal IReadOnlyList<IModerationAdapter>? Moderation { get; private set; }
@@ -125,6 +133,22 @@ public sealed class AgentCoreOptions
     {
         ArgumentNullException.ThrowIfNull(retrieval);
         KnowledgeRetrieval = retrieval;
+        return this;
+    }
+
+    /// <summary>Binds the query analyzers, and the document picks one by <c>providers.knowledge.analyzer</c>.</summary>
+    public AgentCoreOptions UseKnowledgeQueryAnalyzers(params IKnowledgeQueryAnalyzer[] analyzers)
+    {
+        ArgumentNullException.ThrowIfNull(analyzers);
+        KnowledgeAnalyzers = analyzers;
+        return this;
+    }
+
+    /// <summary>Binds the point mappers, and the document picks one by <c>providers.knowledge.mapper</c>.</summary>
+    public AgentCoreOptions UseKnowledgePointMappers(params IKnowledgePointMapper[] mappers)
+    {
+        ArgumentNullException.ThrowIfNull(mappers);
+        KnowledgeMappers = mappers;
         return this;
     }
 
