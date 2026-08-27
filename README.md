@@ -40,11 +40,6 @@ is the annotated tour of every key.
 
 They share one version and ship as a set. Mixing versions across them is unsupported.
 
-## Deployment
-
-AgentCore ships no deployment workflow and no container image. Where this runs is your decision,
-and a library has no business making it.
-
 ## The demo
 
 [`demo/`](https://github.com/MatthewHsu1/AgentCore/tree/main/demo) holds a working host and a React
