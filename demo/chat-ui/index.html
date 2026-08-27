@@ -1,7 +1,7 @@
 <!doctype html>
 <!--
-  data-agentcore-endpoint is what lets a host move the text endpoint without a rebuild. The C# side
-  rewrites it when MapAgentCoreChat is given a route; the value here is the default.
+  The endpoint the UI posts turns to. App.tsx falls back to this same value when the attribute is
+  absent, so a page built without it still works.
 -->
 <html lang="en" data-agentcore-endpoint="/v1/chat/completions">
   <head>

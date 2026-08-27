@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UserSecretsId>d7549002-fd56-4ad5-b74d-3360ef14904e</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/AgentCore.Hosting/AgentCore.Hosting.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="config/example.yaml" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="config/demo.yaml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ClientAppSource Include="../chat-ui/src/**/*" />
+    <ClientAppSource Include="../chat-ui/index.html" />
+    <ClientAppSource Include="../chat-ui/package.json" />
+    <ClientAppSource Include="../chat-ui/package-lock.json" />
+    <ClientAppSource Include="../chat-ui/vite.config.ts" />
+    <ClientAppSource Include="../chat-ui/tsconfig*.json" />
+  </ItemGroup>
+
+  <!--
+    Node is required, not probed for. This project is the demo: a machine without Node should fail
+    here rather than start and serve a stale bundle. release.yml sets SkipClientAppBuild because a
+    release contains no browser code at all.
+
+    Outputs names the real build artifact rather than a stamp under obj/: a stamp survives a
+    "rm -rf wwwroot", so MSBuild believed the target was up to date while its actual output was
+    gone and /chat silently 404'd. Vite does not content-hash the entry HTML, so this name is
+    stable across builds.
+  -->
+  <Target Name="BuildClientApp"
+          BeforeTargets="BeforeBuild"
+          Condition="'$(SkipClientAppBuild)' != 'true'"
+          Inputs="@(ClientAppSource)"
+          Outputs="wwwroot/chat/index.html">
+    <Exec Command="npm ci" WorkingDirectory="../chat-ui" />
+    <Exec Command="npm run build" WorkingDirectory="../chat-ui" />
+  </Target>
+
+</Project>

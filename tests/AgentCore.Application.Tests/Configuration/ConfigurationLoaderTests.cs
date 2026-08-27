@@ -629,7 +629,7 @@ public sealed class ConfigurationLoaderTests
     [Fact]
     public void ShippedExampleFile_Loads()
     {
-        var path = Path.Combine(RepositoryRoot(), "src", "AgentCore.Api", "config", "example.yaml");
+        var path = Path.Combine(RepositoryRoot(), "demo", "AgentCore.Demo", "config", "example.yaml");
         Assert.True(File.Exists(path), $"The shipped example is missing at '{path}'.");
 
         var shipped = ConfigurationLoader.LoadFile(path);

@@ -18,6 +18,15 @@
         "ASPNETCORE_ENVIRONMENT": "Development",
         "AgentCore__ConfigurationPath": "config/example.yaml"
       }
+    },
+    "demo": {
+      "commandName": "Project",
+      "applicationUrl": "http://localhost:5199",
+      "launchBrowser": false,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "AgentCore__ConfigurationPath": "config/demo.yaml"
+      }
     }
   }
 }

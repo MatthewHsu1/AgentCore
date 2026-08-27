@@ -3,6 +3,7 @@
   <PropertyGroup>
     <IsPackable>true</IsPackable>
     <Description>Pure domain records for AgentCore. Zero dependencies.</Description>
+    <PackageTags>agent;ai;voice;chat;domain</PackageTags>
   </PropertyGroup>
 
   <!-- Rule 2, section 5.1: guard the public surface. -->

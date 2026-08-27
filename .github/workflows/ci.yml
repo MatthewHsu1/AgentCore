@@ -1,11 +1,3 @@
-# The hermetic gate. It runs on every push and every pull request, and it holds no secret.
-#
-# A pull request from a fork gets no secret on GitHub, so this workflow has to pass with none. Every
-# job below reads no key: the unit tests use fakes, and the offline eval set uses the synthetic
-# fixture and the one evaluator that calls no model.
-#
-# The judged metrics and the real golden set belong to a deployment. They run on a deploy/<org>
-# branch, where the knowledge base, the configuration document, and the keys all exist.
 name: ci
 
 on:
@@ -58,11 +50,11 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-          cache-dependency-path: src/AgentCore.Chat/ClientApp/package-lock.json
+          cache-dependency-path: demo/chat-ui/package-lock.json
 
       - name: Chat UI dependencies
         run: npm ci
-        working-directory: src/AgentCore.Chat/ClientApp
+        working-directory: demo/chat-ui
 
       - name: Restore
         run: |
@@ -72,12 +64,9 @@ jobs:
       - name: Build
         run: dotnet build --no-restore -c Release
 
-      - name: Chat UI matches its source
-        run: git diff --exit-code -- src/AgentCore.Chat/wwwroot
-
       - name: Chat UI tests
         run: npm test
-        working-directory: src/AgentCore.Chat/ClientApp
+        working-directory: demo/chat-ui
 
       - name: Unit tests
         run: dotnet test --no-build -c Release

@@ -3,6 +3,7 @@
   <PropertyGroup>
     <IsPackable>true</IsPackable>
     <Description>Orchestration, configuration compilation, and every port interface.</Description>
+    <PackageTags>agent;ai;voice;chat;orchestration</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

@@ -141,10 +141,14 @@ describe("the vocabulary the drawing model is taught", () => {
   test("names only components this app can actually render", () => {
     // The drift guard. The C# skill file is the model's whole vocabulary and the library is what
     // draws it; an upgrade that renames a component would otherwise show the caller a hole.
-    // From the ClientApp directory, which is where vitest runs. `import.meta.url` is not a file
-    // URL under happy-dom.
+    // From demo/chat-ui, which is where vitest runs. `import.meta.url` is not a file URL under
+    // happy-dom.
+    //
+    // This reaches outside demo/chat-ui into AgentCore's own source tree, so this test breaks if
+    // chat-ui is copied into another repo, per the README's suggestion. There is no fix here short
+    // of publishing the vocabulary as its own artifact both sides read.
     const vocabulary = readFileSync(
-      resolve(process.cwd(), "../../AgentCore.Application/Tools/Drawing/vocabulary.md"),
+      resolve(process.cwd(), "../../src/AgentCore.Application/Tools/Drawing/vocabulary.md"),
       "utf8",
     );
 

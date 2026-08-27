@@ -1,0 +1,82 @@
+# The smallest document that gives you a real conversation in the browser.
+#
+# example.yaml is the annotated reference: it shows every feature, and it needs a knowledge base,
+# an orders API, and a case system before it does anything interesting. This one needs an OpenAI
+# key and nothing else. Two stages, one tool-free agent, and an extractor that watches for goodbye.
+#
+#   export OPENAI_API_KEY=sk-...
+#   cd demo/AgentCore.Demo && dotnet run --launch-profile demo
+#   open http://localhost:5199/chat
+#
+# No key is written here. ${secret:...} references are never used by this file: OPENAI_API_KEY is
+# read straight from the environment at startup, so this file is safe to commit.
+apiVersion: agentcore/v1
+name: demo-chat
+
+fallbackReply: "Sorry, I could not finish that. Please try again."
+
+# The extractor reads the reply after every turn and writes the state slots below. It is a second,
+# cheaper model call per turn, and it is what moves the conversation between stages.
+state:
+  callerSaidGoodbye: { type: boolean, default: false, writer: extractor }
+
+extractor:
+  model: { ref: fill }
+  when: after_reply
+
+guards:
+  saidGoodbye:
+    { var: callerSaidGoodbye }
+
+# Drawing. The agent asks for a picture in words and gets back one line naming the buttons; a
+# second, private model call turns the request into a tree of cards, charts, tables and buttons and
+# sends it straight to the browser. The 27-component vocabulary never reaches the agent below, so
+# listing this costs it 239 bytes.
+#
+# The drawing call uses the first model declared in providers.llm, which is 'reply'.
+tools:
+  - { id: draw, kind: builtin, uses: ui.draw }
+
+agents:
+  defaults:
+    model: { ref: reply }
+    instructions: |
+      You are a helpful assistant. Answer plainly and briefly.
+      Do not invent facts. Say when you do not know something.
+  items:
+    - id: helper
+      instructions: |
+        Answer whatever the person asks.
+        When the answer is numbers, a comparison, a list of things, or a choice for the person to
+        make, call draw and describe what you want shown. Put the data in the request: whoever
+        draws it cannot see this conversation. Then say one short sentence about it. Do not repeat
+        the numbers you just had drawn.
+      tools: [ draw ]
+    - id: closer
+      instructions: "If the person is leaving. Say goodbye in one short sentence."
+      tools: []
+
+policy:
+  initial: talk
+  stages:
+    - id: talk
+      agent: helper
+      to:
+        - { stage: close, when: saidGoodbye }
+    - id: close
+      agent: closer
+      terminal: true
+
+providers:
+  # Two names, two models. reply is what the person reads; fill is the extractor, which only has to
+  # answer a small structured question and so does not need the larger model.
+  llm:
+    - { kind: openai, model: gpt-5.6-luna, as: reply }
+    - { kind: openai, model: gpt-5.6-luna, as: fill }
+
+  # Required by the schema even for a text-only host, and inert until something opens /v1/call. The
+  # chat UI never touches either one.
+  call: { kind: telnyx-relay }
+  speech:
+    stt: { kind: telnyx-relay }
+    tts: { kind: telnyx-relay }

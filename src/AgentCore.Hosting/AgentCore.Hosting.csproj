@@ -3,6 +3,7 @@
   <PropertyGroup>
     <IsPackable>true</IsPackable>
     <Description>The batteries-included host: every vendor seam bound and every route mapped, in two calls.</Description>
+    <PackageTags>agent;ai;voice;chat;hosting</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
