@@ -54,6 +54,9 @@ back when the caller clicks, so it must be enough to act on.
 - `Box` — a bare container for shapes you build yourself, e.g. a progress bar as a
   track `Box` holding a partial-width fill `Box`. `width`, `height`, `radius`
   ("full" is a pill), `background`. Numbers are pixels.
+  **`background` and `radius` are raw inline styles**, so they ignore the caller's light
+  or dark theme. Set them only for a small deliberate shape such as a bar or a dot, never
+  to stand in for a component that is missing from this list.
 - `Divider` — a horizontal rule. `flush`.
 - `Carousel` — a scrollable row of `Card` children, at most 10. `label`.
 
@@ -97,3 +100,12 @@ A control inside a form needs a `name`, or its value is not collected.
 - Prefer `Fact` over `Text` for numbers, and `Table` over many `Fact`s.
 - Add a button only when the request asks for a decision.
 - A prop that is not listed above is dropped silently. Do not guess prop names.
+- Only the components listed above exist. There is no map, no calendar, no tabs, no
+  accordion, no modal, no dashboard and no chat bubble. Do not guess component names.
+- Never fake a missing component out of `Box`, `Card` or `Image`. A coloured rectangle
+  labelled "map" is not a map; it renders as an empty pale block and tells the caller
+  nothing. When the request asks for a component that is not on the list, draw an `Alert`
+  with `tone: "warning"` that names what cannot be drawn, plus whatever part of the
+  request you *can* draw, and say so in your reply line.
+- When the request asks what you can draw, draw the list itself: a `Card` holding a
+  `ListView` of the component names above, grouped as they are grouped here.
