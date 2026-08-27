@@ -2,9 +2,9 @@ import { Thread } from "@/components/assistant-ui/thread";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AssistantRuntimeProvider, useRemoteThreadListRuntime } from "@assistant-ui/react";
-import { GenerativeUiDataUI } from "./generative/GenerativeUiDataUI";
+import { AgentCoreSidebar } from "@/components/AgentCoreSidebar";
+import { GenerativeUiDataUI } from "@/components/GenerativeUiDataUI";
 import { useAgentCoreRuntime } from "./runtime/AgentCoreRuntime";
-import { AgentCoreSidebar } from "./runtime/AgentCoreSidebar";
 import { localThreadListAdapter } from "./runtime/LocalThreadListAdapter";
 
 /**

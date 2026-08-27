@@ -30,13 +30,3 @@ registry's default entries resolved to Radix on their own; nothing was chosen by
 
 If a vendored file ever needs a change to work here, it is not vendorable. Wrap it from `runtime/`
 instead of editing it in place.
-
-## Files vendored but deliberately unused
-
-`components/assistant-ui/threadlist-sidebar.tsx` is not imported by anything. It is a shell around
-`ThreadList` whose only other content is a header linking to assistant-ui.com and a footer linking
-to their repository — right for their template, wrong for a UI a consumer serves to their own
-callers. `runtime/AgentCoreSidebar.tsx` is the same shell without them.
-
-It stays on disk rather than being deleted so that the `shadcn add` commands above remain a clean
-overwrite. Nothing imports it, so it never reaches the bundle.
