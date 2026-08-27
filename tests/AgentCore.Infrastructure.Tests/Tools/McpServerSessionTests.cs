@@ -7,6 +7,7 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Tools;
 using AgentCore.Infrastructure.Tests.Tools.Fakes;
 using AgentCore.Infrastructure.Tools;
+using AgentCore.Infrastructure.Tools.Mcp;
 using Microsoft.Extensions.AI;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
@@ -56,6 +57,21 @@ public sealed class McpServerSessionTests
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
             async () => await source.ProvideAsync(
                 ContextFor(Wedged(connectTimeoutSeconds: 1, attempts: 1)), Token));
+
+        Assert.Contains("connectTimeoutSeconds", failure.Message, StringComparison.Ordinal);
+    }
+
+    // The SDK runs its InitializationTimeout on the same length as the session's own deadline, so
+    // on a loaded machine the SDK's clock can fire first and throw its own TimeoutException.
+    [Fact]
+    public async Task WhenTheSdksOwnClockWins_TheKnobIsStillNamed()
+    {
+        await using McpServerSession session = new(
+            Wedged(connectTimeoutSeconds: 1, attempts: 1),
+            (_, _) => throw new TimeoutException("Client failed to initialize within the timeout."));
+
+        var failure = await Assert.ThrowsAsync<TimeoutException>(
+            async () => await session.OpenAsync(Token));
 
         Assert.Contains("connectTimeoutSeconds", failure.Message, StringComparison.Ordinal);
     }

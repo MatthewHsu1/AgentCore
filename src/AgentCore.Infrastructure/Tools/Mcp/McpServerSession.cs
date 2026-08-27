@@ -279,9 +279,15 @@ internal sealed class McpServerSession : IAsyncDisposable
         {
             await CloseAsync(opened).ConfigureAwait(false);
 
-            throw new TimeoutException(
-                $"the MCP server '{_server.Id}' did not finish connecting within {timeout.TotalSeconds:0.###}s. "
-                + "Raise connectTimeoutSeconds if the server is simply slow to start.");
+            throw TimedOut(timeout);
+        }
+        catch (TimeoutException)
+        {
+            // The SDK's InitializationTimeout runs the same length as the deadline, so either clock
+            // can fire first. The SDK's message does not name the knob, so it is replaced.
+            await CloseAsync(opened).ConfigureAwait(false);
+
+            throw TimedOut(timeout);
         }
         catch
         {
@@ -301,6 +307,12 @@ internal sealed class McpServerSession : IAsyncDisposable
 
         return descriptors;
     }
+
+    /// <summary>Names the timeout and the knob that raises it, whichever clock noticed first.</summary>
+    private TimeoutException TimedOut(TimeSpan timeout)
+        => new(
+            $"the MCP server '{_server.Id}' did not finish connecting within {timeout.TotalSeconds:0.###}s. "
+            + "Raise connectTimeoutSeconds if the server is simply slow to start.");
 
     /// <summary>Closes one connection, and never lets the closing itself become the failure.</summary>
     private async ValueTask CloseAsync(McpClient? client)
