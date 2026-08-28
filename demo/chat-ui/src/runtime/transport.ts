@@ -84,8 +84,8 @@ export type ToolPart = {
   readonly callId: string;
   readonly name: string;
   readonly arguments: JsonObject;
-  /** What the tool answered. Absent while it is still running. */
-  readonly result?: string;
+  /** What the tool answered, in whatever shape it answered in. Absent while it is still running. */
+  readonly result?: unknown;
   /** Whether the tool failed. Absent while it is still running. */
   readonly failed?: boolean;
 };
@@ -136,7 +136,8 @@ type ToolFrame = {
   phase?: string;
   /** Typed rather than `unknown` because it comes off `JSON.parse` of a field the host writes as an object. */
   arguments?: JsonObject;
-  result?: string;
+  /** The host writes the answer as JSON, so this is an object as often as it is a string. */
+  result?: unknown;
   failed?: boolean;
 };
 

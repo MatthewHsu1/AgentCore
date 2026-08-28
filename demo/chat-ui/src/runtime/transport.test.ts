@@ -382,6 +382,19 @@ test("runTurn yields a tool call before its result arrives", async () => {
   ]);
 });
 
+test("runTurn keeps a tool answer that is an object as an object", async () => {
+  // The host writes the answer as JSON rather than as text, so that the quotes inside it are not
+  // escaped and the panel can lay it out. A result read as a string would print those escapes raw.
+  const collected = await states([
+    'data: {"agentcore_tool":{"call_id":"c1","name":"read_records","phase":"call","arguments":{}}}\n\n',
+    'data: {"agentcore_tool":{"call_id":"c1","name":"read_records","phase":"result","result":{"entities":["it\'s"]},"failed":false}}\n\n',
+    "data: [DONE]\n\n",
+  ]);
+
+  const last = collected[collected.length - 1];
+  assert.deepEqual(last.tools[0].result, { entities: ["it's"] });
+});
+
 test("runTurn folds a tool result onto the call it answers", async () => {
   const collected = await states([
     'data: {"agentcore_tool":{"call_id":"c1","name":"read_records","phase":"call","arguments":{"what":"revenue"}}}\n\n',
