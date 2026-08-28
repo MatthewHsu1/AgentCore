@@ -991,6 +991,12 @@ AgentCore.Application.Tools.Registry.ToolSourceContext.ToolSourceContext(AgentCo
 AgentCore.Application.Tools.Registry.ToolSourceError
 AgentCore.Application.Tools.TimeLimitedTool
 AgentCore.Application.Tools.TimeLimitedTool.TimeLimitedTool(Microsoft.Extensions.AI.AIFunction! inner, System.TimeSpan limit) -> void
+AgentCore.Application.Tools.ToolArgumentJson
+AgentCore.Application.Tools.ToolCallNames
+AgentCore.Application.Tools.ToolCallNames.Called(Microsoft.Extensions.AI.FunctionCallContent! call) -> void
+AgentCore.Application.Tools.ToolCallNames.Of(Microsoft.Extensions.AI.FunctionResultContent! result) -> string?
+AgentCore.Application.Tools.ToolCallNames.ToolCallNames() -> void
+AgentCore.Application.Tools.ToolResultJson
 AgentCore.Application.Tools.ToolErrorResult
 AgentCore.Application.Transcript.CallMessage
 AgentCore.Application.Transcript.CallMessage.<Clone>$() -> AgentCore.Application.Transcript.CallMessage!
@@ -1448,6 +1454,8 @@ static AgentCore.Application.Tools.Registry.ToolSourceContext.operator ==(AgentC
 static AgentCore.Application.Tools.Registry.ToolSourceError.Fail(string! message) -> AgentCore.Application.Configuration.Parsing.ConfigurationLoadException!
 static AgentCore.Application.Tools.ToolErrorResult.Create(string! tool, string! message) -> System.Text.Json.Nodes.JsonObject!
 static AgentCore.Application.Tools.ToolErrorResult.IsError(System.Text.Json.Nodes.JsonNode? result) -> bool
+static AgentCore.Application.Tools.ToolArgumentJson.ToJsonObject(System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string!, object?>>! arguments) -> System.Text.Json.Nodes.JsonObject!
+static AgentCore.Application.Tools.ToolResultJson.ToNode(object? value) -> System.Text.Json.Nodes.JsonNode?
 static AgentCore.Application.Transcript.CallMessage.operator !=(AgentCore.Application.Transcript.CallMessage? left, AgentCore.Application.Transcript.CallMessage? right) -> bool
 static AgentCore.Application.Transcript.CallMessage.operator ==(AgentCore.Application.Transcript.CallMessage? left, AgentCore.Application.Transcript.CallMessage? right) -> bool
 static AgentCore.Application.Transcript.TranscriptJson.Options.get -> System.Text.Json.JsonSerializerOptions!

@@ -1,9 +1,12 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Tools;
 using AgentCore.Application.Transcript;
 using AgentCore.Domain;
+using Microsoft.Extensions.AI;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -221,6 +224,9 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
             Chunk(id, created, model, new ChatCompletionMessage { Role = "assistant" }, finishReason: null, turn: null),
             cancellationToken).ConfigureAwait(false);
 
+        // One turn's worth of ids: the pairing dies with the stream.
+        ToolCallNames toolNames = new();
+
         await foreach (var update in session.RunTurnStreamingAsync(input, cancellationToken).ConfigureAwait(false))
         {
             foreach (var drawn in update.Contents.OfType<RenderContent>())
@@ -229,6 +235,15 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
                     http,
                     Chunk(id, created, model, new ChatCompletionMessage(), finishReason: null, turn: null)
                         with { AgentCoreData = new RenderedPayload { Name = drawn.Name, Data = drawn.Data } },
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            foreach (var tool in ToolPayloadsOf(update, toolNames))
+            {
+                await WriteEventAsync(
+                    http,
+                    Chunk(id, created, model, new ChatCompletionMessage(), finishReason: null, turn: null)
+                        with { AgentCoreTool = tool },
                     cancellationToken).ConfigureAwait(false);
             }
 
@@ -254,6 +269,67 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
         await http.Response.WriteAsync(DoneEvent, cancellationToken).ConfigureAwait(false);
         await http.Response.Body.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>Reads the tool facts one update carries, in the order they appear on it.</summary>
+    /// <param name="update">One update of the stream.</param>
+    /// <param name="toolNames">The pairing of call id to tool name for this turn, written and read here.</param>
+    /// <returns>One payload for each half of a tool call the update carries, possibly none.</returns>
+    private static IEnumerable<ToolPayload> ToolPayloadsOf(
+        ChatResponseUpdate update,
+        ToolCallNames toolNames)
+    {
+        foreach (var content in update.Contents)
+        {
+            switch (content)
+            {
+                case FunctionCallContent call:
+                    toolNames.Called(call);
+                    yield return new ToolPayload
+                    {
+                        CallId = call.CallId,
+                        Name = call.Name,
+                        Phase = "call",
+                        Arguments = ArgumentsOf(call),
+                    };
+                    break;
+
+                case FunctionResultContent result:
+                    // The answer has no declared shape, so it goes through the one reader that knows
+                    // every shape it arrives in. Reading it twice would let the two disagree.
+                    var answer = ToolResultJson.ToNode(result.Result);
+                    yield return new ToolPayload
+                    {
+                        CallId = result.CallId,
+                        // A result that arrives with no call before it should not be possible, and
+                        // naming it after its id beats naming it nothing if it ever is.
+                        Name = toolNames.Of(result) ?? result.CallId,
+                        Phase = "result",
+                        Result = ResultOf(result, answer),
+                        Failed = result.Exception is not null || ToolErrorResult.IsError(answer),
+                    };
+                    break;
+
+                default:
+                    break;
+            }
+        }
+    }
+
+    /// <summary>Reads what the model passed to one tool, or <see langword="null"/> when it passed nothing.</summary>
+    private static JsonObject? ArgumentsOf(FunctionCallContent call)
+        => call.Arguments is { Count: > 0 } arguments ? ToolArgumentJson.ToJsonObject(arguments) : null;
+
+    /// <summary>Reads what one tool answered, as the browser receives it.</summary>
+    /// <param name="result">The result half of the call.</param>
+    /// <param name="answer">The same result read as JSON, or <see langword="null"/> when it answered nothing.</param>
+    /// <remarks>
+    /// A thrown fault beyond the model never becomes a result at all — it ends the turn — so the
+    /// exception arm here only ever sees a fault the loop kept.
+    /// </remarks>
+    private static JsonNode? ResultOf(FunctionResultContent result, JsonNode? answer)
+        => result.Exception is { } failure
+            ? JsonValue.Create(failure.GetType().Name + ": " + failure.Message)
+            : answer;
 
     /// <summary>Builds one chunk of a stream.</summary>
     /// <param name="id">The id every chunk of one reply shares.</param>

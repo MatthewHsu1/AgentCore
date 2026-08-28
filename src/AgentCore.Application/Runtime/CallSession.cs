@@ -7,6 +7,7 @@ using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Policy;
 using AgentCore.Application.Ports;
 using AgentCore.Application.State;
+using AgentCore.Application.Tools;
 using AgentCore.Application.Transcript;
 using AgentCore.Domain;
 using AgentCore.Domain.Audit;
@@ -1020,24 +1021,26 @@ public sealed class CallSession : IConversationPort
     /// <param name="messages">The messages the agent produced, oldest first.</param>
     private void ApplyToolResults(IEnumerable<ChatMessage> messages)
     {
-        // The result carries the call id, and the call carries the name. The name is the declared
-        // tool id, because the compile table names every function after the tools: entry it built.
-        Dictionary<string, string> toolIdByCall = new(StringComparer.Ordinal);
+        // The name a call carries is the declared tool id, because the compile table names every
+        // function after the tools: entry it built.
+        ToolCallNames names = new();
 
         foreach (var message in messages)
         {
             foreach (var content in message.Contents)
             {
-                if (content is FunctionCallContent call)
+                switch (content)
                 {
-                    toolIdByCall[call.CallId] = call.Name;
-                    continue;
-                }
+                    case FunctionCallContent call:
+                        names.Called(call);
+                        break;
 
-                if (content is FunctionResultContent result
-                    && toolIdByCall.TryGetValue(result.CallId, out var toolId))
-                {
-                    ToolStateWriter.Apply(State, toolId, ToolResultJson.ToNode(result.Result));
+                    case FunctionResultContent result when names.Of(result) is { } toolId:
+                        ToolStateWriter.Apply(State, toolId, ToolResultJson.ToNode(result.Result));
+                        break;
+
+                    default:
+                        break;
                 }
             }
         }
