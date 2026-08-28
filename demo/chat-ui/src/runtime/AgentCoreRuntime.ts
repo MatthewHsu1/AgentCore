@@ -10,6 +10,7 @@ import {
   runTurn,
   wireMessages,
   type Session,
+  type ToolPart,
   type TurnState,
   type WireMessage,
 } from "./transport.ts";
@@ -68,8 +69,9 @@ function newTurnClock() {
         length = state.text.length;
         totalChunks += 1;
       }
-      // Every drawing is one `present` call that ran server-side.
-      toolCallCount = state.data.length;
+      // The wire now reports every tool the host ran, drawing tools included, so this is the count
+      // itself rather than the drawings it used to be estimated from.
+      toolCallCount = state.tools.length;
     },
 
     finish(): MessageTiming {
@@ -89,6 +91,25 @@ function newTurnClock() {
           }),
       };
     },
+  };
+}
+
+/**
+ * Turns one reported tool into the content part assistant-ui draws it as.
+ *
+ * `result` is left off entirely while the tool is still running, because that absence is what the
+ * kit reads as "running" — an empty string there would draw a finished tool that answered nothing.
+ */
+function toolContent(tool: ToolPart) {
+  return {
+    type: "tool-call" as const,
+    toolCallId: tool.callId,
+    toolName: tool.name,
+    args: tool.arguments,
+    argsText: JSON.stringify(tool.arguments, null, 2),
+    ...(tool.result !== undefined
+      ? { result: tool.result, isError: tool.failed === true }
+      : {}),
   };
 }
 
@@ -115,13 +136,30 @@ export function useAgentCoreRuntime(endpoint: string) {
 
       const clock = newTurnClock();
       let content: ChatModelRunResult["content"] = [];
+      let stage: ChatModelRunResult["metadata"] = undefined;
 
       for await (const state of turn) {
         clock.observe(state);
 
+        // `metadata.custom` is the one slot on a message that is the app's to define. Nothing on
+        // screen reads the stage or `isTerminal` — the caller is never shown which stage answered
+        // them — but both stay here because they cost one field each and the alternative is
+        // re-plumbing the runtime the day something does want them.
+        stage = {
+          custom: {
+            stage: state.stage,
+            isTerminal: state.isTerminal,
+            // Absent today. Carried anyway so a live handoff is a server change on its own.
+            speaker: state.speaker,
+          },
+        };
+
         // Every yield replaces the message content rather than adding to it, so each one repeats
         // everything drawn so far. Drop the repeat and a later text-only yield erases the drawing.
+        // Tools first, and then the words: the host runs every tool before it speaks, so this is
+        // the order the turn actually happened in.
         content = [
+          ...state.tools.map(toolContent),
           ...(state.text.length > 0
             ? [{ type: "text" as const, text: state.text }]
             : []),
@@ -131,13 +169,13 @@ export function useAgentCoreRuntime(endpoint: string) {
             data: part.data,
           })),
         ];
-        yield { content };
+        yield { content, metadata: stage };
       }
 
       // A final yield carrying the same content, so the timing lands on the finished message
       // without blanking what was already drawn — `content` is optional on the result, but
       // omitting it here would make this yield the message's last word on its own content.
-      yield { content, metadata: { timing: clock.finish() } };
+      yield { content, metadata: { ...stage, timing: clock.finish() } };
     },
   };
 

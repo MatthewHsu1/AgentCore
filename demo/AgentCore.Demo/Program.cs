@@ -8,10 +8,27 @@ var app = builder.Build();
 
 app.MapAgentCoreHost();
 
+// Which sites may frame the widget.
+//
+// Configure with, e.g.:
+//   "Widget": { "AllowedOrigins": [ "https://exmaple.com" ] }
+var widgetOrigins = builder.Configuration.GetSection("Widget:AllowedOrigins").Get<string[]>();
+var frameAncestors = widgetOrigins is { Length: > 0 }
+    ? string.Join(' ', widgetOrigins)
+    : "'none'";
+
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/chat"))
+    {
+        context.Response.Headers["Content-Security-Policy"] = $"frame-ancestors {frameAncestors}";
+    }
+
+    await next();
+});
+
 app.UseStaticFiles();
 
-// Two things in this pattern are load-bearing, both measured rather than assumed.
-//
 // nonfile: without it, routing selects this fallback for /chat/assets/index.js, the static file
 // middleware stands down because an endpoint is already selected, and every script and stylesheet
 // is answered with the page. The constraint makes the fallback decline anything whose last segment

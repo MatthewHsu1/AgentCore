@@ -347,3 +347,126 @@ test("a data part survives a later text-only yield", async () => {
   assert.equal(last.text, "and that is why");
   assert.deepEqual(last.data, [{ name: "chart", data: { title: "Q3" } }]);
 });
+
+// -------------------------------------------------------------------------------------------------
+// Tool calls. The host runs the tool, so both halves arrive as facts and neither asks for anything.
+// -------------------------------------------------------------------------------------------------
+
+/** Runs one turn over the events given and answers every state it yielded. */
+async function states(events: string[]) {
+  const collected = [];
+  for await (const state of runTurn({
+    endpoint: "/v1/chat/completions",
+    session: { current: null },
+    messages: [{ role: "user", content: "look it up" }],
+    abortSignal: new AbortController().signal,
+    fetch: scripted([streaming(events)]).fetch,
+  })) {
+    collected.push(state);
+  }
+
+  return collected;
+}
+
+test("runTurn yields a tool call before its result arrives", async () => {
+  // The point of showing a tool at all is showing it while it runs, so the call half must reach the
+  // screen on its own rather than waiting to be paired with a result.
+  const collected = await states([
+    'data: {"agentcore_tool":{"call_id":"c1","name":"read_records","phase":"call","arguments":{"what":"revenue"}}}\n\n',
+    "data: [DONE]\n\n",
+  ]);
+
+  const last = collected[collected.length - 1];
+  assert.deepEqual(last.tools, [
+    { callId: "c1", name: "read_records", arguments: { what: "revenue" } },
+  ]);
+});
+
+test("runTurn folds a tool result onto the call it answers", async () => {
+  const collected = await states([
+    'data: {"agentcore_tool":{"call_id":"c1","name":"read_records","phase":"call","arguments":{"what":"revenue"}}}\n\n',
+    'data: {"agentcore_tool":{"call_id":"c1","name":"read_records","phase":"result","result":"42 rows","failed":false}}\n\n',
+    'data: {"choices":[{"delta":{"content":"there are 42."}}]}\n\n',
+    "data: [DONE]\n\n",
+  ]);
+
+  const last = collected[collected.length - 1];
+  assert.equal(last.text, "there are 42.");
+  assert.deepEqual(last.tools, [
+    {
+      callId: "c1",
+      name: "read_records",
+      arguments: { what: "revenue" },
+      result: "42 rows",
+      failed: false,
+    },
+  ]);
+});
+
+test("runTurn keeps a failed tool marked as failed", async () => {
+  const collected = await states([
+    'data: {"agentcore_tool":{"call_id":"c1","name":"read_records","phase":"call","arguments":{}}}\n\n',
+    'data: {"agentcore_tool":{"call_id":"c1","name":"read_records","phase":"result","result":"the table is gone","failed":true}}\n\n',
+    "data: [DONE]\n\n",
+  ]);
+
+  const last = collected[collected.length - 1];
+  assert.equal(last.tools[0]?.failed, true);
+  assert.equal(last.tools[0]?.result, "the table is gone");
+});
+
+test("runTurn keeps two tool calls apart and pairs each with its own result", async () => {
+  const collected = await states([
+    'data: {"agentcore_tool":{"call_id":"c1","name":"read_records","phase":"call","arguments":{}}}\n\n',
+    'data: {"agentcore_tool":{"call_id":"c2","name":"aggregate_records","phase":"call","arguments":{}}}\n\n',
+    'data: {"agentcore_tool":{"call_id":"c2","name":"aggregate_records","phase":"result","result":"second","failed":false}}\n\n',
+    'data: {"agentcore_tool":{"call_id":"c1","name":"read_records","phase":"result","result":"first","failed":false}}\n\n',
+    "data: [DONE]\n\n",
+  ]);
+
+  const last = collected[collected.length - 1];
+  assert.deepEqual(
+    last.tools.map((tool) => [tool.callId, tool.result]),
+    [
+      ["c1", "first"],
+      ["c2", "second"],
+    ],
+  );
+});
+
+test("a tool survives a later text-only yield", async () => {
+  // Same rule as a drawing: the runtime replaces message content on every yield, so a state that
+  // forgot the tool would blank it the moment the model spoke.
+  const collected = await states([
+    'data: {"agentcore_tool":{"call_id":"c1","name":"read_records","phase":"call","arguments":{}}}\n\n',
+    'data: {"choices":[{"delta":{"content":"one moment"}}]}\n\n',
+    "data: [DONE]\n\n",
+  ]);
+
+  const last = collected[collected.length - 1];
+  assert.equal(last.text, "one moment");
+  assert.equal(last.tools.length, 1);
+});
+
+test("a result for a call that never arrived is kept rather than dropped", async () => {
+  // It should not happen. If it ever does, showing the answer with no question beats showing
+  // nothing at all and leaving the caller wondering what the wait was for.
+  const collected = await states([
+    'data: {"agentcore_tool":{"call_id":"c9","name":"read_records","phase":"result","result":"orphan","failed":false}}\n\n',
+    "data: [DONE]\n\n",
+  ]);
+
+  const last = collected[collected.length - 1];
+  assert.deepEqual(last.tools, [
+    { callId: "c9", name: "read_records", arguments: {}, result: "orphan", failed: false },
+  ]);
+});
+
+test("a turn that calls no tool yields an empty tool list", async () => {
+  const collected = await states([
+    'data: {"choices":[{"delta":{"content":"hello"}}]}\n\n',
+    "data: [DONE]\n\n",
+  ]);
+
+  assert.deepEqual(collected[collected.length - 1].tools, []);
+});

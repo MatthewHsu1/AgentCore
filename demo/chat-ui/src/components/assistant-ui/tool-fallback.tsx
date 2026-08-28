@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { ToolError } from "@/components/elements/tool-error";
+import { useActionBarReload } from "@assistant-ui/core/react";
 
 const ANIMATION_DURATION = 200;
 
@@ -277,11 +279,15 @@ function ToolFallbackResult({
 
 function ToolFallbackError({
   status,
+  toolName,
   className,
   ...props
 }: React.ComponentProps<"div"> & {
   status?: ToolCallMessagePartStatus;
+  toolName?: string;
 }) {
+  const { disabled, reload } = useActionBarReload();
+
   if (status?.type !== "incomplete") return null;
 
   const error = status.error;
@@ -294,21 +300,41 @@ function ToolFallbackError({
   if (!errorText) return null;
 
   const isCancelled = status.reason === "cancelled";
-  const headerText = isCancelled ? "Cancelled reason:" : "Error:";
+
+  // A cancelled tool is not a failure, and dressing it as one — red, with a retry — would tell the
+  // caller something broke when what actually happened is that they stopped it.
+  if (isCancelled) {
+    return (
+      <div
+        data-slot="tool-fallback-error"
+        className={cn("aui-tool-fallback-error", className)}
+        {...props}
+      >
+        <p className="aui-tool-fallback-error-header text-muted-foreground font-semibold">
+          Cancelled reason:
+        </p>
+        <p className="aui-tool-fallback-error-reason text-muted-foreground">
+          {errorText}
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div
+    <ToolError
       data-slot="tool-fallback-error"
-      className={cn("aui-tool-fallback-error", className)}
+      className={cn("aui-tool-fallback-error max-w-none", className)}
+      name={toolName ?? "tool"}
+      // AgentCore reports no target for a failed call, and no attempt count either: it does not
+      // retry tools, so every failure is the first and only one. Saying "1 of 1" is the truth.
+      target={status.reason}
+      message={errorText}
+      attempt={1}
+      maxAttempts={1}
+      retrying={false}
+      {...(disabled ? {} : { onRetry: reload })}
       {...props}
-    >
-      <p className="aui-tool-fallback-error-header text-muted-foreground font-semibold">
-        {headerText}
-      </p>
-      <p className="aui-tool-fallback-error-reason text-muted-foreground">
-        {errorText}
-      </p>
-    </div>
+    />
   );
 }
 
@@ -553,7 +579,7 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
     <ToolFallbackRoot open={open} onOpenChange={setOpen}>
       <ToolFallbackTrigger toolName={toolName} status={status} />
       <ToolFallbackContent>
-        <ToolFallbackError status={status} />
+        <ToolFallbackError status={status} toolName={toolName} />
         <ToolFallbackArgs
           argsText={argsText}
           className={cn(isCancelled && "opacity-60")}

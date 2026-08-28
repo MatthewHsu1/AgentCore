@@ -10,6 +10,15 @@
 /** The header that names the call, on the request and on the answer. */
 export const SessionHeader = "X-AgentCore-Session";
 
+/**
+ * The header naming the stage the turn speaks in.
+ *
+ * It arrives with the response headers, before the first token, which is the only reason the stage
+ * can be shown while the turn is still running: the `agentcore` block that carries `stage_after`
+ * rides the *last* chunk, so it says where the machine ended up, never where it is.
+ */
+export const StageHeader = "X-AgentCore-Stage";
+
 /** The prefix every server-sent event carries. */
 const DataPrefix = "data: ";
 
@@ -22,16 +31,77 @@ export type WireMessage = {
   readonly content: string;
 };
 
+/**
+ * Who produced a message, when that is not simply "the agent".
+ *
+ * Nothing sends this yet. It is declared here so the browser already has somewhere to put a human
+ * rep the day AgentCore can hand a conversation to one: the wire, the runtime and the message
+ * metadata are the three places that would otherwise all need changing at once, under time
+ * pressure, while a customer is waiting on the other end of a live handoff.
+ *
+ * The contract AgentCore would emit, beside the OpenAI shape and alongside `agentcore`:
+ *
+ *     "agentcore_speaker": { "kind": "human", "name": "Dana R.", "detail": "Support" }
+ */
+export type Speaker = {
+  /** `agent` is the model, `human` a real person, `system` the host speaking for itself. */
+  readonly kind: "agent" | "human" | "system";
+  readonly name: string;
+  /** A role, team, or anything else worth showing under the name. Optional. */
+  readonly detail?: string;
+};
+
 /** One thing the host asked the browser to draw. */
 export type RenderPart = {
   readonly name: string;
   readonly data: unknown;
 };
 
+/** Anything `JSON.parse` can produce. */
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly JsonValue[]
+  | { readonly [key: string]: JsonValue };
+
+/** A JSON object, which is the only shape a tool's arguments ever take. */
+export type JsonObject = { readonly [key: string]: JsonValue };
+
+/**
+ * One tool the host ran, with its result once it has one.
+ *
+ * Both halves of a call arrive as separate chunks and are folded together here, because the screen
+ * wants one row per tool that fills in, and not two rows that have to be matched up by whoever draws
+ * them. A part with no `result` yet is a tool still running.
+ *
+ * This is a *report* and never a request. AgentCore owns the tool loop, so nothing the browser does
+ * with this can make a tool run, and the OpenAI `tool_calls` field — which does mean "you run this"
+ * — is deliberately not what carries it.
+ */
+export type ToolPart = {
+  readonly callId: string;
+  readonly name: string;
+  readonly arguments: JsonObject;
+  /** What the tool answered. Absent while it is still running. */
+  readonly result?: string;
+  /** Whether the tool failed. Absent while it is still running. */
+  readonly failed?: boolean;
+};
+
 /** Everything one turn has produced so far. */
 export type TurnState = {
   readonly text: string;
   readonly data: readonly RenderPart[];
+  /** Every tool this turn has called, in call order, each with its result once it has one. */
+  readonly tools: readonly ToolPart[];
+  /** The stage the pipeline is in: the turn's own stage, then the stage it moved to at the end. */
+  readonly stage: string | null;
+  /** Whether the stage the turn moved to ends the call. Only ever true on the final state. */
+  readonly isTerminal: boolean;
+  /** Who is speaking, when the host says. `null` means the agent, which is the only case today. */
+  readonly speaker: Speaker | null;
 };
 
 /** The id of the open call, held for the life of the tab. */
@@ -54,15 +124,29 @@ export type TurnOptions = {
 /** What the endpoint adds beside the OpenAI shape on the last chunk of a stream. */
 type TurnInfo = {
   session?: string;
+  stage_before?: string;
   stage_after?: string;
   is_terminal?: boolean;
+};
+
+/** One half of one tool call, as the endpoint writes it. */
+type ToolFrame = {
+  call_id?: string;
+  name?: string;
+  phase?: string;
+  /** Typed rather than `unknown` because it comes off `JSON.parse` of a field the host writes as an object. */
+  arguments?: JsonObject;
+  result?: string;
+  failed?: boolean;
 };
 
 /** One chunk of a streamed answer. */
 type StreamChunk = {
   choices?: { delta?: { content?: string }; finish_reason?: string | null }[];
   agentcore?: TurnInfo;
+  agentcore_tool?: ToolFrame;
   agentcore_data?: RenderPart;
+  agentcore_speaker?: Speaker;
 };
 
 /** The body of one refusal. */
@@ -149,6 +233,49 @@ function post(options: TurnOptions, session: string | null): Promise<Response> {
 }
 
 /**
+ * Folds one tool frame into the list the state carries.
+ *
+ * @param tools What the turn has called so far.
+ * @param frame The half that just arrived.
+ * @returns A new list. Never the one passed in: the state yielded before this is read after it, so
+ * a list mutated in place would change under a consumer that already has it.
+ */
+export function foldTool(
+  tools: readonly ToolPart[],
+  frame: ToolFrame,
+): readonly ToolPart[] {
+  const callId = frame.call_id;
+  if (!callId) {
+    return tools;
+  }
+
+  const name = frame.name ?? callId;
+
+  if (frame.phase !== "result") {
+    return [...tools, { callId, name, arguments: frame.arguments ?? {} }];
+  }
+
+  const answered: ToolPart = {
+    callId,
+    name,
+    arguments: {},
+    result: frame.result ?? "",
+    failed: frame.failed ?? false,
+  };
+
+  const index = tools.findIndex((tool) => tool.callId === callId);
+  if (index < 0) {
+    // A result with no call before it should not happen. Showing the answer with no question still
+    // beats showing nothing and leaving the caller wondering what the wait was for.
+    return [...tools, answered];
+  }
+
+  const merged = [...tools];
+  merged[index] = { ...tools[index], ...answered, arguments: tools[index].arguments };
+  return merged;
+}
+
+/**
  * Runs one turn and yields the reply as it grows.
  *
  * Each yield is the whole reply so far rather than the newest piece, because that is what the
@@ -191,10 +318,16 @@ export async function* runTurn(options: TurnOptions): AsyncGenerator<TurnState> 
     throw new Error("the host answered with no body, so there is nothing to read.");
   }
 
+  // Named before the first token, so the very first yield already knows the stage.
+  let stage = response.headers.get(StageHeader);
+  let isTerminal = false;
+  let speaker: Speaker | null = null;
+
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
   let pending = "";
   let text = "";
   let data: RenderPart[] = [];
+  let tools: readonly ToolPart[] = [];
 
   try {
     for (; ;) {
@@ -221,18 +354,35 @@ export async function* runTurn(options: TurnOptions): AsyncGenerator<TurnState> 
           session.current = null;
         }
 
+        // The last chunk is the first place that knows where the machine moved to.
+        // Sticky: a handoff names the speaker once, and every chunk after it belongs to them.
+        speaker = chunk.agentcore_speaker ?? speaker;
+
+        const info = chunk.agentcore;
+        if (info) {
+          stage = info.stage_after ?? stage;
+          isTerminal = info.is_terminal ?? isTerminal;
+          yield { text, data, tools, stage, isTerminal, speaker };
+        }
+
         const rendered = chunk.agentcore_data;
         if (rendered) {
           // A new array each time: the yielded state is read after the yield, so the consumer must
           // never see a list this loop keeps changing underneath it.
           data = [...data, rendered];
-          yield { text, data };
+          yield { text, data, tools, stage, isTerminal, speaker };
+        }
+
+        const tool = chunk.agentcore_tool;
+        if (tool) {
+          tools = foldTool(tools, tool);
+          yield { text, data, tools, stage, isTerminal, speaker };
         }
 
         const delta = chunk.choices?.[0]?.delta?.content;
         if (delta) {
           text += delta;
-          yield { text, data };
+          yield { text, data, tools, stage, isTerminal, speaker };
         }
       }
     }

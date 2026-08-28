@@ -46,11 +46,15 @@ import {
 // `@assistant-ui/react` re-exports most hooks but not this one, so it comes from the core package
 // the app already depends on directly.
 import { useActionBarReload } from "@assistant-ui/core/react";
+import { TypingIndicator } from "@/components/elements/typing-indicator";
+import { ComposerDraft } from "@/components/assistant-ui/draft";
+import { Regenerate } from "@/components/assistant-ui/regenerate";
+import { ThreadMessageSearch } from "@/components/assistant-ui/search";
+import { MessageSpeaker } from "@/components/assistant-ui/speaker";
 import { DayDivider } from "@/components/elements/day-separator";
 import { ErrorState } from "@/components/elements/error-state";
 import { MessageTiming as MessageTimingStats } from "@/components/elements/message-timing";
 import { StoppedRun } from "@/components/elements/stopped-run";
-import { TypingIndicator } from "@/components/elements/typing-indicator";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -62,7 +66,6 @@ import {
   MicIcon,
   MoreHorizontalIcon,
   PencilIcon,
-  RefreshCwIcon,
   SquareIcon,
 } from "lucide-react";
 import {
@@ -196,6 +199,10 @@ const ThreadRoot: FC<{ isEmpty: boolean }> = ({ isEmpty }) => {
             )}
           >
             <ThreadScrollToBottom />
+            <AuiIf condition={(s) => s.thread.messages.length > 0}>
+              <ThreadMessageSearch />
+            </AuiIf>
+            <ComposerDraft />
             <ThreadFollowupSuggestions />
             <Composer />
             <AuiIf condition={(s) => isNewChatView(s) && s.composer.isEmpty}>
@@ -537,6 +544,7 @@ const AssistantMessage: FC = () => {
         data-slot="aui_assistant-message-content"
         className="text-foreground px-2 leading-relaxed wrap-break-word"
       >
+        <MessageSpeaker />
         <MessagePrimitive.GroupedParts
           groupBy={groupPartByType({
             reasoning: ["group-chainOfThought", "group-reasoning"],
@@ -598,6 +606,8 @@ const AssistantMessage: FC = () => {
                   </div>
                 );
               case "indicator":
+                // Bare dots and never a label. The one thing this host could name here is the
+                // pipeline stage, and it is deliberately never shown to the caller.
                 return (
                   <TypingIndicator
                     data-slot="aui_assistant-message-indicator"
@@ -643,11 +653,7 @@ const AssistantActionBar: FC = () => {
           </AuiIf>
         </TooltipIconButton>
       </ActionBarPrimitive.Copy>
-      <ActionBarPrimitive.Reload asChild>
-        <TooltipIconButton tooltip="Refresh">
-          <RefreshCwIcon />
-        </TooltipIconButton>
-      </ActionBarPrimitive.Reload>
+      <Regenerate />
       <ActionBarMorePrimitive.Root>
         <ActionBarMorePrimitive.Trigger asChild>
           <TooltipIconButton
