@@ -88,7 +88,7 @@ public sealed class StoreNamingNeutralityTests
     {
         var channel = new CapturingSearchChannel([Point()]);
 
-        await Store(channel, analyzer: new IdentifierCodeAnalyzer())
+        await Store(channel, analyzer: new FixedTermAnalyzer())
             .SearchAsync("the screen says e33", TestContext.Current.CancellationToken);
 
         Assert.Equal("content", Assert.Single(channel.LexicalKeys));
@@ -101,7 +101,7 @@ public sealed class StoreNamingNeutralityTests
         // filter on a key this collection has no index for and drop every row.
         var channel = new CapturingSearchChannel([Point()]);
 
-        await Store(channel, fields: Foreign with { Lexical = null }, analyzer: new IdentifierCodeAnalyzer())
+        await Store(channel, fields: Foreign with { Lexical = null }, analyzer: new FixedTermAnalyzer())
             .SearchAsync("the screen says e33", TestContext.Current.CancellationToken);
 
         Assert.Empty(channel.LexicalKeys);
@@ -199,6 +199,21 @@ public sealed class StoreNamingNeutralityTests
 
     private static KnowledgeScope Scope(string key, string value)
         => new() { Facets = new Dictionary<string, string>(StringComparer.Ordinal) { [key] = value } };
+
+    /// <summary>
+    /// Requires one fixed term, whatever the query says.
+    /// </summary>
+    /// <remarks>
+    /// The lexical leg needs SOME analyzer to fire, and AgentCore ships only <c>none</c>, which
+    /// never fires. A test that borrowed a cleverer one would be asserting that analyzer's rules
+    /// as well as the store's naming. This one has no rules to assert.
+    /// </remarks>
+    private sealed class FixedTermAnalyzer : IKnowledgeQueryAnalyzer
+    {
+        public string Name => "fixed-term";
+
+        public IReadOnlyList<string> RequiredTerms(string query) => ["e33"];
+    }
 
     private static QdrantKnowledgeStore Store(
         CapturingSearchChannel channel,

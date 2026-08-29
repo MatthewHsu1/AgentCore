@@ -179,7 +179,7 @@ internal static class ExampleDocument
               field: see_also
               lookup: uuid5
               prefix: "kb:"
-            analyzer: identifier-codes
+            analyzer: none
             citation: source-locator
 
         evaluation:
@@ -581,7 +581,7 @@ internal static class ExampleDocument
                 "lookup": "uuid5",
                 "prefix": "kb:"
               },
-              "analyzer": "identifier-codes",
+              "analyzer": "none",
               "citation": "source-locator"
             }
           },

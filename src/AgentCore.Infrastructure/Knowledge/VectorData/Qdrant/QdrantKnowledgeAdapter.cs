@@ -42,8 +42,7 @@ public sealed class QdrantKnowledgeAdapter : IKnowledgeStoreAdapter
 
     private readonly IEmbeddingGenerator<string, Embedding<float>>? _embeddings;
 
-    private IReadOnlyList<IKnowledgeQueryAnalyzer> _analyzers =
-        [new IdentifierCodeAnalyzer(), new NoQueryAnalyzer()];
+    private IReadOnlyList<IKnowledgeQueryAnalyzer> _analyzers = [new NoQueryAnalyzer()];
 
     private IKnowledgePointMapper[] _mappers = [];
 

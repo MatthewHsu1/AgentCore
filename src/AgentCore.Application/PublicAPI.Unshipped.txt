@@ -708,10 +708,6 @@ AgentCore.Application.Knowledge.IKnowledgePointMapper.Name.get -> string!
 AgentCore.Application.Knowledge.IKnowledgeQueryAnalyzer
 AgentCore.Application.Knowledge.IKnowledgeQueryAnalyzer.Name.get -> string!
 AgentCore.Application.Knowledge.IKnowledgeQueryAnalyzer.RequiredTerms(string! query) -> System.Collections.Generic.IReadOnlyList<string!>!
-AgentCore.Application.Knowledge.IdentifierCodeAnalyzer
-AgentCore.Application.Knowledge.IdentifierCodeAnalyzer.IdentifierCodeAnalyzer() -> void
-AgentCore.Application.Knowledge.IdentifierCodeAnalyzer.Name.get -> string!
-AgentCore.Application.Knowledge.IdentifierCodeAnalyzer.RequiredTerms(string! query) -> System.Collections.Generic.IReadOnlyList<string!>!
 AgentCore.Application.Knowledge.KnowledgeCitationFormatterFactory
 AgentCore.Application.Knowledge.KnowledgePoint
 AgentCore.Application.Knowledge.KnowledgePoint.<Clone>$() -> AgentCore.Application.Knowledge.KnowledgePoint!
@@ -1076,7 +1072,6 @@ const AgentCore.Application.Evaluation.ModerationVerdict.ModerationVerdictName =
 const AgentCore.Application.Evaluation.ModerationVerdict.NothingFlagged = "the endpoint flagged no category." -> string!
 const AgentCore.Application.Evaluation.PromptModerator.ModerationEvaluatorName = "moderation" -> string!
 const AgentCore.Application.Evaluation.RetrievedDocumentsContext.RetrievedDocumentsContextName = "Retrieved Documents" -> string!
-const AgentCore.Application.Knowledge.IdentifierCodeAnalyzer.AnalyzerName = "identifier-codes" -> string!
 const AgentCore.Application.Knowledge.NoQueryAnalyzer.AnalyzerName = "none" -> string!
 const AgentCore.Application.Knowledge.SourceLocatorCitationFormatter.FormatterName = "source-locator" -> string!
 const AgentCore.Application.Policy.StagePolicy.TurnEndedTrigger = "TurnEnded" -> string!

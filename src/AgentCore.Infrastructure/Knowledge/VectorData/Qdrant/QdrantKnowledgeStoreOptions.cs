@@ -35,7 +35,7 @@ internal sealed record QdrantKnowledgeStoreOptions
     public Guid LinkNamespace { get; init; } = Uuid5PointId.Namespace(KnowledgeLinksConfiguration.DefaultNamespace);
 
     /// <summary>Gets what picks the terms a result must contain.</summary>
-    public IKnowledgeQueryAnalyzer Analyzer { get; init; } = new IdentifierCodeAnalyzer();
+    public IKnowledgeQueryAnalyzer Analyzer { get; init; } = new NoQueryAnalyzer();
 
     /// <summary>Gets how many fused results to return. This is the deployment's ceiling, not an agent's.</summary>
     public int Limit { get; init; } = 5;

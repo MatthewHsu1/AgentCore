@@ -337,12 +337,17 @@ providers:
     # proves the derivation really lands on the point that holds it. Every mode reads fields.id, so
     # a links: block without one is refused.
 
-    analyzer: identifier-codes
-    # Picks the terms a result MUST contain, on top of vector similarity. The default is `none`:
-    # require nothing, rank by vector alone. `identifier-codes` treats a short letter run followed
-    # by a short digit run (e33, a17) as mandatory — a real shape in fault codes and part numbers,
-    # but ONE corpus's shape, and a term wrongly made mandatory drops good answers silently. Name
-    # it on purpose, or register your own with options.UseKnowledgeQueryAnalyzers.
+    analyzer: none
+    # Picks the terms a result MUST contain, on top of vector similarity. `none` is the only
+    # analyzer AgentCore ships, and it is what this line names: require nothing, rank by vector
+    # alone.
+    #
+    # Anything cleverer is a claim about ONE corpus's vocabulary — that a short letter run followed
+    # by a short digit run is a fault code, say. That is true of some collections and false of
+    # others, and a term wrongly made mandatory drops good answers with no error and no log line.
+    # So the framework holds no such rule, for the same reason it holds no field names. Write your
+    # own IKnowledgeQueryAnalyzer, register it with options.UseKnowledgeQueryAnalyzers, and name it
+    # here.
 
     citation: source-locator
     # How each card's source label is worded, for agents that declare citations: true. The shipped

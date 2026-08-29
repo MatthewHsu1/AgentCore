@@ -813,7 +813,6 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
                 TestContext.Current.CancellationToken));
 
         Assert.Contains("clause-numbers", failure.Message, StringComparison.Ordinal);
-        Assert.Contains("identifier-codes", failure.Message, StringComparison.Ordinal);
         Assert.Contains("none", failure.Message, StringComparison.Ordinal);
     }
 
