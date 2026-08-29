@@ -15,20 +15,24 @@ internal sealed record QdrantKnowledgeStoreOptions
     /// <summary>Gets the vector name every query searches, or <see langword="null"/> for the single anonymous vector.</summary>
     public string? VectorName { get; init; }
 
-    /// <summary>Gets how a card's payload is named.</summary>
-    public KnowledgeFieldsConfiguration Fields { get; init; } = new();
+    /// <summary>Gets how a card's payload is named, or <see langword="null"/> when a mapper owns the shape.</summary>
+    public KnowledgeFieldsConfiguration? Fields { get; init; }
 
     /// <summary>Gets what turns one point into a card, or <see langword="null"/> for the <c>fields:</c> mapping.</summary>
     public IKnowledgePointMapper? Mapper { get; init; }
 
-    /// <summary>Gets the payload path each facet key becomes, with <c>{key}</c> for the key.</summary>
-    public string ScopeTemplate { get; init; } = KnowledgeScopeConfiguration.DefaultTemplate;
+    /// <summary>
+    /// Gets the payload path each facet key becomes, with <c>{key}</c> for the key, or
+    /// <see langword="null"/> when the document names none. There is no default: a template is a
+    /// claim about one collection's layout, and an unscoped deployment never needs one.
+    /// </summary>
+    public string? ScopeTemplate { get; init; }
 
     /// <summary>Gets how links between cards are read and followed, or <see langword="null"/> for no expansion.</summary>
     public KnowledgeLinksConfiguration? Links { get; init; }
 
     /// <summary>Gets the uuid5 namespace, already resolved from <see cref="KnowledgeLinksConfiguration.Namespace"/>.</summary>
-    public Guid LinkNamespace { get; init; } = KbPointId.Namespace(KnowledgeLinksConfiguration.DefaultNamespace);
+    public Guid LinkNamespace { get; init; } = Uuid5PointId.Namespace(KnowledgeLinksConfiguration.DefaultNamespace);
 
     /// <summary>Gets what picks the terms a result must contain.</summary>
     public IKnowledgeQueryAnalyzer Analyzer { get; init; } = new IdentifierCodeAnalyzer();

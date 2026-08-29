@@ -61,6 +61,8 @@ AgentCore.Application.Call.CallSpeechPairing
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.AgentCompilationContext(AgentCore.Application.Ports.IChatClientFactory! chatClients) -> void
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.ChatClients.get -> AgentCore.Application.Ports.IChatClientFactory!
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Citations.get -> AgentCore.Application.Knowledge.IKnowledgeCitationFormatter?
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Citations.init -> void
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Guards.get -> AgentCore.Application.Configuration.Validation.IGuardEvaluator?
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Guards.init -> void
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Knowledge.get -> AgentCore.Application.Ports.IKnowledgeRetrievalPort?
@@ -334,14 +336,11 @@ AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.Method.get -
 AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.Method.init -> void
 AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.Url.get -> string!
 AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.Url.init -> void
-AgentCore.Application.Configuration.Schema.KnowledgeMode
-AgentCore.Application.Configuration.Schema.KnowledgeMode.Prefetch = 0 -> AgentCore.Application.Configuration.Schema.KnowledgeMode
-AgentCore.Application.Configuration.Schema.KnowledgeMode.Tool = 1 -> AgentCore.Application.Configuration.Schema.KnowledgeMode
 AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration
 AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration!
 AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.Authority.get -> string?
 AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.Authority.init -> void
-AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.Body.get -> string!
+AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.Body.get -> string?
 AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.Body.init -> void
 AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.Equals(AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration? other) -> bool
 AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.Id.get -> string?
@@ -360,7 +359,7 @@ AgentCore.Application.Configuration.Schema.KnowledgeLinkLookup.Uuid5 = 0 -> Agen
 AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration
 AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration!
 AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration.Equals(AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration? other) -> bool
-AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration.Field.get -> string!
+AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration.Field.get -> string?
 AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration.Field.init -> void
 AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration.KnowledgeLinksConfiguration() -> void
 AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration.Lookup.get -> AgentCore.Application.Configuration.Schema.KnowledgeLinkLookup
@@ -369,22 +368,21 @@ AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration.Namespace
 AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration.Namespace.init -> void
 AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration.Prefix.get -> string!
 AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration.Prefix.init -> void
-AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration
-AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration!
-AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.Equals(AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration? other) -> bool
-AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.KnowledgeScopeConfiguration() -> void
-AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.Template.get -> string!
-AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.Template.init -> void
+AgentCore.Application.Configuration.Schema.KnowledgeMode
+AgentCore.Application.Configuration.Schema.KnowledgeMode.Prefetch = 0 -> AgentCore.Application.Configuration.Schema.KnowledgeMode
+AgentCore.Application.Configuration.Schema.KnowledgeMode.Tool = 1 -> AgentCore.Application.Configuration.Schema.KnowledgeMode
 AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration
 AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration!
 AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Analyzer.get -> string!
 AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Analyzer.init -> void
+AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Citation.get -> string!
+AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Citation.init -> void
 AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Collection.get -> string!
 AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Collection.init -> void
 AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Endpoint.get -> string?
 AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Endpoint.init -> void
 AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Equals(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration? other) -> bool
-AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Fields.get -> AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration!
+AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Fields.get -> AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration?
 AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Fields.init -> void
 AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Kind.get -> string!
 AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Kind.init -> void
@@ -399,6 +397,12 @@ AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.ScoreF
 AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.ScoreFloor.init -> void
 AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Vector.get -> string?
 AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Vector.init -> void
+AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration
+AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration!
+AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.Equals(AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.KnowledgeScopeConfiguration() -> void
+AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.Template.get -> string?
+AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.Template.init -> void
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.LlmProviderConfiguration!
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.As.get -> string!
@@ -695,6 +699,9 @@ AgentCore.Application.Evaluation.RetrievedDocumentsContext.Expected.get -> Syste
 AgentCore.Application.Evaluation.RetrievedDocumentsContext.Retrieved.get -> System.Collections.Generic.IReadOnlyList<string!>!
 AgentCore.Application.Evaluation.RetrievedDocumentsContext.RetrievedDocumentsContext(System.Collections.Generic.IEnumerable<string!>! expected, System.Collections.Generic.IEnumerable<string!>! retrieved) -> void
 AgentCore.Application.Knowledge.CompositeKnowledgeStoreFactory
+AgentCore.Application.Knowledge.IKnowledgeCitationFormatter
+AgentCore.Application.Knowledge.IKnowledgeCitationFormatter.Format(AgentCore.Domain.Knowledge.KnowledgeCard! card) -> string?
+AgentCore.Application.Knowledge.IKnowledgeCitationFormatter.Name.get -> string!
 AgentCore.Application.Knowledge.IKnowledgePointMapper
 AgentCore.Application.Knowledge.IKnowledgePointMapper.Map(AgentCore.Application.Knowledge.KnowledgePoint! point) -> AgentCore.Domain.Knowledge.KnowledgeCard?
 AgentCore.Application.Knowledge.IKnowledgePointMapper.Name.get -> string!
@@ -705,6 +712,7 @@ AgentCore.Application.Knowledge.IdentifierCodeAnalyzer
 AgentCore.Application.Knowledge.IdentifierCodeAnalyzer.IdentifierCodeAnalyzer() -> void
 AgentCore.Application.Knowledge.IdentifierCodeAnalyzer.Name.get -> string!
 AgentCore.Application.Knowledge.IdentifierCodeAnalyzer.RequiredTerms(string! query) -> System.Collections.Generic.IReadOnlyList<string!>!
+AgentCore.Application.Knowledge.KnowledgeCitationFormatterFactory
 AgentCore.Application.Knowledge.KnowledgePoint
 AgentCore.Application.Knowledge.KnowledgePoint.<Clone>$() -> AgentCore.Application.Knowledge.KnowledgePoint!
 AgentCore.Application.Knowledge.KnowledgePoint.Equals(AgentCore.Application.Knowledge.KnowledgePoint? other) -> bool
@@ -716,9 +724,13 @@ AgentCore.Application.Knowledge.KnowledgePoint.PointId.init -> void
 AgentCore.Application.Knowledge.KnowledgePoint.Score.get -> double?
 AgentCore.Application.Knowledge.KnowledgePoint.Score.init -> void
 AgentCore.Application.Knowledge.NoQueryAnalyzer
-AgentCore.Application.Knowledge.NoQueryAnalyzer.NoQueryAnalyzer() -> void
 AgentCore.Application.Knowledge.NoQueryAnalyzer.Name.get -> string!
+AgentCore.Application.Knowledge.NoQueryAnalyzer.NoQueryAnalyzer() -> void
 AgentCore.Application.Knowledge.NoQueryAnalyzer.RequiredTerms(string! query) -> System.Collections.Generic.IReadOnlyList<string!>!
+AgentCore.Application.Knowledge.SourceLocatorCitationFormatter
+AgentCore.Application.Knowledge.SourceLocatorCitationFormatter.Format(AgentCore.Domain.Knowledge.KnowledgeCard! card) -> string?
+AgentCore.Application.Knowledge.SourceLocatorCitationFormatter.Name.get -> string!
+AgentCore.Application.Knowledge.SourceLocatorCitationFormatter.SourceLocatorCitationFormatter() -> void
 AgentCore.Application.Llm.CompositeChatClientFactory
 AgentCore.Application.Llm.CompositeChatClientFactory.Dispose() -> void
 AgentCore.Application.Llm.CompositeChatClientFactory.GetChatClient(AgentCore.Application.Configuration.Schema.ModelReference? model) -> Microsoft.Extensions.AI.IChatClient!
@@ -996,8 +1008,8 @@ AgentCore.Application.Tools.ToolCallNames
 AgentCore.Application.Tools.ToolCallNames.Called(Microsoft.Extensions.AI.FunctionCallContent! call) -> void
 AgentCore.Application.Tools.ToolCallNames.Of(Microsoft.Extensions.AI.FunctionResultContent! result) -> string?
 AgentCore.Application.Tools.ToolCallNames.ToolCallNames() -> void
-AgentCore.Application.Tools.ToolResultJson
 AgentCore.Application.Tools.ToolErrorResult
+AgentCore.Application.Tools.ToolResultJson
 AgentCore.Application.Transcript.CallMessage
 AgentCore.Application.Transcript.CallMessage.<Clone>$() -> AgentCore.Application.Transcript.CallMessage!
 AgentCore.Application.Transcript.CallMessage.CallId.get -> string!
@@ -1043,20 +1055,10 @@ const AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.DefaultR
 const AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.SupportedApiVersion = "agentcore/v1" -> string!
 const AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.MaximumLimit = 20 -> int
 const AgentCore.Application.Configuration.Schema.EvaluationConfiguration.DefaultSampleRate = 0 -> double
-const AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.DefaultAuthority = "authority" -> string!
-const AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.DefaultBody = "body" -> string!
-const AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.DefaultId = "card_id" -> string!
-const AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.DefaultLexical = "text" -> string!
-const AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.DefaultLocator = "source.locator" -> string!
-const AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.DefaultSource = "source.ref" -> string!
-const AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration.DefaultField = "see_also" -> string!
 const AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration.DefaultNamespace = "url" -> string!
-const AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration.DefaultPrefix = "kb:" -> string!
-const AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.DefaultAnalyzer = "identifier-codes" -> string!
-const AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.DefaultCollection = "kb" -> string!
-const AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.DefaultKind = "qdrant" -> string!
+const AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.DefaultAnalyzer = "none" -> string!
+const AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.DefaultCitation = "source-locator" -> string!
 const AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.DefaultScoreFloor = 0.25 -> double
-const AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.DefaultTemplate = "facets.{key}" -> string!
 const AgentCore.Application.Configuration.Schema.ReservedStateSlots.CallDurationSeconds = "callDurationSeconds" -> string!
 const AgentCore.Application.Configuration.Schema.ReservedStateSlots.Stage = "stage" -> string!
 const AgentCore.Application.Configuration.Schema.ReservedStateSlots.TurnIndex = "turnIndex" -> string!
@@ -1076,6 +1078,7 @@ const AgentCore.Application.Evaluation.PromptModerator.ModerationEvaluatorName =
 const AgentCore.Application.Evaluation.RetrievedDocumentsContext.RetrievedDocumentsContextName = "Retrieved Documents" -> string!
 const AgentCore.Application.Knowledge.IdentifierCodeAnalyzer.AnalyzerName = "identifier-codes" -> string!
 const AgentCore.Application.Knowledge.NoQueryAnalyzer.AnalyzerName = "none" -> string!
+const AgentCore.Application.Knowledge.SourceLocatorCitationFormatter.FormatterName = "source-locator" -> string!
 const AgentCore.Application.Policy.StagePolicy.TurnEndedTrigger = "TurnEnded" -> string!
 const AgentCore.Application.Runtime.CallSession.EmptyReplyReason = "the run returned an empty reply, so the turn spoke the fallback." -> string!
 const AgentCore.Application.Runtime.CallSession.FallbackReply = "I am sorry. I could not finish that. Please say it again." -> string!
@@ -1409,6 +1412,7 @@ static AgentCore.Application.Evaluation.ModerationEvaluatorFactory.CreateAsync(A
 static AgentCore.Application.Evaluation.ModerationVerdict.TryRead(Microsoft.Extensions.AI.Evaluation.EvaluationResult! result, out AgentCore.Application.Evaluation.ModerationVerdict? verdict) -> bool
 static AgentCore.Application.Evaluation.PromptModerator.FromRegistry(AgentCore.Application.Evaluation.EvaluatorRegistry! registry) -> AgentCore.Application.Evaluation.PromptModerator?
 static AgentCore.Application.Knowledge.CompositeKnowledgeStoreFactory.CreateAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.IKnowledgeStoreAdapter!>! adapters, Microsoft.Extensions.AI.IEmbeddingGenerator<string!, Microsoft.Extensions.AI.Embedding<float>!>? embeddings, bool scopeDeclared, bool requireScope, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IKnowledgeRetrievalPort?>
+static AgentCore.Application.Knowledge.KnowledgeCitationFormatterFactory.Resolve(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Knowledge.IKnowledgeCitationFormatter!>? registered) -> AgentCore.Application.Knowledge.IKnowledgeCitationFormatter!
 static AgentCore.Application.Knowledge.KnowledgePoint.operator !=(AgentCore.Application.Knowledge.KnowledgePoint? left, AgentCore.Application.Knowledge.KnowledgePoint? right) -> bool
 static AgentCore.Application.Knowledge.KnowledgePoint.operator ==(AgentCore.Application.Knowledge.KnowledgePoint? left, AgentCore.Application.Knowledge.KnowledgePoint? right) -> bool
 static AgentCore.Application.Llm.CompositeChatClientFactory.CreateAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.IChatClientAdapter!>! adapters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Llm.CompositeChatClientFactory!>
@@ -1452,9 +1456,9 @@ static AgentCore.Application.Tools.Registry.ToolRegistryBuilder.BuildAsync(Syste
 static AgentCore.Application.Tools.Registry.ToolSourceContext.operator !=(AgentCore.Application.Tools.Registry.ToolSourceContext? left, AgentCore.Application.Tools.Registry.ToolSourceContext? right) -> bool
 static AgentCore.Application.Tools.Registry.ToolSourceContext.operator ==(AgentCore.Application.Tools.Registry.ToolSourceContext? left, AgentCore.Application.Tools.Registry.ToolSourceContext? right) -> bool
 static AgentCore.Application.Tools.Registry.ToolSourceError.Fail(string! message) -> AgentCore.Application.Configuration.Parsing.ConfigurationLoadException!
+static AgentCore.Application.Tools.ToolArgumentJson.ToJsonObject(System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string!, object?>>! arguments) -> System.Text.Json.Nodes.JsonObject!
 static AgentCore.Application.Tools.ToolErrorResult.Create(string! tool, string! message) -> System.Text.Json.Nodes.JsonObject!
 static AgentCore.Application.Tools.ToolErrorResult.IsError(System.Text.Json.Nodes.JsonNode? result) -> bool
-static AgentCore.Application.Tools.ToolArgumentJson.ToJsonObject(System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string!, object?>>! arguments) -> System.Text.Json.Nodes.JsonObject!
 static AgentCore.Application.Tools.ToolResultJson.ToNode(object? value) -> System.Text.Json.Nodes.JsonNode?
 static AgentCore.Application.Transcript.CallMessage.operator !=(AgentCore.Application.Transcript.CallMessage? left, AgentCore.Application.Transcript.CallMessage? right) -> bool
 static AgentCore.Application.Transcript.CallMessage.operator ==(AgentCore.Application.Transcript.CallMessage? left, AgentCore.Application.Transcript.CallMessage? right) -> bool

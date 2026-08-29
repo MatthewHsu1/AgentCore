@@ -32,7 +32,38 @@ internal sealed class QdrantKnowledgeStore : IKnowledgeRetrievalPort, IDisposabl
         _channel = channel;
         _embeddings = embeddings;
         _options = options;
-        _mapper = options.Mapper ?? new FieldsPointMapper(options.Fields);
+        // A links block with no field names no payload key to read outbound ids from. The adapter
+        // rejects that in the document; this rejects it for a store built in code, where the
+        // alternative is a null dereference on the first search that ranks anything.
+        if (options.Links is { } links && links.Field is not { Length: > 0 })
+        {
+            throw new ArgumentException(
+                "these options carry a links block that names no field, so there is no payload key to "
+                + "read outbound ids from. AgentCore has no default link field; name one, or leave "
+                + "Links null to turn link expansion off.",
+                nameof(options));
+        }
+
+        // Every lookup mode resolves a linked id through the mapped id field: filter matches on it,
+        // and uuid5 and direct derive the key from it. Unmapped, the filter path used to reach
+        // protobuf with a null key and die there with nothing about the document in the message.
+        if (options.Links is not null && options.Fields?.Id is not { Length: > 0 })
+        {
+            throw new ArgumentException(
+                "these options carry a links block and map no fields.id. Every links.lookup mode "
+                + "resolves a linked id through that field, so no link could ever be followed. Map "
+                + "the id field, or leave Links null to turn link expansion off.",
+                nameof(options));
+        }
+
+        _mapper = options.Mapper
+            ?? (options.Fields is { Body.Length: > 0 } fields
+                ? new FieldsPointMapper(fields)
+                : throw new ArgumentException(
+                    "these options name neither a mapper nor a fields.body, so no point could be read "
+                    + "into a card and every turn would see an empty knowledge base. AgentCore has no "
+                    + "default field names; set one of the two.",
+                    nameof(options)));
     }
 
     /// <summary>
@@ -98,7 +129,8 @@ internal sealed class QdrantKnowledgeStore : IKnowledgeRetrievalPort, IDisposabl
 
         var have = cards.Select(card => card.CardId).ToHashSet(StringComparer.Ordinal);
 
-        var links = QdrantPayload.ReadList(ranked[0].Payload, linksConfiguration.Field)
+        // The adapter refuses a links block that names no field, so this is never null here.
+        var links = QdrantPayload.ReadList(ranked[0].Payload, linksConfiguration.Field!)
             .Where(id => !have.Contains(id))
             .Distinct(StringComparer.Ordinal)
             .ToList();
@@ -127,8 +159,10 @@ internal sealed class QdrantKnowledgeStore : IKnowledgeRetrievalPort, IDisposabl
         {
             scopeFilter.Must.Add(new Condition
             {
-                // Dotted, because `kb sync` writes a nested struct. A flat `facets_model` matches
-                // nothing at all, silently.
+                // Whatever scope.template produced, verbatim. A dotted path walks into a nested
+                // struct; a flat key does not. Getting that wrong matches nothing at all, silently,
+                // which is why the template is the deployment's to write and never AgentCore's to
+                // guess.
                 Field = new FieldCondition { Key = ScopePath(facet), Match = new Match { Keyword = value } },
             });
         }
@@ -139,7 +173,7 @@ internal sealed class QdrantKnowledgeStore : IKnowledgeRetrievalPort, IDisposabl
 
         var prefetch = new List<PrefetchQuery> { Dense(vector, scopeFilter.Clone(), depth) };
 
-        if (_options.Fields.Lexical is { Length: > 0 } lexical)
+        if (_options.Fields?.Lexical is { Length: > 0 } lexical)
         {
             var identifiers = _options.Analyzer.RequiredTerms(query);
             if (identifiers.Count > 0)
@@ -199,7 +233,7 @@ internal sealed class QdrantKnowledgeStore : IKnowledgeRetrievalPort, IDisposabl
                 // The adapter refuses a links block without a mapped id, so this is never null here.
                 Field = new FieldCondition
                 {
-                    Key = _options.Fields.Id!,
+                    Key = _options.Fields!.Id!,
                     Match = new Match { Keywords = new RepeatedStrings { Strings = { ids } } },
                 },
             });
@@ -219,14 +253,25 @@ internal sealed class QdrantKnowledgeStore : IKnowledgeRetrievalPort, IDisposabl
                 $"links.lookup is direct and the card id '{cardId}' is not a GUID. Qdrant's point key "
                 + "is a GUID or an unsigned integer, so a free-form id cannot be one. Use "
                 + "links.lookup: filter to match on the id field instead."),
-        _ => KbPointId.For(cardId, _options.LinkNamespace, links.Prefix),
+        _ => Uuid5PointId.For(cardId, _options.LinkNamespace, links.Prefix),
     };
 
     /// <summary>Whether a card the ranking never chose is still inside the turn's scope.</summary>
     private bool InScope(MapField<string, Value> payload, KnowledgeScope? scope) =>
         Facets(scope).All(entry => Holds(QdrantPayload.Read(payload, ScopePath(entry.Key)), entry.Value));
 
-    private string ScopePath(string facet) => _options.ScopeTemplate.Replace("{key}", facet, StringComparison.Ordinal);
+    /// <summary>Turns one facet key into the payload path this collection keeps it at.</summary>
+    /// <remarks>
+    /// Only reached once a scope names a facet, which is why an unset template is an error here and
+    /// not at startup: a deployment whose agents never scope legitimately names no template.
+    /// </remarks>
+    private string ScopePath(string facet)
+        => _options.ScopeTemplate is { Length: > 0 } template
+            ? template.Replace("{key}", facet, StringComparison.Ordinal)
+            : throw new InvalidOperationException(
+                $"a KnowledgeScope names the facet '{facet}' and providers.knowledge.scope.template is "
+                + "unset, so AgentCore does not know what payload path that key becomes. There is no "
+                + "default. Write scope.template, such as '{key}' for flat facets.");
 
     /// <summary>Mirrors Qdrant keyword matching, where a list facet matches when any element does.</summary>
     private static bool Holds(Value? facet, string wanted) => facet switch

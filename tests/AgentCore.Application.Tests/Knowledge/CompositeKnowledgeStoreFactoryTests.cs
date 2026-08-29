@@ -43,6 +43,7 @@ public sealed class CompositeKnowledgeStoreFactoryTests
             kind: qdrant
             endpoint: https://cluster.example.com
             collection: manuals
+            fields: { body: body }
         """;
 
     private const string ShoutedKindYaml =
@@ -59,6 +60,8 @@ public sealed class CompositeKnowledgeStoreFactoryTests
             tts: { kind: telnyx-relay }
           knowledge:
             kind: QDRANT
+            collection: manuals
+            fields: { body: body }
         """;
 
     // ---------------------------------------------------------------------------------------------
@@ -75,14 +78,17 @@ public sealed class CompositeKnowledgeStoreFactoryTests
     }
 
     [Fact]
-    public async Task NoKnowledgeBlockAtAll_TakesTheDefaultKind()
+    public async Task NoKnowledgeBlockAtAll_FailsWithAPointerAtTheBlock()
     {
-        RecordingKnowledgeStoreAdapter qdrant = new(KnowledgeProviderConfiguration.DefaultKind);
+        // There is no entry to invent. A standing-in default would guess the vendor, the collection
+        // name AND the payload shape, then fail somewhere further in against a store nobody named.
+        RecordingKnowledgeStoreAdapter qdrant = new("qdrant");
 
-        var port = await Create(NoKnowledgeYaml, qdrant);
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+            async () => await Create(NoKnowledgeYaml, qdrant));
 
-        Assert.NotNull(port);
-        Assert.True(qdrant.CreateSearchCalled);
+        Assert.Contains(failure.Errors, error => error.Pointer == "/providers/knowledge");
+        Assert.False(qdrant.CreateSearchCalled);
     }
 
     [Fact]
@@ -202,7 +208,8 @@ public sealed class CompositeKnowledgeStoreFactoryTests
                 tts: { kind: telnyx-relay }
               knowledge:
                 kind: qdrant
-                fields: { source: null, locator: null }
+                collection: manuals
+                fields: { body: body, source: null, locator: null }
             """;
         RecordingKnowledgeStoreAdapter qdrant = new("qdrant");
 
@@ -232,7 +239,8 @@ public sealed class CompositeKnowledgeStoreFactoryTests
                 tts: { kind: telnyx-relay }
               knowledge:
                 kind: qdrant
-                fields: { source: null }
+                collection: manuals
+                fields: { body: body, locator: source.locator, source: null }
             """;
         RecordingKnowledgeStoreAdapter qdrant = new("qdrant");
 
@@ -275,7 +283,12 @@ public sealed class CompositeKnowledgeStoreFactoryTests
     // ---------------------------------------------------------------------------------------------
     // Helpers.
     // ---------------------------------------------------------------------------------------------
-    /// <summary>Builds a document whose only knowledge-relevant field is <c>providers.knowledge.kind</c>.</summary>
+    /// <summary>Builds a document whose only interesting field is <c>providers.knowledge.kind</c>.</summary>
+    /// <remarks>
+    /// The rest of the block is here because the composite requires it, not because these tests are
+    /// about it: a body to map, and a scope template for the tests that declare a scope. Neither has
+    /// a default to fall back on.
+    /// </remarks>
     private static AgentCoreConfiguration Document(string kind)
         => new()
         {
@@ -283,7 +296,13 @@ public sealed class CompositeKnowledgeStoreFactoryTests
             Name = "test",
             Providers = new ProvidersConfiguration
             {
-                Knowledge = new KnowledgeProviderConfiguration { Kind = kind },
+                Knowledge = new KnowledgeProviderConfiguration
+                {
+                    Kind = kind,
+                    Collection = "manuals",
+                    Fields = new KnowledgeFieldsConfiguration { Body = "body" },
+                    Scope = new KnowledgeScopeConfiguration { Template = "facets.{key}" },
+                },
             },
         };
 

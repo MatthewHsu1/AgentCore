@@ -87,6 +87,7 @@ public sealed class KnowledgeProviderFactoryTests
             new HangingKnowledgePort(TimeSpan.FromMilliseconds(20)),
             Resolved(KnowledgeMode.Prefetch),
             "resolver",
+            new SourceLocatorCitationFormatter(),
             loggers);
 
         var context = await provider.InvokingAsync(
@@ -117,6 +118,7 @@ public sealed class KnowledgeProviderFactoryTests
             new HangingKnowledgePort(TimeSpan.FromMinutes(5)),
             Resolved(KnowledgeMode.Prefetch),
             "resolver",
+            new SourceLocatorCitationFormatter(),
             loggers);
 
         caller.CancelAfter(TimeSpan.FromMilliseconds(20));
@@ -294,7 +296,7 @@ public sealed class KnowledgeProviderFactoryTests
         var port = new StubKnowledgePort([Card("a"), Linked("z")]);
 
         var provider = KnowledgeProviderFactory.Create(
-            port, Resolved(KnowledgeMode.Prefetch), "analyst", loggers);
+            port, Resolved(KnowledgeMode.Prefetch), "analyst", new SourceLocatorCitationFormatter(), loggers);
         await provider.InvokingAsync(Invoking("the screen says e33"), TestContext.Current.CancellationToken);
 
         var line = Assert.Single(loggers.Of(11));
@@ -303,7 +305,9 @@ public sealed class KnowledgeProviderFactoryTests
 
         var record = line.Field<KnowledgeAuditRecord.LogView>("Record");
         Assert.NotNull(record);
-        Assert.Equal(["ranked", "see_also"], record.Cards.Select(card => card.Via));
+        // "link", not "see_also": the audit record says how the card arrived, in its own words,
+        // rather than repeating one collection's payload key back at the reader.
+        Assert.Equal(["ranked", "link"], record.Cards.Select(card => card.Via));
         Assert.Equal("analyst", record.Agent);
     }
 
@@ -317,7 +321,7 @@ public sealed class KnowledgeProviderFactoryTests
         InvalidOperationException down = new("qdrant is down");
 
         var provider = KnowledgeProviderFactory.Create(
-            new ThrowingKnowledgePort(down), Resolved(KnowledgeMode.Prefetch), "resolver", loggers);
+            new ThrowingKnowledgePort(down), Resolved(KnowledgeMode.Prefetch), "resolver", new SourceLocatorCitationFormatter(), loggers);
         await provider.InvokingAsync(Invoking("the screen says e33"), TestContext.Current.CancellationToken);
 
         var line = Assert.Single(loggers.Of(12));
@@ -349,13 +353,14 @@ public sealed class KnowledgeProviderFactoryTests
         RecordingLoggerFactory loggers = new();
 
         var answered = KnowledgeProviderFactory.Create(
-            new StubKnowledgePort([Card("a")]), Resolved(KnowledgeMode.Prefetch), "analyst", loggers);
+            new StubKnowledgePort([Card("a")]), Resolved(KnowledgeMode.Prefetch), "analyst", new SourceLocatorCitationFormatter(), loggers);
         await answered.InvokingAsync(Invoking(spoken), TestContext.Current.CancellationToken);
 
         var threw = KnowledgeProviderFactory.Create(
             new ThrowingKnowledgePort(new InvalidOperationException("qdrant is down")),
             Resolved(KnowledgeMode.Prefetch),
             "resolver",
+            new SourceLocatorCitationFormatter(),
             loggers);
         await threw.InvokingAsync(Invoking(spoken), TestContext.Current.CancellationToken);
 
@@ -390,7 +395,7 @@ public sealed class KnowledgeProviderFactoryTests
         RecordingLoggerFactory loggers = new();
 
         var provider = KnowledgeProviderFactory.Create(
-            new StubKnowledgePort([Card("a")]), Resolved(KnowledgeMode.Prefetch), "analyst", loggers);
+            new StubKnowledgePort([Card("a")]), Resolved(KnowledgeMode.Prefetch), "analyst", new SourceLocatorCitationFormatter(), loggers);
         await provider.InvokingAsync(Invoking(spoken), TestContext.Current.CancellationToken);
 
         var view = Assert.Single(loggers.Of(11)).Field<KnowledgeAuditRecord.LogView>("Record");
@@ -531,7 +536,8 @@ public sealed class KnowledgeProviderFactoryTests
     /// <param name="knowledge">The agent's resolved <c>knowledge:</c> block.</param>
     /// <returns>The provider.</returns>
     private static AIContextProvider Provider(IKnowledgeRetrievalPort port, ResolvedKnowledge knowledge)
-        => KnowledgeProviderFactory.Create(port, knowledge, "agent-under-test", loggers: null);
+        => KnowledgeProviderFactory.Create(
+            port, knowledge, "agent-under-test", new SourceLocatorCitationFormatter(), loggers: null);
 
     /// <summary>Every message text of a returned context, in one string.</summary>
     private static string Merged(AIContext context)

@@ -154,12 +154,14 @@ public sealed class ConfigurationLoaderTests
         Assert.Equal("telnyx", Example.Providers.Telephony!.Kind);
         Assert.Equal("qdrant", Example.Providers.Knowledge!.Kind);
         Assert.Equal("https://qdrant.example.com:6334", Example.Providers.Knowledge.Endpoint);
-        Assert.Equal(KnowledgeProviderConfiguration.DefaultCollection, Example.Providers.Knowledge.Collection);
+        Assert.Equal("kb", Example.Providers.Knowledge.Collection);
     }
 
     [Fact]
-    public void AKnowledgeProviderWithNoFields_TakesTheDefaults()
+    public void AnEmptyKnowledgeBlock_FailsTheLoadForKindAndCollection()
     {
+        // There is nothing to default them to. AgentCore knows no vendor and no collection name, so
+        // an empty block names no store at all rather than naming a conventional one.
         const string document = """
             apiVersion: agentcore/v1
             name: plain
@@ -171,17 +173,17 @@ public sealed class ConfigurationLoaderTests
               knowledge: {}
             """;
 
-        var configuration = ConfigurationLoader.LoadYaml(document);
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
 
-        var knowledge = configuration.Providers!.Knowledge!;
-        Assert.Equal(KnowledgeProviderConfiguration.DefaultKind, knowledge.Kind);
-        Assert.Null(knowledge.Endpoint);
-        Assert.Equal(KnowledgeProviderConfiguration.DefaultCollection, knowledge.Collection);
+        Assert.Contains("kind", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("collection", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void AKnowledgeFieldSetToNull_BindsNullAndKeepsTheOtherDefaults()
+    public void AFieldsBlockNamingOneRole_LeavesEveryOtherRoleUnmapped()
     {
+        // The whole point of the block: a role this document does not name is absent from the card.
+        // It is never filled in from a name AgentCore chose, because AgentCore chooses none.
         const string document = """
             apiVersion: agentcore/v1
             name: foreign
@@ -191,15 +193,20 @@ public sealed class ConfigurationLoaderTests
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
               knowledge:
-                fields: { id: null, body: page_content }
+                kind: qdrant
+                collection: pages
+                fields: { body: page_content }
             """;
 
         var knowledge = ConfigurationLoader.LoadYaml(document).Providers!.Knowledge!;
 
+        Assert.Equal("page_content", knowledge.Fields!.Body);
         Assert.Null(knowledge.Fields.Id);
-        Assert.Equal("page_content", knowledge.Fields.Body);
-        Assert.Equal(KnowledgeFieldsConfiguration.DefaultLexical, knowledge.Fields.Lexical);
-        Assert.Equal(KnowledgeFieldsConfiguration.DefaultSource, knowledge.Fields.Source);
+        Assert.Null(knowledge.Fields.Lexical);
+        Assert.Null(knowledge.Fields.Source);
+        Assert.Null(knowledge.Fields.Locator);
+        Assert.Null(knowledge.Fields.Authority);
+        Assert.Null(knowledge.Scope.Template);
     }
 
     [Fact]
@@ -214,6 +221,8 @@ public sealed class ConfigurationLoaderTests
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
               knowledge:
+                kind: qdrant
+                collection: pages
                 fields: { body: null }
             """;
 
@@ -260,7 +269,7 @@ public sealed class ConfigurationLoaderTests
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
-              knowledge: {}
+              knowledge: { kind: qdrant, collection: manuals }
             """;
 
         var knowledge = ConfigurationLoader.LoadYaml(document).Providers!.Knowledge!;
@@ -280,6 +289,8 @@ public sealed class ConfigurationLoaderTests
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
               knowledge:
+                kind: qdrant
+                collection: manuals
                 mapper: acme-catalog
             """;
 
@@ -597,7 +608,7 @@ public sealed class ConfigurationLoaderTests
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
-              knowledge: {}
+              knowledge: { kind: qdrant, collection: manuals }
             """;
 
         Assert.Null(ConfigurationLoader.LoadYaml(document).Providers!.Knowledge!.Links);
@@ -606,7 +617,7 @@ public sealed class ConfigurationLoaderTests
     [Fact]
     public void ALinksBlockWithoutLookup_DefaultsToFilter()
     {
-        // filter is the only mode that works on any collection; uuid5 is now Spirit's explicit spelling.
+        // filter is the only mode that works on any collection. uuid5 and direct derive the key.
         const string document = """
             apiVersion: agentcore/v1
             name: linked
@@ -616,6 +627,8 @@ public sealed class ConfigurationLoaderTests
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
               knowledge:
+                kind: qdrant
+                collection: manuals
                 links: { field: related }
             """;
 

@@ -1,3 +1,4 @@
+using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
 using Microsoft.Extensions.AI;
@@ -26,7 +27,12 @@ public sealed class KnowledgeStartupTests
         AgentCoreOptions options = new();
         options.UseKnowledgeStores(adapter);
 
-        var configuration = Configuration(new KnowledgeProviderConfiguration { Kind = "test" });
+        var configuration = Configuration(new KnowledgeProviderConfiguration
+        {
+            Kind = "test",
+            Collection = "manuals",
+            Fields = new KnowledgeFieldsConfiguration { Body = "body" },
+        });
         AgentCoreStartup startup = new(configuration, ResolvedSecrets.Empty);
 
         var port = await KnowledgeStartup.OpenAsync(
@@ -97,11 +103,12 @@ public sealed class KnowledgeStartupTests
     }
 
     [Fact]
-    public async Task OpenAsync_AnAgentDeclaresKnowledgeButNoProvidersBlock_StillAsksTheRegistry()
+    public async Task OpenAsync_AnAgentDeclaresKnowledgeButNoProvidersBlock_FailsTheStart()
     {
-        // The agent's own knowledge: block is the other opt-in. The composite then defaults the
-        // entry, and the matched adapter decides what a blockless build means.
-        RecordingAdapter adapter = new(KnowledgeProviderConfiguration.DefaultKind);
+        // The agent's own knowledge: block is the other opt-in, so the registry IS reached -- and
+        // then there is nothing to reach it with. AgentCore has no default vendor, collection or
+        // payload shape, so the only honest answer is a refusal that names the missing block.
+        RecordingAdapter adapter = new("qdrant");
         AgentCoreOptions options = new();
         options.UseKnowledgeStores(adapter);
 
@@ -122,17 +129,18 @@ public sealed class KnowledgeStartupTests
         };
         AgentCoreStartup startup = new(configuration, ResolvedSecrets.Empty);
 
-        var port = await KnowledgeStartup.OpenAsync(
-            configuration,
-            options,
-            startup,
-            embeddings: null,
-            scopeDeclared: false,
-            requireScope: false,
-            TestContext.Current.CancellationToken);
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+            async () => await KnowledgeStartup.OpenAsync(
+                configuration,
+                options,
+                startup,
+                embeddings: null,
+                scopeDeclared: false,
+                requireScope: false,
+                TestContext.Current.CancellationToken));
 
-        Assert.NotNull(port);
-        Assert.True(adapter.CreateSearchCalled);
+        Assert.Contains(failure.Errors, error => error.Pointer == "/providers/knowledge");
+        Assert.False(adapter.CreateSearchCalled);
     }
 
     private static AgentCoreConfiguration Configuration(KnowledgeProviderConfiguration? knowledge)

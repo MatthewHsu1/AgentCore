@@ -39,6 +39,7 @@ internal static class KnowledgeProviderFactory
     /// <param name="port">The store every agent shares.</param>
     /// <param name="knowledge">The agent's resolved <c>knowledge:</c> block.</param>
     /// <param name="agent">The id of the agent this provider hangs on, for the log line.</param>
+    /// <param name="citations">The wording <c>providers.knowledge.citation</c> named.</param>
     /// <param name="loggers">
     /// Where the retrieval record and the framework's own provider log go, or <see langword="null"/>
     /// when the host wired none. Ruling 21: this is the one reachable observability seam — the audit
@@ -51,11 +52,13 @@ internal static class KnowledgeProviderFactory
         IKnowledgeRetrievalPort port,
         ResolvedKnowledge knowledge,
         string agent,
+        IKnowledgeCitationFormatter citations,
         ILoggerFactory? loggers)
     {
         ArgumentNullException.ThrowIfNull(port);
         ArgumentNullException.ThrowIfNull(knowledge);
         ArgumentNullException.ThrowIfNull(agent);
+        ArgumentNullException.ThrowIfNull(citations);
 
         var logger = loggers?.CreateLogger(typeof(KnowledgeProviderFactory)) ?? NullLogger.Instance;
 
@@ -100,7 +103,7 @@ internal static class KnowledgeProviderFactory
                     Log.KnowledgeRetrieved(logger, agent, cards.Count, record);
                 }
 
-                return Trim(cards, knowledge);
+                return Trim(cards, knowledge, citations);
             }
             catch (Exception failure) when (!CallerCancelled(failure, cancellationToken))
             {
@@ -144,9 +147,12 @@ internal static class KnowledgeProviderFactory
     /// <summary>Cuts one search down to the agent's <c>limit:</c>.</summary>
     /// <param name="cards">What the store returned, best first, links last.</param>
     /// <param name="knowledge">The agent's resolved <c>knowledge:</c> block.</param>
+    /// <param name="citations">The wording each kept card's source label is written in.</param>
     /// <returns>The cards this agent sees.</returns>
     private static List<TextSearchProvider.TextSearchResult> Trim(
-        IReadOnlyList<KnowledgeCard> cards, ResolvedKnowledge knowledge)
+        IReadOnlyList<KnowledgeCard> cards,
+        ResolvedKnowledge knowledge,
+        IKnowledgeCitationFormatter citations)
     {
         List<TextSearchProvider.TextSearchResult> kept = [];
         var ranked = 0;
@@ -158,7 +164,7 @@ internal static class KnowledgeProviderFactory
                 continue;
             }
 
-            kept.Add(KnowledgeCardMapper.ToResult(card, knowledge.Citations));
+            kept.Add(KnowledgeCardMapper.ToResult(card, knowledge.Citations, citations));
         }
 
         return kept;

@@ -4,7 +4,7 @@ using Xunit;
 namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant;
 
 [Collection(QdrantServerCollection.Name)]
-public sealed class SyntheticCorpusTests
+public sealed class KbShapedCorpusTests
 {
     [QdrantFact]
     public async Task CreateAsync_BuildsANamedVectorCollectionWithNestedFacets()
@@ -14,12 +14,12 @@ public sealed class SyntheticCorpusTests
 
         try
         {
-            await SyntheticCorpus.CreateAsync(client, collection, interleaved: true, TestContext.Current.CancellationToken);
+            await KbShapedCorpus.CreateAsync(client, collection, interleaved: true, TestContext.Current.CancellationToken);
 
             var info = await client.GetCollectionInfoAsync(collection, TestContext.Current.CancellationToken);
             Assert.True(info.Config.Params.VectorsConfig.ParamsMap.Map.ContainsKey("dense"));
             Assert.Equal(
-                (ulong)SyntheticCorpus.Count,
+                (ulong)KbShapedCorpus.Count,
                 await client.CountAsync(collection, cancellationToken: TestContext.Current.CancellationToken));
 
             // The facet must be a real nested path, not a flat key with a dot in it.
@@ -53,20 +53,20 @@ public sealed class SyntheticCorpusTests
 
         try
         {
-            await SyntheticCorpus.CreateAsync(client, collection, interleaved: true, TestContext.Current.CancellationToken);
+            await KbShapedCorpus.CreateAsync(client, collection, interleaved: true, TestContext.Current.CancellationToken);
 
             var results = await client.QueryAsync(
                 collection,
-                query: SyntheticCorpus.QueryVector(),
+                query: KbShapedCorpus.QueryVector(),
                 usingVector: "dense",
-                limit: (ulong)SyntheticCorpus.Count,
+                limit: (ulong)KbShapedCorpus.Count,
                 payloadSelector: true,
                 cancellationToken: TestContext.Current.CancellationToken);
 
             // A wrong distance function, a wrong vector name, or a broken upsert would all still
             // return 30 points -- only checking the actual order proves the server round-trip.
             var order = results.Select(r => r.Payload["card_id"].StringValue).ToList();
-            var expected = Enumerable.Range(0, SyntheticCorpus.Count).Select(SyntheticCorpus.Id).ToList();
+            var expected = Enumerable.Range(0, KbShapedCorpus.Count).Select(KbShapedCorpus.Id).ToList();
             Assert.Equal(expected, order);
         }
         finally
@@ -78,8 +78,8 @@ public sealed class SyntheticCorpusTests
     [Fact]
     public void Cards_DenseSimilarityToQuery_StrictlyDecreasesWithIndex()
     {
-        var query = SyntheticCorpus.QueryVector();
-        var cards = SyntheticCorpus.Cards(interleaved: true);
+        var query = KbShapedCorpus.QueryVector();
+        var cards = KbShapedCorpus.Cards(interleaved: true);
         var similarities = cards.Select(c => DotProduct(c.Vector, query)).ToList();
 
         for (var i = 1; i < similarities.Count; i++)
@@ -93,11 +93,11 @@ public sealed class SyntheticCorpusTests
     [Fact]
     public void LookalikeIdentifierCard_RanksExactlyOneBelowItsRival()
     {
-        var cards = SyntheticCorpus.Cards(interleaved: true);
-        var query = SyntheticCorpus.QueryVector();
+        var cards = KbShapedCorpus.Cards(interleaved: true);
+        var query = KbShapedCorpus.QueryVector();
 
-        var e27 = cards.Single(c => c.CardId == SyntheticCorpus.Id(6));
-        var e33 = cards.Single(c => c.CardId == SyntheticCorpus.Id(7));
+        var e27 = cards.Single(c => c.CardId == KbShapedCorpus.Id(6));
+        var e33 = cards.Single(c => c.CardId == KbShapedCorpus.Id(7));
 
         Assert.Contains("e27", e27.Text, StringComparison.Ordinal);
         Assert.Contains("e33", e33.Text, StringComparison.Ordinal);
@@ -110,7 +110,7 @@ public sealed class SyntheticCorpusTests
     [Fact]
     public void Cards_Interleaved_SpreadsOutOfScopeCardsThroughTheRanking()
     {
-        var maxRun = LongestRunOfInScopeCards(SyntheticCorpus.Cards(interleaved: true));
+        var maxRun = LongestRunOfInScopeCards(KbShapedCorpus.Cards(interleaved: true));
 
         // A single early stray followed by 27 in-scope cards would still satisfy "some out-of-scope
         // card ranks above the last in-scope card" -- that is a boundary crossing, not dispersion.
@@ -118,7 +118,7 @@ public sealed class SyntheticCorpusTests
         // dropped scope filter cannot hide behind: any long run means the nearest cards for a
         // scope-filtered query are all in scope anyway, so the filter changes nothing observable.
         Assert.True(
-            maxRun <= SyntheticCorpus.Count / 5,
+            maxRun <= KbShapedCorpus.Count / 5,
             $"the longest run of consecutive in-scope cards was {maxRun}; out-of-scope cards must be spread through the ranking, not merely present somewhere above the tail");
     }
 
@@ -128,23 +128,23 @@ public sealed class SyntheticCorpusTests
         // The negative control: interleaved:false is the trap a fixture author walks into without
         // noticing, proven here (by the same metric as the positive case) so the `true` case above
         // is known to test something real rather than merely "not this exact other arrangement".
-        var maxRun = LongestRunOfInScopeCards(SyntheticCorpus.Cards(interleaved: false));
+        var maxRun = LongestRunOfInScopeCards(KbShapedCorpus.Cards(interleaved: false));
 
         Assert.True(
-            maxRun > SyntheticCorpus.Count / 2,
+            maxRun > KbShapedCorpus.Count / 2,
             $"the longest run of consecutive in-scope cards was only {maxRun}; interleaved:false should genuinely cluster out-of-scope cards at the tail");
     }
 
     [Fact]
     public void Card0SeeAlso_PointsToTheFarthestCard()
     {
-        var cards = SyntheticCorpus.Cards(interleaved: true);
+        var cards = KbShapedCorpus.Cards(interleaved: true);
 
-        Assert.Equal([SyntheticCorpus.Id(SyntheticCorpus.Count - 1)], cards[0].SeeAlso);
+        Assert.Equal([KbShapedCorpus.Id(KbShapedCorpus.Count - 1)], cards[0].SeeAlso);
         Assert.All(cards.Skip(1), c => Assert.Empty(c.SeeAlso));
     }
 
-    private static int LongestRunOfInScopeCards(IReadOnlyList<SyntheticCard> cards)
+    private static int LongestRunOfInScopeCards(IReadOnlyList<KbShapedCard> cards)
     {
         var longest = 0;
         var current = 0;

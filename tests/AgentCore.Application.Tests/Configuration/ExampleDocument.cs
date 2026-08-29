@@ -12,6 +12,25 @@ namespace AgentCore.Application.Tests.Configuration;
 /// </remarks>
 internal static class ExampleDocument
 {
+    /// <summary>
+    /// The last line of the <c>providers:</c> block, for a test that splices its own provider block
+    /// in after it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Three test files used to keep a private copy of the one-line providers.knowledge entry and
+    /// anchor on that. When the block grew to ten lines, every copy stopped matching, Replace
+    /// silently did nothing, and eighteen tests failed on a provider that had never been written
+    /// into the document at all. One anchor, owned by the document, cannot drift out of step with it.
+    /// </para>
+    /// <para>
+    /// It must stay the LAST line of providers:. A splice after any earlier line lands inside the
+    /// block that follows, which is a different failure again -- valid YAML, wrong nesting, and a
+    /// provider silently belonging to the wrong parent.
+    /// </para>
+    /// </remarks>
+    public const string LastProviderLine = "    citation: source-locator";
+
     /// <summary>The section 8.1 document as YAML.</summary>
     public const string Yaml =
         """
@@ -142,7 +161,26 @@ internal static class ExampleDocument
           telephony: { kind: telnyx }              # dial, transfer, hang up. Not the pipe — that is call
           moderation: { kind: openai }             # reads what the CALLER said, before the model runs
           embeddings: { kind: openai, model: text-embedding-3-small }
-          knowledge: { kind: qdrant, endpoint: https://qdrant.example.com:6334, collection: kb, vector: dense, links: { lookup: uuid5 } }
+          knowledge:
+            kind: qdrant
+            endpoint: https://qdrant.example.com:6334
+            collection: kb
+            vector: dense
+            fields:
+              id: card_id
+              body: body
+              lexical: text
+              source: source.ref
+              locator: source.locator
+              authority: authority
+            scope:
+              template: "facets.{key}"
+            links:
+              field: see_also
+              lookup: uuid5
+              prefix: "kb:"
+            analyzer: identifier-codes
+            citation: source-locator
 
         evaluation:
           sampleRate: 0
@@ -527,9 +565,24 @@ internal static class ExampleDocument
               "endpoint": "https://qdrant.example.com:6334",
               "collection": "kb",
               "vector": "dense",
+              "fields": {
+                "id": "card_id",
+                "body": "body",
+                "lexical": "text",
+                "source": "source.ref",
+                "locator": "source.locator",
+                "authority": "authority"
+              },
+              "scope": {
+                "template": "facets.{key}"
+              },
               "links": {
-                "lookup": "uuid5"
-              }
+                "field": "see_also",
+                "lookup": "uuid5",
+                "prefix": "kb:"
+              },
+              "analyzer": "identifier-codes",
+              "citation": "source-locator"
             }
           },
           "evaluation": {

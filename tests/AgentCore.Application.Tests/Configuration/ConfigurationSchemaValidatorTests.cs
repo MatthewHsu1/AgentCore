@@ -221,7 +221,7 @@ public sealed class ConfigurationSchemaValidatorTests
     }
 
     [Fact]
-    public void AKnowledgeProviderWithNoFields_PassesCheckOne()
+    public void AKnowledgeProviderNamingOnlyKindAndCollection_PassesCheckOne()
     {
         const string document = """
             apiVersion: agentcore/v1
@@ -231,7 +231,7 @@ public sealed class ConfigurationSchemaValidatorTests
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
-              knowledge: {}
+              knowledge: { kind: qdrant, collection: manuals }
             """;
 
         var parsed = ConfigurationLoader.ReadDocument(document, ConfigurationFormat.Yaml);

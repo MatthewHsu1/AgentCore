@@ -52,6 +52,9 @@ public sealed class AgentCoreOptions
     /// <summary>Gets the mappers <c>providers.knowledge.mapper</c> may name.</summary>
     internal IReadOnlyList<IKnowledgePointMapper> KnowledgeMappers { get; private set; } = [];
 
+    /// <summary>Gets the citation formatters <c>providers.knowledge.citation</c> may name.</summary>
+    internal IReadOnlyList<IKnowledgeCitationFormatter> KnowledgeCitations { get; private set; } = [];
+
     /// <summary>Gets the moderation vendors the host registered, or <see langword="null"/>.</summary>
     internal IReadOnlyList<IModerationAdapter>? Moderation { get; private set; }
 
@@ -149,6 +152,17 @@ public sealed class AgentCoreOptions
     {
         ArgumentNullException.ThrowIfNull(mappers);
         KnowledgeMappers = mappers;
+        return this;
+    }
+
+    /// <summary>
+    /// Binds the citation formatters, and the document picks one by
+    /// <c>providers.knowledge.citation</c>.
+    /// </summary>
+    public AgentCoreOptions UseKnowledgeCitationFormatters(params IKnowledgeCitationFormatter[] formatters)
+    {
+        ArgumentNullException.ThrowIfNull(formatters);
+        KnowledgeCitations = formatters;
         return this;
     }
 

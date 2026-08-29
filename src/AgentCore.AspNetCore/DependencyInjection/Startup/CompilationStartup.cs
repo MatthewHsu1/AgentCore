@@ -3,6 +3,7 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Evaluation;
+using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tools.Registry;
@@ -34,6 +35,7 @@ internal static class CompilationStartup
     /// compiled agent, so it is bound here rather than on the session factory.
     /// </param>
     /// <param name="knowledge">The port step 3b opened, or <see langword="null"/> when the host bound no knowledge vendor.</param>
+    /// <param name="citations">The wording <c>providers.knowledge.citation</c> named.</param>
     /// <param name="loggers">The factory the guard evaluator and the knowledge provider take their loggers from.</param>
     /// <returns>The compiled graph, and the seams that made it.</returns>
     /// <exception cref="ConfigurationLoadException">The document does not compile.</exception>
@@ -44,6 +46,7 @@ internal static class CompilationStartup
         ITranscriptStore transcript,
         EvaluatorRegistry evaluators,
         IKnowledgeRetrievalPort? knowledge,
+        IKnowledgeCitationFormatter citations,
         ILoggerFactory loggers)
     {
         GuardEvaluator guards = new(configuration.Guards, loggers.CreateLogger<GuardEvaluator>());
@@ -59,6 +62,7 @@ internal static class CompilationStartup
                 TranscriptStore = transcript,
                 StateSnapshot = CallStateScope.Snapshot,
                 Knowledge = knowledge,
+                Citations = citations,
                 Loggers = loggers,
             });
 

@@ -4,7 +4,7 @@ using Qdrant.Client.Grpc;
 namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant;
 
 /// <summary>
-/// A collection that shares no name with the one <c>kb sync</c> writes.
+/// A collection that shares no name with the synthetic corpus, and none with AgentCore either.
 /// </summary>
 /// <remarks>
 /// Different vector name, flat top-level facets, a different id field, random point keys, and a

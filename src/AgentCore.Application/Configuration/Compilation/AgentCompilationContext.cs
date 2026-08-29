@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Evaluation;
+using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools.Registry;
 using Microsoft.Extensions.Logging;
@@ -56,6 +57,11 @@ public sealed class AgentCompilationContext
     /// Gets or sets the store every agent's <c>knowledge:</c> block reads through.
     /// </summary>
     public IKnowledgeRetrievalPort? Knowledge { get; init; }
+
+    /// <summary>
+    /// Gets or sets the wording each card's source label is written in.
+    /// </summary>
+    public IKnowledgeCitationFormatter? Citations { get; init; }
 
     /// <summary>
     /// Gets or sets where the compiled agents write their own diagnostics, or <see langword="null"/>.
