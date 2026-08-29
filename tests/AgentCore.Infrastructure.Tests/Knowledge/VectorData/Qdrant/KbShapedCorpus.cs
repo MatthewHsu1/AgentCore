@@ -1,4 +1,6 @@
+using System.Text.RegularExpressions;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Knowledge;
 using AgentCore.Infrastructure.Knowledge.VectorData.Qdrant;
 using Qdrant.Client;
 using Qdrant.Client.Grpc;
@@ -57,7 +59,7 @@ public sealed record KbShapedCard
 /// Card 6 holds <c>e27</c> and card 7 holds <c>e33</c>, so the look-alike case puts the identifier
 /// card one dense rank BELOW its rival. Only the required-identifier prefetch lifts it.
 /// </remarks>
-public static class KbShapedCorpus
+public static partial class KbShapedCorpus
 {
     /// <summary>The vector width. Small on purpose: nothing here needs a real embedding model.</summary>
     public const int Dim = 8;
@@ -79,6 +81,19 @@ public static class KbShapedCorpus
 
     /// <summary>The value every card carries in its <c>applies_to</c> LIST facet, alongside its own model.</summary>
     public const string SharedAudience = "shared";
+
+    /// <summary>
+    /// The required-term rule this corpus's own vocabulary implies: a short letter run followed by
+    /// a short digit run is a console code.
+    /// </summary>
+    /// <remarks>
+    /// This used to be a framework default, which is why the tests below once left the analyzer
+    /// unset and still got a required-term leg. It was one corpus's vocabulary living in the
+    /// framework, exactly like the payload names were. AgentCore now ships only <c>none</c>, so
+    /// the rule lives with the corpus that means it, next to <see cref="Fields"/> and
+    /// <see cref="Links"/>.
+    /// </remarks>
+    public static IKnowledgeQueryAnalyzer Analyzer => new ConsoleCodeAnalyzer();
 
     private const int E27 = 6;
     private const int E33 = 7;
@@ -269,5 +284,25 @@ public static class KbShapedCorpus
         }).ToList();
 
         await client.UpsertAsync(collection, points, cancellationToken: cancellationToken);
+    }
+
+    /// <summary>Treats a short letter run followed by a short digit run as a required term.</summary>
+    private sealed partial class ConsoleCodeAnalyzer : IKnowledgeQueryAnalyzer
+    {
+        [GeneratedRegex("[a-z0-9]+")]
+        private static partial Regex Word { get; }
+
+        [GeneratedRegex("^[a-z]{1,4}[0-9]{1,3}$")]
+        private static partial Regex Identifier { get; }
+
+        public string Name => "console-codes";
+
+        public IReadOnlyList<string> RequiredTerms(string query) =>
+        [
+            .. Word.Matches(query.ToLowerInvariant())
+                .Select(match => match.Value)
+                .Where(token => Identifier.IsMatch(token))
+                .Distinct(StringComparer.Ordinal),
+        ];
     }
 }

@@ -318,6 +318,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
                 Limit = limit,
                 ScoreFloor = floor,
                 Scoped = scoped,
+                Analyzer = KbShapedCorpus.Analyzer,
             });
 
     // KbShapedCorpus keys every point uuid5, and Store() carries no Links now that the feature is
@@ -336,6 +337,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
                 ScoreFloor = floor,
                 Scoped = scoped,
                 Links = KbShapedCorpus.Links,
+                Analyzer = KbShapedCorpus.Analyzer,
             });
 
     private async Task<List<string>> ModelsOf(IReadOnlyList<KnowledgeCard> cards)
