@@ -5,9 +5,14 @@ using Xunit;
 namespace AgentCore.Application.Tests.Compilation;
 
 /// <summary>
-/// The new providers.knowledge block. Every default must reproduce the value that was hardcoded
-/// before it existed, so a document written against the old schema keeps its exact behaviour.
+/// The providers.knowledge block. It ships no payload field names at all, so the block a deployment
+/// writes is the only description of its collection that exists.
 /// </summary>
+/// <remarks>
+/// This file used to assert the opposite: that every unwritten field took the name one particular
+/// ingester happened to use. That made one corpus's naming the framework's, and made a mismapped
+/// role silent instead of loud. The assertions below are the inversion of that.
+/// </remarks>
 public sealed class KnowledgeProviderSchemaTests
 {
     private const string MinimalYaml =
@@ -54,6 +59,7 @@ public sealed class KnowledgeProviderSchemaTests
               namespace: dns
               prefix: "doc:"
             analyzer: none
+            citation: acme-handbook
             scoreFloor: 0.5
         agents:
           items:
@@ -69,27 +75,33 @@ public sealed class KnowledgeProviderSchemaTests
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
-          knowledge: { kind: qdrant, endpoint: "https://q.example.com:6334", vectorName: dense }
+          knowledge: { kind: qdrant, endpoint: "https://q.example.com:6334", collection: kb, vectorName: dense }
         agents:
           items:
             - { id: only, instructions: "hello" }
         """;
 
     [Fact]
-    public void Defaults_ReproduceTheOldHardcodedValues()
+    public void ABlockThatNamesNoFields_MapsNothing()
     {
         var knowledge = Load(MinimalYaml).Providers!.Knowledge!;
 
         Assert.Null(knowledge.Vector);
-        Assert.Equal("card_id", knowledge.Fields.Id);
-        Assert.Equal("body", knowledge.Fields.Body);
-        Assert.Equal("text", knowledge.Fields.Lexical);
-        Assert.Equal("source.ref", knowledge.Fields.Source);
-        Assert.Equal("source.locator", knowledge.Fields.Locator);
-        Assert.Equal("authority", knowledge.Fields.Authority);
-        Assert.Equal("facets.{key}", knowledge.Scope.Template);
+
+        // Not an empty fields block with six null roles: no block at all. The document said nothing
+        // about this collection's payload, and nothing is what AgentCore knows about it.
+        Assert.Null(knowledge.Fields);
+        Assert.Null(knowledge.Scope.Template);
         Assert.Null(knowledge.Links);
-        Assert.Equal("identifier-codes", knowledge.Analyzer);
+
+        // 'none' requires no term, so ranking is vector similarity alone. The old default named one
+        // corpus's error-code shape and applied it to every consumer's queries.
+        Assert.Equal("none", knowledge.Analyzer);
+
+        // A wording IS shipped, unlike a field name: a citation has to read something, and the two
+        // roles it reads are the two the document already named. The wording is replaceable, and
+        // that is a different thing from being absent.
+        Assert.Equal("source-locator", knowledge.Citation);
         Assert.Equal(0.25, knowledge.ScoreFloor);
     }
 
@@ -99,7 +111,7 @@ public sealed class KnowledgeProviderSchemaTests
         var knowledge = Load(FullYaml).Providers!.Knowledge!;
 
         Assert.Equal("embedding", knowledge.Vector);
-        Assert.Equal("doc_id", knowledge.Fields.Id);
+        Assert.Equal("doc_id", knowledge.Fields!.Id);
         Assert.Equal("content", knowledge.Fields.Body);
         Assert.Equal("content", knowledge.Fields.Lexical);
         Assert.Equal("origin", knowledge.Fields.Source);
@@ -112,6 +124,7 @@ public sealed class KnowledgeProviderSchemaTests
         Assert.Equal("dns", knowledge.Links.Namespace);
         Assert.Equal("doc:", knowledge.Links.Prefix);
         Assert.Equal("none", knowledge.Analyzer);
+        Assert.Equal("acme-handbook", knowledge.Citation);
         Assert.Equal(0.5, knowledge.ScoreFloor);
     }
 

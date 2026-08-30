@@ -4,6 +4,7 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Evaluation;
+using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Secrets;
@@ -198,7 +199,15 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
             .ConfigureAwait(false);
 
         var graph = await CompilationStartup
-            .CompileAsync(configuration, chatClients, tools.Registry, transcript, evaluators, knowledge, _loggers)
+            .CompileAsync(
+                configuration,
+                chatClients,
+                tools.Registry,
+                transcript,
+                evaluators,
+                knowledge,
+                KnowledgeCitationFormatterFactory.Resolve(configuration, _options.KnowledgeCitations),
+                _loggers)
             .ConfigureAwait(false);
 
         var seams = CallSeamStartup.Build(configuration, _options);

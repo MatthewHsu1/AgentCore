@@ -1,0 +1,25 @@
+<!doctype html>
+<!--
+  The embeddable widget. Served at /chat/widget.html and framed by /chat/embed.js.
+
+  `background: transparent` on both the document and the body is what lets the host page show
+  through around the bubble. An iframe paints its own white ground otherwise, and the bubble would
+  sit in a visible rectangle.
+-->
+<html lang="en" data-agentcore-endpoint="/v1/chat/completions">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SpiritAI</title>
+    <style>
+      html,
+      body {
+        background: transparent !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/widget-main.tsx"></script>
+  </body>
+</html>

@@ -19,7 +19,11 @@ public sealed class KnowledgeAuditRecordTests
             [Ranked("a", 0.87), Linked("b")], latencyMs: 106, failure: null);
 
         Assert.Equal("ranked", record.Cards[0].Via);
-        Assert.Equal("see_also", record.Cards[1].Via);
+
+        // "link", not "see_also". How a card arrived is the audit record's own vocabulary; the old
+        // value was one collection's payload key, and a deployment whose link field is named
+        // something else read a log line naming a field it does not have.
+        Assert.Equal("link", record.Cards[1].Via);
         Assert.Null(record.Cards[1].Score);
     }
 

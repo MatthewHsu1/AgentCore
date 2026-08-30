@@ -80,7 +80,16 @@ public sealed class KnowledgeScopeArgumentOrderTests
             Name = "scope-argument-order",
             Providers = new ProvidersConfiguration
             {
-                Knowledge = new KnowledgeProviderConfiguration { Kind = "test", Collection = "kb" },
+                Knowledge = new KnowledgeProviderConfiguration
+                {
+                    Kind = "test",
+                    Collection = "kb",
+
+                    // An agent here declares scoped: true, so the block has to say where this
+                    // collection keeps its facets. Nothing is inherited.
+                    Fields = new KnowledgeFieldsConfiguration { Body = "body" },
+                    Scope = new KnowledgeScopeConfiguration { Template = "facets.{key}" },
+                },
             },
             Policy = new PolicyConfiguration
             {

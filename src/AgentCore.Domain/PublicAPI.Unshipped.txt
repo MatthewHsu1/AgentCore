@@ -48,6 +48,8 @@ AgentCore.Domain.Knowledge.KnowledgeCard.Authority.init -> void
 AgentCore.Domain.Knowledge.KnowledgeCard.CardId.get -> string!
 AgentCore.Domain.Knowledge.KnowledgeCard.CardId.init -> void
 AgentCore.Domain.Knowledge.KnowledgeCard.Equals(AgentCore.Domain.Knowledge.KnowledgeCard? other) -> bool
+AgentCore.Domain.Knowledge.KnowledgeCard.Extras.get -> System.Collections.Generic.IReadOnlyDictionary<string!, object?>!
+AgentCore.Domain.Knowledge.KnowledgeCard.Extras.init -> void
 AgentCore.Domain.Knowledge.KnowledgeCard.KnowledgeCard() -> void
 AgentCore.Domain.Knowledge.KnowledgeCard.Score.get -> double?
 AgentCore.Domain.Knowledge.KnowledgeCard.Score.init -> void

@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Tools;
 using Microsoft.Extensions.AI;
+using ModelContextProtocol.Protocol;
 
 namespace AgentCore.Infrastructure.Tools.Mcp;
 
@@ -41,10 +42,6 @@ internal sealed class McpTool : AIFunction
     public override JsonElement JsonSchema => _descriptor.JsonSchema;
 
     /// <inheritdoc />
-    /// <remarks>
-    /// Section 8.7: this returns an error result and never throws. The caller is on a telephone call,
-    /// and an exception would end the turn where a result lets the model say something.
-    /// </remarks>
     protected override async ValueTask<object?> InvokeCoreAsync(
         AIFunctionArguments arguments, CancellationToken cancellationToken)
     {
@@ -52,7 +49,10 @@ internal sealed class McpTool : AIFunction
 
         try
         {
-            return await _session.CallAsync(_descriptor.Name, arguments, cancellationToken).ConfigureAwait(false);
+            var answer = await _session.CallAsync(_descriptor.Name, arguments, cancellationToken)
+                .ConfigureAwait(false);
+
+            return Unwrap(answer);
         }
         catch (McpToolGoneException)
         {
@@ -69,6 +69,35 @@ internal sealed class McpTool : AIFunction
             return Failed($"the MCP server '{_session.Id}' could not be reached: {ex.GetBaseException().Message}");
         }
     }
+
+    /// <summary>Reads the answer out of the envelope the protocol wraps it in.</summary>
+    /// <param name="answer">What the server sent back.</param>
+    /// <returns>The answer itself, or an error result when the tool failed on its own terms.</returns>
+    private object? Unwrap(CallToolResult answer)
+    {
+        var text = TextOf(answer);
+
+        // A tool that fails answers in the one error shape, whichever way it failed.
+        // The protocol's own failure flag is not that shape, so it is carried into it here.
+        if (answer.IsError == true)
+        {
+            return Failed(text is { Length: > 0 }
+                ? $"the MCP server '{_session.Id}' answered with a failure: {text}"
+                : $"the MCP server '{_session.Id}' answered with a failure and said nothing about it.");
+        }
+
+        // A server that fills the spec's own structured field means that to be the answer, so it
+        // beats reading the same answer back out of the text blocks.
+        return answer.StructuredContent is { } structured ? structured : text;
+    }
+
+    /// <summary>Joins the text blocks of one answer, and names every block that is not text.</summary>
+    /// <param name="answer">What the server sent back.</param>
+    /// <returns>The text, which is empty when the server sent no blocks.</returns>
+    private static string TextOf(CallToolResult answer)
+        => string.Join(
+            "\n",
+            answer.Content.Select(block => block is TextContentBlock text ? text.Text : $"[{block.Type}]"));
 
     private JsonObject Failed(string message) => ToolErrorResult.Create(_id, message);
 }

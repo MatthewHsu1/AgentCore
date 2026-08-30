@@ -1063,13 +1063,16 @@
     },
     "knowledgeProvider": {
       "type": "object",
-      "description": "The adapter that answers IKnowledgeRetrievalPort, and what it reads.",
+      "description": "The adapter that answers IKnowledgeRetrievalPort, and what it reads. AgentCore ships no payload field names: every role below is unmapped until this block names it.",
       "additionalProperties": false,
+      "required": [
+        "kind",
+        "collection"
+      ],
       "properties": {
         "kind": {
           "type": "string",
           "minLength": 1,
-          "default": "qdrant",
           "description": "The adapter that answers IKnowledgeRetrievalPort, such as qdrant."
         },
         "endpoint": {
@@ -1080,38 +1083,42 @@
         "collection": {
           "type": "string",
           "minLength": 1,
-          "default": "kb",
-          "description": "The collection to read. Always the alias, never a concrete collection."
+          "description": "The collection to read. Point it at an alias if your ingester swaps collections on rebuild."
         },
         "vector": {
           "type": ["string", "null"],
           "minLength": 1,
-          "description": "The named vector every query searches. Omitted or null, the collection's single anonymous vector is searched; a kb sync collection needs vector: dense."
+          "description": "The named vector every query searches. Omitted or null, the collection's single anonymous vector is searched."
         },
         "fields": {
           "type": "object",
-          "description": "How a card's payload is named. A dotted name walks into a nested struct. Only body must stay mapped; null disables a role the collection does not carry.",
+          "description": "How a card's payload is named, in this collection. A dotted name walks into a nested struct. There are no defaults: a role this block does not name is absent from the card. Required unless mapper: names a point mapper instead.",
           "additionalProperties": false,
+          "required": [
+            "body"
+          ],
           "properties": {
-            "id": { "type": ["string", "null"], "minLength": 1, "default": "card_id" },
-            "body": { "type": "string", "minLength": 1, "default": "body" },
-            "lexical": { "type": ["string", "null"], "minLength": 1, "default": "text" },
-            "source": { "type": ["string", "null"], "minLength": 1, "default": "source.ref" },
-            "locator": { "type": ["string", "null"], "minLength": 1, "default": "source.locator" },
-            "authority": { "type": ["string", "null"], "minLength": 1, "default": "authority" }
+            "id": { "type": ["string", "null"], "minLength": 1, "description": "The card id. Unmapped, the point's own key stands in." },
+            "body": { "type": "string", "minLength": 1, "description": "What the model reads. The one role the built-in mapping cannot do without." },
+            "lexical": { "type": ["string", "null"], "minLength": 1, "description": "The full-text-indexed field the required-term leg matches on. Unmapped, the search ranks by vector alone." },
+            "source": { "type": ["string", "null"], "minLength": 1, "description": "The citation's source label." },
+            "locator": { "type": ["string", "null"], "minLength": 1, "description": "Where in that source the card sits." },
+            "authority": { "type": ["string", "null"], "minLength": 1, "description": "The trust rank. Read by the audit record only." }
           }
         },
         "scope": {
           "type": "object",
-          "description": "How an open KnowledgeScope's facet keys become payload paths.",
+          "description": "How an open KnowledgeScope's facet keys become payload paths. Required whenever any agent declares knowledge: { scoped: true }.",
           "additionalProperties": false,
+          "required": [
+            "template"
+          ],
           "properties": {
             "template": {
               "type": "string",
               "minLength": 1,
               "pattern": "\\{key\\}",
-              "default": "facets.{key}",
-              "description": "The payload path each facet key becomes, with {key} standing for the key."
+              "description": "The payload path each facet key becomes, with {key} standing for the key. Flat facets are {key}; facets nested under one struct are facets.{key}."
             }
           }
         },
@@ -1119,37 +1126,46 @@
           "type": "object",
           "description": "How a card's links to other cards are read and followed. Writing the block turns link expansion on and requires a mapped fields.id; omitting it turns the feature off.",
           "additionalProperties": false,
+          "required": [
+            "field"
+          ],
           "properties": {
-            "field": { "type": "string", "minLength": 1, "default": "see_also" },
+            "field": { "type": "string", "minLength": 1, "description": "The payload field holding the ids of the cards this card links to." },
             "lookup": {
               "type": "string",
               "enum": ["uuid5", "direct", "filter"],
               "default": "filter",
-              "description": "How a linked id becomes a point to fetch. filter works on any collection; uuid5 is the kb sync scheme."
+              "description": "How a linked id becomes a point to fetch. filter works on any collection; uuid5 and direct derive the point key from the id."
             },
             "namespace": {
               "type": "string",
               "minLength": 1,
               "default": "url",
-              "description": "The uuid5 namespace: url, dns, oid, x500, or a GUID."
+              "description": "The uuid5 namespace: url, dns, oid, x500, or a GUID. RFC 4122's own names; uuid5 is undefined without one."
             },
             "prefix": {
               "type": "string",
-              "default": "kb:",
-              "description": "What the ingester puts in front of the id before hashing. May be empty."
+              "default": "",
+              "description": "What the ingester puts in front of the id before hashing. Empty by default."
             }
           }
         },
         "analyzer": {
           "type": "string",
           "minLength": 1,
-          "default": "identifier-codes",
-          "description": "The IKnowledgeQueryAnalyzer name that picks required terms."
+          "default": "none",
+          "description": "The IKnowledgeQueryAnalyzer name that picks required terms. Defaults to none, which requires nothing and ranks by vector alone."
         },
         "mapper": {
           "type": "string",
           "minLength": 1,
           "description": "The IKnowledgePointMapper name that turns a point into a card. Omitted, the fields: block is the mapper."
+        },
+        "citation": {
+          "type": "string",
+          "minLength": 1,
+          "default": "source-locator",
+          "description": "The IKnowledgeCitationFormatter name that writes each card's source label. Read only by agents that declare citations: true. Register your own with options.UseKnowledgeCitationFormatters."
         },
         "scoreFloor": {
           "type": "number",

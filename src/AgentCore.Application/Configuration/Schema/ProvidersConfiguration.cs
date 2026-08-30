@@ -81,56 +81,56 @@ public sealed record EmbeddingProviderConfiguration
     public int? Dimensions { get; init; }
 }
 
-/// <summary>How a card's payload is named in the collection this deployment reads.</summary>
+/// <summary>
+/// How a card's payload is named in the collection this deployment reads.
+/// </summary>
+/// <remarks>
+/// AgentCore ships no field names. Every role starts unmapped, and stays unmapped until this
+/// document names the payload path that fills it. A collection built by any ingester is therefore
+/// expressible here, and no ingester's naming is privileged. An unmapped role is simply absent from
+/// the card: it is never guessed, and never silently read off a name AgentCore chose.
+/// </remarks>
 public sealed record KnowledgeFieldsConfiguration
 {
-    /// <summary>The id field used when the document names none.</summary>
-    public const string DefaultId = "card_id";
-
-    /// <summary>The body field used when the document names none.</summary>
-    public const string DefaultBody = "body";
-
-    /// <summary>The full-text field used when the document names none.</summary>
-    public const string DefaultLexical = "text";
-
-    /// <summary>The citation source field used when the document names none.</summary>
-    public const string DefaultSource = "source.ref";
-
-    /// <summary>The citation locator field used when the document names none.</summary>
-    public const string DefaultLocator = "source.locator";
-
-    /// <summary>The trust-rank field used when the document names none.</summary>
-    public const string DefaultAuthority = "authority";
+    /// <summary>
+    /// Gets the field holding what the model reads, or <see langword="null"/> when this document
+    /// names none. Required whenever <c>providers.knowledge.mapper</c> is absent, because the
+    /// built-in mapping has nothing to put in the card without it.
+    /// </summary>
+    public string? Body { get; init; }
 
     /// <summary>Gets the field holding the card id, or null when the collection carries none.</summary>
-    public string? Id { get; init; } = DefaultId;
-
-    /// <summary>Gets the field holding what the model reads.</summary>
-    public string Body { get; init; } = DefaultBody;
+    /// <remarks>The point's own key stands in for an unmapped id.</remarks>
+    public string? Id { get; init; }
 
     /// <summary>Gets the full-text-indexed field the required-term leg matches on.</summary>
-    public string? Lexical { get; init; } = DefaultLexical;
+    /// <remarks>Unmapped, the search ranks by vector alone and the analyzer is never consulted.</remarks>
+    public string? Lexical { get; init; }
 
-    /// <summary>Gets the field holding the citation's source label. Empty output omits the citation.</summary>
-    public string? Source { get; init; } = DefaultSource;
+    /// <summary>Gets the field holding the citation's source label.</summary>
+    public string? Source { get; init; }
 
     /// <summary>Gets the field holding where in that source the card sits.</summary>
-    public string? Locator { get; init; } = DefaultLocator;
+    public string? Locator { get; init; }
 
     /// <summary>Gets the field holding the trust rank. Read by the audit record only.</summary>
-    public string? Authority { get; init; } = DefaultAuthority;
+    public string? Authority { get; init; }
 }
 
 /// <summary>How an open <c>KnowledgeScope</c>'s facet keys become payload paths.</summary>
+/// <remarks>
+/// There is no default template, because a template is a claim about where one particular
+/// collection keeps its facets. A deployment whose agents never scope needs none; one whose agents
+/// do must say where to look.
+/// </remarks>
 public sealed record KnowledgeScopeConfiguration
 {
-    /// <summary>The template used when the document names none.</summary>
-    public const string DefaultTemplate = "facets.{key}";
-
     /// <summary>
-    /// Gets the payload path each facet key becomes, with <c>{key}</c> standing for the key.
+    /// Gets the payload path each facet key becomes, with <c>{key}</c> standing for the key, or
+    /// <see langword="null"/> when this document names none. Required whenever any agent declares
+    /// <c>knowledge: { scoped: true }</c>.
     /// </summary>
-    public string Template { get; init; } = DefaultTemplate;
+    public string? Template { get; init; }
 }
 
 /// <summary>How a card id becomes something Qdrant can fetch.</summary>
@@ -153,17 +153,18 @@ public enum KnowledgeLinkLookup
 /// </remarks>
 public sealed record KnowledgeLinksConfiguration
 {
-    /// <summary>The links field used when the document names none.</summary>
-    public const string DefaultField = "see_also";
-
-    /// <summary>The namespace used when the document names none.</summary>
+    /// <summary>The uuid5 namespace used when the document names none.</summary>
+    /// <remarks>
+    /// This is RFC 4122's own URL namespace, not any ingester's choice. <c>uuid5</c> is undefined
+    /// without a namespace, so unlike a field name it cannot be left unset.
+    /// </remarks>
     public const string DefaultNamespace = "url";
 
-    /// <summary>The prefix used when the document names none.</summary>
-    public const string DefaultPrefix = "kb:";
-
-    /// <summary>Gets the payload field holding the ids of the cards this card links to.</summary>
-    public string Field { get; init; } = DefaultField;
+    /// <summary>
+    /// Gets the payload field holding the ids of the cards this card links to, or
+    /// <see langword="null"/> when this document names none. Required inside a <c>links:</c> block.
+    /// </summary>
+    public string? Field { get; init; }
 
     /// <summary>Gets how a linked id becomes a point to fetch. <c>filter</c> works on any collection.</summary>
     public KnowledgeLinkLookup Lookup { get; init; } = KnowledgeLinkLookup.Filter;
@@ -171,8 +172,8 @@ public sealed record KnowledgeLinksConfiguration
     /// <summary>Gets the uuid5 namespace: <c>url</c>, <c>dns</c>, <c>oid</c>, <c>x500</c>, or a GUID.</summary>
     public string Namespace { get; init; } = DefaultNamespace;
 
-    /// <summary>Gets what the ingester puts in front of the id before hashing. May be empty.</summary>
-    public string Prefix { get; init; } = DefaultPrefix;
+    /// <summary>Gets what the ingester puts in front of the id before hashing. Empty by default.</summary>
+    public string Prefix { get; init; } = string.Empty;
 }
 
 /// <summary>
@@ -180,26 +181,23 @@ public sealed record KnowledgeLinksConfiguration
 /// </summary>
 public sealed record KnowledgeProviderConfiguration
 {
-    /// <summary>The adapter used when the document names none.</summary>
-    public const string DefaultKind = "qdrant";
+    /// <summary>The analyzer used when the document names none: one that requires nothing.</summary>
+    public const string DefaultAnalyzer = NoQueryAnalyzer.AnalyzerName;
 
-    /// <summary>The collection used when the document names none.</summary>
-    public const string DefaultCollection = "kb";
-
-    /// <summary>The analyzer used when the document names none.</summary>
-    public const string DefaultAnalyzer = IdentifierCodeAnalyzer.AnalyzerName;
+    /// <summary>The citation wording used when the document names none.</summary>
+    public const string DefaultCitation = SourceLocatorCitationFormatter.FormatterName;
 
     /// <summary>The score floor used when the document sets none.</summary>
     public const double DefaultScoreFloor = 0.25;
 
     /// <summary>Gets the adapter that answers <c>IKnowledgeRetrievalPort</c>, such as <c>qdrant</c>.</summary>
-    public string Kind { get; init; } = DefaultKind;
+    public required string Kind { get; init; }
 
     /// <summary>Gets the Qdrant endpoint, such as <c>https://qdrant.example.com:6334</c>.</summary>
     public string? Endpoint { get; init; }
 
     /// <summary>Gets the collection to read.</summary>
-    public string Collection { get; init; } = DefaultCollection;
+    public required string Collection { get; init; }
 
     /// <summary>
     /// Gets the named vector every query searches, or <see langword="null"/> for the collection's
@@ -207,8 +205,11 @@ public sealed record KnowledgeProviderConfiguration
     /// </summary>
     public string? Vector { get; init; }
 
-    /// <summary>Gets how a card's payload is named.</summary>
-    public KnowledgeFieldsConfiguration Fields { get; init; } = new();
+    /// <summary>
+    /// Gets how a card's payload is named, or <see langword="null"/> when this document names
+    /// nothing. Required whenever <see cref="Mapper"/> is absent.
+    /// </summary>
+    public KnowledgeFieldsConfiguration? Fields { get; init; }
 
     /// <summary>Gets how facet keys become payload paths.</summary>
     public KnowledgeScopeConfiguration Scope { get; init; } = new();
@@ -218,6 +219,12 @@ public sealed record KnowledgeProviderConfiguration
 
     /// <summary>Gets the <c>IKnowledgeQueryAnalyzer</c> name that picks required terms.</summary>
     public string Analyzer { get; init; } = DefaultAnalyzer;
+
+    /// <summary>
+    /// Gets the <c>IKnowledgeCitationFormatter</c> name that writes each card's source label.
+    /// </summary>
+    /// <remarks>Read only by agents that declare <c>knowledge: { citations: true }</c>.</remarks>
+    public string Citation { get; init; } = DefaultCitation;
 
     /// <summary>
     /// Gets the <c>IKnowledgePointMapper</c> name that turns a point into a card, or

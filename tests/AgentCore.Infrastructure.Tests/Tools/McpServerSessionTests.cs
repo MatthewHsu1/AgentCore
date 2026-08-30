@@ -151,6 +151,10 @@ public sealed class McpServerSessionTests
 
         Assert.Equal(2, fake.ConnectionsOpened);
         Assert.False(IsError(result), $"the call returned an error result: {result}");
+
+        // The CallToolResult envelope is protocol and not answer, so what comes back is the text the
+        // server put in it and never the box it arrived in.
+        Assert.Equal("ran create_issue", result);
     }
 
     [Fact]

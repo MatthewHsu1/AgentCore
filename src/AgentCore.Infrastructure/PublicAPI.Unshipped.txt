@@ -15,6 +15,10 @@ AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationAdapter.Ope
 AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator
 AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator.EvaluateAsync(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages, Microsoft.Extensions.AI.ChatResponse! modelResponse, Microsoft.Extensions.AI.Evaluation.ChatConfiguration? chatConfiguration = null, System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.Evaluation.EvaluationContext!>? additionalContext = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.Evaluation.EvaluationResult!>
 AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator.EvaluationMetricNames.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
+AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.FieldsPointMapper
+AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.FieldsPointMapper.FieldsPointMapper(AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration! fields) -> void
+AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.FieldsPointMapper.Map(AgentCore.Application.Knowledge.KnowledgePoint! point) -> AgentCore.Domain.Knowledge.KnowledgeCard?
+AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.FieldsPointMapper.Name.get -> string!
 AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter
 AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter.CanScope.get -> bool
 AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter.CanServeSearch.get -> bool
@@ -22,6 +26,8 @@ AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter.Crea
 AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter.Kind.get -> string!
 AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter.QdrantKnowledgeAdapter() -> void
 AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter.QdrantKnowledgeAdapter(Microsoft.Extensions.AI.IEmbeddingGenerator<string!, Microsoft.Extensions.AI.Embedding<float>!>! embeddings) -> void
+AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter.UseAnalyzers(params AgentCore.Application.Knowledge.IKnowledgeQueryAnalyzer![]! analyzers) -> AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter!
+AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter.UseMappers(params AgentCore.Application.Knowledge.IKnowledgePointMapper![]! mappers) -> AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter!
 AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter
 AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.CreateClientAsync(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.IChatClient!>
 AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.Kind.get -> string!
@@ -63,11 +69,10 @@ const AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvalu
 const AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator.HttpClientName = "agentcore.openai.moderation" -> string!
 const AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator.ModerationModel = "omni-moderation-latest" -> string!
 const AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator.ModerationPath = "/v1/moderations" -> string!
+const AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.FieldsPointMapper.MapperName = "fields" -> string!
 const AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter.ApiKeySecretName = "qdrant-api-key" -> string!
 const AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter.ApiKeyVariableName = "QDRANT_API_KEY" -> string!
 const AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter.ProviderKind = "qdrant" -> string!
-AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter.UseAnalyzers(params AgentCore.Application.Knowledge.IKnowledgeQueryAnalyzer![]! analyzers) -> AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter!
-AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter.UseMappers(params AgentCore.Application.Knowledge.IKnowledgePointMapper![]! mappers) -> AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter!
 const AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.ApiKeySecretName = "openai-api-key" -> string!
 const AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.ApiKeyVariableName = "OPENAI_API_KEY" -> string!
 const AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.ProviderKind = "openai" -> string!

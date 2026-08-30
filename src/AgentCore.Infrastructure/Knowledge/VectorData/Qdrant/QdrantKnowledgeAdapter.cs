@@ -3,6 +3,7 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
+using Google.Protobuf.Collections;
 using Microsoft.Extensions.AI;
 using Qdrant.Client;
 using Qdrant.Client.Grpc;
@@ -41,8 +42,7 @@ public sealed class QdrantKnowledgeAdapter : IKnowledgeStoreAdapter
 
     private readonly IEmbeddingGenerator<string, Embedding<float>>? _embeddings;
 
-    private IReadOnlyList<IKnowledgeQueryAnalyzer> _analyzers =
-        [new IdentifierCodeAnalyzer(), new NoQueryAnalyzer()];
+    private IReadOnlyList<IKnowledgeQueryAnalyzer> _analyzers = [new NoQueryAnalyzer()];
 
     private IKnowledgePointMapper[] _mappers = [];
 
@@ -129,13 +129,32 @@ public sealed class QdrantKnowledgeAdapter : IKnowledgeStoreAdapter
 
         var mapper = ResolveMapper(entry.Mapper);
 
-        if (entry.Links is not null && entry.Fields.Id is not { Length: > 0 })
+        if (entry.Mapper is null && entry.Fields?.Body is not { Length: > 0 })
+        {
+            throw Fail(
+                "/providers/knowledge/fields/body",
+                "providers.knowledge names no mapper, so the built-in fields: mapping reads every "
+                + "card, and it maps no body. AgentCore has no default field names, so every card "
+                + "would reach the model empty. Map providers.knowledge.fields.body, or name an "
+                + "IKnowledgePointMapper with mapper:.");
+        }
+
+        if (entry.Links is not null && entry.Fields?.Id is not { Length: > 0 })
         {
             throw Fail(
                 "/providers/knowledge/fields/id",
                 "providers.knowledge.links is configured, and every links.lookup mode resolves a "
-                + "linked id through providers.knowledge.fields.id, which this document disables. "
+                + "linked id through providers.knowledge.fields.id, which this document does not map. "
                 + "Map the id field, or remove the links block.");
+        }
+
+        if (entry.Links is { } declaredLinks && declaredLinks.Field is not { Length: > 0 })
+        {
+            throw Fail(
+                "/providers/knowledge/links/field",
+                "providers.knowledge.links is configured and names no field. AgentCore has no default "
+                + "link field: it cannot guess which payload key holds this collection's outbound ids. "
+                + "Write links.field, or remove the links block.");
         }
 
         var linkNamespace = Guid.Empty;
@@ -144,7 +163,7 @@ public sealed class QdrantKnowledgeAdapter : IKnowledgeStoreAdapter
         {
             try
             {
-                linkNamespace = KbPointId.Namespace(uuid5Links.Namespace);
+                linkNamespace = Uuid5PointId.Namespace(uuid5Links.Namespace);
             }
             catch (FormatException)
             {
@@ -165,8 +184,8 @@ public sealed class QdrantKnowledgeAdapter : IKnowledgeStoreAdapter
             {
                 throw new InvalidOperationException(
                     $"providers.knowledge.collection names '{entry.Collection}', and no such collection or "
-                    + "alias exists. AgentCore never creates it: `kb sync` keeps that name as an alias and "
-                    + "refuses to run if it finds a concrete collection there instead. Run `kb sync` first.");
+                    + "alias exists on this cluster. AgentCore reads a knowledge base and never creates "
+                    + "one: run whatever ingests your cards, or correct the name.");
             }
 
             var info = await client.GetCollectionInfoAsync(entry.Collection, cancellationToken).ConfigureAwait(false);
@@ -227,9 +246,9 @@ public sealed class QdrantKnowledgeAdapter : IKnowledgeStoreAdapter
                 var label = entry.Vector is { Length: > 0 } named ? $"a '{named}' vector" : "an anonymous vector";
                 throw new InvalidOperationException(
                     $"'{entry.Collection}' has {label} of {width} dimensions and this "
-                    + $"host embeds at {dimensions}. Every score would be meaningless. Either point this "
-                    + "host at the embedding model `kb sync` used to build the collection, or run "
-                    + "`kb sync` again with this host's model.");
+                    + $"host embeds at {dimensions}. Every score would be meaningless. Either set "
+                    + "providers.embeddings to the model this collection was built with, or rebuild the "
+                    + "collection with this host's model.");
             }
 
             await AssertPayloadAsync(client, entry, mapper, linkNamespace, cancellationToken).ConfigureAwait(false);
@@ -303,18 +322,17 @@ public sealed class QdrantKnowledgeAdapter : IKnowledgeStoreAdapter
             return;
         }
 
-        foreach (var key in DeclaredKeys(entry.Fields))
+        foreach (var (role, key, numeric) in DeclaredKeys(entry.Fields!))
         {
-            if (QdrantPayload.Read(point.Payload, key) is not { KindCase: Value.KindOneofCase.StringValue } value
-                || value.StringValue.Length == 0)
+            if (!Carries(point.Payload, key, numeric))
             {
                 throw new InvalidOperationException(
-                    $"'{entry.Collection}' holds points whose payload has no non-empty '{key}'. AgentCore "
-                    + "reads every field providers.knowledge.fields declares off every point, treats a "
-                    + "missing key as an empty string, and would then inject blank cards into every turn "
-                    + "without failing anything. Correct providers.knowledge.fields — a role this "
-                    + "collection does not carry is declared with an explicit null — or point this host "
-                    + "at the collection whose payload matches it.");
+                    $"'{entry.Collection}' holds points whose payload has no {(numeric ? "numeric" : "non-empty")} "
+                    + $"'{key}', which providers.knowledge.fields.{role} names. AgentCore reads every field "
+                    + "that block maps off every point and treats a missing key as absent, so this role "
+                    + "would be silently empty on every card. Map the path this collection really uses, "
+                    + "declare the role with an explicit null if the collection does not carry it, or "
+                    + "point this host at the collection whose payload matches.");
             }
         }
 
@@ -324,15 +342,61 @@ public sealed class QdrantKnowledgeAdapter : IKnowledgeStoreAdapter
         }
     }
 
-    /// <summary>The payload keys the document actually mapped: body always, id while it is mapped.</summary>
-    private static IEnumerable<string> DeclaredKeys(KnowledgeFieldsConfiguration fields)
+    /// <summary>
+    /// Every payload key the document actually mapped, with the role that named it and whether that
+    /// role holds a number rather than text.
+    /// </summary>
+    /// <remarks>
+    /// All six roles, not the two the built-in mapping cannot do without. A wrong path under
+    /// <c>source</c>, <c>locator</c> or <c>authority</c> throws nothing and returns nothing: the
+    /// citation is simply blank on every card, on every turn, for the life of the deployment. That is
+    /// exactly the failure a startup proof exists to convert into a refusal to start.
+    /// </remarks>
+    private static IEnumerable<(string Role, string Key, bool Numeric)> DeclaredKeys(
+        KnowledgeFieldsConfiguration fields)
     {
-        yield return fields.Body;
+        if (fields.Body is { Length: > 0 } body)
+        {
+            yield return ("body", body, false);
+        }
+
         if (fields.Id is { Length: > 0 } id)
         {
-            yield return id;
+            yield return ("id", id, false);
+        }
+
+        if (fields.Lexical is { Length: > 0 } lexical)
+        {
+            yield return ("lexical", lexical, false);
+        }
+
+        if (fields.Source is { Length: > 0 } source)
+        {
+            yield return ("source", source, false);
+        }
+
+        if (fields.Locator is { Length: > 0 } locator)
+        {
+            yield return ("locator", locator, false);
+        }
+
+        // Authority ranks trust, so a collection writes it as an integer. Demanding a string here
+        // would refuse every correctly built collection there is.
+        if (fields.Authority is { Length: > 0 } authority)
+        {
+            yield return ("authority", authority, true);
         }
     }
+
+    /// <summary>Whether one point really carries the role a mapped key claims.</summary>
+    private static bool Carries(MapField<string, Value> payload, string key, bool numeric)
+        => QdrantPayload.Read(payload, key) switch
+        {
+            { KindCase: Value.KindOneofCase.StringValue } value => !numeric && value.StringValue.Length > 0,
+            { KindCase: Value.KindOneofCase.IntegerValue } => numeric,
+            { KindCase: Value.KindOneofCase.DoubleValue } => numeric,
+            _ => false,
+        };
 
     /// <summary>Proves a linked id resolves back to the point that holds it.</summary>
     private static void AssertPointKey(
@@ -341,12 +405,12 @@ public sealed class QdrantKnowledgeAdapter : IKnowledgeStoreAdapter
         KnowledgeLinksConfiguration links,
         Guid linkNamespace)
     {
-        if (QdrantPayload.Read(point.Payload, links.Field) is null)
+        if (QdrantPayload.Read(point.Payload, links.Field!) is null)
         {
             return;
         }
 
-        var cardId = QdrantPayload.Read(point.Payload, entry.Fields.Id!)!.StringValue;
+        var cardId = QdrantPayload.Read(point.Payload, entry.Fields!.Id!)!.StringValue;
 
         if (point.Id.PointIdOptionsCase != PointId.PointIdOptionsOneofCase.Uuid)
         {
@@ -354,7 +418,7 @@ public sealed class QdrantKnowledgeAdapter : IKnowledgeStoreAdapter
                 $"'{entry.Collection}' holds points keyed by number, and providers.knowledge.links.lookup "
                 + $"is {links.Lookup.ToString().ToLowerInvariant()}, which builds a UUID key. Every "
                 + "link expansion would silently return nothing. Set links.lookup: filter to match on "
-                + $"'{entry.Fields.Id}' instead.");
+                + $"'{entry.Fields!.Id}' instead.");
         }
 
         Guid expected;
@@ -366,12 +430,12 @@ public sealed class QdrantKnowledgeAdapter : IKnowledgeStoreAdapter
                     $"'{entry.Collection}' holds a point whose '{entry.Fields.Id}' is '{cardId}', which is "
                     + "not a GUID, but providers.knowledge.links.lookup is direct. Qdrant's point key is a "
                     + "GUID or an unsigned integer, so a free-form id cannot be one. Set links.lookup: "
-                    + $"filter to match on '{entry.Fields.Id}' instead.");
+                    + $"filter to match on '{entry.Fields!.Id}' instead.");
             }
         }
         else
         {
-            expected = KbPointId.For(cardId, linkNamespace, links.Prefix);
+            expected = Uuid5PointId.For(cardId, linkNamespace, links.Prefix);
         }
 
         if (Guid.Parse(point.Id.Uuid) != expected)
@@ -382,7 +446,7 @@ public sealed class QdrantKnowledgeAdapter : IKnowledgeStoreAdapter
                 + $"{links.Lookup.ToString().ToLowerInvariant()} with namespace "
                 + $"'{links.Namespace}' and prefix '{links.Prefix}', which derives {expected}. "
                 + $"Every '{links.Field}' expansion would silently return nothing. Correct the "
-                + $"namespace or prefix, or set links.lookup: filter to match on '{entry.Fields.Id}'.");
+                + $"namespace or prefix, or set links.lookup: filter to match on '{entry.Fields!.Id}'.");
         }
     }
 

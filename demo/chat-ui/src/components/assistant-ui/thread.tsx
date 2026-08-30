@@ -33,7 +33,6 @@ import {
   type AssistantState,
   BranchPickerPrimitive,
   ComposerPrimitive,
-  ErrorPrimitive,
   groupPartByType,
   MessagePrimitive,
   SuggestionPrimitive,
@@ -42,7 +41,20 @@ import {
   type ImageMessagePartComponent,
   type ToolCallMessagePartComponent,
   useAuiState,
+  useMessageTiming,
 } from "@assistant-ui/react";
+// `@assistant-ui/react` re-exports most hooks but not this one, so it comes from the core package
+// the app already depends on directly.
+import { useActionBarReload } from "@assistant-ui/core/react";
+import { TypingIndicator } from "@/components/elements/typing-indicator";
+import { ComposerDraft } from "@/components/assistant-ui/draft";
+import { Regenerate } from "@/components/assistant-ui/regenerate";
+import { ThreadMessageSearch } from "@/components/assistant-ui/search";
+import { MessageSpeaker } from "@/components/assistant-ui/speaker";
+import { DayDivider } from "@/components/elements/day-separator";
+import { ErrorState } from "@/components/elements/error-state";
+import { MessageTiming as MessageTimingStats } from "@/components/elements/message-timing";
+import { StoppedRun } from "@/components/elements/stopped-run";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -54,12 +66,12 @@ import {
   MicIcon,
   MoreHorizontalIcon,
   PencilIcon,
-  RefreshCwIcon,
   SquareIcon,
 } from "lucide-react";
 import {
   createContext,
   useContext,
+  useState,
   type ComponentType,
   type FC,
   type PropsWithChildren,
@@ -187,6 +199,10 @@ const ThreadRoot: FC<{ isEmpty: boolean }> = ({ isEmpty }) => {
             )}
           >
             <ThreadScrollToBottom />
+            <AuiIf condition={(s) => s.thread.messages.length > 0}>
+              <ThreadMessageSearch />
+            </AuiIf>
+            <ComposerDraft />
             <ThreadFollowupSuggestions />
             <Composer />
             <AuiIf condition={(s) => isNewChatView(s) && s.composer.isEmpty}>
@@ -199,15 +215,69 @@ const ThreadRoot: FC<{ isEmpty: boolean }> = ({ isEmpty }) => {
   );
 };
 
+/** The local calendar day, as a value two dates on the same day always share. */
+const dayKey = (date: Date) =>
+  `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+
+/** "Today" and "Yesterday" beat a date nobody has to decode; older days get the date. */
+function dayLabel(date: Date): string {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+
+  if (dayKey(date) === dayKey(today)) return "Today";
+  if (dayKey(date) === dayKey(yesterday)) return "Yesterday";
+
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    // A year is noise until the conversation actually spans one.
+    ...(date.getFullYear() === today.getFullYear() ? {} : { year: "numeric" }),
+  });
+}
+
+/**
+ * The label for a rule above this message, or `null` when it continues the day above it.
+ *
+ * The selector returns a string rather than the message it derived it from, so a re-render with an
+ * unchanged day is not a state change and does not repaint the thread.
+ */
+const useDayBreak = () =>
+  useAuiState((s) => {
+    // `s.message.index` rather than a search through `s.thread.messages`: this selector re-runs on
+    // every store update, and streaming updates the store per chunk, so a scan here would cost the
+    // whole thread on every frame of every answer.
+    const previous = s.thread.messages[s.message.index - 1];
+    const day = dayKey(s.message.createdAt);
+
+    if (previous && dayKey(previous.createdAt) === day) return null;
+
+    return dayLabel(s.message.createdAt);
+  });
+
 const ThreadMessage: FC = () => {
   const { AssistantMessage: AssistantMessageComponent = AssistantMessage } =
     useContext(ThreadComponentsContext);
   const role = useAuiState((s) => s.message.role);
   const isEditing = useAuiState((s) => s.message.composer.isEditing);
+  const dayBreak = useDayBreak();
 
-  if (isEditing) return <EditComposer />;
-  if (role === "user") return <UserMessage />;
-  return <AssistantMessageComponent />;
+  const message = isEditing ? (
+    <EditComposer />
+  ) : role === "user" ? (
+    <UserMessage />
+  ) : (
+    <AssistantMessageComponent />
+  );
+
+  if (!dayBreak) return message;
+
+  return (
+    <>
+      <DayDivider day={dayBreak} className="mx-2 my-3" />
+      {message}
+    </>
+  );
 };
 
 const ThreadScrollToBottom: FC = () => {
@@ -354,13 +424,102 @@ const ComposerAction: FC = () => {
   );
 };
 
+/** How this message ended, or `undefined` while it is still running or is the caller's own. */
+const useAssistantStatus = () =>
+  useAuiState((s) =>
+    s.message.role === "assistant" ? s.message.status : undefined,
+  );
+
+/** The error a run carries is `unknown`, and only a string of it can go on screen. */
+function errorDetail(error: unknown): string {
+  if (error === undefined || error === null) return "The run did not finish.";
+  if (typeof error === "string") return error;
+  if (error instanceof Error) return error.message;
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
 const MessageError: FC = () => {
+  const status = useAssistantStatus();
+  const { disabled, reload } = useActionBarReload();
+  const [retrying, setRetrying] = useState(false);
+
+  if (status?.type !== "incomplete" || status.reason !== "error") return null;
+
   return (
-    <MessagePrimitive.Error>
-      <ErrorPrimitive.Root className="aui-message-error-root border-destructive bg-destructive/10 text-destructive dark:bg-destructive/5 mt-2 rounded-md border p-3 text-sm dark:text-red-200">
-        <ErrorPrimitive.Message className="aui-message-error-message line-clamp-2" />
-      </ErrorPrimitive.Root>
-    </MessagePrimitive.Error>
+    <ErrorState
+      className="mt-2 max-w-none"
+      title="Something went wrong"
+      detail={errorDetail(status.error)}
+      // `reload` is null while the thread is busy. Showing the spinner then would be a lie: the
+      // click did nothing, and the row would sit spinning forever.
+      retrying={retrying}
+      onRetry={() => {
+        if (disabled) return;
+        setRetrying(true);
+        reload();
+      }}
+    />
+  );
+};
+
+/**
+ * The marker under an answer the caller stopped.
+ *
+ * Without it a cancelled turn just ends mid-sentence and reads as a crash. `words` is empty on
+ * purpose — the partial answer is already drawn above by the message parts, and passing it again
+ * would print it twice. What is left of that paragraph is the caret, which marks the cut.
+ */
+const StoppedRunNotice: FC = () => {
+  const status = useAssistantStatus();
+  const { disabled, reload } = useActionBarReload();
+  const [discarded, setDiscarded] = useState(false);
+
+  if (discarded) return null;
+  if (status?.type !== "incomplete" || status.reason !== "cancelled") return null;
+
+  return (
+    <StoppedRun
+      className="mt-2 max-w-none"
+      words={[]}
+      reason="stopped"
+      onContinue={() => {
+        if (!disabled) reload();
+      }}
+      onDiscard={() => setDiscarded(true)}
+    />
+  );
+};
+
+/**
+ * How long the turn took, under the answer.
+ *
+ * Reads `message.metadata.timing`, which nothing fills in by default — see `newTurnClock` in
+ * runtime/AgentCoreRuntime.ts, which is what puts it there.
+ */
+const MessageTimingFooter: FC = () => {
+  const timing = useMessageTiming();
+  if (timing?.totalStreamTime === undefined) return null;
+
+  const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
+
+  return (
+    <MessageTimingStats
+      className="mt-1.5 max-w-none"
+      stats={[
+        { label: "took", value: seconds(timing.totalStreamTime) },
+        ...(timing.firstTokenTime !== undefined
+          ? [{ label: "first token", value: seconds(timing.firstTokenTime) }]
+          : []),
+        ...(timing.tokensPerSecond !== undefined
+          ? [{ label: "tok/s", value: timing.tokensPerSecond.toFixed(1) }]
+          : []),
+      ]}
+    />
   );
 };
 
@@ -385,6 +544,7 @@ const AssistantMessage: FC = () => {
         data-slot="aui_assistant-message-content"
         className="text-foreground px-2 leading-relaxed wrap-break-word"
       >
+        <MessageSpeaker />
         <MessagePrimitive.GroupedParts
           groupBy={groupPartByType({
             reasoning: ["group-chainOfThought", "group-reasoning"],
@@ -446,21 +606,23 @@ const AssistantMessage: FC = () => {
                   </div>
                 );
               case "indicator":
+                // Bare dots and never a label. The one thing this host could name here is the
+                // pipeline stage, and it is deliberately never shown to the caller.
                 return (
-                  <span
+                  <TypingIndicator
                     data-slot="aui_assistant-message-indicator"
-                    className="animate-pulse font-sans"
-                    aria-label="Assistant is working"
-                  >
-                    {"●"}
-                  </span>
+                    variant="bare"
+                    className="py-2"
+                  />
                 );
               default:
                 return null;
             }
           }}
         </MessagePrimitive.GroupedParts>
+        <StoppedRunNotice />
         <MessageError />
+        <MessageTimingFooter />
       </div>
 
       <div
@@ -491,11 +653,7 @@ const AssistantActionBar: FC = () => {
           </AuiIf>
         </TooltipIconButton>
       </ActionBarPrimitive.Copy>
-      <ActionBarPrimitive.Reload asChild>
-        <TooltipIconButton tooltip="Refresh">
-          <RefreshCwIcon />
-        </TooltipIconButton>
-      </ActionBarPrimitive.Reload>
+      <Regenerate />
       <ActionBarMorePrimitive.Root>
         <ActionBarMorePrimitive.Trigger asChild>
           <TooltipIconButton

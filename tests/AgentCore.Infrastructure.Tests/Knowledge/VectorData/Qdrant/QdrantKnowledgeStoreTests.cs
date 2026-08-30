@@ -18,7 +18,7 @@ namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant;
 /// Every test here only reads, so one collection serves them all. Building one per test made
 /// <c>CreatePayloadIndexAsync</c> exceed the client's 30 s deadline against a scratch container.
 /// </remarks>
-public sealed class SyntheticCorpusFixture : IAsyncLifetime
+public sealed class KbShapedCorpusFixture : IAsyncLifetime
 {
     /// <summary>Gets the collection name. Dropped when the class finishes.</summary>
     public string Name { get; } = $"store-{Guid.NewGuid():N}";
@@ -34,7 +34,7 @@ public sealed class SyntheticCorpusFixture : IAsyncLifetime
         }
 
         Client = QdrantServer.CreateClient();
-        await SyntheticCorpus.CreateAsync(
+        await KbShapedCorpus.CreateAsync(
             Client, Name, interleaved: true, TestContext.Current.CancellationToken);
     }
 
@@ -57,11 +57,11 @@ public sealed class SyntheticCorpusFixture : IAsyncLifetime
 }
 
 [Collection(QdrantServerCollection.Name)]
-public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFixture>
+public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixture>
 {
-    private readonly SyntheticCorpusFixture _corpus;
+    private readonly KbShapedCorpusFixture _corpus;
 
-    public QdrantKnowledgeStoreTests(SyntheticCorpusFixture corpus) => _corpus = corpus;
+    public QdrantKnowledgeStoreTests(KbShapedCorpusFixture corpus) => _corpus = corpus;
 
     [QdrantFact]
     public async Task SearchAsync_ScopedSearch_ReturnsOnlyThatProduct()
@@ -70,7 +70,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
         // re-check on see_also expansion: a key lookup carries no filter of its own.
         using var _ = Ct900();
 
-        var cards = await LinkedStore().SearchAsync(SyntheticCorpus.PlainQuery, TestContext.Current.CancellationToken);
+        var cards = await LinkedStore().SearchAsync(KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(cards);
         var models = await ModelsOf(cards);
@@ -84,7 +84,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
         // `scoped: false` is the design's own switch for a whole-corpus read. An empty facet map is
         // not that switch, and now fails closed like an absent ambient.
         var cards = await Store(scoped: false).SearchAsync(
-            SyntheticCorpus.PlainQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
 
         Assert.True((await ModelsOf(cards)).Distinct(StringComparer.Ordinal).Count() > 1);
     }
@@ -94,7 +94,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
     {
         // A21, first door. An absent scope fails closed. It never searches every customer's cards.
         var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await Store().SearchAsync(SyntheticCorpus.PlainQuery, TestContext.Current.CancellationToken));
+            async () => await Store().SearchAsync(KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken));
 
         Assert.Contains("no KnowledgeScope is open", thrown.Message, StringComparison.Ordinal);
     }
@@ -109,7 +109,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
             new KnowledgeScope { Facets = new Dictionary<string, string>(StringComparer.Ordinal) });
 
         var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await Store().SearchAsync(SyntheticCorpus.PlainQuery, TestContext.Current.CancellationToken));
+            async () => await Store().SearchAsync(KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken));
 
         Assert.Contains("names no facets", thrown.Message, StringComparison.Ordinal);
     }
@@ -124,10 +124,12 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
         // floor's `>=` cannot be told from `>`.
         Assert.Equal(0.25, options.ScoreFloor);
         Assert.Equal(5, options.Limit);
-        // Left unset, VectorName means the collection's single anonymous vector -- not a name `kb
-        // sync` owns, so unlike Fields.Lexical it has no Application-side constant to fall back to.
+        // Left unset, VectorName means the collection's single anonymous vector.
         Assert.Null(options.VectorName);
-        Assert.Equal("text", options.Fields.Lexical, StringComparer.Ordinal);
+        // No corpus's field names are here to fall back to, so an options record nobody configured
+        // maps nothing at all -- which is why the store refuses to be built from one.
+        Assert.Null(options.Fields);
+        Assert.Null(options.ScopeTemplate);
     }
 
     [QdrantFact]
@@ -136,9 +138,9 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
         // A22. Card 7 holds e33 and sits one dense rank BELOW card 6. Only the required
         // prefetch lifts it.
         var cards = await Store(scoped: false).SearchAsync(
-            SyntheticCorpus.LookalikeQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.LookalikeQuery, TestContext.Current.CancellationToken);
 
-        Assert.Equal(SyntheticCorpus.Id(7), cards[0].CardId);
+        Assert.Equal(KbShapedCorpus.Id(7), cards[0].CardId);
     }
 
     [QdrantFact]
@@ -148,9 +150,9 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
         // Under `should` it would match both cards and reorder. `must` and `should` are the
         // SAME filter for one token, so no single-identifier test can tell them apart.
         var cards = await Store(scoped: false).SearchAsync(
-            SyntheticCorpus.TwoIdentifierQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.TwoIdentifierQuery, TestContext.Current.CancellationToken);
 
-        Assert.Equal(SyntheticCorpus.Id(0), cards[0].CardId);
+        Assert.Equal(KbShapedCorpus.Id(0), cards[0].CardId);
     }
 
     [QdrantFact]
@@ -160,7 +162,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
         // depth (10) and the depth a hardcoded constant would use (20), so either one caps the
         // result below what the caller asked for.
         var cards = await Store(limit: 25, scoped: false).SearchAsync(
-            SyntheticCorpus.PlainQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
 
         Assert.True(
             cards.Count(card => !card.ViaLink) >= 25,
@@ -172,9 +174,9 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
     {
         // The floor must be exact in float32, or `>=` cannot be told from `>`.
         var all = await Store(floor: 0.0, limit: 20, scoped: false).SearchAsync(
-            SyntheticCorpus.PlainQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
         var floored = await Store(floor: 0.25, limit: 20, scoped: false).SearchAsync(
-            SyntheticCorpus.PlainQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
 
         var atOrAbove = all.Count(card => card.Score >= 0.25);
 
@@ -192,10 +194,10 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
         // on the page already. Nothing is scoped here, so `InScope` is vacuously true and the link
         // mechanism itself is what the assertion sees.
         var cards = await LinkedStore(limit: 3, scoped: false).SearchAsync(
-            SyntheticCorpus.PlainQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
 
         var linked = Assert.Single(cards, card => card.ViaLink);
-        Assert.Equal(SyntheticCorpus.Id(SyntheticCorpus.Count - 1), linked.CardId);
+        Assert.Equal(KbShapedCorpus.Id(KbShapedCorpus.Count - 1), linked.CardId);
         Assert.Null(linked.Score);
     }
 
@@ -210,15 +212,15 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
         {
             Facets = new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                ["applies_to"] = SyntheticCorpus.SharedAudience,
+                ["applies_to"] = KbShapedCorpus.SharedAudience,
             },
         });
 
         var cards = await LinkedStore(limit: 3, floor: 0.0).SearchAsync(
-            SyntheticCorpus.PlainQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
 
         var linked = Assert.Single(cards, card => card.ViaLink);
-        Assert.Equal(SyntheticCorpus.Id(SyntheticCorpus.Count - 1), linked.CardId);
+        Assert.Equal(KbShapedCorpus.Id(KbShapedCorpus.Count - 1), linked.CardId);
     }
 
     [QdrantFact]
@@ -233,7 +235,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
         });
 
         var cards = await LinkedStore(limit: 3, floor: 0.0).SearchAsync(
-            SyntheticCorpus.PlainQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(cards);
         Assert.DoesNotContain(cards, card => card.ViaLink);
@@ -244,7 +246,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
     {
         using var _ = Ct900();
 
-        var card = (await Store().SearchAsync(SyntheticCorpus.PlainQuery, TestContext.Current.CancellationToken))[0];
+        var card = (await Store().SearchAsync(KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken))[0];
 
         Assert.StartsWith("manifest-", card.SourceRef, StringComparison.Ordinal);
         Assert.Equal("p.1", card.SourceLocator);
@@ -260,12 +262,13 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
         // The one test a real server cannot serve. This is why the seam exists.
         var store = new QdrantKnowledgeStore(
             new HangingSearchChannel(TimeSpan.FromSeconds(30)),
-            new FakeEmbeddingGenerator(SyntheticCorpus.QueryVector()),
+            new FakeEmbeddingGenerator(KbShapedCorpus.QueryVector()),
             new QdrantKnowledgeStoreOptions
             {
                 Collection = "anything",
                 VectorName = "dense",
                 Scoped = false,
+                Fields = KbShapedCorpus.Fields,
                 Deadline = TimeSpan.FromMilliseconds(20),
             });
 
@@ -279,12 +282,13 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
         // The other one: the caller's token must be linked in, not replaced by the deadline.
         var store = new QdrantKnowledgeStore(
             new HangingSearchChannel(TimeSpan.FromSeconds(30)),
-            new FakeEmbeddingGenerator(SyntheticCorpus.QueryVector()),
+            new FakeEmbeddingGenerator(KbShapedCorpus.QueryVector()),
             new QdrantKnowledgeStoreOptions
             {
                 Collection = "anything",
                 VectorName = "dense",
                 Scoped = false,
+                Fields = KbShapedCorpus.Fields,
 
                 // Longer than the channel hangs for, so nothing but the caller's own token can end
                 // this call. At the default 10 s the store's deadline ends it instead and the test
@@ -304,37 +308,43 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
     private QdrantKnowledgeStore Store(int limit = 10, double floor = 0.0, bool scoped = true)
         => new(
             new QdrantSearchChannel(_corpus.Client),
-            new FakeEmbeddingGenerator(SyntheticCorpus.QueryVector()),
+            new FakeEmbeddingGenerator(KbShapedCorpus.QueryVector()),
             new QdrantKnowledgeStoreOptions
             {
+                Fields = KbShapedCorpus.Fields,
+                ScopeTemplate = KbShapedCorpus.ScopeTemplate,
                 Collection = _corpus.Name,
                 VectorName = "dense",
                 Limit = limit,
                 ScoreFloor = floor,
                 Scoped = scoped,
+                Analyzer = KbShapedCorpus.Analyzer,
             });
 
-    // SyntheticCorpus keys every point uuid5, and Store() carries no Links now that the feature is
+    // KbShapedCorpus keys every point uuid5, and Store() carries no Links now that the feature is
     // opt-in -- so a test that exercises see_also expansion needs this instead.
     private QdrantKnowledgeStore LinkedStore(int limit = 10, double floor = 0.0, bool scoped = true)
         => new(
             new QdrantSearchChannel(_corpus.Client),
-            new FakeEmbeddingGenerator(SyntheticCorpus.QueryVector()),
+            new FakeEmbeddingGenerator(KbShapedCorpus.QueryVector()),
             new QdrantKnowledgeStoreOptions
             {
+                Fields = KbShapedCorpus.Fields,
+                ScopeTemplate = KbShapedCorpus.ScopeTemplate,
                 Collection = _corpus.Name,
                 VectorName = "dense",
                 Limit = limit,
                 ScoreFloor = floor,
                 Scoped = scoped,
-                Links = new KnowledgeLinksConfiguration { Lookup = KnowledgeLinkLookup.Uuid5 },
+                Links = KbShapedCorpus.Links,
+                Analyzer = KbShapedCorpus.Analyzer,
             });
 
     private async Task<List<string>> ModelsOf(IReadOnlyList<KnowledgeCard> cards)
     {
         var points = await _corpus.Client.RetrieveAsync(
             _corpus.Name,
-            [.. cards.Select(card => new PointId { Uuid = KbPointId.For(card.CardId).ToString() })],
+            [.. cards.Select(card => new PointId { Uuid = KbShapedCorpus.PointKey(card.CardId).ToString() })],
             withPayload: true,
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -352,19 +362,20 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
 
         var store = new QdrantKnowledgeStore(
             new QdrantSearchChannel(_corpus.Client),
-            new FakeEmbeddingGenerator(SyntheticCorpus.QueryVector()),
+            new FakeEmbeddingGenerator(KbShapedCorpus.QueryVector()),
             new QdrantKnowledgeStoreOptions
             {
+                ScopeTemplate = KbShapedCorpus.ScopeTemplate,
                 Collection = _corpus.Name,
                 VectorName = "dense",
                 Scoped = true,
                 Limit = 10,
                 ScoreFloor = 0.0,
-                Fields = new KnowledgeFieldsConfiguration { Source = "card_id", Locator = "text" },
+                Fields = KbShapedCorpus.Fields with { Source = "card_id", Locator = "text" },
             });
 
         var card = (await store.SearchAsync(
-            SyntheticCorpus.PlainQuery, TestContext.Current.CancellationToken))[0];
+            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken))[0];
 
         Assert.Equal(card.CardId, card.SourceRef);
         Assert.NotEmpty(card.SourceLocator);
@@ -374,23 +385,24 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
     [QdrantFact]
     public async Task SearchAsync_IdRoleDisabled_UsesThePointKeyAsTheCardId()
     {
-        // Audit falls back to the point key; SyntheticCorpus keys every point uuid5, so the id
+        // Audit falls back to the point key; KbShapedCorpus keys every point uuid5, so the id
         // must parse as a GUID when fields.id is null.
         var store = new QdrantKnowledgeStore(
             new QdrantSearchChannel(_corpus.Client),
-            new FakeEmbeddingGenerator(SyntheticCorpus.QueryVector()),
+            new FakeEmbeddingGenerator(KbShapedCorpus.QueryVector()),
             new QdrantKnowledgeStoreOptions
             {
+                ScopeTemplate = KbShapedCorpus.ScopeTemplate,
                 Collection = _corpus.Name,
                 VectorName = "dense",
                 Scoped = false,
                 Limit = 3,
                 ScoreFloor = 0.0,
-                Fields = new KnowledgeFieldsConfiguration { Id = null },
+                Fields = KbShapedCorpus.Fields with { Id = null },
             });
 
         var card = (await store.SearchAsync(
-            SyntheticCorpus.PlainQuery, TestContext.Current.CancellationToken))[0];
+            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken))[0];
 
         Assert.True(Guid.TryParse(card.CardId, out _), $"'{card.CardId}' is not a point key");
         Assert.NotEmpty(card.Text);
@@ -403,19 +415,20 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
         // lookalike lift disappears but the dense leg still answers.
         var store = new QdrantKnowledgeStore(
             new QdrantSearchChannel(_corpus.Client),
-            new FakeEmbeddingGenerator(SyntheticCorpus.QueryVector()),
+            new FakeEmbeddingGenerator(KbShapedCorpus.QueryVector()),
             new QdrantKnowledgeStoreOptions
             {
+                ScopeTemplate = KbShapedCorpus.ScopeTemplate,
                 Collection = _corpus.Name,
                 VectorName = "dense",
                 Scoped = false,
                 Limit = 10,
                 ScoreFloor = 0.0,
-                Fields = new KnowledgeFieldsConfiguration { Lexical = null },
+                Fields = KbShapedCorpus.Fields with { Lexical = null },
             });
 
         var cards = await store.SearchAsync(
-            SyntheticCorpus.TwoIdentifierQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.TwoIdentifierQuery, TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(cards);
     }
@@ -429,9 +442,11 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
 
         var store = new QdrantKnowledgeStore(
             new QdrantSearchChannel(_corpus.Client),
-            new FakeEmbeddingGenerator(SyntheticCorpus.QueryVector()),
+            new FakeEmbeddingGenerator(KbShapedCorpus.QueryVector()),
             new QdrantKnowledgeStoreOptions
             {
+                Fields = KbShapedCorpus.Fields,
+                ScopeTemplate = KbShapedCorpus.ScopeTemplate,
                 Collection = _corpus.Name,
                 VectorName = "dense",
                 Scoped = true,
@@ -441,7 +456,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
             });
 
         var cards = await store.SearchAsync(
-            SyntheticCorpus.LookalikeQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.LookalikeQuery, TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(cards);
     }
@@ -455,22 +470,24 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
         // on the page cannot have arrived by ranking. Both modes must find the same one.
         var store = new QdrantKnowledgeStore(
             new QdrantSearchChannel(_corpus.Client),
-            new FakeEmbeddingGenerator(SyntheticCorpus.QueryVector()),
+            new FakeEmbeddingGenerator(KbShapedCorpus.QueryVector()),
             new QdrantKnowledgeStoreOptions
             {
+                Fields = KbShapedCorpus.Fields,
+                ScopeTemplate = KbShapedCorpus.ScopeTemplate,
                 Collection = _corpus.Name,
                 VectorName = "dense",
                 Scoped = false,
                 Limit = 3,
                 ScoreFloor = 0.0,
-                Links = new KnowledgeLinksConfiguration { Lookup = lookup },
+                Links = KbShapedCorpus.Links with { Lookup = lookup },
             });
 
         var cards = await store.SearchAsync(
-            SyntheticCorpus.PlainQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
 
         var linked = Assert.Single(cards, card => card.ViaLink);
-        Assert.Equal(SyntheticCorpus.Id(SyntheticCorpus.Count - 1), linked.CardId);
+        Assert.Equal(KbShapedCorpus.Id(KbShapedCorpus.Count - 1), linked.CardId);
         Assert.Null(linked.Score);
     }
 
@@ -483,19 +500,21 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
 
         var store = new QdrantKnowledgeStore(
             new QdrantSearchChannel(_corpus.Client),
-            new FakeEmbeddingGenerator(SyntheticCorpus.QueryVector()),
+            new FakeEmbeddingGenerator(KbShapedCorpus.QueryVector()),
             new QdrantKnowledgeStoreOptions
             {
+                Fields = KbShapedCorpus.Fields,
+                ScopeTemplate = KbShapedCorpus.ScopeTemplate,
                 Collection = _corpus.Name,
                 VectorName = "dense",
                 Scoped = true,
                 Limit = 3,
                 ScoreFloor = 0.0,
-                Links = new KnowledgeLinksConfiguration { Lookup = KnowledgeLinkLookup.Filter },
+                Links = KbShapedCorpus.Links with { Lookup = KnowledgeLinkLookup.Filter },
             });
 
         var cards = await store.SearchAsync(
-            SyntheticCorpus.PlainQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
 
         Assert.All(cards, card => Assert.False(card.ViaLink));
     }
@@ -505,7 +524,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
     {
         // Card 0's payload still says see_also: [syn-29]; with no links: block that is data, not behaviour.
         var cards = await Store(limit: 3, scoped: false).SearchAsync(
-            SyntheticCorpus.PlainQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(cards);
         Assert.All(cards, card => Assert.False(card.ViaLink));
@@ -516,19 +535,21 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
     {
         var store = new QdrantKnowledgeStore(
             new QdrantSearchChannel(_corpus.Client),
-            new FakeEmbeddingGenerator(SyntheticCorpus.QueryVector()),
+            new FakeEmbeddingGenerator(KbShapedCorpus.QueryVector()),
             new QdrantKnowledgeStoreOptions
             {
+                Fields = KbShapedCorpus.Fields,
+                ScopeTemplate = KbShapedCorpus.ScopeTemplate,
                 Collection = _corpus.Name,
                 VectorName = "dense",
                 Scoped = false,
                 Limit = 3,
                 ScoreFloor = 0.0,
-                Links = new KnowledgeLinksConfiguration { Field = "no_such_field" },
+                Links = KbShapedCorpus.Links with { Field = "no_such_field" },
             });
 
         var cards = await store.SearchAsync(
-            SyntheticCorpus.PlainQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(cards);
         Assert.All(cards, card => Assert.False(card.ViaLink));
@@ -541,7 +562,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
         using var client = QdrantServer.CreateClient();
         await client.CreateCollectionAsync(
             collection,
-            new VectorParams { Size = SyntheticCorpus.Dim, Distance = Distance.Cosine },
+            new VectorParams { Size = KbShapedCorpus.Dim, Distance = Distance.Cosine },
             cancellationToken: TestContext.Current.CancellationToken);
 
         try
@@ -549,7 +570,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
             var point = new PointStruct
             {
                 Id = new PointId { Uuid = Guid.NewGuid().ToString() },
-                Vectors = SyntheticCorpus.QueryVector(),
+                Vectors = KbShapedCorpus.QueryVector(),
             };
             point.Payload["card_id"] = "anon-00";
             point.Payload["body"] = "anonymous vector card";
@@ -557,9 +578,11 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<SyntheticCorpusFix
 
             var store = new QdrantKnowledgeStore(
                 new QdrantSearchChannel(QdrantServer.CreateClient()),
-                new FakeEmbeddingGenerator(SyntheticCorpus.QueryVector()),
+                new FakeEmbeddingGenerator(KbShapedCorpus.QueryVector()),
                 new QdrantKnowledgeStoreOptions
                 {
+                    Fields = KbShapedCorpus.Fields,
+                    ScopeTemplate = KbShapedCorpus.ScopeTemplate,
                     Collection = collection,
                     Scoped = false,
                     Limit = 3,

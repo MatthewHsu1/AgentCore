@@ -190,6 +190,12 @@ agents:
       <the stable cached prefix: persona, safety, transfer rules, and tool etiquette>
     # citations defaults to false and scoped defaults to true. A forgotten flag is then silent
     # and safe, and the dangerous direction is the one you type on purpose.
+    #
+    # scoped: true is what makes providers.knowledge.scope.template required above: a scoped turn
+    # filters on facets, and only this document knows where this collection keeps them. It also
+    # means the HOST must open a KnowledgeScope for the turn -- AgentCore opens none for you, and a
+    # scoped agent with no scope open says it cannot look the answer up rather than searching
+    # everything. Set scoped: false on an agent that is meant to read the whole corpus.
     knowledge: { mode: prefetch, limit: 5, citations: false }
   items:
     # voice, scripted — one model round trip, no source labels spoken aloud. Inherits mode:
@@ -269,41 +275,96 @@ providers:
   # openai-api-key secret, the same one the llm entries above read. Remove this line to moderate
   # nothing: the adapter is then never asked to build, and no key is read for it.
   embeddings: { kind: openai, model: text-embedding-3-small }
-  # the model that turns a query into a vector. It must be the model kb sync built the collection
-  # with, or the startup width check refuses to open the store. It reads the same openai-api-key
-  # secret the llm entries read. dimensions: is optional; write it only if kb sync narrowed the
-  # model's own width.
+  # the model that turns a query into a vector. It must be the model the collection was BUILT with,
+  # or the startup width check refuses to open the store. It reads the same openai-api-key secret
+  # the llm entries read. dimensions: is optional; write it only if your ingester asked the vendor
+  # for a narrower vector than the model's own width.
+  # -------------------------------------------------------------------------------------------
+  # knowledge: the collection this deployment reads, and the ONLY description of it that exists.
+  #
+  # AgentCore ships no payload field names. Not one. It does not know that a card id is usually
+  # called card_id, or that a body is usually called body, because "usually" is a fact about one
+  # ingester and this framework serves any of them. Every name below is here because THIS
+  # collection is shaped this way; a collection built by another tool writes a different block,
+  # and neither shape is privileged.
+  #
+  # The cost of that is a longer block. The benefit is that getting it wrong is LOUD. At startup
+  # the adapter scrolls one point and proves every role this block maps is really carried, with
+  # the right type, and refuses to open the store if it is not. Before that check existed, a
+  # mismapped source: produced a blank citation on every card, on every turn, for the life of the
+  # deployment, and logged nothing.
+  #
+  # A role this collection does not carry is declared with an explicit null, never left out and
+  # hoped about: `source: null` means "no citation label", and the startup proof then skips it.
+  # -------------------------------------------------------------------------------------------
   knowledge:
     kind: qdrant
     endpoint: https://qdrant.example.com:6334
     collection: kb
-    # collection is always the alias; kb sync --rebuild swaps it and this document never changes
+    # collection is whatever this deployment's ingester writes. Point it at an alias if the
+    # ingester swaps collections on a rebuild, and this document then never changes.
     #
-    # This deployment reads the collection `kb sync` writes: a NAMED dense vector and uuid5 point
-    # keys. Both are opt-in spellings now, so they are written out. Omitting vector: searches a
-    # collection's single anonymous vector; omitting links: turns link expansion off entirely.
+    # AgentCore never CREATES a collection. A missing name fails the start rather than standing up
+    # an empty one where the ingester's alias belongs.
+
     vector: dense
+    # The named vector every query searches. OMIT it for a collection with one anonymous vector,
+    # which is the shape most Qdrant tooling creates. Naming a vector the collection does not have
+    # would miss every point on search with no error, so the start checks this too.
+
+    fields:
+      id: card_id              # unmapped, the point's own key stands in for the card id
+      body: body               # the one role the built-in mapping cannot do without
+      lexical: text            # the full-text field the required-term leg matches on
+      source: source.ref       # a dotted name walks into a nested struct
+      locator: source.locator
+      authority: authority     # an INTEGER role; the startup proof knows not to demand a string
+
+    scope:
+      template: "facets.{key}"
+    # How one facet key becomes a payload path. There is no default, because a template is a claim
+    # about where one collection keeps its facets. Flat facets are "{key}"; facets nested under one
+    # struct are "facets.{key}". Required as soon as ANY agent declares scoped: true — which is the
+    # default, so most documents need it.
+
     links:
-      lookup: uuid5         # uuid5 | direct | filter. A links: block without lookup: gets filter.
-      # field: see_also
-      # namespace: url       # url | dns | oid | x500 | <guid>
-      # prefix: "kb:"
+      field: see_also
+      lookup: uuid5            # uuid5 | direct | filter
+      namespace: url           # url | dns | oid | x500 | <guid>. RFC 4122's own names.
+      prefix: "kb:"            # what the ingester hashed in front of the id. Defaults to EMPTY.
+    # Omit the whole block to turn link expansion off. `filter` works on any collection and matches
+    # on fields.id; `uuid5` and `direct` derive the point key from the id instead, and the start
+    # proves the derivation really lands on the point that holds it. Every mode reads fields.id, so
+    # a links: block without one is refused.
+
+    analyzer: none
+    # Picks the terms a result MUST contain, on top of vector similarity. `none` is the only
+    # analyzer AgentCore ships, and it is what this line names: require nothing, rank by vector
+    # alone.
     #
-    # Everything below is optional and defaults to the names kb sync writes. Only fields.body must
-    # stay mapped; write null to declare a role the collection does not carry, e.g. id: null.
-    # fields:
-    #   id: card_id
-    #   body: body
-    #   lexical: text
-    #   source: source.ref
-    #   locator: source.locator
-    #   authority: authority
-    # scope:
-    #   template: "facets.{key}"
-    # mapper: my-mapper      # an IKnowledgePointMapper registered with UseKnowledgePointMappers;
-    #                        # omitted, the fields: block above is the mapper
-    # analyzer: identifier-codes
-    # scoreFloor: 0.25
+    # Anything cleverer is a claim about ONE corpus's vocabulary — that a short letter run followed
+    # by a short digit run is a fault code, say. That is true of some collections and false of
+    # others, and a term wrongly made mandatory drops good answers with no error and no log line.
+    # So the framework holds no such rule, for the same reason it holds no field names. Write your
+    # own IKnowledgeQueryAnalyzer, register it with options.UseKnowledgeQueryAnalyzers, and name it
+    # here.
+
+    citation: source-locator
+    # How each card's source label is worded, for agents that declare citations: true. The shipped
+    # wording joins the two roles above with a comma. Register your own with
+    # options.UseKnowledgeCitationFormatters and name it here; it can read anything the mapper put
+    # on the card, including fields no role above names. Registering under this same name replaces
+    # the shipped wording for every agent without touching this document.
+
+    scoreFloor: 0.25
+    # The smallest fused score a card may carry, 0 to 1.
+
+    # mapper: my-mapper
+    # An IKnowledgePointMapper registered with options.UseKnowledgePointMappers. Named, it owns the
+    # payload shape and replaces the fields: block entirely — for a collection whose card cannot be
+    # expressed as field paths at all. The built-in mapping is public (FieldsPointMapper), so a
+    # mapper that wants the paths plus one thing of its own composes it rather than reimplementing
+    # the dotted-path walk.
 
   # telemetry is absent here on purpose, and this host therefore exports nothing. Spans and
   # measurements are still written, where they cost almost nothing with nobody listening, and log

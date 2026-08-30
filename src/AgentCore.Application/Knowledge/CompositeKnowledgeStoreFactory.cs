@@ -29,12 +29,39 @@ public static class CompositeKnowledgeStoreFactory
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(adapters);
 
-        var entry = configuration.Providers?.Knowledge ?? new KnowledgeProviderConfiguration();
+        // No invented entry. AgentCore knows no collection name, no vendor and no payload shape, so a
+        // document that reads a knowledge base has to say what it reads. Standing one up from
+        // defaults would guess all three and fail somewhere further in, against a store nobody named.
+        var entry = configuration.Providers?.Knowledge ?? throw Fail(
+            "/providers/knowledge",
+            "an agent declares a knowledge: block and this document has no providers.knowledge, so "
+            + "there is no store to read and no payload shape to read it with. Write the block, or "
+            + "remove knowledge: from every agent.");
+
+        if (entry.Mapper is null && entry.Fields?.Body is not { Length: > 0 })
+        {
+            throw Fail(
+                "/providers/knowledge/fields/body",
+                "providers.knowledge names no mapper, so the built-in fields: mapping reads every card, "
+                + "and it maps no body. AgentCore has no default field names: the card the model reads "
+                + "would be empty on every turn. Map providers.knowledge.fields.body to the payload "
+                + "field holding the text, or name an IKnowledgePointMapper with mapper:.");
+        }
+
+        if (scopeDeclared && entry.Scope.Template is not { Length: > 0 })
+        {
+            throw Fail(
+                "/providers/knowledge/scope/template",
+                "an agent declares knowledge: { scoped: true } and providers.knowledge.scope names no "
+                + "template, so AgentCore does not know where this collection keeps its facets. There "
+                + "is no default: write scope.template as the payload path one facet key becomes, such "
+                + "as '{key}' for flat facets or 'facets.{key}' for facets nested under one struct.");
+        }
 
         if (entry.Mapper is null
             && CitationsDeclared(configuration)
-            && entry.Fields.Source is not { Length: > 0 }
-            && entry.Fields.Locator is not { Length: > 0 })
+            && entry.Fields?.Source is not { Length: > 0 }
+            && entry.Fields?.Locator is not { Length: > 0 })
         {
             throw Fail(
                 "/providers/knowledge/fields/source",

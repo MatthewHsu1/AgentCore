@@ -64,7 +64,12 @@ public sealed class DirectLinkLookupTests
         {
             Collection = "anything",
             Scoped = false,
-            Links = new KnowledgeLinksConfiguration { Lookup = KnowledgeLinkLookup.Direct },
+            Fields = new KnowledgeFieldsConfiguration { Id = "card_id", Body = "body" },
+            Links = new KnowledgeLinksConfiguration
+            {
+                Field = "see_also",
+                Lookup = KnowledgeLinkLookup.Direct,
+            },
             ScoreFloor = 0.0,
         });
 }

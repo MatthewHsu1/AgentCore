@@ -1,18 +1,16 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Microsoft.Extensions.AI;
-
 namespace AgentCore.Application.Tools;
 
 /// <summary>
 /// The one rule for carrying what the model filled into JSON.
 /// </summary>
-internal static class ToolArgumentJson
+public static class ToolArgumentJson
 {
     /// <summary>Copies every argument into one JSON object.</summary>
     /// <param name="arguments">The arguments the model filled.</param>
     /// <returns>The object, with one property per argument.</returns>
-    internal static JsonObject ToJsonObject(AIFunctionArguments arguments)
+    public static JsonObject ToJsonObject(IEnumerable<KeyValuePair<string, object?>> arguments)
     {
         ArgumentNullException.ThrowIfNull(arguments);
 

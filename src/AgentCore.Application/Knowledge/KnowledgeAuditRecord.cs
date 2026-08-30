@@ -121,7 +121,7 @@ internal sealed record KnowledgeAuditRecord
         /// <summary>Gets where in that source it sits.</summary>
         public required string Locator { get; init; }
 
-        /// <summary>Gets <c>"ranked"</c> when the search scored the card, or <c>"see_also"</c> when a link pulled it in.</summary>
+        /// <summary>Gets <c>"ranked"</c> when the search scored the card, or <c>"link"</c> when a link pulled it in.</summary>
         public required string Via { get; init; }
 
         /// <summary>Reads one card into its audit entry.</summary>
@@ -134,7 +134,7 @@ internal sealed record KnowledgeAuditRecord
             Authority = card.Authority,
             SourceRef = card.SourceRef,
             Locator = card.SourceLocator,
-            Via = card.ViaLink ? "see_also" : "ranked",
+            Via = card.ViaLink ? "link" : "ranked",
         };
     }
 }

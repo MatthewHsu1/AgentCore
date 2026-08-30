@@ -1,3 +1,6 @@
+using System.Text.RegularExpressions;
+using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Knowledge;
 using AgentCore.Infrastructure.Knowledge.VectorData.Qdrant;
 using Qdrant.Client;
 using Qdrant.Client.Grpc;
@@ -5,7 +8,7 @@ using Qdrant.Client.Grpc;
 namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant;
 
 /// <summary>One card of the synthetic corpus.</summary>
-public sealed record SyntheticCard
+public sealed record KbShapedCard
 {
     /// <summary>Gets the card id.</summary>
     public required string CardId { get; init; }
@@ -36,13 +39,27 @@ public sealed record SyntheticCard
 }
 
 /// <summary>
-/// A hand-built corpus: 30 cards, 8 dimensions, no OpenAI and no checked-in vector file.
+/// A hand-built corpus in the shape one particular ingester writes: 30 cards, 8 dimensions, no
+/// OpenAI and no checked-in vector file.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Named for the shape, not for the fact that it is synthetic. Every corpus in this folder is
+/// synthetic; what matters about this one is that its payload keys, its nested facets and its
+/// uuid5 point keys are ONE deployment's conventions. A test that passes here has proved the store
+/// works against that shape and nothing more, which is why <see cref="ForeignCorpus"/> and
+/// <see cref="HostileCorpus"/> exist beside it.
+/// </para>
+/// <para>
+/// The block a document writes to read it lives here too — <see cref="Fields"/>,
+/// <see cref="Scope"/>, <see cref="Links"/>. AgentCore supplies none of it.
+/// </para>
+/// </remarks>
 /// <remarks>
 /// Card 6 holds <c>e27</c> and card 7 holds <c>e33</c>, so the look-alike case puts the identifier
 /// card one dense rank BELOW its rival. Only the required-identifier prefetch lifts it.
 /// </remarks>
-public static class SyntheticCorpus
+public static partial class KbShapedCorpus
 {
     /// <summary>The vector width. Small on purpose: nothing here needs a real embedding model.</summary>
     public const int Dim = 8;
@@ -64,6 +81,19 @@ public static class SyntheticCorpus
 
     /// <summary>The value every card carries in its <c>applies_to</c> LIST facet, alongside its own model.</summary>
     public const string SharedAudience = "shared";
+
+    /// <summary>
+    /// The required-term rule this corpus's own vocabulary implies: a short letter run followed by
+    /// a short digit run is a console code.
+    /// </summary>
+    /// <remarks>
+    /// This used to be a framework default, which is why the tests below once left the analyzer
+    /// unset and still got a required-term leg. It was one corpus's vocabulary living in the
+    /// framework, exactly like the payload names were. AgentCore now ships only <c>none</c>, so
+    /// the rule lives with the corpus that means it, next to <see cref="Fields"/> and
+    /// <see cref="Links"/>.
+    /// </remarks>
+    public static IKnowledgeQueryAnalyzer Analyzer => new ConsoleCodeAnalyzer();
 
     private const int E27 = 6;
     private const int E33 = 7;
@@ -87,9 +117,9 @@ public static class SyntheticCorpus
     /// tests must pass <see langword="true"/>.
     /// </param>
     /// <returns>The cards, in dense-rank order.</returns>
-    public static IReadOnlyList<SyntheticCard> Cards(bool interleaved)
+    public static IReadOnlyList<KbShapedCard> Cards(bool interleaved)
     {
-        var cards = new List<SyntheticCard>(Count);
+        var cards = new List<KbShapedCard>(Count);
 
         for (var i = 0; i < Count; i++)
         {
@@ -102,7 +132,7 @@ public static class SyntheticCorpus
                 ? (i % 3 != 2 ? "ct900" : i % 2 == 0 ? "ctsbs900" : "ct900ent")
                 : (i < 20 ? "ct900" : i < 25 ? "ctsbs900" : "ct900ent");
 
-            cards.Add(new SyntheticCard
+            cards.Add(new KbShapedCard
             {
                 CardId = Id(i),
                 Text = i switch
@@ -129,7 +159,49 @@ public static class SyntheticCorpus
         return cards;
     }
 
-    /// <summary>Creates the collection and fills it, exactly as `kb sync` shapes a real one.</summary>
+    /// <summary>
+    /// The <c>fields:</c> block a document writes to read THIS corpus.
+    /// </summary>
+    /// <remarks>
+    /// Written out, never inherited. AgentCore ships no field names, so a corpus that wants to be
+    /// read has to describe itself, and the description belongs beside the corpus that made it true.
+    /// </remarks>
+    public static KnowledgeFieldsConfiguration Fields => new()
+    {
+        Id = "card_id",
+        Body = "body",
+        Lexical = "text",
+        Source = "source.ref",
+        Locator = "source.locator",
+        Authority = "authority",
+    };
+
+    /// <summary>The payload path one facet key becomes here: a nested struct, so a dotted path.</summary>
+    public const string ScopeTemplate = "facets.{key}";
+
+    /// <summary>What this corpus puts in front of a card id before hashing it into a point key.</summary>
+    /// <remarks>
+    /// Written out here and read back by every fixture, because the framework's own prefix default
+    /// is the empty string. A corpus that hashes with a prefix has to say which one.
+    /// </remarks>
+    public const string LinkPrefix = "kb:";
+
+    /// <summary>The <c>links:</c> block a document writes to follow THIS corpus's links.</summary>
+    public static KnowledgeLinksConfiguration Links => new()
+    {
+        Field = "see_also",
+        Lookup = KnowledgeLinkLookup.Uuid5,
+        Prefix = LinkPrefix,
+    };
+
+    /// <summary>The point key of one card here.</summary>
+    public static Guid PointKey(string cardId)
+        => Uuid5PointId.For(cardId, Uuid5PointId.Namespace(KnowledgeLinksConfiguration.DefaultNamespace), LinkPrefix);
+
+    /// <summary>The <c>scope:</c> block a document writes to scope over THIS corpus.</summary>
+    public static KnowledgeScopeConfiguration Scope => new() { Template = ScopeTemplate };
+
+    /// <summary>Creates the collection and fills it, shaped the way a real ingester shapes one.</summary>
     /// <param name="client">The client.</param>
     /// <param name="collection">The collection name. The caller drops it afterwards.</param>
     /// <param name="interleaved">See <see cref="Cards"/>.</param>
@@ -163,7 +235,7 @@ public static class SyntheticCorpus
         {
             var point = new PointStruct
             {
-                Id = new PointId { Uuid = KbPointId.For(card.CardId).ToString() },
+                Id = new PointId { Uuid = PointKey(card.CardId).ToString() },
                 Vectors = new Vectors { Vectors_ = new NamedVectors { Vectors = { ["dense"] = card.Vector } } },
             };
 
@@ -212,5 +284,25 @@ public static class SyntheticCorpus
         }).ToList();
 
         await client.UpsertAsync(collection, points, cancellationToken: cancellationToken);
+    }
+
+    /// <summary>Treats a short letter run followed by a short digit run as a required term.</summary>
+    private sealed partial class ConsoleCodeAnalyzer : IKnowledgeQueryAnalyzer
+    {
+        [GeneratedRegex("[a-z0-9]+")]
+        private static partial Regex Word { get; }
+
+        [GeneratedRegex("^[a-z]{1,4}[0-9]{1,3}$")]
+        private static partial Regex Identifier { get; }
+
+        public string Name => "console-codes";
+
+        public IReadOnlyList<string> RequiredTerms(string query) =>
+        [
+            .. Word.Matches(query.ToLowerInvariant())
+                .Select(match => match.Value)
+                .Where(token => Identifier.IsMatch(token))
+                .Distinct(StringComparer.Ordinal),
+        ];
     }
 }

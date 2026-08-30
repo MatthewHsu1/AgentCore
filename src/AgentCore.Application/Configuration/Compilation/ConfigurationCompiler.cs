@@ -303,7 +303,12 @@ public static class ConfigurationCompiler
                 + $"{nameof(IKnowledgeRetrievalPort)}, or remove the knowledge: block.");
         }
 
-        providers.Add(KnowledgeProviderFactory.Create(port, knowledge, item.Id, context.Loggers));
+        providers.Add(KnowledgeProviderFactory.Create(
+            port,
+            knowledge,
+            item.Id,
+            context.Citations ?? new SourceLocatorCitationFormatter(),
+            context.Loggers));
 
         return providers;
     }

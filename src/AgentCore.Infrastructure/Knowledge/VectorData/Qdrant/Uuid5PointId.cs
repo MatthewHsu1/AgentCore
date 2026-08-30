@@ -5,13 +5,15 @@ using System.Text;
 namespace AgentCore.Infrastructure.Knowledge.VectorData.Qdrant;
 
 /// <summary>
-/// The point key of one card: <c>uuid5(namespace, prefix + card_id)</c>.
+/// The RFC 4122 version 5 point key of one card: <c>uuid5(namespace, prefix + id)</c>.
 /// </summary>
-internal static class KbPointId
+/// <remarks>
+/// Only <c>links.lookup: uuid5</c> reaches this. Both the namespace and the prefix come from the
+/// document, because they belong to whichever ingester built the collection: this class knows the
+/// formula, never one deployment's parameters for it.
+/// </remarks>
+internal static class Uuid5PointId
 {
-    /// <summary>The prefix <c>kb sync</c> puts in front of a card id.</summary>
-    public const string DefaultPrefix = "kb:";
-
     private static readonly Guid DnsNamespace = new("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
     private static readonly Guid UrlNamespace = new("6ba7b811-9dad-11d1-80b4-00c04fd430c8");
     private static readonly Guid OidNamespace = new("6ba7b812-9dad-11d1-80b4-00c04fd430c8");
@@ -32,10 +34,11 @@ internal static class KbPointId
         };
     }
 
-    /// <summary>Builds the point key of one card, under the default namespace and prefix.</summary>
-    public static Guid For(string cardId) => For(cardId, UrlNamespace, DefaultPrefix);
-
     /// <summary>Builds the point key of one card.</summary>
+    /// <param name="cardId">The id the collection stores at <c>fields.id</c>.</param>
+    /// <param name="namespace">The uuid5 namespace <c>links.namespace</c> resolved to.</param>
+    /// <param name="prefix">What <c>links.prefix</c> puts in front of the id. May be empty.</param>
+    /// <returns>The key.</returns>
     [SuppressMessage(
         "Security",
         "CA5350:Do Not Use Weak Cryptographic Algorithms",

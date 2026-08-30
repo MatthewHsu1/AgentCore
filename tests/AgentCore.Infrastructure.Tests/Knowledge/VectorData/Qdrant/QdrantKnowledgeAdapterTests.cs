@@ -15,30 +15,40 @@ using Xunit;
 namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant;
 
 [Collection(QdrantServerCollection.Name)]
-public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusFixture>
+public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFixture>
 {
-    // Width 8, matching SyntheticCorpus.Dim: every collection this file builds by hand or through
-    // SyntheticCorpus carries an 8-wide "dense" vector, so the dimension check must measure 8 too.
+    // Width 8, matching KbShapedCorpus.Dim: every collection this file builds by hand or through
+    // KbShapedCorpus carries an 8-wide "dense" vector, so the dimension check must measure 8 too.
     private static readonly IEmbeddingGenerator<string, Embedding<float>> Embeddings =
-        new FakeEmbeddingGenerator(new float[SyntheticCorpus.Dim]);
+        new FakeEmbeddingGenerator(new float[KbShapedCorpus.Dim]);
 
-    private readonly SyntheticCorpusFixture _corpus;
+    private readonly KbShapedCorpusFixture _corpus;
 
-    public QdrantKnowledgeAdapterTests(SyntheticCorpusFixture corpus) => _corpus = corpus;
+    public QdrantKnowledgeAdapterTests(KbShapedCorpusFixture corpus) => _corpus = corpus;
 
     [QdrantFact]
     public async Task CreateSearchAsync_CollectionMissing_FailsTheStart()
     {
-        // A29. AgentCore never creates. If it did, it would put a concrete collection where
-        // `kb sync`'s alias belongs, and `kb sync` then refuses to run until a human deletes it.
+        // A29. AgentCore never creates. If it did, it would put an empty concrete collection where
+        // the ingester's alias belongs, and the next ingest run then has a name it cannot claim.
         var adapter = new QdrantKnowledgeAdapter(_ => QdrantServer.CreateClient(), Embeddings);
-        var entry = new KnowledgeProviderConfiguration { Kind = "qdrant", Collection = "does-not-exist", Vector = "dense" };
+        var entry = new KnowledgeProviderConfiguration
+        {
+            Kind = "qdrant",
+            Collection = "does-not-exist",
+            Vector = "dense",
+            Fields = KbShapedCorpus.Fields,
+        };
 
         var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
             async () => await adapter.CreateSearchAsync(entry, secrets: null, embeddings: null, requireScope: true, TestContext.Current.CancellationToken));
 
         Assert.Contains("does-not-exist", thrown.Message, StringComparison.Ordinal);
-        Assert.Contains("kb sync", thrown.Message, StringComparison.Ordinal);
+
+        // The message says what to do without naming anybody's ingest tool. AgentCore does not know
+        // what wrote this collection, and a stranger told to "run kb sync" has nothing to run.
+        Assert.Contains("never creates one", thrown.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("kb sync", thrown.Message, StringComparison.Ordinal);
         Assert.False(await ClientExists("does-not-exist"));
     }
 
@@ -56,7 +66,13 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
                 return captured;
             },
             Embeddings);
-        var entry = new KnowledgeProviderConfiguration { Kind = "qdrant", Collection = "does-not-exist", Vector = "dense" };
+        var entry = new KnowledgeProviderConfiguration
+        {
+            Kind = "qdrant",
+            Collection = "does-not-exist",
+            Vector = "dense",
+            Fields = KbShapedCorpus.Fields,
+        };
 
         await Assert.ThrowsAsync<InvalidOperationException>(
             async () => await adapter.CreateSearchAsync(
@@ -79,7 +95,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
         // that silently does nothing.
         var collection = $"dispose-{Guid.NewGuid():N}";
         using var setup = QdrantServer.CreateClient();
-        await SyntheticCorpus.CreateAsync(setup, collection, interleaved: true, TestContext.Current.CancellationToken);
+        await KbShapedCorpus.CreateAsync(setup, collection, interleaved: true, TestContext.Current.CancellationToken);
 
         QdrantClient? captured = null;
         var adapter = new QdrantKnowledgeAdapter(
@@ -89,7 +105,13 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
                 return captured;
             },
             Embeddings);
-        var entry = new KnowledgeProviderConfiguration { Kind = "qdrant", Collection = collection, Vector = "dense" };
+        var entry = new KnowledgeProviderConfiguration
+            {
+                Kind = "qdrant",
+                Collection = collection,
+                Vector = "dense",
+                Fields = KbShapedCorpus.Fields,
+            };
 
         try
         {
@@ -134,6 +156,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
                 Kind = "qdrant",
                 Collection = collection,
                 Vector = "dense",
+                Fields = KbShapedCorpus.Fields,
             };
 
             var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
@@ -167,7 +190,13 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
         try
         {
             var adapter = new QdrantKnowledgeAdapter(_ => QdrantServer.CreateClient(), Embeddings);
-            var entry = new KnowledgeProviderConfiguration { Kind = "qdrant", Collection = collection, Vector = "dense" };
+            var entry = new KnowledgeProviderConfiguration
+            {
+                Kind = "qdrant",
+                Collection = collection,
+                Vector = "dense",
+                Fields = KbShapedCorpus.Fields,
+            };
 
             var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
                 async () => await adapter.CreateSearchAsync(
@@ -177,8 +206,11 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
             // collection name, so Contains("4") and Contains("8") both pass on a chance digit in it
             // even when the two widths have been swapped, or dropped from the message entirely.
             Assert.Contains("of 4 dimensions", thrown.Message, StringComparison.Ordinal);
-            Assert.Contains($"embeds at {SyntheticCorpus.Dim}", thrown.Message, StringComparison.Ordinal);
-            Assert.Contains("kb sync", thrown.Message, StringComparison.Ordinal);
+            Assert.Contains($"embeds at {KbShapedCorpus.Dim}", thrown.Message, StringComparison.Ordinal);
+
+            // Both ways out, named as document settings rather than as one repository's CLI.
+            Assert.Contains("providers.embeddings", thrown.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain("kb sync", thrown.Message, StringComparison.Ordinal);
         }
         finally
         {
@@ -191,12 +223,18 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
     {
         var collection = $"adapter-{Guid.NewGuid():N}";
         using var client = QdrantServer.CreateClient();
-        await SyntheticCorpus.CreateAsync(client, collection, interleaved: true, TestContext.Current.CancellationToken);
+        await KbShapedCorpus.CreateAsync(client, collection, interleaved: true, TestContext.Current.CancellationToken);
 
         try
         {
             var adapter = new QdrantKnowledgeAdapter(_ => QdrantServer.CreateClient(), Embeddings);
-            var entry = new KnowledgeProviderConfiguration { Kind = "qdrant", Collection = collection, Vector = "dense" };
+            var entry = new KnowledgeProviderConfiguration
+            {
+                Kind = "qdrant",
+                Collection = collection,
+                Vector = "dense",
+                Fields = KbShapedCorpus.Fields,
+            };
 
             var port = await adapter.CreateSearchAsync(entry, secrets: null, embeddings: null, requireScope: true, TestContext.Current.CancellationToken);
 
@@ -226,12 +264,18 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
         // QdrantClient._isDisposed.
         var collection = $"limit-{Guid.NewGuid():N}";
         using var client = QdrantServer.CreateClient();
-        await SyntheticCorpus.CreateAsync(client, collection, interleaved: true, TestContext.Current.CancellationToken);
+        await KbShapedCorpus.CreateAsync(client, collection, interleaved: true, TestContext.Current.CancellationToken);
 
         try
         {
             var adapter = new QdrantKnowledgeAdapter(_ => QdrantServer.CreateClient(), Embeddings);
-            var entry = new KnowledgeProviderConfiguration { Kind = "qdrant", Collection = collection, Vector = "dense" };
+            var entry = new KnowledgeProviderConfiguration
+            {
+                Kind = "qdrant",
+                Collection = collection,
+                Vector = "dense",
+                Fields = KbShapedCorpus.Fields,
+            };
 
             using var port = (IDisposable)await adapter.CreateSearchAsync(
                 entry, secrets: null, embeddings: null, requireScope: false, TestContext.Current.CancellationToken);
@@ -265,12 +309,18 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
         // can tell "queried the right name" from "queried a name that happens to match".
         var collection = $"names-{Guid.NewGuid():N}";
         using var client = QdrantServer.CreateClient();
-        await SyntheticCorpus.CreateAsync(client, collection, interleaved: true, TestContext.Current.CancellationToken);
+        await KbShapedCorpus.CreateAsync(client, collection, interleaved: true, TestContext.Current.CancellationToken);
 
         try
         {
             var adapter = new QdrantKnowledgeAdapter(_ => QdrantServer.CreateClient(), Embeddings);
-            var entry = new KnowledgeProviderConfiguration { Kind = "qdrant", Collection = collection, Vector = "dense" };
+            var entry = new KnowledgeProviderConfiguration
+            {
+                Kind = "qdrant",
+                Collection = collection,
+                Vector = "dense",
+                Fields = KbShapedCorpus.Fields,
+            };
 
             using var port = (IDisposable)await adapter.CreateSearchAsync(
                 entry, secrets: null, embeddings: null, requireScope: false, TestContext.Current.CancellationToken);
@@ -280,7 +330,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
                 .GetValue(port)!;
 
             Assert.Equal("dense", options.VectorName, StringComparer.Ordinal);
-            Assert.Equal(KnowledgeFieldsConfiguration.DefaultLexical, options.Fields.Lexical, StringComparer.Ordinal);
+            Assert.Equal("text", options.Fields!.Lexical, StringComparer.Ordinal);
         }
         finally
         {
@@ -291,25 +341,32 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
     [QdrantFact]
     public async Task CreateSearchAsync_PayloadHasNoBody_FailsTheStart()
     {
-        // The payload schema is owned by `kb sync`, in another repository, so it is the likeliest half
+        // The payload schema is owned by whatever ingests the cards, usually in another repository
+        // on another release cycle, so it is the likeliest half
         // of this seam to drift -- and the only failure mode with no symptom: the store reads a missing
         // key as an empty string, "" satisfies every `required` on KnowledgeCard, and every turn of
         // every agent is then injected with blank cards. The fixture cannot catch it either; it writes
         // exactly the keys the store reads, so it can only ever agree with itself.
         var collection = $"nobody-{Guid.NewGuid():N}";
         using var client = QdrantServer.CreateClient();
-        await SyntheticCorpus.CreateAsync(client, collection, interleaved: true, TestContext.Current.CancellationToken);
+        await KbShapedCorpus.CreateAsync(client, collection, interleaved: true, TestContext.Current.CancellationToken);
 
         try
         {
-            // Exactly the drift being guarded against: `kb sync` renames body to text_body.
+            // Exactly the drift being guarded against: the ingester renames body to text_body.
             Guid[] everyPoint =
-                [.. Enumerable.Range(0, SyntheticCorpus.Count).Select(i => KbPointId.For(SyntheticCorpus.Id(i)))];
+                [.. Enumerable.Range(0, KbShapedCorpus.Count).Select(i => KbShapedCorpus.PointKey(KbShapedCorpus.Id(i)))];
             await client.DeletePayloadAsync(
                 collection, ["body"], everyPoint, cancellationToken: TestContext.Current.CancellationToken);
 
             var adapter = new QdrantKnowledgeAdapter(_ => QdrantServer.CreateClient(), Embeddings);
-            var entry = new KnowledgeProviderConfiguration { Kind = "qdrant", Collection = collection, Vector = "dense" };
+            var entry = new KnowledgeProviderConfiguration
+            {
+                Kind = "qdrant",
+                Collection = collection,
+                Vector = "dense",
+                Fields = KbShapedCorpus.Fields,
+            };
 
             var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
                 async () => await adapter.CreateSearchAsync(
@@ -330,21 +387,27 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
     {
         // The deliberate hole in the payload check, and the reason it is deliberate: a collection with
         // no points has no payload contract to violate, and refusing the start would make a host
-        // unbootable in the window between creating the alias and the first `kb sync` filling it.
+        // unbootable in the window between creating the alias and the first ingest run filling it.
         var collection = $"empty-{Guid.NewGuid():N}";
         using var client = QdrantServer.CreateClient();
         await client.CreateCollectionAsync(
             collection,
             vectorsConfig: new VectorParamsMap
             {
-                Map = { ["dense"] = new VectorParams { Size = SyntheticCorpus.Dim, Distance = Distance.Cosine } },
+                Map = { ["dense"] = new VectorParams { Size = KbShapedCorpus.Dim, Distance = Distance.Cosine } },
             },
             cancellationToken: TestContext.Current.CancellationToken);
 
         try
         {
             var adapter = new QdrantKnowledgeAdapter(_ => QdrantServer.CreateClient(), Embeddings);
-            var entry = new KnowledgeProviderConfiguration { Kind = "qdrant", Collection = collection, Vector = "dense" };
+            var entry = new KnowledgeProviderConfiguration
+            {
+                Kind = "qdrant",
+                Collection = collection,
+                Vector = "dense",
+                Fields = KbShapedCorpus.Fields,
+            };
 
             using var port = (IDisposable)await adapter.CreateSearchAsync(
                 entry, secrets: null, embeddings: null, requireScope: false, TestContext.Current.CancellationToken);
@@ -368,7 +431,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
             collection,
             vectorsConfig: new VectorParamsMap
             {
-                Map = { ["dense"] = new VectorParams { Size = SyntheticCorpus.Dim, Distance = Distance.Cosine } },
+                Map = { ["dense"] = new VectorParams { Size = KbShapedCorpus.Dim, Distance = Distance.Cosine } },
             },
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -379,7 +442,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
                 Id = new PointId { Num = 1 },
                 Vectors = new Vectors
                 {
-                    Vectors_ = new NamedVectors { Vectors = { ["dense"] = new float[SyntheticCorpus.Dim] } },
+                    Vectors_ = new NamedVectors { Vectors = { ["dense"] = new float[KbShapedCorpus.Dim] } },
                 },
             };
             point.Payload["card_id"] = "num-00";
@@ -398,7 +461,8 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
                 Kind = "qdrant",
                 Collection = collection,
                 Vector = "dense",
-                Links = new KnowledgeLinksConfiguration { Lookup = KnowledgeLinkLookup.Uuid5 },
+                Fields = new KnowledgeFieldsConfiguration { Id = "card_id", Body = "body" },
+                Links = KbShapedCorpus.Links,
             };
 
             var failure = await Assert.ThrowsAsync<InvalidOperationException>(
@@ -426,7 +490,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
             collection,
             vectorsConfig: new VectorParamsMap
             {
-                Map = { ["dense"] = new VectorParams { Size = SyntheticCorpus.Dim, Distance = Distance.Cosine } },
+                Map = { ["dense"] = new VectorParams { Size = KbShapedCorpus.Dim, Distance = Distance.Cosine } },
             },
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -438,7 +502,8 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
                 Kind = "qdrant",
                 Collection = collection,
                 Vector = "dense",
-                Links = new KnowledgeLinksConfiguration { Lookup = lookup },
+                Fields = new KnowledgeFieldsConfiguration { Id = "card_id", Body = "body" },
+                Links = KbShapedCorpus.Links with { Lookup = lookup },
             };
 
             using var port = (IDisposable)await adapter.CreateSearchAsync(
@@ -472,7 +537,13 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
         // Ruling 17a: the failure names the block to write. It must fire before any network work,
         // so the production constructor over an unreachable endpoint is safe here.
         var adapter = new QdrantKnowledgeAdapter();
-        var entry = new KnowledgeProviderConfiguration { Endpoint = "https://cluster.example.com:6334" };
+        var entry = new KnowledgeProviderConfiguration
+        {
+            Kind = "qdrant",
+            Collection = "unreachable",
+            Endpoint = "https://cluster.example.com:6334",
+            Fields = KbShapedCorpus.Fields,
+        };
 
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
             async () => await adapter.CreateSearchAsync(
@@ -489,12 +560,18 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
         // arrives as the CreateSearchAsync argument.
         var collection = $"portgen-{Guid.NewGuid():N}";
         using var client = QdrantServer.CreateClient();
-        await SyntheticCorpus.CreateAsync(client, collection, interleaved: true, TestContext.Current.CancellationToken);
+        await KbShapedCorpus.CreateAsync(client, collection, interleaved: true, TestContext.Current.CancellationToken);
 
         try
         {
             var adapter = new QdrantKnowledgeAdapter(_ => QdrantServer.CreateClient());
-            var entry = new KnowledgeProviderConfiguration { Kind = "qdrant", Collection = collection, Vector = "dense" };
+            var entry = new KnowledgeProviderConfiguration
+            {
+                Kind = "qdrant",
+                Collection = collection,
+                Vector = "dense",
+                Fields = KbShapedCorpus.Fields,
+            };
 
             using var port = (IDisposable)await adapter.CreateSearchAsync(
                 entry, secrets: null, embeddings: Embeddings, requireScope: false, TestContext.Current.CancellationToken);
@@ -514,7 +591,13 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
 
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
             async () => await adapter.CreateSearchAsync(
-                new KnowledgeProviderConfiguration(), secrets: null, embeddings: null, requireScope: true, TestContext.Current.CancellationToken));
+                new KnowledgeProviderConfiguration
+                {
+                    Kind = "qdrant",
+                    Collection = "unreachable",
+                    Fields = KbShapedCorpus.Fields,
+                },
+                secrets: null, embeddings: null, requireScope: true, TestContext.Current.CancellationToken));
 
         Assert.Equal("/providers/knowledge/endpoint", failure.Pointer);
     }
@@ -523,7 +606,13 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
     public async Task CreateSearchAsync_EndpointNotAUrl_FailsTheLoadAndPointsAtTheSameField()
     {
         var adapter = new QdrantKnowledgeAdapter(Embeddings);
-        var entry = new KnowledgeProviderConfiguration { Endpoint = "not a url" };
+        var entry = new KnowledgeProviderConfiguration
+        {
+            Kind = "qdrant",
+            Collection = "unreachable",
+            Endpoint = "not a url",
+            Fields = KbShapedCorpus.Fields,
+        };
 
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
             async () => await adapter.CreateSearchAsync(entry, secrets: null, embeddings: null, requireScope: true, TestContext.Current.CancellationToken));
@@ -536,7 +625,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
     {
         var entry = Entry() with
         {
-            Links = new KnowledgeLinksConfiguration { Lookup = KnowledgeLinkLookup.Uuid5, Prefix = "wrong:" },
+            Links = KbShapedCorpus.Links with { Prefix = "wrong:" },
         };
 
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(
@@ -555,9 +644,9 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
         // them the way the uuid5 mismatch message does -- that would send an operator chasing a
         // setting this mode never looks at.
         //
-        // A dedicated single-point collection, not the shared SyntheticCorpus: AssertPayloadAsync
+        // A dedicated single-point collection, not the shared KbShapedCorpus: AssertPayloadAsync
         // scrolls one arbitrary point, and Qdrant does not guarantee which one comes back. Every
-        // SyntheticCorpus card is non-GUID, so the assertion would still fire no matter which point
+        // KbShapedCorpus card is non-GUID, so the assertion would still fire no matter which point
         // the scroll returned -- but the id it names would not be predictable, and naming the right
         // id is the whole point of this test.
         const string cardId = "direct-01";
@@ -567,7 +656,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
             collection,
             vectorsConfig: new VectorParamsMap
             {
-                Map = { ["dense"] = new VectorParams { Size = SyntheticCorpus.Dim, Distance = Distance.Cosine } },
+                Map = { ["dense"] = new VectorParams { Size = KbShapedCorpus.Dim, Distance = Distance.Cosine } },
             },
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -578,7 +667,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
                 Id = new PointId { Uuid = Guid.NewGuid().ToString() },
                 Vectors = new Vectors
                 {
-                    Vectors_ = new NamedVectors { Vectors = { ["dense"] = new float[SyntheticCorpus.Dim] } },
+                    Vectors_ = new NamedVectors { Vectors = { ["dense"] = new float[KbShapedCorpus.Dim] } },
                 },
             };
             point.Payload["card_id"] = cardId;
@@ -593,7 +682,8 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
                 Kind = "qdrant",
                 Collection = collection,
                 Vector = "dense",
-                Links = new KnowledgeLinksConfiguration { Lookup = KnowledgeLinkLookup.Direct },
+                Fields = new KnowledgeFieldsConfiguration { Id = "card_id", Body = "body" },
+                Links = KbShapedCorpus.Links with { Lookup = KnowledgeLinkLookup.Direct },
             };
 
             var failure = await Assert.ThrowsAsync<InvalidOperationException>(
@@ -621,9 +711,11 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
         var adapter = new QdrantKnowledgeAdapter(Embeddings);
         var entry = new KnowledgeProviderConfiguration
         {
+            Kind = "qdrant",
+            Collection = "unreachable",
             Endpoint = "https://cluster.example.com:6334",
-            Fields = new KnowledgeFieldsConfiguration { Id = null },
-            Links = new KnowledgeLinksConfiguration(),
+            Fields = new KnowledgeFieldsConfiguration { Body = "body", Id = null },
+            Links = new KnowledgeLinksConfiguration { Field = "see_also" },
         };
 
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
@@ -640,7 +732,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
         // filter derives no key, so uuid5's couplings must not be able to fail it.
         var entry = Entry() with
         {
-            Links = new KnowledgeLinksConfiguration { Prefix = "wrong:", Namespace = "dns" },
+            Links = KbShapedCorpus.Links with { Lookup = KnowledgeLinkLookup.Filter, Prefix = "wrong:", Namespace = "dns" },
         };
 
         var store = await Adapter().CreateSearchAsync(
@@ -654,7 +746,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
     [QdrantFact]
     public async Task CreateSearchAsync_NoLinksBlock_SkipsTheRoundTripCheckEntirely()
     {
-        // SyntheticCorpus points DO carry see_also and uuid5 keys, but with no links: block there is
+        // KbShapedCorpus points DO carry see_also and uuid5 keys, but with no links: block there is
         // no feature to protect and no check to run.
         using var store = await Adapter().CreateSearchAsync(
             Entry(), secrets: null, Embedder(), requireScope: false,
@@ -670,7 +762,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
         // ever run, so there is nothing for the id check to protect and the start must succeed.
         var entry = Entry() with
         {
-            Links = new KnowledgeLinksConfiguration { Lookup = KnowledgeLinkLookup.Uuid5, Field = "no_such_field", Prefix = "wrong:" },
+            Links = KbShapedCorpus.Links with { Field = "no_such_field", Prefix = "wrong:" },
         };
 
         var store = await Adapter().CreateSearchAsync(
@@ -721,7 +813,6 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
                 TestContext.Current.CancellationToken));
 
         Assert.Contains("clause-numbers", failure.Message, StringComparison.Ordinal);
-        Assert.Contains("identifier-codes", failure.Message, StringComparison.Ordinal);
         Assert.Contains("none", failure.Message, StringComparison.Ordinal);
     }
 
@@ -746,6 +837,8 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
         var adapter = new QdrantKnowledgeAdapter(Embeddings);
         var entry = new KnowledgeProviderConfiguration
         {
+            Kind = "qdrant",
+            Collection = "unreachable",
             Endpoint = "https://cluster.example.com:6334",
             Mapper = "acme-catalog",
         };
@@ -804,7 +897,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
             collection,
             vectorsConfig: new VectorParamsMap
             {
-                Map = { ["dense"] = new VectorParams { Size = SyntheticCorpus.Dim, Distance = Distance.Cosine } },
+                Map = { ["dense"] = new VectorParams { Size = KbShapedCorpus.Dim, Distance = Distance.Cosine } },
             },
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -815,7 +908,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
                 Id = new PointId { Uuid = Guid.NewGuid().ToString() },
                 Vectors = new Vectors
                 {
-                    Vectors_ = new NamedVectors { Vectors = { ["dense"] = new float[SyntheticCorpus.Dim] } },
+                    Vectors_ = new NamedVectors { Vectors = { ["dense"] = new float[KbShapedCorpus.Dim] } },
                 },
             };
             point.Payload["body"] = "a card with no id concept";
@@ -827,7 +920,10 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
                 Kind = "qdrant",
                 Collection = collection,
                 Vector = "dense",
-                Fields = new KnowledgeFieldsConfiguration { Id = null },
+
+                // This collection holds one point carrying a body and nothing else, so the entry
+                // maps a body and nothing else.
+                Fields = new KnowledgeFieldsConfiguration { Body = "body" },
             };
 
             using var port = (IDisposable)await adapter.CreateSearchAsync(
@@ -852,7 +948,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
             collection,
             vectorsConfig: new VectorParamsMap
             {
-                Map = { ["dense"] = new VectorParams { Size = SyntheticCorpus.Dim, Distance = Distance.Cosine } },
+                Map = { ["dense"] = new VectorParams { Size = KbShapedCorpus.Dim, Distance = Distance.Cosine } },
             },
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -863,14 +959,20 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
                 Id = new PointId { Uuid = Guid.NewGuid().ToString() },
                 Vectors = new Vectors
                 {
-                    Vectors_ = new NamedVectors { Vectors = { ["dense"] = new float[SyntheticCorpus.Dim] } },
+                    Vectors_ = new NamedVectors { Vectors = { ["dense"] = new float[KbShapedCorpus.Dim] } },
                 },
             };
             point.Payload["body"] = "a card with no id concept";
             await client.UpsertAsync(collection, [point], cancellationToken: TestContext.Current.CancellationToken);
 
             var adapter = new QdrantKnowledgeAdapter(_ => QdrantServer.CreateClient(), Embeddings);
-            var entry = new KnowledgeProviderConfiguration { Kind = "qdrant", Collection = collection, Vector = "dense" };
+            var entry = new KnowledgeProviderConfiguration
+            {
+                Kind = "qdrant",
+                Collection = collection,
+                Vector = "dense",
+                Fields = KbShapedCorpus.Fields,
+            };
 
             var failure = await Assert.ThrowsAsync<InvalidOperationException>(
                 async () => await adapter.CreateSearchAsync(
@@ -893,7 +995,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
         using var client = QdrantServer.CreateClient();
         await client.CreateCollectionAsync(
             collection,
-            new VectorParams { Size = SyntheticCorpus.Dim, Distance = Distance.Cosine },
+            new VectorParams { Size = KbShapedCorpus.Dim, Distance = Distance.Cosine },
             cancellationToken: TestContext.Current.CancellationToken);
 
         try
@@ -901,14 +1003,19 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
             var point = new PointStruct
             {
                 Id = new PointId { Uuid = Guid.NewGuid().ToString() },
-                Vectors = new float[SyntheticCorpus.Dim],
+                Vectors = new float[KbShapedCorpus.Dim],
             };
             point.Payload["card_id"] = "anon-00";
             point.Payload["body"] = "anonymous vector card";
             await client.UpsertAsync(collection, [point], cancellationToken: TestContext.Current.CancellationToken);
 
             var adapter = new QdrantKnowledgeAdapter(_ => QdrantServer.CreateClient(), Embeddings);
-            var entry = new KnowledgeProviderConfiguration { Kind = "qdrant", Collection = collection };
+            var entry = new KnowledgeProviderConfiguration
+            {
+                Kind = "qdrant",
+                Collection = collection,
+                Fields = new KnowledgeFieldsConfiguration { Id = "card_id", Body = "body" },
+            };
 
             using var port = (IDisposable)await adapter.CreateSearchAsync(
                 entry, secrets: null, embeddings: null, requireScope: false, TestContext.Current.CancellationToken);
@@ -972,11 +1079,16 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<SyntheticCorpusF
         Kind = QdrantKnowledgeAdapter.ProviderKind,
         Collection = _corpus.Name,
         Vector = "dense",
+
+        // The corpus describes its own payload. Nothing here is inherited: AgentCore ships no
+        // field names, so an entry that omits this block reads nothing off any point.
+        Fields = KbShapedCorpus.Fields,
+        Scope = KbShapedCorpus.Scope,
     };
 
     private static QdrantKnowledgeAdapter Adapter() => new(_ => QdrantServer.CreateClient());
 
-    private static FakeEmbeddingGenerator Embedder() => new(SyntheticCorpus.QueryVector());
+    private static FakeEmbeddingGenerator Embedder() => new(KbShapedCorpus.QueryVector());
 
     private static async Task<bool> ClientExists(string collection)
     {

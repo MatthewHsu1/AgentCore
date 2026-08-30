@@ -1207,7 +1207,7 @@ public sealed class AddAgentCoreTests
             tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
-          knowledge: { kind: test }
+          knowledge: { kind: test, collection: manuals, fields: { body: body } }
         """;
 
     // The transcript store opens at step 4b and the moderation vendor is built at step 4c, so a

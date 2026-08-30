@@ -3,7 +3,8 @@ using Qdrant.Client.Grpc;
 
 namespace AgentCore.Infrastructure.Knowledge.VectorData.Qdrant;
 
-/// <summary>Reads a dotted-path field out of the nested payload struct <c>kb sync</c> writes.</summary>
+/// <summary>Reads a field out of one point's payload, walking a dotted path into nested structs.</summary>
+/// <remarks>Every path it walks comes from the document. This class knows no field name of its own.</remarks>
 internal static class QdrantPayload
 {
     /// <summary>Walks a dotted path into a nested payload struct.</summary>

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace AgentCore.AspNetCore.Endpoints;
@@ -103,6 +104,32 @@ internal sealed record ChatCompletionResponse
     /// <summary>Gets what this chunk asks the browser to draw, or <see langword="null"/> when nothing.</summary>
     [JsonPropertyName("agentcore_data")]
     public RenderedPayload? AgentCoreData { get; init; }
+
+    /// <summary>Gets the tool fact this chunk carries, or <see langword="null"/> when none.</summary>
+    [JsonPropertyName("agentcore_tool")]
+    public ToolPayload? AgentCoreTool { get; init; }
+}
+
+/// <summary>One half of one tool call, as the browser reads it.</summary>
+internal sealed record ToolPayload
+{
+    /// <summary>Gets the id both halves of one call share.</summary>
+    public required string CallId { get; init; }
+
+    /// <summary>Gets the name of the tool.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets which half this is: <c>call</c> or <c>result</c>.</summary>
+    public required string Phase { get; init; }
+
+    /// <summary>Gets what the model passed, on the <c>call</c> half only.</summary>
+    public JsonNode? Arguments { get; init; }
+
+    /// <summary>Gets what the tool answered, on the <c>result</c> half only.</summary>
+    public JsonNode? Result { get; init; }
+
+    /// <summary>Gets whether the tool failed, on the <c>result</c> half only.</summary>
+    public bool? Failed { get; init; }
 }
 
 /// <summary>One thing a chunk asks the browser to draw.</summary>
