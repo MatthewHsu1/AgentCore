@@ -108,6 +108,10 @@ internal sealed record ChatCompletionResponse
     /// <summary>Gets the tool fact this chunk carries, or <see langword="null"/> when none.</summary>
     [JsonPropertyName("agentcore_tool")]
     public ToolPayload? AgentCoreTool { get; init; }
+
+    /// <summary>Gets the source this chunk carries, or <see langword="null"/> when none.</summary>
+    [JsonPropertyName("agentcore_source")]
+    public SourcePayload? AgentCoreSource { get; init; }
 }
 
 /// <summary>One half of one tool call, as the browser reads it.</summary>
@@ -130,6 +134,34 @@ internal sealed record ToolPayload
 
     /// <summary>Gets whether the tool failed, on the <c>result</c> half only.</summary>
     public bool? Failed { get; init; }
+}
+
+/// <summary>Where one answer came from, as the browser reads it.</summary>
+internal sealed record SourcePayload
+{
+    /// <summary>Gets the tool call this source was cited under.</summary>
+    public required string CallId { get; init; }
+
+    /// <summary>Gets the id of this source, unique within one turn.</summary>
+    public required string Id { get; init; }
+
+    /// <summary>Gets which shape it takes: <c>document</c> or <c>url</c>.</summary>
+    public required string SourceType { get; init; }
+
+    /// <summary>Gets what the source is called.</summary>
+    public required string Title { get; init; }
+
+    /// <summary>Gets where inside the source it sits, such as <c>p.27</c>. Empty when it has none.</summary>
+    public required string Locator { get; init; }
+
+    /// <summary>Gets the link to open, or <see langword="null"/> when there is nothing to open.</summary>
+    public string? Url { get; init; }
+
+    /// <summary>Gets the media type of the source.</summary>
+    public required string MediaType { get; init; }
+
+    /// <summary>Gets what produced this source, such as <c>knowledge</c>.</summary>
+    public required string Origin { get; init; }
 }
 
 /// <summary>One thing a chunk asks the browser to draw.</summary>

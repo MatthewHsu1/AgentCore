@@ -15,5 +15,5 @@ internal sealed class ModelFacingChatClient(IChatClient inner) : DelegatingChatC
         => base.GetStreamingResponseAsync(Strip(messages), options, ct);
 
     private static IEnumerable<ChatMessage> Strip(IEnumerable<ChatMessage> messages)
-        => messages.Select(static message => message.WithoutRenders());
+        => messages.Select(static message => message.WithoutHostContent());
 }

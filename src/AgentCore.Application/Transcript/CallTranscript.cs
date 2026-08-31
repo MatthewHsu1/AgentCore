@@ -39,16 +39,17 @@ internal sealed class CallTranscript
         {
             var ordinal = NextOrdinal++;
 
-            // The row is what the store persists, so it keeps the full message, drawing included.
-            // Messages is the live history, serialised into the session state bag every turn, so it
-            // never sees a drawing: a multi-kilobyte RenderContent has no business growing that bag.
+            // The row is what the store persists, so it keeps the full message, drawing and source
+            // included. Messages is the live history, serialised into the session state bag every
+            // turn, so it never sees either: a multi-kilobyte RenderContent, or a SourceContent citing
+            // a document, has no business growing that bag.
             rows.Add(new CallMessage(CallId, ordinal, TurnIndex, message));
 
             Messages.Add(new StoredMessage
             {
                 Ordinal = ordinal,
                 TurnIndex = TurnIndex,
-                Message = message.WithoutRenders(),
+                Message = message.WithoutHostContent(),
             });
 
             // A tool-calling turn produces two assistant messages and only the second is spoken.

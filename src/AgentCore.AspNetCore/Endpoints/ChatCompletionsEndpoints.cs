@@ -6,10 +6,11 @@ using AgentCore.Application.Runtime;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Transcript;
 using AgentCore.Domain;
-using Microsoft.Extensions.AI;
+using AgentCore.Domain.Sources;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AgentCore.AspNetCore.Endpoints;
@@ -234,7 +235,18 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
                 await WriteEventAsync(
                     http,
                     Chunk(id, created, model, new ChatCompletionMessage(), finishReason: null, turn: null)
-                        with { AgentCoreData = new RenderedPayload { Name = drawn.Name, Data = drawn.Data } },
+                        with
+                    { AgentCoreData = new RenderedPayload { Name = drawn.Name, Data = drawn.Data } },
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            foreach (var cited in update.Contents.OfType<SourceContent>())
+            {
+                await WriteEventAsync(
+                    http,
+                    Chunk(id, created, model, new ChatCompletionMessage(), finishReason: null, turn: null)
+                        with
+                    { AgentCoreSource = SourcePayloadOf(cited) },
                     cancellationToken).ConfigureAwait(false);
             }
 
@@ -243,7 +255,8 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
                 await WriteEventAsync(
                     http,
                     Chunk(id, created, model, new ChatCompletionMessage(), finishReason: null, turn: null)
-                        with { AgentCoreTool = tool },
+                        with
+                    { AgentCoreTool = tool },
                     cancellationToken).ConfigureAwait(false);
             }
 
@@ -314,6 +327,22 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
             }
         }
     }
+
+    /// <summary>Reads one cited source into what the browser receives.</summary>
+    /// <param name="cited">The source the message carried.</param>
+    /// <returns>The payload.</returns>
+    private static SourcePayload SourcePayloadOf(SourceContent cited)
+        => new()
+        {
+            CallId = cited.CallId,
+            Id = cited.Source.SourceId,
+            SourceType = cited.Source.Kind == SourceKind.Url ? "url" : "document",
+            Title = cited.Source.Title,
+            Locator = cited.Source.Locator,
+            Url = cited.Source.Url,
+            MediaType = cited.Source.MediaType,
+            Origin = cited.Source.Origin,
+        };
 
     /// <summary>Reads what the model passed to one tool, or <see langword="null"/> when it passed nothing.</summary>
     private static JsonObject? ArgumentsOf(FunctionCallContent call)

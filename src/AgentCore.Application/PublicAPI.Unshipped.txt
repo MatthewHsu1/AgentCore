@@ -791,6 +791,8 @@ AgentCore.Application.Ports.IRenderPort
 AgentCore.Application.Ports.IRenderPort.Publish(string! name, string! renderId, object! data, bool transient = false) -> void
 AgentCore.Application.Ports.ISecretResolverPort
 AgentCore.Application.Ports.ISecretResolverPort.TryResolveAsync(string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string?>
+AgentCore.Application.Ports.ISourcePort
+AgentCore.Application.Ports.ISourcePort.Publish(AgentCore.Domain.Sources.SourceReference! source) -> void
 AgentCore.Application.Ports.ISpeechAdapter
 AgentCore.Application.Ports.ITelemetryAdapter
 AgentCore.Application.Ports.ITelemetryAdapter.StartAsync(AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.ITelemetrySession!>
@@ -873,6 +875,7 @@ AgentCore.Application.Runtime.CallSession.Transcript.get -> System.Collections.G
 AgentCore.Application.Runtime.CallSessionFactory
 AgentCore.Application.Runtime.CallSessionFactory.CallSessionFactory(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Configuration.Validation.IGuardEvaluator! guards, AgentCore.Application.State.StateExtractor? extractor = null, System.TimeProvider? timeProvider = null, Microsoft.Extensions.Logging.ILogger? logger = null, System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ICallObserver!>? observers = null) -> void
 AgentCore.Application.Runtime.CallSessionFactory.Create(string? callId = null) -> AgentCore.Application.Runtime.CallSession!
+AgentCore.Application.Runtime.CallSourceScope
 AgentCore.Application.Runtime.CallStateScope
 AgentCore.Application.Runtime.KnowledgeScopeScope
 AgentCore.Application.Secrets.KnownSecrets
@@ -1032,6 +1035,12 @@ AgentCore.Application.Transcript.RenderContent.Name.set -> void
 AgentCore.Application.Transcript.RenderContent.RenderContent() -> void
 AgentCore.Application.Transcript.RenderContent.RenderId.get -> string!
 AgentCore.Application.Transcript.RenderContent.RenderId.set -> void
+AgentCore.Application.Transcript.SourceContent
+AgentCore.Application.Transcript.SourceContent.CallId.get -> string!
+AgentCore.Application.Transcript.SourceContent.CallId.set -> void
+AgentCore.Application.Transcript.SourceContent.Source.get -> AgentCore.Domain.Sources.SourceReference!
+AgentCore.Application.Transcript.SourceContent.Source.set -> void
+AgentCore.Application.Transcript.SourceContent.SourceContent() -> void
 AgentCore.Application.Transcript.TranscriptJson
 AgentCore.Application.Transcript.TranscriptStoreFactory
 abstract AgentCore.Application.Call.CallInput.<Clone>$() -> AgentCore.Application.Call.CallInput!
@@ -1419,6 +1428,7 @@ static AgentCore.Application.Runtime.CallEvent.operator ==(AgentCore.Application
 static AgentCore.Application.Runtime.CallObservers.Standard(AgentCore.Application.Ports.IAuditSinkPort! auditSink, Microsoft.Extensions.Logging.ILogger? logger, System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ICallObserver!>? hostObservers = null) -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.ICallObserver!>!
 static AgentCore.Application.Runtime.CallRenderScope.Current.get -> AgentCore.Application.Ports.IRenderPort?
 static AgentCore.Application.Runtime.CallSessionFactory.CreateExtractor(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Ports.IChatClientFactory! chatClients) -> AgentCore.Application.State.StateExtractor?
+static AgentCore.Application.Runtime.CallSourceScope.Current.get -> AgentCore.Application.Ports.ISourcePort?
 static AgentCore.Application.Runtime.CallStateScope.Enter(AgentCore.Application.State.StateDocument! state) -> System.IDisposable!
 static AgentCore.Application.Runtime.CallStateScope.Snapshot() -> System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>!
 static AgentCore.Application.Runtime.KnowledgeScopeScope.Current.get -> AgentCore.Domain.Knowledge.KnowledgeScope?

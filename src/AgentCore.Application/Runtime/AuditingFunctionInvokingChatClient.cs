@@ -94,7 +94,7 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
 
     /// <summary>
     /// Builds the messages the model reads, reports every tool it could not find, and attaches
-    /// whatever this turn drew to the tool-result message it belongs to.
+    /// whatever this turn drew or cited to the tool-result message it belongs to.
     /// </summary>
     protected override IList<ChatMessage> CreateResponseMessages(ReadOnlySpan<FunctionInvocationResult> results)
     {
@@ -130,7 +130,10 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
             return messages;
         }
 
-        if (TurnAmbients.Current?.Renders is not { } renders)
+        var renders = TurnAmbients.Current?.Renders;
+        var sources = TurnAmbients.Current?.Sources;
+
+        if (renders is null && sources is null)
         {
             return messages;
         }
@@ -142,9 +145,14 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
             // anything has been appended, even where nothing further was left to enumerate.
             foreach (var callId in message.Contents.OfType<FunctionResultContent>().Select(r => r.CallId).ToList())
             {
-                foreach (var drawn in renders.TakeFor(callId))
+                foreach (var drawn in renders?.TakeFor(callId) ?? [])
                 {
                     message.Contents.Add(drawn);
+                }
+
+                foreach (var cited in sources?.TakeFor(callId) ?? [])
+                {
+                    message.Contents.Add(cited);
                 }
             }
         }
