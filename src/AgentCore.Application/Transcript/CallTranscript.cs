@@ -23,6 +23,34 @@ internal sealed class CallTranscript
     /// </summary>
     public List<StoredMessage> Messages { get; set; } = [];
 
+    /// <summary>Reads a call that already has words back into a transcript that has none.</summary>
+    /// <param name="rows">Every stored message of the call. Order does not matter.</param>
+    /// <returns>The index the next turn of this call takes.</returns>
+    public int Resume(IReadOnlyList<CallMessage> rows)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+
+        if (rows.Count == 0)
+        {
+            return 0;
+        }
+
+        // Stripped for the reason Append gives: the live history is serialised into the session
+        // state bag every turn, and what store 1 keeps is bigger than that bag should ever carry.
+        Messages = [.. rows
+            .OrderBy(row => row.Ordinal)
+            .Select(row => new StoredMessage
+            {
+                Ordinal = row.Ordinal,
+                TurnIndex = row.TurnIndex,
+                Message = row.Content.WithoutHostContent(),
+            })];
+
+        NextOrdinal = rows.Max(row => row.Ordinal) + 1;
+
+        return rows.Max(row => row.TurnIndex) + 1;
+    }
+
     /// <summary>Opens a turn, so the rows it appends carry its index.</summary>
     public void BeginTurn(int turnIndex) => TurnIndex = turnIndex;
 

@@ -38,20 +38,34 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
     }
 
     /// <summary>
-    /// Opens a call on one session: names it, and says where a dropped write is reported.
+    /// Opens a call on one session: names it, reads back what it already said, and says where a
+    /// dropped write is reported.
     /// </summary>
-    public void BeginCall(AgentSession session, string callId, TranscriptWriteDropped? report = null)
+    /// <param name="session">The session this call runs on.</param>
+    /// <param name="callId">The call being opened.</param>
+    /// <param name="spoken">
+    /// What store 1 already holds for this call, which is empty for a call that is new. A second
+    /// session of one call is handed the first session's words here, and nowhere else.
+    /// </param>
+    /// <param name="report">Where a dropped store 1 write is reported, if anywhere.</param>
+    /// <returns>The index the next turn of this call takes.</returns>
+    public int BeginCall(
+        AgentSession session,
+        string callId,
+        IReadOnlyList<CallMessage> spoken,
+        TranscriptWriteDropped? report = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentException.ThrowIfNullOrEmpty(callId);
+        ArgumentNullException.ThrowIfNull(spoken);
 
-        UnderLock(
+        return UnderLock(
             session,
             (transcript, gate) =>
             {
                 transcript.CallId = callId;
                 gate.Dropped = report;
-                return true;
+                return transcript.Resume(spoken);
             });
     }
 

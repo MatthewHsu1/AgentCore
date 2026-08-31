@@ -426,7 +426,11 @@ public sealed class CallSession : IConversationPort
             ? await _compiled.TurnAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false)
             : new CallHistorySession();
 
-        await _compiled.CallStore.CreateAsync(CallId, cancellationToken).ConfigureAwait(false);
+        var record = await _compiled.CallStore.CreateAsync(CallId, cancellationToken).ConfigureAwait(false);
+
+        IReadOnlyList<CallMessage> spoken = record.LastMessageAt is null
+            ? []
+            : await _compiled.CallStore.ReadAsync(CallId, cancellationToken).ConfigureAwait(false);
 
         lock (_interruptLock)
         {
@@ -434,10 +438,8 @@ public sealed class CallSession : IConversationPort
             {
                 _agentSession = session;
 
-                // The provider serves every call, so it is told here which call this session
-                // carries and where THIS call's dropped writes go. A session that lost the race
-                // above opens nothing: it is discarded, and no write was ever queued against it.
-                _history.BeginCall(session, CallId, _events.RaiseDroppedTranscriptWrite);
+                State.TurnIndex = _history.BeginCall(
+                    session, CallId, spoken, _events.RaiseDroppedTranscriptWrite);
             }
 
             return _agentSession;

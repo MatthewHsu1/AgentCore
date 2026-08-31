@@ -169,7 +169,7 @@ public sealed class AgentCoreChatHistoryProviderTests
         var store = new BlockingCallStore();
         var provider = new AgentCoreChatHistoryProvider(store);
         var session = new StubSession();
-        provider.BeginCall(session, CallId);
+        provider.BeginCall(session, CallId, []);
         AppendTurn(provider, session, turnIndex: 0, "hello", "hi there");
         await provider.DrainAsync(session);
         store.BlockNextAppend();
@@ -305,8 +305,8 @@ public sealed class AgentCoreChatHistoryProviderTests
         var provider = new AgentCoreChatHistoryProvider(new RecordingCallStore());
         var first = new StubSession();
         var second = new StubSession();
-        provider.BeginCall(first, "call-a");
-        provider.BeginCall(second, "call-b");
+        provider.BeginCall(first, "call-a", []);
+        provider.BeginCall(second, "call-b", []);
         AppendTurn(provider, first, turnIndex: 0, "a said", "a heard");
 
         // Act
@@ -359,8 +359,8 @@ public sealed class AgentCoreChatHistoryProviderTests
         var provider = new AgentCoreChatHistoryProvider(new RecordingCallStore());
         var first = new StubSession();
         var second = new StubSession();
-        provider.BeginCall(first, "call-a");
-        provider.BeginCall(second, "call-b");
+        provider.BeginCall(first, "call-a", []);
+        provider.BeginCall(second, "call-b", []);
 
         // Act
         AppendTurn(provider, first, turnIndex: 0, "a said", "a heard");
@@ -377,7 +377,7 @@ public sealed class AgentCoreChatHistoryProviderTests
         // Arrange
         var provider = new AgentCoreChatHistoryProvider(new ThrowingCallStore());
         var session = new StubSession();
-        provider.BeginCall(session, CallId);
+        provider.BeginCall(session, CallId, []);
 
         // Act
         AppendTurn(provider, session, turnIndex: 0, "hello", "hi there");
@@ -394,7 +394,7 @@ public sealed class AgentCoreChatHistoryProviderTests
         var provider = new AgentCoreChatHistoryProvider(new ThrowingCallStore());
         var session = new StubSession();
         List<int> dropped = [];
-        provider.BeginCall(session, CallId, (turnIndex, _) => dropped.Add(turnIndex));
+        provider.BeginCall(session, CallId, [], (turnIndex, _) => dropped.Add(turnIndex));
 
         // Act
         AppendTurn(provider, session, turnIndex: 3, "hello", "hi there");
@@ -411,7 +411,7 @@ public sealed class AgentCoreChatHistoryProviderTests
         var store = new InMemoryCallStore();
         var provider = new AgentCoreChatHistoryProvider(store);
         var session = new StubSession();
-        provider.BeginCall(session, CallId);
+        provider.BeginCall(session, CallId, []);
         AppendTurn(provider, session, turnIndex: 0, "order 41?", "it ships Friday from the depot");
 
         // Act
@@ -430,7 +430,7 @@ public sealed class AgentCoreChatHistoryProviderTests
         var store = new RecordingCallStore();
         var provider = new AgentCoreChatHistoryProvider(store);
         var session = new StubSession();
-        provider.BeginCall(session, CallId);
+        provider.BeginCall(session, CallId, []);
         return (provider, store, session);
     }
 
