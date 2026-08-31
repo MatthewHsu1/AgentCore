@@ -8,7 +8,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Sessions.Memory;
 using AgentCore.Application.Transcript;
-using AgentCore.Application.Transcript.Memory;
+using AgentCore.Application.Calls.Memory;
 using AgentCore.AspNetCore.Tests.Fakes;
 using AgentCore.Domain.Audit;
 using Microsoft.Extensions.AI;
@@ -239,7 +239,7 @@ public sealed class TelnyxRelayCallEndTests
         // The session is the only thing that can wait for them, so once it leaves the store nothing
         // can: the record of that call would lose the turn the caller just had, and no error would
         // say so. Same shape as the teardown that removed a session without closing its chain.
-        ParkingTranscriptStore transcript = new();
+        ParkingCallStore transcript = new();
         using FragmentingChatClient reply = new("your order ships Friday");
         var factory = TranscriptBackedSessions(TelnyxRelayTurnTests.PolicyYaml, reply, transcript);
         OrderedCallSessions sessions = new(factory, () => transcript.Landed);
@@ -283,7 +283,7 @@ public sealed class TelnyxRelayCallEndTests
         // one is dropped there and then. It is dropped by the same rule teardown obeys: the session
         // is the only thing that can wait for the words it queued, so the first call's record would
         // lose its last turn.
-        ParkingTranscriptStore transcript = new();
+        ParkingCallStore transcript = new();
         using FragmentingChatClient reply = new("your order ships Friday");
         var factory = TranscriptBackedSessions(TelnyxRelayTurnTests.PolicyYaml, reply, transcript);
         OrderedCallSessions sessions = new(factory, () => transcript.Landed);
@@ -399,7 +399,7 @@ public sealed class TelnyxRelayCallEndTests
     /// <param name="reply">The model behind every reference in it.</param>
     /// <returns>The factory.</returns>
     private static CallSessionFactory SessionsFor(string yaml, IChatClient reply)
-        => TranscriptBackedSessions(yaml, reply, new InMemoryTranscriptStore());
+        => TranscriptBackedSessions(yaml, reply, new InMemoryCallStore());
 
     /// <summary>Builds the session factory of one document over a given store 1.</summary>
     /// <param name="yaml">The document, as YAML.</param>
@@ -407,19 +407,19 @@ public sealed class TelnyxRelayCallEndTests
     /// <param name="transcript">Where the words of a call are written.</param>
     /// <returns>The factory, ready to register over the one <c>AddAgentCore</c> built.</returns>
     /// <remarks>
-    /// A document that names no providers.transcript compiles onto the memory store, so this is the
+    /// A document that names no providers.calls compiles onto the memory store, so this is the
     /// only seam a test has for putting a slow store behind a call. It is why the whole factory is
     /// rebuilt rather than decorated: the store is compiled into the agent, and the factory holds
     /// the compiled agent.
     /// </remarks>
     private static CallSessionFactory TranscriptBackedSessions(
-        string yaml, IChatClient reply, ITranscriptStore transcript)
+        string yaml, IChatClient reply, ICallStore transcript)
     {
         var document = ConfigurationLoader.LoadYaml(yaml);
         RoutingChatClientFactory chatClients = new(reply);
         var compiled = ConfigurationCompiler.Compile(
             document,
-            new AgentCompilationContext(chatClients) { TranscriptStore = transcript });
+            new AgentCompilationContext(chatClients) { CallStore = transcript });
 
         return new CallSessionFactory(
             compiled,

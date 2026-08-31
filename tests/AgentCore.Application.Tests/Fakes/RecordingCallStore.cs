@@ -1,18 +1,19 @@
-using AgentCore.Application.Ports;
+using AgentCore.Application.Calls.Memory;
+using AgentCore.TestSupport;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Transcript;
 using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Tests.Fakes;
 
-/// <summary>Store 1's backing, kept in this process, with the calls it was made recorded.</summary>
+/// <summary>A store kept in this process, with the calls made against its words recorded.</summary>
 /// <remarks>
 /// It answers two different questions, because store 1 is asked two different things. <see cref="Rows"/>
 /// and <see cref="Rewrites"/> are logs — what the provider ASKED the store to do, and in what order.
 /// <see cref="Live"/> is the state those calls left behind, which is what a reader of the record
 /// years later would see.
 /// </remarks>
-internal sealed class RecordingTranscriptStore : ITranscriptStore
+internal sealed class RecordingCallStore() : DelegatingCallStore(new InMemoryCallStore())
 {
     private readonly Lock _lock = new();
     private readonly Dictionary<(string CallId, int Ordinal), CallMessage> _state = [];
@@ -34,7 +35,7 @@ internal sealed class RecordingTranscriptStore : ITranscriptStore
     }
 
     /// <inheritdoc />
-    public ValueTask AppendAsync(
+    public override ValueTask AppendAsync(
         IReadOnlyList<CallMessage> messages, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(messages);
@@ -52,7 +53,7 @@ internal sealed class RecordingTranscriptStore : ITranscriptStore
     }
 
     /// <inheritdoc />
-    public ValueTask RewriteAsync(
+    public override ValueTask RewriteAsync(
         string callId, int ordinal, ChatMessage content, CancellationToken cancellationToken = default)
     {
         lock (_lock)
@@ -66,5 +67,25 @@ internal sealed class RecordingTranscriptStore : ITranscriptStore
         }
 
         return default;
+    }
+
+    /// <inheritdoc />
+    public override ValueTask<IReadOnlyList<CallMessage>> ReadAsync(
+        string callId, CancellationToken cancellationToken = default)
+        => ValueTask.FromResult(Live(callId));
+
+    /// <inheritdoc />
+    public override ValueTask<int> EraseAsync(string callId, CancellationToken cancellationToken = default)
+    {
+        lock (_lock)
+        {
+            var going = _state.Keys.Where(key => key.CallId == callId).ToList();
+            foreach (var key in going)
+            {
+                _state.Remove(key);
+            }
+
+            return ValueTask.FromResult(going.Count);
+        }
     }
 }

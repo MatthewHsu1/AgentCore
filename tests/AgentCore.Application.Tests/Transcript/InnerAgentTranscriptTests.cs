@@ -38,11 +38,11 @@ public sealed class InnerAgentTranscriptTests
     [Fact]
     public async Task ADelegatingTurn_WritesTheOuterRoundsOnly()
     {
-        RecordingTranscriptStore store = new();
+        RecordingCallStore store = new();
         using ToolCallingChatClient model = new("done");
         var compiled = ConfigurationCompiler.Compile(
             ConfigurationLoader.LoadYaml(DelegatingYaml),
-            new AgentCompilationContext(new FakeChatClientFactory(model)) { TranscriptStore = store });
+            new AgentCompilationContext(new FakeChatClientFactory(model)) { CallStore = store });
 
         var session = new CallSessionFactory(
             compiled, new GuardEvaluator(compiled.Configuration.Guards), extractor: null).Create();

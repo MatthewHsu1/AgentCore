@@ -18,6 +18,8 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
     protected override bool Migrated => false;
 
     [PostgresTheory]
+    [InlineData("call")]
+    [InlineData("call_principal")]
     [InlineData("call_message")]
     [InlineData("audit_event")]
     public async Task ApplyAsync_FreshDatabase_CreatesTheTable(string table)
@@ -188,6 +190,7 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
     {
         // Arrange
         await PostgresSchema.ApplyAsync(DataSource, Token);
+        await ExecuteAsync("INSERT INTO call (call_id) VALUES ('C1')");
         await ExecuteAsync(
             "INSERT INTO call_message (call_id, ordinal, turn_index, role, content) VALUES ('C1', 0, 0, 'user', '{}')");
 
@@ -197,6 +200,54 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
 
         // Assert
         Assert.Equal("23505", Assert.IsType<PostgresException>(refusal).SqlState);
+    }
+
+    [PostgresFact]
+    public async Task Versions_AreOrderedSoTheParentTableIsCreatedFirst()
+        => Assert.Equal(
+            ["001_writer_role", "002_call", "003_call_message",
+             "004_audit_event", "005_audit_event_append_only"],
+            PostgresSchema.Versions);
+
+    [PostgresFact]
+    public async Task CallMessage_WithNoCallRow_IsRefused()
+    {
+        // Arrange
+        await PostgresSchema.ApplyAsync(DataSource, Token);
+        await ExecuteAsync("INSERT INTO call (call_id) VALUES ('present')");
+
+        // Act
+        var refusal = await Record.ExceptionAsync(() => ExecuteAsync(
+            "INSERT INTO call_message (call_id, ordinal, turn_index, role, content) VALUES ('absent', 0, 0, 'user', '{}')"));
+
+        // Assert
+        Assert.Equal("23503", Assert.IsType<PostgresException>(refusal).SqlState);
+    }
+
+    /// <summary>
+    /// The cascade is the whole reason one store holds both. It reaches call_message and
+    /// call_principal, and it deliberately does not reach audit_event: 005 refuses every DELETE
+    /// there, and the trail outlives the conversation on purpose.
+    /// </summary>
+    [PostgresFact]
+    public async Task DeletingACall_TakesItsMessagesAndPrincipals_AndLeavesItsAuditEvents()
+    {
+        // Arrange
+        await PostgresSchema.ApplyAsync(DataSource, Token);
+        await ExecuteAsync("INSERT INTO call (call_id) VALUES ('C1')");
+        await ExecuteAsync(
+            "INSERT INTO call_message (call_id, ordinal, turn_index, role, content) VALUES ('C1', 0, 0, 'user', '{}')");
+        await ExecuteAsync(
+            "INSERT INTO call_principal (call_id, principal_key, role) VALUES ('C1', 'p1', 'owner')");
+        await InsertOneEventAsync();
+
+        // Act
+        await ExecuteAsync("DELETE FROM call WHERE call_id = 'C1'");
+
+        // Assert
+        Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM call_message"));
+        Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM call_principal"));
+        Assert.Equal(1L, await ScalarAsync<long>("SELECT count(*) FROM audit_event"));
     }
 
     private Task InsertOneEventAsync() => ExecuteAsync(

@@ -3,18 +3,12 @@ using AgentCore.Application.Ports;
 using AgentCore.Infrastructure.Database.Postgres;
 using Npgsql;
 
-namespace AgentCore.Infrastructure.Transcript.Postgres;
+namespace AgentCore.Infrastructure.Calls.Postgres;
 
 /// <summary>
-/// The <c>postgres</c> transcript vendor behind <see cref="ITranscriptStore"/>.
+/// The <c>postgres</c> call vendor behind <see cref="ICallStore"/>.
 /// </summary>
-/// <remarks>
-/// It reads the same <c>postgres-connection-string</c> secret the audit vendor reads, and a document
-/// that names both opens a pool for each. Two pools against one database is what keeps the two stores
-/// independent: store 1 holds words a caller may have erased, and store 3 holds a chain that may
-/// never lose a row.
-/// </remarks>
-public sealed class PostgresTranscriptStoreAdapter : ITranscriptStoreAdapter
+public sealed class PostgresCallStoreAdapter : ICallStoreAdapter
 {
     /// <summary>
     /// The one <c>kind</c> value this adapter serves.
@@ -27,7 +21,7 @@ public sealed class PostgresTranscriptStoreAdapter : ITranscriptStoreAdapter
     public string Kind => ProviderKind;
 
     /// <inheritdoc />
-    public async ValueTask<ITranscriptStore> OpenAsync(
+    public async ValueTask<ICallStore> OpenAsync(
         VendorProviderConfiguration entry,
         ISecretResolverPort? secrets,
         CancellationToken cancellationToken = default)
@@ -35,10 +29,10 @@ public sealed class PostgresTranscriptStoreAdapter : ITranscriptStoreAdapter
         NpgsqlDataSource dataSource = await PostgresDataSourceFactory
             .OpenMigratedAsync(
                 secrets,
-                "The words of every call in providers.transcript are written to PostgreSQL.",
+                "A call's row in providers.calls is written to PostgreSQL.",
                 cancellationToken)
             .ConfigureAwait(false);
 
-        return new PostgresTranscriptStore(dataSource);
+        return new PostgresCallStore(dataSource);
     }
 }

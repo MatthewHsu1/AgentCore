@@ -1,17 +1,17 @@
 using System.Text.Json.Nodes;
 using AgentCore.Application.Audit;
 using AgentCore.Application.Audit.Memory;
+using AgentCore.Application.Calls.Memory;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
-using AgentCore.Application.Transcript.Memory;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Endpoints;
 using AgentCore.Domain.Knowledge;
 using AgentCore.Infrastructure.Audit.Postgres;
-using AgentCore.Infrastructure.Transcript.Postgres;
+using AgentCore.Infrastructure.Calls.Postgres;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.AI;
@@ -110,10 +110,10 @@ public sealed class AgentCoreHostTests
     }
 
     [Fact]
-    public async Task ProvidersTranscriptPostgresReachesTheAdapterRatherThanTheSelector()
+    public async Task ProvidersCallsPostgresReachesTheAdapterRatherThanTheSelector()
     {
         var failure = await Assert.ThrowsAsync<SecretResolutionException>(
-            () => StartAsync(options => options.SecretResolver = new EmptySecretResolver(), Transcript));
+            () => StartAsync(options => options.SecretResolver = new EmptySecretResolver(), Calls));
 
         Assert.Contains(KnownSecrets.PostgresConnectionString.Name, failure.Message, StringComparison.Ordinal);
     }
@@ -126,7 +126,8 @@ public sealed class AgentCoreHostTests
         using var host = await StartAsync();
 
         Assert.IsType<InMemoryAuditSink>(host.Services.GetRequiredService<QueuedAuditSink>().Store);
-        Assert.IsType<InMemoryTranscriptStore>(host.Services.GetRequiredService<ITranscriptStore>());
+        Assert.IsType<InMemoryCallStore>(host.Services.GetRequiredService<ICallStore>());
+        Assert.IsType<InMemoryCallStore>(host.Services.GetRequiredService<ICallStore>());
     }
 
     [Fact]
@@ -143,13 +144,13 @@ public sealed class AgentCoreHostTests
     }
 
     [Fact]
-    public async Task AHostTranscriptStoreWinsOverTheDefaultVendorOnTheSameKind()
+    public async Task AHostCallStoreWinsOverTheDefaultVendorOnTheSameKind()
     {
         using var host = await StartAsync(
-            options => options.UseTranscriptStores(new FakeStoreAdapter()),
-            Transcript);
+            options => options.UseCallStores(new FakeCallStoreAdapter()),
+            Calls);
 
-        Assert.IsType<InMemoryTranscriptStore>(host.Services.GetRequiredService<ITranscriptStore>());
+        Assert.IsType<InMemoryCallStore>(host.Services.GetRequiredService<ICallStore>());
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -395,7 +396,9 @@ public sealed class AgentCoreHostTests
     private const string Audit = "  audit: { kind: postgres }";
 
     /// <summary>The <c>providers</c> line that asks for the durable transcript vendor.</summary>
-    private const string Transcript = "  transcript: { kind: postgres }";
+
+    /// <summary>The <c>providers</c> line that asks for the durable call store vendor.</summary>
+    private const string Calls = "  calls: { kind: postgres }";
 
     /// <summary>
     /// The <c>providers</c> lines for a knowledge store on an endpoint nothing listens on, so the
@@ -491,16 +494,17 @@ public sealed class AgentCoreHostTests
             => ValueTask.FromResult<IAuditSinkPort>(new InMemoryAuditSink());
     }
 
-    /// <summary>A transcript vendor answering to the same kind the default list names.</summary>
-    private sealed class FakeStoreAdapter : ITranscriptStoreAdapter
-    {
-        public string Kind => PostgresTranscriptStoreAdapter.ProviderKind;
 
-        public ValueTask<ITranscriptStore> OpenAsync(
+    /// <summary>A call store vendor answering to the same kind the default list names.</summary>
+    private sealed class FakeCallStoreAdapter : ICallStoreAdapter
+    {
+        public string Kind => PostgresCallStoreAdapter.ProviderKind;
+
+        public ValueTask<ICallStore> OpenAsync(
             VendorProviderConfiguration entry,
             ISecretResolverPort? secrets,
             CancellationToken cancellationToken = default)
-            => ValueTask.FromResult<ITranscriptStore>(new InMemoryTranscriptStore());
+            => ValueTask.FromResult<ICallStore>(new InMemoryCallStore());
     }
 
     /// <summary>An embedding vendor whose generator is never actually asked to embed anything.</summary>

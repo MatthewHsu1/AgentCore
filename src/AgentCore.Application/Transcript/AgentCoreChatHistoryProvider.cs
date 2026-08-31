@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
+using AgentCore.Application.Calls.Memory;
 using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Transcript.Memory;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -23,14 +23,14 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
 
     private readonly ProviderSessionState<CallTranscript> _state;
 
-    private readonly ITranscriptStore _store;
+    private readonly ICallStore _store;
 
     private readonly ILogger _logger;
 
     /// <summary>Creates the provider over a backing store.</summary>
-    public AgentCoreChatHistoryProvider(ITranscriptStore? store = null, ILogger? logger = null)
+    public AgentCoreChatHistoryProvider(ICallStore? store = null, ILogger? logger = null)
     {
-        _store = store ?? new InMemoryTranscriptStore();
+        _store = store ?? new InMemoryCallStore();
 
         _logger = logger ?? NullLogger.Instance;
 

@@ -1,39 +1,37 @@
+using AgentCore.Application.Calls;
+using AgentCore.Application.Calls.Memory;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
-using AgentCore.Application.Transcript.Memory;
-using AgentCore.Application.Transcript;
-using Microsoft.Extensions.AI;
+using AgentCore.TestSupport;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Transcript;
+namespace AgentCore.Application.Tests.Calls;
 
 /// <summary>
-/// The sixth vendor seam: <c>providers.transcript</c>, and what a document that names none gets.
+/// The store vendor seam: <c>providers.calls</c>, and what a document that names none gets.
 /// </summary>
 /// <remarks>
-/// It reads an absent block the way <c>providers.audit</c> does, and for the same reason: the turn
-/// loop writes the words of every call whether or not a document chose where to put them, so the
-/// answer is never <see langword="null"/>. These tests pin the parts that are this project's and not
-/// a vendor's — that there is always a store, that <c>memory</c> is this library's own name, and that
-/// every other kind goes through the shared selector.
+/// The answer is never <see langword="null"/>: a call's row and its words must have somewhere to go
+/// whether or not a document chose where. These tests pin the parts that are this project's and not a vendor's --
+/// that there is always a store, that <c>memory</c> is this library's own name, and that every other
+/// kind goes through the shared selector.
 /// </remarks>
-public sealed class TranscriptStoreFactoryTests
+public sealed class CallStoreFactoryTests
 {
     [Fact]
-    public async Task OpenAsync_NoTranscriptBlock_GetsTheInProcessStoreAndAsksNoAdapter()
+    public async Task OpenAsync_NoCallsBlock_GetsTheInProcessStoreAndAsksNoAdapter()
     {
         // Arrange
         var configuration = ConfigurationLoader.LoadYaml(Document());
-        FakeCallMessageStoreAdapter adapter = new("postgres");
+        FakeCallStoreAdapter adapter = new("postgres");
 
         // Act
-        var store = await TranscriptStoreFactory.OpenAsync(
+        var store = await CallStoreFactory.OpenAsync(
             configuration, secrets: null, [adapter], TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.IsType<InMemoryTranscriptStore>(store);
+        Assert.IsType<InMemoryCallStore>(store);
         Assert.Equal(0, adapter.Opens);
     }
 
@@ -44,11 +42,11 @@ public sealed class TranscriptStoreFactoryTests
         var configuration = ConfigurationLoader.LoadYaml(Document("kind: memory"));
 
         // Act
-        var store = await TranscriptStoreFactory.OpenAsync(
+        var store = await CallStoreFactory.OpenAsync(
             configuration, secrets: null, [], TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.IsType<InMemoryTranscriptStore>(store);
+        Assert.IsType<InMemoryCallStore>(store);
     }
 
     [Fact]
@@ -56,14 +54,14 @@ public sealed class TranscriptStoreFactoryTests
     {
         // Arrange
         var configuration = ConfigurationLoader.LoadYaml(Document("kind: memory"));
-        FakeCallMessageStoreAdapter impostor = new("memory");
+        FakeCallStoreAdapter impostor = new("memory");
 
         // Act
-        var store = await TranscriptStoreFactory.OpenAsync(
+        var store = await CallStoreFactory.OpenAsync(
             configuration, secrets: null, [impostor], TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.IsType<InMemoryTranscriptStore>(store);
+        Assert.IsType<InMemoryCallStore>(store);
         Assert.Equal(0, impostor.Opens);
     }
 
@@ -72,11 +70,11 @@ public sealed class TranscriptStoreFactoryTests
     {
         // Arrange
         var configuration = ConfigurationLoader.LoadYaml(Document("kind: fake"));
-        FakeCallMessageStoreAdapter fake = new("fake");
-        FakeCallMessageStoreAdapter other = new("postgres");
+        FakeCallStoreAdapter fake = new("fake");
+        FakeCallStoreAdapter other = new("postgres");
 
         // Act
-        var store = await TranscriptStoreFactory.OpenAsync(
+        var store = await CallStoreFactory.OpenAsync(
             configuration, secrets: null, [other, fake], TestContext.Current.CancellationToken);
 
         // Assert
@@ -89,16 +87,16 @@ public sealed class TranscriptStoreFactoryTests
     {
         // Arrange
         var configuration = ConfigurationLoader.LoadYaml(Document("kind: postgres"));
-        FakeCallMessageStoreAdapter adapter = new("fake");
+        FakeCallStoreAdapter adapter = new("fake");
 
         // Act
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
-            async () => await TranscriptStoreFactory.OpenAsync(
+            async () => await CallStoreFactory.OpenAsync(
                 configuration, secrets: null, [adapter], TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Contains("postgres", failure.Message, StringComparison.Ordinal);
-        Assert.Equal("/providers/transcript/kind", failure.Errors[0].Pointer);
+        Assert.Equal("/providers/calls/kind", failure.Errors[0].Pointer);
     }
 
     [Fact]
@@ -106,12 +104,12 @@ public sealed class TranscriptStoreFactoryTests
     {
         // Arrange
         var configuration = ConfigurationLoader.LoadYaml(Document("kind: postgres"));
-        FakeCallMessageStoreAdapter[] both =
-            [new FakeCallMessageStoreAdapter("postgres"), new FakeCallMessageStoreAdapter("postgres")];
+        FakeCallStoreAdapter[] both =
+            [new FakeCallStoreAdapter("postgres"), new FakeCallStoreAdapter("postgres")];
 
         // Act
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
-            async () => await TranscriptStoreFactory.OpenAsync(
+            async () => await CallStoreFactory.OpenAsync(
                 configuration, secrets: null, both, TestContext.Current.CancellationToken));
 
         // Assert
@@ -119,12 +117,12 @@ public sealed class TranscriptStoreFactoryTests
         Assert.Contains("stores", failure.Message, StringComparison.Ordinal);
     }
 
-    /// <summary>The <c>providers.knowledge</c> line the transcript block is written after.</summary>
+    /// <summary>The <c>providers.knowledge</c> line the calls block is written after.</summary>
     private const string KnowledgeLine = Configuration.ExampleDocument.LastProviderLine;
 
-    /// <summary>Builds the section 8.1 document with one transcript block written into it.</summary>
+    /// <summary>Builds the section 8.1 document with one calls block written into it.</summary>
     /// <param name="entries">
-    /// The keys under <c>providers.transcript</c>, one for each line and without indentation. No entry
+    /// The keys under <c>providers.calls</c>, one for each line and without indentation. No entry
     /// at all leaves the block out, which is the case that must still produce a store.
     /// </param>
     private static string Document(params string[] entries)
@@ -132,20 +130,20 @@ public sealed class TranscriptStoreFactoryTests
             ? Configuration.ExampleDocument.Yaml
             : Configuration.ExampleDocument.Yaml.Replace(
                 KnowledgeLine,
-                KnowledgeLine + "\n  transcript:\n" + string.Join("\n", entries.Select(entry => "    " + entry)),
+                KnowledgeLine + "\n  calls:\n" + string.Join("\n", entries.Select(entry => "    " + entry)),
                 StringComparison.Ordinal);
 
     /// <summary>An adapter that opens nothing and records that it was asked.</summary>
-    private sealed class FakeCallMessageStoreAdapter(string kind) : ITranscriptStoreAdapter
+    private sealed class FakeCallStoreAdapter(string kind) : ICallStoreAdapter
     {
         public string Kind => kind;
 
         public int Opens { get; private set; }
 
         /// <summary>The store this adapter hands over. It is a different type from the built-in one.</summary>
-        public ITranscriptStore Store { get; } = new FakeCallMessageStore();
+        public ICallStore Store { get; } = new FakeCallStore();
 
-        public ValueTask<ITranscriptStore> OpenAsync(
+        public ValueTask<ICallStore> OpenAsync(
             VendorProviderConfiguration entry,
             ISecretResolverPort? secrets,
             CancellationToken cancellationToken = default)
@@ -155,15 +153,6 @@ public sealed class TranscriptStoreFactoryTests
         }
     }
 
-    /// <summary>A store that keeps nothing, and is a different type from the built-in one.</summary>
-    private sealed class FakeCallMessageStore : ITranscriptStore
-    {
-        public ValueTask AppendAsync(
-            IReadOnlyList<CallMessage> messages, CancellationToken cancellationToken = default)
-            => ValueTask.CompletedTask;
-
-        public ValueTask RewriteAsync(
-            string callId, int ordinal, ChatMessage content, CancellationToken cancellationToken = default)
-            => ValueTask.CompletedTask;
-    }
+    /// <summary>A store that is a different type from the built-in one, and does nothing else.</summary>
+    private sealed class FakeCallStore() : DelegatingCallStore(new InMemoryCallStore());
 }

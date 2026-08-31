@@ -426,6 +426,8 @@ public sealed class CallSession : IConversationPort
             ? await _compiled.TurnAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false)
             : new CallHistorySession();
 
+        await _compiled.CallStore.CreateAsync(CallId, cancellationToken).ConfigureAwait(false);
+
         lock (_interruptLock)
         {
             if (_agentSession is null)

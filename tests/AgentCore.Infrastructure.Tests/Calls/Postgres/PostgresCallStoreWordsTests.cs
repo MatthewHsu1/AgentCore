@@ -4,23 +4,36 @@ using AgentCore.Application.Transcript;
 using AgentCore.Domain.Audit;
 using AgentCore.Infrastructure.Audit.Postgres;
 using AgentCore.Infrastructure.Tests.Database.Postgres;
-using AgentCore.Infrastructure.Transcript.Postgres;
+using AgentCore.Infrastructure.Calls.Postgres;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentCore.Infrastructure.Tests.Transcript.Postgres;
+namespace AgentCore.Infrastructure.Tests.Calls.Postgres;
 
 /// <summary>
-/// Store 1, the words of a call, in PostgreSQL.
+/// The words half of the store, in PostgreSQL.
 /// </summary>
 /// <remarks>
 /// These need a live PostgreSQL and skip without one — <see cref="PostgresFactAttribute"/> names the
 /// variable. Each test takes a database of its own, because the retention sweep and the erase both
 /// read the whole table.
 /// </remarks>
-public sealed class PostgresTranscriptStoreTests : PostgresDatabaseTest
+public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
 {
     private static readonly TimeSpan NinetyDays = TimeSpan.FromDays(90);
+
+    /// <summary>Opens the store with the call rows these tests write words against already made.</summary>
+    /// <remarks>
+    /// call_message is a child of call, so a word cannot be written before its call exists. In
+    /// production CallSession makes the row when the session opens; here the arrangement makes it.
+    /// </remarks>
+    private async Task<PostgresCallStore> OpenAsync()
+    {
+        PostgresCallStore store = new(DataSource);
+        await store.CreateAsync("C1", Token);
+        await store.CreateAsync("C2", Token);
+        return store;
+    }
 
     /// <inheritdoc />
     protected override bool Migrated => true;
@@ -32,7 +45,7 @@ public sealed class PostgresTranscriptStoreTests : PostgresDatabaseTest
     public async Task AppendAsync_ATurn_WritesOneRowForEachMessage()
     {
         // Arrange
-        PostgresTranscriptStore store = new(DataSource);
+        var store = await OpenAsync();
 
         // Act
         await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), Token);
@@ -45,7 +58,7 @@ public sealed class PostgresTranscriptStoreTests : PostgresDatabaseTest
     public async Task AppendAsync_ATurn_LiftsTheRoleOutOfTheContent()
     {
         // Arrange
-        PostgresTranscriptStore store = new(DataSource);
+        var store = await OpenAsync();
 
         // Act
         await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), Token);
@@ -61,7 +74,7 @@ public sealed class PostgresTranscriptStoreTests : PostgresDatabaseTest
     {
         // Arrange — the framework ships the polymorphic converters, so a tool call and its result
         // survive with no code of ours.
-        PostgresTranscriptStore store = new(DataSource);
+        var store = await OpenAsync();
         ChatMessage announced = new(
             ChatRole.Assistant,
             [new TextContent("Let me check that."), new FunctionCallContent("id1", "lookup", null)]);
@@ -90,7 +103,7 @@ public sealed class PostgresTranscriptStoreTests : PostgresDatabaseTest
     public async Task AppendAsync_NoMessages_TouchesNothing()
     {
         // Arrange
-        PostgresTranscriptStore store = new(DataSource);
+        var store = await OpenAsync();
 
         // Act
         await store.AppendAsync([], Token);
@@ -104,7 +117,7 @@ public sealed class PostgresTranscriptStoreTests : PostgresDatabaseTest
     {
         // Arrange — an ordinal is permanent, so a repeat is a defect and never a silent overwrite.
         // AgentCoreChatHistoryProvider is what catches this and lets the call continue.
-        PostgresTranscriptStore store = new(DataSource);
+        var store = await OpenAsync();
         await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), Token);
 
         // Act
@@ -122,7 +135,7 @@ public sealed class PostgresTranscriptStoreTests : PostgresDatabaseTest
     public async Task ReadAsync_AWrittenCall_ReturnsEveryRowInOrdinalOrder()
     {
         // Arrange
-        PostgresTranscriptStore store = new(DataSource);
+        var store = await OpenAsync();
         await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), Token);
         await store.AppendAsync(Turn("C1", turnIndex: 1, ordinal: 2), Token);
 
@@ -138,7 +151,7 @@ public sealed class PostgresTranscriptStoreTests : PostgresDatabaseTest
     {
         // Arrange — a read that answered with the messages alone would restart ordinals at zero and
         // collide with the rows already there, on a primary key the provider never sees.
-        PostgresTranscriptStore store = new(DataSource);
+        var store = await OpenAsync();
         await store.AppendAsync(Turn("C1", turnIndex: 3, ordinal: 6), Token);
 
         // Act
@@ -152,7 +165,7 @@ public sealed class PostgresTranscriptStoreTests : PostgresDatabaseTest
     public async Task ReadAsync_AnotherCall_ReturnsNothing()
     {
         // Arrange
-        PostgresTranscriptStore store = new(DataSource);
+        var store = await OpenAsync();
         await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), Token);
 
         // Act
@@ -169,7 +182,7 @@ public sealed class PostgresTranscriptStoreTests : PostgresDatabaseTest
     public async Task RewriteAsync_ARow_ReplacesTheWordsOfThatRowOnly()
     {
         // Arrange
-        PostgresTranscriptStore store = new(DataSource);
+        var store = await OpenAsync();
         await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), Token);
 
         // Act
@@ -185,7 +198,7 @@ public sealed class PostgresTranscriptStoreTests : PostgresDatabaseTest
     {
         // Arrange — the retention sweep reads updated_at, so a corrected turn ages from its
         // correction.
-        PostgresTranscriptStore store = new(DataSource);
+        var store = await OpenAsync();
         await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), Token);
         await ExecuteAsync("UPDATE call_message SET created_at = now() - interval '1 hour', updated_at = created_at");
 
@@ -202,7 +215,7 @@ public sealed class PostgresTranscriptStoreTests : PostgresDatabaseTest
     {
         // Arrange — a barge-in that raced the append it corrects. The append carries the corrected
         // words, so there is nothing to report and nothing to guess at.
-        PostgresTranscriptStore store = new(DataSource);
+        var store = await OpenAsync();
         await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), Token);
 
         // Act
@@ -219,7 +232,7 @@ public sealed class PostgresTranscriptStoreTests : PostgresDatabaseTest
     public async Task EraseAsync_OneCall_DeletesItsRowsAndLeavesTheOthers()
     {
         // Arrange
-        PostgresTranscriptStore store = new(DataSource);
+        var store = await OpenAsync();
         await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), Token);
         await store.AppendAsync(Turn("C2", turnIndex: 0, ordinal: 0), Token);
 
@@ -232,74 +245,9 @@ public sealed class PostgresTranscriptStoreTests : PostgresDatabaseTest
         Assert.Equal(2, (await store.ReadAsync("C2", Token)).Count);
     }
 
-    [PostgresFact]
-    public async Task SweepAsync_ExpiredCall_DeletesEveryRow()
-    {
-        // Arrange
-        PostgresTranscriptStore store = new(DataSource);
-        await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), Token);
-        await AgeAsync("C1", TimeSpan.FromDays(100));
 
-        // Act
-        var swept = await store.SweepAsync(NinetyDays, cancellationToken: Token);
 
-        // Assert
-        Assert.Equal(2, swept);
-        Assert.Empty(await store.ReadAsync("C1", Token));
-    }
 
-    [PostgresFact]
-    public async Task SweepAsync_CallStraddlingTheBoundary_DeletesNothing()
-    {
-        // Arrange — a call ages out whole or not at all. Its first turn is well outside the window
-        // and its last is inside it, so every row stays.
-        PostgresTranscriptStore store = new(DataSource);
-        await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), Token);
-        await AgeAsync("C1", TimeSpan.FromDays(100));
-        await store.AppendAsync(Turn("C1", turnIndex: 1, ordinal: 2), Token);
-
-        // Act
-        var swept = await store.SweepAsync(NinetyDays, cancellationToken: Token);
-
-        // Assert
-        Assert.Equal(0, swept);
-        Assert.Equal(4, (await store.ReadAsync("C1", Token)).Count);
-    }
-
-    [PostgresFact]
-    public async Task SweepAsync_InsideTheWindow_DeletesNothing()
-    {
-        // Arrange
-        PostgresTranscriptStore store = new(DataSource);
-        await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), Token);
-
-        // Act
-        var swept = await store.SweepAsync(NinetyDays, cancellationToken: Token);
-
-        // Assert
-        Assert.Equal(0, swept);
-    }
-
-    [PostgresFact]
-    public async Task SweepAsync_MoreExpiredCallsThanOneBatch_LoopsUntilNoneAreLeft()
-    {
-        // Arrange — the LIMIT keeps one transaction off a hundred-thousand-row delete, so the sweep
-        // is only finished when a batch deletes nothing.
-        PostgresTranscriptStore store = new(DataSource);
-        await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), Token);
-        await store.AppendAsync(Turn("C2", turnIndex: 0, ordinal: 0), Token);
-        await store.AppendAsync(Turn("C3", turnIndex: 0, ordinal: 0), Token);
-        await AgeAsync("C1", TimeSpan.FromDays(100));
-        await AgeAsync("C2", TimeSpan.FromDays(100));
-        await AgeAsync("C3", TimeSpan.FromDays(100));
-
-        // Act
-        var swept = await store.SweepAsync(NinetyDays, batchSize: 1, cancellationToken: Token);
-
-        // Assert
-        Assert.Equal(6, swept);
-        Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM call_message"));
-    }
 
     // ---------------------------------------------------------------------------------------------
     // Store 1 against store 3.
@@ -310,7 +258,7 @@ public sealed class PostgresTranscriptStoreTests : PostgresDatabaseTest
         // Arrange — the DISTINCT ON guard. The turn writes an assistant message carrying the tool
         // call and another carrying the reply; without it both come back, and the textless one
         // reports a false tamper on every tool-calling turn.
-        PostgresTranscriptStore store = new(DataSource);
+        var store = await OpenAsync();
         await WriteToolCallingTurnAsync(store, "C1", turnIndex: 0, spoken: "Order 41 ships Friday.");
 
         // Act
@@ -325,7 +273,7 @@ public sealed class PostgresTranscriptStoreTests : PostgresDatabaseTest
     public async Task ReadSpokenTurnsAsync_AToolCallingTurn_MatchesTheHashTheChainHolds()
     {
         // Arrange
-        PostgresTranscriptStore store = new(DataSource);
+        var store = await OpenAsync();
         await WriteToolCallingTurnAsync(store, "C1", turnIndex: 0, spoken: "Order 41 ships Friday.");
 
         // Act
@@ -341,7 +289,7 @@ public sealed class PostgresTranscriptStoreTests : PostgresDatabaseTest
         // Arrange — a RenderContent rides the tool-result message alongside its FunctionResultContent.
         // The verify query never looks at that row's role, but jsonb round-tripping a second content
         // type on it must not upset the DISTINCT ON guard or the hash comparison.
-        PostgresTranscriptStore store = new(DataSource);
+        var store = await OpenAsync();
         await WriteToolCallingTurnAsync(store, "C1", turnIndex: 0, spoken: "Order 41 ships Friday.", drew: true);
 
         // Act
@@ -357,7 +305,7 @@ public sealed class PostgresTranscriptStoreTests : PostgresDatabaseTest
     {
         // Arrange — the erasure working, and not a tamper. The chain keeps its row and goes on
         // proving what it proved.
-        PostgresTranscriptStore store = new(DataSource);
+        var store = await OpenAsync();
         await WriteToolCallingTurnAsync(store, "C1", turnIndex: 0, spoken: "Order 41 ships Friday.");
         await store.EraseAsync("C1", Token);
 
@@ -374,7 +322,7 @@ public sealed class PostgresTranscriptStoreTests : PostgresDatabaseTest
     {
         // Arrange — a barge-in amends a turn, so the chain carries a second turn.completed for it.
         // Without the guard on the chain side the join multiplies and one turn answers twice.
-        PostgresTranscriptStore store = new(DataSource);
+        var store = await OpenAsync();
         await WriteToolCallingTurnAsync(store, "C1", turnIndex: 0, spoken: "Order 41 ships Friday.");
         await store.RewriteAsync("C1", 3, new ChatMessage(ChatRole.Assistant, "Order 41 sh"), Token);
         await AmendTurnAsync("C1", turnIndex: 0, sequence: 1, amends: 0, spoken: "Order 41 sh");
@@ -400,7 +348,7 @@ public sealed class PostgresTranscriptStoreTests : PostgresDatabaseTest
     /// no words the caller heard, and only the second was spoken.
     /// </remarks>
     private async Task WriteToolCallingTurnAsync(
-        PostgresTranscriptStore store, string callId, int turnIndex, string spoken, bool drew = false)
+        PostgresCallStore store, string callId, int turnIndex, string spoken, bool drew = false)
     {
         List<AIContent> toolResultContents = [new FunctionResultContent("id1", "Friday")];
         if (drew)

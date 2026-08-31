@@ -1,18 +1,18 @@
-using AgentCore.Application.Ports;
+using AgentCore.Application.Calls.Memory;
 using AgentCore.Application.Transcript;
 using Microsoft.Extensions.AI;
 
 namespace AgentCore.TestSupport;
 
 /// <summary>
-/// A store 1 that holds its first write open until a test releases it.
+/// A store that holds its first write of words open until a test releases it.
 /// </summary>
 /// <remarks>
 /// A real store talks to a database, so a write outlives the turn that queued it. The memory store
 /// every other test runs on lands a write before the next line reads it, and would let teardown drop
 /// a session with a write still owing without any test noticing.
 /// </remarks>
-public sealed class ParkingTranscriptStore : ITranscriptStore
+public sealed class ParkingCallStore() : DelegatingCallStore(new InMemoryCallStore())
 {
     private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -28,7 +28,7 @@ public sealed class ParkingTranscriptStore : ITranscriptStore
     public void Release() => _release.TrySetResult();
 
     /// <inheritdoc />
-    public async ValueTask AppendAsync(
+    public override async ValueTask AppendAsync(
         IReadOnlyList<CallMessage> messages, CancellationToken cancellationToken = default)
     {
         _entered.TrySetResult();
@@ -36,8 +36,6 @@ public sealed class ParkingTranscriptStore : ITranscriptStore
         _landed = true;
     }
 
-    /// <inheritdoc />
-    public ValueTask RewriteAsync(
-        string callId, int ordinal, ChatMessage content, CancellationToken cancellationToken = default)
-        => ValueTask.CompletedTask;
+
+
 }

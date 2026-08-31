@@ -46,7 +46,7 @@ public sealed class AgentCompilationContext
     /// <summary>
     /// Gets or sets the backing store of store 1, or <see langword="null"/> for memory.
     /// </summary>
-    public ITranscriptStore? TranscriptStore { get; init; }
+    public ICallStore? CallStore { get; init; }
 
     /// <summary>
     /// Gets or sets the source of the state a guarded graph edge reads.

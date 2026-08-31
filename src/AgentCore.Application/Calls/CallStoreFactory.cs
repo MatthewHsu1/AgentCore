@@ -1,24 +1,24 @@
+using AgentCore.Application.Calls.Memory;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Providers;
-using AgentCore.Application.Transcript.Memory;
 
-namespace AgentCore.Application.Transcript;
+namespace AgentCore.Application.Calls;
 
 /// <summary>
-/// Opens the store 1 backing the document names, from the adapters the host registered.
+/// Opens the store 0 backing the document names, from the adapters the host registered.
 /// </summary>
-public static class TranscriptStoreFactory
+public static class CallStoreFactory
 {
     /// <summary>The built-in kind, and the one a document that names no provider gets.</summary>
     public const string MemoryKind = "memory";
 
     /// <summary>What this seam calls itself, so the shared selector writes its failures.</summary>
     private static readonly VendorSeam Seam =
-        new("providers.transcript", "/providers/transcript/kind", "options.UseTranscriptStores(...)", "stores");
+        new("providers.calls", "/providers/calls/kind", "options.UseCallStores(...)", "stores");
 
-    /// <summary>Opens the store <c>providers.transcript</c> names, or the built-in one.</summary>
+    /// <summary>Opens the store <c>providers.calls</c> names, or the built-in one.</summary>
     /// <param name="configuration">The loaded document.</param>
     /// <param name="secrets">The chain a credential resolves through, or <see langword="null"/>.</param>
     /// <param name="adapters">The vendors this host supports.</param>
@@ -28,19 +28,19 @@ public static class TranscriptStoreFactory
     /// <exception cref="ConfigurationLoadException">
     /// The document names a <c>kind</c> no adapter serves, or a <c>kind</c> two adapters answer to.
     /// </exception>
-    public static ValueTask<ITranscriptStore> OpenAsync(
+    public static ValueTask<ICallStore> OpenAsync(
         AgentCoreConfiguration configuration,
         ISecretResolverPort? secrets,
-        IReadOnlyList<ITranscriptStoreAdapter> adapters,
+        IReadOnlyList<ICallStoreAdapter> adapters,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(adapters);
 
-        if (configuration.Providers?.Transcript is not { } entry
+        if (configuration.Providers?.Calls is not { } entry
             || string.Equals(entry.Kind, MemoryKind, StringComparison.OrdinalIgnoreCase))
         {
-            return ValueTask.FromResult<ITranscriptStore>(new InMemoryTranscriptStore());
+            return ValueTask.FromResult<ICallStore>(new InMemoryCallStore());
         }
 
         var adapter = VendorAdapterSelector.Select(entry.Kind, adapters, Seam);

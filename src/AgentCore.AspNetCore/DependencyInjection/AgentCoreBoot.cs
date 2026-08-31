@@ -72,8 +72,8 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
     /// <summary>Gets the registry the compile table reads.</summary>
     internal ToolRegistry Tools => Started.Tools;
 
-    /// <summary>Gets the store 1 backing every call writes its words to.</summary>
-    internal ITranscriptStore Transcript => Started.Transcript;
+    /// <summary>Gets the backing every call's row and every word of it is kept in.</summary>
+    internal ICallStore Calls => Started.Calls;
 
     /// <summary>Gets the registry the turn loop reads, and the offline golden set alike.</summary>
     internal EvaluatorRegistry Evaluators => Started.Evaluators;
@@ -190,7 +190,7 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
 
         ConfigurationValidator.ValidateToolReferences(configuration, tools.ServedIds);
 
-        var transcript = Track(await TranscriptStartup
+        var calls = Track(await CallStartup
             .OpenAsync(configuration, _options, _loggers, cancellationToken)
             .ConfigureAwait(false));
 
@@ -203,7 +203,7 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
                 configuration,
                 chatClients,
                 tools.Registry,
-                transcript,
+                calls,
                 evaluators,
                 knowledge,
                 KnowledgeCitationFormatterFactory.Resolve(configuration, _options.KnowledgeCitations),
@@ -221,7 +221,7 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
             secrets,
             telemetry,
             tools.Registry,
-            transcript,
+            calls,
             evaluators,
             graph,
             call.Sessions,
@@ -290,7 +290,7 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
         ResolvedSecrets Secrets,
         ITelemetrySession? Telemetry,
         ToolRegistry Tools,
-        ITranscriptStore Transcript,
+        ICallStore Calls,
         EvaluatorRegistry Evaluators,
         CompiledGraph Graph,
         ICallSessionFactory Sessions,
