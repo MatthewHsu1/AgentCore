@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
+import { describe, expect, it, test } from "vitest";
 import {
   SessionHeader,
+  foldSource,
   readEvent,
   runTurn,
   splitEvents,
@@ -482,4 +483,66 @@ test("a turn that calls no tool yields an empty tool list", async () => {
   ]);
 
   assert.deepEqual(collected[collected.length - 1].tools, []);
+});
+
+// -------------------------------------------------------------------------------------------------
+// Sources. The host cites them, the browser folds them, and nothing draws them yet.
+// -------------------------------------------------------------------------------------------------
+
+describe("foldSource", () => {
+  const frame = {
+    call_id: "call-1",
+    id: "card-42",
+    source_type: "document",
+    title: "Spirit CT900 owner's manual",
+    locator: "p.27",
+    url: null,
+    media_type: "text/plain",
+    origin: "knowledge",
+  };
+
+  it("reads one source off the wire", () => {
+    const [source] = foldSource([], frame);
+
+    expect(source).toEqual({
+      id: "card-42",
+      sourceType: "document",
+      title: "Spirit CT900 owner's manual",
+      locator: "p.27",
+      url: null,
+      mediaType: "text/plain",
+      origin: "knowledge",
+      callId: "call-1",
+    });
+  });
+
+  it("shows one chip when the same id is cited twice", () => {
+    // Two searches in one turn can return the same card. Two identical chips are noise.
+    const once = foldSource([], frame);
+    const twice = foldSource(once, { ...frame, title: "second" });
+
+    expect(twice).toHaveLength(1);
+    expect(twice[0]?.title).toBe("second");
+  });
+
+  it("drops a frame with no id, because nothing can be kept in step without one", () => {
+    expect(foldSource([], { ...frame, id: undefined })).toHaveLength(0);
+  });
+
+  it("treats an unknown source_type as a document, which needs no link", () => {
+    const [source] = foldSource([], { ...frame, source_type: "wat" });
+
+    expect(source?.sourceType).toBe("document");
+  });
+
+  it("keeps a url source's link", () => {
+    const [source] = foldSource([], {
+      ...frame,
+      source_type: "url",
+      url: "https://example.com/support",
+    });
+
+    expect(source?.sourceType).toBe("url");
+    expect(source?.url).toBe("https://example.com/support");
+  });
 });

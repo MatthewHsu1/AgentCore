@@ -57,6 +57,39 @@ export type RenderPart = {
   readonly data: unknown;
 };
 
+/**
+ * One source the host cited, as the browser holds it.
+ *
+ * Producer-neutral by design: `origin` names what produced it — `knowledge` today — so a later web
+ * search or parts lookup arrives on the same field and draws with the same component.
+ */
+export type SourcePart = {
+  readonly id: string;
+  readonly sourceType: "document" | "url";
+  readonly title: string;
+  /** Where inside the source it sits, such as `p.27`. Empty when the producer has none. */
+  readonly locator: string;
+  /** The link to open, or `null` when there is nothing to open. A document has none. */
+  readonly url: string | null;
+  readonly mediaType: string;
+  /** What produced it, such as `knowledge`. */
+  readonly origin: string;
+  /** The tool call it was cited under. */
+  readonly callId: string;
+};
+
+/** One source as the wire spells it. Every field is optional: the browser never trusts the host's shape. */
+export type SourceFrame = {
+  call_id?: string;
+  id?: string;
+  source_type?: string;
+  title?: string;
+  locator?: string;
+  url?: string | null;
+  media_type?: string;
+  origin?: string;
+};
+
 /** Anything `JSON.parse` can produce. */
 export type JsonValue =
   | string
@@ -96,6 +129,8 @@ export type TurnState = {
   readonly data: readonly RenderPart[];
   /** Every tool this turn has called, in call order, each with its result once it has one. */
   readonly tools: readonly ToolPart[];
+  /** Every source this turn cited, in cite order. */
+  readonly sources: readonly SourcePart[];
   /** The stage the pipeline is in: the turn's own stage, then the stage it moved to at the end. */
   readonly stage: string | null;
   /** Whether the stage the turn moved to ends the call. Only ever true on the final state. */
@@ -147,6 +182,7 @@ type StreamChunk = {
   agentcore?: TurnInfo;
   agentcore_tool?: ToolFrame;
   agentcore_data?: RenderPart;
+  agentcore_source?: SourceFrame;
   agentcore_speaker?: Speaker;
 };
 
@@ -277,6 +313,42 @@ export function foldTool(
 }
 
 /**
+ * Folds one wire frame into the sources held so far.
+ *
+ * Keyed by id, last write winning in the place the first took: the host already de-duplicates
+ * within a turn, and this holds the line for a stream that reconnects mid-turn.
+ */
+export function foldSource(
+  sources: readonly SourcePart[],
+  frame: SourceFrame,
+): readonly SourcePart[] {
+  const id = frame.id;
+  if (!id) {
+    return sources;
+  }
+
+  const part: SourcePart = {
+    id,
+    sourceType: frame.source_type === "url" ? "url" : "document",
+    title: frame.title ?? id,
+    locator: frame.locator ?? "",
+    url: frame.url ?? null,
+    mediaType: frame.media_type ?? "text/plain",
+    origin: frame.origin ?? "",
+    callId: frame.call_id ?? "",
+  };
+
+  const at = sources.findIndex((existing) => existing.id === id);
+  if (at < 0) {
+    return [...sources, part];
+  }
+
+  const next = [...sources];
+  next[at] = part;
+  return next;
+}
+
+/**
  * Runs one turn and yields the reply as it grows.
  *
  * Each yield is the whole reply so far rather than the newest piece, because that is what the
@@ -329,6 +401,7 @@ export async function* runTurn(options: TurnOptions): AsyncGenerator<TurnState> 
   let text = "";
   let data: RenderPart[] = [];
   let tools: readonly ToolPart[] = [];
+  let sources: readonly SourcePart[] = [];
 
   try {
     for (; ;) {
@@ -363,7 +436,7 @@ export async function* runTurn(options: TurnOptions): AsyncGenerator<TurnState> 
         if (info) {
           stage = info.stage_after ?? stage;
           isTerminal = info.is_terminal ?? isTerminal;
-          yield { text, data, tools, stage, isTerminal, speaker };
+          yield { text, data, tools, sources, stage, isTerminal, speaker };
         }
 
         const rendered = chunk.agentcore_data;
@@ -371,19 +444,25 @@ export async function* runTurn(options: TurnOptions): AsyncGenerator<TurnState> 
           // A new array each time: the yielded state is read after the yield, so the consumer must
           // never see a list this loop keeps changing underneath it.
           data = [...data, rendered];
-          yield { text, data, tools, stage, isTerminal, speaker };
+          yield { text, data, tools, sources, stage, isTerminal, speaker };
         }
 
         const tool = chunk.agentcore_tool;
         if (tool) {
           tools = foldTool(tools, tool);
-          yield { text, data, tools, stage, isTerminal, speaker };
+          yield { text, data, tools, sources, stage, isTerminal, speaker };
+        }
+
+        const source = chunk.agentcore_source;
+        if (source) {
+          sources = foldSource(sources, source);
+          yield { text, data, tools, sources, stage, isTerminal, speaker };
         }
 
         const delta = chunk.choices?.[0]?.delta?.content;
         if (delta) {
           text += delta;
-          yield { text, data, tools, stage, isTerminal, speaker };
+          yield { text, data, tools, sources, stage, isTerminal, speaker };
         }
       }
     }
