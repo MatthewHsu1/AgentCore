@@ -6,6 +6,7 @@ using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Knowledge.Fakes;
+using AgentCore.Application.Tests.Runtime;
 using AgentCore.Domain.Knowledge;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -478,6 +479,78 @@ public sealed class KnowledgeProviderFactoryTests
         Assert.Contains("ct900-om, p.27", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Include citations", text, StringComparison.Ordinal);
         Assert.Contains("Do not invent a link", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Create_CitationsOn_PublishesASourceForEachCardShown()
+    {
+        // Task 5 fix round 1, Finding 1. Nothing in this suite drove CallSourceScope.Current to a
+        // non-null value for a citing search before this test, so the body of the publish loop had
+        // never executed. A collector plus an outer call, both open around the same InvokingAsync
+        // the other tests already drive, is what proves the wiring rather than just reading it.
+        var port = new StubKnowledgePort([Card("a"), Card("b")]);
+        var provider = Provider(port, Resolved(KnowledgeMode.Prefetch, citations: true));
+
+        TurnSources sources = new();
+
+        using (TurnAmbientsTestScope.WithSources(sources))
+        using (TurnAmbientsTestScope.WithOuterCall("call-1"))
+        {
+            await provider.InvokingAsync(
+                Invoking("the screen says e33"), TestContext.Current.CancellationToken);
+        }
+
+        var cited = sources.TakeFor("call-1");
+        Assert.Equal(2, cited.Count);
+        Assert.Equal(
+            ["a", "b"], cited.Select(content => content.Source.SourceId).OrderBy(id => id));
+        Assert.All(cited, content => Assert.Equal("ct900-om, p.27", content.Source.Title));
+    }
+
+    [Fact]
+    public async Task Create_CitationsOff_PublishesNothing()
+    {
+        // The leak test, and the most important one in this task. citations: false is the single
+        // switch a deployment uses to decide whether it discloses its sources at all -- a chip on
+        // screen is a disclosure just as much as the label the model is shown -- so this must
+        // publish nothing even with a collector and an outer call both open and cards coming back.
+        var port = new StubKnowledgePort([Card("a"), Card("b")]);
+        var provider = Provider(port, Resolved(KnowledgeMode.Prefetch, citations: false));
+
+        TurnSources sources = new();
+
+        using (TurnAmbientsTestScope.WithSources(sources))
+        using (TurnAmbientsTestScope.WithOuterCall("call-1"))
+        {
+            await provider.InvokingAsync(
+                Invoking("the screen says e33"), TestContext.Current.CancellationToken);
+        }
+
+        Assert.Empty(sources.TakeFor("call-1"));
+    }
+
+    [Fact]
+    public async Task Create_MoreCardsThanTheLimit_CitesOnlyTheCardsTheModelIsShown()
+    {
+        // Finding 2. A card ranked past the agent's limit: is never shown to the model, so citing
+        // it anyway would put a chip on screen for a document the answer could not possibly have
+        // drawn on. The cited set must match the kept set, not the store's full return.
+        var port = new StubKnowledgePort([Card("a"), Card("b"), Card("c"), Card("d"), Card("e")]);
+        var provider = Provider(port, Resolved(KnowledgeMode.Prefetch, limit: 2, citations: true));
+
+        TurnSources sources = new();
+
+        using (TurnAmbientsTestScope.WithSources(sources))
+        using (TurnAmbientsTestScope.WithOuterCall("call-1"))
+        {
+            await provider.InvokingAsync(
+                Invoking("the screen says e33"), TestContext.Current.CancellationToken);
+        }
+
+        var cited = sources.TakeFor("call-1");
+        Assert.Equal(2, cited.Count);
+        Assert.Equal(
+            ["a", "b"], cited.Select(content => content.Source.SourceId).OrderBy(id => id));
     }
 
     [Fact]

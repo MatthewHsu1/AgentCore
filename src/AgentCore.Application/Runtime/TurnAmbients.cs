@@ -25,6 +25,9 @@ internal sealed record TurnAmbients
     /// <summary>Gets what a turn has drawn and not yet attached to a message, or <see langword="null"/> when this call has no screen.</summary>
     public TurnRenders? Renders { get; init; }
 
+    /// <summary>Gets what a turn has cited and not yet attached to a message.</summary>
+    public TurnSources? Sources { get; init; }
+
     /// <summary>Gets what to do with a tool failure the run reports.</summary>
     public Action<ToolFailure>? OnToolFailure { get; init; }
 
@@ -38,13 +41,20 @@ internal sealed record TurnAmbients
     public KnowledgeScope? Knowledge { get; init; }
 
     /// <summary>Opens what a turn owns, and carries every other ambient through unchanged.</summary>
+    /// <param name="state">The state document the call reads and writes.</param>
+    /// <param name="renders">What this turn draws into, or <see langword="null"/> when it has no screen.</param>
+    /// <param name="sources">What this turn cites into. Never null: a call with no screen still has sources.</param>
+    /// <param name="onToolFailure">What to do with a tool failure the run reports.</param>
+    /// <param name="context">The turn the tools are running inside.</param>
     internal static IDisposable Enter(
         StateDocument state,
         TurnRenders? renders,
+        TurnSources sources,
         Action<ToolFailure> onToolFailure,
         TurnContext context)
     {
         ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(onToolFailure);
         ArgumentNullException.ThrowIfNull(context);
 
@@ -53,6 +63,7 @@ internal sealed record TurnAmbients
             State = state,
             Screen = renders,
             Renders = renders,
+            Sources = sources,
             OnToolFailure = onToolFailure,
             Context = context,
         });

@@ -40,7 +40,7 @@ public sealed class AgentCoreChatHistoryProviderStateBagTests
         // loaded from storage would: a same-process SetValue keeps the CLR object and never touches
         // these options at all, which would let this test pass no matter what the provider is wired to.
         var session = new StubSession(AgentSessionStateBag.Deserialize(seed.Serialize()));
-        var provider = new AgentCoreChatHistoryProvider(new RecordingTranscriptStore());
+        var provider = new AgentCoreChatHistoryProvider(new RecordingCallStore());
 
         // Act
         var read = provider.Read(session);

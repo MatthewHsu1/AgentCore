@@ -10,6 +10,7 @@ import {
   runTurn,
   wireMessages,
   type Session,
+  type SourcePart,
   type ToolPart,
   type TurnState,
   type WireMessage,
@@ -114,6 +115,40 @@ function toolContent(tool: ToolPart) {
 }
 
 /**
+ * Turns one cited source into the content part assistant-ui draws it as.
+ *
+ * The two variants are not interchangeable. `url` renders a clickable chip and needs a real href;
+ * `document` renders a badge and needs a title and a media type. A knowledge card has no URL, so it
+ * is always a document, and a `url` source that arrives without its link degrades to one rather
+ * than drawing a chip that goes nowhere.
+ *
+ * `parentId` is the tool call that cited it, which is how assistant-ui ties a source to the step
+ * that found it. `providerMetadata` carries what is ours and not assistant-ui's: which producer
+ * cited it, and where inside the source it sits.
+ */
+export function sourceContent(source: SourcePart) {
+  const shared = {
+    type: "source" as const,
+    id: source.id,
+    title: source.title,
+    parentId: source.callId,
+    providerMetadata: {
+      agentcore: { origin: source.origin, locator: source.locator },
+    },
+  };
+
+  if (source.sourceType === "url" && source.url) {
+    return { ...shared, sourceType: "url" as const, url: source.url };
+  }
+
+  return {
+    ...shared,
+    sourceType: "document" as const,
+    mediaType: source.mediaType,
+  };
+}
+
+/**
  * Binds assistant-ui to one AgentCore endpoint.
  *
  * @param endpoint The route the host mapped the text endpoint on.
@@ -158,8 +193,12 @@ export function useAgentCoreRuntime(endpoint: string) {
         // everything drawn so far. Drop the repeat and a later text-only yield erases the drawing.
         // Tools first, and then the words: the host runs every tool before it speaks, so this is
         // the order the turn actually happened in.
+        // Sources sit between the tools and the words: they are what the tools found, and the
+        // caller should read the answer last. Every yield replaces the whole content, so a source
+        // dropped from one yield would be erased from the message rather than merely not added.
         content = [
           ...state.tools.map(toolContent),
+          ...state.sources.map(sourceContent),
           ...(state.text.length > 0
             ? [{ type: "text" as const, text: state.text }]
             : []),

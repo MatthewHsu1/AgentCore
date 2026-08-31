@@ -71,7 +71,7 @@ public sealed class CallSessionTranscriptTests
     public async Task Interrupt_MidReply_StoredTranscriptHoldsHeardTextOnly()
     {
         // Arrange
-        RecordingTranscriptStore store = new();
+        RecordingCallStore store = new();
         using ScriptedChatClient reply = new("Hello", " there", " caller") { GateAfterFirstFragment = true };
         var session = CreateSession(OneAgentYaml, reply, store);
         var (turn, spoke) = StartGatedTurn(session, "hi");
@@ -98,7 +98,7 @@ public sealed class CallSessionTranscriptTests
     public async Task InterruptAfterTheTurnEnded_ToolTurnWithProse_StoresTheHeardWordsOnce()
     {
         // Arrange
-        RecordingTranscriptStore store = new();
+        RecordingCallStore store = new();
         using ProseThenReplyChatClient reply = new("the price is fifty");
         var session = CreateSession(ToolYaml, reply, store, new StubToolBuilder(ToolResult).Create);
         await DrainAsync(session.RunTurnStreamingAsync("how much?", TestContext.Current.CancellationToken));
@@ -131,7 +131,7 @@ public sealed class CallSessionTranscriptTests
     public async Task InterruptAfterTheTurnEnded_ToolTurnThatDrew_LeavesTheRenderContentOnTheToolResultRow()
     {
         // Arrange
-        RecordingTranscriptStore store = new();
+        RecordingCallStore store = new();
         using ProseThenReplyChatClient reply = new("the price is fifty");
         var session = CreateSession(ToolYaml, reply, store, DrawingTool);
         session.SetHasScreen(true);
@@ -164,7 +164,7 @@ public sealed class CallSessionTranscriptTests
     public async Task ATurnThatDrawsWithAScreenBound_StoresTheRenderContentOnTheToolResultRow()
     {
         // Arrange
-        RecordingTranscriptStore store = new();
+        RecordingCallStore store = new();
         ToolCallingChatClient reply = new("drew it.");
         var session = CreateSession(ToolYaml, reply, store, DrawingTool);
         session.SetHasScreen(true);
@@ -198,7 +198,7 @@ public sealed class CallSessionTranscriptTests
     public async Task Interrupt_AfterASecondTurn_LeavesTheFirstTurnsReplyWhole()
     {
         // Arrange
-        RecordingTranscriptStore store = new();
+        RecordingCallStore store = new();
         RequestRecordingChatClient reply = new("hi there caller", "it ships Friday from the depot");
         var session = CreateSession(OneAgentYaml, reply, store);
         _ = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
@@ -220,7 +220,7 @@ public sealed class CallSessionTranscriptTests
     {
         // Arrange
         RequestRecordingChatClient reply = new("hi there", "it ships Friday");
-        var session = CreateSession(OneAgentYaml, reply, new RecordingTranscriptStore());
+        var session = CreateSession(OneAgentYaml, reply, new RecordingCallStore());
         _ = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
 
         // Act
@@ -240,7 +240,7 @@ public sealed class CallSessionTranscriptTests
     public async Task RunTurn_WithAnUnfilledSlot_KeepsTheReminderOutOfTheStoredTranscript()
     {
         // Arrange
-        RecordingTranscriptStore store = new();
+        RecordingCallStore store = new();
         RequestRecordingChatClient reply = new("which order?");
         var session = CreateSession(SlotYaml, reply, store);
 
@@ -257,7 +257,7 @@ public sealed class CallSessionTranscriptTests
     }
 
     private static CallSession CreateSession(
-        string yaml, IChatClient reply, ITranscriptStore store, Func<ToolConfiguration, AITool?>? tools = null)
+        string yaml, IChatClient reply, ICallStore store, Func<ToolConfiguration, AITool?>? tools = null)
     {
         var document = ConfigurationLoader.LoadYaml(yaml);
         var chatClients = new FakeChatClientFactory(reply);
@@ -265,7 +265,7 @@ public sealed class CallSessionTranscriptTests
             document,
             new AgentCompilationContext(chatClients)
             {
-                TranscriptStore = store,
+                CallStore = store,
                 Tools = TestToolRegistry.From(document, tools, TestContext.Current.CancellationToken),
             });
 

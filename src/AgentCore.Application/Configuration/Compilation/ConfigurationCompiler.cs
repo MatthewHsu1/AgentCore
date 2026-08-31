@@ -1,3 +1,4 @@
+using AgentCore.Application.Calls.Memory;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Evaluation;
@@ -7,7 +8,6 @@ using AgentCore.Application.Runtime;
 using AgentCore.Application.Transcript;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
-
 namespace AgentCore.Application.Configuration.Compilation;
 
 /// <summary>
@@ -136,7 +136,9 @@ public static class ConfigurationCompiler
 
         var row = SelectRow(configuration);
 
-        AgentCoreChatHistoryProvider history = new(context.TranscriptStore);
+        ICallStore calls = context.CallStore ?? new InMemoryCallStore();
+
+        AgentCoreChatHistoryProvider history = new(calls);
 
         var agents = BuildAgents(configuration, context, row.SessionCarriesHistory ? history : null);
 
@@ -147,6 +149,7 @@ public static class ConfigurationCompiler
         return new CompiledAgent(
             configuration,
             row,
+            calls,
             entry,
             agents,
             stages,

@@ -44,7 +44,7 @@ public static class AgentCoreServiceCollectionExtensions
         services.AddSingleton(Boot(boot => boot.ChatClients));
         services.AddSingleton(Boot(boot => boot.Guards));
         services.AddSingleton(Boot(boot => boot.Tools));
-        services.AddSingleton(Boot(boot => boot.Transcript));
+        services.AddSingleton(Boot(boot => boot.Calls));
         services.AddSingleton(Boot(boot => boot.Sessions));
         services.AddSingleton(Boot(boot => boot.Agent));
         services.AddSingleton(Boot(boot => boot.AuditQueue));

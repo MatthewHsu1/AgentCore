@@ -1,11 +1,12 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
-using AgentCore.Application.Transcript.Memory;
+using AgentCore.Application.Calls.Memory;
 using AgentCore.Application.Transcript;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using System.Text.Json;
+using AgentCore.TestSupport;
 using Xunit;
 
 namespace AgentCore.Application.Tests.Transcript;
@@ -165,7 +166,7 @@ public sealed class AgentCoreChatHistoryProviderTests
     public async Task TruncateLastReply_WhileTheAppendIsStillWriting_ReachesTheStoreAfterIt()
     {
         // Arrange
-        var store = new BlockingTranscriptStore();
+        var store = new BlockingCallStore();
         var provider = new AgentCoreChatHistoryProvider(store);
         var session = new StubSession();
         provider.BeginCall(session, CallId);
@@ -184,7 +185,7 @@ public sealed class AgentCoreChatHistoryProviderTests
         Assert.True(cut);
         Assert.Equal(
             ["hello", "hi there", "order 41?", "it ships"],
-            store.Read(CallId).Select(row => row.Content.Text));
+            (await store.ReadAsync(CallId, TestContext.Current.CancellationToken)).Select(row => row.Content.Text));
     }
 
     /// <summary>
@@ -301,7 +302,7 @@ public sealed class AgentCoreChatHistoryProviderTests
     public async Task ProvideChatHistory_TwoConcurrentSessions_DoNotMix()
     {
         // Arrange
-        var provider = new AgentCoreChatHistoryProvider(new RecordingTranscriptStore());
+        var provider = new AgentCoreChatHistoryProvider(new RecordingCallStore());
         var first = new StubSession();
         var second = new StubSession();
         provider.BeginCall(first, "call-a");
@@ -355,7 +356,7 @@ public sealed class AgentCoreChatHistoryProviderTests
     public void AppendTurn_TwoSessions_EachHoldsItsOwnTranscriptUnderThatKey()
     {
         // Arrange
-        var provider = new AgentCoreChatHistoryProvider(new RecordingTranscriptStore());
+        var provider = new AgentCoreChatHistoryProvider(new RecordingCallStore());
         var first = new StubSession();
         var second = new StubSession();
         provider.BeginCall(first, "call-a");
@@ -374,7 +375,7 @@ public sealed class AgentCoreChatHistoryProviderTests
     public async Task AppendTurn_BackingStoreThrows_DoesNotFailTheTurn()
     {
         // Arrange
-        var provider = new AgentCoreChatHistoryProvider(new ThrowingTranscriptStore());
+        var provider = new AgentCoreChatHistoryProvider(new ThrowingCallStore());
         var session = new StubSession();
         provider.BeginCall(session, CallId);
 
@@ -390,7 +391,7 @@ public sealed class AgentCoreChatHistoryProviderTests
     public async Task BeginCall_BackingStoreThrows_TellsTheReporterWhichTurnWasLost()
     {
         // Arrange
-        var provider = new AgentCoreChatHistoryProvider(new ThrowingTranscriptStore());
+        var provider = new AgentCoreChatHistoryProvider(new ThrowingCallStore());
         var session = new StubSession();
         List<int> dropped = [];
         provider.BeginCall(session, CallId, (turnIndex, _) => dropped.Add(turnIndex));
@@ -407,7 +408,7 @@ public sealed class AgentCoreChatHistoryProviderTests
     public async Task InMemoryStore_AfterTurnAndBargeIn_HoldsTheHeardTextInOrder()
     {
         // Arrange
-        var store = new InMemoryTranscriptStore();
+        var store = new InMemoryCallStore();
         var provider = new AgentCoreChatHistoryProvider(store);
         var session = new StubSession();
         provider.BeginCall(session, CallId);
@@ -418,13 +419,15 @@ public sealed class AgentCoreChatHistoryProviderTests
 
         // Assert
         await provider.DrainAsync(session);
-        Assert.Equal(["order 41?", "it ships"], store.Read(CallId).Select(row => row.Content.Text));
+        Assert.Equal(
+            ["order 41?", "it ships"],
+            (await store.ReadAsync(CallId, TestContext.Current.CancellationToken)).Select(row => row.Content.Text));
     }
 
     /// <summary>Opens one call on a fresh session, the way <c>CallSession</c> does at call start.</summary>
-    private static (AgentCoreChatHistoryProvider Provider, RecordingTranscriptStore Store, StubSession Session) NewCall()
+    private static (AgentCoreChatHistoryProvider Provider, RecordingCallStore Store, StubSession Session) NewCall()
     {
-        var store = new RecordingTranscriptStore();
+        var store = new RecordingCallStore();
         var provider = new AgentCoreChatHistoryProvider(store);
         var session = new StubSession();
         provider.BeginCall(session, CallId);
@@ -470,11 +473,10 @@ public sealed class AgentCoreChatHistoryProviderTests
     /// Holds one append open, so a barge-in can arrive while a turn is still writing. It keeps the
     /// real store's ordering rule: a rewrite of a row that is not there yet changes nothing.
     /// </summary>
-    private sealed class BlockingTranscriptStore : ITranscriptStore
+    private sealed class BlockingCallStore() : DelegatingCallStore(new InMemoryCallStore())
     {
         private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private readonly InMemoryTranscriptStore _rows = new();
         private bool _block;
 
         public Task Entered => _entered.Task;
@@ -483,9 +485,7 @@ public sealed class AgentCoreChatHistoryProviderTests
 
         public void Release() => _release.TrySetResult();
 
-        public IReadOnlyList<CallMessage> Read(string callId) => _rows.Read(callId);
-
-        public async ValueTask AppendAsync(
+        public override async ValueTask AppendAsync(
             IReadOnlyList<CallMessage> messages, CancellationToken cancellationToken = default)
         {
             if (_block)
@@ -495,12 +495,12 @@ public sealed class AgentCoreChatHistoryProviderTests
                 await _release.Task.WaitAsync(cancellationToken);
             }
 
-            await _rows.AppendAsync(messages, cancellationToken);
+            await Inner.AppendAsync(messages, cancellationToken);
         }
 
-        public ValueTask RewriteAsync(
+        public override ValueTask RewriteAsync(
             string callId, int ordinal, ChatMessage content, CancellationToken cancellationToken = default)
-            => _rows.RewriteAsync(callId, ordinal, content, cancellationToken);
+            => Inner.RewriteAsync(callId, ordinal, content, cancellationToken);
     }
 
     private sealed class StubSession : AgentSession;

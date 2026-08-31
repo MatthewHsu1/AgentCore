@@ -1,6 +1,7 @@
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Policy;
+using AgentCore.Application.Ports;
 using AgentCore.Application.Transcript;
 using Microsoft.Agents.AI;
 
@@ -20,6 +21,7 @@ public sealed class CompiledAgent
     internal CompiledAgent(
         AgentCoreConfiguration configuration,
         CompileTableRow row,
+        ICallStore calls,
         AIAgent entry,
         Dictionary<string, AIAgent> byAgentId,
         Dictionary<string, string> agentIdByStage,
@@ -31,6 +33,7 @@ public sealed class CompiledAgent
         Shape = row.Shape;
         SessionCarriesHistory = row.SessionCarriesHistory;
         Agent = entry;
+        CallStore = calls;
         SpokenBy = spokenBy;
         History = history;
 
@@ -75,6 +78,9 @@ public sealed class CompiledAgent
     /// Gets store 1 of every call this agent answers.
     /// </summary>
     internal AgentCoreChatHistoryProvider History { get; }
+
+    /// <summary>Gets the store this agent's calls and every word of them are kept in.</summary>
+    internal ICallStore CallStore { get; }
 
     /// <summary>
     /// Gets the agent a turn runs, with the turn-disposition layers on it.

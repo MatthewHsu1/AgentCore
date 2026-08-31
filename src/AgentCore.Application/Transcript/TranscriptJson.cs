@@ -22,6 +22,7 @@ public static class TranscriptJson
         };
 
         options.AddAIContentType<RenderContent>(RenderContentTypeId);
+        options.AddAIContentType<SourceContent>(SourceContentTypeId);
         options.MakeReadOnly();
 
         return options;
@@ -29,4 +30,7 @@ public static class TranscriptJson
 
     /// <summary>The discriminator a stored RenderContent is written with. It is a wire format.</summary>
     private const string RenderContentTypeId = "agentcore.render";
+
+    /// <summary>The discriminator a stored SourceContent is written with. It is a wire format.</summary>
+    private const string SourceContentTypeId = "agentcore.source";
 }

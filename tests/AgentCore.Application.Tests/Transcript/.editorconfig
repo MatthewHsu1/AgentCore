@@ -3,3 +3,8 @@
 # CA1707: "Remove the underscores from member name". A test name reads Subject_Behaviour, and the
 # underscore is what separates the two halves.
 dotnet_diagnostic.CA1707.severity = none
+
+# CA1859: "Use a concrete type". These tests exist to exercise ITranscriptStore itself, so the
+# variable is the interface on purpose and the concrete type would defeat the test.
+[InMemoryTranscriptStoreTests.cs]
+dotnet_diagnostic.CA1859.severity = none

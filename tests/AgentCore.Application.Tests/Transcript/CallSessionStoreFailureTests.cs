@@ -36,7 +36,7 @@ public sealed class CallSessionStoreFailureTests
     public async Task Interrupt_MidReply_StoreOneHoldsTheWordsBeforeTheInterruptedFactIsRaised()
     {
         // Arrange
-        RecordingTranscriptStore store = new();
+        RecordingCallStore store = new();
         using ScriptedChatClient reply = new("Hello", " there", " caller") { GateAfterFirstFragment = true };
         List<string> whenTheFactWasRaised = [];
         WatchingObserver observer = new(
@@ -63,7 +63,7 @@ public sealed class CallSessionStoreFailureTests
     {
         // Arrange
         using RequestRecordingChatClient reply = new("hi there", "it ships Friday");
-        var session = CreateSession(OneAgentYaml, reply, new ThrowingTranscriptStore());
+        var session = CreateSession(OneAgentYaml, reply, new ThrowingCallStore());
         _ = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
 
         // Act
@@ -87,7 +87,7 @@ public sealed class CallSessionStoreFailureTests
         // Arrange
         using RequestRecordingChatClient reply = new("hi there");
         RecordingObserver observer = new();
-        var session = CreateSession(OneAgentYaml, reply, new ThrowingTranscriptStore(), observer);
+        var session = CreateSession(OneAgentYaml, reply, new ThrowingCallStore(), observer);
 
         // Act
         _ = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
@@ -107,12 +107,12 @@ public sealed class CallSessionStoreFailureTests
     }
 
     private static CallSession CreateSession(
-        string yaml, IChatClient reply, ITranscriptStore store, params ICallObserver[] observers)
+        string yaml, IChatClient reply, ICallStore store, params ICallObserver[] observers)
     {
         var document = ConfigurationLoader.LoadYaml(yaml);
         var compiled = ConfigurationCompiler.Compile(
             document,
-            new AgentCompilationContext(new FakeChatClientFactory(reply)) { TranscriptStore = store });
+            new AgentCompilationContext(new FakeChatClientFactory(reply)) { CallStore = store });
 
         return new CallSessionFactory(
             compiled,

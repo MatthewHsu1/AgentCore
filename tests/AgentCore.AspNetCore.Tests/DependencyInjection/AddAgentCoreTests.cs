@@ -12,7 +12,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Secrets;
 using AgentCore.Application.Tools;
-using AgentCore.Application.Transcript.Memory;
+using AgentCore.Application.Calls.Memory;
 using AgentCore.Application.Transcript;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Sessions;
@@ -599,14 +599,14 @@ public sealed class AddAgentCoreTests
     }
 
     [Fact]
-    public async Task AddAgentCore_ClosesTheTranscriptStoreWhenTheHostShutsDown()
+    public async Task AddAgentCore_ClosesTheCallStoreWhenTheHostShutsDown()
     {
-        RecordingTranscriptStore store = new();
+        RecordingCallStore store = new();
         HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
         ConfigureServices(
             builder.Services,
             VendorTranscriptYaml,
-            options => options.UseTranscriptStores(new TestTranscriptStoreAdapter(store)));
+            options => options.UseCallStores(new TestCallStoreAdapter(store)));
 
         IHost host = builder.Build();
         await host.StartAsync(TestContext.Current.CancellationToken);
@@ -622,7 +622,7 @@ public sealed class AddAgentCoreTests
         // KnowledgeStartup.OpenAsync's result used to be discarded with `_ = await ...`, so a
         // successful open -- a QdrantClient in production -- was never tracked against the boot and
         // outlived host shutdown. This proves the port the adapter built is closed the same way the
-        // transcript store above is.
+        // call store above is.
         DisposeTrackingKnowledgeAdapter adapter = new();
         HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
         ConfigureServices(
@@ -1171,10 +1171,10 @@ public sealed class AddAgentCoreTests
         => Assert.IsType<InMemoryAuditSink>(provider.GetRequiredService<QueuedAuditSink>().Store);
 
     // -------------------------------------------------------------------------------------------
-    // The transcript store: named by providers.transcript, and never absent.
+    // The transcript store: named by providers.calls, and never absent.
     // -------------------------------------------------------------------------------------------
 
-    // The same agent, served by a transcript vendor the host registers itself.
+    // The same agent, served by a call-store vendor the host registers itself.
     private const string VendorTranscriptYaml =
         """
         apiVersion: agentcore/v1
@@ -1189,7 +1189,7 @@ public sealed class AddAgentCoreTests
             tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
-          transcript: { kind: test }
+          calls: { kind: test }
         """;
 
     // The same agent, served by a knowledge vendor the host registers itself.
@@ -1210,10 +1210,10 @@ public sealed class AddAgentCoreTests
           knowledge: { kind: test, collection: manuals, fields: { body: body } }
         """;
 
-    // The transcript store opens at step 4b and the moderation vendor is built at step 4c, so a
+    // The call store opens at step 4c and the moderation vendor is built at step 4c, so a
     // document that names both puts a failure strictly after an open. Nothing else in the boot has
     // that shape.
-    private const string TranscriptThenModerationFailureYaml =
+    private const string CallStoreThenModerationFailureYaml =
         """
         apiVersion: agentcore/v1
         name: composed
@@ -1227,41 +1227,41 @@ public sealed class AddAgentCoreTests
             tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
-          transcript: { kind: test }
+          calls: { kind: test }
           moderation: { kind: test }
         """;
 
     [Fact]
-    public async Task ADocumentThatNamesNoTranscriptProvider_StillOpensTheMemoryStore()
+    public async Task ADocumentThatNamesNoCallStoreProvider_StillOpensTheMemoryStore()
     {
         using var provider = await BuildAsync(OneAgentYaml);
 
         // The turn loop writes the words of every call whatever a document says, so this seam has a
         // working default rather than a null, and a first run needs no database.
-        Assert.NotNull(provider.GetService<ITranscriptStore>());
-        Assert.IsType<InMemoryTranscriptStore>(provider.GetRequiredService<ITranscriptStore>());
+        Assert.NotNull(provider.GetService<ICallStore>());
+        Assert.IsType<InMemoryCallStore>(provider.GetRequiredService<ICallStore>());
     }
 
     [Fact]
-    public async Task ATranscriptVendorTheDocumentNames_IsTheStoreTheTurnWritesTo()
+    public async Task ACallStoreVendorTheDocumentNames_IsTheStoreTheTurnWritesTo()
     {
-        RecordingTranscriptStore store = new();
+        RecordingCallStore store = new();
         using var provider = await BuildAsync(
             VendorTranscriptYaml,
-            options => options.UseTranscriptStores(new TestTranscriptStoreAdapter(store)));
+            options => options.UseCallStores(new TestCallStoreAdapter(store)));
 
         var session = provider.GetRequiredService<ICallSessionFactory>().Create("call-1");
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
         await session.FlushTranscriptAsync();
 
-        // The host lists its vendors once and providers.transcript.kind picks one. Nothing but the
+        // The host lists its vendors once and providers.calls.kind picks one. Nothing but the
         // document decides where the words of a call land.
-        Assert.Same(store, provider.GetRequiredService<ITranscriptStore>());
+        Assert.Same(store, provider.GetRequiredService<ICallStore>());
         Assert.Equal(["user", "assistant"], store.Roles);
     }
 
     [Fact]
-    public async Task ATranscriptKindThisHostDoesNotRegister_FailsTheStart()
+    public async Task ACallStoreKindThisHostDoesNotRegister_FailsTheStart()
     {
         // A document that asked for something this host cannot give fails while the host starts, and
         // never on a call.
@@ -1271,20 +1271,26 @@ public sealed class AddAgentCoreTests
         Assert.Contains("test", failure.Message, StringComparison.Ordinal);
     }
 
-    /// <summary>A transcript vendor that hands over the store the test holds.</summary>
-    private sealed class TestTranscriptStoreAdapter(RecordingTranscriptStore store) : ITranscriptStoreAdapter
+    /// <summary>A call-store vendor that hands over the store the test holds.</summary>
+    private sealed class TestCallStoreAdapter(RecordingCallStore store) : ICallStoreAdapter
     {
         public string Kind => "test";
 
-        public ValueTask<ITranscriptStore> OpenAsync(
+        public ValueTask<ICallStore> OpenAsync(
             VendorProviderConfiguration entry,
             ISecretResolverPort? secrets,
             CancellationToken cancellationToken = default)
-            => ValueTask.FromResult<ITranscriptStore>(store);
+            => ValueTask.FromResult<ICallStore>(store);
     }
 
     /// <summary>A store 1 backing that keeps the role of every row it accepted.</summary>
-    private sealed class RecordingTranscriptStore : ITranscriptStore, IAsyncDisposable
+    /// <remarks>
+    /// Keeps only <see cref="Roles"/>, with no <c>callId</c> or <c>ordinal</c>, so it cannot rebuild a
+    /// <see cref="CallMessage"/> to answer a read or an erase truthfully. <see cref="ReadAsync"/> and
+    /// <see cref="EraseAsync"/> report empty and 0 even after <see cref="AppendAsync"/> has recorded
+    /// rows — a test that needs either should use a different double.
+    /// </remarks>
+    private sealed class RecordingCallStore() : DelegatingCallStore(new InMemoryCallStore()), IAsyncDisposable
     {
         private readonly Lock _gate = new();
         private readonly List<string> _roles = [];
@@ -1304,7 +1310,7 @@ public sealed class AddAgentCoreTests
             }
         }
 
-        public ValueTask AppendAsync(
+        public override ValueTask AppendAsync(
             IReadOnlyList<CallMessage> messages, CancellationToken cancellationToken = default)
         {
             lock (_gate)
@@ -1315,9 +1321,19 @@ public sealed class AddAgentCoreTests
             return ValueTask.CompletedTask;
         }
 
-        public ValueTask RewriteAsync(
+        public override ValueTask RewriteAsync(
             string callId, int ordinal, ChatMessage content, CancellationToken cancellationToken = default)
             => ValueTask.CompletedTask;
+
+        public override ValueTask<IReadOnlyList<CallMessage>> ReadAsync(
+            string callId, CancellationToken cancellationToken = default)
+        {
+            IReadOnlyList<CallMessage> rows = [];
+            return ValueTask.FromResult(rows);
+        }
+
+        public override ValueTask<int> EraseAsync(string callId, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(0);
 
         public ValueTask DisposeAsync()
         {
@@ -1496,19 +1512,19 @@ public sealed class AddAgentCoreTests
     }
 
     /// <summary>
-    /// The transcript store is opened at step 4b, and the moderation vendor is built after it. A
+    /// The call store is opened at step 4c, and the moderation vendor is built after it. A
     /// document that names a moderation kind this host does not register therefore fails with the
     /// store already open, and nothing between the two steps has taken ownership of it.
     /// </summary>
     [Fact]
-    public async Task AFailureAfterTheTranscriptStoreOpens_StillClosesTheStore()
+    public async Task AFailureAfterTheCallStoreOpens_StillClosesTheStore()
     {
-        RecordingTranscriptStore store = new();
+        RecordingCallStore store = new();
 
         await Assert.ThrowsAsync<ConfigurationLoadException>(() => BuildAsync(
-            TranscriptThenModerationFailureYaml,
+            CallStoreThenModerationFailureYaml,
             options => options
-                .UseTranscriptStores(new TestTranscriptStoreAdapter(store))
+                .UseCallStores(new TestCallStoreAdapter(store))
                 .UseModeration(new FakeModerationAdapter("other", new AlwaysFlagsEvaluator()))));
 
         Assert.True(store.Closed);

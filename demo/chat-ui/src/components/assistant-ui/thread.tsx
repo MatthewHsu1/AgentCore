@@ -5,6 +5,10 @@ import {
   ComposerAttachments,
   UserMessageAttachments,
 } from "@/components/assistant-ui/attachment";
+import {
+  Sources,
+  type Source,
+} from "@/components/assistant-ui/elements/sources";
 import { File } from "@/components/assistant-ui/file";
 import { ThreadFollowupSuggestions } from "@/components/assistant-ui/follow-up-suggestions";
 import { Image } from "@/components/assistant-ui/image";
@@ -30,23 +34,23 @@ import {
   ActionBarMorePrimitive,
   ActionBarPrimitive,
   AuiIf,
-  type AssistantState,
   BranchPickerPrimitive,
   ComposerPrimitive,
   groupPartByType,
   MessagePrimitive,
   SuggestionPrimitive,
   ThreadPrimitive,
-  type FileMessagePartComponent,
-  type ImageMessagePartComponent,
-  type ToolCallMessagePartComponent,
   useAuiState,
   useMessageTiming,
+  type AssistantState,
+  type FileMessagePartComponent,
+  type ImageMessagePartComponent,
+  type PartProviderMetadata,
+  type PartState,
+  type ToolCallMessagePartComponent,
 } from "@assistant-ui/react";
 // `@assistant-ui/react` re-exports most hooks but not this one, so it comes from the core package
 // the app already depends on directly.
-import { useActionBarReload } from "@assistant-ui/core/react";
-import { TypingIndicator } from "@/components/elements/typing-indicator";
 import { ComposerDraft } from "@/components/assistant-ui/draft";
 import { Regenerate } from "@/components/assistant-ui/regenerate";
 import { ThreadMessageSearch } from "@/components/assistant-ui/search";
@@ -55,6 +59,8 @@ import { DayDivider } from "@/components/elements/day-separator";
 import { ErrorState } from "@/components/elements/error-state";
 import { MessageTiming as MessageTimingStats } from "@/components/elements/message-timing";
 import { StoppedRun } from "@/components/elements/stopped-run";
+import { TypingIndicator } from "@/components/elements/typing-indicator";
+import { useActionBarReload } from "@assistant-ui/core/react";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -91,11 +97,11 @@ export type ThreadComponents = {
   Welcome?: ComponentType | undefined;
   ToolFallback?: ToolCallMessagePartComponent | undefined;
   ToolGroup?:
-    | ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>
-    | undefined;
+  | ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>
+  | undefined;
   ReasoningGroup?:
-    | ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>
-    | undefined;
+  | ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>
+  | undefined;
 };
 
 export type ThreadProps = {
@@ -195,7 +201,7 @@ const ThreadRoot: FC<{ isEmpty: boolean }> = ({ isEmpty }) => {
             className={cn(
               "aui-thread-viewport-footer bg-background flex flex-col gap-4 overflow-visible pb-4 md:pb-6",
               !isEmpty &&
-                "sticky bottom-0 mt-auto rounded-t-(--composer-radius)",
+              "sticky bottom-0 mt-auto rounded-t-(--composer-radius)",
             )}
           >
             <ThreadScrollToBottom />
@@ -523,6 +529,67 @@ const MessageTimingFooter: FC = () => {
   );
 };
 
+/**
+ * One provider-metadata bag, read defensively: the shape is ours by convention, not by type.
+ */
+function metadataString(
+  bag: PartProviderMetadata[string] | undefined,
+  key: string,
+): string {
+  const value = bag?.[key];
+  return typeof value === "string" ? value : "";
+}
+
+/**
+ * Turns one cited part into the card `Sources` draws. A `url` source gets its hostname, the
+ * closest thing a card grid built for web citations has to a "domain". A `document` source has no
+ * URL at all — a knowledge card's locator (`p.27`) says more than its media type ever could, so
+ * that leads, and the producer name (`knowledge`) is the fallback when a card has no locator.
+ */
+function sourceCardOf(part: Extract<PartState, { type: "source" }>): Source {
+  if (part.sourceType === "url") {
+    // `title` is optional on the `url` variant of the wire type even though this app's own
+    // producer always sets it (see `foldSource`'s `title ?? id` fallback) — fall back the same
+    // way here so the type matches what is already true at runtime.
+    return { id: part.id, domain: new URL(part.url).hostname, title: part.title ?? part.id };
+  }
+
+  const agentcore = part.providerMetadata?.agentcore;
+  const locator = metadataString(agentcore, "locator");
+  const origin = metadataString(agentcore, "origin");
+
+  return { id: part.id, domain: locator || origin, title: part.title };
+}
+
+/**
+ * `Sources` is a collection component — one "Sources N" toggle over a card grid — not a chip
+ * meant to repeat per citation. So this reads the whole message's parts once and draws one grid,
+ * instead of the switch below drawing one grid per part.
+ *
+ * Selects the parts array itself, not a filtered copy: `useAuiState` runs the selector inside
+ * `getSnapshot`, and a selector that allocates a new array every call never sees its result count
+ * as equal to the last, so it would re-render forever. Filtering happens after the selector
+ * returns, on a plain array.
+ */
+const MessageSources: FC = () => {
+  const parts = useAuiState((s) => s.message.parts);
+  const [open, setOpen] = useState(false);
+
+  const sources = parts.filter(
+    (part): part is Extract<PartState, { type: "source" }> => part.type === "source",
+  );
+
+  if (sources.length === 0) return null;
+
+  return (
+    <Sources
+      sources={sources.map(sourceCardOf)}
+      open={open}
+      onOpenChange={setOpen}
+    />
+  );
+};
+
 const AssistantMessage: FC = () => {
   const {
     ToolFallback: ToolFallbackComponent = ToolFallback,
@@ -605,9 +672,11 @@ const AssistantMessage: FC = () => {
                     <Image {...part} />
                   </div>
                 );
+              case "source":
+                // Drawn collectively in `MessageSources`, below — the element is a collection
+                // (one grid, `sources: {domain,title}[]`).
+                return null;
               case "indicator":
-                // Bare dots and never a label. The one thing this host could name here is the
-                // pipeline stage, and it is deliberately never shown to the caller.
                 return (
                   <TypingIndicator
                     data-slot="aui_assistant-message-indicator"
@@ -620,6 +689,7 @@ const AssistantMessage: FC = () => {
             }
           }}
         </MessagePrimitive.GroupedParts>
+        <MessageSources />
         <StoppedRunNotice />
         <MessageError />
         <MessageTimingFooter />

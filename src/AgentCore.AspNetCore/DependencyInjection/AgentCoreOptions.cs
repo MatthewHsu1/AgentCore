@@ -64,8 +64,8 @@ public sealed class AgentCoreOptions
     /// <summary>Gets the audit sink vendors the host registered, or <see langword="null"/>.</summary>
     internal IReadOnlyList<IAuditSinkAdapter>? AuditSinks { get; private set; }
 
-    /// <summary>Gets the transcript store vendors the host registered, or <see langword="null"/>.</summary>
-    internal IReadOnlyList<ITranscriptStoreAdapter>? TranscriptStores { get; private set; }
+    /// <summary>Gets the call store vendors the host registered, or <see langword="null"/>.</summary>
+    internal IReadOnlyList<ICallStoreAdapter>? CallStores { get; private set; }
 
     /// <summary>Gets the speech vendors the host registered, or <see langword="null"/>.</summary>
     internal IReadOnlyList<ISpeechAdapter>? Speech { get; private set; }
@@ -196,13 +196,13 @@ public sealed class AgentCoreOptions
         return this;
     }
 
-    /// <summary>Binds the transcript store vendors, and the document picks one by <c>kind</c>.</summary>
+    /// <summary>Binds the call store vendors, and the document picks one by <c>kind</c>.</summary>
     /// <param name="adapters">The vendors this host supports.</param>
     /// <returns>These options, so a host chains its calls.</returns>
-    public AgentCoreOptions UseTranscriptStores(params ITranscriptStoreAdapter[] adapters)
+    public AgentCoreOptions UseCallStores(params ICallStoreAdapter[] adapters)
     {
         ArgumentNullException.ThrowIfNull(adapters);
-        TranscriptStores = adapters;
+        CallStores = adapters;
         return this;
     }
 

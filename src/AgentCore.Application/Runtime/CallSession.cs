@@ -426,6 +426,8 @@ public sealed class CallSession : IConversationPort
             ? await _compiled.TurnAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false)
             : new CallHistorySession();
 
+        await _compiled.CallStore.CreateAsync(CallId, cancellationToken).ConfigureAwait(false);
+
         lock (_interruptLock)
         {
             if (_agentSession is null)
@@ -462,6 +464,7 @@ public sealed class CallSession : IConversationPort
         => TurnAmbients.Enter(
             State,
             turn.Renders,
+            turn.Sources,
             failure => _events.RaiseToolFailure(turn.Index, failure),
             TurnContextOf(turn));
 
@@ -559,7 +562,8 @@ public sealed class CallSession : IConversationPort
             State.TurnIndex,
             activity,
             _time.GetTimestamp(),
-            _hasScreen ? new TurnRenders() : null);
+            _hasScreen ? new TurnRenders() : null,
+            new TurnSources());
     }
 
     /// <summary>
@@ -1082,6 +1086,10 @@ public sealed class CallSession : IConversationPort
     /// scope on every step of a streaming turn, and a fresh collector each time would lose whatever
     /// an earlier step drew before a later step could attach it to a message.
     /// </param>
+    /// <param name="Sources">
+    /// What this turn cites into. Built once per turn for the same reason <see cref="Renders"/> is,
+    /// and never null: a call with no screen still answers from documents.
+    /// </param>
     private sealed record Turn(
         AIAgent Agent,
         AgentSession Session,
@@ -1092,7 +1100,8 @@ public sealed class CallSession : IConversationPort
         int Index,
         Activity? Activity,
         long StartedAt,
-        TurnRenders? Renders);
+        TurnRenders? Renders,
+        TurnSources Sources);
 
     /// <summary>The session a graph row's call holds, so store 1 has somewhere to live.</summary>
     /// <remarks>

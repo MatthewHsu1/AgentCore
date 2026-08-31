@@ -323,6 +323,6 @@ public sealed record ProvidersConfiguration
     /// <summary>Gets the audit sink provider, or <see langword="null"/> for the in-process default.</summary>
     public VendorProviderConfiguration? Audit { get; init; }
 
-    /// <summary>Gets the transcript store provider, or <see langword="null"/> for the in-process default.</summary>
-    public VendorProviderConfiguration? Transcript { get; init; }
+    /// <summary>Gets the call store provider, or <see langword="null"/> for the in-process default.</summary>
+    public VendorProviderConfiguration? Calls { get; init; }
 }

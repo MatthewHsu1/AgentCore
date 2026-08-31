@@ -3,6 +3,7 @@ using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
 using AgentCore.Hosting.Secrets;
 using AgentCore.Infrastructure.Audit.Postgres;
+using AgentCore.Infrastructure.Calls.Postgres;
 using AgentCore.Infrastructure.Embeddings.OpenAI;
 using AgentCore.Infrastructure.Evaluation.OpenAiModeration;
 using AgentCore.Infrastructure.Knowledge.VectorData.Qdrant;
@@ -10,7 +11,6 @@ using AgentCore.Infrastructure.Llm.OpenAI;
 using AgentCore.Infrastructure.Secrets;
 using AgentCore.Infrastructure.Telemetry.Grafana;
 using AgentCore.Infrastructure.Tools;
-using AgentCore.Infrastructure.Transcript.Postgres;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -129,8 +129,8 @@ public static class AgentCoreHostBuilderExtensions
         // providers.audit.kind picks the adapter.
         options.UseAuditSinks(new PostgresAuditSinkAdapter());
 
-        // providers.transcript.kind picks the adapter.
-        options.UseTranscriptStores(new PostgresTranscriptStoreAdapter());
+        // providers.calls.kind picks the adapter.
+        options.UseCallStores(new PostgresCallStoreAdapter());
     }
 
     /// <summary>Opens the client a <c>transport: http</c> MCP server is reached on.</summary>

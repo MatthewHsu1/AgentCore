@@ -67,6 +67,27 @@ AgentCore.Domain.Knowledge.KnowledgeScope.Equals(AgentCore.Domain.Knowledge.Know
 AgentCore.Domain.Knowledge.KnowledgeScope.Facets.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!
 AgentCore.Domain.Knowledge.KnowledgeScope.Facets.init -> void
 AgentCore.Domain.Knowledge.KnowledgeScope.KnowledgeScope() -> void
+AgentCore.Domain.Sources.SourceKind
+AgentCore.Domain.Sources.SourceKind.Document = 0 -> AgentCore.Domain.Sources.SourceKind
+AgentCore.Domain.Sources.SourceKind.Url = 1 -> AgentCore.Domain.Sources.SourceKind
+AgentCore.Domain.Sources.SourceReference
+AgentCore.Domain.Sources.SourceReference.<Clone>$() -> AgentCore.Domain.Sources.SourceReference!
+AgentCore.Domain.Sources.SourceReference.Equals(AgentCore.Domain.Sources.SourceReference? other) -> bool
+AgentCore.Domain.Sources.SourceReference.Kind.get -> AgentCore.Domain.Sources.SourceKind
+AgentCore.Domain.Sources.SourceReference.Kind.init -> void
+AgentCore.Domain.Sources.SourceReference.Locator.get -> string!
+AgentCore.Domain.Sources.SourceReference.Locator.init -> void
+AgentCore.Domain.Sources.SourceReference.MediaType.get -> string!
+AgentCore.Domain.Sources.SourceReference.MediaType.init -> void
+AgentCore.Domain.Sources.SourceReference.Origin.get -> string!
+AgentCore.Domain.Sources.SourceReference.Origin.init -> void
+AgentCore.Domain.Sources.SourceReference.SourceId.get -> string!
+AgentCore.Domain.Sources.SourceReference.SourceId.init -> void
+AgentCore.Domain.Sources.SourceReference.SourceReference() -> void
+AgentCore.Domain.Sources.SourceReference.Title.get -> string!
+AgentCore.Domain.Sources.SourceReference.Title.init -> void
+AgentCore.Domain.Sources.SourceReference.Url.get -> string?
+AgentCore.Domain.Sources.SourceReference.Url.init -> void
 AgentCore.Domain.TurnResult
 AgentCore.Domain.TurnResult.<Clone>$() -> AgentCore.Domain.TurnResult!
 AgentCore.Domain.TurnResult.CallId.get -> string!
@@ -116,6 +137,9 @@ override AgentCore.Domain.Knowledge.KnowledgeCard.ToString() -> string!
 override AgentCore.Domain.Knowledge.KnowledgeScope.Equals(object? obj) -> bool
 override AgentCore.Domain.Knowledge.KnowledgeScope.GetHashCode() -> int
 override AgentCore.Domain.Knowledge.KnowledgeScope.ToString() -> string!
+override AgentCore.Domain.Sources.SourceReference.Equals(object? obj) -> bool
+override AgentCore.Domain.Sources.SourceReference.GetHashCode() -> int
+override AgentCore.Domain.Sources.SourceReference.ToString() -> string!
 override AgentCore.Domain.TurnResult.Equals(object? obj) -> bool
 override AgentCore.Domain.TurnResult.GetHashCode() -> int
 override AgentCore.Domain.TurnResult.ToString() -> string!
@@ -138,5 +162,7 @@ static AgentCore.Domain.Knowledge.KnowledgeCard.operator !=(AgentCore.Domain.Kno
 static AgentCore.Domain.Knowledge.KnowledgeCard.operator ==(AgentCore.Domain.Knowledge.KnowledgeCard? left, AgentCore.Domain.Knowledge.KnowledgeCard? right) -> bool
 static AgentCore.Domain.Knowledge.KnowledgeScope.operator !=(AgentCore.Domain.Knowledge.KnowledgeScope? left, AgentCore.Domain.Knowledge.KnowledgeScope? right) -> bool
 static AgentCore.Domain.Knowledge.KnowledgeScope.operator ==(AgentCore.Domain.Knowledge.KnowledgeScope? left, AgentCore.Domain.Knowledge.KnowledgeScope? right) -> bool
+static AgentCore.Domain.Sources.SourceReference.operator !=(AgentCore.Domain.Sources.SourceReference? left, AgentCore.Domain.Sources.SourceReference? right) -> bool
+static AgentCore.Domain.Sources.SourceReference.operator ==(AgentCore.Domain.Sources.SourceReference? left, AgentCore.Domain.Sources.SourceReference? right) -> bool
 static AgentCore.Domain.TurnResult.operator !=(AgentCore.Domain.TurnResult? left, AgentCore.Domain.TurnResult? right) -> bool
 static AgentCore.Domain.TurnResult.operator ==(AgentCore.Domain.TurnResult? left, AgentCore.Domain.TurnResult? right) -> bool

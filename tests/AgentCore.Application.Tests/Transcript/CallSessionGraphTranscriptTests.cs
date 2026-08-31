@@ -48,7 +48,7 @@ public sealed class CallSessionGraphTranscriptTests
     public async Task Run_GraphRow_StoresOnlyCallerFacingMessages()
     {
         // Arrange
-        RecordingTranscriptStore store = new();
+        RecordingCallStore store = new();
         RecordingNodeClient researcher = new(Thinking);
         RecordingNodeClient responder = new(Spoken);
         var session = CreateSession(researcher, responder, store);
@@ -73,7 +73,7 @@ public sealed class CallSessionGraphTranscriptTests
         // Arrange
         RecordingNodeClient researcher = new(Thinking);
         RecordingNodeClient responder = new(Spoken);
-        var session = CreateSession(researcher, responder, new RecordingTranscriptStore());
+        var session = CreateSession(researcher, responder, new RecordingCallStore());
         _ = await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
 
         // Act
@@ -101,7 +101,7 @@ public sealed class CallSessionGraphTranscriptTests
     public async Task Run_GraphRow_ReplyIsFinalNodeOnly()
     {
         // Arrange
-        RecordingTranscriptStore store = new();
+        RecordingCallStore store = new();
         RecordingNodeClient researcher = new(Thinking);
         RecordingNodeClient responder = new(Spoken);
         var session = CreateSession(researcher, responder, store);
@@ -122,7 +122,7 @@ public sealed class CallSessionGraphTranscriptTests
     public async Task Interrupt_MidGraphReply_StoresTheHeardWordsOnly()
     {
         // Arrange
-        RecordingTranscriptStore store = new();
+        RecordingCallStore store = new();
         RecordingNodeClient researcher = new(Thinking);
         using ScriptedChatClient responder = new("Order 41 ", "ships Friday.") { GateAfterFirstFragment = true };
         var session = CreateSession(researcher, responder, store);
@@ -150,7 +150,7 @@ public sealed class CallSessionGraphTranscriptTests
     public async Task Interrupt_BeforeAnyGraphWordLanded_StoresTheCallerUtteranceAlone()
     {
         // Arrange
-        RecordingTranscriptStore store = new();
+        RecordingCallStore store = new();
         RecordingNodeClient researcher = new(Thinking);
         using ScriptedChatClient responder = new("Order 41 ", "ships Friday.") { GateAfterFirstFragment = true };
         var session = CreateSession(researcher, responder, store);
@@ -196,7 +196,7 @@ public sealed class CallSessionGraphTranscriptTests
     }
 
     private static CallSession CreateSession(
-        IChatClient researcher, IChatClient responder, ITranscriptStore store)
+        IChatClient researcher, IChatClient responder, ICallStore store)
     {
         var document = ConfigurationLoader.LoadYaml(GraphYaml);
         RoutingChatClientFactory chatClients = new(researcher);
@@ -204,7 +204,7 @@ public sealed class CallSessionGraphTranscriptTests
 
         var compiled = ConfigurationCompiler.Compile(
             document,
-            new AgentCompilationContext(chatClients) { TranscriptStore = store });
+            new AgentCompilationContext(chatClients) { CallStore = store });
 
         var factory = new CallSessionFactory(
             compiled,

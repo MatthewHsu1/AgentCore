@@ -33,7 +33,7 @@ public sealed class CallSessionsTests
     {
         // A real store answers over a network, so a write outlives the turn that queued it. This
         // session is the only thing that can wait for it, and closing is the last moment anything can.
-        ParkingTranscriptStore transcript = new();
+        ParkingCallStore transcript = new();
         InMemoryCallSessions sessions = new(Factory(transcript), TimeSpan.FromMinutes(30), Clock());
         var session = await sessions.OpenAsync("call-1", Token);
 
@@ -91,7 +91,7 @@ public sealed class CallSessionsTests
     {
         // The reason expiry goes through CloseAsync. An evictor that dropped the entry on its own
         // would return with the write still in flight, and nothing left able to wait for it.
-        ParkingTranscriptStore transcript = new();
+        ParkingCallStore transcript = new();
         var clock = Clock();
         InMemoryCallSessions sessions = new(Factory(transcript), TimeSpan.FromMinutes(30), clock);
         var session = await sessions.OpenAsync("call-1", Token);
@@ -143,7 +143,7 @@ public sealed class CallSessionsTests
         """;
 
     private static CallSessionFactory Factory(
-        ITranscriptStore? transcript = null,
+        ICallStore? transcript = null,
         string? yaml = null,
         IChatClient? reply = null,
         ICallObserver? observer = null)
@@ -152,7 +152,7 @@ public sealed class CallSessionsTests
         RoutingChatClientFactory chatClients = new(reply ?? new StubChatClient());
         var compiled = ConfigurationCompiler.Compile(
             document,
-            new AgentCompilationContext(chatClients) { TranscriptStore = transcript });
+            new AgentCompilationContext(chatClients) { CallStore = transcript });
 
         return new CallSessionFactory(
             compiled,

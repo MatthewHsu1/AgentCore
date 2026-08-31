@@ -103,7 +103,11 @@ internal static class KnowledgeProviderFactory
                     Log.KnowledgeRetrieved(logger, agent, cards.Count, record);
                 }
 
-                return Trim(cards, knowledge, citations);
+                var shown = Kept(cards, knowledge);
+
+                Cite(shown, knowledge, citations);
+
+                return Map(shown, knowledge, citations);
             }
             catch (Exception failure) when (!CallerCancelled(failure, cancellationToken))
             {
@@ -144,17 +148,36 @@ internal static class KnowledgeProviderFactory
             Stopwatch.GetElapsedTime(started).TotalMilliseconds,
             failure);
 
-    /// <summary>Cuts one search down to the agent's <c>limit:</c>.</summary>
-    /// <param name="cards">What the store returned, best first, links last.</param>
+    /// <summary>Cites what this search read, for the caller's screen.</summary>
+    /// <param name="cards">The cards the agent is actually shown, after <see cref="Kept"/> cuts the search down to the agent's <c>limit:</c> — not everything the store returned.</param>
     /// <param name="knowledge">The agent's resolved <c>knowledge:</c> block.</param>
-    /// <param name="citations">The wording each kept card's source label is written in.</param>
-    /// <returns>The cards this agent sees.</returns>
-    private static List<TextSearchProvider.TextSearchResult> Trim(
+    /// <param name="citations">The wording <c>providers.knowledge.citation</c> named.</param>
+    private static void Cite(
         IReadOnlyList<KnowledgeCard> cards,
         ResolvedKnowledge knowledge,
         IKnowledgeCitationFormatter citations)
     {
-        List<TextSearchProvider.TextSearchResult> kept = [];
+        if (!knowledge.Citations || CallSourceScope.Current is not { } port)
+        {
+            return;
+        }
+
+        foreach (var card in cards)
+        {
+            if (KnowledgeSourceMapper.ToSource(card, citations) is { } source)
+            {
+                port.Publish(source);
+            }
+        }
+    }
+
+    /// <summary>Cuts one search down to the agent's <c>limit:</c>.</summary>
+    /// <param name="cards">What the store returned, best first, links last.</param>
+    /// <param name="knowledge">The agent's resolved <c>knowledge:</c> block.</param>
+    /// <returns>The cards this agent is shown.</returns>
+    private static List<KnowledgeCard> Kept(IReadOnlyList<KnowledgeCard> cards, ResolvedKnowledge knowledge)
+    {
+        List<KnowledgeCard> kept = [];
         var ranked = 0;
 
         foreach (var card in cards)
@@ -164,10 +187,30 @@ internal static class KnowledgeProviderFactory
                 continue;
             }
 
-            kept.Add(KnowledgeCardMapper.ToResult(card, knowledge.Citations, citations));
+            kept.Add(card);
         }
 
         return kept;
+    }
+
+    /// <summary>Maps the cards this agent is shown into what the framework injects.</summary>
+    /// <param name="cards">The cards <see cref="Kept"/> already cut down to the agent's <c>limit:</c>.</param>
+    /// <param name="knowledge">The agent's resolved <c>knowledge:</c> block.</param>
+    /// <param name="citations">The wording each card's source label is written in.</param>
+    /// <returns>The results the framework injects.</returns>
+    private static List<TextSearchProvider.TextSearchResult> Map(
+        IReadOnlyList<KnowledgeCard> cards,
+        ResolvedKnowledge knowledge,
+        IKnowledgeCitationFormatter citations)
+    {
+        List<TextSearchProvider.TextSearchResult> mapped = [];
+
+        foreach (var card in cards)
+        {
+            mapped.Add(KnowledgeCardMapper.ToResult(card, knowledge.Citations, citations));
+        }
+
+        return mapped;
     }
 
     /// <summary>Wraps one sentence for the model in the shape the framework injects.</summary>

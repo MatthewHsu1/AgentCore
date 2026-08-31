@@ -29,7 +29,7 @@ internal static class CompilationStartup
     /// <param name="configuration">The loaded document.</param>
     /// <param name="chatClients">The factory step 3c built, which the compile table asks for every agent and for the extractor.</param>
     /// <param name="tools">The registry step 4 built.</param>
-    /// <param name="transcript">The store 1 backing step 4b opened. One store serves every call.</param>
+    /// <param name="calls">The store every call's row and every word of it is kept in.</param>
     /// <param name="evaluators">
     /// The registry the moderator comes out of. R3 puts moderation in the chat pipeline of every
     /// compiled agent, so it is bound here rather than on the session factory.
@@ -43,7 +43,7 @@ internal static class CompilationStartup
         AgentCoreConfiguration configuration,
         IChatClientFactory chatClients,
         ToolRegistry tools,
-        ITranscriptStore transcript,
+        ICallStore calls,
         EvaluatorRegistry evaluators,
         IKnowledgeRetrievalPort? knowledge,
         IKnowledgeCitationFormatter citations,
@@ -59,7 +59,7 @@ internal static class CompilationStartup
                 Tools = tools,
                 Guards = guards,
                 Moderation = PromptModerator.FromRegistry(evaluators),
-                TranscriptStore = transcript,
+                CallStore = calls,
                 StateSnapshot = CallStateScope.Snapshot,
                 Knowledge = knowledge,
                 Citations = citations,
