@@ -49,16 +49,19 @@ public sealed class QueuedAuditSinkTests
         InMemoryAuditSink inner = new();
         await using QueuedAuditSink sink = new(inner);
 
+        List<Guid> ids = [];
         for (long sequence = 1; sequence <= 5; sequence++)
         {
-            await sink.AppendAsync(Event(sequence), TestContext.Current.CancellationToken);
+            var id = Guid.CreateVersion7();
+            ids.Add(id);
+            await sink.AppendAsync(Event(sequence, id), TestContext.Current.CancellationToken);
         }
 
         await sink.FlushAsync(TestContext.Current.CancellationToken);
 
         // One reader drains the channel, so the chain of D23 reaches the store in the order the call
         // produced it. That ordering is now a property of this class and not of each adapter.
-        Assert.Equal([1L, 2L, 3L, 4L, 5L], inner.Events.Select(item => item.Sequence).ToArray());
+        Assert.Equal(ids, inner.Events.Select(item => item.EventId).ToArray());
     }
 
     [Fact]
@@ -135,12 +138,13 @@ public sealed class QueuedAuditSinkTests
         InMemoryAuditSink inner = new();
         QueuedAuditSink sink = new(inner);
 
-        await sink.AppendAsync(Event(1), TestContext.Current.CancellationToken);
+        var id = Guid.CreateVersion7();
+        await sink.AppendAsync(Event(1, id), TestContext.Current.CancellationToken);
         await sink.DisposeAsync();
 
         // A host that stops does not lose the rows it already accepted, which is what makes a queue
         // in front of the chain safe to put there.
-        Assert.Equal([1L], inner.Events.Select(item => item.Sequence).ToArray());
+        Assert.Equal(id, Assert.Single(inner.Events).EventId);
     }
 
     [Fact]
@@ -161,10 +165,10 @@ public sealed class QueuedAuditSinkTests
         Assert.Empty(inner.Events);
     }
 
-    private static AuditEvent Event(long sequence) => new()
+    private static AuditEvent Event(long sequence, Guid? eventId = null) => new()
     {
         CallId = CallId,
-        Sequence = sequence,
+        EventId = eventId ?? Guid.CreateVersion7(),
         Kind = AuditEventKind.TurnCompleted,
         OccurredAt = DateTimeOffset.UnixEpoch.AddSeconds(sequence),
     };

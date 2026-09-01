@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Schema;
 
@@ -9,7 +10,17 @@ namespace AgentCore.Application.State;
 /// <remarks>
 /// <para>
 /// Section 8.3: every slot has exactly one writer, and guards read only declared state. One document
-/// belongs to one call, so it takes no lock. The turn loop owns it and no other thread touches it.
+/// belongs to one call, and the turn loop is its only WRITER, so nothing here serialises writes
+/// against each other.
+/// </para>
+/// <para>
+/// It is not, however, touched by one thread alone. <c>CallSession.Snapshot</c> reads the document
+/// off the turn, and <c>AgentCoreAgent.SerializeSessionCoreAsync</c> is a framework seam any host
+/// thread may call while a turn is running. That is why <see cref="_written"/> is concurrent: a
+/// reader mid-<see cref="TryWrite"/> must get a torn answer and never an
+/// <see cref="InvalidOperationException"/> out of the framework's own serialization API. A torn read
+/// is acceptable where a throw is not, because the snapshot is best effort by design — D5 says the
+/// next turn's own write corrects it, and the blob holds no counter that could collide.
 /// </para>
 /// <para>
 /// A slot the writers have not filled is <em>unfilled</em>, and it reads as its declared default.
@@ -19,7 +30,7 @@ namespace AgentCore.Application.State;
 /// </remarks>
 public sealed class StateDocument
 {
-    private readonly Dictionary<string, JsonNode?> _written = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, JsonNode?> _written = new(StringComparer.Ordinal);
 
     /// <summary>Creates the state of one call from the declared slots.</summary>
     /// <param name="configuration">The loaded document.</param>
@@ -124,6 +135,26 @@ public sealed class StateDocument
         snapshot[ReservedStateSlots.TurnIndex] = JsonValue.Create(TurnIndex);
         snapshot[ReservedStateSlots.CallDurationSeconds] = JsonValue.Create(CallDurationSeconds);
         return snapshot;
+    }
+
+    /// <summary>Reads the declared slots a writer has actually filled, for the durable blob.</summary>
+    /// <returns>A copy. An unfilled slot is absent, which is what keeps unfilled and filled-default apart.</returns>
+    /// <remarks>
+    /// Not <see cref="Snapshot"/>: that one fills every declared slot with its default and adds the
+    /// three reserved slots, which is right for a guard and wrong for a blob. Restoring a default as
+    /// though a writer had chosen it would lose the difference <see cref="IsUnfilled(string)"/>
+    /// exists to keep.
+    /// </remarks>
+    public IReadOnlyDictionary<string, JsonNode?> WrittenSlots()
+    {
+        Dictionary<string, JsonNode?> written = new(_written.Count, StringComparer.Ordinal);
+
+        foreach (var entry in _written)
+        {
+            written[entry.Key] = entry.Value?.DeepClone();
+        }
+
+        return written;
     }
 
     private JsonValue? ReadReserved(string slot)

@@ -1,3 +1,4 @@
+using AgentCore.Application.Calls;
 using AgentCore.Application.Calls.Memory;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Transcript;
@@ -17,10 +18,12 @@ public sealed class DelegatingCallStoreTests
         public int Appends { get; private set; }
 
         public override ValueTask AppendAsync(
-            IReadOnlyList<CallMessage> messages, CancellationToken cancellationToken = default)
+            IReadOnlyList<CallMessage> messages,
+            CallSessionState? state = null,
+            CancellationToken cancellationToken = default)
         {
             Appends++;
-            return base.AppendAsync(messages, cancellationToken);
+            return base.AppendAsync(messages, state, cancellationToken);
         }
     }
 
@@ -32,7 +35,7 @@ public sealed class DelegatingCallStoreTests
 
         // Act
         await store.AppendAsync(
-            [new CallMessage("c1", 0, 0, new ChatMessage(ChatRole.User, "hi"))], Token);
+            [new CallMessage("c1", 0, 0, new ChatMessage(ChatRole.User, "hi"))], cancellationToken: Token);
 
         // Assert
         Assert.Equal(1, store.Appends);

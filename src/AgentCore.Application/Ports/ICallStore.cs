@@ -67,14 +67,24 @@ public interface ICallStore
     /// </remarks>
     ValueTask DeleteAsync(string callId, CancellationToken cancellationToken = default);
 
-    /// <summary>Writes a turn's new messages. One turn is one round trip.</summary>
+    /// <summary>Writes a turn's new messages, and the state the session holds after them.</summary>
     /// <param name="messages">The rows to write, oldest first.</param>
+    /// <param name="state">
+    /// What the session holds after this turn, or <see langword="null"/> to leave the stored state
+    /// alone. It rides with the words on purpose: a crash between the two would leave the stage
+    /// behind the words it belongs to. For the same reason, a non-<see langword="null"/> state is
+    /// silently dropped when <paramref name="messages"/> is empty: an empty turn writes no words for
+    /// it to ride with, so there is nothing to write it beside.
+    /// </param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <remarks>
     /// The call's row must already exist. <see cref="CreateAsync"/> runs once when the session opens,
     /// and a backing that enforces the relation refuses this write without it.
     /// </remarks>
-    ValueTask AppendAsync(IReadOnlyList<CallMessage> messages, CancellationToken cancellationToken = default);
+    ValueTask AppendAsync(
+        IReadOnlyList<CallMessage> messages,
+        CallSessionState? state = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Rewrites one already-written message in place, on a barge-in.</summary>
     /// <param name="callId">The call the message belongs to.</param>

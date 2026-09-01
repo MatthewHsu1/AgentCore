@@ -3,31 +3,15 @@ namespace AgentCore.Application.Runtime;
 /// <summary>
 /// The closed set of facts one call raises to its observers.
 /// </summary>
-/// <remarks>
-/// <para>
-/// This is the vocabulary of the hook, and it is deliberately LARGER than
-/// <see cref="Domain.Audit.AuditEventKind"/>. Four of the kinds here are diagnostic only: they are
-/// counted and logged, and no audit row records them. A turn loop that raised only what the chain
-/// stores would have to keep its own logging beside the hook, which is the coupling this seam exists
-/// to remove.
-/// </para>
-/// <para>
-/// The two enums are therefore NOT interchangeable, and nothing casts between them.
-/// <c>AuditCallObserver</c> owns the mapping, and it drops every kind the chain does not hold.
-/// </para>
-/// <para>
-/// Unlike <see cref="Domain.Audit.AuditEventKind"/>, no number here is ever stored or hashed. A
-/// <see cref="CallEvent"/> lives for the length of one dispatch and reaches nothing but an observer
-/// in this process, so the numeric values carry no compatibility promise and the wire token of an
-/// audit row is produced by <see cref="Domain.Audit.AuditEventKinds"/> from the mapped kind. The set
-/// is still closed, for the reason <see cref="Domain.Audit.AuditEventKind"/> gives: a vocabulary that
-/// grows by one string on every new caller cannot be read a year later.
-/// </para>
-/// </remarks>
 public enum CallEventKind
 {
-    /// <summary>The call started. It is the first fact of every call.</summary>
-    /// <remarks>One call raises exactly one of these, and it carries no turn index. The chain stores it.</remarks>
+    /// <summary>A session of the call started. It is the first fact of every session.</summary>
+    /// <remarks>
+    /// One SESSION raises exactly one of these, and a call can have several of them: a chat page
+    /// reload opens a second session onto the same call. It carries no turn index. The chain stores
+    /// it, and <see cref="Domain.Audit.AuditEventKind.CallStarted"/> says why it is not suppressed on
+    /// a resume.
+    /// </remarks>
     CallStarted = 0,
 
     /// <summary>Moderation flagged what the CALLER said, so the agent refused to answer that turn.</summary>
@@ -40,7 +24,7 @@ public enum CallEventKind
 
     /// <summary>The moderation endpoint did not answer in time, or it faulted, so the turn ran unchecked.</summary>
     /// <remarks>
-    /// Diagnostic only: it is counted and logged, and <see cref="CallEvent.Ordinal"/> is
+    /// Diagnostic only: it is counted and logged, and <see cref="CallEvent.EventId"/> is
     /// <see langword="null"/> so no audit row records it. Moderation guards the turn and must never
     /// be the thing that drops it, so an endpoint that cannot answer is reported and the turn goes on.
     /// </remarks>
@@ -48,8 +32,8 @@ public enum CallEventKind
 
     /// <summary>The moderation endpoint answered, and it flagged nothing.</summary>
     /// <remarks>
-    /// Diagnostic only, and the quietest of the four: it is counted and not even logged, and
-    /// <see cref="CallEvent.Ordinal"/> is <see langword="null"/>. The clean verdict is what makes the
+    /// Diagnostic only, and the quietest of the six: it is counted and not even logged, and
+    /// <see cref="CallEvent.EventId"/> is <see langword="null"/>. The clean verdict is what makes the
     /// flagged count readable as a rate, and a clean turn is not a fact about the call worth a
     /// permanent row.
     /// </remarks>
@@ -61,7 +45,7 @@ public enum CallEventKind
 
     /// <summary>The run returned quietly with no text, so the turn spoke the fallback.</summary>
     /// <remarks>
-    /// Diagnostic only: it is counted and logged, and <see cref="CallEvent.Ordinal"/> is
+    /// Diagnostic only: it is counted and logged, and <see cref="CallEvent.EventId"/> is
     /// <see langword="null"/> so no audit row records it. On a voice call the silence is the failure,
     /// so the turn loop reads the reply rather than trusting the absence of an exception. The
     /// <see cref="TurnCompleted"/> of the same turn still writes the row, and it carries the fallback
@@ -71,7 +55,7 @@ public enum CallEventKind
 
     /// <summary>The extractor returned an invalid object, so the slots stayed unchanged.</summary>
     /// <remarks>
-    /// Diagnostic only: it is counted and logged, and <see cref="CallEvent.Ordinal"/> is
+    /// Diagnostic only: it is counted and logged, and <see cref="CallEvent.EventId"/> is
     /// <see langword="null"/> so no audit row records it. The call continues, so this is a warning
     /// and never an error.
     /// </remarks>
@@ -87,7 +71,7 @@ public enum CallEventKind
     /// <summary>The caller spoke over a reply, so the reply stopped early.</summary>
     /// <remarks>
     /// This fact amends the <see cref="TurnCompleted"/> of the same turn, per T23, because the chain
-    /// refuses to rewrite the first event. <see cref="CallEvent.AmendsOrdinal"/> is therefore required
+    /// refuses to rewrite the first event. <see cref="CallEvent.AmendsEventId"/> is therefore required
     /// on this kind. It records the text the caller ACTUALLY HEARD and never the text the model
     /// produced. The chain stores it.
     /// </remarks>
@@ -95,15 +79,32 @@ public enum CallEventKind
 
     /// <summary>A store 1 write was refused, so the durable copy of some words was lost.</summary>
     /// <remarks>
-    /// Diagnostic only: it is counted and logged, and <see cref="CallEvent.Ordinal"/> is
-    /// <see langword="null"/> so no audit row records it. A dropped write is a fact about the system
+    /// Diagnostic only: it is logged where the write was refused, which is the only place the
+    /// exception still exists, and counted nowhere — no instrument of section 8.6 takes it, because
+    /// the turn did not fail. <see cref="CallEvent.EventId"/> is <see langword="null"/> so no audit
+    /// row records it either. A dropped write is a fact about the system
     /// and not about the call — the caller notices nothing, the live history is unharmed, and the
-    /// next turn still has the whole conversation — so it must not take an ordinal the chain would
-    /// then be missing.
+    /// next turn still has the whole conversation — so it takes no identity and the chain owes it no
+    /// row.
     /// </remarks>
     TranscriptWriteFailed = 10,
 
-    /// <summary>The call ended. It is the last fact of every call.</summary>
-    /// <remarks>One call raises exactly one of these, and it carries no turn index. The chain stores it.</remarks>
+    /// <summary>The host ended the call. It is the last fact of the session that ended it.</summary>
+    /// <remarks>
+    /// One session raises at most one of these, and another session may open onto the same call
+    /// afterwards, so it is not necessarily the last fact of the call. It carries no turn index. The
+    /// chain stores it.
+    /// </remarks>
     CallEnded = 9,
+
+    /// <summary>A resumed call could not restore part of its stored state: the document changed under it.</summary>
+    /// <remarks>
+    /// Diagnostic only: it is logged, counted nowhere, and <see cref="CallEvent.EventId"/> is
+    /// <see langword="null"/> so no audit row records it. It is the one diagnostic kind raised
+    /// outside a turn — the call is opening — so it carries no turn index. Restore is best effort by
+    /// D6, and this is what makes "best effort" reportable rather than silent: without the line, a
+    /// document change that cost every call in flight its stage would reach nobody but a host that
+    /// wrote an <c>ICallObserver</c> of its own.
+    /// </remarks>
+    StateRestorePartial = 11,
 }

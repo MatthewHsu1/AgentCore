@@ -22,7 +22,7 @@ public sealed class InMemoryCallStoreTranscriptTests
         [
             new CallMessage("c1", 0, 0, new ChatMessage(ChatRole.User, "hello")),
             new CallMessage("c1", 1, 0, new ChatMessage(ChatRole.Assistant, "hi")),
-        ], Token);
+        ], cancellationToken: Token);
 
         // Assert
         var rows = await store.ReadAsync("c1", Token);
@@ -37,7 +37,7 @@ public sealed class InMemoryCallStoreTranscriptTests
         // Arrange
         InMemoryCallStore store = new();
         await store.AppendAsync(
-            [new CallMessage("c1", 0, 0, new ChatMessage(ChatRole.Assistant, "long reply"))], Token);
+            [new CallMessage("c1", 0, 0, new ChatMessage(ChatRole.Assistant, "long reply"))], cancellationToken: Token);
 
         // Act
         await store.RewriteAsync("c1", 0, new ChatMessage(ChatRole.Assistant, "cut"), Token);
@@ -56,7 +56,7 @@ public sealed class InMemoryCallStoreTranscriptTests
         [
             new CallMessage("c1", 0, 0, new ChatMessage(ChatRole.User, "a")),
             new CallMessage("c2", 0, 0, new ChatMessage(ChatRole.User, "b")),
-        ], Token);
+        ], cancellationToken: Token);
 
         // Act
         var erased = await store.EraseAsync("c1", Token);
@@ -76,7 +76,7 @@ public sealed class InMemoryCallStoreTranscriptTests
 
         // Act
         await store.AppendAsync(
-            [new CallMessage("c1", 0, 0, new ChatMessage(ChatRole.User, "hello"))], Token);
+            [new CallMessage("c1", 0, 0, new ChatMessage(ChatRole.User, "hello"))], cancellationToken: Token);
 
         // Assert
         var call = await store.GetAsync("c1", Token);
@@ -94,7 +94,7 @@ public sealed class InMemoryCallStoreTranscriptTests
                 new CallMessage("c1", 1, 0, new ChatMessage(ChatRole.User, "second")),
                 new CallMessage("c1", 0, 0, new ChatMessage(ChatRole.User, "first")),
             ],
-            Token);
+            cancellationToken: Token);
 
         // Act
         var rows = await store.ReadAsync("c1", Token);
@@ -121,8 +121,8 @@ public sealed class InMemoryCallStoreTranscriptTests
     {
         // Arrange
         InMemoryCallStore store = new();
-        await store.AppendAsync([new CallMessage("c1", 0, 0, new ChatMessage(ChatRole.User, "mine"))], Token);
-        await store.AppendAsync([new CallMessage("c2", 0, 0, new ChatMessage(ChatRole.User, "theirs"))], Token);
+        await store.AppendAsync([new CallMessage("c1", 0, 0, new ChatMessage(ChatRole.User, "mine"))], cancellationToken: Token);
+        await store.AppendAsync([new CallMessage("c2", 0, 0, new ChatMessage(ChatRole.User, "theirs"))], cancellationToken: Token);
 
         // Act
         var rows = await store.ReadAsync("c1", Token);
@@ -141,7 +141,7 @@ public sealed class InMemoryCallStoreTranscriptTests
                 new CallMessage("c1", 0, 0, new ChatMessage(ChatRole.User, "one")),
                 new CallMessage("c1", 1, 0, new ChatMessage(ChatRole.Assistant, "two")),
             ],
-            Token);
+            cancellationToken: Token);
 
         // Act
         var erased = await store.EraseAsync("c1", Token);
@@ -156,8 +156,8 @@ public sealed class InMemoryCallStoreTranscriptTests
     {
         // Arrange
         InMemoryCallStore store = new();
-        await store.AppendAsync([new CallMessage("c1", 0, 0, new ChatMessage(ChatRole.User, "mine"))], Token);
-        await store.AppendAsync([new CallMessage("c2", 0, 0, new ChatMessage(ChatRole.User, "theirs"))], Token);
+        await store.AppendAsync([new CallMessage("c1", 0, 0, new ChatMessage(ChatRole.User, "mine"))], cancellationToken: Token);
+        await store.AppendAsync([new CallMessage("c2", 0, 0, new ChatMessage(ChatRole.User, "theirs"))], cancellationToken: Token);
 
         // Act
         await store.EraseAsync("c1", Token);

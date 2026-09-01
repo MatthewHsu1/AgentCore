@@ -30,8 +30,12 @@ internal static class PostgresCallStoreSql
     internal const string CreateSql =
         "INSERT INTO call (call_id) VALUES ($1) ON CONFLICT (call_id) DO NOTHING";
 
+    /// <summary>One call's row, with the session state a resume reads back.</summary>
     internal static readonly string GetSql =
-        $"SELECT {Projection} FROM call c {ActivityJoin} WHERE c.call_id = $1";
+        $"SELECT {Projection}, c.state FROM call c {ActivityJoin} WHERE c.call_id = $1";
+
+    internal const string StateSql =
+        "UPDATE call SET state = $2, updated_at = now() WHERE call_id = $1";
 
     internal const string RenameSql =
         "UPDATE call SET title = $2, updated_at = now() WHERE call_id = $1";

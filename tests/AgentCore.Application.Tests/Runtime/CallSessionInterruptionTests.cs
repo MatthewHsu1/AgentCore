@@ -233,7 +233,7 @@ public sealed class CallSessionInterruptionTests
         var events = sink.EventsOf(session.CallId);
         var completed = Assert.Single(events, item => item.Kind == AuditEventKind.TurnCompleted);
         var amendment = Assert.Single(events, item => item.Kind == AuditEventKind.ReplyInterrupted);
-        Assert.Equal(completed.Sequence, amendment.AmendsSequence);
+        Assert.Equal(completed.EventId, amendment.AmendsEventId);
         Assert.Equal(completed.TurnIndex, amendment.TurnIndex);
         Assert.Equal(
             AuditHash.OfText("Hello there").Value,
@@ -421,7 +421,7 @@ public sealed class CallSessionInterruptionTests
         var events = sink.EventsOf(session.CallId);
         var completed = Assert.Single(events, item => item.Kind == AuditEventKind.TurnCompleted);
         var amendment = Assert.Single(events, item => item.Kind == AuditEventKind.ReplyInterrupted);
-        Assert.Equal(completed.Sequence, amendment.AmendsSequence);
+        Assert.Equal(completed.EventId, amendment.AmendsEventId);
         Assert.Equal(completed.TurnIndex, amendment.TurnIndex);
         Assert.Equal(
             AuditHash.OfText("Hello there").Value,

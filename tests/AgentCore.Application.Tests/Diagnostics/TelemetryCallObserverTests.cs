@@ -128,7 +128,7 @@ public sealed class TelemetryCallObserverTests
                 CallId = "call-1",
                 Kind = kind,
                 OccurredAt = DateTimeOffset.UnixEpoch,
-                Ordinal = 0,
+                EventId = Guid.CreateVersion7(),
                 TurnIndex = 0,
             },
             TestContext.Current.CancellationToken);

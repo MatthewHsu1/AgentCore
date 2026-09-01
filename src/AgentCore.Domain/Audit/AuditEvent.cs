@@ -11,9 +11,6 @@ public sealed record AuditEvent
     /// <summary>Gets the id of the call the event belongs to.</summary>
     public required string CallId { get; init; }
 
-    /// <summary>Gets the position of the event inside its call, counting from zero.</summary>
-    public required long Sequence { get; init; }
-
     /// <summary>Gets what the event records.</summary>
     public required AuditEventKind Kind { get; init; }
 
@@ -26,11 +23,20 @@ public sealed record AuditEvent
     /// </summary>
     public int? TurnIndex { get; init; }
 
+    /// <summary>Gets the identity of the event. The call allocates it, and it never orders anything.</summary>
+    /// <remarks>
+    /// It is a UUID v7, so it is unique without a round trip and an amendment can name the event it
+    /// corrects the instant that event is raised. It is <em>not</em> an order: v7 is random within a
+    /// millisecond, and a turn raises three events inside one. The order of a call is the
+    /// <c>sequence</c> the store assigns, and nothing sorts by this value.
+    /// </remarks>
+    public required Guid EventId { get; init; }
+
     /// <summary>
-    /// Gets the <see cref="Sequence"/> of the earlier event in the same call that this event corrects,
+    /// Gets the <see cref="EventId"/> of the earlier event in the same call that this event corrects,
     /// or <see langword="null"/> when the event corrects nothing.
     /// </summary>
-    public long? AmendsSequence { get; init; }
+    public Guid? AmendsEventId { get; init; }
 
     /// <summary>Gets the facts the event carries, keyed by name.</summary>
     public IReadOnlyDictionary<string, string> Payload { get; init; } = EmptyPayload;

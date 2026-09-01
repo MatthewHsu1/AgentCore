@@ -29,7 +29,7 @@ public sealed class PostgresCallStoreSweepTests : PostgresDatabaseTest
         // Arrange
         PostgresCallStore store = new(DataSource);
         await store.CreateAsync("old", Token);
-        await store.AppendAsync([Word("old")], Token);
+        await store.AppendAsync([Word("old")], cancellationToken: Token);
         await ExecuteAsync("UPDATE call_message SET updated_at = now() - interval '90 days'");
 
         // Act
@@ -67,7 +67,7 @@ public sealed class PostgresCallStoreSweepTests : PostgresDatabaseTest
         // Arrange
         PostgresCallStore store = new(DataSource);
         await store.CreateAsync("fresh", Token);
-        await store.AppendAsync([Word("fresh")], Token);
+        await store.AppendAsync([Word("fresh")], cancellationToken: Token);
         await ExecuteAsync("UPDATE call SET created_at = now() - interval '90 days'");
 
         // Act
@@ -87,8 +87,8 @@ public sealed class PostgresCallStoreSweepTests : PostgresDatabaseTest
         await ExecuteAsync("UPDATE call SET created_at = now() - interval '90 days'");
         await ExecuteAsync(
             """
-            INSERT INTO audit_event (call_id, sequence, kind, occurred_at)
-            VALUES ('old', 0, 'call.started', now())
+            INSERT INTO audit_event (call_id, event_id, sequence, kind, occurred_at)
+            VALUES ('old', gen_random_uuid(), 0, 'call.started', now())
             """);
 
         // Act
@@ -124,7 +124,7 @@ public sealed class PostgresCallStoreSweepTests : PostgresDatabaseTest
         // Arrange
         PostgresCallStore store = new(DataSource);
         await store.CreateAsync("c1", Token);
-        await store.AppendAsync([Word("c1")], Token);
+        await store.AppendAsync([Word("c1")], cancellationToken: Token);
 
         // Act
         var erased = await store.EraseAsync("c1", Token);

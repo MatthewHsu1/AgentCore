@@ -74,7 +74,7 @@ public sealed class PostgresAuditSinkAdapterTests : PostgresDatabaseTest
             new()
             {
                 CallId = "C1",
-                Sequence = 0,
+                EventId = Guid.CreateVersion7(),
                 Kind = AgentCore.Domain.Audit.AuditEventKind.CallStarted,
                 OccurredAt = new DateTimeOffset(2026, 8, 19, 9, 0, 0, TimeSpan.Zero),
             },

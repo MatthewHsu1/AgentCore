@@ -219,7 +219,7 @@ public sealed class QueuedAuditSink : IAuditSinkPort, IAsyncDisposable, IDisposa
     {
         try
         {
-            Log.AuditQueueFull(_logger, auditEvent.CallId, auditEvent.Sequence);
+            Log.AuditQueueFull(_logger, auditEvent.CallId, auditEvent.EventId);
         }
 #pragma warning disable CA1031 // A logger that refuses the report is still not a part of the call.
         catch (Exception)

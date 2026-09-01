@@ -13,6 +13,11 @@ namespace AgentCore.Application.Calls;
 /// When store 1 last wrote a word of this call, or <see langword="null"/> when it holds none. UTC.
 /// Derived at read time; store 0 keeps no such column.
 /// </param>
+/// <param name="State">
+/// What the session of this call held, or <see langword="null"/> for a call that has run no turn
+/// under a build that writes it. Read by <c>GetAsync</c> and <c>CreateAsync</c> only: a listing does
+/// not need it and does not pay for it.
+/// </param>
 public sealed record CallRecord(
     string CallId,
     string? Title,
@@ -20,4 +25,5 @@ public sealed record CallRecord(
     string? ExternalId,
     JsonElement? Custom,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? LastMessageAt);
+    DateTimeOffset? LastMessageAt,
+    CallSessionState? State = null);

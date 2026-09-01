@@ -1,3 +1,4 @@
+using AgentCore.Application.Calls;
 using AgentCore.Application.Calls.Memory;
 using AgentCore.Application.Transcript;
 using Microsoft.Extensions.AI;
@@ -29,7 +30,9 @@ public sealed class ParkingCallStore() : DelegatingCallStore(new InMemoryCallSto
 
     /// <inheritdoc />
     public override async ValueTask AppendAsync(
-        IReadOnlyList<CallMessage> messages, CancellationToken cancellationToken = default)
+        IReadOnlyList<CallMessage> messages,
+        CallSessionState? state = null,
+        CancellationToken cancellationToken = default)
     {
         _entered.TrySetResult();
         await _release.Task.WaitAsync(cancellationToken);

@@ -150,27 +150,27 @@ public sealed class AuditEventVocabularyTests
     [Fact]
     public void AnAmendment_ReferencesTheEventItAmends()
     {
-        AuditEvent turn = Turn(sequence: 4, turnIndex: 2);
-        AuditEvent interruption = Interruption(sequence: 5, amends: turn.Sequence, turnIndex: 2);
+        AuditEvent turn = Turn(eventId: Guid.CreateVersion7(), turnIndex: 2);
+        AuditEvent interruption = Interruption(eventId: Guid.CreateVersion7(), amends: turn.EventId, turnIndex: 2);
 
         AuditEvent[] run = [turn, interruption];
 
         Assert.All(run, AuditEventVocabulary.Validate);
-        Assert.Equal(turn.Sequence, interruption.AmendsSequence);
+        Assert.Equal(turn.EventId, interruption.AmendsEventId);
         Assert.Equal(turn.CallId, interruption.CallId);
         Assert.Equal(turn.TurnIndex, interruption.TurnIndex);
 
         // The first event is untouched. Nothing rewrote the turn, and both events stand.
         Assert.Equal(AuditHash.OfText(Spoken).Value, turn.Payload[AuditPayloadKeys.ReplyTextSha256]);
-        Assert.Null(turn.AmendsSequence);
+        Assert.Null(turn.AmendsEventId);
     }
 
     /// <summary>Section 11, item 6a: the event records the text the caller ACTUALLY HEARD.</summary>
     [Fact]
     public void AnInterruption_RecordsWhatTheCallerHeardAndNotWhatTheModelProduced()
     {
-        AuditEvent turn = Turn(sequence: 0, turnIndex: 0);
-        AuditEvent interruption = Interruption(sequence: 1, amends: 0, turnIndex: 0);
+        AuditEvent turn = Turn(eventId: Guid.CreateVersion7(), turnIndex: 0);
+        AuditEvent interruption = Interruption(eventId: Guid.CreateVersion7(), amends: turn.EventId, turnIndex: 0);
 
         string produced = turn.Payload[AuditPayloadKeys.ReplyTextSha256];
         string heard = interruption.Payload[AuditPayloadKeys.UtteranceUntilInterruptSha256];
@@ -186,7 +186,9 @@ public sealed class AuditEventVocabularyTests
     [Fact]
     public void AnInterruptionThatAmendsNothing_IsRefused()
     {
-        AuditEvent orphan = Interruption(sequence: 1, amends: 0, turnIndex: 0) with { AmendsSequence = null };
+        AuditEvent orphan = Interruption(eventId: Guid.CreateVersion7(), amends: Guid.CreateVersion7(), turnIndex: 0)
+            with
+        { AmendsEventId = null };
 
         ArgumentException failure = Assert.Throws<ArgumentException>(
             () => AuditEventVocabulary.Validate(orphan));
@@ -197,7 +199,7 @@ public sealed class AuditEventVocabularyTests
     [Fact]
     public void AnInterruptionWithoutTheUtterance_IsRefused()
     {
-        AuditEvent silent = Interruption(sequence: 1, amends: 0, turnIndex: 0) with
+        AuditEvent silent = Interruption(eventId: Guid.CreateVersion7(), amends: Guid.CreateVersion7(), turnIndex: 0) with
         {
             Payload = new Dictionary<string, string>(StringComparer.Ordinal)
             {
@@ -216,7 +218,7 @@ public sealed class AuditEventVocabularyTests
     {
         // The chain stores proof of the words and not the words, so the one value that must never
         // reach it is a hash that proves nothing. An empty text still hashes to a full digest.
-        AuditEvent unproven = Interruption(sequence: 1, amends: 0, turnIndex: 0) with
+        AuditEvent unproven = Interruption(eventId: Guid.CreateVersion7(), amends: Guid.CreateVersion7(), turnIndex: 0) with
         {
             Payload = new Dictionary<string, string>(StringComparer.Ordinal)
             {
@@ -234,7 +236,7 @@ public sealed class AuditEventVocabularyTests
     [Fact]
     public void Validate_EmptyHashOnTurnCompleted_IsRefused()
     {
-        AuditEvent unproven = Turn(sequence: 0, turnIndex: 0) with
+        AuditEvent unproven = Turn(eventId: Guid.CreateVersion7(), turnIndex: 0) with
         {
             Payload = new Dictionary<string, string>(StringComparer.Ordinal)
             {
@@ -249,17 +251,42 @@ public sealed class AuditEventVocabularyTests
     }
 
     [Fact]
-    public void AnAmendmentThatNamesALaterEvent_IsRefused()
+    public void Validate_RefusesAnEventWithNoIdentity()
     {
-        AuditEvent backwards = Interruption(sequence: 1, amends: 0, turnIndex: 0) with { AmendsSequence = 9 };
+        AuditEvent malformed = Turn(eventId: Guid.Empty, turnIndex: 0);
 
-        Assert.Throws<ArgumentException>(() => AuditEventVocabulary.Validate(backwards));
+        var error = Assert.Throws<ArgumentException>(() => AuditEventVocabulary.Validate(malformed));
+
+        Assert.Contains("identity", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validate_RefusesAnAmendmentThatNamesItself()
+    {
+        var id = Guid.CreateVersion7();
+        AuditEvent circular = Interruption(eventId: id, amends: id, turnIndex: 2);
+
+        var error = Assert.Throws<ArgumentException>(() => AuditEventVocabulary.Validate(circular));
+
+        Assert.Contains("names another event", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validate_AcceptsAnAmendmentThatNamesAnotherEvent()
+    {
+        AuditEvent turn = Turn(eventId: Guid.CreateVersion7(), turnIndex: 2);
+        AuditEvent interruption =
+            Interruption(eventId: Guid.CreateVersion7(), amends: turn.EventId, turnIndex: 2);
+
+        AuditEventVocabulary.Validate(interruption);
+
+        Assert.Equal(turn.EventId, interruption.AmendsEventId);
     }
 
     [Fact]
     public void AnEventWithoutACallId_IsRefused()
     {
-        AuditEvent nameless = Turn(sequence: 0, turnIndex: 0) with { CallId = string.Empty };
+        AuditEvent nameless = Turn(eventId: Guid.CreateVersion7(), turnIndex: 0) with { CallId = string.Empty };
 
         Assert.Throws<ArgumentException>(() => AuditEventVocabulary.Validate(nameless));
     }
@@ -282,32 +309,14 @@ public sealed class AuditEventVocabularyTests
     [Fact]
     public void AFlaggedPrompt_NeedsNoAmendment()
     {
-        AuditEvent flagged = FlaggedPrompt(sequence: 1, turnIndex: 1);
+        AuditEvent flagged = FlaggedPrompt(eventId: Guid.CreateVersion7(), turnIndex: 1);
 
-        Assert.Null(flagged.AmendsSequence);
+        Assert.Null(flagged.AmendsEventId);
         Assert.Equal(1, flagged.TurnIndex);
 
         AuditEvent[] run = [flagged];
 
         Assert.All(run, AuditEventVocabulary.Validate);
-    }
-
-    /// <summary>
-    /// The agent refuses the turn, so the flag is written before the turn event that closes it.
-    /// <c>TurnIndex</c> names the turn, and no amendment is involved.
-    /// </summary>
-    [Fact]
-    public void AFlaggedPrompt_SitsBeforeTheTurnItBelongsTo()
-    {
-        AuditEvent flagged = FlaggedPrompt(sequence: 3, turnIndex: 1);
-        AuditEvent turn = Turn(sequence: 4, turnIndex: 1);
-
-        AuditEvent[] run = [flagged, turn];
-
-        Assert.All(run, AuditEventVocabulary.Validate);
-        Assert.True(flagged.Sequence < turn.Sequence);
-        Assert.Equal(flagged.TurnIndex, turn.TurnIndex);
-        Assert.Null(flagged.AmendsSequence);
     }
 
     /// <summary>
@@ -317,7 +326,7 @@ public sealed class AuditEventVocabularyTests
     [Fact]
     public void AFlaggedPromptWithoutTheCategories_IsRefused()
     {
-        AuditEvent silent = FlaggedPrompt(sequence: 1, turnIndex: 1) with
+        AuditEvent silent = FlaggedPrompt(eventId: Guid.CreateVersion7(), turnIndex: 1) with
         {
             Payload = new Dictionary<string, string>(StringComparer.Ordinal),
         };
@@ -331,7 +340,7 @@ public sealed class AuditEventVocabularyTests
     [Fact]
     public void AFlaggedPromptWithAnEmptyCategoryList_IsRefused()
     {
-        AuditEvent empty = FlaggedPrompt(sequence: 1, turnIndex: 1, categories: string.Empty);
+        AuditEvent empty = FlaggedPrompt(eventId: Guid.CreateVersion7(), turnIndex: 1, categories: string.Empty);
 
         ArgumentException failure = Assert.Throws<ArgumentException>(
             () => AuditEventVocabulary.Validate(empty));
@@ -346,7 +355,7 @@ public sealed class AuditEventVocabularyTests
     [InlineData(",harassment")]
     public void AFlaggedPromptWithABlankCategory_IsRefused(string categories)
     {
-        AuditEvent blank = FlaggedPrompt(sequence: 1, turnIndex: 1, categories: categories);
+        AuditEvent blank = FlaggedPrompt(eventId: Guid.CreateVersion7(), turnIndex: 1, categories: categories);
 
         ArgumentException failure = Assert.Throws<ArgumentException>(
             () => AuditEventVocabulary.Validate(blank));
@@ -366,8 +375,8 @@ public sealed class AuditEventVocabularyTests
     [Fact]
     public void AFlaggedPromptKeepsTheOrderTheEndpointReturned()
     {
-        AuditEvent first = FlaggedPrompt(sequence: 1, turnIndex: 1, categories: "harassment,violence");
-        AuditEvent second = FlaggedPrompt(sequence: 1, turnIndex: 1, categories: "violence,harassment");
+        AuditEvent first = FlaggedPrompt(eventId: Guid.CreateVersion7(), turnIndex: 1, categories: "harassment,violence");
+        AuditEvent second = FlaggedPrompt(eventId: Guid.CreateVersion7(), turnIndex: 1, categories: "violence,harassment");
 
         AuditEventVocabulary.Validate(first);
         AuditEventVocabulary.Validate(second);
@@ -385,7 +394,7 @@ public sealed class AuditEventVocabularyTests
     public void ACategoryTheLibraryNeverNamed_IsAccepted()
     {
         AuditEvent novel = FlaggedPrompt(
-            sequence: 1,
+            eventId: Guid.CreateVersion7(),
             turnIndex: 1,
             categories: "illicit/violent,some-category-openai-added-last-tuesday");
 
@@ -400,19 +409,19 @@ public sealed class AuditEventVocabularyTests
     [Fact]
     public void AFlaggedPrompt_MayStillCarryAnAmendment()
     {
-        AuditEvent turn = Turn(sequence: 4, turnIndex: 1);
-        AuditEvent flagged = FlaggedPrompt(sequence: 5, turnIndex: 1) with { AmendsSequence = turn.Sequence };
+        AuditEvent turn = Turn(eventId: Guid.CreateVersion7(), turnIndex: 1);
+        AuditEvent flagged = FlaggedPrompt(eventId: Guid.CreateVersion7(), turnIndex: 1) with { AmendsEventId = turn.EventId };
 
         AuditEvent[] run = [turn, flagged];
 
         Assert.All(run, AuditEventVocabulary.Validate);
-        Assert.Equal(turn.Sequence, flagged.AmendsSequence);
+        Assert.Equal(turn.EventId, flagged.AmendsEventId);
     }
 
-    private static AuditEvent Turn(long sequence, int turnIndex) => new()
+    private static AuditEvent Turn(Guid eventId, int turnIndex) => new()
     {
         CallId = "call-1",
-        Sequence = sequence,
+        EventId = eventId,
         Kind = AuditEventKind.TurnCompleted,
         OccurredAt = Start,
         TurnIndex = turnIndex,
@@ -424,14 +433,14 @@ public sealed class AuditEventVocabularyTests
         },
     };
 
-    private static AuditEvent Interruption(long sequence, long amends, int turnIndex) => new()
+    private static AuditEvent Interruption(Guid eventId, Guid amends, int turnIndex) => new()
     {
         CallId = "call-1",
-        Sequence = sequence,
+        EventId = eventId,
         Kind = AuditEventKind.ReplyInterrupted,
         OccurredAt = Start.AddMilliseconds(1_820),
         TurnIndex = turnIndex,
-        AmendsSequence = amends,
+        AmendsEventId = amends,
         Payload = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             [AuditPayloadKeys.UtteranceUntilInterruptSha256] = AuditHash.OfText(Heard).Value,
@@ -439,10 +448,10 @@ public sealed class AuditEventVocabularyTests
         },
     };
 
-    private static AuditEvent FlaggedPrompt(long sequence, int turnIndex, string categories = "harassment") => new()
+    private static AuditEvent FlaggedPrompt(Guid eventId, int turnIndex, string categories = "harassment") => new()
     {
         CallId = "call-1",
-        Sequence = sequence,
+        EventId = eventId,
         Kind = AuditEventKind.PromptFlagged,
         OccurredAt = Start.AddMilliseconds(2_400),
         TurnIndex = turnIndex,
@@ -455,7 +464,7 @@ public sealed class AuditEventVocabularyTests
     private static AuditEvent Ended() => new()
     {
         CallId = "call-1",
-        Sequence = 6,
+        EventId = Guid.CreateVersion7(),
         Kind = AuditEventKind.CallEnded,
         OccurredAt = Start.AddMilliseconds(9_000),
         Payload = new Dictionary<string, string>(StringComparer.Ordinal)

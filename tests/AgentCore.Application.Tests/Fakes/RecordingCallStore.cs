@@ -1,3 +1,4 @@
+using AgentCore.Application.Calls;
 using AgentCore.Application.Calls.Memory;
 using AgentCore.TestSupport;
 using AgentCore.Application.Runtime;
@@ -16,7 +17,14 @@ namespace AgentCore.Application.Tests.Fakes;
 internal sealed class RecordingCallStore() : DelegatingCallStore(new InMemoryCallStore())
 {
     private readonly Lock _lock = new();
-    private readonly Dictionary<(string CallId, int Ordinal), CallMessage> _state = [];
+
+    /// <summary>The words as the store holds them now. It backs <see cref="Live"/>, not <see cref="Rows"/>.</summary>
+    /// <remarks>
+    /// <see cref="Rows"/> is the log of what was ASKED for and grows forever; this is the record a
+    /// reader would see, so a rewrite edits it in place and an erase empties it. It holds no
+    /// <see cref="CallSessionState"/>: see the remarks on <see cref="AppendAsync"/>.
+    /// </remarks>
+    private readonly Dictionary<(string CallId, int Ordinal), CallMessage> _rows = [];
 
     /// <summary>Gets every row the provider appended, in the order it appended them.</summary>
     public List<CallMessage> Rows { get; } = [];
@@ -30,13 +38,22 @@ internal sealed class RecordingCallStore() : DelegatingCallStore(new InMemoryCal
     {
         lock (_lock)
         {
-            return [.. _state.Values.Where(row => row.CallId == callId).OrderBy(row => row.Ordinal)];
+            return [.. _rows.Values.Where(row => row.CallId == callId).OrderBy(row => row.Ordinal)];
         }
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <paramref name="state"/> is DROPPED on purpose, and the drop is total: this override does not
+    /// call the inner store, so nothing behind it sees the blob either. These tests ask store 1 what
+    /// words it was handed and in what order, which is what the two logs answer; a resume that has to
+    /// find its stage again wants a real store and not this one. Say so here rather than let a test
+    /// that expects <c>GetAsync</c> to return the state read a null and go looking in the wrong file.
+    /// </remarks>
     public override ValueTask AppendAsync(
-        IReadOnlyList<CallMessage> messages, CancellationToken cancellationToken = default)
+        IReadOnlyList<CallMessage> messages,
+        CallSessionState? state = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(messages);
 
@@ -45,7 +62,7 @@ internal sealed class RecordingCallStore() : DelegatingCallStore(new InMemoryCal
             Rows.AddRange(messages);
             foreach (var message in messages)
             {
-                _state.Add((message.CallId, message.Ordinal), message);
+                _rows.Add((message.CallId, message.Ordinal), message);
             }
         }
 
@@ -60,9 +77,9 @@ internal sealed class RecordingCallStore() : DelegatingCallStore(new InMemoryCal
         {
             Rewrites.Add(new CallMessage(callId, ordinal, TurnIndex: -1, content));
 
-            if (_state.TryGetValue((callId, ordinal), out var row))
+            if (_rows.TryGetValue((callId, ordinal), out var row))
             {
-                _state[(callId, ordinal)] = row with { Content = content };
+                _rows[(callId, ordinal)] = row with { Content = content };
             }
         }
 
@@ -79,10 +96,10 @@ internal sealed class RecordingCallStore() : DelegatingCallStore(new InMemoryCal
     {
         lock (_lock)
         {
-            var going = _state.Keys.Where(key => key.CallId == callId).ToList();
+            var going = _rows.Keys.Where(key => key.CallId == callId).ToList();
             foreach (var key in going)
             {
-                _state.Remove(key);
+                _rows.Remove(key);
             }
 
             return ValueTask.FromResult(going.Count);

@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using AgentCore.Application.Calls;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Transcript;
 using AgentCore.Domain.Audit;
@@ -48,7 +50,7 @@ public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
         var store = await OpenAsync();
 
         // Act
-        await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), Token);
+        await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), cancellationToken: Token);
 
         // Assert
         Assert.Equal(2L, await ScalarAsync<long>("SELECT count(*) FROM call_message"));
@@ -61,7 +63,7 @@ public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
         var store = await OpenAsync();
 
         // Act
-        await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), Token);
+        await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), cancellationToken: Token);
 
         // Assert — retention and redaction read the role, and never parse the content to find it.
         Assert.Equal(
@@ -86,7 +88,7 @@ public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
                 new CallMessage("C1", 0, 0, announced),
                 new CallMessage("C1", 1, 0, result),
             ],
-            Token);
+            cancellationToken: Token);
 
         // Assert
         var rows = await store.ReadAsync("C1", Token);
@@ -106,7 +108,7 @@ public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
         var store = await OpenAsync();
 
         // Act
-        await store.AppendAsync([], Token);
+        await store.AppendAsync([], cancellationToken: Token);
 
         // Assert
         Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM call_message"));
@@ -118,14 +120,119 @@ public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
         // Arrange — an ordinal is permanent, so a repeat is a defect and never a silent overwrite.
         // AgentCoreChatHistoryProvider is what catches this and lets the call continue.
         var store = await OpenAsync();
-        await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), Token);
+        await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), cancellationToken: Token);
 
         // Act
         var failure = await Record.ExceptionAsync(
-            () => store.AppendAsync(Turn("C1", turnIndex: 1, ordinal: 0), Token).AsTask());
+            () => store.AppendAsync(Turn("C1", turnIndex: 1, ordinal: 0), cancellationToken: Token).AsTask());
 
         // Assert
         Assert.NotNull(failure);
+    }
+
+    [PostgresFact]
+    public async Task ItWritesTheStateBesideTheWords()
+    {
+        var store = await OpenAsync();
+
+        CallSessionState state = new()
+        {
+            Stage = "collecting",
+            Slots = new Dictionary<string, JsonNode?>(StringComparer.Ordinal)
+            {
+                ["model"] = JsonValue.Create("F63"),
+            },
+        };
+
+        await store.AppendAsync(
+            [new CallMessage("C1", 0, 0, new ChatMessage(ChatRole.User, "hello"))],
+            state,
+            Token);
+
+        var record = await store.GetAsync("C1", Token);
+
+        Assert.NotNull(record?.State);
+        Assert.Equal("collecting", record.State.Stage);
+        Assert.Equal("F63", record.State.Slots["model"]!.GetValue<string>());
+    }
+
+    [PostgresFact]
+    public async Task ACallWithNoStateReadsAsNull()
+    {
+        PostgresCallStore store = new(DataSource);
+
+        var record = await store.CreateAsync("C3", Token);
+
+        Assert.Null(record.State);
+    }
+
+    [PostgresFact]
+    public async Task AnAppendWithNoStateLeavesTheStoredStateAlone()
+    {
+        var store = await OpenAsync();
+
+        await store.AppendAsync(
+            [new CallMessage("C1", 0, 0, new ChatMessage(ChatRole.User, "hello"))],
+            new CallSessionState { Stage = "collecting" },
+            Token);
+        await store.AppendAsync(
+            [new CallMessage("C1", 1, 0, new ChatMessage(ChatRole.Assistant, "hi"))],
+            state: null,
+            Token);
+
+        var record = await store.GetAsync("C1", Token);
+
+        Assert.Equal("collecting", record?.State?.Stage);
+    }
+
+    [PostgresFact]
+    public async Task AnAppendThatFails_LandsNeitherTheWordsNorTheState()
+    {
+        // Arrange — D5's whole claim: the blob rides the turn's own batch, so the words and the state
+        // are of one moment and cannot disagree. Nothing else tests it, and what it rests on is
+        // implicit: AppendAsync opens no explicit transaction, and atomicity comes from Npgsql
+        // sending the batch between two Sync messages, which makes PostgreSQL wrap it in one
+        // implicit transaction of its own. That is a property of the driver, not of this code, so it
+        // is worth a test that fails the day a version of Npgsql splits the batch.
+        var store = await OpenAsync();
+        await store.AppendAsync(
+            [new CallMessage("C1", 0, 0, new ChatMessage(ChatRole.User, "hello"))],
+            new CallSessionState { Stage = "a" },
+            Token);
+
+        // Act — the same ordinal again. The insert is refused on the primary key, and the state
+        // command sits BEHIND it in the same batch.
+        var failure = await Record.ExceptionAsync(
+            () => store.AppendAsync(
+                [new CallMessage("C1", 0, 1, new ChatMessage(ChatRole.User, "again"))],
+                new CallSessionState { Stage = "b" },
+                Token).AsTask());
+
+        // Assert — the throw, and then the state the failed batch tried to write. A stage of "b"
+        // beside one message would be a call whose blob had moved on without its words.
+        Assert.NotNull(failure);
+        var record = await store.GetAsync("C1", Token);
+        Assert.Equal("a", record?.State?.Stage);
+        Assert.Single(await store.ReadAsync("C1", Token));
+    }
+
+    [PostgresFact]
+    public async Task AStateBlobThatWillNotParse_ReadsAsNoBlobRatherThanClosingTheCall()
+    {
+        // Arrange — jsonb refuses malformed JSON, so a bad blob is well-formed JSON of the wrong
+        // shape: an older or newer build's column, or a hand-edited row. Version cannot save this
+        // one, because Version is only readable after the deserialize has already succeeded.
+        var store = await OpenAsync();
+        await ExecuteAsync("UPDATE call SET state = '[1, 2, 3]'::jsonb WHERE call_id = 'C1'");
+
+        // Act
+        var record = await store.GetAsync("C1", Token);
+
+        // Assert — no throw, and no state. A throw here would escape GetAsync, CreateAsync and
+        // OpenSessionAsync, and the call could never be opened again by anyone: one bad row would
+        // refuse every turn of that call forever, with no diagnostic and no way back.
+        Assert.NotNull(record);
+        Assert.Null(record.State);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -136,8 +243,8 @@ public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
     {
         // Arrange
         var store = await OpenAsync();
-        await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), Token);
-        await store.AppendAsync(Turn("C1", turnIndex: 1, ordinal: 2), Token);
+        await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), cancellationToken: Token);
+        await store.AppendAsync(Turn("C1", turnIndex: 1, ordinal: 2), cancellationToken: Token);
 
         // Act
         var rows = await store.ReadAsync("C1", Token);
@@ -152,7 +259,7 @@ public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
         // Arrange — a read that answered with the messages alone would restart ordinals at zero and
         // collide with the rows already there, on a primary key the provider never sees.
         var store = await OpenAsync();
-        await store.AppendAsync(Turn("C1", turnIndex: 3, ordinal: 6), Token);
+        await store.AppendAsync(Turn("C1", turnIndex: 3, ordinal: 6), cancellationToken: Token);
 
         // Act
         var rows = await store.ReadAsync("C1", Token);
@@ -166,7 +273,7 @@ public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
     {
         // Arrange
         var store = await OpenAsync();
-        await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), Token);
+        await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), cancellationToken: Token);
 
         // Act
         var rows = await store.ReadAsync("C2", Token);
@@ -183,7 +290,7 @@ public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
     {
         // Arrange
         var store = await OpenAsync();
-        await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), Token);
+        await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), cancellationToken: Token);
 
         // Act
         await store.RewriteAsync("C1", 1, new ChatMessage(ChatRole.Assistant, "Order 41 sh"), Token);
@@ -199,7 +306,7 @@ public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
         // Arrange — the retention sweep reads updated_at, so a corrected turn ages from its
         // correction.
         var store = await OpenAsync();
-        await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), Token);
+        await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), cancellationToken: Token);
         await ExecuteAsync("UPDATE call_message SET created_at = now() - interval '1 hour', updated_at = created_at");
 
         // Act
@@ -216,7 +323,7 @@ public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
         // Arrange — a barge-in that raced the append it corrects. The append carries the corrected
         // words, so there is nothing to report and nothing to guess at.
         var store = await OpenAsync();
-        await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), Token);
+        await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), cancellationToken: Token);
 
         // Act
         await store.RewriteAsync("C1", 9, new ChatMessage(ChatRole.Assistant, "never spoken"), Token);
@@ -233,8 +340,8 @@ public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
     {
         // Arrange
         var store = await OpenAsync();
-        await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), Token);
-        await store.AppendAsync(Turn("C2", turnIndex: 0, ordinal: 0), Token);
+        await store.AppendAsync(Turn("C1", turnIndex: 0, ordinal: 0), cancellationToken: Token);
+        await store.AppendAsync(Turn("C2", turnIndex: 0, ordinal: 0), cancellationToken: Token);
 
         // Act
         var erased = await store.EraseAsync("C1", Token);
@@ -323,9 +430,9 @@ public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
         // Arrange — a barge-in amends a turn, so the chain carries a second turn.completed for it.
         // Without the guard on the chain side the join multiplies and one turn answers twice.
         var store = await OpenAsync();
-        await WriteToolCallingTurnAsync(store, "C1", turnIndex: 0, spoken: "Order 41 ships Friday.");
+        var firstEventId = await WriteToolCallingTurnAsync(store, "C1", turnIndex: 0, spoken: "Order 41 ships Friday.");
         await store.RewriteAsync("C1", 3, new ChatMessage(ChatRole.Assistant, "Order 41 sh"), Token);
-        await AmendTurnAsync("C1", turnIndex: 0, sequence: 1, amends: 0, spoken: "Order 41 sh");
+        await AmendTurnAsync("C1", turnIndex: 0, amends: firstEventId, spoken: "Order 41 sh");
 
         // Act
         var turns = await store.ReadSpokenTurnsAsync("C1", Token);
@@ -347,7 +454,7 @@ public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
     /// The turn's two assistant messages are the point: the first announces the tool call and carries
     /// no words the caller heard, and only the second was spoken.
     /// </remarks>
-    private async Task WriteToolCallingTurnAsync(
+    private async Task<Guid> WriteToolCallingTurnAsync(
         PostgresCallStore store, string callId, int turnIndex, string spoken, bool drew = false)
     {
         List<AIContent> toolResultContents = [new FunctionResultContent("id1", "Friday")];
@@ -369,15 +476,16 @@ public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
                 new CallMessage(callId, 2, turnIndex, new ChatMessage(ChatRole.Tool, toolResultContents)),
                 new CallMessage(callId, 3, turnIndex, new ChatMessage(ChatRole.Assistant, spoken)),
             ],
-            Token);
+            cancellationToken: Token);
 
         // Not disposed: the sink would take the test's own pool with it.
+        Guid eventId = Guid.CreateVersion7();
         PostgresAuditSink chain = new(DataSource);
         await chain.AppendAsync(
             new AuditEvent
             {
                 CallId = callId,
-                Sequence = 0,
+                EventId = eventId,
                 Kind = AuditEventKind.TurnCompleted,
                 OccurredAt = new DateTimeOffset(2026, 8, 19, 9, 0, 1, TimeSpan.Zero),
                 TurnIndex = turnIndex,
@@ -387,10 +495,12 @@ public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
                 },
             },
             Token);
+
+        return eventId;
     }
 
     /// <summary>Writes a second <c>turn.completed</c> that corrects the first, as a barge-in does.</summary>
-    private async Task AmendTurnAsync(string callId, int turnIndex, long sequence, long amends, string spoken)
+    private async Task AmendTurnAsync(string callId, int turnIndex, Guid amends, string spoken)
     {
         // Not disposed: the sink would take the test's own pool with it.
         PostgresAuditSink chain = new(DataSource);
@@ -398,11 +508,11 @@ public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
             new AuditEvent
             {
                 CallId = callId,
-                Sequence = sequence,
+                EventId = Guid.CreateVersion7(),
                 Kind = AuditEventKind.TurnCompleted,
                 OccurredAt = new DateTimeOffset(2026, 8, 19, 9, 0, 2, TimeSpan.Zero),
                 TurnIndex = turnIndex,
-                AmendsSequence = amends,
+                AmendsEventId = amends,
                 Payload = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     [AuditPayloadKeys.ReplyTextSha256] = AuditHash.OfText(spoken).Value,

@@ -81,8 +81,9 @@ public sealed class CallSessionModerationTests
         var completed = Assert.Single(events, e => e.Kind == AuditEventKind.TurnCompleted);
 
         // The verdict precedes the model, so the flag precedes the turn event and amends nothing.
-        Assert.True(flagged.Sequence < completed.Sequence);
-        Assert.Null(flagged.AmendsSequence);
+        var order = events.ToList();
+        Assert.True(order.IndexOf(flagged) < order.IndexOf(completed));
+        Assert.Null(flagged.AmendsEventId);
         Assert.Equal(0, flagged.TurnIndex);
     }
 
@@ -193,7 +194,9 @@ public sealed class CallSessionModerationTests
         await session.RunTurnAsync("...", TestContext.Current.CancellationToken);
 
         var events = sink.EventsOf("call-1");
-        Assert.Equal([0, 1, 2], events.Select(e => e.Sequence));
+        Assert.Equal(
+            [AuditEventKind.CallStarted, AuditEventKind.PromptFlagged, AuditEventKind.TurnCompleted],
+            events.Select(e => e.Kind).ToArray());
         Assert.All(events, AuditEventVocabulary.Validate);
     }
 

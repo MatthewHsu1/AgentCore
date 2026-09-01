@@ -146,7 +146,7 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
         {
             while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
-                rows.Add(Read(reader));
+                rows.Add(ReadListing(reader));
                 lastSortAt = reader.GetFieldValue<DateTimeOffset>(6);
             }
         }
@@ -216,7 +216,47 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
     /// <returns>A task that completes when the pool is closed.</returns>
     public ValueTask DisposeAsync() => _dataSource.DisposeAsync();
 
+    /// <summary>
+    /// One call's row from <see cref="GetSql"/>, whose ninth column is the state a resume reads back.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="GetSql"/> is <see cref="Projection"/> plus <c>c.state</c>, so columns 0-7 mean the
+    /// same thing here as in <see cref="ReadListing"/>. Layering the state read onto it, rather than
+    /// hand-indexing the shared columns a second time, is what keeps the two in lockstep: a change to
+    /// <see cref="Projection"/> only has one place left to miss.
+    /// </remarks>
     private static CallRecord Read(NpgsqlDataReader reader) =>
+        ReadListing(reader) with { State = reader.IsDBNull(8) ? null : ReadState(reader.GetString(8)) };
+
+    /// <summary>Reads one call's resume blob, or nothing when the blob cannot be read.</summary>
+    /// <param name="blob">The JSON in <c>call.state</c>.</param>
+    /// <returns>The state, or <see langword="null"/> when it did not parse into one.</returns>
+    /// <remarks>
+    /// A bad blob is no blob. Every other restore failure on this path is best effort with a
+    /// diagnostic, and this one has to be too, because a throw here does not fail a resume — it
+    /// escapes <c>GetAsync</c>, then <c>CreateAsync</c>, then <c>OpenSessionAsync</c>, and the call
+    /// can never be opened again by anyone. That is the worst available outcome for the one input
+    /// this library controls least, and it defeats <see cref="CallSessionState.Version"/>, which can
+    /// only be read once a deserialize has already succeeded.
+    /// </remarks>
+    private static CallSessionState? ReadState(string blob)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<CallSessionState>(blob, CallStateJson.Options);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// One call's row from <see cref="ListSql"/>, which projects <see cref="Projection"/> alone. It
+    /// has no ninth column to read, so <see cref="CallRecord.State"/> is left at its default
+    /// <see langword="null"/> rather than paying to deserialize a blob a listing never shows.
+    /// </summary>
+    private static CallRecord ReadListing(NpgsqlDataReader reader) =>
         new(
             reader.GetString(0),
             reader.IsDBNull(1) ? null : reader.GetString(1),
@@ -246,7 +286,9 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
     /// unique violation and not a silent overwrite.
     /// </remarks>
     public async ValueTask AppendAsync(
-        IReadOnlyList<CallMessage> messages, CancellationToken cancellationToken = default)
+        IReadOnlyList<CallMessage> messages,
+        CallSessionState? state = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(messages);
 
@@ -269,6 +311,19 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
                 new NpgsqlParameter { Value = Serialise(message.Content), NpgsqlDbType = NpgsqlDbType.Jsonb });
 
             batch.BatchCommands.Add(command);
+        }
+
+        if (state is not null)
+        {
+            NpgsqlBatchCommand stateCommand = new(StateSql);
+            stateCommand.Parameters.Add(new NpgsqlParameter { Value = messages[0].CallId });
+            stateCommand.Parameters.Add(new NpgsqlParameter
+            {
+                Value = JsonSerializer.Serialize(state, CallStateJson.Options),
+                NpgsqlDbType = NpgsqlDbType.Jsonb,
+            });
+
+            batch.BatchCommands.Add(stateCommand);
         }
 
         await batch.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);

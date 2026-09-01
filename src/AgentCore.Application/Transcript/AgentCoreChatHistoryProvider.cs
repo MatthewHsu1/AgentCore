@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using AgentCore.Application.Calls;
 using AgentCore.Application.Calls.Memory;
 using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Ports;
@@ -95,10 +96,30 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
         return UnderLock(session, static transcript => transcript.Read());
     }
 
-    /// <summary>
-    /// Adds one finished turn's messages to the call.
-    /// </summary>
-    public void AppendTurn(AgentSession session, IReadOnlyList<ChatMessage> messages)
+    /// <summary>Adds one finished turn's messages to the call, and the state that follows them.</summary>
+    /// <param name="session">The session this call runs on.</param>
+    /// <param name="messages">The messages the turn produced.</param>
+    /// <param name="state">
+    /// The state to store beside the words, or <see langword="null"/> to store none. A value, read
+    /// by the caller before it calls: everything the turn writes to the state document — the clock
+    /// fields, the counters, the stage and whether the machine finished — is already final when the
+    /// caller enters its commit lock, and the late barge-in path that runs after this call amends
+    /// the record of the turn without touching any of it. So there is nothing later to wait for.
+    /// </param>
+    /// <remarks>
+    /// Reading the state here instead, when the queued write runs, is the tempting shape and it is
+    /// the wrong one. A queued write resumes on the thread pool, and the state document takes no
+    /// lock because the turn loop is supposed to be the only thing that touches it — so a read on
+    /// that thread could walk the slots while the NEXT turn is writing them. What comes out of that
+    /// is an exception from the enumeration, which this class catches as a failed write: the turn
+    /// would lose its words as well as its state. Taking the value on the turn's own thread also
+    /// stores THIS turn's state rather than whatever the call had reached by the time the queue
+    /// drained.
+    /// </remarks>
+    public void AppendTurn(
+        AgentSession session,
+        IReadOnlyList<ChatMessage> messages,
+        CallSessionState? state = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(messages);
@@ -113,19 +134,28 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
             (transcript, gate) =>
             {
                 var rows = transcript.Append(messages);
-                Enqueue(gate, () => _store.AppendAsync(rows, CancellationToken.None), transcript);
+                Enqueue(gate, () => _store.AppendAsync(rows, state, CancellationToken.None), transcript);
                 return true;
             });
     }
 
-    /// <summary>
-    /// Adds the caller-facing turn of a graph row: what the caller said, and what it heard.
-    /// </summary>
-    public void AppendCallerFacingTurn(AgentSession session, ChatMessage spoken, ChatMessage? heard)
+    /// <summary>Adds the caller-facing turn of a graph row: what the caller said, and what it heard.</summary>
+    /// <param name="session">The session this call runs on.</param>
+    /// <param name="spoken">What the caller said.</param>
+    /// <param name="heard">What the caller heard, or <see langword="null"/> when it heard nothing.</param>
+    /// <param name="state">
+    /// The state to store beside the words, on the same terms as
+    /// <see cref="AppendTurn(AgentSession, IReadOnlyList{ChatMessage}, CallSessionState?)"/>.
+    /// </param>
+    public void AppendCallerFacingTurn(
+        AgentSession session,
+        ChatMessage spoken,
+        ChatMessage? heard,
+        CallSessionState? state = null)
     {
         ArgumentNullException.ThrowIfNull(spoken);
 
-        AppendTurn(session, heard is null ? [spoken] : [spoken, heard]);
+        AppendTurn(session, heard is null ? [spoken] : [spoken, heard], state);
     }
 
     /// <summary>

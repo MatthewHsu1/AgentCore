@@ -12,6 +12,12 @@ CREATE TABLE call (
     status      text        NOT NULL DEFAULT 'regular',
     external_id text        NULL,
     custom      jsonb       NULL,
+
+    -- What the SESSION of a call holds and nothing else does: the stage, whether the machine
+    -- finished, and the slots the writers filled. Not the words — those are call_message — and not
+    -- any number that addresses them, because a fact with two homes gets one chance to disagree.
+    -- Written in the same batch as the turn's words, so a crash cannot land one without the other.
+    state       jsonb       NULL,
     created_at  timestamptz NOT NULL DEFAULT now(),
     updated_at  timestamptz NOT NULL DEFAULT now(),
 

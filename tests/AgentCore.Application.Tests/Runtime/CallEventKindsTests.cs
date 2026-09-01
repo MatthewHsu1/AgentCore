@@ -9,7 +9,7 @@ namespace AgentCore.Application.Tests.Runtime;
 /// </summary>
 /// <remarks>
 /// Two observers and the dispatcher ask this the same question, so it is answered in one place. These
-/// tests pin the split: six kinds the chain of D23 stores, and five that are counted and logged and
+/// tests pin the split: six kinds the chain of D23 stores, and six that are counted and logged and
 /// stored nowhere.
 /// </remarks>
 public sealed class CallEventKindsTests
@@ -35,6 +35,7 @@ public sealed class CallEventKindsTests
             { CallEventKind.EmptyReply, "reply.empty" },
             { CallEventKind.ExtractionFailed, "extraction.failed" },
             { CallEventKind.TranscriptWriteFailed, "transcript.write.failed" },
+            { CallEventKind.StateRestorePartial, "state.restore.partial" },
         };
 
     [Theory]
@@ -65,7 +66,7 @@ public sealed class CallEventKindsTests
         var stored = Enum.GetValues<CallEventKind>()
             .Count(kind => CallEventKinds.TryGetAuditKind(kind, out _));
 
-        Assert.Equal(11, Enum.GetValues<CallEventKind>().Length);
+        Assert.Equal(12, Enum.GetValues<CallEventKind>().Length);
         Assert.Equal(6, stored);
     }
 

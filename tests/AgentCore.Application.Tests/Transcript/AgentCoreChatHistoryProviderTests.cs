@@ -1,3 +1,4 @@
+using AgentCore.Application.Calls;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
@@ -486,7 +487,9 @@ public sealed class AgentCoreChatHistoryProviderTests
         public void Release() => _release.TrySetResult();
 
         public override async ValueTask AppendAsync(
-            IReadOnlyList<CallMessage> messages, CancellationToken cancellationToken = default)
+            IReadOnlyList<CallMessage> messages,
+            CallSessionState? state = null,
+            CancellationToken cancellationToken = default)
         {
             if (_block)
             {
@@ -495,7 +498,7 @@ public sealed class AgentCoreChatHistoryProviderTests
                 await _release.Task.WaitAsync(cancellationToken);
             }
 
-            await Inner.AppendAsync(messages, cancellationToken);
+            await Inner.AppendAsync(messages, state, cancellationToken);
         }
 
         public override ValueTask RewriteAsync(

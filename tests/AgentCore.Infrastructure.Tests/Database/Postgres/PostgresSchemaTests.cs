@@ -135,8 +135,8 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
         // Act
         var refusal = await Record.ExceptionAsync(() => ExecuteAsync(
             """
-            INSERT INTO audit_event (write_position, call_id, sequence, kind, occurred_at)
-            VALUES (1, 'C1', 1, 'call.started', now())
+            INSERT INTO audit_event (write_position, call_id, event_id, sequence, kind, occurred_at)
+            VALUES (1, 'C1', gen_random_uuid(), 1, 'call.started', now())
             """));
 
         // Assert
@@ -146,15 +146,16 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
     [PostgresFact]
     public async Task AuditEvent_SecondRowOnTheSameCallAndSequence_IsRefused()
     {
-        // Arrange — the caller allocates the sequence, so the table is what catches a duplicate.
+        // Arrange — raw SQL stands in for the store here, so the table itself is what catches two
+        // rows landing on the same call and sequence.
         await PostgresSchema.ApplyAsync(DataSource, Token);
         await InsertOneEventAsync();
 
         // Act
         var refusal = await Record.ExceptionAsync(() => ExecuteAsync(
             """
-            INSERT INTO audit_event (call_id, sequence, kind, occurred_at)
-            VALUES ('C1', 1, 'call.ended', now())
+            INSERT INTO audit_event (call_id, event_id, sequence, kind, occurred_at)
+            VALUES ('C1', gen_random_uuid(), 1, 'call.ended', now())
             """));
 
         // Assert
@@ -169,8 +170,8 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
         await PostgresSchema.ApplyAsync(DataSource, Token);
         await ExecuteAsync(
             """
-            INSERT INTO audit_event (call_id, sequence, kind, occurred_at)
-            VALUES ('C1', 0, 'call.started', now())
+            INSERT INTO audit_event (call_id, event_id, sequence, kind, occurred_at)
+            VALUES ('C1', gen_random_uuid(), 0, 'call.started', now())
             """);
 
         // Act
@@ -252,8 +253,8 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
 
     private Task InsertOneEventAsync() => ExecuteAsync(
         """
-        INSERT INTO audit_event (call_id, sequence, kind, occurred_at)
-        VALUES ('C1', 1, 'call.started', now())
+        INSERT INTO audit_event (call_id, event_id, sequence, kind, occurred_at)
+        VALUES ('C1', gen_random_uuid(), 1, 'call.started', now())
         """);
 
     /// <summary>Opens a pool that logs in as an ordinary member of <c>agentcore_writer</c>.</summary>

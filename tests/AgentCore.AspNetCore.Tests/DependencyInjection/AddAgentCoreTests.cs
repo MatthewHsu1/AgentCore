@@ -12,6 +12,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Secrets;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Calls;
 using AgentCore.Application.Calls.Memory;
 using AgentCore.Application.Transcript;
 using AgentCore.AspNetCore.DependencyInjection;
@@ -1311,7 +1312,9 @@ public sealed class AddAgentCoreTests
         }
 
         public override ValueTask AppendAsync(
-            IReadOnlyList<CallMessage> messages, CancellationToken cancellationToken = default)
+            IReadOnlyList<CallMessage> messages,
+            CallSessionState? state = null,
+            CancellationToken cancellationToken = default)
         {
             lock (_gate)
             {
@@ -1704,14 +1707,14 @@ public sealed class AddAgentCoreTests
     }
 
     /// <summary>One well-formed event, which is all a drain has to carry.</summary>
-    /// <param name="sequence">The chain position.</param>
+    /// <param name="secondsPastEpoch">Seconds past the epoch the event occurred at, so callers can order rows.</param>
     /// <returns>The event.</returns>
-    private static AuditEvent AuditRow(long sequence) => new()
+    private static AuditEvent AuditRow(long secondsPastEpoch) => new()
     {
         CallId = "call-1",
-        Sequence = sequence,
+        EventId = Guid.CreateVersion7(),
         Kind = AuditEventKind.TurnCompleted,
-        OccurredAt = DateTimeOffset.UnixEpoch.AddSeconds(sequence),
+        OccurredAt = DateTimeOffset.UnixEpoch.AddSeconds(secondsPastEpoch),
     };
 
     /// <summary>Starts a host on one document, which is where the whole boot happens.</summary>

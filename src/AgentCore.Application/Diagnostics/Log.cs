@@ -130,7 +130,7 @@ internal static partial class Log
     /// <summary>The audit queue had no room, so the event was dropped.</summary>
     /// <param name="logger">The logger of the queue.</param>
     /// <param name="callId">The id of the call the dropped event belongs to.</param>
-    /// <param name="sequence">The per-call sequence number of the dropped event.</param>
+    /// <param name="eventId">The identity of the dropped event.</param>
     /// <remarks>
     /// <para>
     /// An implementation of <see cref="Ports.IAuditSinkPort"/> does not throw for a full queue and it
@@ -147,9 +147,9 @@ internal static partial class Log
     [LoggerMessage(
         EventId = 8,
         Level = LogLevel.Error,
-        Message = "The audit queue was full, so event {Sequence} of call {CallId} was dropped. "
+        Message = "The audit queue was full, so event {EventId} of call {CallId} was dropped. "
             + "The call continues and the chain has a gap.")]
-    public static partial void AuditQueueFull(ILogger logger, string callId, long sequence);
+    public static partial void AuditQueueFull(ILogger logger, string callId, Guid eventId);
 
     /// <summary>A store 1 write was refused, so the turn has no durable record.</summary>
     /// <param name="logger">The logger of the session.</param>
@@ -210,4 +210,15 @@ internal static partial class Log
             + "unreachable and the call continues. {Record}")]
     public static partial void KnowledgeRetrievalFailed(
         ILogger logger, string agent, KnowledgeAuditRecord.LogView record, Exception exception);
+
+    /// <summary>A resumed call could not restore part of its stored state, so it went on without it.</summary>
+    /// <param name="logger">The logger of the session.</param>
+    /// <param name="callId">The id of the call being resumed.</param>
+    /// <param name="reason">Which part was dropped, and why it would not go back.</param>
+    [LoggerMessage(
+        EventId = 13,
+        Level = LogLevel.Warning,
+        Message = "Call {CallId} could not restore part of its stored state: {Reason} "
+            + "The call resumes without that part.")]
+    public static partial void StateRestorePartial(ILogger logger, string callId, string reason);
 }
