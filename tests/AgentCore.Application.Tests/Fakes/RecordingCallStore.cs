@@ -1,3 +1,4 @@
+using AgentCore.Application.Calls;
 using AgentCore.Application.Calls.Memory;
 using AgentCore.TestSupport;
 using AgentCore.Application.Runtime;
@@ -7,16 +8,12 @@ using Microsoft.Extensions.AI;
 namespace AgentCore.Application.Tests.Fakes;
 
 /// <summary>A store kept in this process, with the calls made against its words recorded.</summary>
-/// <remarks>
-/// It answers two different questions, because store 1 is asked two different things. <see cref="Rows"/>
-/// and <see cref="Rewrites"/> are logs — what the provider ASKED the store to do, and in what order.
-/// <see cref="Live"/> is the state those calls left behind, which is what a reader of the record
-/// years later would see.
-/// </remarks>
 internal sealed class RecordingCallStore() : DelegatingCallStore(new InMemoryCallStore())
 {
     private readonly Lock _lock = new();
-    private readonly Dictionary<(string CallId, int Ordinal), CallMessage> _state = [];
+
+    /// <summary>The words as the store holds them now. It backs <see cref="Live"/>, not <see cref="Rows"/>.</summary>
+    private readonly Dictionary<(string CallId, int Ordinal), CallMessage> _rows = [];
 
     /// <summary>Gets every row the provider appended, in the order it appended them.</summary>
     public List<CallMessage> Rows { get; } = [];
@@ -30,13 +27,15 @@ internal sealed class RecordingCallStore() : DelegatingCallStore(new InMemoryCal
     {
         lock (_lock)
         {
-            return [.. _state.Values.Where(row => row.CallId == callId).OrderBy(row => row.Ordinal)];
+            return [.. _rows.Values.Where(row => row.CallId == callId).OrderBy(row => row.Ordinal)];
         }
     }
 
     /// <inheritdoc />
     public override ValueTask AppendAsync(
-        IReadOnlyList<CallMessage> messages, CancellationToken cancellationToken = default)
+        IReadOnlyList<CallMessage> messages,
+        CallSessionState? state = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(messages);
 
@@ -45,7 +44,7 @@ internal sealed class RecordingCallStore() : DelegatingCallStore(new InMemoryCal
             Rows.AddRange(messages);
             foreach (var message in messages)
             {
-                _state.Add((message.CallId, message.Ordinal), message);
+                _rows.Add((message.CallId, message.Ordinal), message);
             }
         }
 
@@ -58,11 +57,11 @@ internal sealed class RecordingCallStore() : DelegatingCallStore(new InMemoryCal
     {
         lock (_lock)
         {
-            Rewrites.Add(new CallMessage(callId, ordinal, TurnIndex: -1, content));
+            Rewrites.Add(new CallMessage(callId, ordinal, TurnIndex: -1, content, $"m{ordinal}"));
 
-            if (_state.TryGetValue((callId, ordinal), out var row))
+            if (_rows.TryGetValue((callId, ordinal), out var row))
             {
-                _state[(callId, ordinal)] = row with { Content = content };
+                _rows[(callId, ordinal)] = row with { Content = content };
             }
         }
 
@@ -79,10 +78,10 @@ internal sealed class RecordingCallStore() : DelegatingCallStore(new InMemoryCal
     {
         lock (_lock)
         {
-            var going = _state.Keys.Where(key => key.CallId == callId).ToList();
+            var going = _rows.Keys.Where(key => key.CallId == callId).ToList();
             foreach (var key in going)
             {
-                _state.Remove(key);
+                _rows.Remove(key);
             }
 
             return ValueTask.FromResult(going.Count);

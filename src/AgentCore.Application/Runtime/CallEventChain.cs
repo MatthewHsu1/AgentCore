@@ -4,15 +4,17 @@ using AgentCore.Domain.Audit;
 namespace AgentCore.Application.Runtime;
 
 /// <summary>
-/// The event chain of one call. It allocates the ordinals, hands every fact to the observers, and
+/// The event chain of one call. It gives every fact its identity, hands it to the observers, and
 /// closes the chain once.
 /// </summary>
 internal sealed class CallEventChain
 {
     private readonly string _callId;
+
     private readonly CallObserverDispatcher _observers;
+
     private readonly TimeProvider _time;
-    private long _ordinal;
+
     private int _ended;
 
     internal CallEventChain(string callId, CallObserverDispatcher observers, TimeProvider time)
@@ -25,25 +27,19 @@ internal sealed class CallEventChain
     /// <summary>Gets whether the chain already closed. Nothing may be appended behind call.ended.</summary>
     internal bool HasEnded => Volatile.Read(ref _ended) == 1;
 
-    /// <summary>Raises one durable fact of this call, and takes the next ordinal.</summary>
-    /// <param name="kind">What happened. The chain of D23 stores this one.</param>
-    /// <param name="occurredAt">When it happened.</param>
-    /// <param name="turnIndex">The turn it belongs to, or <see langword="null"/> for a call fact.</param>
-    /// <param name="amends">The ordinal this fact corrects, or <see langword="null"/>.</param>
-    /// <param name="payload">The detail the fact carries.</param>
-    /// <returns>The ordinal this fact took, so a later amendment can name it.</returns>
-    internal long Raise(
+    /// <summary>Raises one durable fact of this call, and gives it its identity.</summary>
+    internal Guid Raise(
         CallEventKind kind,
         DateTimeOffset occurredAt,
         int? turnIndex,
-        long? amends = null,
+        Guid? amends = null,
         IReadOnlyDictionary<string, string>? payload = null)
     {
-        var ordinal = Interlocked.Increment(ref _ordinal) - 1;
+        var eventId = Guid.CreateVersion7();
 
-        Dispatch(kind, occurredAt, turnIndex, ordinal, amends, payload);
+        Dispatch(kind, occurredAt, turnIndex, eventId, amends, payload);
 
-        return ordinal;
+        return eventId;
     }
 
     /// <summary>Raises one fact that is counted and logged and stored nowhere.</summary>
@@ -56,7 +52,7 @@ internal sealed class CallEventChain
         DateTimeOffset occurredAt,
         int? turnIndex,
         IReadOnlyDictionary<string, string>? payload = null)
-        => Dispatch(kind, occurredAt, turnIndex, ordinal: null, amends: null, payload);
+        => Dispatch(kind, occurredAt, turnIndex, eventId: null, amends: null, payload);
 
     /// <summary>Closes the chain of this call, once.</summary>
     /// <param name="reason">Why the call ended.</param>
@@ -98,10 +94,10 @@ internal sealed class CallEventChain
     /// <param name="toolFault">The message of the fault, or <see langword="null"/>.</param>
     /// <param name="interruptedAfter">The played duration, or <see langword="null"/>.</param>
     /// <returns>
-    /// The ordinal of the <c>turn.completed</c> fact, so a barge-in that arrives after this turn
-    /// already ended can name it through <see cref="CallEvent.AmendsOrdinal"/>.
+    /// The identity of the <c>turn.completed</c> fact, so a barge-in that arrives after this turn
+    /// already ended can name it through <see cref="CallEvent.AmendsEventId"/>.
     /// </returns>
-    internal long WriteTurnEvents(
+    internal Guid WriteTurnEvents(
         int turnIndex,
         DateTimeOffset endedAt,
         string stageBefore,
@@ -145,20 +141,20 @@ internal sealed class CallEventChain
     /// <summary>Raises the amendment pair's second half: the barge-in that corrects one turn.</summary>
     /// <param name="turnIndex">The turn whose reply was cut.</param>
     /// <param name="occurredAt">When the cut was recorded.</param>
-    /// <param name="amendsOrdinal">The ordinal of the <c>turn.completed</c> fact it corrects.</param>
+    /// <param name="amendsEventId">The identity of the <c>turn.completed</c> fact it corrects.</param>
     /// <param name="heard">The text the caller actually heard.</param>
     /// <param name="played">How much of the reply played, as the relay reported it.</param>
     internal void RaiseReplyInterrupted(
         int turnIndex,
         DateTimeOffset occurredAt,
-        long amendsOrdinal,
+        Guid amendsEventId,
         string heard,
         TimeSpan played)
         => _ = Raise(
             CallEventKind.ReplyInterrupted,
             occurredAt,
             turnIndex,
-            amends: amendsOrdinal,
+            amends: amendsEventId,
             payload: new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [AuditPayloadKeys.UtteranceUntilInterruptSha256] = AuditHash.OfText(heard).Value,
@@ -236,24 +232,24 @@ internal sealed class CallEventChain
     /// <param name="kind">What happened.</param>
     /// <param name="occurredAt">When it happened.</param>
     /// <param name="turnIndex">The turn it belongs to, or <see langword="null"/>.</param>
-    /// <param name="ordinal">The number it took, or <see langword="null"/> when it took none.</param>
-    /// <param name="amends">The ordinal it corrects, or <see langword="null"/>.</param>
+    /// <param name="eventId">The identity it took, or <see langword="null"/> when it took none.</param>
+    /// <param name="amends">The identity it corrects, or <see langword="null"/>.</param>
     /// <param name="payload">The detail it carries.</param>
     private void Dispatch(
         CallEventKind kind,
         DateTimeOffset occurredAt,
         int? turnIndex,
-        long? ordinal,
-        long? amends,
+        Guid? eventId,
+        Guid? amends,
         IReadOnlyDictionary<string, string>? payload)
         => _observers.Dispatch(new CallEvent
         {
             CallId = _callId,
             Kind = kind,
             OccurredAt = occurredAt,
-            Ordinal = ordinal,
+            EventId = eventId,
             TurnIndex = turnIndex,
-            AmendsOrdinal = amends,
+            AmendsEventId = amends,
             Payload = payload ?? new Dictionary<string, string>(StringComparer.Ordinal),
         });
 }

@@ -9,32 +9,20 @@ namespace AgentCore.Application.Policy;
 /// <summary>
 /// The stage machine of row 2 of the compile table, over string stages.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Section 8.2 measured this against MAF Workflows: the same six stages cost 55 lines under
-/// <c>Stateless</c> and 115 to 142 under Workflows, and both ways to write a wrong transition table
-/// fail silently in the graph. Configuration-authored guards raise the mistake rate, so the runtime
-/// that throws is the correct one.
-/// </para>
-/// <para>
-/// Zero guards true is the normal case: the stage stays where it is, which is what
-/// <c>OnUnhandledTrigger</c> does. A stage that sets <see cref="StageNoMatch.Error"/> rejects that
-/// instead. Two guards true at one point throws, and check 5 of section 8.5 catches it at startup.
-/// </para>
-/// <para>
-/// One machine belongs to one call. The compiled agent is a process singleton, so the runtime builds
-/// one machine for each call and shares no machine between calls.
-/// </para>
-/// </remarks>
 public sealed class StagePolicy
 {
     /// <summary>The one trigger. A turn ends, and the machine picks the next stage.</summary>
     public const string TurnEndedTrigger = "TurnEnded";
 
     private readonly PolicyConfiguration _policy;
+
     private readonly Dictionary<string, StageConfiguration> _stages;
+
     private readonly StateMachine<string, string> _machine;
+
     private readonly StateMachine<string, string>.TriggerWithParameters<IReadOnlyDictionary<string, JsonNode?>> _turnEnded;
+
+    private string _stage;
 
     /// <summary>Builds the machine one configuration declares.</summary>
     /// <param name="policy">The <c>policy:</c> section.</param>
@@ -58,7 +46,10 @@ public sealed class StagePolicy
                 $"The initial stage '{policy.Initial}' is not declared in policy.stages.", nameof(policy));
         }
 
-        _machine = new StateMachine<string, string>(policy.Initial);
+        _stage = policy.Initial;
+
+        _machine = new StateMachine<string, string>(() => _stage, stage => _stage = stage);
+
         _turnEnded = _machine.SetTriggerParameters<IReadOnlyDictionary<string, JsonNode?>>(TurnEndedTrigger);
 
         // No guard matched means the caller has not given us enough to move on. Staying is correct,
@@ -93,13 +84,28 @@ public sealed class StagePolicy
     /// <summary>Gets the id of the agent that speaks in the stage the machine holds.</summary>
     public string? CurrentAgentId => CurrentStage.Agent;
 
+    /// <summary>Reports whether this policy declares a stage.</summary>
+    public bool Declares(string stage)
+    {
+        ArgumentNullException.ThrowIfNull(stage);
+        return _stages.ContainsKey(stage);
+    }
+
+    /// <summary>Puts the machine back in the stage a previous session of this call left it in.</summary>
+    internal void RestoreStage(string stage)
+    {
+        ArgumentNullException.ThrowIfNull(stage);
+
+        if (!_stages.ContainsKey(stage))
+        {
+            throw new ArgumentException(
+                $"The stage '{stage}' is not declared in policy.stages.", nameof(stage));
+        }
+
+        _stage = stage;
+    }
+
     /// <summary>Ends a turn, and picks the stage of the next turn.</summary>
-    /// <param name="state">The state snapshot the guards read.</param>
-    /// <returns>The stage the machine now holds.</returns>
-    /// <exception cref="InvalidOperationException">
-    /// Two exit guards are true at once, or no guard is true and the stage sets
-    /// <see cref="StageNoMatch.Error"/>.
-    /// </exception>
     public string Advance(IReadOnlyDictionary<string, JsonNode?> state)
     {
         ArgumentNullException.ThrowIfNull(state);

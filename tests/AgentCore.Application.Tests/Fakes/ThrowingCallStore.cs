@@ -1,3 +1,4 @@
+using AgentCore.Application.Calls;
 using AgentCore.Application.Calls.Memory;
 using AgentCore.Application.Transcript;
 using AgentCore.TestSupport;
@@ -9,7 +10,9 @@ namespace AgentCore.Application.Tests.Fakes;
 internal sealed class ThrowingCallStore() : DelegatingCallStore(new InMemoryCallStore())
 {
     public override ValueTask AppendAsync(
-        IReadOnlyList<CallMessage> messages, CancellationToken cancellationToken = default)
+        IReadOnlyList<CallMessage> messages,
+        CallSessionState? state = null,
+        CancellationToken cancellationToken = default)
         => throw new InvalidOperationException("the call store is down.");
 
     public override ValueTask RewriteAsync(

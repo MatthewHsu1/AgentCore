@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.CompilerServices;
+using AgentCore.Application.Calls;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
@@ -57,29 +59,45 @@ public sealed class CallSession : IConversationPort
     private static readonly TimeSpan TurnCompletionTimeout = TimeSpan.FromSeconds(5);
 
     private readonly CompiledAgent _compiled;
+
     private readonly StagePolicy? _policy;
+
     private readonly StateExtractor? _extractor;
+
     private readonly CounterStateWriter _counters;
+
     private readonly TimeProvider _time;
+
     private readonly CallEventChain _events;
+
     private readonly DateTimeOffset _startedAt;
+
     private readonly AgentCoreChatHistoryProvider _history;
+
     private readonly bool _sessionCarriesHistory;
+
     private readonly Lock _interruptLock = new();
+
     private AgentSession? _agentSession;
+
     private CancellationTokenSource? _runCancellation;
+
     private Interruption? _interruption;
-    private long? _amendableOrdinal;
+
+    private Guid? _amendableEventId;
+
     private int _running;
+
+    private CallSessionState? _checkpoint;
 
     // Whether the running turn has already handed the host something to speak. One rule for both
     // run shapes: a run that has handed the host nothing cannot be the turn the caller was hearing,
     // so a barge-in in that window belongs to the turn that finished before it. A streaming turn
     // raises this at its first piece of content; a turn that never streams hands the host nothing
-    // until it returns, so it never raises it and is never cut in flight. See the remarks on
-    // <see cref="Interrupt"/>. It is dropped twice: once in CompleteTurnAsync's commit lock, the
-    // moment the turn's own record exists for a late barge-in to amend, and again in EndRun, which
-    // is the only clear a turn that never reached that commit gets.
+    // until it returns, so it never raises it and is never cut in flight. It is dropped twice:
+    // once in CompleteTurnAsync's commit lock, the moment the turn's own record exists for a late
+    // barge-in to amend, and again in EndRun, which is the only clear a turn that never reached
+    // that commit gets.
     private volatile bool _runIsAudible;
 
     private (string ToolId, IReadOnlyList<AITool> Tools)? _delegatedTools;
@@ -134,7 +152,15 @@ public sealed class CallSession : IConversationPort
         // load-bearing.
         ConstStateWriter.Apply(State);
 
-        // Ordinal 0 of the call. It started, and no turn has run.
+        // The first fact of this SESSION, and not necessarily of the call: a resumed call raises a
+        // second one, behind the turns of the session before it. Nothing allocates a position here
+        // any more — store 3 assigns the sequence — so a second one collides with nothing, and it is
+        // raised rather than suppressed because a session picking the call up is a fact that
+        // happened and the chain is where facts that happened go. Suppressing it is also not
+        // available from here: knowing whether the call already has words needs the store read that
+        // only OpenSessionAsync can do, and moving the raise there would let a call opened, never
+        // spoken to, and then ended through EndCall write a call.ended with no call.started in front
+        // of it.
         _ = _events.Raise(CallEventKind.CallStarted, _startedAt, turnIndex: null);
     }
 
@@ -170,6 +196,11 @@ public sealed class CallSession : IConversationPort
     public TurnResult? LastTurn { get; private set; }
 
     /// <summary>
+    /// Gets the name the last written message was stored under, for a caller to hang an edit off.
+    /// </summary>
+    public string? LastReplyMessageId { get; private set; }
+
+    /// <summary>
     /// Gets the compiled agent this session runs. Every call shares it.
     /// </summary>
     public CompiledAgent Compiled => _compiled;
@@ -196,11 +227,27 @@ public sealed class CallSession : IConversationPort
     /// <summary>
     /// Runs one turn end to end, and returns what it did.
     /// </summary>
-    public async Task<TurnResult> RunTurnAsync(string userInput, CancellationToken cancellationToken = default)
+    public Task<TurnResult> RunTurnAsync(string userInput, CancellationToken cancellationToken = default)
+        => RunTurnAtOriginAsync(userInput, origin: null, cancellationToken);
+
+    /// <summary>
+    /// Runs one turn that knows where it sits in the conversation the caller can see.
+    /// </summary>
+    /// <param name="userInput">What the caller said.</param>
+    /// <param name="origin">
+    /// Where these words hang, or <see langword="null"/> for a caller that does not track its
+    /// messages by name. See <see cref="CallTurnOrigin"/>: supplying it is what lets a caller send an
+    /// earlier message again and have the answers to the old one withdrawn.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the turn.</param>
+    public async Task<TurnResult> RunTurnAtOriginAsync(
+        string userInput, CallTurnOrigin? origin, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(userInput);
 
-        var turn = BeginTurn(userInput, await OpenSessionAsync(cancellationToken).ConfigureAwait(false));
+        var session = await OpenSessionAsync(cancellationToken).ConfigureAwait(false);
+
+        var turn = BeginTurn(userInput, session, origin);
 
         var cancellation = StartRun(cancellationToken);
 
@@ -252,13 +299,30 @@ public sealed class CallSession : IConversationPort
     /// The call already reached a terminal stage, another turn of this call is still running, or the
     /// stage the machine holds names no agent.
     /// </exception>
-    public async IAsyncEnumerable<ChatResponseUpdate> RunTurnStreamingAsync(
+    public IAsyncEnumerable<ChatResponseUpdate> RunTurnStreamingAsync(
+        string userInput, CancellationToken cancellationToken = default)
+        => RunTurnStreamingAtOriginAsync(userInput, origin: null, cancellationToken);
+
+    /// <summary>
+    /// Runs one streaming turn that knows where it sits in the conversation the caller can see.
+    /// </summary>
+    /// <param name="userInput">What the caller said.</param>
+    /// <param name="origin">
+    /// Where these words hang, or <see langword="null"/> for a caller that does not track its
+    /// messages by name. See <see cref="RunTurnAtOriginAsync"/>, which this mirrors.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the model calls.</param>
+    /// <returns>The reply, one update at a time. Every update carries content.</returns>
+    public async IAsyncEnumerable<ChatResponseUpdate> RunTurnStreamingAtOriginAsync(
         string userInput,
+        CallTurnOrigin? origin,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(userInput);
 
-        var turn = BeginTurn(userInput, await OpenSessionAsync(cancellationToken).ConfigureAwait(false));
+        var session = await OpenSessionAsync(cancellationToken).ConfigureAwait(false);
+
+        var turn = BeginTurn(userInput, session, origin);
 
         // A streaming turn becomes audible only once it hands the host its first piece of content.
         // Until then nothing of it has reached the caller, and a barge-in belongs elsewhere.
@@ -426,7 +490,11 @@ public sealed class CallSession : IConversationPort
             ? await _compiled.TurnAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false)
             : new CallHistorySession();
 
-        await _compiled.CallStore.CreateAsync(CallId, cancellationToken).ConfigureAwait(false);
+        var record = await _compiled.CallStore.CreateAsync(CallId, cancellationToken).ConfigureAwait(false);
+
+        IReadOnlyList<CallMessage> spoken = record.LastMessageAt is null
+            ? []
+            : await _compiled.CallStore.ReadAsync(CallId, cancellationToken).ConfigureAwait(false);
 
         lock (_interruptLock)
         {
@@ -434,14 +502,163 @@ public sealed class CallSession : IConversationPort
             {
                 _agentSession = session;
 
-                // The provider serves every call, so it is told here which call this session
-                // carries and where THIS call's dropped writes go. A session that lost the race
-                // above opens nothing: it is discarded, and no write was ever queued against it.
-                _history.BeginCall(session, CallId, _events.RaiseDroppedTranscriptWrite);
+                State.TurnIndex = _history.BeginCall(
+                    session, CallId, spoken, _events.RaiseDroppedTranscriptWrite, record.State ?? _checkpoint);
+
+                // After the constructor, never inside it. The const writer has already run by now,
+                // so a slot a previous session filled lands on top of the const default rather than
+                // under it — and the record it is read from only exists after an async store read.
+                //
+                // One restore point for both sources, and store 0 outranks the host's checkpoint
+                // outright rather than merging with it. Store 0's blob is written in the same batch
+                // as the turn's words, so its state and store 1's words are of one moment and cannot
+                // disagree; a checkpoint's state beside store 1's words can be of two. So the
+                // checkpoint decides only a call store 0 does not know, or knows without state.
+                if ((record.State ?? _checkpoint) is { } stored)
+                {
+                    Restore(stored);
+                }
             }
 
             return _agentSession;
         }
+    }
+
+    /// <summary>Reads the state this call would resume from, as it stands right now.</summary>
+    internal CallSessionState Snapshot()
+    {
+        lock (_interruptLock)
+        {
+            if (_agentSession is null && _checkpoint is { } held)
+            {
+                // Handed back by reference, where the branch below deep-clones through
+                // WrittenSlots(). Deliberate, and not the asymmetry it looks like: this value is the
+                // host's own object, arriving from Resume and going straight back out to the only
+                // caller that can reach this branch — the seam, which serializes it and drops it. A
+                // clone would defend the host against itself, and cost a copy of the slots to do it.
+                return held;
+            }
+        }
+
+        return new()
+        {
+            Stage = State.Stage,
+            IsComplete = IsComplete,
+            Slots = State.WrittenSlots(),
+
+            // The turn index this call has reached, which is already the NEXT one by the time the
+            // commit reads it.
+            NextTurnIndex = State.TurnIndex,
+
+            // Read here so a snapshot taken outside a turn — the serialize seam — carries it. On the
+            // commit path the provider overwrites it, because the ordinal this turn leaves behind is
+            // not settled until the turn's rows are cut.
+            NextOrdinal = Session() is { } session ? _history.NextOrdinal(session) : 0,
+        };
+    }
+
+    /// <summary>Names the state this call resumes from when store 0 holds none of its own.</summary>
+    internal void Resume(CallSessionState stored)
+    {
+        ArgumentNullException.ThrowIfNull(stored);
+
+        // One lock over the check and the write. The guard exists to catch a late hand-off, and a
+        // guard that read the session under the lock and then wrote the field outside it would be
+        // racing the very reader — OpenSessionAsync at the top of this file — that it guards.
+        lock (_interruptLock)
+        {
+            if (_agentSession is not null)
+            {
+                throw new InvalidOperationException(
+                    $"The call '{CallId}' has already run a turn, and a call resumes only as its "
+                    + "first turn opens it. Hand the state to the factory that builds the session "
+                    + "instead.");
+            }
+
+            _checkpoint = stored;
+        }
+    }
+
+    /// <summary>Puts back what a previous session of this call had, as far as the document still allows.</summary>
+    private void Restore(CallSessionState stored)
+    {
+        if (stored.Version != CallSessionState.CurrentVersion)
+        {
+            Dropped($"the stored state is version {stored.Version} and this build writes {CallSessionState.CurrentVersion}.");
+            return;
+        }
+
+        string? refusedStage = null;
+
+        if (_policy is null)
+        {
+            // A document with no policy: has no stage machine and no stage to hold, so the only
+            // stored stage it can honour is no stage at all. An id from a build that still declared
+            // policy: would otherwise land in the reserved stage slot, where the guards and the
+            // audit chain read it as though a machine were holding it.
+            if (stored.Stage.Length > 0)
+            {
+                refusedStage = $"the document declares no policy, so the stage '{stored.Stage}' has nowhere to go.";
+            }
+        }
+        else if (!_policy.Declares(stored.Stage))
+        {
+            refusedStage = $"the document no longer declares the stage '{stored.Stage}'.";
+        }
+
+        if (refusedStage is null)
+        {
+            // Both, and in this order. The machine is what picks the agent and what the next
+            // transition fires from; the reserved slot is what the guards and the audit chain read.
+            // Moving one without the other is worse than moving neither, because the call would
+            // then report a stage it was not actually running in.
+            _policy?.RestoreStage(stored.Stage);
+            State.Stage = stored.Stage;
+
+            // Only on this branch. A stored 'true' was read off a terminal stage, so restoring it
+            // beside a stage that was refused would bring the call back only to have it turn every
+            // turn away — the one outcome this whole method exists to avoid.
+            IsComplete = stored.IsComplete;
+        }
+        else
+        {
+            Dropped(refusedStage);
+        }
+
+        foreach (var slot in stored.Slots)
+        {
+            if (ReservedStateSlots.Contains(slot.Key))
+            {
+                // TryWrite throws on a reserved slot rather than answering false, and an exception
+                // here would escape OpenSessionAsync and refuse the call outright. Snapshot never
+                // writes one, but this blob is arbitrary JSON out of store 0 and a host hands one
+                // straight in through DeserializeSessionAsync, so the guard is the caller's and not
+                // the blob's.
+                Dropped($"the slot '{slot.Key}' is reserved, and a reserved slot is never restored.");
+                continue;
+            }
+
+            if (State.TryWrite(slot.Key, slot.Value?.DeepClone()))
+            {
+                continue;
+            }
+
+            // TryWrite answers false for exactly two things, and they cost an operator different
+            // things to fix, so the reason says which one happened rather than making them guess.
+            Dropped(
+                State.Configuration.State.ContainsKey(slot.Key)
+                    ? $"the slot '{slot.Key}' no longer takes the value it was stored with."
+                    : $"the document no longer declares the slot '{slot.Key}'.");
+        }
+
+        void Dropped(string reason) => _events.RaiseDiagnostic(
+            CallEventKind.StateRestorePartial,
+            _time.GetUtcNow(),
+            turnIndex: null,
+            payload: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [CallEventPayloadKeys.Reason] = reason,
+            });
     }
 
     /// <summary>
@@ -507,12 +724,14 @@ public sealed class CallSession : IConversationPort
     }
 
     /// <summary>
-    /// Picks the agent, builds the model input, and takes the turn.
+    /// Picks the agent, withdraws whatever this turn replaces, builds the model input, and takes the
+    /// turn.
     /// </summary>
     /// <param name="userInput">What the caller said.</param>
     /// <param name="session">The session of this call.</param>
+    /// <param name="origin">Where the turn hangs, or null for a caller that does not say.</param>
     /// <returns>Everything the rest of the turn needs.</returns>
-    private Turn BeginTurn(string userInput, AgentSession session)
+    private Turn BeginTurn(string userInput, AgentSession session, CallTurnOrigin? origin = null)
     {
         if (IsComplete)
         {
@@ -529,6 +748,14 @@ public sealed class CallSession : IConversationPort
             throw new InvalidOperationException(
                 $"A turn of the call '{CallId}' is still running. One call runs one turn at a time.");
         }
+
+        // Behind both guards, because the withdrawal deletes: a turn refused for a terminal call or
+        // for one already running must not have taken the tail of the call with it on the way out.
+        // Ahead of the request below, because the words it withdraws have to be gone from the live
+        // history this run reads and not only from the store. The turn index is deliberately not
+        // wound back with them: store 3 keeps its rows for the withdrawn turns, and two turns at one
+        // index in the chain is worse than a gap in it.
+        WithdrawSuperseded(session, origin);
 
         // The reminder rides a request that happens anyway, and it rides exactly one, as a message
         // the framework appends for that invocation and stores nowhere. It reads the state document
@@ -563,7 +790,33 @@ public sealed class CallSession : IConversationPort
             activity,
             _time.GetTimestamp(),
             _hasScreen ? new TurnRenders() : null,
-            new TurnSources());
+            new TurnSources(),
+            origin?.MessageId);
+    }
+
+    /// <summary>Takes back everything the call said after the message this turn hangs off.</summary>
+    private void WithdrawSuperseded(AgentSession session, CallTurnOrigin? origin)
+    {
+        if (origin is not { NamesParent: true }
+            || _history.TruncateFrom(session, origin.ParentMessageId) is not { } withdrawn)
+        {
+            return;
+        }
+
+        // The turn index the event is filed under is the one about to run; the payload is what says
+        // which turns it replaced. The rows of those turns are already deleted, so nothing else in
+        // any store can answer that afterwards.
+        _ = _events.Raise(
+            CallEventKind.TurnSuperseded,
+            _time.GetUtcNow(),
+            State.TurnIndex,
+            payload: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [AuditPayloadKeys.WithdrewFromTurnIndex] =
+                    withdrawn.First.ToString(CultureInfo.InvariantCulture),
+                [AuditPayloadKeys.WithdrewThroughTurnIndex] =
+                    withdrawn.Last.ToString(CultureInfo.InvariantCulture),
+            });
     }
 
     /// <summary>
@@ -615,7 +868,7 @@ public sealed class CallSession : IConversationPort
     {
         // The chain has already closed, so nothing may be appended behind call.ended.
         if (_events.HasEnded
-            || _amendableOrdinal is not { } completedOrdinal
+            || _amendableEventId is not { } completedEventId
             || LastTurn is not { InterruptedAfter: null } finished
             || Session() is not { } session)
         {
@@ -640,7 +893,7 @@ public sealed class CallSession : IConversationPort
         LastTurn = finished with { ReplyText = heard, InterruptedAfter = cut.PlayedDuration };
 
         _events.RaiseReplyInterrupted(
-            finished.TurnIndex, _time.GetUtcNow(), completedOrdinal, heard, cut.PlayedDuration);
+            finished.TurnIndex, _time.GetUtcNow(), completedEventId, heard, cut.PlayedDuration);
 
         return true;
     }
@@ -658,18 +911,6 @@ public sealed class CallSession : IConversationPort
     /// <summary>Reads whether the caller hears the node that produced one update.</summary>
     /// <param name="update">One update of the run.</param>
     /// <returns><see langword="true"/> when the host should speak it.</returns>
-    /// <remarks>
-    /// <para>
-    /// A graph row streams every node's words, and the caller must hear the answer alone rather than
-    /// the graph deliberating its way to one. <c>CompiledAgent.SpokenBy</c> names the answering
-    /// agents, and it is null on every row that runs one agent, where this check passes everything.
-    /// </para>
-    /// <para>
-    /// An update the turn layers produced themselves carries no author and is still spoken: it is
-    /// the refusal or the fallback, which belongs to the turn rather than to any node. The marker it
-    /// carries is what tells it apart from a node's own update.
-    /// </para>
-    /// </remarks>
     private bool Speaks(AgentResponseUpdate update)
         => _compiled.SpokenBy is not { } spoken
             || (update.AuthorName is { } author && spoken.Contains(author))
@@ -684,21 +925,6 @@ public sealed class CallSession : IConversationPort
     /// </param>
     /// <param name="cancellationToken">Cancels the extractor call.</param>
     /// <returns>The finished turn.</returns>
-    /// <remarks>
-    /// <para>
-    /// This is where the facts of the turn are raised, because this is where the turn index, both
-    /// stages, and the moment the turn ended are all known at once. The clock is read exactly once,
-    /// so every event of the turn carries the same instant.
-    /// </para>
-    /// <para>
-    /// The interruption is read twice, at the two moments it can be answered. The first read decides
-    /// what this turn records for itself. The second, in the commit lock at the end, catches a
-    /// barge-in that landed while the extractor was still running: <see cref="EndRun"/> does not run
-    /// until this method has returned, so <see cref="Interrupt"/> in that window still finds a live
-    /// run and answers <see langword="true"/>, and only the second read makes that answer true. The
-    /// same lock then closes the window behind it, so the tail of this method needs no third read.
-    /// </para>
-    /// </remarks>
     /// <param name="disposition">
     /// What <see cref="ModerationAgent"/> and <see cref="FallbackAgent"/> reported about
     /// this turn, or <see langword="null"/> when neither layer marked it. A flagged turn skips the
@@ -877,23 +1103,25 @@ public sealed class CallSession : IConversationPort
             // What the caller said and what the caller heard, written together.
             if (_sessionCarriesHistory)
             {
-                _history.AppendTurn(turn.Session, [turn.Spoken, .. written]);
+                LastReplyMessageId = _history.AppendTurn(
+                    turn.Session, [turn.Spoken, .. written], Snapshot(), turn.MessageId);
             }
             else
             {
                 // Rows 3 and 4 answer with one reply per node, and the caller hears one of them.
                 // Store 1 holds the caller-facing turn alone, so the deliberation that produced the
                 // answer never enters the record and never reaches a later turn.
-                _history.AppendCallerFacingTurn(turn.Session, turn.Spoken, heard);
+                LastReplyMessageId = _history.AppendCallerFacingTurn(
+                    turn.Session, turn.Spoken, heard, Snapshot(), turn.MessageId);
             }
 
             // Only now. The chain stores a hash of the spoken text and store 1 stores the text, so a
             // reply.interrupted raised before the append would name a hash of words nothing holds.
-            var completedOrdinal = _events.WriteTurnEvents(
+            var completedEventId = _events.WriteTurnEvents(
                 turn.Index, endedAt, turn.StageBefore, stageAfter, reply, spokenReply, toolFault, interruptedAfter);
 
             // A turn one barge-in already cut is not amendable again, so it is not published here.
-            _amendableOrdinal = interruptedAfter is null ? completedOrdinal : null;
+            _amendableEventId = interruptedAfter is null ? completedEventId : null;
             LastTurn = result;
 
             // The second read. The first one happened before the extractor await, and that await is
@@ -907,7 +1135,7 @@ public sealed class CallSession : IConversationPort
             // here.) Nothing recorded the streaming frame. Reading _interruption again here, one
             // statement after _amendable and LastTurn were published, hands that frame to the very
             // path a frame arriving one instant later would have taken: the tested amendment, which
-            // writes the TurnCompleted then ReplyInterrupted pair T23 asks for. The _amendableOrdinal
+            // writes the TurnCompleted then ReplyInterrupted pair T23 asks for. The _amendableEventId
             // guard above already fits: it is published exactly when interruptedAfter is null, which
             // is the only state this window can be reached in.
             if (interruption is null
@@ -978,13 +1206,6 @@ public sealed class CallSession : IConversationPort
     /// <summary>Reads what the turn layers reported across the updates of one streaming turn.</summary>
     /// <param name="updates">Every update the run produced, in order, before the seam filtered them.</param>
     /// <returns>The disposition, or <see langword="null"/> when no update carried one.</returns>
-    /// <remarks>
-    /// <b>The read site differs by run shape, and that is measured rather than a style choice.</b>
-    /// Update-level properties do not survive streaming coalescing, so the folded response carries
-    /// nothing and the raw updates carry everything. Two updates may be marked — moderation leads
-    /// with an empty one and the fallback layer may close with its own — so the last one wins, which
-    /// is the one that already folded the other in.
-    /// </remarks>
     private static TurnDisposition? ReadDisposition(List<AgentResponseUpdate> updates)
     {
         TurnDisposition? found = null;
@@ -1090,6 +1311,10 @@ public sealed class CallSession : IConversationPort
     /// What this turn cites into. Built once per turn for the same reason <see cref="Renders"/> is,
     /// and never null: a call with no screen still answers from documents.
     /// </param>
+    /// <param name="MessageId">
+    /// What the caller calls the message it sent, or <see langword="null"/> when it named none. The
+    /// append stamps it on the row so a later edit has something to anchor on.
+    /// </param>
     private sealed record Turn(
         AIAgent Agent,
         AgentSession Session,
@@ -1101,24 +1326,14 @@ public sealed class CallSession : IConversationPort
         Activity? Activity,
         long StartedAt,
         TurnRenders? Renders,
-        TurnSources Sources);
+        TurnSources Sources,
+        string? MessageId);
 
     /// <summary>The session a graph row's call holds, so store 1 has somewhere to live.</summary>
-    /// <remarks>
-    /// <c>AsAIAgent()</c>'s host agent refuses any session but its own <c>WorkflowSession</c>, and a
-    /// workflow accepts no chat history provider, so nothing on rows 3 and 4 ever hands this to an
-    /// agent. It carries the state bag <see cref="AgentCoreChatHistoryProvider"/> keeps the call in,
-    /// and nothing else.
-    /// </remarks>
     private sealed class CallHistorySession : AgentSession;
 
     /// <summary>What the relay reported when the caller spoke over the reply.</summary>
     /// <param name="HeardText">The text the caller actually heard.</param>
     /// <param name="PlayedDuration">How much of the reply played, at 1 ms.</param>
-    /// <remarks>
-    /// Both values arrive on the <c>interrupt</c> frame of section 7.1, and the vendor adapter that
-    /// reads that frame owns its schema. This record carries the two values across the seam, so the
-    /// core never learns the frame.
-    /// </remarks>
     private sealed record Interruption(string HeardText, TimeSpan PlayedDuration);
 }

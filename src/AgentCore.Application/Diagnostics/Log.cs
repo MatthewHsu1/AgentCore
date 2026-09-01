@@ -13,10 +13,6 @@ internal static partial class Log
     /// <param name="callId">The id of the call.</param>
     /// <param name="turnIndex">The zero-based index of the turn that just ran.</param>
     /// <param name="reason">Why the extractor produced nothing.</param>
-    /// <remarks>
-    /// The slots stay unchanged and the call continues, so this is a warning and never an error.
-    /// It is written once for the turn.
-    /// </remarks>
     [LoggerMessage(
         EventId = 1,
         Level = LogLevel.Warning,
@@ -29,7 +25,6 @@ internal static partial class Log
     /// <param name="callId">The id of the call.</param>
     /// <param name="turnIndex">The zero-based index of the turn that just ran.</param>
     /// <param name="reason">The message of the fault.</param>
-    /// <remarks>The turn speaks the fallback and the call stays alive, so nothing here is fatal.</remarks>
     [LoggerMessage(
         EventId = 2,
         Level = LogLevel.Error,
@@ -41,10 +36,6 @@ internal static partial class Log
     /// <param name="logger">The logger of the session.</param>
     /// <param name="callId">The id of the call.</param>
     /// <param name="turnIndex">The zero-based index of the turn that just ran.</param>
-    /// <remarks>
-    /// On a voice call the silence is the failure, so the turn loop reads the reply rather than
-    /// trusting the absence of an exception.
-    /// </remarks>
     [LoggerMessage(
         EventId = 3,
         Level = LogLevel.Warning,
@@ -56,10 +47,6 @@ internal static partial class Log
     /// <param name="logger">The logger of the composition root.</param>
     /// <param name="guard">The guard name, or the rule text of an inline guard.</param>
     /// <param name="exception">The cause.</param>
-    /// <remarks>
-    /// <see cref="Configuration.Validation.GuardEvaluator"/> reports each distinct guard exactly
-    /// once, so this line is written once for each guard and never once for each turn.
-    /// </remarks>
     [LoggerMessage(
         EventId = 4,
         Level = LogLevel.Warning,
@@ -71,19 +58,6 @@ internal static partial class Log
     /// <param name="callId">The id of the call.</param>
     /// <param name="kind">The wire token of the event kind.</param>
     /// <param name="exception">The cause.</param>
-    /// <remarks>
-    /// <para>
-    /// An observer records the call and is never a part of it, so one that fails is reported and the
-    /// turn goes on. When the observer is the audit sink, a lost event breaks the chain, which
-    /// <c>chain_check</c> then reports.
-    /// </para>
-    /// <para>
-    /// <see cref="Runtime.CallObserverDispatcher"/> routes EVERY observer fault through this row, not
-    /// only the sink's: the telemetry and logging readings of a fact fail the same way and are worth
-    /// the same line. The message names the audit sink because the text, the level, and the event id
-    /// are the ones hosts already alert on and parse, and none of the three moves.
-    /// </para>
-    /// </remarks>
     [LoggerMessage(
         EventId = 5,
         Level = LogLevel.Error,
@@ -96,12 +70,6 @@ internal static partial class Log
     /// <param name="callId">The id of the call.</param>
     /// <param name="turnIndex">The zero-based index of the turn.</param>
     /// <param name="categories">The categories the endpoint flagged, comma-separated, in its order.</param>
-    /// <remarks>
-    /// The words the caller spoke are NOT logged. They are the text that was flagged, so a log line
-    /// carrying them would copy the content out of the audit chain and into a log store that D23 does
-    /// not protect. The audit chain records the categories, and this line reports the same fact where
-    /// an operator watches.
-    /// </remarks>
     [LoggerMessage(
         EventId = 6,
         Level = LogLevel.Warning,
@@ -114,12 +82,6 @@ internal static partial class Log
     /// <param name="callId">The id of the call.</param>
     /// <param name="turnIndex">The zero-based index of the turn.</param>
     /// <param name="reason">What went wrong.</param>
-    /// <remarks>
-    /// Moderation fails OPEN, and that is deliberate: a vendor outage must not refuse every caller on
-    /// a support line. The turn goes on, and this line plus the <c>unavailable</c> metric outcome are
-    /// the only record that it went unchecked. It is a warning and not an error, because a vendor
-    /// that did not answer is not a defect in this library.
-    /// </remarks>
     [LoggerMessage(
         EventId = 7,
         Level = LogLevel.Warning,
@@ -130,38 +92,19 @@ internal static partial class Log
     /// <summary>The audit queue had no room, so the event was dropped.</summary>
     /// <param name="logger">The logger of the queue.</param>
     /// <param name="callId">The id of the call the dropped event belongs to.</param>
-    /// <param name="sequence">The per-call sequence number of the dropped event.</param>
-    /// <remarks>
-    /// <para>
-    /// An implementation of <see cref="Ports.IAuditSinkPort"/> does not throw for a full queue and it
-    /// does not block. Audit is a record of the call and never a part of it, so a store that cannot
-    /// keep up drops and reports rather than slowing the caller down, and this line is the report.
-    /// </para>
-    /// <para>
-    /// A dropped event is a gap in the chain, which <c>chain_check</c> then reports. It is an error
-    /// and not a warning for that reason: the queue of <see cref="Audit.QueuedAuditSink"/> is sized to
-    /// absorb the p99 of section 7, so one of these lines means the store has been unreachable or slow
-    /// for long enough to matter, and an operator alerts on it.
-    /// </para>
-    /// </remarks>
+    /// <param name="eventId">The identity of the dropped event.</param>
     [LoggerMessage(
         EventId = 8,
         Level = LogLevel.Error,
-        Message = "The audit queue was full, so event {Sequence} of call {CallId} was dropped. "
+        Message = "The audit queue was full, so event {EventId} of call {CallId} was dropped. "
             + "The call continues and the chain has a gap.")]
-    public static partial void AuditQueueFull(ILogger logger, string callId, long sequence);
+    public static partial void AuditQueueFull(ILogger logger, string callId, Guid eventId);
 
     /// <summary>A store 1 write was refused, so the turn has no durable record.</summary>
     /// <param name="logger">The logger of the session.</param>
     /// <param name="callId">The id of the call.</param>
     /// <param name="turnIndex">The zero-based index of the turn that was being written.</param>
     /// <param name="exception">The cause.</param>
-    /// <remarks>
-    /// The live history stays in the session, so the caller notices nothing and the next turn still
-    /// has the whole conversation. It is a warning and not an error for that reason: store 1 is the
-    /// erasable store, and losing a row there is recoverable in a way that losing a link of the
-    /// audit chain is not.
-    /// </remarks>
     [LoggerMessage(
         EventId = 9,
         Level = LogLevel.Warning,
@@ -174,11 +117,6 @@ internal static partial class Log
     /// <param name="callId">The id of the call.</param>
     /// <param name="turnIndex">The zero-based index of the turn whose reply was cut.</param>
     /// <param name="playedMilliseconds">How much of the reply was played, as the vendor reported it.</param>
-    /// <remarks>
-    /// The text the caller heard is NOT logged, for the reason
-    /// <see cref="PromptRefused"/> gives. This line reports that the cut happened and how far it
-    /// got; the words stay in store 1 and the proof of them stays in the audit chain.
-    /// </remarks>
     [LoggerMessage(
         EventId = 10,
         Level = LogLevel.Debug,
@@ -210,4 +148,27 @@ internal static partial class Log
             + "unreachable and the call continues. {Record}")]
     public static partial void KnowledgeRetrievalFailed(
         ILogger logger, string agent, KnowledgeAuditRecord.LogView record, Exception exception);
+
+    /// <summary>A resumed call could not restore part of its stored state, so it went on without it.</summary>
+    /// <param name="logger">The logger of the session.</param>
+    /// <param name="callId">The id of the call being resumed.</param>
+    /// <param name="reason">Which part was dropped, and why it would not go back.</param>
+    [LoggerMessage(
+        EventId = 13,
+        Level = LogLevel.Warning,
+        Message = "Call {CallId} could not restore part of its stored state: {Reason} "
+            + "The call resumes without that part.")]
+    public static partial void StateRestorePartial(ILogger logger, string callId, string reason);
+
+    /// <summary>One call had its tail withdrawn, because a caller sent an earlier message again.</summary>
+    /// <param name="logger">The logger of the history provider.</param>
+    /// <param name="callId">The call that was cut.</param>
+    /// <param name="fromOrdinal">The first ordinal withdrawn. It went too.</param>
+    /// <param name="turnIndex">The turn the call had reached when the cut arrived.</param>
+    [LoggerMessage(
+        EventId = 14,
+        Level = LogLevel.Debug,
+        Message = "An edit withdrew call {CallId} from ordinal {FromOrdinal} onward, "
+            + "at turn {TurnIndex}.")]
+    public static partial void CallTruncated(ILogger logger, string callId, int fromOrdinal, int turnIndex);
 }

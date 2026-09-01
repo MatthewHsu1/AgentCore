@@ -186,13 +186,12 @@ public sealed class TurnPipelineTests
         // Act.
         await session.RunTurnAsync("...", TestContext.Current.CancellationToken);
 
-        // Assert. call.started, prompt.flagged, turn.completed — the flag still takes the lower
-        // ordinal, because the verdict is known before the model runs.
+        // Assert. call.started, prompt.flagged, turn.completed — the flag still precedes the turn
+        // event, because the verdict is known before the model runs.
         var events = sink.EventsOf("call-1");
         Assert.Equal(
             [AuditEventKind.CallStarted, AuditEventKind.PromptFlagged, AuditEventKind.TurnCompleted],
             events.Select(entry => entry.Kind));
-        Assert.Equal([0, 1, 2], events.Select(entry => entry.Sequence));
         Assert.Equal("violence,harassment", events[1].Payload[AuditPayloadKeys.ModerationCategories]);
     }
 
@@ -213,7 +212,6 @@ public sealed class TurnPipelineTests
         Assert.Equal(
             [AuditEventKind.CallStarted, AuditEventKind.ToolFailed, AuditEventKind.TurnCompleted],
             events.Select(entry => entry.Kind));
-        Assert.Equal([0, 1, 2], events.Select(entry => entry.Sequence));
         Assert.Contains("the vendor is down", events[1].Payload[AuditPayloadKeys.ToolError], StringComparison.Ordinal);
     }
 

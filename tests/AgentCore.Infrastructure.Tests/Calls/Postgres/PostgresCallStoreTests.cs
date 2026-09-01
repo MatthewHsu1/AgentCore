@@ -81,8 +81,8 @@ public sealed class PostgresCallStoreTests : PostgresDatabaseTest
         await store.CreateAsync("c1", Token);
         await ExecuteAsync(
             """
-            INSERT INTO call_message (call_id, ordinal, turn_index, role, content, created_at, updated_at)
-            VALUES ('c1', 1, 0, 'user', '{}'::jsonb, now(), now() + interval '1 hour')
+            INSERT INTO call_message (call_id, ordinal, turn_index, role, content, message_id, created_at, updated_at)
+            VALUES ('c1', 1, 0, 'user', '{}'::jsonb, 'm1', now(), now() + interval '1 hour')
             """);
 
         // Act
@@ -183,10 +183,6 @@ public sealed class PostgresCallStoreTests : PostgresDatabaseTest
         Assert.Null((await store.GetAsync("c1", Token))!.ExternalId);
     }
 
-    /// <remarks>
-    /// The words are not asserted on. <see cref="ICallStore.DeleteAsync"/> erases store 0 alone, and
-    /// erasing store 1 first is the caller's ordering.
-    /// </remarks>
     [PostgresFact]
     public async Task DeleteAsync_ACall_LeavesNoRowAndNoClaim()
     {

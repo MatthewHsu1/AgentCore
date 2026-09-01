@@ -78,6 +78,36 @@ public sealed class ConfigurationSchemaValidatorTests
     }
 
     [Fact]
+    public void ATitlerWithNoModel_Fails()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            titler: {}
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Contains(failure.Errors, error => error.Pointer == "/titler");
+    }
+
+    [Fact]
+    public void ASecondKeyInTheTitler_Fails()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            titler:
+              model: { ref: fill }
+              when: after_reply
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Contains(failure.Errors, error => error.Pointer == "/titler");
+    }
+
+    [Fact]
     public void AToolWriterWithNoPath_FailsWithThePointerOfTheSlot()
     {
         const string document = """

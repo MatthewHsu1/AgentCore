@@ -149,6 +149,17 @@ export function sourceContent(source: SourcePart) {
 }
 
 /**
+ * Reads back the name the host stored one message under, if this one carries it.
+ *
+ * Only a reply ever does. The caller's own messages already travel under names this browser gave
+ * them, and the host keeps those, so they need no translation.
+ */
+function hostMessageId(message: ThreadMessage): string | undefined {
+  const custom = message.metadata?.custom as { hostMessageId?: unknown } | undefined;
+  return typeof custom?.hostMessageId === "string" ? custom.hostMessageId : undefined;
+}
+
+/**
  * Binds assistant-ui to one AgentCore endpoint.
  *
  * @param endpoint The route the host mapped the text endpoint on.
@@ -161,12 +172,26 @@ export function useAgentCoreRuntime(endpoint: string) {
 
   const adapter: ChatModelAdapter = {
     async *run({ messages, abortSignal }) {
+      // assistant-ui hands over the path from the root to the message being sent, so the last entry
+      // is what the caller just said and the one before it is what that hangs off. On an edit the
+      // parent is the message BEFORE the one replaced, which is exactly what this picks up, and the
+      // abandoned branch is not in this list at all.
+      const parent = messages.at(-2);
+
       const turn = runTurn({
         endpoint,
         session: session.current,
         messages: wireMessages(messages.map(flatten)),
         abortSignal,
         fetch: (url, init) => fetch(url, init),
+        origin: {
+          message_id: messages.at(-1)?.id,
+
+          // Null at the root of the call, which is what an edit of the first message asks for. A
+          // parent the host does not know is sent under this browser's own name and simply matches
+          // nothing there, which the host reads as a plain new turn.
+          parent_id: parent ? (hostMessageId(parent) ?? parent.id) : null,
+        },
       });
 
       const clock = newTurnClock();
@@ -186,6 +211,12 @@ export function useAgentCoreRuntime(endpoint: string) {
             isTerminal: state.isTerminal,
             // Absent today. Carried anyway so a live handoff is a server change on its own.
             speaker: state.speaker,
+
+            // The host's own name for this reply, kept ON the message rather than in a map beside
+            // it. The adapter never learns the id assistant-ui gives the message it is producing, so
+            // there is nothing to key a map on — and metadata rides the message through a branch
+            // switch and through the reload that restores it, which a map in a ref would not.
+            hostMessageId: state.replyMessageId,
           },
         };
 

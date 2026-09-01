@@ -3,34 +3,44 @@ using AgentCore.Application.Audit;
 using AgentCore.Application.Runtime;
 using AgentCore.Domain.Audit;
 using Xunit;
+using Xunit.Sdk;
 
 namespace AgentCore.Application.Tests.Audit;
 
 /// <summary>
 /// The one place that knows both vocabularies: a neutral fact of a call, and a row of the chain of D23.
 /// </summary>
-/// <remarks>
-/// Two rules carry the chain. The six kinds the chain stores keep the number the session gave them, so
-/// <see cref="AuditEvent.Sequence"/> is the session's ordinal and never a number this observer or the
-/// sink invented. The four diagnostic kinds took no number and write no row, which is what keeps the
-/// sequence gap-free and monotonic from zero, exactly as it was before the hook existed.
-/// </remarks>
 public sealed class AuditCallObserverTests
 {
     private const string CallId = "call-1";
 
     private static readonly DateTimeOffset Moment = new(2026, 8, 15, 9, 30, 0, TimeSpan.Zero);
 
-    /// <summary>The four kinds that are counted and logged and stored nowhere.</summary>
+    /// <summary>The six kinds that are counted or logged or both, and stored nowhere.</summary>
     public static TheoryData<CallEventKind> DiagnosticKinds =>
     [
         CallEventKind.ModerationUnavailable,
         CallEventKind.ModerationClean,
         CallEventKind.EmptyReply,
         CallEventKind.ExtractionFailed,
+        CallEventKind.TranscriptWriteFailed,
+        CallEventKind.StateRestorePartial,
     ];
 
-    /// <summary>The six kinds the store keeps, beside the token each one writes.</summary>
+    /// <summary>Every kind, once, across the two tables above.</summary>
+    [Fact]
+    public void TheTwoTables_BetweenThemNameEveryKind()
+    {
+        IEnumerable<CallEventKind> named =
+        [
+            .. DiagnosticKinds.Select(row => (CallEventKind)((ITheoryDataRow)row).GetData()[0]!),
+            .. StoredKinds.Select(row => (CallEventKind)((ITheoryDataRow)row).GetData()[0]!),
+        ];
+
+        Assert.Equal([.. Enum.GetValues<CallEventKind>().Order()], [.. named.Order()]);
+    }
+
+    /// <summary>The seven kinds the store keeps, beside the token each one writes.</summary>
     public static TheoryData<CallEventKind, AuditEventKind> StoredKinds =>
         new()
         {
@@ -40,16 +50,17 @@ public sealed class AuditCallObserverTests
             { CallEventKind.TurnCompleted, AuditEventKind.TurnCompleted },
             { CallEventKind.ReplyInterrupted, AuditEventKind.ReplyInterrupted },
             { CallEventKind.CallEnded, AuditEventKind.CallEnded },
+            { CallEventKind.TurnSuperseded, AuditEventKind.TurnSuperseded },
         };
 
     [Theory]
     [MemberData(nameof(DiagnosticKinds))]
-    public async Task AFactWithNoOrdinal_WritesNoRow(CallEventKind kind)
+    public async Task AFactWithNoEventId_WritesNoRow(CallEventKind kind)
     {
         InMemoryAuditSink sink = new();
         AuditCallObserver observer = new(sink);
 
-        // A diagnostic-only event leaves Ordinal null precisely so that it consumes no number.
+        // A diagnostic-only event leaves EventId null precisely because it takes no row.
         await observer.OnCallEventAsync(Event(kind), TestContext.Current.CancellationToken);
 
         Assert.Empty(sink.Events);
@@ -62,42 +73,62 @@ public sealed class AuditCallObserverTests
         InMemoryAuditSink sink = new();
         AuditCallObserver observer = new(sink);
 
-        await observer.OnCallEventAsync(Event(kind, ordinal: 1, amends: 0), TestContext.Current.CancellationToken);
+        await observer.OnCallEventAsync(
+            Event(kind, eventId: Guid.CreateVersion7(), amends: Guid.CreateVersion7()),
+            TestContext.Current.CancellationToken);
 
         var written = Assert.Single(sink.Events);
         Assert.Equal(expected, written.Kind);
     }
 
     [Fact]
-    public async Task TheOrdinalOfTheSession_IsTheSequenceOfTheRow()
+    public async Task ItCopiesTheIdentityStraightThrough()
     {
         InMemoryAuditSink sink = new();
         AuditCallObserver observer = new(sink);
+        var id = Guid.CreateVersion7();
 
-        // The session allocates the number, not the sink: the sink answers long after the turn moved
-        // on, so a number it allocated would reach nobody in time.
         await observer.OnCallEventAsync(
-            Event(CallEventKind.TurnCompleted, ordinal: 7),
-            TestContext.Current.CancellationToken);
+            new CallEvent
+            {
+                CallId = CallId,
+                Kind = CallEventKind.CallStarted,
+                OccurredAt = DateTimeOffset.UnixEpoch,
+                EventId = id,
+            },
+            CancellationToken.None);
 
-        var written = Assert.Single(sink.Events);
-        Assert.Equal(7, written.Sequence);
+        Assert.Equal(id, Assert.Single(sink.EventsOf(CallId)).EventId);
     }
 
     [Fact]
-    public async Task AnAmendment_NamesTheSequenceItCorrects()
+    public async Task ItCopiesTheAmendmentStraightThrough()
     {
         InMemoryAuditSink sink = new();
         AuditCallObserver observer = new(sink);
+        var turn = Guid.CreateVersion7();
+        var cut = Guid.CreateVersion7();
 
-        // T23: the store is append-only, so a barge-in is a second event that names the first.
         await observer.OnCallEventAsync(
-            Event(CallEventKind.ReplyInterrupted, ordinal: 4, amends: 3),
-            TestContext.Current.CancellationToken);
+            new CallEvent
+            {
+                CallId = CallId,
+                Kind = CallEventKind.ReplyInterrupted,
+                OccurredAt = DateTimeOffset.UnixEpoch,
+                EventId = cut,
+                AmendsEventId = turn,
+                TurnIndex = 0,
+                Payload = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [AuditPayloadKeys.UtteranceUntilInterruptSha256] = AuditHash.OfText("heard").Value,
+                    [AuditPayloadKeys.DurationUntilInterruptMs] = "120",
+                },
+            },
+            CancellationToken.None);
 
-        var written = Assert.Single(sink.Events);
-        Assert.Equal(4, written.Sequence);
-        Assert.Equal(3, written.AmendsSequence);
+        var written = Assert.Single(sink.EventsOf(CallId));
+        Assert.Equal(cut, written.EventId);
+        Assert.Equal(turn, written.AmendsEventId);
     }
 
     [Fact]
@@ -107,10 +138,10 @@ public sealed class AuditCallObserverTests
         AuditCallObserver observer = new(sink);
 
         await observer.OnCallEventAsync(
-            Event(CallEventKind.TurnCompleted, ordinal: 1),
+            Event(CallEventKind.TurnCompleted, eventId: Guid.CreateVersion7()),
             TestContext.Current.CancellationToken);
 
-        Assert.Null(Assert.Single(sink.Events).AmendsSequence);
+        Assert.Null(Assert.Single(sink.Events).AmendsEventId);
     }
 
     [Fact]
@@ -126,7 +157,7 @@ public sealed class AuditCallObserverTests
         };
 
         await observer.OnCallEventAsync(
-            Event(CallEventKind.TurnCompleted, ordinal: 2, turnIndex: 5, payload: payload),
+            Event(CallEventKind.TurnCompleted, eventId: Guid.CreateVersion7(), turnIndex: 5, payload: payload),
             TestContext.Current.CancellationToken);
 
         var written = Assert.Single(sink.Events);
@@ -143,7 +174,7 @@ public sealed class AuditCallObserverTests
         AuditCallObserver observer = new(sink);
 
         await observer.OnCallEventAsync(
-            Event(CallEventKind.CallStarted, ordinal: 0),
+            Event(CallEventKind.CallStarted, eventId: Guid.CreateVersion7()),
             TestContext.Current.CancellationToken);
 
         Assert.Null(Assert.Single(sink.Events).TurnIndex);
@@ -156,15 +187,18 @@ public sealed class AuditCallObserverTests
         AuditCallObserver observer = new(sink);
         var token = TestContext.Current.CancellationToken;
 
-        await observer.OnCallEventAsync(Event(CallEventKind.CallStarted, ordinal: 0), token);
+        await observer.OnCallEventAsync(Event(CallEventKind.CallStarted, eventId: Guid.CreateVersion7()), token);
 
-        // The two diagnostic facts between them take no number, so the sequence stays gap-free.
+        // The two diagnostic facts between them take no identity, so they write no row.
         await observer.OnCallEventAsync(Event(CallEventKind.ModerationClean), token);
-        await observer.OnCallEventAsync(Event(CallEventKind.TurnCompleted, ordinal: 1, turnIndex: 0), token);
+        await observer.OnCallEventAsync(
+            Event(CallEventKind.TurnCompleted, eventId: Guid.CreateVersion7(), turnIndex: 0), token);
         await observer.OnCallEventAsync(Event(CallEventKind.EmptyReply, turnIndex: 0), token);
-        await observer.OnCallEventAsync(Event(CallEventKind.CallEnded, ordinal: 2), token);
+        await observer.OnCallEventAsync(Event(CallEventKind.CallEnded, eventId: Guid.CreateVersion7()), token);
 
-        Assert.Equal([0, 1, 2], sink.EventsOf(CallId).Select(item => item.Sequence));
+        Assert.Equal(
+            [AuditEventKind.CallStarted, AuditEventKind.TurnCompleted, AuditEventKind.CallEnded],
+            sink.EventsOf(CallId).Select(item => item.Kind).ToArray());
     }
 
     [Fact]
@@ -178,27 +212,23 @@ public sealed class AuditCallObserverTests
 
     private static CallEvent Event(
         CallEventKind kind,
-        long? ordinal = null,
+        Guid? eventId = null,
         int? turnIndex = null,
-        long? amends = null,
+        Guid? amends = null,
         IReadOnlyDictionary<string, string>? payload = null) => new()
         {
             CallId = CallId,
             Kind = kind,
             OccurredAt = Moment,
-            Ordinal = ordinal,
+            EventId = eventId,
             TurnIndex = turnIndex,
-            AmendsOrdinal = amends,
+            AmendsEventId = amends,
             Payload = payload ?? RequiredPayload(kind),
         };
 
     /// <summary>
     /// The payload each kind must carry to be a legal event, per <see cref="AuditEventVocabulary"/>.
     /// </summary>
-    /// <remarks>
-    /// A sink refuses an event that is missing these, so a test that fabricates one has to supply
-    /// them or it asserts about a row that could never be written.
-    /// </remarks>
     private static Dictionary<string, string> RequiredPayload(CallEventKind kind) => kind switch
     {
         CallEventKind.ReplyInterrupted => new Dictionary<string, string>(StringComparer.Ordinal)

@@ -9,42 +9,9 @@ namespace AgentCore.Application.Diagnostics;
 /// <summary>
 /// Writes the "log once" rows of section 8.7, one line for each fact that earns one.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Five of the ten kinds are reported, and the lines are the ones <see cref="Log"/> already declares:
-/// same message, same level, same event id. Section 8.7 says "log once" for each row and each of these
-/// facts is raised once for its turn, so moving the call sites behind the hook changed neither the
-/// text an operator greps for nor how often it appears.
-/// </para>
-/// <para>
-/// The five quiet kinds are quiet on purpose. <see cref="CallEventKind.CallStarted"/>,
-/// <see cref="CallEventKind.TurnCompleted"/>, <see cref="CallEventKind.ReplyInterrupted"/>, and
-/// <see cref="CallEventKind.CallEnded"/> are the record of a normal call, and the chain of D23 is
-/// where a record of a call belongs; a line for each of them would bill Grafana Cloud by volume for
-/// facts a query already answers. <see cref="CallEventKind.ModerationClean"/> is quieter still: it is
-/// counted and not even logged, because the clean verdict is what makes the flagged count readable as
-/// a rate and nothing more.
-/// </para>
-/// <para>
-/// No line carries what the caller said or what the agent replied, and that is a rule and not an
-/// oversight. The words behind <see cref="CallEventKind.PromptFlagged"/> are the text moderation
-/// flagged, so a line carrying them would copy the content out of the chain, which D23 protects, and
-/// into a log store, which it does not. The categories are reported instead.
-/// </para>
-/// <para>
-/// It never fails and never waits, so it always completes synchronously. One instance serves every
-/// call.
-/// </para>
-/// </remarks>
 internal sealed class LoggingCallObserver : ICallObserver
 {
     /// <summary>The turn a line names when the fact carried no index. No turn has it.</summary>
-    /// <remarks>
-    /// The five reported kinds all happen inside a turn and all carry its index, so this is
-    /// unreachable for any event the session raises. A line an operator can read beats an exception
-    /// thrown over a missing field, so a malformed event is reported under a value that is obviously
-    /// not a turn.
-    /// </remarks>
     private const int NoTurn = -1;
 
     private readonly ILogger _logger;
@@ -115,6 +82,19 @@ internal sealed class LoggingCallObserver : ICallObserver
                     _logger,
                     callEvent.CallId,
                     TurnOf(callEvent),
+                    Detail(callEvent, CallEventPayloadKeys.Reason));
+                break;
+
+            case CallEventKind.StateRestorePartial:
+                // Not a turn's fact and not section 8.7's: it happens once, as the call opens, and it
+                // carries no turn index. It earns a line all the same because it is the only signal
+                // there is. A document change costs a resumed call its stage or a slot, the chain
+                // stores no diagnostic kind, and the caller notices only that the agent has forgotten
+                // them — so without this line the fault is visible to nobody but a host that wrote an
+                // ICallObserver of its own.
+                Log.StateRestorePartial(
+                    _logger,
+                    callEvent.CallId,
                     Detail(callEvent, CallEventPayloadKeys.Reason));
                 break;
 

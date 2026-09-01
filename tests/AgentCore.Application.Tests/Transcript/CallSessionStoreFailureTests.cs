@@ -82,7 +82,7 @@ public sealed class CallSessionStoreFailureTests
     /// logged and stored nowhere.
     /// </summary>
     [Fact]
-    public async Task Append_StoreThrows_RaisesDiagnosticWithNoOrdinal()
+    public async Task Append_StoreThrows_RaisesDiagnosticWithNoEventId()
     {
         // Arrange
         using RequestRecordingChatClient reply = new("hi there");
@@ -97,13 +97,16 @@ public sealed class CallSessionStoreFailureTests
         var dropped = Assert.Single(
             observer.Events,
             callEvent => callEvent.Kind == CallEventKind.TranscriptWriteFailed);
-        Assert.Null(dropped.Ordinal);
+        Assert.Null(dropped.EventId);
         Assert.Equal(0, dropped.TurnIndex);
 
-        // The numbers the chain holds are the ones it would have held with no failure at all.
+        // The facts that did take an identity are the ones the chain would have written with no
+        // failure at all: only the dropped write itself takes no row.
+        var stored = observer.Events.Where(item => item.EventId is not null).ToArray();
         Assert.Equal(
-            [0, 1],
-            observer.Events.Where(item => item.Ordinal is not null).Select(item => item.Ordinal));
+            [CallEventKind.CallStarted, CallEventKind.TurnCompleted],
+            stored.Select(item => item.Kind).ToArray());
+        Assert.Equal(stored.Length, stored.Select(item => item.EventId).Distinct().Count());
     }
 
     private static CallSession CreateSession(

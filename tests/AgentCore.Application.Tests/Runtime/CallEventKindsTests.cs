@@ -7,11 +7,6 @@ namespace AgentCore.Application.Tests.Runtime;
 /// <summary>
 /// What one call event kind is to the audit vocabulary, and what it is called in a log line.
 /// </summary>
-/// <remarks>
-/// Two observers and the dispatcher ask this the same question, so it is answered in one place. These
-/// tests pin the split: six kinds the chain of D23 stores, and five that are counted and logged and
-/// stored nowhere.
-/// </remarks>
 public sealed class CallEventKindsTests
 {
     /// <summary>Every kind the chain stores, beside the row it writes and the token it hashes.</summary>
@@ -24,6 +19,7 @@ public sealed class CallEventKindsTests
             { CallEventKind.TurnCompleted, AuditEventKind.TurnCompleted, "turn.completed" },
             { CallEventKind.ReplyInterrupted, AuditEventKind.ReplyInterrupted, "reply.interrupted" },
             { CallEventKind.CallEnded, AuditEventKind.CallEnded, "call.ended" },
+            { CallEventKind.TurnSuperseded, AuditEventKind.TurnSuperseded, "turn.superseded" },
         };
 
     /// <summary>Every diagnostic kind, beside the name a log line gives it.</summary>
@@ -35,6 +31,7 @@ public sealed class CallEventKindsTests
             { CallEventKind.EmptyReply, "reply.empty" },
             { CallEventKind.ExtractionFailed, "extraction.failed" },
             { CallEventKind.TranscriptWriteFailed, "transcript.write.failed" },
+            { CallEventKind.StateRestorePartial, "state.restore.partial" },
         };
 
     [Theory]
@@ -65,8 +62,8 @@ public sealed class CallEventKindsTests
         var stored = Enum.GetValues<CallEventKind>()
             .Count(kind => CallEventKinds.TryGetAuditKind(kind, out _));
 
-        Assert.Equal(11, Enum.GetValues<CallEventKind>().Length);
-        Assert.Equal(6, stored);
+        Assert.Equal(13, Enum.GetValues<CallEventKind>().Length);
+        Assert.Equal(7, stored);
     }
 
     [Fact]

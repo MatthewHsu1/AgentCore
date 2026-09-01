@@ -81,6 +81,9 @@
     },
     "evaluation": {
       "$ref": "#/$defs/evaluation"
+    },
+    "titler": {
+      "$ref": "#/$defs/titler"
     }
   },
   "dependentSchemas": {
@@ -261,6 +264,19 @@
           ],
           "default": "after_reply",
           "description": "Section 8.3: agentcore/v1 defines no second value."
+        }
+      }
+    },
+    "titler": {
+      "type": "object",
+      "description": "The model that names a call from its first few messages. The key is optional, and a document that omits it leaves the titler on the default providers.llm entry.",
+      "required": [
+        "model"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "$ref": "#/$defs/modelRef"
         }
       }
     },

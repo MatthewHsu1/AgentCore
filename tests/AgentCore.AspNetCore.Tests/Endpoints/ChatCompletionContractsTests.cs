@@ -51,4 +51,24 @@ public sealed class ChatCompletionContractsTests
 
         Assert.DoesNotContain("agentcore_data", json, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void AParentIdTheBodyLeavesOut_IsNotTheSameAsOneItSendsAsNull()
+    {
+        var absent = JsonSerializer.Deserialize<ChatCompletionRequest>(
+            """{"messages":[],"agentcore":{"message_id":"m1"}}""", ChatCompletionJson.Options);
+
+        var explicitly = JsonSerializer.Deserialize<ChatCompletionRequest>(
+            """{"messages":[],"agentcore":{"message_id":"m1","parent_id":null}}""",
+            ChatCompletionJson.Options);
+
+        // Both leave ParentId null, and the two mean opposite things: null names the start of the
+        // call and withdraws every word of it. A client that forgot the member must not erase the
+        // call it was adding to.
+        Assert.Null(absent?.AgentCore?.ParentId);
+        Assert.False(absent?.AgentCore?.NamesParent);
+
+        Assert.Null(explicitly?.AgentCore?.ParentId);
+        Assert.True(explicitly?.AgentCore?.NamesParent);
+    }
 }

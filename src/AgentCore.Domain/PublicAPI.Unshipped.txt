@@ -1,20 +1,20 @@
 #nullable enable
 AgentCore.Domain.Audit.AuditEvent
 AgentCore.Domain.Audit.AuditEvent.<Clone>$() -> AgentCore.Domain.Audit.AuditEvent!
-AgentCore.Domain.Audit.AuditEvent.AmendsSequence.get -> long?
-AgentCore.Domain.Audit.AuditEvent.AmendsSequence.init -> void
+AgentCore.Domain.Audit.AuditEvent.AmendsEventId.get -> System.Guid?
+AgentCore.Domain.Audit.AuditEvent.AmendsEventId.init -> void
 AgentCore.Domain.Audit.AuditEvent.AuditEvent() -> void
 AgentCore.Domain.Audit.AuditEvent.CallId.get -> string!
 AgentCore.Domain.Audit.AuditEvent.CallId.init -> void
 AgentCore.Domain.Audit.AuditEvent.Equals(AgentCore.Domain.Audit.AuditEvent? other) -> bool
+AgentCore.Domain.Audit.AuditEvent.EventId.get -> System.Guid
+AgentCore.Domain.Audit.AuditEvent.EventId.init -> void
 AgentCore.Domain.Audit.AuditEvent.Kind.get -> AgentCore.Domain.Audit.AuditEventKind
 AgentCore.Domain.Audit.AuditEvent.Kind.init -> void
 AgentCore.Domain.Audit.AuditEvent.OccurredAt.get -> System.DateTimeOffset
 AgentCore.Domain.Audit.AuditEvent.OccurredAt.init -> void
 AgentCore.Domain.Audit.AuditEvent.Payload.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!
 AgentCore.Domain.Audit.AuditEvent.Payload.init -> void
-AgentCore.Domain.Audit.AuditEvent.Sequence.get -> long
-AgentCore.Domain.Audit.AuditEvent.Sequence.init -> void
 AgentCore.Domain.Audit.AuditEvent.TurnIndex.get -> int?
 AgentCore.Domain.Audit.AuditEvent.TurnIndex.init -> void
 AgentCore.Domain.Audit.AuditEventKind
@@ -24,6 +24,7 @@ AgentCore.Domain.Audit.AuditEventKind.PromptFlagged = 6 -> AgentCore.Domain.Audi
 AgentCore.Domain.Audit.AuditEventKind.ReplyInterrupted = 2 -> AgentCore.Domain.Audit.AuditEventKind
 AgentCore.Domain.Audit.AuditEventKind.ToolFailed = 3 -> AgentCore.Domain.Audit.AuditEventKind
 AgentCore.Domain.Audit.AuditEventKind.TurnCompleted = 1 -> AgentCore.Domain.Audit.AuditEventKind
+AgentCore.Domain.Audit.AuditEventKind.TurnSuperseded = 7 -> AgentCore.Domain.Audit.AuditEventKind
 AgentCore.Domain.Audit.AuditEventKinds
 AgentCore.Domain.Audit.AuditEventVocabulary
 AgentCore.Domain.Audit.AuditHash
@@ -125,6 +126,8 @@ const AgentCore.Domain.Audit.AuditPayloadKeys.ToolError = "toolError" -> string!
 const AgentCore.Domain.Audit.AuditPayloadKeys.ToolFailureKind = "toolFailureKind" -> string!
 const AgentCore.Domain.Audit.AuditPayloadKeys.ToolName = "toolName" -> string!
 const AgentCore.Domain.Audit.AuditPayloadKeys.UtteranceUntilInterruptSha256 = "utteranceUntilInterruptSha256" -> string!
+const AgentCore.Domain.Audit.AuditPayloadKeys.WithdrewFromTurnIndex = "withdrewFromTurnIndex" -> string!
+const AgentCore.Domain.Audit.AuditPayloadKeys.WithdrewThroughTurnIndex = "withdrewThroughTurnIndex" -> string!
 override AgentCore.Domain.Audit.AuditEvent.Equals(object? obj) -> bool
 override AgentCore.Domain.Audit.AuditEvent.GetHashCode() -> int
 override AgentCore.Domain.Audit.AuditEvent.ToString() -> string!

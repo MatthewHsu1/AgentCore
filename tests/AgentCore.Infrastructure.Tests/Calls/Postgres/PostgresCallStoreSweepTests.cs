@@ -9,10 +9,6 @@ namespace AgentCore.Infrastructure.Tests.Calls.Postgres;
 /// <summary>
 /// Retention, which deletes the call and lets the cascade take the words.
 /// </summary>
-/// <remarks>
-/// A call ages on the same clock the listing ranks it by: the newest message, or when the call was
-/// made if it holds none. The old sweep read call_message alone and could not see an empty thread.
-/// </remarks>
 public sealed class PostgresCallStoreSweepTests : PostgresDatabaseTest
 {
     private static readonly TimeSpan Window = TimeSpan.FromDays(30);
@@ -21,7 +17,7 @@ public sealed class PostgresCallStoreSweepTests : PostgresDatabaseTest
     protected override bool Migrated => true;
 
     private static CallMessage Word(string callId) =>
-        new(callId, 0, 0, new ChatMessage(ChatRole.User, "hello"));
+        new(callId, 0, 0, new ChatMessage(ChatRole.User, "hello"), "m0");
 
     [PostgresFact]
     public async Task SweepAsync_ACallWhoseLastMessageIsOld_TakesTheCallAndItsWords()
@@ -29,7 +25,7 @@ public sealed class PostgresCallStoreSweepTests : PostgresDatabaseTest
         // Arrange
         PostgresCallStore store = new(DataSource);
         await store.CreateAsync("old", Token);
-        await store.AppendAsync([Word("old")], Token);
+        await store.AppendAsync([Word("old")], cancellationToken: Token);
         await ExecuteAsync("UPDATE call_message SET updated_at = now() - interval '90 days'");
 
         // Act
@@ -67,7 +63,7 @@ public sealed class PostgresCallStoreSweepTests : PostgresDatabaseTest
         // Arrange
         PostgresCallStore store = new(DataSource);
         await store.CreateAsync("fresh", Token);
-        await store.AppendAsync([Word("fresh")], Token);
+        await store.AppendAsync([Word("fresh")], cancellationToken: Token);
         await ExecuteAsync("UPDATE call SET created_at = now() - interval '90 days'");
 
         // Act
@@ -87,8 +83,8 @@ public sealed class PostgresCallStoreSweepTests : PostgresDatabaseTest
         await ExecuteAsync("UPDATE call SET created_at = now() - interval '90 days'");
         await ExecuteAsync(
             """
-            INSERT INTO audit_event (call_id, sequence, kind, occurred_at)
-            VALUES ('old', 0, 'call.started', now())
+            INSERT INTO audit_event (call_id, event_id, sequence, kind, occurred_at)
+            VALUES ('old', gen_random_uuid(), 0, 'call.started', now())
             """);
 
         // Act
@@ -124,7 +120,7 @@ public sealed class PostgresCallStoreSweepTests : PostgresDatabaseTest
         // Arrange
         PostgresCallStore store = new(DataSource);
         await store.CreateAsync("c1", Token);
-        await store.AppendAsync([Word("c1")], Token);
+        await store.AppendAsync([Word("c1")], cancellationToken: Token);
 
         // Act
         var erased = await store.EraseAsync("c1", Token);

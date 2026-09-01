@@ -20,6 +20,7 @@ internal static class CallEventKinds
             case CallEventKind.TurnCompleted: auditKind = AuditEventKind.TurnCompleted; return true;
             case CallEventKind.ReplyInterrupted: auditKind = AuditEventKind.ReplyInterrupted; return true;
             case CallEventKind.CallEnded: auditKind = AuditEventKind.CallEnded; return true;
+            case CallEventKind.TurnSuperseded: auditKind = AuditEventKind.TurnSuperseded; return true;
             default: auditKind = default; return false;
         }
     }
@@ -41,6 +42,7 @@ internal static class CallEventKinds
             CallEventKind.EmptyReply => "reply.empty",
             CallEventKind.ExtractionFailed => "extraction.failed",
             CallEventKind.TranscriptWriteFailed => "transcript.write.failed",
+            CallEventKind.StateRestorePartial => "state.restore.partial",
 
             // A kind outside the closed set must not cost the report the fault it is carrying, so this
             // names the value instead of throwing over it.

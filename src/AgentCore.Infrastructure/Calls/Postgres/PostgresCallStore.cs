@@ -146,7 +146,7 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
         {
             while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
-                rows.Add(Read(reader));
+                rows.Add(ReadListing(reader));
                 lastSortAt = reader.GetFieldValue<DateTimeOffset>(6);
             }
         }
@@ -216,7 +216,33 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
     /// <returns>A task that completes when the pool is closed.</returns>
     public ValueTask DisposeAsync() => _dataSource.DisposeAsync();
 
+    /// <summary>
+    /// One call's row from <see cref="GetSql"/>, whose ninth column is the state a resume reads back.
+    /// </summary>
     private static CallRecord Read(NpgsqlDataReader reader) =>
+        ReadListing(reader) with { State = reader.IsDBNull(8) ? null : ReadState(reader.GetString(8)) };
+
+    /// <summary>Reads one call's resume blob, or nothing when the blob cannot be read.</summary>
+    /// <param name="blob">The JSON in <c>call.state</c>.</param>
+    /// <returns>The state, or <see langword="null"/> when it did not parse into one.</returns>
+    private static CallSessionState? ReadState(string blob)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<CallSessionState>(blob, CallStateJson.Options);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// One call's row from <see cref="ListSql"/>, which projects <see cref="Projection"/> alone. It
+    /// has no ninth column to read, so <see cref="CallRecord.State"/> is left at its default
+    /// <see langword="null"/> rather than paying to deserialize a blob a listing never shows.
+    /// </summary>
+    private static CallRecord ReadListing(NpgsqlDataReader reader) =>
         new(
             reader.GetString(0),
             reader.IsDBNull(1) ? null : reader.GetString(1),
@@ -241,12 +267,10 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// One turn is one round trip. The caller allocated the ordinals, so a repeated ordinal is a
-    /// unique violation and not a silent overwrite.
-    /// </remarks>
     public async ValueTask AppendAsync(
-        IReadOnlyList<CallMessage> messages, CancellationToken cancellationToken = default)
+        IReadOnlyList<CallMessage> messages,
+        CallSessionState? state = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(messages);
 
@@ -267,18 +291,28 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
             command.Parameters.Add(new NpgsqlParameter { Value = message.Content.Role.Value });
             command.Parameters.Add(
                 new NpgsqlParameter { Value = Serialise(message.Content), NpgsqlDbType = NpgsqlDbType.Jsonb });
+            command.Parameters.Add(new NpgsqlParameter { Value = message.MessageId });
 
             batch.BatchCommands.Add(command);
+        }
+
+        if (state is not null)
+        {
+            NpgsqlBatchCommand stateCommand = new(StateSql);
+            stateCommand.Parameters.Add(new NpgsqlParameter { Value = messages[0].CallId });
+            stateCommand.Parameters.Add(new NpgsqlParameter
+            {
+                Value = JsonSerializer.Serialize(state, CallStateJson.Options),
+                NpgsqlDbType = NpgsqlDbType.Jsonb,
+            });
+
+            batch.BatchCommands.Add(stateCommand);
         }
 
         await batch.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// A row that is not there is not written, and this reports nothing about it: the barge-in that
-    /// asked for it raced the append it corrects, and the append is what carries the corrected words.
-    /// </remarks>
     public async ValueTask RewriteAsync(
         string callId, int ordinal, ChatMessage content, CancellationToken cancellationToken = default)
     {
@@ -295,11 +329,6 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
 
     /// <inheritdoc />
     /// <exception cref="ArgumentNullException">The call id is <see langword="null"/>.</exception>
-    /// <remarks>
-    /// <b>A failed read is worse than a failed write, so this one throws.</b> A write that fails costs
-    /// the durable record of a turn; a read that answered with an empty history would run the turn
-    /// with no memory of the call.
-    /// </remarks>
     public async ValueTask<IReadOnlyList<CallMessage>> ReadAsync(
         string callId, CancellationToken cancellationToken = default)
     {
@@ -317,7 +346,8 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
                 callId,
                 reader.GetInt32(0),
                 reader.GetInt32(1),
-                Deserialise(reader.GetString(2))));
+                Deserialise(reader.GetString(2)),
+                reader.GetString(3)));
         }
 
         return rows;
@@ -325,10 +355,20 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
 
     /// <inheritdoc />
     /// <exception cref="ArgumentNullException">The call id is <see langword="null"/>.</exception>
-    /// <remarks>
-    /// The audit chain keeps its rows and stays intact, because it holds a hash of what was spoken
-    /// and never the words. What the erased call proves, it goes on proving.
-    /// </remarks>
+    public async ValueTask<int> TruncateAsync(
+        string callId, int fromOrdinal, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(callId);
+
+        await using var command = _dataSource.CreateCommand(TruncateSql);
+        command.Parameters.Add(new NpgsqlParameter { Value = callId });
+        command.Parameters.Add(new NpgsqlParameter { Value = fromOrdinal });
+
+        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    /// <exception cref="ArgumentNullException">The call id is <see langword="null"/>.</exception>
     public async ValueTask<int> EraseAsync(string callId, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(callId);
@@ -344,12 +384,6 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>One row for each spoken turn, oldest turn first.</returns>
     /// <exception cref="ArgumentNullException">The call id is <see langword="null"/>.</exception>
-    /// <remarks>
-    /// This is the check that store 1 still holds the words store 3 proves: hash each
-    /// <see cref="TranscriptTurnDigest.Spoken"/> with <c>AuditHash.OfText</c> and compare. A turn
-    /// whose words were erased answers with no row at all, which is the erasure working rather than a
-    /// tamper.
-    /// </remarks>
     public async Task<IReadOnlyList<TranscriptTurnDigest>> ReadSpokenTurnsAsync(
         string callId, CancellationToken cancellationToken = default)
     {
@@ -373,14 +407,6 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
     }
 
 
-    /// <remarks>
-    /// <see cref="TranscriptJson.Options"/> is required here, not merely convenient: the column is
-    /// <c>jsonb</c>, which keeps no key order, so a stored <c>$type</c> discriminator does not come
-    /// back first and every read throws without <c>AllowOutOfOrderMetadataProperties</c> — measured, on
-    /// the first run of these tests. The alternative was the <c>json</c> column type, which keeps the
-    /// text verbatim and gives up every <c>jsonb</c> operator the verify query above is written in,
-    /// <c>@&gt;</c> among them.
-    /// </remarks>
     private static string Serialise(ChatMessage message)
         => JsonSerializer.Serialize(message, TranscriptJson.Options);
 

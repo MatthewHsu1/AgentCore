@@ -1,3 +1,4 @@
+using AgentCore.Application.Calls;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
@@ -13,10 +14,15 @@ namespace AgentCore.Application.Runtime;
 public sealed class CallSessionFactory : ICallSessionFactory
 {
     private readonly CompiledAgent _compiled;
+
     private readonly IGuardEvaluator _guards;
+
     private readonly StateExtractor? _extractor;
+
     private readonly TimeProvider _time;
+
     private readonly ICallObserver[] _observers;
+    
     private readonly ILogger? _logger;
 
     /// <summary>Creates the factory.</summary>
@@ -64,12 +70,23 @@ public sealed class CallSessionFactory : ICallSessionFactory
     }
 
     /// <inheritdoc />
-    public CallSession Create(string? callId = null)
-        => new(
+    public CallSession Create(string? callId = null, CallSessionState? state = null)
+    {
+        CallSession session = new(
             string.IsNullOrWhiteSpace(callId) ? Guid.NewGuid().ToString("N") : callId,
             _compiled,
             _guards,
             _extractor,
             _time,
             new CallObserverDispatcher(_observers, _logger));
+
+        // Named, not applied. The session resumes on its first turn, where store 0's own copy
+        // outranks this one — see the remarks on CallSession.Resume.
+        if (state is not null)
+        {
+            session.Resume(state);
+        }
+
+        return session;
+    }
 }

@@ -14,6 +14,9 @@ public sealed class InMemoryCallStore : ICallStore
 
     private readonly Dictionary<(string CallId, int Ordinal), CallMessage> _rows = [];
 
+    /// <summary>The resume blob of each call, beside the row rather than on it.</summary>
+    private readonly Dictionary<string, CallSessionState> _state = [];
+
     private readonly HashSet<(string CallId, string PrincipalKey)> _claims = [];
 
     private readonly TimeProvider _time;
@@ -36,7 +39,7 @@ public sealed class InMemoryCallStore : ICallStore
                 _calls[callId] = existing;
             }
 
-            return ValueTask.FromResult(existing);
+            return ValueTask.FromResult(existing with { State = _state.GetValueOrDefault(callId) });
         }
     }
 
@@ -47,7 +50,8 @@ public sealed class InMemoryCallStore : ICallStore
 
         lock (_lock)
         {
-            return ValueTask.FromResult(_calls.GetValueOrDefault(callId));
+            var call = _calls.GetValueOrDefault(callId);
+            return ValueTask.FromResult(call is null ? null : call with { State = _state.GetValueOrDefault(callId) });
         }
     }
 
@@ -132,6 +136,7 @@ public sealed class InMemoryCallStore : ICallStore
         {
             _calls.Remove(callId);
             _claims.RemoveWhere(claim => claim.CallId == callId);
+            _state.Remove(callId);
             RemoveWords(callId);
         }
 
@@ -164,6 +169,7 @@ public sealed class InMemoryCallStore : ICallStore
             {
                 _calls.Remove(callId);
                 _claims.RemoveWhere(claim => claim.CallId == callId);
+                _state.Remove(callId);
                 RemoveWords(callId);
             }
 
@@ -204,7 +210,9 @@ public sealed class InMemoryCallStore : ICallStore
 
     /// <inheritdoc />
     public ValueTask AppendAsync(
-        IReadOnlyList<CallMessage> messages, CancellationToken cancellationToken = default)
+        IReadOnlyList<CallMessage> messages,
+        CallSessionState? state = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(messages);
 
@@ -220,6 +228,11 @@ public sealed class InMemoryCallStore : ICallStore
                 {
                     _calls[message.CallId] = call with { LastMessageAt = now };
                 }
+            }
+
+            if (state is not null && messages.Count > 0)
+            {
+                _state[messages[0].CallId] = state;
             }
         }
 
@@ -260,6 +273,28 @@ public sealed class InMemoryCallStore : ICallStore
     }
 
     /// <inheritdoc />
+    public ValueTask<int> TruncateAsync(
+        string callId, int fromOrdinal, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(callId);
+
+        lock (_lock)
+        {
+            var going = _rows.Keys
+                .Where(key => string.Equals(key.CallId, callId, StringComparison.Ordinal)
+                           && key.Ordinal >= fromOrdinal)
+                .ToList();
+
+            foreach (var key in going)
+            {
+                _rows.Remove(key);
+            }
+
+            return ValueTask.FromResult(going.Count);
+        }
+    }
+
+    /// <inheritdoc />
     public ValueTask<int> EraseAsync(string callId, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(callId);
@@ -270,13 +305,8 @@ public sealed class InMemoryCallStore : ICallStore
         }
     }
 
-    /// <remarks>
-    /// The same coalesce the PostgreSQL backing pages by. A NULL sort key would drop a call out of
-    /// every page after the first, and here every call has one.
-    /// </remarks>
     private static DateTimeOffset SortValue(CallRecord call) => call.LastMessageAt ?? call.CreatedAt;
 
-    /// <remarks>The caller holds <see cref="_lock"/>.</remarks>
     private int RemoveWords(string callId)
     {
         var going = _rows.Keys.Where(key => key.CallId == callId).ToList();

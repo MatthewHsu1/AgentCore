@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Tools.Registry;
 using AgentCore.TestSupport;
@@ -12,6 +13,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Secrets;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Calls;
 using AgentCore.Application.Calls.Memory;
 using AgentCore.Application.Transcript;
 using AgentCore.AspNetCore.DependencyInjection;
@@ -1035,6 +1037,88 @@ public sealed class AddAgentCoreTests
     }
 
     // -------------------------------------------------------------------------------------------
+    // The call titler: one model, named by the document like every other model.
+    // -------------------------------------------------------------------------------------------
+
+    // The same agent, and a document that gives the titler a model of its own.
+    private const string TitlerYaml =
+        """
+        apiVersion: agentcore/v1
+        name: composed
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything" }
+        titler:
+          model: { ref: titles }
+        providers:
+          call:   { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: reply }
+            - { kind: openai, model: gpt-4.1-nano, as: titles }
+        """;
+
+    [Fact]
+    public async Task AddAgentCore_GivesTheTitlerTheModelTheDocumentNames()
+    {
+        RecordingChatClientFactory factory = new();
+        using var provider = await BuildAsync(TitlerYaml, options => options.UseChatClients(_ => factory));
+
+        var titler = provider.GetRequiredService<ICallTitler>();
+
+        Assert.IsType<ChatCallTitler>(titler);
+        Assert.Equal("titles", factory.Asked?.Ref);
+    }
+
+    [Fact]
+    public async Task AddAgentCore_GivesTheTitlerTheDefaultModelWhenTheDocumentNamesNone()
+    {
+        RecordingChatClientFactory factory = new();
+        using var provider = await BuildAsync(OneAgentYaml, options => options.UseChatClients(_ => factory));
+
+        provider.GetRequiredService<ICallTitler>();
+
+        // A null reference is how the factory is asked for the first declared entry.
+        Assert.Null(factory.Asked);
+    }
+
+    [Fact]
+    public async Task AddAgentCore_KeepsATitlerTheHostRegisteredFirst()
+    {
+        SilentCallTitler mine = new();
+        HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+        builder.Services.AddSingleton<ICallTitler>(mine);
+        ConfigureServices(builder.Services, TitlerYaml, null);
+
+        using var provider = await StartAsync(builder.Build());
+
+        Assert.Same(mine, provider.GetRequiredService<ICallTitler>());
+    }
+
+    /// <summary>A titler that names nothing, for the test that only asks who won the registration.</summary>
+    private sealed class SilentCallTitler : ICallTitler
+    {
+        public async IAsyncEnumerable<string> GenerateAsync(
+            string callId,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.CompletedTask;
+            yield break;
+        }
+
+        public async IAsyncEnumerable<string> GenerateFromAsync(
+            string callId,
+            IReadOnlyList<ChatMessage> messages,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.CompletedTask;
+            yield break;
+        }
+    }
+
+    // -------------------------------------------------------------------------------------------
     // The audit sink: named by providers.audit, and never absent.
     // -------------------------------------------------------------------------------------------
 
@@ -1311,7 +1395,9 @@ public sealed class AddAgentCoreTests
         }
 
         public override ValueTask AppendAsync(
-            IReadOnlyList<CallMessage> messages, CancellationToken cancellationToken = default)
+            IReadOnlyList<CallMessage> messages,
+            CallSessionState? state = null,
+            CancellationToken cancellationToken = default)
         {
             lock (_gate)
             {
@@ -1704,14 +1790,14 @@ public sealed class AddAgentCoreTests
     }
 
     /// <summary>One well-formed event, which is all a drain has to carry.</summary>
-    /// <param name="sequence">The chain position.</param>
+    /// <param name="secondsPastEpoch">Seconds past the epoch the event occurred at, so callers can order rows.</param>
     /// <returns>The event.</returns>
-    private static AuditEvent AuditRow(long sequence) => new()
+    private static AuditEvent AuditRow(long secondsPastEpoch) => new()
     {
         CallId = "call-1",
-        Sequence = sequence,
+        EventId = Guid.CreateVersion7(),
         Kind = AuditEventKind.TurnCompleted,
-        OccurredAt = DateTimeOffset.UnixEpoch.AddSeconds(sequence),
+        OccurredAt = DateTimeOffset.UnixEpoch.AddSeconds(secondsPastEpoch),
     };
 
     /// <summary>Starts a host on one document, which is where the whole boot happens.</summary>

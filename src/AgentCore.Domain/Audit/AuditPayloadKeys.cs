@@ -46,12 +46,6 @@ public static class AuditPayloadKeys
     /// <summary>
     /// Which of the two ways a tool call fails this one was.
     /// </summary>
-    /// <remarks>
-    /// The value is one wire token of <see cref="Audit.ToolFailureKind"/>, and never free text, for the
-    /// reason <see cref="EndReason"/> gives: the fact is counted years later. It is not required on
-    /// <see cref="AuditEventKind.ToolFailed"/> — a turn whose run threw before any one call could be
-    /// named still writes the event, and a missing fact is an absent key.
-    /// </remarks>
     public const string ToolFailureKind = "toolFailureKind";
 
     /// <summary>
@@ -69,4 +63,14 @@ public static class AuditPayloadKeys
     /// Why the call ended.
     /// </summary>
     public const string EndReason = "endReason";
+
+    /// <summary>
+    /// The lowest turn index an edit withdrew.
+    /// </summary>
+    public const string WithdrewFromTurnIndex = "withdrewFromTurnIndex";
+
+    /// <summary>
+    /// The highest turn index an edit withdrew, included.
+    /// </summary>
+    public const string WithdrewThroughTurnIndex = "withdrewThroughTurnIndex";
 }

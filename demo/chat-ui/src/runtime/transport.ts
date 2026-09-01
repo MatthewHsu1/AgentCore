@@ -137,6 +137,8 @@ export type TurnState = {
   readonly isTerminal: boolean;
   /** Who is speaking, when the host says. `null` means the agent, which is the only case today. */
   readonly speaker: Speaker | null;
+  /** What the host called this reply, once it says. Null until the final chunk carries it. */
+  readonly replyMessageId: string | null;
 };
 
 /** The id of the open call, held for the life of the tab. */
@@ -147,6 +149,21 @@ export type Session = {
 /** The part of `fetch` this module uses, so a test can hand it one that reaches no network. */
 export type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
+/** Where the caller says a turn's words hang, in the conversation it draws. */
+export type TurnOrigin = {
+  /** What this client calls the message it is sending. */
+  readonly message_id?: string;
+  /**
+   * What this client calls the message the new one hangs off, or null at the root of the call.
+   *
+   * The host withdraws everything the call said after this message before it runs the turn. On an
+   * ordinary send that is the last thing the call said, so nothing goes; it is an edit exactly when
+   * the parent is further back, and then the answers to the replaced question stop reaching the
+   * model.
+   */
+  readonly parent_id?: string | null;
+};
+
 /** What one turn needs to run. */
 export type TurnOptions = {
   readonly endpoint: string;
@@ -154,6 +171,8 @@ export type TurnOptions = {
   readonly messages: readonly WireMessage[];
   readonly abortSignal: AbortSignal;
   readonly fetch: FetchLike;
+  /** Omitted by a caller that does not track its messages by name. */
+  readonly origin?: TurnOrigin;
 };
 
 /** What the endpoint adds beside the OpenAI shape on the last chunk of a stream. */
@@ -162,6 +181,13 @@ type TurnInfo = {
   stage_before?: string;
   stage_after?: string;
   is_terminal?: boolean;
+  /**
+   * What the host called the reply it just wrote.
+   *
+   * Needed because the message an edit hangs off is usually a reply, and a reply has no name until
+   * the host writes it — so this client cannot invent one and has to be told.
+   */
+  message_id?: string;
 };
 
 /** One half of one tool call, as the endpoint writes it. */
@@ -264,7 +290,11 @@ function post(options: TurnOptions, session: string | null): Promise<Response> {
   return options.fetch(options.endpoint, {
     method: "POST",
     headers,
-    body: JSON.stringify({ messages: options.messages, stream: true }),
+    body: JSON.stringify({
+      messages: options.messages,
+      stream: true,
+      ...(options.origin ? { agentcore: options.origin } : {}),
+    }),
     signal: options.abortSignal,
   });
 }
@@ -395,6 +425,7 @@ export async function* runTurn(options: TurnOptions): AsyncGenerator<TurnState> 
   let stage = response.headers.get(StageHeader);
   let isTerminal = false;
   let speaker: Speaker | null = null;
+  let replyMessageId: string | null = null;
 
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
   let pending = "";
@@ -432,11 +463,23 @@ export async function* runTurn(options: TurnOptions): AsyncGenerator<TurnState> 
         // Sticky: a handoff names the speaker once, and every chunk after it belongs to them.
         speaker = chunk.agentcore_speaker ?? speaker;
 
+        const state = () => ({
+          text,
+          data,
+          tools,
+          sources,
+          stage,
+          isTerminal,
+          speaker,
+          replyMessageId,
+        });
+
         const info = chunk.agentcore;
         if (info) {
           stage = info.stage_after ?? stage;
           isTerminal = info.is_terminal ?? isTerminal;
-          yield { text, data, tools, sources, stage, isTerminal, speaker };
+          replyMessageId = info.message_id ?? replyMessageId;
+          yield state();
         }
 
         const rendered = chunk.agentcore_data;
@@ -444,25 +487,25 @@ export async function* runTurn(options: TurnOptions): AsyncGenerator<TurnState> 
           // A new array each time: the yielded state is read after the yield, so the consumer must
           // never see a list this loop keeps changing underneath it.
           data = [...data, rendered];
-          yield { text, data, tools, sources, stage, isTerminal, speaker };
+          yield state();
         }
 
         const tool = chunk.agentcore_tool;
         if (tool) {
           tools = foldTool(tools, tool);
-          yield { text, data, tools, sources, stage, isTerminal, speaker };
+          yield state();
         }
 
         const source = chunk.agentcore_source;
         if (source) {
           sources = foldSource(sources, source);
-          yield { text, data, tools, sources, stage, isTerminal, speaker };
+          yield state();
         }
 
         const delta = chunk.choices?.[0]?.delta?.content;
         if (delta) {
           text += delta;
-          yield { text, data, tools, sources, stage, isTerminal, speaker };
+          yield state();
         }
       }
     }

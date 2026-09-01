@@ -1,3 +1,4 @@
+using AgentCore.Application.Calls;
 using AgentCore.Application.Ports;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -48,7 +49,9 @@ namespace AgentCore.Application.Runtime;
 public sealed class AgentCoreAgent : AIAgent
 {
     private readonly ICallSessionFactory _sessions;
+
     private readonly string? _name;
+    
     private readonly string? _description;
 
     /// <summary>Creates the shim over one compiled document's turn loop.</summary>
@@ -95,25 +98,99 @@ public sealed class AgentCoreAgent : AIAgent
 
     /// <inheritdoc />
     /// <remarks>
-    /// Not supported yet. Everything a resumed call needs — the transcript, the state document, the
-    /// stage, the event ordinal — lives on <see cref="CallSession"/>, which does not expose its
-    /// private state for rehydration today. This shim is the seam that makes call resume across a
-    /// process restart possible at all; building it means giving <see cref="CallSession"/> a
-    /// serialization surface, which is its own change with its own review, not a rider on this one.
+    /// <para>
+    /// What travels is the call's id and what its session alone holds: the stage, whether the
+    /// machine finished, and the slots the writers filled. That is a <see cref="CallSessionState"/>
+    /// under the id it belongs to — the same pairing <c>ChatClientAgentSession</c> writes as
+    /// <c>{ conversationId, stateBag }</c>, and for the same reason. State that travelled without
+    /// its id would come back on a call that has none of its words behind it.
+    /// </para>
+    /// <para>
+    /// <b>The words are not here.</b> They are store 1, which is durable already, so a checkpoint
+    /// that carried them would give one conversation two records and one chance to disagree. The
+    /// price is that this is a key and not a copy: a host moving a session between processes still
+    /// needs the shared store behind it, or the revived call answers with an empty transcript.
+    /// </para>
+    /// <para>
+    /// <b>This blob is not store 0's.</b> A host's <paramref name="jsonSerializerOptions"/> reach
+    /// the nested <c>state</c> member too, not the envelope alone, so that member is encoded to the
+    /// host's rules and not to <see cref="CallStateJson.Options"/>, which every store agrees on. It
+    /// is harmless while the member stays inside the envelope, because this seam and its reader are
+    /// symmetric. Lifting it out and writing it to store 0 is what would not be.
+    /// </para>
     /// </remarks>
     protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
         AgentSession session,
         JsonSerializerOptions? jsonSerializerOptions = null,
         CancellationToken cancellationToken = default)
-        => throw new NotSupportedException(SerializationNotSupported);
+    {
+        // Refused, where a run answers a null session by making one. The fabricated call is the
+        // framework's one-shot shape for a RUN — one turn of a call nothing continues — and there is
+        // no such thing as a one-shot serialize: what it would write is an envelope naming a fresh
+        // random id beside an empty state, and a host would keep that as its checkpoint and never
+        // learn it points at nothing. The parameter is not nullable, so this only catches a caller
+        // that went around the type.
+        ArgumentNullException.ThrowIfNull(session);
+
+        var call = Resolve(session);
+
+        return new(JsonSerializer.SerializeToElement(
+            new SerializedSession(call.CallId, call.Snapshot()),
+            jsonSerializerOptions ?? CallStateJson.Options));
+    }
 
     /// <inheritdoc />
-    /// <remarks>Not supported yet, for the reason <see cref="SerializeSessionCoreAsync"/> gives.</remarks>
+    /// <remarks>
+    /// <para>
+    /// Reads back what <see cref="SerializeSessionCoreAsync"/> wrote — see its remarks for what the
+    /// blob does and does not carry. It is host-facing, so what arrives is not necessarily anything
+    /// this library wrote, and it stays lenient about that: a blob that names no call gets a new id,
+    /// exactly as <see cref="AIAgent.CreateSessionAsync(CancellationToken)"/> does, and state the
+    /// document no longer allows is dropped slot by slot with a diagnostic rather than refusing the
+    /// call. That second contract is <see cref="CallSession.Resume"/>'s and this method does not
+    /// double it.
+    /// </para>
+    /// <para>
+    /// The one blob it refuses carries neither member. That is not a validation layer over
+    /// <see cref="CallSession.Resume"/> but a guard against one specific confusion this library
+    /// creates itself: a bare <see cref="CallSessionState"/> is the literal value in store 0's
+    /// <c>call.state</c> column, so a host reaching for "the state of this call" reaches for the
+    /// wrong one of two shapes. Read as an envelope it names no call and holds no state, and the
+    /// failure is silent and total — a new random id, and the transcript orphaned behind it.
+    /// <see cref="SerializeSessionCoreAsync"/> can never write that blob, so refusing it costs the
+    /// lenient path nothing.
+    /// </para>
+    /// <para>
+    /// <b>Store 0 outranks what arrives here.</b> The state travels with the call's id, and the
+    /// first turn of the revived call reads store 0 under that id; where store 0 holds state of its
+    /// own it wins outright, because its blob rides the same batch as the words. So this decides
+    /// only a call store 0 does not know, or knows without state. See
+    /// <see cref="CallSession.Resume"/>.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="serializedState"/> names no call and holds no state.
+    /// </exception>
     protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
         JsonElement serializedState,
         JsonSerializerOptions? jsonSerializerOptions = null,
         CancellationToken cancellationToken = default)
-        => throw new NotSupportedException(SerializationNotSupported);
+    {
+        var stored = serializedState.Deserialize<SerializedSession>(
+            jsonSerializerOptions ?? CallStateJson.Options);
+
+        if (stored is null or { CallId: null, State: null })
+        {
+            throw new ArgumentException(
+                "The serialized session names no call and holds no state, so it is not one this "
+                + "agent wrote. It expects { callId, state } — the call's id beside its state. A "
+                + "bare CallSessionState, the value store 0 keeps in call.state, is the other shape "
+                + "and reading it as this one would lose the call's transcript.",
+                nameof(serializedState));
+        }
+
+        return new(new AgentCoreAgentSession(_sessions.Create(stored.CallId, stored.State)));
+    }
 
     /// <inheritdoc />
     protected override async Task<AgentResponse> RunCoreAsync(
@@ -154,12 +231,6 @@ public sealed class AgentCoreAgent : AIAgent
             yield return new AgentResponseUpdate(update) { AgentId = Id };
         }
     }
-
-    /// <summary>The message both serialization methods throw with.</summary>
-    /// <remarks>Internal so a test asserts the message a host reads, and D15 keeps it off the public surface.</remarks>
-    internal const string SerializationNotSupported =
-        "This agent cannot serialize a session yet. A call's state lives on CallSession, which has no "
-        + "serialization surface today. See the remarks on AgentCoreAgent.SerializeSessionCoreAsync.";
 
     /// <summary>Finds the call a run belongs to.</summary>
     /// <param name="session">The session the caller passed, or <see langword="null"/>.</param>
@@ -207,6 +278,17 @@ public sealed class AgentCoreAgent : AIAgent
             + "the transcript: pass what the caller just said, not a history.",
             nameof(messages));
     }
+
+    /// <summary>One serialized session: the call it is, and the state it held.</summary>
+    /// <param name="CallId">The id of the call. Store 1 is keyed by it, so it is the half that finds the words.</param>
+    /// <param name="State">What the session alone held, or <see langword="null"/> when the blob named none.</param>
+    /// <remarks>
+    /// A separate shape from <see cref="CallSessionState"/> on purpose. That one is the value store 0
+    /// writes under a <c>call_id</c> column, so putting the id inside it would give one fact two
+    /// homes; here there is no column, so the envelope carries the key beside the value instead.
+    /// Internal because it is a wire shape and not a promise: D15 makes every public type permanent.
+    /// </remarks>
+    internal sealed record SerializedSession(string? CallId, CallSessionState? State);
 
     /// <summary>One call, as the framework sees it.</summary>
     /// <remarks>

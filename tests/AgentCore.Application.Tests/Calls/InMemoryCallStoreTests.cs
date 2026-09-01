@@ -1,5 +1,8 @@
 using AgentCore.Application.Calls;
 using AgentCore.Application.Calls.Memory;
+using AgentCore.Application.Transcript;
+using AgentCore.Application.Tests.Runtime;
+using Microsoft.Extensions.AI;
 using Xunit;
 
 namespace AgentCore.Application.Tests.Calls;
@@ -224,4 +227,44 @@ public sealed class InMemoryCallStoreTests
         Assert.Null(await store.GetAsync("c1", Token));
         Assert.Empty((await store.ListAsync("person-a", after: null, limit: 10, cancellationToken: Token)).Calls);
     }
+
+    [Fact]
+    public async Task DeleteAsync_ACall_TakesItsResumeStateWithIt()
+    {
+        // Arrange — the state lives beside the row rather than on it, so it has to be forgotten by
+        // hand. In PostgreSQL it is a column of the call row and DELETE FROM call takes it, and the
+        // two backings answering differently is the defect this pins.
+        InMemoryCallStore store = new();
+        await store.CreateAsync("c1", Token);
+        await store.AppendAsync([Word("c1")], new CallSessionState { Stage = "collecting" }, Token);
+
+        // Act
+        await store.DeleteAsync("c1", Token);
+
+        // Assert — a call made again under the same id is a NEW call, not the dead one resurrected
+        // with its stage and the caller data the extractor left in its slots.
+        Assert.Null((await store.CreateAsync("c1", Token)).State);
+    }
+
+    [Fact]
+    public async Task SweepAsync_ACallPastRetention_TakesItsResumeStateWithIt()
+    {
+        // Arrange — retention is the promise that a call stops existing, and slots hold what the
+        // extractor took from the caller, so state left behind is data kept past the promise.
+        TestTimeProvider clock = new();
+        InMemoryCallStore store = new(clock);
+        await store.CreateAsync("c1", Token);
+        await store.AppendAsync([Word("c1")], new CallSessionState { Stage = "collecting" }, Token);
+
+        // Act
+        clock.Advance(TimeSpan.FromDays(2));
+        var swept = await store.SweepAsync(TimeSpan.FromDays(1), cancellationToken: Token);
+
+        // Assert
+        Assert.Equal(1, swept);
+        Assert.Null((await store.CreateAsync("c1", Token)).State);
+    }
+
+    private static CallMessage Word(string callId)
+        => new(callId, 0, 0, new ChatMessage(ChatRole.User, "hello"), "m0");
 }

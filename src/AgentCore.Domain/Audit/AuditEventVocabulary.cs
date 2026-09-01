@@ -14,20 +14,21 @@ public static class AuditEventVocabulary
             throw new ArgumentException("An audit event carries a call id.", nameof(auditEvent));
         }
 
-        if (auditEvent.Sequence < 0)
+        if (auditEvent.EventId == Guid.Empty)
         {
-            throw new ArgumentException(
-                $"An audit event sequence counts from zero. This one is {auditEvent.Sequence}.",
-                nameof(auditEvent));
+            throw new ArgumentException("An audit event carries an identity.", nameof(auditEvent));
         }
 
         // The token lookup refuses a value outside the closed set.
         _ = AuditEventKinds.ToToken(auditEvent.Kind);
 
-        if (auditEvent.AmendsSequence is long amends && amends >= auditEvent.Sequence)
+        // The chain is ordered by the sequence the STORE assigns, so "earlier" is not a fact this
+        // record can check: an id is an identity and never a position. What is checkable here is the
+        // one shape that is always wrong, and the store enforces the rest.
+        if (auditEvent.AmendsEventId == auditEvent.EventId)
         {
             throw new ArgumentException(
-                $"An amendment names an earlier event. Event {auditEvent.Sequence} names {amends}.",
+                $"An amendment names another event. Event {auditEvent.EventId} names itself.",
                 nameof(auditEvent));
         }
 
@@ -35,10 +36,10 @@ public static class AuditEventVocabulary
         {
             // T23: the chain is append-only, so a barge-in is a second event that references the
             // turn event. An interruption that amends nothing loses the turn it belongs to.
-            if (auditEvent.AmendsSequence is null)
+            if (auditEvent.AmendsEventId is null)
             {
                 throw new ArgumentException(
-                    "A reply.interrupted event amends the turn.completed event of the same turn, so it sets AmendsSequence. See T23.",
+                    "A reply.interrupted event amends the turn.completed event of the same turn, so it sets AmendsEventId. See T23.",
                     nameof(auditEvent));
             }
 
@@ -67,7 +68,7 @@ public static class AuditEventVocabulary
             // §9 makes this chain the only long-term record. The kind alone says something flagged
             // the caller, and the categories are the only other fact the event carries, so the fact
             // goes in with the event or it is lost. This is the argument the chain already makes for
-            // utteranceUntilInterrupt above. No AmendsSequence rule stands here: the verdict is known
+            // utteranceUntilInterrupt above. No AmendsEventId rule stands here: the verdict is known
             // BEFORE the model runs, so the event is written before the turn.completed event of the
             // same turn and amends nothing. TurnIndex names the turn.
             if (!auditEvent.Payload.TryGetValue(AuditPayloadKeys.ModerationCategories, out string? categories)

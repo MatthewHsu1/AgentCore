@@ -11,9 +11,9 @@ namespace AgentCore.Application.Tests.Diagnostics;
 /// </summary>
 /// <remarks>
 /// Moving the call sites behind the hook must change neither the text an operator greps for nor how
-/// often it appears, so these tests pin the event id, the level, and the fields of each of the five
-/// lines. They also pin the five kinds that write nothing: a normal call is recorded by the chain of
-/// D23, and a log is not.
+/// often it appears, so these tests pin the event id, the level, and the fields of each of the six
+/// lines. They also pin the six kinds that write nothing here: a normal call is recorded by the chain
+/// of D23, and a log is not.
 /// </remarks>
 public sealed class LoggingCallObserverTests
 {
@@ -25,8 +25,9 @@ public sealed class LoggingCallObserverTests
     private const int EmptyReplyEventId = 3;
     private const int PromptRefusedEventId = 6;
     private const int ModerationUnavailableEventId = 7;
+    private const int StateRestorePartialEventId = 13;
 
-    /// <summary>The kinds the chain records and no line reports.</summary>
+    /// <summary>The kinds this observer writes no line for.</summary>
     public static TheoryData<CallEventKind> QuietKinds =>
     [
         CallEventKind.CallStarted,
@@ -34,7 +35,11 @@ public sealed class LoggingCallObserverTests
         CallEventKind.ReplyInterrupted,
         CallEventKind.CallEnded,
 
-        // The quietest of them all: counted, and not even logged.
+        // Logged, but not here: the line is written where the write was refused, which is the only
+        // place the exception still exists. A line from this observer too would double it.
+        CallEventKind.TranscriptWriteFailed,
+
+        // The quietest of them all: counted, and not logged anywhere.
         CallEventKind.ModerationClean,
     ];
 
@@ -130,6 +135,30 @@ public sealed class LoggingCallObserverTests
             line.Message);
     }
 
+    [Fact]
+    public async Task APartialStateRestore_IsAWarningNamingTheCallAndWhatItLost()
+    {
+        RecordingLogger logger = new();
+
+        // No turn index: the call is still opening. It is documented as logged, and until this line
+        // existed it was not — a document change that cost every resumed call its stage produced no
+        // line and no metric, and six tests of the restore itself passed straight over the silence.
+        await Observe(
+            logger,
+            Event(
+                CallEventKind.StateRestorePartial,
+                turnIndex: null,
+                CallEventPayloadKeys.Reason,
+                "the document no longer declares the slot 'model'."));
+
+        var line = Assert.Single(logger.Of(StateRestorePartialEventId));
+        Assert.Equal(LogLevel.Warning, line.Level);
+        Assert.Equal(
+            "Call call-1 could not restore part of its stored state: the document no longer declares "
+                + "the slot 'model'. The call resumes without that part.",
+            line.Message);
+    }
+
     [Theory]
     [MemberData(nameof(QuietKinds))]
     public async Task AKindTheChainRecords_WritesNoLine(CallEventKind kind)
@@ -167,7 +196,7 @@ public sealed class LoggingCallObserverTests
         await observer.OnCallEventAsync(callEvent, TestContext.Current.CancellationToken);
     }
 
-    private static CallEvent Event(CallEventKind kind, int turnIndex, string? key = null, string? detail = null)
+    private static CallEvent Event(CallEventKind kind, int? turnIndex, string? key = null, string? detail = null)
     {
         Dictionary<string, string> payload = new(StringComparer.Ordinal);
         if (key is not null && detail is not null)

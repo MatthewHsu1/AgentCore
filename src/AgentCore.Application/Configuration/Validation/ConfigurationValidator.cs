@@ -169,6 +169,11 @@ public static class ConfigurationValidator
             AddUnknownModel(evaluation.Judge, "/evaluation/judge/ref", names, errors);
         }
 
+        if (configuration.Titler is { } titler)
+        {
+            AddUnknownModel(titler.Model, "/titler/model/ref", names, errors);
+        }
+
         var items = configuration.Agents?.Items ?? [];
         if (configuration.Agents?.Defaults is { } defaults)
         {

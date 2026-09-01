@@ -21,8 +21,8 @@ namespace AgentCore.Application.Tests.Audit;
 /// The turn loop writes the audit chain of D23, and the sink never sits on the turn.
 /// </summary>
 /// <remarks>
-/// The session is the only place that knows the turn index, both stages, and the sequence a later
-/// amendment must reference, so it is the only place that produces an event.
+/// The session is the only place that knows the turn index, both stages, and the identity a later
+/// amendment must name, so it is the only place that produces an event.
 /// </remarks>
 public sealed class CallSessionAuditTests
 {
@@ -67,10 +67,10 @@ public sealed class CallSessionAuditTests
     private const string SaidGoodbye = """{ "callerSaidGoodbye": true }""";
 
     // -------------------------------------------------------------------------------------------
-    // The events, and the sequence a later amendment references.
+    // The events, and the identity a later amendment names.
     // -------------------------------------------------------------------------------------------
     [Fact]
-    public void ANewSession_WritesTheCallStartedEventAtSequenceZero()
+    public void ANewSession_WritesTheCallStartedEvent()
     {
         using SequencedChatClient reply = new("hello there.");
         using SequencedChatClient fill = new(StayingNull);
@@ -80,10 +80,56 @@ public sealed class CallSessionAuditTests
 
         var started = Assert.Single(sink.EventsOf("call-1"));
         Assert.Equal(AuditEventKind.CallStarted, started.Kind);
-        Assert.Equal(0, started.Sequence);
+        Assert.NotEqual(Guid.Empty, started.EventId);
         Assert.Null(started.TurnIndex);
-        Assert.Null(started.AmendsSequence);
+        Assert.Null(started.AmendsEventId);
         Assert.Equal(session.CallId, started.CallId);
+    }
+
+    [Fact]
+    public async Task ASecondSessionOfOneCall_CollidesWithNothing()
+    {
+        using SequencedChatClient reply = new("hello there.", "still here.");
+        using SequencedChatClient fill = new(StayingNull, StayingNull);
+        InMemoryAuditSink sink = new();
+
+        // One factory, so both sessions share one compiled agent and one store — which is what a host
+        // holds, and what makes the second session a resume rather than a different call.
+        var factory = Build(PolicyYaml, reply, fill, auditSink: sink);
+
+        var first = factory.Create("call-1");
+        await first.RunTurnAsync("hello", TestContext.Current.CancellationToken);
+        await first.FlushTranscriptAsync();
+
+        var second = factory.Create("call-1");
+        await second.RunTurnAsync("still there?", TestContext.Current.CancellationToken);
+        await second.FlushTranscriptAsync();
+
+        var written = sink.EventsOf("call-1");
+
+        // The shape is the assertion, and both halves of it are the point.
+        //
+        // ARRIVAL: before this change the second session restarted its counter at zero, store 3
+        // refused every event it raised, and a resumed call lost its whole audit trail. The proof of
+        // the fix is that the second session's two events are HERE — distinctness proves nothing,
+        // because InMemoryAuditSink enforces no key and Guid.CreateVersion7 is unique by
+        // construction, so that assertion passed just as well over the two events that never arrived.
+        //
+        // A SECOND call.started: a session opening onto a call that already has words raises one, and
+        // it is kept rather than suppressed. See AuditEventKind.CallStarted for why. This is where
+        // that decision is visible, so a build that quietly stopped raising it fails here.
+        Assert.Equal(
+            [
+                AuditEventKind.CallStarted,
+                AuditEventKind.TurnCompleted,
+                AuditEventKind.CallStarted,
+                AuditEventKind.TurnCompleted,
+            ],
+            written.Select(item => item.Kind).ToArray());
+
+        var ids = written.Select(item => item.EventId).ToArray();
+        Assert.Equal(ids.Length, ids.Distinct().Count());
+        Assert.DoesNotContain(Guid.Empty, ids);
     }
 
     [Fact]
@@ -99,7 +145,7 @@ public sealed class CallSessionAuditTests
         var turn = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
         var completed = Assert.Single(sink.EventsOf("call-1"), item => item.Kind == AuditEventKind.TurnCompleted);
-        Assert.Equal(1, completed.Sequence);
+        Assert.Same(completed, sink.EventsOf("call-1")[1]);
         Assert.Equal(0, completed.TurnIndex);
         Assert.Equal(AuditHash.OfText("hello there.").Value, completed.Payload[AuditPayloadKeys.ReplyTextSha256]);
         Assert.Equal("greeting", completed.Payload[AuditPayloadKeys.StageBefore]);
@@ -136,8 +182,9 @@ public sealed class CallSessionAuditTests
         var cut = Assert.Single(events, item => item.Kind == AuditEventKind.ReplyInterrupted);
 
         // T23: the chain is append-only, so an amendment is a second event that references the first.
-        Assert.Equal(completed.Sequence, cut.AmendsSequence);
-        Assert.True(cut.Sequence > completed.Sequence);
+        var chain = sink.EventsOf("call-1");
+        Assert.Equal(completed.EventId, cut.AmendsEventId);
+        Assert.True(chain.ToList().IndexOf(cut) > chain.ToList().IndexOf(completed));
         Assert.Equal(completed.TurnIndex, cut.TurnIndex);
 
         // Item 6a: the event records the text the caller ACTUALLY HEARD. Nothing here is estimated,
@@ -163,7 +210,8 @@ public sealed class CallSessionAuditTests
         // and one for the turn that ended because of them. Five in all, and every one of them before
         // the turn event.
         Assert.Equal(5, failures.Length);
-        Assert.All(failures, failure => Assert.True(failure.Sequence < completed.Sequence));
+        var order = sink.EventsOf("call-1").ToList();
+        Assert.All(failures, failure => Assert.True(order.IndexOf(failure) < order.IndexOf(completed)));
         Assert.All(failures, failure => Assert.Equal(0, failure.TurnIndex));
 
         // The turn-level row is the one section 8.7 row six has always written, and it is unchanged:
@@ -332,15 +380,15 @@ public sealed class CallSessionAuditTests
         {
             var events = sink.EventsOf($"call-{index}");
 
-            // Each call recorded exactly its own failure, under its own id, and the sequence is still
-            // gap-free from zero. A record that had leaked between two flows would show up as a
-            // second tool.failed here or as a hole in the sequence there.
+            // Each call recorded exactly its own failure, under its own id, and its three events kept
+            // their own order. A record that had leaked between two flows would show up as a second
+            // tool.failed here or as one of these kinds out of place.
             var failed = Assert.Single(events, item => item.Kind == AuditEventKind.ToolFailed);
             Assert.Equal("lookup_order", failed.Payload[AuditPayloadKeys.ToolName]);
             Assert.NotEmpty(failed.Payload[AuditPayloadKeys.ToolCallId]);
             Assert.Equal(
-                Enumerable.Range(0, events.Count).Select(sequence => (long)sequence).ToArray(),
-                events.Select(item => item.Sequence).ToArray());
+                [AuditEventKind.CallStarted, AuditEventKind.ToolFailed, AuditEventKind.TurnCompleted],
+                events.Select(item => item.Kind).ToArray());
             Assert.All(events, AuditEventVocabulary.Validate);
         }
     }
@@ -435,9 +483,10 @@ public sealed class CallSessionAuditTests
 
         var events = sink.EventsOf("call-1");
 
-        // The sequence is monotonic and starts at zero, which is what an amendment references and
-        // what orders two events inside one millisecond.
-        Assert.Equal([0L, 1L, 2L, 3L], events.Select(item => item.Sequence).ToArray());
+        // Four facts, four identities, none of them repeated. What orders them is
+        // audit_event.sequence, which the store assigns and which this test never sees.
+        Assert.Equal(4, events.Count);
+        Assert.Equal(events.Count, events.Select(item => item.EventId).Distinct().Count());
 
         // This is chain_check of section 11, item 6, run over what the turn loop produced.
         Assert.All(events, AuditEventVocabulary.Validate);
