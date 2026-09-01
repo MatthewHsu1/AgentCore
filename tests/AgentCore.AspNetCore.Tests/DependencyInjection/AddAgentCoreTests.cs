@@ -1107,6 +1107,15 @@ public sealed class AddAgentCoreTests
             await Task.CompletedTask;
             yield break;
         }
+
+        public async IAsyncEnumerable<string> GenerateFromAsync(
+            string callId,
+            IReadOnlyList<ChatMessage> messages,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.CompletedTask;
+            yield break;
+        }
     }
 
     // -------------------------------------------------------------------------------------------
