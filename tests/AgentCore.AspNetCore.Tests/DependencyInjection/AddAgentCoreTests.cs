@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Tools.Registry;
 using AgentCore.TestSupport;
@@ -1033,6 +1034,79 @@ public sealed class AddAgentCoreTests
         // The in-memory publisher grows without a bound, and a long-running host replaces it. Every
         // registration therefore steps aside, exactly as the session store does.
         Assert.Same(mine, provider.GetRequiredService<EvaluationSampler>());
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // The call titler: one model, named by the document like every other model.
+    // -------------------------------------------------------------------------------------------
+
+    // The same agent, and a document that gives the titler a model of its own.
+    private const string TitlerYaml =
+        """
+        apiVersion: agentcore/v1
+        name: composed
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything" }
+        titler:
+          model: { ref: titles }
+        providers:
+          call:   { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: reply }
+            - { kind: openai, model: gpt-4.1-nano, as: titles }
+        """;
+
+    [Fact]
+    public async Task AddAgentCore_GivesTheTitlerTheModelTheDocumentNames()
+    {
+        RecordingChatClientFactory factory = new();
+        using var provider = await BuildAsync(TitlerYaml, options => options.UseChatClients(_ => factory));
+
+        var titler = provider.GetRequiredService<ICallTitler>();
+
+        Assert.IsType<ChatCallTitler>(titler);
+        Assert.Equal("titles", factory.Asked?.Ref);
+    }
+
+    [Fact]
+    public async Task AddAgentCore_GivesTheTitlerTheDefaultModelWhenTheDocumentNamesNone()
+    {
+        RecordingChatClientFactory factory = new();
+        using var provider = await BuildAsync(OneAgentYaml, options => options.UseChatClients(_ => factory));
+
+        provider.GetRequiredService<ICallTitler>();
+
+        // A null reference is how the factory is asked for the first declared entry.
+        Assert.Null(factory.Asked);
+    }
+
+    [Fact]
+    public async Task AddAgentCore_KeepsATitlerTheHostRegisteredFirst()
+    {
+        SilentCallTitler mine = new();
+        HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+        builder.Services.AddSingleton<ICallTitler>(mine);
+        ConfigureServices(builder.Services, TitlerYaml, null);
+
+        using var provider = await StartAsync(builder.Build());
+
+        Assert.Same(mine, provider.GetRequiredService<ICallTitler>());
+    }
+
+    /// <summary>A titler that names nothing, for the test that only asks who won the registration.</summary>
+    private sealed class SilentCallTitler : ICallTitler
+    {
+        public async IAsyncEnumerable<string> GenerateAsync(
+            string callId,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.CompletedTask;
+            yield break;
+        }
     }
 
     // -------------------------------------------------------------------------------------------

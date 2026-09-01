@@ -1,4 +1,5 @@
 using AgentCore.Application.Audit;
+using AgentCore.Application.Calls;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Ports;
@@ -75,10 +76,17 @@ public static class AgentCoreServiceCollectionExtensions
             provider.GetService<ILoggerFactory>()?.CreateLogger<CallSessionSweeper>()
                 ?? NullLogger<CallSessionSweeper>.Instance));
 
+        services.TryAddSingleton<ICallTitler>(provider => new ChatCallTitler(
+            provider.GetRequiredService<ICallStore>(),
+            provider.GetRequiredService<IChatClientFactory>()
+                .GetChatClient(provider.GetRequiredService<AgentCoreConfiguration>().Titler?.Model)));
+
         services.TryAddSingleton(Boot(boot => boot.Evaluators));
+
         services.TryAddSingleton(provider => new EvaluationSampler(
             provider.GetRequiredService<AgentCoreConfiguration>().Evaluation?.SampleRate
             ?? EvaluationConfiguration.DefaultSampleRate));
+            
         services.TryAddSingleton<IEvaluationScorePublisher, InMemoryEvaluationScorePublisher>();
 
         return services;

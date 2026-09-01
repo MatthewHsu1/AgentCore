@@ -110,4 +110,7 @@ public sealed record AgentCoreConfiguration
 
     /// <summary>Gets the evaluation settings, or <see langword="null"/> when the document declares none.</summary>
     public EvaluationConfiguration? Evaluation { get; init; }
+
+    /// <summary>Gets the titler settings, or <see langword="null"/> when the document declares none.</summary>
+    public TitlerConfiguration? Titler { get; init; }
 }

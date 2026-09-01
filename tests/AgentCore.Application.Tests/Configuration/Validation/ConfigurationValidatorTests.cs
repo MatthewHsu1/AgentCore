@@ -159,6 +159,29 @@ public sealed class ConfigurationValidatorTests
     }
 
     [Fact]
+    public void AnUnknownTitlerModel_FailsCheckTwoWithThePointerOfTheReference()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            titler:
+              model: { ref: ghost }
+            providers:
+              call:   { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
+              llm:
+                - { kind: openai, model: gpt-4.1-mini, as: reply }
+            """;
+
+        var error = Assert.Single(Evaluate(document, ConfigurationCheck.ReferenceResolution));
+
+        Assert.Equal("/titler/model/ref", error.Pointer);
+        Assert.Equal("the model 'ghost' is not declared in providers.llm", error.Message);
+    }
+
+    [Fact]
     public void AnEvaluationSectionWithNoJudge_PassesCheckTwo()
     {
         const string document = """

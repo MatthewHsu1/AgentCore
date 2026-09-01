@@ -277,6 +277,8 @@ AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.RefusalReply.g
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.RefusalReply.init -> void
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.State.get -> System.Collections.Generic.IReadOnlyDictionary<string!, AgentCore.Application.Configuration.Schema.StateSlotConfiguration!>!
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.State.init -> void
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Titler.get -> AgentCore.Application.Configuration.Schema.TitlerConfiguration?
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Titler.init -> void
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Tools.get -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Configuration.Schema.ToolConfiguration!>!
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Tools.init -> void
 AgentCore.Application.Configuration.Schema.AgentDefaults
@@ -648,6 +650,12 @@ AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.Servic
 AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.Sources.get -> System.Collections.Generic.IReadOnlyList<string!>!
 AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.Sources.init -> void
 AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.TelemetryProviderConfiguration() -> void
+AgentCore.Application.Configuration.Schema.TitlerConfiguration
+AgentCore.Application.Configuration.Schema.TitlerConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.TitlerConfiguration!
+AgentCore.Application.Configuration.Schema.TitlerConfiguration.Equals(AgentCore.Application.Configuration.Schema.TitlerConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.TitlerConfiguration.Model.get -> AgentCore.Application.Configuration.Schema.ModelReference!
+AgentCore.Application.Configuration.Schema.TitlerConfiguration.Model.init -> void
+AgentCore.Application.Configuration.Schema.TitlerConfiguration.TitlerConfiguration() -> void
 AgentCore.Application.Configuration.Schema.ToolConfiguration
 AgentCore.Application.Configuration.Schema.ToolConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.ToolConfiguration!
 AgentCore.Application.Configuration.Schema.ToolConfiguration.Agent.get -> string?
@@ -1318,6 +1326,9 @@ override AgentCore.Application.Configuration.Schema.StateSlotConfiguration.ToStr
 override AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.TitlerConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.TitlerConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.TitlerConfiguration.ToString() -> string!
 override AgentCore.Application.Configuration.Schema.ToolConfiguration.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.ToolConfiguration.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.ToolConfiguration.ToString() -> string!
@@ -1484,6 +1495,8 @@ static AgentCore.Application.Configuration.Schema.StateSlotConfiguration.operato
 static AgentCore.Application.Configuration.Schema.StateSlotConfiguration.operator ==(AgentCore.Application.Configuration.Schema.StateSlotConfiguration? left, AgentCore.Application.Configuration.Schema.StateSlotConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.operator !=(AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration? left, AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.operator ==(AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration? left, AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.TitlerConfiguration.operator !=(AgentCore.Application.Configuration.Schema.TitlerConfiguration? left, AgentCore.Application.Configuration.Schema.TitlerConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.TitlerConfiguration.operator ==(AgentCore.Application.Configuration.Schema.TitlerConfiguration? left, AgentCore.Application.Configuration.Schema.TitlerConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.ToolConfiguration.operator !=(AgentCore.Application.Configuration.Schema.ToolConfiguration? left, AgentCore.Application.Configuration.Schema.ToolConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.ToolConfiguration.operator ==(AgentCore.Application.Configuration.Schema.ToolConfiguration? left, AgentCore.Application.Configuration.Schema.ToolConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.ToolResultReference.TryParse(string? text, out AgentCore.Application.Configuration.Schema.ToolResultReference? reference) -> bool
