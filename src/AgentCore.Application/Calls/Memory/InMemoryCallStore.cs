@@ -273,6 +273,28 @@ public sealed class InMemoryCallStore : ICallStore
     }
 
     /// <inheritdoc />
+    public ValueTask<int> TruncateAsync(
+        string callId, int fromOrdinal, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(callId);
+
+        lock (_lock)
+        {
+            var going = _rows.Keys
+                .Where(key => string.Equals(key.CallId, callId, StringComparison.Ordinal)
+                           && key.Ordinal >= fromOrdinal)
+                .ToList();
+
+            foreach (var key in going)
+            {
+                _rows.Remove(key);
+            }
+
+            return ValueTask.FromResult(going.Count);
+        }
+    }
+
+    /// <inheritdoc />
     public ValueTask<int> EraseAsync(string callId, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(callId);
@@ -283,13 +305,8 @@ public sealed class InMemoryCallStore : ICallStore
         }
     }
 
-    /// <remarks>
-    /// The same coalesce the PostgreSQL backing pages by. A NULL sort key would drop a call out of
-    /// every page after the first, and here every call has one.
-    /// </remarks>
     private static DateTimeOffset SortValue(CallRecord call) => call.LastMessageAt ?? call.CreatedAt;
 
-    /// <remarks>The caller holds <see cref="_lock"/>.</remarks>
     private int RemoveWords(string callId)
     {
         var going = _rows.Keys.Where(key => key.CallId == callId).ToList();

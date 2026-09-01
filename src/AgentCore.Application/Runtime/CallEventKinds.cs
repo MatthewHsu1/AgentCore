@@ -20,6 +20,7 @@ internal static class CallEventKinds
             case CallEventKind.TurnCompleted: auditKind = AuditEventKind.TurnCompleted; return true;
             case CallEventKind.ReplyInterrupted: auditKind = AuditEventKind.ReplyInterrupted; return true;
             case CallEventKind.CallEnded: auditKind = AuditEventKind.CallEnded; return true;
+            case CallEventKind.TurnSuperseded: auditKind = AuditEventKind.TurnSuperseded; return true;
             default: auditKind = default; return false;
         }
     }

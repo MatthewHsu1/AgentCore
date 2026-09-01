@@ -74,7 +74,7 @@ public sealed class ChatCallTitlerTests
         InMemoryCallStore calls = new();
         await calls.CreateAsync("c1", Token);
         await calls.AppendAsync(
-            [new CallMessage("c1", 0, 0, new ChatMessage(ChatRole.User, "my belt squeaks"))],
+            [new CallMessage("c1", 0, 0, new ChatMessage(ChatRole.User, "my belt squeaks"), "m0")],
             cancellationToken: Token);
 
         return (new ChatCallTitler(calls, new StubChatClient(pieces)), calls);

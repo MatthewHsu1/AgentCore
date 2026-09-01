@@ -10,12 +10,6 @@ namespace AgentCore.Application.Tests.Audit;
 /// <summary>
 /// The one place that knows both vocabularies: a neutral fact of a call, and a row of the chain of D23.
 /// </summary>
-/// <remarks>
-/// Two rules carry the chain. The six kinds the chain stores keep the identity the session gave them,
-/// so <see cref="AuditEvent.EventId"/> is the session's <see cref="CallEvent.EventId"/> and never an
-/// id this observer or the sink invented. The diagnostic kinds took no identity and write no row,
-/// which is what keeps the chain free of rows nobody can name.
-/// </remarks>
 public sealed class AuditCallObserverTests
 {
     private const string CallId = "call-1";
@@ -23,12 +17,6 @@ public sealed class AuditCallObserverTests
     private static readonly DateTimeOffset Moment = new(2026, 8, 15, 9, 30, 0, TimeSpan.Zero);
 
     /// <summary>The six kinds that are counted or logged or both, and stored nowhere.</summary>
-    /// <remarks>
-    /// All six, and not the four the chain's vocabulary happened to leave over when this table was
-    /// written. Every entry here is the only observer-level proof that its kind writes no audit row,
-    /// so a kind added to <see cref="CallEventKind"/> and not to this table is a kind whose silence
-    /// nothing checks.
-    /// </remarks>
     public static TheoryData<CallEventKind> DiagnosticKinds =>
     [
         CallEventKind.ModerationUnavailable,
@@ -40,10 +28,6 @@ public sealed class AuditCallObserverTests
     ];
 
     /// <summary>Every kind, once, across the two tables above.</summary>
-    /// <remarks>
-    /// The tables are hand-written, and the point of each is that it is EXHAUSTIVE. Neither can say
-    /// so alone: a missing entry just runs one theory case fewer and passes.
-    /// </remarks>
     [Fact]
     public void TheTwoTables_BetweenThemNameEveryKind()
     {
@@ -56,7 +40,7 @@ public sealed class AuditCallObserverTests
         Assert.Equal([.. Enum.GetValues<CallEventKind>().Order()], [.. named.Order()]);
     }
 
-    /// <summary>The six kinds the store keeps, beside the token each one writes.</summary>
+    /// <summary>The seven kinds the store keeps, beside the token each one writes.</summary>
     public static TheoryData<CallEventKind, AuditEventKind> StoredKinds =>
         new()
         {
@@ -66,6 +50,7 @@ public sealed class AuditCallObserverTests
             { CallEventKind.TurnCompleted, AuditEventKind.TurnCompleted },
             { CallEventKind.ReplyInterrupted, AuditEventKind.ReplyInterrupted },
             { CallEventKind.CallEnded, AuditEventKind.CallEnded },
+            { CallEventKind.TurnSuperseded, AuditEventKind.TurnSuperseded },
         };
 
     [Theory]
@@ -244,10 +229,6 @@ public sealed class AuditCallObserverTests
     /// <summary>
     /// The payload each kind must carry to be a legal event, per <see cref="AuditEventVocabulary"/>.
     /// </summary>
-    /// <remarks>
-    /// A sink refuses an event that is missing these, so a test that fabricates one has to supply
-    /// them or it asserts about a row that could never be written.
-    /// </remarks>
     private static Dictionary<string, string> RequiredPayload(CallEventKind kind) => kind switch
     {
         CallEventKind.ReplyInterrupted => new Dictionary<string, string>(StringComparer.Ordinal)

@@ -15,20 +15,11 @@ namespace AgentCore.Infrastructure.Tests.Calls.Postgres;
 /// <summary>
 /// The words half of the store, in PostgreSQL.
 /// </summary>
-/// <remarks>
-/// These need a live PostgreSQL and skip without one — <see cref="PostgresFactAttribute"/> names the
-/// variable. Each test takes a database of its own, because the retention sweep and the erase both
-/// read the whole table.
-/// </remarks>
 public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
 {
     private static readonly TimeSpan NinetyDays = TimeSpan.FromDays(90);
 
     /// <summary>Opens the store with the call rows these tests write words against already made.</summary>
-    /// <remarks>
-    /// call_message is a child of call, so a word cannot be written before its call exists. In
-    /// production CallSession makes the row when the session opens; here the arrangement makes it.
-    /// </remarks>
     private async Task<PostgresCallStore> OpenAsync()
     {
         PostgresCallStore store = new(DataSource);
@@ -85,8 +76,8 @@ public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
         // Act
         await store.AppendAsync(
             [
-                new CallMessage("C1", 0, 0, announced),
-                new CallMessage("C1", 1, 0, result),
+                new CallMessage("C1", 0, 0, announced, "m0"),
+                new CallMessage("C1", 1, 0, result, "m1"),
             ],
             cancellationToken: Token);
 
@@ -145,7 +136,7 @@ public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
         };
 
         await store.AppendAsync(
-            [new CallMessage("C1", 0, 0, new ChatMessage(ChatRole.User, "hello"))],
+            [new CallMessage("C1", 0, 0, new ChatMessage(ChatRole.User, "hello"), "m0")],
             state,
             Token);
 
@@ -172,11 +163,11 @@ public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
         var store = await OpenAsync();
 
         await store.AppendAsync(
-            [new CallMessage("C1", 0, 0, new ChatMessage(ChatRole.User, "hello"))],
+            [new CallMessage("C1", 0, 0, new ChatMessage(ChatRole.User, "hello"), "m0")],
             new CallSessionState { Stage = "collecting" },
             Token);
         await store.AppendAsync(
-            [new CallMessage("C1", 1, 0, new ChatMessage(ChatRole.Assistant, "hi"))],
+            [new CallMessage("C1", 1, 0, new ChatMessage(ChatRole.Assistant, "hi"), "m1")],
             state: null,
             Token);
 
@@ -196,24 +187,33 @@ public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
         // is worth a test that fails the day a version of Npgsql splits the batch.
         var store = await OpenAsync();
         await store.AppendAsync(
-            [new CallMessage("C1", 0, 0, new ChatMessage(ChatRole.User, "hello"))],
+            [new CallMessage("C1", 0, 0, new ChatMessage(ChatRole.User, "hello"), "m0")],
             new CallSessionState { Stage = "a" },
             Token);
 
-        // Act — the same ordinal again. The insert is refused on the primary key, and the state
-        // command sits BEHIND it in the same batch.
+        // Act — a batch whose FIRST row is fine and whose second repeats ordinal 0. Ordinal 2 has to
+        // succeed and then be taken back for the implicit transaction to have shown itself; failing
+        // the only row would prove nothing, because every command behind it never runs.
         var failure = await Record.ExceptionAsync(
             () => store.AppendAsync(
-                [new CallMessage("C1", 0, 1, new ChatMessage(ChatRole.User, "again"))],
+                [
+                    new CallMessage("C1", 2, 1, new ChatMessage(ChatRole.User, "lands first"), "m2"),
+                    new CallMessage("C1", 0, 1, new ChatMessage(ChatRole.User, "again"), "m0-again"),
+                ],
                 new CallSessionState { Stage = "b" },
                 Token).AsTask());
 
-        // Assert — the throw, and then the state the failed batch tried to write. A stage of "b"
-        // beside one message would be a call whose blob had moved on without its words.
+        // Assert — the throw, then the row that had already succeeded, then the state the failed
+        // batch tried to write. A stage of "b" beside one message would be a call whose blob had
+        // moved on without its words; a surviving ordinal 2 would be a batch that was never one
+        // transaction.
         Assert.NotNull(failure);
         var record = await store.GetAsync("C1", Token);
         Assert.Equal("a", record?.State?.Stage);
-        Assert.Single(await store.ReadAsync("C1", Token));
+
+        var rows = await store.ReadAsync("C1", Token);
+        Assert.Single(rows);
+        Assert.Equal(0, rows[0].Ordinal);
     }
 
     [PostgresFact]
@@ -445,15 +445,11 @@ public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
     /// <summary>One ordinary turn: what the caller said, and what the caller heard.</summary>
     private static CallMessage[] Turn(string callId, int turnIndex, int ordinal) =>
     [
-        new CallMessage(callId, ordinal, turnIndex, new ChatMessage(ChatRole.User, "what about order 41")),
-        new CallMessage(callId, ordinal + 1, turnIndex, new ChatMessage(ChatRole.Assistant, "Order 41 ships Friday.")),
+        new CallMessage(callId, ordinal, turnIndex, new ChatMessage(ChatRole.User, "what about order 41"), $"m{ordinal}"),
+        new CallMessage(callId, ordinal + 1, turnIndex, new ChatMessage(ChatRole.Assistant, "Order 41 ships Friday."), $"m{ordinal + 1}"),
     ];
 
     /// <summary>Writes a tool-calling turn to store 1 and its <c>turn.completed</c> row to store 3.</summary>
-    /// <remarks>
-    /// The turn's two assistant messages are the point: the first announces the tool call and carries
-    /// no words the caller heard, and only the second was spoken.
-    /// </remarks>
     private async Task<Guid> WriteToolCallingTurnAsync(
         PostgresCallStore store, string callId, int turnIndex, string spoken, bool drew = false)
     {
@@ -470,11 +466,11 @@ public sealed class PostgresCallStoreWordsTests : PostgresDatabaseTest
 
         await store.AppendAsync(
             [
-                new CallMessage(callId, 0, turnIndex, new ChatMessage(ChatRole.User, "what about order 41")),
+                new CallMessage(callId, 0, turnIndex, new ChatMessage(ChatRole.User, "what about order 41"), "m0"),
                 new CallMessage(callId, 1, turnIndex, new ChatMessage(
-                    ChatRole.Assistant, [new FunctionCallContent("id1", "lookup", null)])),
-                new CallMessage(callId, 2, turnIndex, new ChatMessage(ChatRole.Tool, toolResultContents)),
-                new CallMessage(callId, 3, turnIndex, new ChatMessage(ChatRole.Assistant, spoken)),
+                    ChatRole.Assistant, [new FunctionCallContent("id1", "lookup", null)]), "m1"),
+                new CallMessage(callId, 2, turnIndex, new ChatMessage(ChatRole.Tool, toolResultContents), "m2"),
+                new CallMessage(callId, 3, turnIndex, new ChatMessage(ChatRole.Assistant, spoken), "m3"),
             ],
             cancellationToken: Token);
 

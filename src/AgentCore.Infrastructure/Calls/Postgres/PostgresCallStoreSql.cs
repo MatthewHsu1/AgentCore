@@ -77,13 +77,20 @@ internal static class PostgresCallStoreSql
          """;
 
     internal const string AppendSql = """
-        INSERT INTO call_message (call_id, ordinal, turn_index, role, content)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO call_message (call_id, ordinal, turn_index, role, content, message_id)
+        VALUES ($1, $2, $3, $4, $5, $6)
         """;
 
     /// <summary>Reads one whole call.</summary>
     internal const string ReadSql =
-        "SELECT ordinal, turn_index, content FROM call_message WHERE call_id = $1 ORDER BY ordinal";
+        """
+        SELECT ordinal, turn_index, content, message_id
+          FROM call_message WHERE call_id = $1 ORDER BY ordinal
+        """;
+
+    /// <summary>Withdraws the tail of a call, from one ordinal onward.</summary>
+    internal const string TruncateSql =
+        "DELETE FROM call_message WHERE call_id = $1 AND ordinal >= $2";
 
     internal const string RewriteSql = """
         UPDATE call_message SET content = $3, updated_at = now()

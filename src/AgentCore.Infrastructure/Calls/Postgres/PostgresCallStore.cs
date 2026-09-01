@@ -219,26 +219,12 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
     /// <summary>
     /// One call's row from <see cref="GetSql"/>, whose ninth column is the state a resume reads back.
     /// </summary>
-    /// <remarks>
-    /// <see cref="GetSql"/> is <see cref="Projection"/> plus <c>c.state</c>, so columns 0-7 mean the
-    /// same thing here as in <see cref="ReadListing"/>. Layering the state read onto it, rather than
-    /// hand-indexing the shared columns a second time, is what keeps the two in lockstep: a change to
-    /// <see cref="Projection"/> only has one place left to miss.
-    /// </remarks>
     private static CallRecord Read(NpgsqlDataReader reader) =>
         ReadListing(reader) with { State = reader.IsDBNull(8) ? null : ReadState(reader.GetString(8)) };
 
     /// <summary>Reads one call's resume blob, or nothing when the blob cannot be read.</summary>
     /// <param name="blob">The JSON in <c>call.state</c>.</param>
     /// <returns>The state, or <see langword="null"/> when it did not parse into one.</returns>
-    /// <remarks>
-    /// A bad blob is no blob. Every other restore failure on this path is best effort with a
-    /// diagnostic, and this one has to be too, because a throw here does not fail a resume — it
-    /// escapes <c>GetAsync</c>, then <c>CreateAsync</c>, then <c>OpenSessionAsync</c>, and the call
-    /// can never be opened again by anyone. That is the worst available outcome for the one input
-    /// this library controls least, and it defeats <see cref="CallSessionState.Version"/>, which can
-    /// only be read once a deserialize has already succeeded.
-    /// </remarks>
     private static CallSessionState? ReadState(string blob)
     {
         try
@@ -281,10 +267,6 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// One turn is one round trip. The caller allocated the ordinals, so a repeated ordinal is a
-    /// unique violation and not a silent overwrite.
-    /// </remarks>
     public async ValueTask AppendAsync(
         IReadOnlyList<CallMessage> messages,
         CallSessionState? state = null,
@@ -309,6 +291,7 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
             command.Parameters.Add(new NpgsqlParameter { Value = message.Content.Role.Value });
             command.Parameters.Add(
                 new NpgsqlParameter { Value = Serialise(message.Content), NpgsqlDbType = NpgsqlDbType.Jsonb });
+            command.Parameters.Add(new NpgsqlParameter { Value = message.MessageId });
 
             batch.BatchCommands.Add(command);
         }
@@ -330,10 +313,6 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// A row that is not there is not written, and this reports nothing about it: the barge-in that
-    /// asked for it raced the append it corrects, and the append is what carries the corrected words.
-    /// </remarks>
     public async ValueTask RewriteAsync(
         string callId, int ordinal, ChatMessage content, CancellationToken cancellationToken = default)
     {
@@ -350,11 +329,6 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
 
     /// <inheritdoc />
     /// <exception cref="ArgumentNullException">The call id is <see langword="null"/>.</exception>
-    /// <remarks>
-    /// <b>A failed read is worse than a failed write, so this one throws.</b> A write that fails costs
-    /// the durable record of a turn; a read that answered with an empty history would run the turn
-    /// with no memory of the call.
-    /// </remarks>
     public async ValueTask<IReadOnlyList<CallMessage>> ReadAsync(
         string callId, CancellationToken cancellationToken = default)
     {
@@ -372,7 +346,8 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
                 callId,
                 reader.GetInt32(0),
                 reader.GetInt32(1),
-                Deserialise(reader.GetString(2))));
+                Deserialise(reader.GetString(2)),
+                reader.GetString(3)));
         }
 
         return rows;
@@ -380,10 +355,20 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
 
     /// <inheritdoc />
     /// <exception cref="ArgumentNullException">The call id is <see langword="null"/>.</exception>
-    /// <remarks>
-    /// The audit chain keeps its rows and stays intact, because it holds a hash of what was spoken
-    /// and never the words. What the erased call proves, it goes on proving.
-    /// </remarks>
+    public async ValueTask<int> TruncateAsync(
+        string callId, int fromOrdinal, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(callId);
+
+        await using var command = _dataSource.CreateCommand(TruncateSql);
+        command.Parameters.Add(new NpgsqlParameter { Value = callId });
+        command.Parameters.Add(new NpgsqlParameter { Value = fromOrdinal });
+
+        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    /// <exception cref="ArgumentNullException">The call id is <see langword="null"/>.</exception>
     public async ValueTask<int> EraseAsync(string callId, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(callId);
@@ -399,12 +384,6 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>One row for each spoken turn, oldest turn first.</returns>
     /// <exception cref="ArgumentNullException">The call id is <see langword="null"/>.</exception>
-    /// <remarks>
-    /// This is the check that store 1 still holds the words store 3 proves: hash each
-    /// <see cref="TranscriptTurnDigest.Spoken"/> with <c>AuditHash.OfText</c> and compare. A turn
-    /// whose words were erased answers with no row at all, which is the erasure working rather than a
-    /// tamper.
-    /// </remarks>
     public async Task<IReadOnlyList<TranscriptTurnDigest>> ReadSpokenTurnsAsync(
         string callId, CancellationToken cancellationToken = default)
     {
@@ -428,14 +407,6 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
     }
 
 
-    /// <remarks>
-    /// <see cref="TranscriptJson.Options"/> is required here, not merely convenient: the column is
-    /// <c>jsonb</c>, which keeps no key order, so a stored <c>$type</c> discriminator does not come
-    /// back first and every read throws without <c>AllowOutOfOrderMetadataProperties</c> — measured, on
-    /// the first run of these tests. The alternative was the <c>json</c> column type, which keeps the
-    /// text verbatim and gives up every <c>jsonb</c> operator the verify query above is written in,
-    /// <c>@&gt;</c> among them.
-    /// </remarks>
     private static string Serialise(ChatMessage message)
         => JsonSerializer.Serialize(message, TranscriptJson.Options);
 

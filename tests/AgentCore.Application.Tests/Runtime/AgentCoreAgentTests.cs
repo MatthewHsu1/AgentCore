@@ -21,9 +21,6 @@ namespace AgentCore.Application.Tests.Runtime;
 /// The <see cref="AgentCoreAgent"/> shim: the whole turn loop behind the framework's own
 /// <see cref="AIAgent"/> seam. One session is one call, one run is one turn.
 /// </summary>
-/// <remarks>
-/// Every test here runs offline. There is no network call and no API key anywhere in this file.
-/// </remarks>
 public sealed class AgentCoreAgentTests
 {
     private const string SingleAgentYaml =
@@ -412,7 +409,7 @@ public sealed class AgentCoreAgentTests
 
         // Store 0's own copy of this call: one word, and the state written in the same batch.
         await store.AppendAsync(
-            [new CallMessage("call-42", 0, 0, new ChatMessage(ChatRole.User, "an earlier turn"))],
+            [new CallMessage("call-42", 0, 0, new ChatMessage(ChatRole.User, "an earlier turn"), "m0")],
             new CallSessionState
             {
                 Slots = new Dictionary<string, JsonNode?>(StringComparer.Ordinal)

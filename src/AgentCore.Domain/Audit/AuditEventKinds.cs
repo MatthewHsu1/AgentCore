@@ -3,17 +3,6 @@ namespace AgentCore.Domain.Audit;
 /// <summary>
 /// The wire token of each <see cref="AuditEventKind"/>.
 /// </summary>
-/// <remarks>
-/// <para>
-/// The canonical form of an event holds this token and never the .NET member name, and never the
-/// numeric value of the enum. Two reasons, and both come from T56. A rename of a C# member must not
-/// change a hash that PostgreSQL already stored. And the <c>CHECK</c> constraint recomputes the same
-/// SHA-256 inside the engine, where no enum exists, so the token is what the SQL text compares.
-/// </para>
-/// <para>
-/// A token is stable forever. Add a token beside the old one, and never edit one in place.
-/// </para>
-/// </remarks>
 public static class AuditEventKinds
 {
     /// <summary>Reads the wire token of one kind.</summary>
@@ -28,6 +17,7 @@ public static class AuditEventKinds
         AuditEventKind.ToolFailed => "tool.failed",
         AuditEventKind.CallEnded => "call.ended",
         AuditEventKind.PromptFlagged => "prompt.flagged",
+        AuditEventKind.TurnSuperseded => "turn.superseded",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "The audit event vocabulary is closed, and this value is not in it."),
     };
 
@@ -45,6 +35,7 @@ public static class AuditEventKinds
             case "tool.failed": kind = AuditEventKind.ToolFailed; return true;
             case "call.ended": kind = AuditEventKind.CallEnded; return true;
             case "prompt.flagged": kind = AuditEventKind.PromptFlagged; return true;
+            case "turn.superseded": kind = AuditEventKind.TurnSuperseded; return true;
             default: kind = default; return false;
         }
     }

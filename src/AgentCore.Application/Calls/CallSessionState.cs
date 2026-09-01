@@ -16,6 +16,12 @@ public sealed record CallSessionState
     /// <summary>Gets the shape this blob was written in.</summary>
     public int Version { get; init; } = CurrentVersion;
 
+    /// <summary>Gets the next free ordinal of the call.</summary>
+    public int NextOrdinal { get; init; }
+
+    /// <summary>Gets the index the call's next turn takes.</summary>
+    public int NextTurnIndex { get; init; }
+
     /// <summary>Gets the stage the machine held. It is empty when the document declares no policy.</summary>
     public string Stage { get; init; } = string.Empty;
 

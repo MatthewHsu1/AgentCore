@@ -38,6 +38,36 @@ internal sealed record ChatCompletionRequest
 
     /// <summary>Gets whether the client wants server-sent events.</summary>
     public bool? Stream { get; init; }
+
+    /// <summary>Gets what the client says about where this message belongs, if it says anything.</summary>
+    [JsonPropertyName("agentcore")]
+    public AgentCoreRequestInfo? AgentCore { get; init; }
+}
+
+/// <summary>Where the client says its message belongs, carried beside the OpenAI shape.</summary>
+internal sealed record AgentCoreRequestInfo
+{
+    /// <summary>Gets what the client calls the message it is sending.</summary>
+    [JsonPropertyName("message_id")]
+    public string? MessageId { get; init; }
+
+    /// <summary>Gets what the client calls the message this one hangs off. Null starts the call afresh.</summary>
+    [JsonPropertyName("parent_id")]
+    public string? ParentId
+    {
+        get => _parentId;
+        init
+        {
+            _parentId = value;
+            NamesParent = true;
+        }
+    }
+
+    /// <summary>Gets whether the body carried <c>parent_id</c> at all.</summary>
+    [JsonIgnore]
+    public bool NamesParent { get; private init; }
+
+    private readonly string? _parentId;
 }
 
 /// <summary>What one finished turn did, carried beside the OpenAI shape.</summary>
@@ -60,6 +90,10 @@ internal sealed record AgentCoreTurnInfo
 
     /// <summary>Gets the reason the extractor produced nothing, or <see langword="null"/>.</summary>
     public string? ExtractionFailure { get; init; }
+
+    /// <summary>Gets what the host calls the reply it just wrote, for a later edit to hang off.</summary>
+    [JsonPropertyName("message_id")]
+    public string? MessageId { get; init; }
 }
 
 /// <summary>One choice of a reply. It carries <c>message</c> when whole and <c>delta</c> when streamed.</summary>

@@ -128,15 +128,22 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
 
         var model = request?.Model is { Length: > 0 } asked ? asked : session.Compiled.Name;
 
+        // Absent means a client that does not track its messages by name, so its words simply go on
+        // the end. Present means the client answers for where the turn belongs, and a parent further
+        // back than the last thing said is what makes this an edit.
+        var origin = request?.AgentCore is { } placed
+            ? new CallTurnOrigin(placed.MessageId, placed.ParentId) { NamesParent = placed.NamesParent }
+            : null;
+
         try
         {
             if (streaming)
             {
-                await StreamTurnAsync(http, session, input, model, cancellationToken).ConfigureAwait(false);
+                await StreamTurnAsync(http, session, input, model, origin, cancellationToken).ConfigureAwait(false);
             }
             else
             {
-                await WriteTurnAsync(http, session, input, model, cancellationToken).ConfigureAwait(false);
+                await WriteTurnAsync(http, session, input, model, origin, cancellationToken).ConfigureAwait(false);
             }
         }
         catch (InvalidOperationException exception)
@@ -158,6 +165,7 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
     /// <param name="session">The session of the call.</param>
     /// <param name="input">What the caller said.</param>
     /// <param name="model">The model name the answer reports.</param>
+    /// <param name="origin">Where the caller says these words hang, or null when it does not say.</param>
     /// <param name="cancellationToken">Cancels the turn.</param>
     /// <returns>A task that completes when the answer is written.</returns>
     private static async Task WriteTurnAsync(
@@ -165,9 +173,10 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
         CallSession session,
         string input,
         string model,
+        CallTurnOrigin? origin,
         CancellationToken cancellationToken)
     {
-        var turn = await session.RunTurnAsync(input, cancellationToken).ConfigureAwait(false);
+        var turn = await session.RunTurnAtOriginAsync(input, origin, cancellationToken).ConfigureAwait(false);
 
         http.Response.StatusCode = StatusCodes.Status200OK;
         http.Response.Headers[SessionHeaderName] = session.CallId;
@@ -199,6 +208,7 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
     /// <param name="session">The session of the call.</param>
     /// <param name="input">What the caller said.</param>
     /// <param name="model">The model name the answer reports.</param>
+    /// <param name="origin">Where the caller says these words hang, or null when it does not say.</param>
     /// <param name="cancellationToken">Cancels the turn.</param>
     /// <returns>A task that completes when the stream closes.</returns>
     private static async Task StreamTurnAsync(
@@ -206,6 +216,7 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
         CallSession session,
         string input,
         string model,
+        CallTurnOrigin? origin,
         CancellationToken cancellationToken)
     {
         var id = NewCompletionId();
@@ -228,7 +239,7 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
         // One turn's worth of ids: the pairing dies with the stream.
         ToolCallNames toolNames = new();
 
-        await foreach (var update in session.RunTurnStreamingAsync(input, cancellationToken).ConfigureAwait(false))
+        await foreach (var update in session.RunTurnStreamingAtOriginAsync(input, origin, cancellationToken).ConfigureAwait(false))
         {
             foreach (var drawn in update.Contents.OfType<RenderContent>())
             {
@@ -351,10 +362,6 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
     /// <summary>Reads what one tool answered, as the browser receives it.</summary>
     /// <param name="result">The result half of the call.</param>
     /// <param name="answer">The same result read as JSON, or <see langword="null"/> when it answered nothing.</param>
-    /// <remarks>
-    /// A thrown fault beyond the model never becomes a result at all — it ends the turn — so the
-    /// exception arm here only ever sees a fault the loop kept.
-    /// </remarks>
     private static JsonNode? ResultOf(FunctionResultContent result, JsonNode? answer)
         => result.Exception is { } failure
             ? JsonValue.Create(failure.GetType().Name + ": " + failure.Message)
@@ -433,10 +440,6 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
     /// <summary>Reads the last thing the caller said.</summary>
     /// <param name="request">The request, or <see langword="null"/> when the body was empty.</param>
     /// <returns>The text, or <see langword="null"/> when the request carries none.</returns>
-    /// <remarks>
-    /// The session owns the transcript, so an earlier message of the request is already in the call.
-    /// The turn runs on the newest one, and the rest is what the client kept for its own display.
-    /// </remarks>
     private static string? LastUserText(ChatCompletionRequest? request)
     {
         if (request?.Messages is not { Count: > 0 } messages)
@@ -469,6 +472,7 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
             StageAfter = turn.StageAfter,
             IsTerminal = turn.IsTerminal,
             ExtractionFailure = turn.ExtractionFailure,
+            MessageId = session.LastReplyMessageId,
         };
 
     /// <summary>Builds the id of one reply.</summary>

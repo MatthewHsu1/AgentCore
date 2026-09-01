@@ -9,10 +9,6 @@ namespace AgentCore.TestSupport;
 /// <summary>
 /// A store that forwards every call to another one, so a fake overrides only what it is testing.
 /// </summary>
-/// <remarks>
-/// One store holds a call and its words, which is fifteen members. A fake that cares about one of
-/// them should not carry fourteen stubs to say so.
-/// </remarks>
 /// <param name="inner">Where an un-overridden call goes.</param>
 public abstract class DelegatingCallStore(ICallStore inner) : ICallStore
 {
@@ -78,6 +74,11 @@ public abstract class DelegatingCallStore(ICallStore inner) : ICallStore
     public virtual ValueTask<IReadOnlyList<CallMessage>> ReadAsync(
         string callId, CancellationToken cancellationToken = default)
         => Inner.ReadAsync(callId, cancellationToken);
+
+    /// <inheritdoc />
+    public virtual ValueTask<int> TruncateAsync(
+        string callId, int fromOrdinal, CancellationToken cancellationToken = default)
+        => Inner.TruncateAsync(callId, fromOrdinal, cancellationToken);
 
     /// <inheritdoc />
     public virtual ValueTask<int> EraseAsync(

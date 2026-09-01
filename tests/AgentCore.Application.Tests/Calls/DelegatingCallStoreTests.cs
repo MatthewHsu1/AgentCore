@@ -35,7 +35,7 @@ public sealed class DelegatingCallStoreTests
 
         // Act
         await store.AppendAsync(
-            [new CallMessage("c1", 0, 0, new ChatMessage(ChatRole.User, "hi"))], cancellationToken: Token);
+            [new CallMessage("c1", 0, 0, new ChatMessage(ChatRole.User, "hi"), "m0")], cancellationToken: Token);
 
         // Assert
         Assert.Equal(1, store.Appends);

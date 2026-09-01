@@ -266,5 +266,5 @@ public sealed class InMemoryCallStoreTests
     }
 
     private static CallMessage Word(string callId)
-        => new(callId, 0, 0, new ChatMessage(ChatRole.User, "hello"));
+        => new(callId, 0, 0, new ChatMessage(ChatRole.User, "hello"), "m0");
 }

@@ -61,10 +61,6 @@ public interface ICallStore
     /// <summary>Erases the call's row and every attachment to it.</summary>
     /// <param name="callId">The call to erase.</param>
     /// <param name="cancellationToken">Cancels the delete.</param>
-    /// <remarks>
-    /// This takes the call's words with it. One store means one backing, so a backing that enforces
-    /// the relation removes both in one statement and there is no order for a caller to get wrong.
-    /// </remarks>
     ValueTask DeleteAsync(string callId, CancellationToken cancellationToken = default);
 
     /// <summary>Writes a turn's new messages, and the state the session holds after them.</summary>
@@ -77,10 +73,6 @@ public interface ICallStore
     /// it to ride with, so there is nothing to write it beside.
     /// </param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <remarks>
-    /// The call's row must already exist. <see cref="CreateAsync"/> runs once when the session opens,
-    /// and a backing that enforces the relation refuses this write without it.
-    /// </remarks>
     ValueTask AppendAsync(
         IReadOnlyList<CallMessage> messages,
         CallSessionState? state = null,
@@ -100,6 +92,14 @@ public interface ICallStore
     /// <returns>Every message of the call, or an empty list when it holds none.</returns>
     ValueTask<IReadOnlyList<CallMessage>> ReadAsync(
         string callId, CancellationToken cancellationToken = default);
+
+    /// <summary>Withdraws the tail of a call's words, from one ordinal onward.</summary>
+    /// <param name="callId">The call to cut.</param>
+    /// <param name="fromOrdinal">The first ordinal to remove. It goes too.</param>
+    /// <param name="cancellationToken">Cancels the delete.</param>
+    /// <returns>How many messages went.</returns>
+    ValueTask<int> TruncateAsync(
+        string callId, int fromOrdinal, CancellationToken cancellationToken = default);
 
     /// <summary>Erases one call's words, and leaves its row in the listing.</summary>
     /// <param name="callId">The call to quieten.</param>

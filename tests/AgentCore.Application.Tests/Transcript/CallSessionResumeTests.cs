@@ -18,13 +18,6 @@ namespace AgentCore.Application.Tests.Transcript;
 /// <summary>
 /// A call outlives the session that started it.
 /// </summary>
-/// <remarks>
-/// A session is held in memory and a call is not: the host restarts, the session expires, and the
-/// same call arrives again on a new one. Until this file, that second session started at zero on
-/// every counter it owns — an empty history, ordinal 0, turn 0 — so the caller met an agent with no
-/// memory of them, and its first append collided with the rows the first session had already
-/// written. Store 1 is what the second session is missing, and store 1 is where it is read from.
-/// </remarks>
 public sealed class CallSessionResumeTests
 {
     private const string OneAgentYaml = """
@@ -38,11 +31,6 @@ public sealed class CallSessionResumeTests
     /// <summary>
     /// A document with something to forget: one slot a writer fills, and a stage that moves.
     /// </summary>
-    /// <remarks>
-    /// The slot is a counter and the guard reads a reserved slot, so one plain turn fills both with
-    /// no extractor and no tool. That is the point: the test is about what survives a second
-    /// session, not about how the value got there.
-    /// </remarks>
     private const string StagedYaml = """
         apiVersion: agentcore/v1
         name: resume-state-check
@@ -68,11 +56,6 @@ public sealed class CallSessionResumeTests
     /// <summary>
     /// A document whose stages run three deep, so a machine left in the first one is visible.
     /// </summary>
-    /// <remarks>
-    /// Two stages cannot show it. Restoring the second one and then taking a turn lands on the
-    /// third only if the machine itself moved; a machine still holding the first stage walks to the
-    /// second and reports the same answer a restored one would have started from.
-    /// </remarks>
     private const string ThreeStageYaml = """
         apiVersion: agentcore/v1
         name: resume-machine-check
@@ -202,7 +185,7 @@ public sealed class CallSessionResumeTests
         await store.CreateAsync("C-machine", TestContext.Current.CancellationToken);
 
         await store.AppendAsync(
-            [new CallMessage("C-machine", 0, 0, new ChatMessage(ChatRole.User, "hello"))],
+            [new CallMessage("C-machine", 0, 0, new ChatMessage(ChatRole.User, "hello"), "m0")],
             new CallSessionState { Stage = "two" },
             TestContext.Current.CancellationToken);
 
@@ -248,7 +231,7 @@ public sealed class CallSessionResumeTests
 
         // Written as though a build that declared 'retired' had run this call.
         await store.AppendAsync(
-            [new CallMessage("C-drift", 0, 0, new ChatMessage(ChatRole.User, "hello"))],
+            [new CallMessage("C-drift", 0, 0, new ChatMessage(ChatRole.User, "hello"), "m0")],
             new CallSessionState
             {
                 Stage = "intake",
@@ -284,7 +267,7 @@ public sealed class CallSessionResumeTests
 
         // Written as though 'turnsTaken' had been declared a string when this call ran.
         await store.AppendAsync(
-            [new CallMessage("C-retyped", 0, 0, new ChatMessage(ChatRole.User, "hello"))],
+            [new CallMessage("C-retyped", 0, 0, new ChatMessage(ChatRole.User, "hello"), "m0")],
             new CallSessionState
             {
                 Stage = "intake",
@@ -321,7 +304,7 @@ public sealed class CallSessionResumeTests
         // one in directly. StateDocument.TryWrite THROWS on a reserved slot rather than answering
         // false, so a Restore that just asked it would take the call down on its first turn.
         await store.AppendAsync(
-            [new CallMessage("C-reserved", 0, 0, new ChatMessage(ChatRole.User, "hello"))],
+            [new CallMessage("C-reserved", 0, 0, new ChatMessage(ChatRole.User, "hello"), "m0")],
             new CallSessionState
             {
                 Stage = "intake",
@@ -356,7 +339,7 @@ public sealed class CallSessionResumeTests
         await store.CreateAsync("C-future", TestContext.Current.CancellationToken);
 
         await store.AppendAsync(
-            [new CallMessage("C-future", 0, 0, new ChatMessage(ChatRole.User, "hello"))],
+            [new CallMessage("C-future", 0, 0, new ChatMessage(ChatRole.User, "hello"), "m0")],
             new CallSessionState
             {
                 Version = CallSessionState.CurrentVersion + 1,
@@ -393,7 +376,7 @@ public sealed class CallSessionResumeTests
         await store.CreateAsync("C-nopolicy", TestContext.Current.CancellationToken);
 
         await store.AppendAsync(
-            [new CallMessage("C-nopolicy", 0, 0, new ChatMessage(ChatRole.User, "hello"))],
+            [new CallMessage("C-nopolicy", 0, 0, new ChatMessage(ChatRole.User, "hello"), "m0")],
             new CallSessionState { Stage = "intake" },
             TestContext.Current.CancellationToken);
 
@@ -423,7 +406,7 @@ public sealed class CallSessionResumeTests
         await store.CreateAsync("C-finished", TestContext.Current.CancellationToken);
 
         await store.AppendAsync(
-            [new CallMessage("C-finished", 0, 0, new ChatMessage(ChatRole.User, "hello"))],
+            [new CallMessage("C-finished", 0, 0, new ChatMessage(ChatRole.User, "hello"), "m0")],
             new CallSessionState { Stage = "help", IsComplete = true },
             TestContext.Current.CancellationToken);
 
@@ -445,7 +428,7 @@ public sealed class CallSessionResumeTests
         await store.CreateAsync("C-nostage", TestContext.Current.CancellationToken);
 
         await store.AppendAsync(
-            [new CallMessage("C-nostage", 0, 0, new ChatMessage(ChatRole.User, "hello"))],
+            [new CallMessage("C-nostage", 0, 0, new ChatMessage(ChatRole.User, "hello"), "m0")],
             new CallSessionState { Stage = "a-stage-nobody-declares" },
             TestContext.Current.CancellationToken);
 

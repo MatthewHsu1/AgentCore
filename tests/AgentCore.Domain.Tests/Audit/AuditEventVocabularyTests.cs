@@ -37,10 +37,10 @@ public sealed class AuditEventVocabularyTests
     {
         AuditEventKind[] declared = Enum.GetValues<AuditEventKind>();
 
-        // Six kinds, and the numbers run 0 to 6 with 4 missing. Value 4 was reply.flagged, retired
+        // Seven kinds, and the numbers run 0 to 7 with 4 missing. Value 4 was reply.flagged, retired
         // on 2026-08-13 when reply moderation was withdrawn. A number is never reused, so a stored
         // row can never come to mean something else.
-        Assert.Equal(6, declared.Length);
+        Assert.Equal(7, declared.Length);
         Assert.DoesNotContain(declared, kind => (int)kind == 4);
         foreach (AuditEventKind kind in declared)
         {
@@ -367,11 +367,6 @@ public sealed class AuditEventVocabularyTests
     /// The category list is stored exactly as the endpoint returned it. Nothing sorts it, and
     /// nothing rewrites it.
     /// </summary>
-    /// <remarks>
-    /// The order carries meaning the taxonomy does not: the endpoint returns its own ranking, and a
-    /// reader years later has only this row. Validation checks the SHAPE of the list and never the
-    /// names in it, so both spellings below are legal and neither is normalised.
-    /// </remarks>
     [Fact]
     public void AFlaggedPromptKeepsTheOrderTheEndpointReturned()
     {

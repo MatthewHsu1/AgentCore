@@ -7,11 +7,6 @@ namespace AgentCore.Infrastructure.Tests.Database.Postgres;
 /// <summary>
 /// The PostgreSQL schema store 1 and store 3 run on.
 /// </summary>
-/// <remarks>
-/// These need a live PostgreSQL and skip without one — <see cref="PostgresFactAttribute"/> names the
-/// variable. Each test gets a database of its own and drops it again, because a migration is not a
-/// thing two tests can share.
-/// </remarks>
 public sealed class PostgresSchemaTests : PostgresDatabaseTest
 {
     /// <inheritdoc />
@@ -193,22 +188,19 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
         await PostgresSchema.ApplyAsync(DataSource, Token);
         await ExecuteAsync("INSERT INTO call (call_id) VALUES ('C1')");
         await ExecuteAsync(
-            "INSERT INTO call_message (call_id, ordinal, turn_index, role, content) VALUES ('C1', 0, 0, 'user', '{}')");
+            "INSERT INTO call_message (call_id, ordinal, turn_index, role, content, message_id) VALUES ('C1', 0, 0, 'user', '{}', 'm0')");
 
         // Act
         var refusal = await Record.ExceptionAsync(() => ExecuteAsync(
-            "INSERT INTO call_message (call_id, ordinal, turn_index, role, content) VALUES ('C1', 0, 0, 'assistant', '{}')"));
+            "INSERT INTO call_message (call_id, ordinal, turn_index, role, content, message_id) VALUES ('C1', 0, 0, 'assistant', '{}', 'm1')"));
 
         // Assert
         Assert.Equal("23505", Assert.IsType<PostgresException>(refusal).SqlState);
     }
 
     [PostgresFact]
-    public async Task Versions_AreOrderedSoTheParentTableIsCreatedFirst()
-        => Assert.Equal(
-            ["001_writer_role", "002_call", "003_call_message",
-             "004_audit_event", "005_audit_event_append_only"],
-            PostgresSchema.Versions);
+    public async Task Versions_AreTheOneMigrationThisAssemblyCarries()
+        => Assert.Equal(["001_agentcore"], PostgresSchema.Versions);
 
     [PostgresFact]
     public async Task CallMessage_WithNoCallRow_IsRefused()
@@ -219,7 +211,7 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
 
         // Act
         var refusal = await Record.ExceptionAsync(() => ExecuteAsync(
-            "INSERT INTO call_message (call_id, ordinal, turn_index, role, content) VALUES ('absent', 0, 0, 'user', '{}')"));
+            "INSERT INTO call_message (call_id, ordinal, turn_index, role, content, message_id) VALUES ('absent', 0, 0, 'user', '{}', 'm0')"));
 
         // Assert
         Assert.Equal("23503", Assert.IsType<PostgresException>(refusal).SqlState);
@@ -227,8 +219,8 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
 
     /// <summary>
     /// The cascade is the whole reason one store holds both. It reaches call_message and
-    /// call_principal, and it deliberately does not reach audit_event: 005 refuses every DELETE
-    /// there, and the trail outlives the conversation on purpose.
+    /// call_principal, and it deliberately does not reach audit_event: a trigger refuses every
+    /// DELETE there, and the trail outlives the conversation on purpose.
     /// </summary>
     [PostgresFact]
     public async Task DeletingACall_TakesItsMessagesAndPrincipals_AndLeavesItsAuditEvents()
@@ -237,7 +229,7 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
         await PostgresSchema.ApplyAsync(DataSource, Token);
         await ExecuteAsync("INSERT INTO call (call_id) VALUES ('C1')");
         await ExecuteAsync(
-            "INSERT INTO call_message (call_id, ordinal, turn_index, role, content) VALUES ('C1', 0, 0, 'user', '{}')");
+            "INSERT INTO call_message (call_id, ordinal, turn_index, role, content, message_id) VALUES ('C1', 0, 0, 'user', '{}', 'm0')");
         await ExecuteAsync(
             "INSERT INTO call_principal (call_id, principal_key, role) VALUES ('C1', 'p1', 'owner')");
         await InsertOneEventAsync();
@@ -258,10 +250,6 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
         """);
 
     /// <summary>Opens a pool that logs in as an ordinary member of <c>agentcore_writer</c>.</summary>
-    /// <remarks>
-    /// The login role is per-test because roles are cluster-wide. It holds nothing of its own: every
-    /// right it has arrives through the membership.
-    /// </remarks>
     private async Task<NpgsqlDataSource> OpenAsWriterAsync()
     {
         var login = "agentcore_member_" + Guid.NewGuid().ToString("n");

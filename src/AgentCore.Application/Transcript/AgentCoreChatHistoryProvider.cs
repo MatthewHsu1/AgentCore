@@ -49,16 +49,26 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
     /// session of one call is handed the first session's words here, and nowhere else.
     /// </param>
     /// <param name="report">Where a dropped store 1 write is reported, if anywhere.</param>
+    /// <param name="stored">
+    /// The state kept beside these words, or <see langword="null"/> for a call that has none because
+    /// it has never spoken. Its marks say how far the call had got; the words cannot, because an edit
+    /// deletes the rows that would otherwise answer for it.
+    /// </param>
     /// <returns>The index the next turn of this call takes.</returns>
     public int BeginCall(
         AgentSession session,
         string callId,
         IReadOnlyList<CallMessage> spoken,
-        TranscriptWriteDropped? report = null)
+        TranscriptWriteDropped? report = null,
+        CallSessionState? stored = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentException.ThrowIfNullOrEmpty(callId);
         ArgumentNullException.ThrowIfNull(spoken);
+
+        var marks = stored is null
+            ? default
+            : new TranscriptMarks(stored.NextOrdinal, stored.NextTurnIndex);
 
         return UnderLock(
             session,
@@ -66,7 +76,7 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
             {
                 transcript.CallId = callId;
                 gate.Dropped = report;
-                return transcript.Resume(spoken);
+                return transcript.Resume(spoken, marks);
             });
     }
 
@@ -96,6 +106,16 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
         return UnderLock(session, static transcript => transcript.Read());
     }
 
+    /// <summary>Reads the next free ordinal of the call on one session.</summary>
+    /// <param name="session">The session this call runs on.</param>
+    /// <returns>The ordinal the call's next row takes.</returns>
+    public int NextOrdinal(AgentSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        return UnderLock(session, static transcript => transcript.NextOrdinal);
+    }
+
     /// <summary>Adds one finished turn's messages to the call, and the state that follows them.</summary>
     /// <param name="session">The session this call runs on.</param>
     /// <param name="messages">The messages the turn produced.</param>
@@ -106,36 +126,93 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
     /// caller enters its commit lock, and the late barge-in path that runs after this call amends
     /// the record of the turn without touching any of it. So there is nothing later to wait for.
     /// </param>
-    /// <remarks>
-    /// Reading the state here instead, when the queued write runs, is the tempting shape and it is
-    /// the wrong one. A queued write resumes on the thread pool, and the state document takes no
-    /// lock because the turn loop is supposed to be the only thing that touches it — so a read on
-    /// that thread could walk the slots while the NEXT turn is writing them. What comes out of that
-    /// is an exception from the enumeration, which this class catches as a failed write: the turn
-    /// would lose its words as well as its state. Taking the value on the turn's own thread also
-    /// stores THIS turn's state rather than whatever the call had reached by the time the queue
-    /// drained.
-    /// </remarks>
-    public void AppendTurn(
+    /// <param name="firstMessageId">
+    /// What the caller calls the first of these messages, or <see langword="null"/> to name it in the
+    /// append. Only the first: the rest are this call's own words, which no caller had a name for.
+    /// </param>
+    /// <returns>
+    /// The name the last of these messages was written under, so the caller can be told what to hang
+    /// its next edit off. It is <see langword="null"/> only when nothing was written.
+    /// </returns>
+    public string? AppendTurn(
         AgentSession session,
         IReadOnlyList<ChatMessage> messages,
-        CallSessionState? state = null)
+        CallSessionState? state = null,
+        string? firstMessageId = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(messages);
 
         if (messages.Count == 0)
         {
-            return;
+            return null;
         }
 
-        UnderLock(
+        return UnderLock(
             session,
             (transcript, gate) =>
             {
-                var rows = transcript.Append(messages);
-                Enqueue(gate, () => _store.AppendAsync(rows, state, CancellationToken.None), transcript);
-                return true;
+                var rows = transcript.Append(messages, firstMessageId);
+
+                // After the append, never before. The caller reads the state on its own thread and
+                // hands it in — which is right for everything else it carries — but the ordinal this
+                // turn leaves behind is not known until the rows are cut, and a state that named the
+                // ordinal from before them would resume the call one turn short and overwrite them.
+                var stored = state is null ? null : state with { NextOrdinal = transcript.NextOrdinal };
+
+                Enqueue(gate, () => _store.AppendAsync(rows, stored, CancellationToken.None), transcript);
+                return rows[^1].MessageId;
+            });
+    }
+
+    /// <summary>Withdraws everything the call said after one message, because a caller replaced it.</summary>
+    /// <param name="session">The session this call runs on.</param>
+    /// <param name="parentMessageId">
+    /// The message the caller's new words hang off. Everything after it goes. Pass
+    /// <see langword="null"/> to withdraw the whole call, which is what an edit of its first message
+    /// asks for.
+    /// </param>
+    /// <returns>
+    /// The turns the withdrawal took, or <see langword="null"/> when nothing went. Nothing goes when
+    /// the call holds no message of that name — a caller naming a message this host never stored —
+    /// and the turn then runs as a plain new turn.
+    /// </returns>
+    public WithdrawnTurns? TruncateFrom(AgentSession session, string? parentMessageId)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        return UnderLock(
+            session,
+            (transcript, gate) =>
+            {
+                int from;
+                if (parentMessageId is null)
+                {
+                    from = 0;
+                }
+                else if (transcript.OrdinalOf(parentMessageId) is { } parent)
+                {
+                    from = parent + 1;
+                }
+                else
+                {
+                    return (WithdrawnTurns?)null;
+                }
+
+                if (transcript.TruncateFrom(from) is not { } withdrawn)
+                {
+                    return null;
+                }
+
+                Log.CallTruncated(_logger, transcript.CallId, from, transcript.TurnIndex);
+
+                Enqueue(
+                    gate,
+                    () => new ValueTask(
+                        _store.TruncateAsync(transcript.CallId, from, CancellationToken.None).AsTask()),
+                    transcript);
+
+                return withdrawn;
             });
     }
 
@@ -145,17 +222,20 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
     /// <param name="heard">What the caller heard, or <see langword="null"/> when it heard nothing.</param>
     /// <param name="state">
     /// The state to store beside the words, on the same terms as
-    /// <see cref="AppendTurn(AgentSession, IReadOnlyList{ChatMessage}, CallSessionState?)"/>.
+    /// <see cref="AppendTurn(AgentSession, IReadOnlyList{ChatMessage}, CallSessionState?, string?)"/>.
     /// </param>
-    public void AppendCallerFacingTurn(
+    /// <param name="firstMessageId">What the caller calls the message it sent, if it named one.</param>
+    /// <inheritdoc cref="AppendTurn(AgentSession, IReadOnlyList{ChatMessage}, CallSessionState?, string?)" path="/returns"/>
+    public string? AppendCallerFacingTurn(
         AgentSession session,
         ChatMessage spoken,
         ChatMessage? heard,
-        CallSessionState? state = null)
+        CallSessionState? state = null,
+        string? firstMessageId = null)
     {
         ArgumentNullException.ThrowIfNull(spoken);
 
-        AppendTurn(session, heard is null ? [spoken] : [spoken, heard], state);
+        return AppendTurn(session, heard is null ? [spoken] : [spoken, heard], state, firstMessageId);
     }
 
     /// <summary>

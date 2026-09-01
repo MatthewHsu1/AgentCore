@@ -24,6 +24,7 @@ AgentCore.Domain.Audit.AuditEventKind.PromptFlagged = 6 -> AgentCore.Domain.Audi
 AgentCore.Domain.Audit.AuditEventKind.ReplyInterrupted = 2 -> AgentCore.Domain.Audit.AuditEventKind
 AgentCore.Domain.Audit.AuditEventKind.ToolFailed = 3 -> AgentCore.Domain.Audit.AuditEventKind
 AgentCore.Domain.Audit.AuditEventKind.TurnCompleted = 1 -> AgentCore.Domain.Audit.AuditEventKind
+AgentCore.Domain.Audit.AuditEventKind.TurnSuperseded = 7 -> AgentCore.Domain.Audit.AuditEventKind
 AgentCore.Domain.Audit.AuditEventKinds
 AgentCore.Domain.Audit.AuditEventVocabulary
 AgentCore.Domain.Audit.AuditHash
@@ -125,6 +126,8 @@ const AgentCore.Domain.Audit.AuditPayloadKeys.ToolError = "toolError" -> string!
 const AgentCore.Domain.Audit.AuditPayloadKeys.ToolFailureKind = "toolFailureKind" -> string!
 const AgentCore.Domain.Audit.AuditPayloadKeys.ToolName = "toolName" -> string!
 const AgentCore.Domain.Audit.AuditPayloadKeys.UtteranceUntilInterruptSha256 = "utteranceUntilInterruptSha256" -> string!
+const AgentCore.Domain.Audit.AuditPayloadKeys.WithdrewFromTurnIndex = "withdrewFromTurnIndex" -> string!
+const AgentCore.Domain.Audit.AuditPayloadKeys.WithdrewThroughTurnIndex = "withdrewThroughTurnIndex" -> string!
 override AgentCore.Domain.Audit.AuditEvent.Equals(object? obj) -> bool
 override AgentCore.Domain.Audit.AuditEvent.GetHashCode() -> int
 override AgentCore.Domain.Audit.AuditEvent.ToString() -> string!

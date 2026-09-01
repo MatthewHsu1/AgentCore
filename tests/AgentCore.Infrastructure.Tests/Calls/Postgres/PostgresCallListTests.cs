@@ -220,7 +220,7 @@ public sealed class PostgresCallListTests : PostgresDatabaseTest
     private Task Spoke(string callId, string ago) =>
         ExecuteAsync(
             $$"""
-              INSERT INTO call_message (call_id, ordinal, turn_index, role, content, created_at, updated_at)
-              VALUES ('{{callId}}', 1, 0, 'user', '{}'::jsonb, now(), now() + interval '{{ago}}')
+              INSERT INTO call_message (call_id, ordinal, turn_index, role, content, message_id, created_at, updated_at)
+              VALUES ('{{callId}}', 1, 0, 'user', '{}'::jsonb, 'm1', now(), now() + interval '{{ago}}')
               """);
 }

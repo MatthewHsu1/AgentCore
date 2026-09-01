@@ -9,10 +9,6 @@ namespace AgentCore.Infrastructure.Tests.Calls.Postgres;
 /// <summary>
 /// Retention, which deletes the call and lets the cascade take the words.
 /// </summary>
-/// <remarks>
-/// A call ages on the same clock the listing ranks it by: the newest message, or when the call was
-/// made if it holds none. The old sweep read call_message alone and could not see an empty thread.
-/// </remarks>
 public sealed class PostgresCallStoreSweepTests : PostgresDatabaseTest
 {
     private static readonly TimeSpan Window = TimeSpan.FromDays(30);
@@ -21,7 +17,7 @@ public sealed class PostgresCallStoreSweepTests : PostgresDatabaseTest
     protected override bool Migrated => true;
 
     private static CallMessage Word(string callId) =>
-        new(callId, 0, 0, new ChatMessage(ChatRole.User, "hello"));
+        new(callId, 0, 0, new ChatMessage(ChatRole.User, "hello"), "m0");
 
     [PostgresFact]
     public async Task SweepAsync_ACallWhoseLastMessageIsOld_TakesTheCallAndItsWords()
