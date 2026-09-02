@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
+using Microsoft.Agents.AI;
 
 namespace AgentCore.Application.Configuration.Validation;
 
@@ -134,6 +135,47 @@ public static class ConfigurationValidator
 
         var errors = new List<ConfigurationError>();
         CheckToolReferences(configuration, servedToolIds, errors);
+
+        if (errors.Count > 0)
+        {
+            throw new ConfigurationLoadException(errors);
+        }
+    }
+
+    /// <summary>
+    /// Resolves every <c>skills:</c> entry against the names the bound skills folder serves, and
+    /// throws when one names a skill nothing serves.
+    /// </summary>
+    /// <param name="configuration">The bound document.</param>
+    /// <param name="servedSkillNames">Every skill name the bound folder serves.</param>
+    /// <exception cref="ConfigurationLoadException">A reference names a skill nothing serves.</exception>
+    public static void ValidateSkillReferences(AgentCoreConfiguration configuration, IReadOnlySet<string> servedSkillNames)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentNullException.ThrowIfNull(servedSkillNames);
+
+        var errors = new List<ConfigurationError>();
+        CheckSkillReferences(configuration, servedSkillNames, errors);
+
+        if (errors.Count > 0)
+        {
+            throw new ConfigurationLoadException(errors);
+        }
+    }
+
+    /// <summary>
+    /// Refuses a declared tool id that the skills provider also registers. The provider's tools are
+    /// added per agent and never pass through the tool registry, so a collision is invisible until
+    /// the model receives two tools of one name.
+    /// </summary>
+    /// <param name="configuration">The bound document.</param>
+    /// <exception cref="ConfigurationLoadException">A tool id collides with a skills tool name.</exception>
+    public static void ValidateSkillToolNames(AgentCoreConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        var errors = new List<ConfigurationError>();
+        CheckSkillToolNames(configuration, errors);
 
         if (errors.Count > 0)
         {
@@ -327,6 +369,70 @@ public static class ConfigurationValidator
                         $"nothing serves the tool '{agent.Tools[slot]}'. Declare it in tools:, or check that an mcp: server offers it."));
                 }
             }
+        }
+    }
+
+    /// <summary>Resolves every agent's <c>skills:</c> entry against what the bound folder serves.</summary>
+    /// <param name="configuration">The bound document.</param>
+    /// <param name="servedSkillNames">Every skill name the bound folder serves.</param>
+    /// <param name="errors">The list every failure is added to.</param>
+    private static void CheckSkillReferences(
+        AgentCoreConfiguration configuration,
+        IReadOnlySet<string> servedSkillNames,
+        List<ConfigurationError> errors)
+    {
+        var served = string.Join(", ", servedSkillNames.Order(StringComparer.Ordinal));
+        var items = configuration.Agents?.Items ?? [];
+
+        for (var index = 0; index < items.Count; index++)
+        {
+            var agent = items[index];
+            for (var slot = 0; slot < agent.Skills.Count; slot++)
+            {
+                if (servedSkillNames.Contains(agent.Skills[slot]))
+                {
+                    continue;
+                }
+
+                errors.Add(Reference(
+                    ConfigurationError.AppendPointer(
+                        ConfigurationError.AppendPointer(Pointer.Agent(index), "skills"), slot),
+                    $"the skill '{agent.Skills[slot]}' is not in the bound skills folder. "
+                    + $"The folder serves: {served}."));
+            }
+        }
+    }
+
+    /// <summary>Refuses a declared tool id that the skills provider registers under the same name.</summary>
+    /// <param name="configuration">The bound document.</param>
+    /// <param name="errors">The list every failure is added to.</param>
+    private static void CheckSkillToolNames(AgentCoreConfiguration configuration, List<ConfigurationError> errors)
+    {
+        var items = configuration.Agents?.Items ?? [];
+        if (!items.Any(agent => agent.Skills.Count > 0))
+        {
+            return;
+        }
+
+        string[] reserved =
+        [
+            AgentSkillsProvider.LoadSkillToolName,
+            AgentSkillsProvider.ReadSkillResourceToolName,
+            AgentSkillsProvider.RunSkillScriptToolName,
+        ];
+
+        var tools = configuration.Tools;
+        for (var index = 0; index < tools.Count; index++)
+        {
+            if (!reserved.Contains(tools[index].Id, StringComparer.Ordinal))
+            {
+                continue;
+            }
+
+            errors.Add(Reference(
+                ConfigurationError.AppendPointer(Pointer.Tool(index), "id"),
+                $"the tool id '{tools[index].Id}' is reserved while any agent declares a skills: "
+                + "list, because the skills provider registers a tool of that name. Rename the tool."));
         }
     }
 

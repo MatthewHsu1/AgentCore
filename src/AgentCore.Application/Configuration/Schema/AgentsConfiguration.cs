@@ -66,6 +66,9 @@ public sealed record AgentConfiguration
     /// <summary>Gets the ids of the tools this agent may call.</summary>
     public IReadOnlyList<string> Tools { get; init; } = [];
 
+    /// <summary>Gets the names of the skills this agent may load.</summary>
+    public IReadOnlyList<string> Skills { get; init; } = [];
+
     /// <summary>Gets this agent's <c>knowledge:</c> block, or <see langword="null"/> to inherit key by key.</summary>
     public AgentKnowledgeConfiguration? Knowledge { get; init; }
 }

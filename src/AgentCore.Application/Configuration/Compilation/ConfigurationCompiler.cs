@@ -5,6 +5,7 @@ using AgentCore.Application.Evaluation;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Skills;
 using AgentCore.Application.Transcript;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -275,14 +276,6 @@ public static class ConfigurationCompiler
     }
 
     /// <summary>Builds the context providers of one agent.</summary>
-    /// <param name="defaults">The <c>agents.defaults</c> section, or <see langword="null"/>.</param>
-    /// <param name="item">The agent being built.</param>
-    /// <param name="context">The seams the host bound, one of which may be the knowledge store.</param>
-    /// <param name="pointer">The JSON Pointer at this agent.</param>
-    /// <returns>The providers, in the order the framework runs them.</returns>
-    /// <exception cref="ConfigurationLoadException">
-    /// The agent declares a <c>knowledge:</c> block and the host bound no knowledge store.
-    /// </exception>
     private static List<AIContextProvider> BuildContextProviders(
         AgentDefaults? defaults,
         AgentConfiguration item,
@@ -290,6 +283,20 @@ public static class ConfigurationCompiler
         string pointer)
     {
         List<AIContextProvider> providers = [new TurnContextProvider()];
+
+        if (item.Skills.Count > 0)
+        {
+            if (context.Skills is not { } catalog)
+            {
+                throw Fail(
+                    ConfigurationError.AppendPointer(pointer, "skills"),
+                    $"the agent '{item.Id}' declares a skills: list and this host bound no skills "
+                    + "folder, so there is nothing to load. Call options.UseSkills(...) with the "
+                    + "folder that holds the SKILL.md directories, or remove the skills: list.");
+            }
+
+            providers.Add(SkillsProviderFactory.Create(catalog, item.Skills, context.Loggers));
+        }
 
         if (AgentKnowledge.Compose(defaults, item) is not { } knowledge)
         {

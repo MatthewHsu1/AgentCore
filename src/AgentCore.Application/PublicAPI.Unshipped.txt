@@ -147,6 +147,8 @@ AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Loggers.
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Loggers.init -> void
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Moderation.get -> AgentCore.Application.Evaluation.PromptModerator?
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Moderation.init -> void
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Skills.get -> AgentCore.Application.Skills.SkillCatalog?
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Skills.init -> void
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.StateSnapshot.get -> System.Func<System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>!>?
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.StateSnapshot.init -> void
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Tools.get -> AgentCore.Application.Tools.Registry.ToolRegistry?
@@ -251,6 +253,8 @@ AgentCore.Application.Configuration.Schema.AgentConfiguration.Knowledge.get -> A
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Knowledge.init -> void
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Model.get -> AgentCore.Application.Configuration.Schema.ModelReference?
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Model.init -> void
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Skills.get -> System.Collections.Generic.IReadOnlyList<string!>!
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Skills.init -> void
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Tools.get -> System.Collections.Generic.IReadOnlyList<string!>!
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Tools.init -> void
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration
@@ -1020,6 +1024,10 @@ AgentCore.Application.Sessions.Memory.InMemoryCallSessions.InMemoryCallSessions(
 AgentCore.Application.Sessions.Memory.InMemoryCallSessions.OpenAsync(string? callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Runtime.CallSession!>
 AgentCore.Application.Sessions.Memory.InMemoryCallSessions.SweepAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Sessions.Memory.InMemoryCallSessions.TryGetAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Runtime.CallSession?>
+AgentCore.Application.Skills.SkillCatalog
+AgentCore.Application.Skills.SkillCatalog.Names.get -> System.Collections.Generic.IReadOnlySet<string!>!
+AgentCore.Application.Skills.SkillCatalog.SkillCatalog(Microsoft.Agents.AI.AgentSkillsSource! source, System.Collections.Generic.IReadOnlySet<string!>! names) -> void
+AgentCore.Application.Skills.SkillCatalog.Source.get -> Microsoft.Agents.AI.AgentSkillsSource!
 AgentCore.Application.State.ConstStateWriter
 AgentCore.Application.State.CounterStateWriter
 AgentCore.Application.State.CounterStateWriter.Apply(AgentCore.Application.State.StateDocument! state) -> int
@@ -1538,6 +1546,8 @@ static AgentCore.Application.Configuration.Validation.ConfigurationValidationRes
 static AgentCore.Application.Configuration.Validation.ConfigurationValidator.Evaluate(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration) -> AgentCore.Application.Configuration.Validation.ConfigurationValidationResult!
 static AgentCore.Application.Configuration.Validation.ConfigurationValidator.EvaluateStructure(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration) -> AgentCore.Application.Configuration.Validation.ConfigurationValidationResult!
 static AgentCore.Application.Configuration.Validation.ConfigurationValidator.Validate(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration) -> AgentCore.Application.Configuration.Validation.ConfigurationValidationResult!
+static AgentCore.Application.Configuration.Validation.ConfigurationValidator.ValidateSkillReferences(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, System.Collections.Generic.IReadOnlySet<string!>! servedSkillNames) -> void
+static AgentCore.Application.Configuration.Validation.ConfigurationValidator.ValidateSkillToolNames(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration) -> void
 static AgentCore.Application.Configuration.Validation.ConfigurationValidator.ValidateStructure(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration) -> AgentCore.Application.Configuration.Validation.ConfigurationValidationResult!
 static AgentCore.Application.Configuration.Validation.ConfigurationValidator.ValidateToolReferences(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, System.Collections.Generic.IReadOnlySet<string!>! servedToolIds) -> void
 static AgentCore.Application.Configuration.Validation.GuardEvaluator.BuildData(System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>! state) -> System.Text.Json.Nodes.JsonObject!

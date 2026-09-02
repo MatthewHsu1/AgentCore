@@ -3,6 +3,7 @@ using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Skills;
 using AgentCore.Application.Tools.Registry;
 using Microsoft.Extensions.Logging;
 
@@ -57,6 +58,12 @@ public sealed class AgentCompilationContext
     /// Gets or sets the store every agent's <c>knowledge:</c> block reads through.
     /// </summary>
     public IKnowledgeRetrievalPort? Knowledge { get; init; }
+
+    /// <summary>
+    /// Gets or sets the skills every agent's <c>skills:</c> list is drawn from, or
+    /// <see langword="null"/> when the host bound no skills folder.
+    /// </summary>
+    public SkillCatalog? Skills { get; init; }
 
     /// <summary>
     /// Gets or sets the wording each card's source label is written in.

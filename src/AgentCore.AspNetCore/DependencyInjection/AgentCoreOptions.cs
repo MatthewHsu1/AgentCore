@@ -3,6 +3,7 @@ using AgentCore.Application.Knowledge;
 using AgentCore.Application.Llm;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools.Binding;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging;
 
 namespace AgentCore.AspNetCore.DependencyInjection;
@@ -69,6 +70,12 @@ public sealed class AgentCoreOptions
 
     /// <summary>Gets the speech vendors the host registered, or <see langword="null"/>.</summary>
     internal IReadOnlyList<ISpeechAdapter>? Speech { get; private set; }
+
+    /// <summary>Gets the folder that holds the SKILL.md directories, or <see langword="null"/>.</summary>
+    internal string? SkillsPath { get; private set; }
+
+    /// <summary>Gets the skills source a host bound directly, or <see langword="null"/>.</summary>
+    internal AgentSkillsSource? SkillsSource { get; private set; }
 
     /// <summary>Gets the call transports this host supports, or <see langword="null"/>.</summary>
     internal IReadOnlyList<ICallAdapter>? Call { get; private set; }
@@ -226,6 +233,24 @@ public sealed class AgentCoreOptions
     {
         ArgumentNullException.ThrowIfNull(adapters);
         Speech = adapters;
+        return this;
+    }
+
+    /// <summary>Binds the folder that holds this host's SKILL.md directories.</summary>
+    public AgentCoreOptions UseSkills(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        SkillsPath = path;
+        SkillsSource = null;
+        return this;
+    }
+
+    /// <summary>Binds a skills source directly, for a host with no filesystem to read.</summary>
+    public AgentCoreOptions UseSkills(AgentSkillsSource source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        SkillsSource = source;
+        SkillsPath = null;
         return this;
     }
 
