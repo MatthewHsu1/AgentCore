@@ -13,4 +13,8 @@
     <ProjectReference Include="../../src/AgentCore.Application/AgentCore.Application.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Agents.AI" />
+  </ItemGroup>
+
 </Project>

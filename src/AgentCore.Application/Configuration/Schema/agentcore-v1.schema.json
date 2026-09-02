@@ -106,6 +106,12 @@
       "pattern": "^[A-Za-z_][A-Za-z0-9_-]*(\\.[A-Za-z_][A-Za-z0-9_-]*)?$",
       "description": "A tool id an agent references. It carries one optional dot because decision 10 serves an MCP tool as <server>.<tool>; a tools: entry's own id never has one."
     },
+    "skillName": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[a-z0-9]([a-z0-9]*-[a-z0-9])*[a-z0-9]*$",
+      "description": "A skill name. It is not #/$defs/identifier, because MAF's AgentSkillFrontmatter.ValidateName imposes this charset, so an identifier such as Warranty_Returns names a skill no folder can ever serve."
+    },
     "rule": {
       "description": "A raw JSONLogic rule. Section 8.4 checks its operators, and this schema does not type it.",
       "type": [
@@ -711,6 +717,12 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/toolReference"
+          }
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/skillName"
           }
         }
       }

@@ -190,6 +190,18 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
 
         ConfigurationValidator.ValidateToolReferences(configuration, tools.ServedIds);
 
+        var skills = await SkillsStartup
+            .OpenAsync(_options, _loggers, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (skills is not null)
+        {
+            Track(skills.Source);
+            ConfigurationValidator.ValidateSkillReferences(configuration, skills.Names);
+        }
+
+        ConfigurationValidator.ValidateSkillToolNames(configuration);
+
         var calls = Track(await CallStartup
             .OpenAsync(configuration, _options, _loggers, cancellationToken)
             .ConfigureAwait(false));
@@ -206,6 +218,7 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
                 calls,
                 evaluators,
                 knowledge,
+                skills,
                 KnowledgeCitationFormatterFactory.Resolve(configuration, _options.KnowledgeCitations),
                 _loggers)
             .ConfigureAwait(false);

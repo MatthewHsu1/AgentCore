@@ -30,6 +30,7 @@ using Microsoft.Extensions.Logging;
 using System.Text.Json.Nodes;
 using Xunit;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
+using Microsoft.Agents.AI;
 
 namespace AgentCore.AspNetCore.Tests.DependencyInjection;
 
@@ -1751,6 +1752,132 @@ public sealed class AddAgentCoreTests
         Assert.Contains("UseChatClients", failure.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task AddAgentCore_AnAgentWithSkills_Boots()
+    {
+        using var folder = SkillFolder.Create().WithSkill("warranty-returns");
+
+        const string yaml = """
+            apiVersion: agentcore/v1
+            name: skills-host
+            agents:
+              items:
+                - { id: support, skills: [warranty-returns] }
+            """;
+
+        using var host = await BuildAsync(yaml, options => options.UseSkills(folder.Root));
+
+        Assert.NotNull(host);
+    }
+
+    [Fact]
+    public async Task AddAgentCore_AnAgentNamingASkillTheFolderDoesNotServe_FailsAtBoot()
+    {
+        using var folder = SkillFolder.Create().WithSkill("warranty-returns");
+
+        const string yaml = """
+            apiVersion: agentcore/v1
+            name: skills-typo
+            agents:
+              items:
+                - { id: support, skills: [warranty-return] }
+            """;
+
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+            () => BuildAsync(yaml, options => options.UseSkills(folder.Root)));
+
+        Assert.Contains("warranty-return", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AddAgentCore_ClosesTheSkillsSourceWhenTheHostShutsDown()
+    {
+        using var folder = SkillFolder.Create().WithSkill("warranty-returns");
+
+        const string yaml = """
+            apiVersion: agentcore/v1
+            name: skills-shutdown
+            agents:
+              items:
+                - { id: support, skills: [warranty-returns] }
+            """;
+
+        TrackingSkillsSource tracked = new(folder.Root);
+
+        var host = await BuildAsync(yaml, options => options.UseSkills(tracked));
+        host.Dispose();
+
+        Assert.True(tracked.Disposed);
+    }
+
+    /// <summary>
+    /// The source has to be open for the document to be checked against the names it serves, so a
+    /// <c>skills:</c> entry nothing serves fails with it open. <c>AgentCoreBoot</c> takes ownership
+    /// before running that check, and this is what holds the two lines in that order.
+    /// </summary>
+    [Fact]
+    public async Task ASkillReferenceFailure_StillClosesTheSkillsSource()
+    {
+        using var folder = SkillFolder.Create().WithSkill("warranty-returns");
+
+        const string yaml = """
+            apiVersion: agentcore/v1
+            name: skills-typo-source
+            agents:
+              items:
+                - { id: support, skills: [warranty-return] }
+            """;
+
+        TrackingSkillsSource tracked = new(folder.Root);
+
+        await Assert.ThrowsAsync<ConfigurationLoadException>(
+            () => BuildAsync(yaml, options => options.UseSkills(tracked)));
+
+        Assert.True(tracked.Disposed);
+    }
+
+    /// <summary>
+    /// The reserved-tool-id check reads only the document, so it runs outside the null check and
+    /// would sit happily above <c>Track</c> — where its refusal would strand an open source. This
+    /// is what holds it below.
+    /// </summary>
+    [Fact]
+    public async Task AReservedSkillToolIdFailure_StillClosesTheSkillsSource()
+    {
+        using var folder = SkillFolder.Create().WithSkill("warranty-returns");
+
+        const string yaml = """
+            apiVersion: agentcore/v1
+            name: skills-reserved-tool-source
+            tools:
+              - id: load_skill
+                kind: binding
+                binds: CreateCase
+                description: Open a service case for a human agent.
+                parameters:
+                  type: object
+                  properties: { summary: { type: string } }
+                  required: [ summary ]
+            agents:
+              items:
+                - { id: support, skills: [warranty-returns], tools: [ load_skill ] }
+            """;
+
+        TrackingSkillsSource tracked = new(folder.Root);
+
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+            () => BuildAsync(
+                yaml,
+                options =>
+                {
+                    options.UseSkills(tracked);
+                    options.Bind("CreateCase", (_, _) => ValueTask.FromResult<object?>(new JsonObject()));
+                }));
+
+        Assert.Contains("reserved", failure.Message, StringComparison.Ordinal);
+        Assert.True(tracked.Disposed);
+    }
+
     // -------------------------------------------------------------------------------------------
     // Helpers.
     // -------------------------------------------------------------------------------------------
@@ -2106,5 +2233,28 @@ public sealed class AddAgentCoreTests
             Disposed = true;
             return ValueTask.CompletedTask;
         }
+    }
+}
+
+/// <summary>A file source that records whether the boot tracker closed it.</summary>
+internal sealed class TrackingSkillsSource(string path) : AgentSkillsSource
+{
+    private readonly AgentFileSkillsSource _inner = new(path);
+
+    public bool Disposed { get; private set; }
+
+    public override Task<IList<AgentSkill>> GetSkillsAsync(
+        AgentSkillsSourceContext context, CancellationToken cancellationToken = default)
+        => _inner.GetSkillsAsync(context, cancellationToken);
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            Disposed = true;
+            _inner.Dispose();
+        }
+
+        base.Dispose(disposing);
     }
 }

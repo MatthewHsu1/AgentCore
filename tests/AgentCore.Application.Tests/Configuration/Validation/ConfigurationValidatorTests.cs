@@ -1036,6 +1036,95 @@ public sealed class ConfigurationValidatorTests
         Assert.Null(exception);
     }
 
+    [Fact]
+    public void ValidateSkillReferences_ANameTheFolderDoesNotServe_FailsNamingItAndWhatIsServed()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken-skills
+            agents:
+              items:
+                - { id: support, skills: [warranty-return] }
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+        var served = new HashSet<string>(["shipping-claims", "warranty-returns"], StringComparer.Ordinal);
+
+        var failure = Assert.Throws<ConfigurationLoadException>(
+            () => ConfigurationValidator.ValidateSkillReferences(configuration, served));
+
+        var error = Assert.Single(failure.Errors);
+        Assert.Equal("/agents/items/0/skills/0", error.Pointer);
+        Assert.Equal(
+            "the skill 'warranty-return' is not in the bound skills folder. The folder serves: shipping-claims, warranty-returns.",
+            error.Message);
+        Assert.Equal(ConfigurationCheck.ReferenceResolution, error.Check);
+    }
+
+    [Fact]
+    public void ValidateSkillReferences_EveryNameServed_DoesNotThrow()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: good-skills
+            agents:
+              items:
+                - { id: support, skills: [warranty-returns] }
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+        var served = new HashSet<string>(["warranty-returns"], StringComparer.Ordinal);
+
+        var exception = Record.Exception(() => ConfigurationValidator.ValidateSkillReferences(configuration, served));
+
+        Assert.Null(exception);
+    }
+
+    [Theory]
+    [InlineData("load_skill")]
+    [InlineData("read_skill_resource")]
+    [InlineData("run_skill_script")]
+    public void ValidateSkillToolNames_AToolIdTheSkillsProviderOwns_FailsNamingIt(string reserved)
+    {
+        var document = $$"""
+            apiVersion: agentcore/v1
+            name: colliding
+            tools:
+              - { id: {{reserved}}, kind: http, request: { method: GET, url: "https://example.test" } }
+            agents:
+              items:
+                - { id: support, skills: [warranty-returns], tools: [{{reserved}}] }
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+
+        var failure = Assert.Throws<ConfigurationLoadException>(
+            () => ConfigurationValidator.ValidateSkillToolNames(configuration));
+
+        var error = Assert.Single(failure.Errors);
+        Assert.Contains($"the tool id '{reserved}' is reserved", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ValidateSkillToolNames_NoAgentDeclaresSkills_AllowsTheName()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: no-skills-anywhere
+            tools:
+              - { id: load_skill, kind: http, request: { method: GET, url: "https://example.test" } }
+            agents:
+              items:
+                - { id: support, tools: [load_skill] }
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+
+        var exception = Record.Exception(() => ConfigurationValidator.ValidateSkillToolNames(configuration));
+
+        Assert.Null(exception);
+    }
+
     /// <summary>Walks up from the test binaries to the directory that holds the solution file.</summary>
     /// <returns>The repository root.</returns>
     private static string RepositoryRoot()

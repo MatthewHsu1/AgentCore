@@ -6,6 +6,7 @@ using AgentCore.Application.Evaluation;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Skills;
 using AgentCore.Application.Tools.Registry;
 using Microsoft.Extensions.Logging;
 
@@ -35,6 +36,7 @@ internal static class CompilationStartup
     /// compiled agent, so it is bound here rather than on the session factory.
     /// </param>
     /// <param name="knowledge">The port step 3b opened, or <see langword="null"/> when the host bound no knowledge vendor.</param>
+    /// <param name="skills">The catalog step "skills" opened, or <see langword="null"/> when the host bound no skills folder.</param>
     /// <param name="citations">The wording <c>providers.knowledge.citation</c> named.</param>
     /// <param name="loggers">The factory the guard evaluator and the knowledge provider take their loggers from.</param>
     /// <returns>The compiled graph, and the seams that made it.</returns>
@@ -46,6 +48,7 @@ internal static class CompilationStartup
         ICallStore calls,
         EvaluatorRegistry evaluators,
         IKnowledgeRetrievalPort? knowledge,
+        SkillCatalog? skills,
         IKnowledgeCitationFormatter citations,
         ILoggerFactory loggers)
     {
@@ -62,6 +65,7 @@ internal static class CompilationStartup
                 CallStore = calls,
                 StateSnapshot = CallStateScope.Snapshot,
                 Knowledge = knowledge,
+                Skills = skills,
                 Citations = citations,
                 Loggers = loggers,
             });

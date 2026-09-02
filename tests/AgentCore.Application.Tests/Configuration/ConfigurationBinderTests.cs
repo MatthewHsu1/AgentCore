@@ -172,4 +172,58 @@ public sealed class ConfigurationBinderTests
     [InlineData("something new the reader learned to say", "something new the reader learned to say")]
     public void TheMessageTheReaderWrites_IsRewrittenForTheAuthor(string written, string expected)
         => Assert.Equal(expected, ConfigurationBinder.Explain(written));
+
+    [Fact]
+    public void Bind_AnAgentWithASkillsList_CarriesTheNamesInOrder()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: skills-bind
+            agents:
+              items:
+                - { id: support, skills: [warranty-returns, shipping-claims] }
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+
+        var agent = Assert.Single(configuration.Agents!.Items);
+        Assert.Equal(["warranty-returns", "shipping-claims"], agent.Skills);
+    }
+
+    [Fact]
+    public void Bind_AnAgentWithNoSkillsKey_CarriesAnEmptyList()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: skills-absent
+            agents:
+              items:
+                - { id: greeter }
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+
+        Assert.Empty(Assert.Single(configuration.Agents!.Items).Skills);
+    }
+
+    [Theory]
+    [InlineData("Warranty_Returns")]
+    [InlineData("Warranty-Returns")]
+    [InlineData("-leading-hyphen")]
+    [InlineData("trailing-hyphen-")]
+    [InlineData("double--hyphen")]
+    public void Bind_ASkillNameOutsideMafsCharset_FailsCheckOne(string name)
+    {
+        var document = $$"""
+            apiVersion: agentcore/v1
+            name: skills-charset
+            agents:
+              items:
+                - { id: support, skills: [{{name}}] }
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+    }
 }
