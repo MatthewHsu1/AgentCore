@@ -421,6 +421,29 @@ public sealed class CallSessionTests
     }
 
     [Fact]
+    public async Task TheExtractor_ReadsTheAgentsPreviousMessageBeforeTheFinishedTurn()
+    {
+        using SequencedChatClient reply = new("is it the CT900 or the CT900ENT?", "got it.");
+        using SequencedChatClient fill = new(StayingNull, StayingNull);
+        var session = Build(PolicyYaml, reply, fill).Create();
+
+        await session.RunTurnAsync("my belt slips", TestContext.Current.CancellationToken);
+        await session.RunTurnAsync("the ENT one", TestContext.Current.CancellationToken);
+
+        // Turn 1 has no earlier agent message, so the finished turn stands alone.
+        var first = fill.Requests[0].Where(message => message.Role != ChatRole.System).ToList();
+        Assert.Equal([ChatRole.User, ChatRole.Assistant], first.Select(message => message.Role));
+
+        // Turn 2: the caller is answering a question. Measured 2026-09-02: without the question in
+        // view the extractor reads "the ENT one" and fills nothing; with it, it fills the machine.
+        var second = fill.Requests[1].Where(message => message.Role != ChatRole.System).ToList();
+        Assert.Equal([ChatRole.Assistant, ChatRole.User, ChatRole.Assistant], second.Select(message => message.Role));
+        Assert.Equal("is it the CT900 or the CT900ENT?", second[0].Text);
+        Assert.Equal("the ENT one", second[1].Text);
+        Assert.Equal("got it.", second[2].Text);
+    }
+
+    [Fact]
     public async Task AFailedExtraction_DoesNotDropTheTurn()
     {
         using SequencedChatClient reply = new("hello there.");

@@ -1,4 +1,5 @@
 using AgentCore.Application.Knowledge;
+using AgentCore.Domain.Knowledge;
 using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Application.Diagnostics;
@@ -171,4 +172,23 @@ internal static partial class Log
         Message = "An edit withdrew call {CallId} from ordinal {FromOrdinal} onward, "
             + "at turn {TurnIndex}.")]
     public static partial void CallTruncated(ILogger logger, string callId, int fromOrdinal, int turnIndex);
+
+    /// <summary>
+    /// One turn composed its knowledge scope. Every facet logged <see cref="KnowledgeFacetOrigin.Wildcard"/>
+    /// is a facet nothing set: this line is the only warning a deployment gets that <c>wildcard.facets</c>
+    /// names a key nothing ever sets.
+    /// </summary>
+    /// <param name="logger">The logger of the session.</param>
+    /// <param name="callId">The id of the call.</param>
+    /// <param name="turnIndex">The zero-based index of the turn.</param>
+    /// <param name="origins">Where each facet's value came from.</param>
+    [LoggerMessage(
+        EventId = 15,
+        Level = LogLevel.Debug,
+        Message = "Call {CallId} turn {TurnIndex} composed the knowledge scope {Origins}.")]
+    public static partial void KnowledgeScopeComposed(
+        ILogger logger,
+        string callId,
+        int turnIndex,
+        IReadOnlyDictionary<string, KnowledgeFacetOrigin> origins);
 }

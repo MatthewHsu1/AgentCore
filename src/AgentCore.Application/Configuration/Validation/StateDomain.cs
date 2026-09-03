@@ -193,9 +193,18 @@ internal static class StateDomain
             slot = reserved;
         }
 
-        if (slot.EnumValues is { Count: > 0 })
+        if (slot.EnumValues is { Count: > 0 } members)
         {
-            return [.. slot.EnumValues.Select(static member => (JsonNode?)member.DeepClone())];
+            List<JsonNode?> points = [.. members.Select(static member => (JsonNode?)member.DeepClone())];
+
+            // A slot with no default reads as null until a writer fills it, and that is a state the
+            // guards run in. Without this point check 5 analyses a domain the call never starts in.
+            if (slot.Default is null)
+            {
+                points.Add(null);
+            }
+
+            return points;
         }
 
         return slot.Type switch

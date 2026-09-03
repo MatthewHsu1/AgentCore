@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
@@ -333,6 +334,188 @@ public sealed class ConfigurationValidatorTests
 
         Assert.Equal("/mcp/1/id", error.Pointer);
         Assert.Contains("jira", error.Message, StringComparison.Ordinal);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Check 2, knowledge scope: a state-built scope must not produce a filter nobody meant.
+    // ---------------------------------------------------------------------------------------------
+    // KnowledgeStartup skips the store factory for a host-supplied port, and returns null when
+    // KnowledgeStores is unset, but CallSession composes the scope regardless — so these are document
+    // checks, not store checks.
+    private static AgentCoreConfiguration Scoped(
+        IReadOnlyList<string> fromState,
+        KnowledgeWildcardConfiguration? wildcard,
+        IDictionary<string, StateSlotConfiguration> state,
+        ExtractorConfiguration? extractor = null) => new()
+    {
+        ApiVersion = "agentcore/v1",
+        Name = "doc",
+        State = new Dictionary<string, StateSlotConfiguration>(state, StringComparer.Ordinal),
+        Extractor = extractor,
+        Providers = new()
+        {
+            Knowledge = new()
+            {
+                Kind = "qdrant",
+                Collection = "kb",
+                Fields = new() { Body = "text" },
+                Scope = new()
+                {
+                    Template = "facets.{key}",
+                    Wildcard = wildcard,
+                    FromState = fromState,
+                },
+            },
+        },
+    };
+
+    private static StateSlotConfiguration FacetSlot() => new()
+    {
+        Type = StateSlotType.String,
+        Writer = StateWriter.Extractor,
+        EnumValues = [JsonValue.Create("f63")!],
+    };
+
+    private static readonly KnowledgeWildcardConfiguration Star =
+        new() { Value = "*", Facets = ["applies_to"] };
+
+    private static ExtractorConfiguration AnExtractor() =>
+        new() { Model = new ModelReference { Ref = "small" } };
+
+    [Fact]
+    public void Evaluate_FromStateNamesAnUndeclaredSlot_Fails()
+    {
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(["applies_to"], Star, new Dictionary<string, StateSlotConfiguration>(), AnExtractor()));
+
+        var error = Assert.Single(result.Errors, e => e.Pointer == "/providers/knowledge/scope/fromState");
+        Assert.Contains("applies_to", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Evaluate_FacetSlotDeclaresADefault_Fails()
+    {
+        var slot = FacetSlot() with { Default = JsonValue.Create("f63") };
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to"],
+                Star,
+                new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = slot },
+                AnExtractor()));
+
+        Assert.Single(result.Errors, e => e.Pointer == "/state/applies_to/default");
+    }
+
+    [Fact]
+    public void Evaluate_FromStateWithoutAWildcard_Fails()
+    {
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to"],
+                wildcard: null,
+                new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = FacetSlot() },
+                AnExtractor()));
+
+        Assert.Single(result.Errors, e => e.Pointer == "/providers/knowledge/scope/wildcard");
+    }
+
+    [Fact]
+    public void Evaluate_FacetSlotIsNotTypeString_Fails()
+    {
+        var slot = FacetSlot() with { Type = StateSlotType.Boolean };
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to"],
+                Star,
+                new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = slot },
+                AnExtractor()));
+
+        var error = Assert.Single(result.Errors, e => e.Pointer == "/state/applies_to/type");
+        Assert.Contains("applies_to", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Evaluate_FacetSlotIsNotWrittenByExtractor_Fails()
+    {
+        var slot = FacetSlot() with { Writer = StateWriter.Const, Value = JsonValue.Create("f63") };
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to"],
+                Star,
+                new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = slot },
+                AnExtractor()));
+
+        var error = Assert.Single(result.Errors, e => e.Pointer == "/state/applies_to/writer");
+        Assert.Contains("applies_to", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Evaluate_FacetSlotDeclaresNoEnum_Fails()
+    {
+        var slot = FacetSlot() with { EnumValues = null };
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to"],
+                Star,
+                new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = slot },
+                AnExtractor()));
+
+        var error = Assert.Single(result.Errors, e => e.Pointer == "/state/applies_to/enum");
+        Assert.Contains("applies_to", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Evaluate_FromStateWithNoExtractor_Fails()
+    {
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to"],
+                Star,
+                new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = FacetSlot() }));
+
+        Assert.Single(result.Errors, e => e.Pointer == "/extractor");
+    }
+
+    [Fact]
+    public void Evaluate_FromStateNameNotInWildcardFacets_Fails()
+    {
+        var wildcard = new KnowledgeWildcardConfiguration { Value = "*", Facets = ["other_facet"] };
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to"],
+                wildcard,
+                new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = FacetSlot() },
+                AnExtractor()));
+
+        var error = Assert.Single(result.Errors, e => e.Pointer == "/providers/knowledge/scope/wildcard/facets");
+        Assert.Contains("applies_to", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Evaluate_FacetWildcardValueIsWhitespace_Fails()
+    {
+        var wildcard = new KnowledgeWildcardConfiguration { Value = "   ", Facets = ["applies_to"] };
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped([], wildcard, new Dictionary<string, StateSlotConfiguration>()));
+
+        Assert.Single(result.Errors, e => e.Pointer == "/providers/knowledge/scope/wildcard/value");
+    }
+
+    [Fact]
+    public void Evaluate_FacetWildcardDeclaresNoFacets_Fails()
+    {
+        var wildcard = new KnowledgeWildcardConfiguration { Value = "*", Facets = [] };
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped([], wildcard, new Dictionary<string, StateSlotConfiguration>()));
+
+        Assert.Single(result.Errors, e => e.Pointer == "/providers/knowledge/scope/wildcard/facets");
     }
 
     // ---------------------------------------------------------------------------------------------

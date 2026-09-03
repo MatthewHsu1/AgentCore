@@ -6,6 +6,7 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Diagnostics;
+using AgentCore.Application.Knowledge;
 using AgentCore.Application.Policy;
 using AgentCore.Application.Ports;
 using AgentCore.Application.State;
@@ -13,8 +14,11 @@ using AgentCore.Application.Tools;
 using AgentCore.Application.Transcript;
 using AgentCore.Domain;
 using AgentCore.Domain.Audit;
+using AgentCore.Domain.Knowledge;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AgentCore.Application.Runtime;
 
@@ -76,6 +80,8 @@ public sealed class CallSession : IConversationPort
 
     private readonly bool _sessionCarriesHistory;
 
+    private readonly ILogger _logger;
+
     private readonly Lock _interruptLock = new();
 
     private AgentSession? _agentSession;
@@ -113,7 +119,8 @@ public sealed class CallSession : IConversationPort
         IGuardEvaluator guards,
         StateExtractor? extractor,
         TimeProvider timeProvider,
-        CallObserverDispatcher? observers = null)
+        CallObserverDispatcher? observers = null,
+        ILogger? logger = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(callId);
         ArgumentNullException.ThrowIfNull(compiled);
@@ -121,6 +128,8 @@ public sealed class CallSession : IConversationPort
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         CallId = callId;
+
+        _logger = logger ?? NullLogger.Instance;
 
         _compiled = compiled;
 
@@ -683,7 +692,8 @@ public sealed class CallSession : IConversationPort
             turn.Renders,
             turn.Sources,
             failure => _events.RaiseToolFailure(turn.Index, failure),
-            TurnContextOf(turn));
+            TurnContextOf(turn),
+            turn.Knowledge);
 
     /// <summary>
     /// Reads what one turn adds to its own model invocation.
@@ -779,6 +789,15 @@ public sealed class CallSession : IConversationPort
         // One turn is one span. The call id rides here, on a span attribute, because T61 refuses it
         // on a metric. The span is disposed in the finally of whichever run method opened the turn.
         var activity = AgentCoreTelemetry.StartTurn(CallId, State.TurnIndex, State.Stage);
+
+        var knowledge = StateKnowledgeScope.Compose(
+            State, _compiled.Configuration.Providers?.Knowledge?.Scope, KnowledgeScopeScope.Current);
+
+        if (knowledge is { Origins.Count: > 0 })
+        {
+            Log.KnowledgeScopeComposed(_logger, CallId, State.TurnIndex, knowledge.Origins);
+        }
+
         return new Turn(
             agent,
             session,
@@ -791,6 +810,7 @@ public sealed class CallSession : IConversationPort
             _time.GetTimestamp(),
             _hasScreen ? new TurnRenders() : null,
             new TurnSources(),
+            knowledge,
             origin?.MessageId);
     }
 
@@ -1233,9 +1253,17 @@ public sealed class CallSession : IConversationPort
             return null;
         }
 
-        // The extractor reads one finished turn and not the whole call, which is what its own prompt
-        // asks for. The state document already carries every earlier answer, so nothing is lost.
+        // The extractor reads the finished turn and, in front of it, the last thing the agent said
+        // before the caller spoke. A caller answering a question — "the ENT one", "yes", "the second
+        // one" — cannot be read without the question, and the state document cannot carry it because
+        // nothing was written yet. The rest of the call stays out: the document already carries every
+        // earlier answer. Measured 2026-09-02: with the question in view every such answer resolved,
+        // and a turn where only the agent had named a machine still filled nothing.
         List<ChatMessage> finished = [turn.Spoken, .. response.Messages];
+        if (Transcript.LastOrDefault(message => message.Role == ChatRole.Assistant && message.Text.Length > 0) is { } asked)
+        {
+            finished.Insert(0, asked);
+        }
 
         // A failed extraction never drops the turn. The result carries the reason instead.
         var result = await _extractor.ExtractAsync(State, finished, cancellationToken).ConfigureAwait(false);
@@ -1311,6 +1339,11 @@ public sealed class CallSession : IConversationPort
     /// What this turn cites into. Built once per turn for the same reason <see cref="Renders"/> is,
     /// and never null: a call with no screen still answers from documents.
     /// </param>
+    /// <param name="Knowledge">
+    /// What this turn may see of the knowledge base. Built once per turn for the same reason
+    /// <see cref="Renders"/> is, and additionally because a scope that changed between two updates
+    /// of one streaming turn would search two different corpora for one answer.
+    /// </param>
     /// <param name="MessageId">
     /// What the caller calls the message it sent, or <see langword="null"/> when it named none. The
     /// append stamps it on the row so a later edit has something to anchor on.
@@ -1327,6 +1360,7 @@ public sealed class CallSession : IConversationPort
         long StartedAt,
         TurnRenders? Renders,
         TurnSources Sources,
+        KnowledgeScope? Knowledge,
         string? MessageId);
 
     /// <summary>The session a graph row's call holds, so store 1 has somewhere to live.</summary>

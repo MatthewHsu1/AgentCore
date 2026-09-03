@@ -102,7 +102,10 @@ public sealed class KnowledgeProviderSchemaTests
         // roles it reads are the two the document already named. The wording is replaceable, and
         // that is a different thing from being absent.
         Assert.Equal("source-locator", knowledge.Citation);
-        Assert.Equal(0.25, knowledge.ScoreFloor);
+        // Cosine similarity on the dense prefetch. Measured 2026-09-02 on text-embedding-3-small:
+        // 0.25 let twelve of twenty cards through for a question the corpus did not answer; 0.35 let
+        // none through and kept every card of every answered question.
+        Assert.Equal(0.35, knowledge.ScoreFloor);
     }
 
     [Fact]

@@ -263,6 +263,8 @@ public sealed class QdrantKnowledgeAdapter : IKnowledgeStoreAdapter
                     VectorName = entry.Vector,
                     Fields = entry.Fields,
                     ScopeTemplate = entry.Scope.Template,
+                    ScopeWildcard = entry.Scope.Wildcard?.Value,
+                    ScopeWildcardFacets = entry.Scope.Wildcard?.Facets ?? [],
                     Links = entry.Links,
                     LinkNamespace = linkNamespace,
                     Analyzer = analyzer,

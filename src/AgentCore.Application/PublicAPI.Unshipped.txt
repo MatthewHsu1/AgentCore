@@ -480,9 +480,21 @@ AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Vector
 AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration
 AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration!
 AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.Equals(AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.FromState.get -> System.Collections.Generic.IReadOnlyList<string!>!
+AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.FromState.init -> void
 AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.KnowledgeScopeConfiguration() -> void
 AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.Template.get -> string?
 AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.Template.init -> void
+AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.Wildcard.get -> AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration?
+AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.Wildcard.init -> void
+AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration
+AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration!
+AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration.Equals(AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration.Facets.get -> System.Collections.Generic.IReadOnlyList<string!>!
+AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration.Facets.init -> void
+AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration.KnowledgeWildcardConfiguration() -> void
+AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration.Value.get -> string!
+AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration.Value.init -> void
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.LlmProviderConfiguration!
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.As.get -> string!
@@ -1186,7 +1198,7 @@ const AgentCore.Application.Configuration.Schema.EvaluationConfiguration.Default
 const AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration.DefaultNamespace = "url" -> string!
 const AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.DefaultAnalyzer = "none" -> string!
 const AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.DefaultCitation = "source-locator" -> string!
-const AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.DefaultScoreFloor = 0.25 -> double
+const AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.DefaultScoreFloor = 0.35 -> double
 const AgentCore.Application.Configuration.Schema.ReservedStateSlots.CallDurationSeconds = "callDurationSeconds" -> string!
 const AgentCore.Application.Configuration.Schema.ReservedStateSlots.Stage = "stage" -> string!
 const AgentCore.Application.Configuration.Schema.ReservedStateSlots.TurnIndex = "turnIndex" -> string!
@@ -1323,6 +1335,9 @@ override AgentCore.Application.Configuration.Schema.KnowledgeProviderConfigurati
 override AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration.ToString() -> string!
 override AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.ToString() -> string!
@@ -1505,6 +1520,8 @@ static AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration
 static AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.operator ==(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.operator !=(AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.operator ==(AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration.operator !=(AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration.operator ==(AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.operator !=(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? left, AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.operator ==(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? left, AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.McpAllowEntry.operator !=(AgentCore.Application.Configuration.Schema.McpAllowEntry? left, AgentCore.Application.Configuration.Schema.McpAllowEntry? right) -> bool

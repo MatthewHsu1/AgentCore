@@ -22,7 +22,7 @@ public sealed class ConfigurationLoaderTests
     [Fact]
     public void Example_BindsEveryStateSlot()
     {
-        Assert.Equal(6, Example.State.Count);
+        Assert.Equal(8, Example.State.Count);
 
         var goodbye = Example.State["callerSaidGoodbye"];
         Assert.Equal(StateSlotType.Boolean, goodbye.Type);

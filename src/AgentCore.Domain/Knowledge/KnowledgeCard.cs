@@ -28,7 +28,7 @@ public sealed record KnowledgeCard
     /// <summary>Gets how much the source is trusted: higher is more trusted.</summary>
     public int? Authority { get; init; }
 
-    /// <summary>Gets the fused score, or <see langword="null"/> when a link pulled this card in.</summary>
+    /// <summary>Gets the retrieval score — cosine similarity under one leg, a fused rank score under several — or <see langword="null"/> when a link pulled this card in.</summary>
     public double? Score { get; init; }
 
     /// <summary>

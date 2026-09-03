@@ -226,4 +226,35 @@ public sealed class ConfigurationBinderTests
 
         Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
     }
+
+    [Fact]
+    public void Bind_KnowledgeScopeWildcardAndFromState_ReadsBoth()
+    {
+        const string Document = """
+            apiVersion: agentcore/v1
+            name: doc
+            providers:
+              call:   { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
+              knowledge:
+                kind: qdrant
+                collection: kb
+                fields: { body: text }
+                scope:
+                  template: "facets.{key}"
+                  wildcard:
+                    value: "*"
+                    facets: [brand, applies_to]
+                  fromState: [brand, applies_to]
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(Document);
+        var scope = configuration.Providers!.Knowledge!.Scope;
+
+        Assert.Equal("*", scope.Wildcard!.Value);
+        Assert.Equal(["brand", "applies_to"], scope.Wildcard.Facets);
+        Assert.Equal(["brand", "applies_to"], scope.FromState);
+    }
 }

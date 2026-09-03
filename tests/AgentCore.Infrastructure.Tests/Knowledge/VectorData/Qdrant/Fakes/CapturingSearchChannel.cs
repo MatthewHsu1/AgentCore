@@ -29,7 +29,7 @@ internal sealed class CapturingSearchChannel : IQdrantSearchChannel
     }
 
     /// <summary>Gets the fused query the store built, or null when it never searched.</summary>
-    public FusedQuery? Query { get; private set; }
+    public SearchQuery? Query { get; private set; }
 
     /// <summary>Gets the filter the store scrolled with, or null when it never scrolled.</summary>
     public Filter? ScrollFilter { get; private set; }
@@ -57,7 +57,7 @@ internal sealed class CapturingSearchChannel : IQdrantSearchChannel
                 .Where(condition => condition.Field is { Match.Text.Length: > 0 })
                 .Select(condition => condition.Field.Key)];
 
-    public Task<IReadOnlyList<ScoredPoint>> QueryAsync(FusedQuery query, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<ScoredPoint>> QueryAsync(SearchQuery query, CancellationToken cancellationToken)
     {
         Query = query;
         return Task.FromResult(_ranked);

@@ -83,6 +83,7 @@ public static class ConfigurationValidator
 
         CheckReferences(configuration, names, errors);
         CheckSlotWriters(configuration, errors);
+        CheckKnowledgeScopeSlots(configuration, errors);
         CheckGuardRules(configuration, errors);
         CheckExclusivity(configuration, errors, warnings);
         CheckReachability(configuration, errors);
@@ -494,6 +495,120 @@ public static class ConfigurationValidator
                     + "logged by every proxy it passes, and nothing resolves a reference there — it "
                     + "would be passed through as its own characters. Put the credential in headers: "
                     + "instead."));
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Check 2, knowledge scope: a state-built scope must not produce a filter nobody meant.
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>Refuses a scope built from state that could produce a filter nobody meant.</summary>
+    /// <remarks>
+    /// These are document checks, not store checks: <c>KnowledgeStartup</c> skips the store factory
+    /// for a host-supplied port, but the session composes the scope either way.
+    /// </remarks>
+    private static void CheckKnowledgeScopeSlots(
+        AgentCoreConfiguration configuration, List<ConfigurationError> errors)
+    {
+        if (configuration.Providers?.Knowledge?.Scope is not { } scope)
+        {
+            return;
+        }
+
+        if (scope.Wildcard is { } wildcard)
+        {
+            if (string.IsNullOrWhiteSpace(wildcard.Value))
+            {
+                errors.Add(Reference(
+                    "/providers/knowledge/scope/wildcard/value",
+                    "the wildcard value is blank, so it names no payload value a card could carry."));
+            }
+
+            if (wildcard.Facets.Count == 0)
+            {
+                errors.Add(Reference(
+                    "/providers/knowledge/scope/wildcard/facets",
+                    "the wildcard names no facets, so it widens nothing. Name the reach facets, and "
+                    + "never an isolation facet such as a customer id."));
+            }
+        }
+
+        if (scope.FromState.Count == 0)
+        {
+            return;
+        }
+
+        if (scope.Wildcard is null)
+        {
+            errors.Add(Reference(
+                "/providers/knowledge/scope/wildcard",
+                "fromState is set and no wildcard is. An unknown slot would then leave its facet out "
+                + "of the scope, putting no condition on it, and every value of that facet would be "
+                + "in reach. Declare the wildcard, or drop fromState."));
+        }
+
+        if (configuration.Extractor is null)
+        {
+            errors.Add(Reference(
+                "/extractor",
+                "fromState names extractor slots and this document declares no extractor, so no slot "
+                + "is ever filled and every call searches only what the wildcard admits."));
+        }
+
+        foreach (var name in scope.FromState)
+        {
+            if (scope.Wildcard is { } declared
+                && !declared.Facets.Contains(name, StringComparer.Ordinal))
+            {
+                errors.Add(Reference(
+                    "/providers/knowledge/scope/wildcard/facets",
+                    $"fromState names '{name}' and wildcard.facets does not, so an unfilled '{name}' "
+                    + "would be searched for the literal wildcard rather than widened by it."));
+            }
+
+            if (!configuration.State.TryGetValue(name, out var slot))
+            {
+                errors.Add(Reference(
+                    "/providers/knowledge/scope/fromState",
+                    $"fromState names the slot '{name}', which this document does not declare."));
+                continue;
+            }
+
+            var pointer = Pointer.State(name);
+
+            if (slot.Default is not null)
+            {
+                errors.Add(Reference(
+                    ConfigurationError.AppendPointer(pointer, "default"),
+                    $"the facet slot '{name}' declares a default. An unfilled slot reads as its "
+                    + "default, so every call before the caller says otherwise would be scoped to a "
+                    + "guess, with no error."));
+            }
+
+            if (slot.Type != StateSlotType.String)
+            {
+                errors.Add(Reference(
+                    ConfigurationError.AppendPointer(pointer, "type"),
+                    $"the facet slot '{name}' is not type string. A facet holds one string value."));
+            }
+
+            if (slot.Writer != StateWriter.Extractor)
+            {
+                errors.Add(Reference(
+                    ConfigurationError.AppendPointer(pointer, "writer"),
+                    $"the facet slot '{name}' is not written by the extractor. A const slot is filled "
+                    + "before turn 1 and would scope every call to it; a tool slot could change the "
+                    + "scope mid-call."));
+            }
+
+            if (slot.EnumValues is not { Count: > 0 })
+            {
+                errors.Add(Reference(
+                    ConfigurationError.AppendPointer(pointer, "enum"),
+                    $"the facet slot '{name}' declares no enum. Nothing would then stop a value the "
+                    + "corpus has never been tagged with, which the wildcard turns into an answer "
+                    + "from the wrong bucket rather than an empty result."));
             }
         }
     }

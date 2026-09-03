@@ -10,7 +10,7 @@ internal sealed class HangingSearchChannel : IQdrantSearchChannel
 
     public HangingSearchChannel(TimeSpan delay) => _delay = delay;
 
-    public async Task<IReadOnlyList<ScoredPoint>> QueryAsync(FusedQuery query, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ScoredPoint>> QueryAsync(SearchQuery query, CancellationToken cancellationToken)
     {
         await Task.Delay(_delay, cancellationToken).ConfigureAwait(false);
         return [];

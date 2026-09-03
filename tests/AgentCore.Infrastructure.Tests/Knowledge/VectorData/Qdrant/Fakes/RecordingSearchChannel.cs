@@ -22,7 +22,7 @@ internal sealed class RecordingSearchChannel : IQdrantSearchChannel
     /// <summary>Gets every id set <see cref="RetrieveAsync"/> was called with, in call order.</summary>
     public List<IReadOnlyList<Guid>> RetrievedIds { get; } = [];
 
-    public Task<IReadOnlyList<ScoredPoint>> QueryAsync(FusedQuery query, CancellationToken cancellationToken) =>
+    public Task<IReadOnlyList<ScoredPoint>> QueryAsync(SearchQuery query, CancellationToken cancellationToken) =>
         Task.FromResult(_queryResult);
 
     public Task<IReadOnlyList<RetrievedPoint>> RetrieveAsync(

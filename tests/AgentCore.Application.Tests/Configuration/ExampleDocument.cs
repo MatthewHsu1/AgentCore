@@ -45,6 +45,8 @@ internal static class ExampleDocument
           machineIdentified:   { type: boolean, default: false, writer: extractor }
           resolved:            { type: boolean, default: false, writer: extractor }
           orderStatus:         { type: string,  writer: tool, from: lookup_order.status }
+          brand:      { type: string, writer: extractor, description: "The brand of the caller's machine.", enum: [sole, spirit] }
+          applies_to: { type: string, writer: extractor, description: "The model, as printed on the machine.", enum: [f63, f65, f80] }
           failedResolveTurns:
             type: integer
             default: 0
@@ -175,6 +177,10 @@ internal static class ExampleDocument
               authority: authority
             scope:
               template: "facets.{key}"
+              wildcard:
+                value: "*"
+                facets: [brand, applies_to]
+              fromState: [brand, applies_to]
             links:
               field: see_also
               lookup: uuid5
@@ -220,6 +226,25 @@ internal static class ExampleDocument
               "type": "string",
               "writer": "tool",
               "from": "lookup_order.status"
+            },
+            "brand": {
+              "type": "string",
+              "writer": "extractor",
+              "description": "The brand of the caller's machine.",
+              "enum": [
+                "sole",
+                "spirit"
+              ]
+            },
+            "applies_to": {
+              "type": "string",
+              "writer": "extractor",
+              "description": "The model, as printed on the machine.",
+              "enum": [
+                "f63",
+                "f65",
+                "f80"
+              ]
             },
             "failedResolveTurns": {
               "type": "integer",
@@ -574,7 +599,18 @@ internal static class ExampleDocument
                 "authority": "authority"
               },
               "scope": {
-                "template": "facets.{key}"
+                "template": "facets.{key}",
+                "wildcard": {
+                  "value": "*",
+                  "facets": [
+                    "brand",
+                    "applies_to"
+                  ]
+                },
+                "fromState": [
+                  "brand",
+                  "applies_to"
+                ]
               },
               "links": {
                 "field": "see_also",

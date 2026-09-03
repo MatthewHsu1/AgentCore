@@ -94,7 +94,8 @@ public sealed class StateDocument
     /// <param name="value">The raw value the writer produced.</param>
     /// <returns>
     /// <see langword="true"/> when the value coerced and the slot changed. <see langword="false"/>
-    /// when coercion failed, which leaves the slot at its default.
+    /// when coercion failed or the value is outside the slot's <c>enum</c>, which leaves the slot
+    /// as it was.
     /// </returns>
     /// <exception cref="ArgumentException">The slot is reserved, and a reserved slot is read-only.</exception>
     public bool TryWrite(string slot, JsonNode? value)
@@ -116,8 +117,33 @@ public sealed class StateDocument
             return false;
         }
 
+        // A slot that names its members has a closed domain, and the knowledge scope reads such a
+        // slot straight into a search filter. Refusing here is the only gate: the extractor's schema
+        // is a request to the model, and Restore writes a host-supplied blob through this same path.
+        if (declared.EnumValues is { Count: > 0 } members && !IsMember(members, coerced))
+        {
+            return false;
+        }
+
         _written[slot] = coerced;
         return true;
+    }
+
+    // ToJsonString rather than JsonNode.DeepEquals, so the comparison works on every target
+    // framework this package builds for.
+    private static bool IsMember(IReadOnlyList<JsonNode> members, JsonNode? value)
+    {
+        var written = value?.ToJsonString();
+
+        foreach (var member in members)
+        {
+            if (string.Equals(member.ToJsonString(), written, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Takes a snapshot the guards read. It holds every declared slot and the three reserved slots.</summary>

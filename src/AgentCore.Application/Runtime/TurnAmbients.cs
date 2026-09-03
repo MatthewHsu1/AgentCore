@@ -46,19 +46,23 @@ internal sealed record TurnAmbients
     /// <param name="sources">What this turn cites into. Never null: a call with no screen still has sources.</param>
     /// <param name="onToolFailure">What to do with a tool failure the run reports.</param>
     /// <param name="context">The turn the tools are running inside.</param>
+    /// <param name="knowledge">What this turn may see of the knowledge base, or <see langword="null"/> when the document composes none.</param>
     internal static IDisposable Enter(
         StateDocument state,
         TurnRenders? renders,
         TurnSources sources,
         Action<ToolFailure> onToolFailure,
-        TurnContext context)
+        TurnContext context,
+        KnowledgeScope? knowledge)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(onToolFailure);
         ArgumentNullException.ThrowIfNull(context);
 
-        return Push((Ambient.Value ?? None) with
+        var current = Ambient.Value ?? None;
+
+        return Push(current with
         {
             State = state,
             Screen = renders,
@@ -66,6 +70,7 @@ internal sealed record TurnAmbients
             Sources = sources,
             OnToolFailure = onToolFailure,
             Context = context,
+            Knowledge = knowledge ?? current.Knowledge,
         });
     }
 

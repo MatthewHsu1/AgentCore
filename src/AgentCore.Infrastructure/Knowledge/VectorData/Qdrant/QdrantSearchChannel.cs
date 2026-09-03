@@ -21,7 +21,7 @@ internal sealed class QdrantSearchChannel : IQdrantSearchChannel, IDisposable
     public void Dispose() => _client.Dispose();
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<ScoredPoint>> QueryAsync(FusedQuery query, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<ScoredPoint>> QueryAsync(SearchQuery query, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(query);
 
@@ -30,6 +30,7 @@ internal sealed class QdrantSearchChannel : IQdrantSearchChannel, IDisposable
                 query.Collection,
                 prefetch: query.Prefetch,
                 query: query.Query,
+                usingVector: query.Using,
                 limit: query.Limit,
                 payloadSelector: new WithPayloadSelector { Enable = true },
                 cancellationToken: cancellationToken),

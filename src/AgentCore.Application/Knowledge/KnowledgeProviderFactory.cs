@@ -30,6 +30,19 @@ internal static class KnowledgeProviderFactory
         + "within. Say you cannot look this up, and do not answer from memory.";
 
     /// <summary>
+    /// What the model is told when the search ran and matched nothing.
+    /// </summary>
+    /// <remarks>
+    /// Tool mode only. Prefetch searches before every invocation on a query composed from recent
+    /// messages, so a greeting would otherwise open the call by announcing an empty knowledge base.
+    /// </remarks>
+    private const string EmptyNotice =
+        "The knowledge base holds nothing for this question. Say so, and do not answer from memory.";
+
+    /// <summary>The source name every notice carries, so the model can never cite one as a card.</summary>
+    internal const string NoticeSourceName = "agentcore:notice";
+
+    /// <summary>
     /// The scope an agent that declares <c>scoped: false</c> searches under.
     /// </summary>
     private static readonly KnowledgeScope WholeCorpus =
@@ -101,6 +114,15 @@ internal static class KnowledgeProviderFactory
                 {
                     var record = Record(agent, knowledge, query, cards, started, failure: null).ForLog();
                     Log.KnowledgeRetrieved(logger, agent, cards.Count, record);
+                }
+
+                // Only a scope with at least one facet gets the notice. An unscoped agent opened
+                // WholeCorpus, and its empty search stays an empty list.
+                if (cards.Count == 0
+                    && knowledge.Mode == KnowledgeMode.Tool
+                    && KnowledgeScopeScope.Current is { Facets.Count: > 0 })
+                {
+                    return [Notice(EmptyNotice)];
                 }
 
                 var shown = Kept(cards, knowledge);
@@ -217,5 +239,5 @@ internal static class KnowledgeProviderFactory
     /// <param name="text">What the model is told.</param>
     /// <returns>The result.</returns>
     private static TextSearchProvider.TextSearchResult Notice(string text)
-        => new() { Text = text };
+        => new() { Text = text, SourceName = NoticeSourceName };
 }

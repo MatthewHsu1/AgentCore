@@ -1147,6 +1147,30 @@
               "minLength": 1,
               "pattern": "\\{key\\}",
               "description": "The payload path each facet key becomes, with {key} standing for the key. Flat facets are {key}; facets nested under one struct are facets.{key}."
+            },
+            "wildcard": {
+              "type": "object",
+              "description": "How a card marks itself reachable from every scope. Absent means exact match only.",
+              "additionalProperties": false,
+              "required": ["value", "facets"],
+              "properties": {
+                "value": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The payload value that satisfies any scope on a named facet."
+                },
+                "facets": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": { "type": "string", "minLength": 1 },
+                  "description": "The facet keys the wildcard widens. Every other facet stays exact match."
+                }
+              }
+            },
+            "fromState": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "description": "The state slots the turn's scope is built from. Each becomes one facet key."
             }
           }
         },
@@ -1199,8 +1223,8 @@
           "type": "number",
           "minimum": 0,
           "maximum": 1,
-          "default": 0.25,
-          "description": "The smallest fused score a card may carry."
+          "default": 0.35,
+          "description": "The cosine similarity a card must score strictly above. Applied on the dense prefetch, before any fusion. 0 disables the floor."
         }
       }
     },

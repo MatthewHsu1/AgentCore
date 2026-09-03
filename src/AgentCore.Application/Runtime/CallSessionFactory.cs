@@ -78,7 +78,8 @@ public sealed class CallSessionFactory : ICallSessionFactory
             _guards,
             _extractor,
             _time,
-            new CallObserverDispatcher(_observers, _logger));
+            new CallObserverDispatcher(_observers, _logger),
+            _logger);
 
         // Named, not applied. The session resumes on its first turn, where store 0's own copy
         // outranks this one — see the remarks on CallSession.Resume.

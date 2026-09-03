@@ -131,6 +131,26 @@ public sealed record KnowledgeScopeConfiguration
     /// <c>knowledge: { scoped: true }</c>.
     /// </summary>
     public string? Template { get; init; }
+
+    /// <summary>Gets how a card marks itself reachable from every scope, or <see langword="null"/> for exact match only.</summary>
+    public KnowledgeWildcardConfiguration? Wildcard { get; init; }
+
+    /// <summary>Gets the state slots the turn's scope is built from. Each name becomes one facet key.</summary>
+    public IReadOnlyList<string> FromState { get; init; } = [];
+}
+
+/// <summary>Which facets a card may opt out of, and the value it opts out with.</summary>
+/// <remarks>
+/// Named per facet, never global. A wildcard reaching an isolation facet such as a customer id
+/// would serve one mis-tagged card to every caller, which is the failure the scope exists to stop.
+/// </remarks>
+public sealed record KnowledgeWildcardConfiguration
+{
+    /// <summary>Gets the payload value that satisfies any scope on a named facet.</summary>
+    public required string Value { get; init; }
+
+    /// <summary>Gets the facet keys the wildcard widens. Every other facet stays exact match.</summary>
+    public required IReadOnlyList<string> Facets { get; init; }
 }
 
 /// <summary>How a card id becomes something Qdrant can fetch.</summary>
@@ -187,8 +207,13 @@ public sealed record KnowledgeProviderConfiguration
     /// <summary>The citation wording used when the document names none.</summary>
     public const string DefaultCitation = SourceLocatorCitationFormatter.FormatterName;
 
-    /// <summary>The score floor used when the document sets none.</summary>
-    public const double DefaultScoreFloor = 0.25;
+    /// <summary>
+    /// The score floor used when the document sets none: a cosine similarity, applied on the dense
+    /// prefetch. On text-embedding-3-small, 0.25 let twelve of twenty cards through for a question
+    /// the corpus did not answer; 0.35 let none through and kept every answered question's cards.
+    /// 0 disables the floor.
+    /// </summary>
+    public const double DefaultScoreFloor = 0.35;
 
     /// <summary>Gets the adapter that answers <c>IKnowledgeRetrievalPort</c>, such as <c>qdrant</c>.</summary>
     public required string Kind { get; init; }
@@ -233,7 +258,11 @@ public sealed record KnowledgeProviderConfiguration
 
     public string? Mapper { get; init; }
 
-    /// <summary>Gets the smallest fused score a card may carry, in the range 0 to 1.</summary>
+    /// <summary>
+    /// Gets the cosine similarity a card must score strictly above, in the range 0 to 1. The store
+    /// applies it on the dense prefetch, before any fusion; Qdrant drops a card scoring exactly it.
+    /// 0 disables the floor.
+    /// </summary>
     public double ScoreFloor { get; init; } = DefaultScoreFloor;
 }
 
