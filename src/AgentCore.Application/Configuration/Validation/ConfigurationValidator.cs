@@ -90,6 +90,7 @@ public static class ConfigurationValidator
         var names = DeclaredNames.From(configuration);
 
         CheckReferences(configuration, names, errors);
+        ReasoningTemperatureCheck.Run(configuration, errors);
         CheckSlotWriters(configuration, errors);
         CheckKnowledgeScopeSlots(configuration, errors);
         CheckVocabularyAndAmbiguity(configuration, errors, warnings);

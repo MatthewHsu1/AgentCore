@@ -6,8 +6,7 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.Infrastructure.Llm.OpenAI;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
-using ChatCompletionOptions = OpenAI.Chat.ChatCompletionOptions;
-using ChatReasoningEffortLevel = OpenAI.Chat.ChatReasoningEffortLevel;
+using OpenAI.Responses;
 using Xunit;
 
 namespace AgentCore.Infrastructure.Tests.Llm;
@@ -17,10 +16,10 @@ namespace AgentCore.Infrastructure.Tests.Llm;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A reasoning model refuses function tools on the chat-completions path unless the value is
-/// <c>none</c>. Without this setting, the first agent that lists a tool fails every turn with a
-/// vendor 400 naming <c>reasoning_effort</c> — and the log calls it a tool that failed four times,
-/// which is not what happened.
+/// The adapter sends this on the <c>/v1/responses</c> path, which is the only path where a
+/// reasoning model accepts function tools at an effort above <c>none</c>. The value therefore
+/// reaches the vendor inside <see cref="CreateResponseOptions"/>, not inside chat-completion
+/// options, and these tests pin that shape.
 /// </para>
 /// <para>
 /// Every test here runs offline. No request leaves the process and no key is real.
@@ -41,14 +40,14 @@ public sealed class OpenAiReasoningEffortTests
         var client = OpenAiChatClientAdapter.WithReasoningEffort(inner, effort);
         await client.GetResponseAsync("hi", cancellationToken: TestContext.Current.CancellationToken);
 
-        var raw = Assert.IsType<ChatCompletionOptions>(
+        var raw = Assert.IsType<CreateResponseOptions>(
             inner.Seen!.RawRepresentationFactory!(inner));
 
-        Assert.Equal(effort, raw.ReasoningEffortLevel.ToString());
+        Assert.Equal(effort, raw.ReasoningOptions!.ReasoningEffortLevel.ToString());
     }
 
     [Fact]
-    public async Task TheValueThatLetsAReasoningModelUseFunctionTools_IsTheOneNamedNone()
+    public async Task TheLevelThatSendsNoReasoningAtAll_IsTheOneNamedNone()
     {
         // Pinned, so a vendor rename is caught here rather than as a 400 at run time against a real
         // provider. The SDK marks this type for evaluation (OPENAI001); this is what watches it.
@@ -57,10 +56,10 @@ public sealed class OpenAiReasoningEffortTests
         var client = OpenAiChatClientAdapter.WithReasoningEffort(inner, "none");
         await client.GetResponseAsync("hi", cancellationToken: TestContext.Current.CancellationToken);
 
-        var raw = Assert.IsType<ChatCompletionOptions>(inner.Seen!.RawRepresentationFactory!(inner));
+        var raw = Assert.IsType<CreateResponseOptions>(inner.Seen!.RawRepresentationFactory!(inner));
 
-        Assert.Equal(ChatReasoningEffortLevel.None, raw.ReasoningEffortLevel);
-        Assert.Equal("none", ChatReasoningEffortLevel.None.ToString());
+        Assert.Equal(ResponseReasoningEffortLevel.None, raw.ReasoningOptions!.ReasoningEffortLevel);
+        Assert.Equal("none", ResponseReasoningEffortLevel.None.ToString());
     }
 
     [Fact]
@@ -68,7 +67,7 @@ public sealed class OpenAiReasoningEffortTests
     {
         // A default for the entry, not an override of the call.
         CapturingChatClient inner = new();
-        ChatCompletionOptions mine = new();
+        CreateResponseOptions mine = new();
 
         var client = OpenAiChatClientAdapter.WithReasoningEffort(inner, "none");
         await client.GetResponseAsync(

@@ -10,7 +10,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
 using Microsoft.Extensions.AI;
 using OpenAI;
-using OpenAI.Chat;
+using OpenAI.Responses;
 
 namespace AgentCore.Infrastructure.Llm.OpenAI;
 
@@ -71,7 +71,7 @@ public sealed class OpenAiChatClientAdapter : IChatClientAdapter
                 .RequireAsync(KnownSecrets.OpenAi, cancellationToken: cancellationToken)
                 .ConfigureAwait(false)));
 
-        var client = _client.GetChatClient(entry.Model).AsIChatClient();
+        var client = _client.GetResponsesClient().AsIChatClient(entry.Model);
 
         return entry.ReasoningEffort is { Length: > 0 } effort ? WithReasoningEffort(client, effort) : client;
     }
@@ -88,7 +88,10 @@ public sealed class OpenAiChatClientAdapter : IChatClientAdapter
         return client
             .AsBuilder()
             .ConfigureOptions(options => options.RawRepresentationFactory ??=
-                _ => new ChatCompletionOptions { ReasoningEffortLevel = level })
+                _ => new CreateResponseOptions
+                {
+                    ReasoningOptions = new ResponseReasoningOptions { ReasoningEffortLevel = level },
+                })
             .Build();
     }
 
@@ -96,14 +99,14 @@ public sealed class OpenAiChatClientAdapter : IChatClientAdapter
     /// <param name="effort">The value the document wrote.</param>
     /// <returns>The vendor level.</returns>
     /// <exception cref="ConfigurationLoadException">The value is not one this vendor knows.</exception>
-    private static ChatReasoningEffortLevel Level(string effort)
+    private static ResponseReasoningEffortLevel Level(string effort)
         => effort.ToLowerInvariant() switch
         {
-            "none" => ChatReasoningEffortLevel.None,
-            "minimal" => ChatReasoningEffortLevel.Minimal,
-            "low" => ChatReasoningEffortLevel.Low,
-            "medium" => ChatReasoningEffortLevel.Medium,
-            "high" => ChatReasoningEffortLevel.High,
+            "none" => ResponseReasoningEffortLevel.None,
+            "minimal" => ResponseReasoningEffortLevel.Minimal,
+            "low" => ResponseReasoningEffortLevel.Low,
+            "medium" => ResponseReasoningEffortLevel.Medium,
+            "high" => ResponseReasoningEffortLevel.High,
             _ => throw new ConfigurationLoadException(new ConfigurationError
             {
                 Pointer = "/providers/llm",
