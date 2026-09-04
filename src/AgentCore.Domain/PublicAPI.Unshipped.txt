@@ -74,6 +74,7 @@ AgentCore.Domain.Knowledge.KnowledgeScope.Facets.init -> void
 AgentCore.Domain.Knowledge.KnowledgeScope.KnowledgeScope() -> void
 AgentCore.Domain.Knowledge.KnowledgeScope.Origins.get -> System.Collections.Generic.IReadOnlyDictionary<string!, AgentCore.Domain.Knowledge.KnowledgeFacetOrigin>!
 AgentCore.Domain.Knowledge.KnowledgeScope.Origins.init -> void
+AgentCore.Domain.Knowledge.PayloadPath
 AgentCore.Domain.Sources.SourceKind
 AgentCore.Domain.Sources.SourceKind.Document = 0 -> AgentCore.Domain.Sources.SourceKind
 AgentCore.Domain.Sources.SourceKind.Url = 1 -> AgentCore.Domain.Sources.SourceKind
@@ -171,6 +172,7 @@ static AgentCore.Domain.Knowledge.KnowledgeCard.operator !=(AgentCore.Domain.Kno
 static AgentCore.Domain.Knowledge.KnowledgeCard.operator ==(AgentCore.Domain.Knowledge.KnowledgeCard? left, AgentCore.Domain.Knowledge.KnowledgeCard? right) -> bool
 static AgentCore.Domain.Knowledge.KnowledgeScope.operator !=(AgentCore.Domain.Knowledge.KnowledgeScope? left, AgentCore.Domain.Knowledge.KnowledgeScope? right) -> bool
 static AgentCore.Domain.Knowledge.KnowledgeScope.operator ==(AgentCore.Domain.Knowledge.KnowledgeScope? left, AgentCore.Domain.Knowledge.KnowledgeScope? right) -> bool
+static AgentCore.Domain.Knowledge.PayloadPath.Read(System.Collections.Generic.IReadOnlyDictionary<string!, object?>! payload, string? path) -> object?
 static AgentCore.Domain.Sources.SourceReference.operator !=(AgentCore.Domain.Sources.SourceReference? left, AgentCore.Domain.Sources.SourceReference? right) -> bool
 static AgentCore.Domain.Sources.SourceReference.operator ==(AgentCore.Domain.Sources.SourceReference? left, AgentCore.Domain.Sources.SourceReference? right) -> bool
 static AgentCore.Domain.TurnResult.operator !=(AgentCore.Domain.TurnResult? left, AgentCore.Domain.TurnResult? right) -> bool

@@ -275,7 +275,7 @@ public sealed class AuditingFunctionInvokingChatClientRenderTests
     public void TakeFor_ReturnsDistinctRenderIds_InPublishOrder()
     {
         TurnRenders renders = new();
-        using var outer = OuterToolCall.Enter("call_1");
+        using var outer = OuterToolCall.Enter("call_1", out _);
 
         renders.Publish("generative-ui", "b", new { title = "second" });
         renders.Publish("generative-ui", "a", new { title = "first" });

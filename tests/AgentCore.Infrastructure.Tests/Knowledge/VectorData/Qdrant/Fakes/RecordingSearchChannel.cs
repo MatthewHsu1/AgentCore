@@ -35,4 +35,8 @@ internal sealed class RecordingSearchChannel : IQdrantSearchChannel
     public Task<IReadOnlyList<RetrievedPoint>> ScrollAsync(
         string collection, Filter filter, uint limit, CancellationToken cancellationToken) =>
         throw new NotSupportedException("These tests drive links.lookup: direct, which never scrolls.");
+
+    public Task<IReadOnlyList<string>> FacetAsync(
+        string collection, string key, ulong limit, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("These tests drive links.lookup: direct, which never facets.");
 }

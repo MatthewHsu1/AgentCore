@@ -239,6 +239,13 @@ public sealed record KnowledgeProviderConfiguration
     /// <summary>Gets how facet keys become payload paths.</summary>
     public KnowledgeScopeConfiguration Scope { get; init; } = new();
 
+    /// <summary>
+    /// Gets how the knowledge search asks the caller which machine they meant, or
+    /// <see langword="null"/> when this document names none. Absent means neither the probe nor the
+    /// clarification ever runs.
+    /// </summary>
+    public KnowledgeAmbiguityConfiguration? Ambiguity { get; init; }
+
     /// <summary>Gets how links between cards are read and followed, or <see langword="null"/> for no link expansion.</summary>
     public KnowledgeLinksConfiguration? Links { get; init; }
 
@@ -264,6 +271,44 @@ public sealed record KnowledgeProviderConfiguration
     /// 0 disables the floor.
     /// </summary>
     public double ScoreFloor { get; init; } = DefaultScoreFloor;
+}
+
+/// <summary>
+/// How the knowledge search asks the caller which machine they meant, when the scope narrows to more
+/// than one and the search itself came back empty. See section 4 of the ambiguity-and-vocabulary
+/// design.
+/// </summary>
+public sealed record KnowledgeAmbiguityConfiguration
+{
+    /// <summary>The candidate cap used when the document sets none.</summary>
+    public const int DefaultMaxCandidates = 6;
+
+    /// <summary>The per-slot ask cap used when the document sets none.</summary>
+    public const int DefaultMaxAsks = 2;
+
+    /// <summary>The probe's own budget used when the document sets none, in seconds.</summary>
+    public const int DefaultProbeDeadlineSeconds = 5;
+
+    /// <summary>The loser's extra wait used when the document sets none, in seconds.</summary>
+    public const int DefaultProbeWaitMarginSeconds = 1;
+
+    /// <summary>Gets how many distinct values the ask may name. Above this, the ask names none of them.</summary>
+    public int MaxCandidates { get; init; } = DefaultMaxCandidates;
+
+    /// <summary>
+    /// Gets the cap on each of a slot's two ask counters. <c>0</c> means never ask: the vocabulary
+    /// and the gate still work.
+    /// </summary>
+    public int MaxAsks { get; init; } = DefaultMaxAsks;
+
+    /// <summary>Gets the probe's own budget, in seconds. The main search keeps the store's own deadline.</summary>
+    public int ProbeDeadlineSeconds { get; init; } = DefaultProbeDeadlineSeconds;
+
+    /// <summary>
+    /// Gets how much longer than the probe, in seconds, a concurrent loser waits for the winner's
+    /// payload.
+    /// </summary>
+    public int ProbeWaitMarginSeconds { get; init; } = DefaultProbeWaitMarginSeconds;
 }
 
 /// <summary>

@@ -76,4 +76,8 @@ internal sealed class CapturingSearchChannel : IQdrantSearchChannel
         ScrollFilter = filter;
         return Task.FromResult(_fetched);
     }
+
+    public Task<IReadOnlyList<string>> FacetAsync(
+        string collection, string key, ulong limit, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("No test here drives a facet read; use QdrantSearchChannel against a live server.");
 }

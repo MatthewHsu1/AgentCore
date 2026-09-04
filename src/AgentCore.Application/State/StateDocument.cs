@@ -30,21 +30,42 @@ namespace AgentCore.Application.State;
 /// </remarks>
 public sealed class StateDocument
 {
+    private static readonly IReadOnlyDictionary<string, VocabularyView> EmptyVocabulary =
+        new Dictionary<string, VocabularyView>(StringComparer.Ordinal);
+
     private readonly ConcurrentDictionary<string, JsonNode?> _written = new(StringComparer.Ordinal);
+
+    private readonly IReadOnlyDictionary<string, VocabularyView> _vocabulary;
 
     /// <summary>Creates the state of one call from the declared slots.</summary>
     /// <param name="configuration">The loaded document.</param>
     /// <param name="stage">The stage the call starts in, or <see langword="null"/> when there is no policy.</param>
-    public StateDocument(AgentCoreConfiguration configuration, string? stage = null)
+    /// <param name="vocabulary">
+    /// Every <c>vocabulary:</c> slot's domain, sampled once at call open (K40), or
+    /// <see langword="null"/> when the caller has none to give. A slot missing from this map
+    /// refuses every write, the same as a slot missing from an <c>enum:</c>.
+    /// </param>
+    public StateDocument(
+        AgentCoreConfiguration configuration,
+        string? stage = null,
+        IReadOnlyDictionary<string, VocabularyView>? vocabulary = null)
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
         Configuration = configuration;
         Stage = stage ?? configuration.Policy?.Initial ?? string.Empty;
+        _vocabulary = vocabulary ?? EmptyVocabulary;
     }
 
     /// <summary>Gets the document this state was declared by.</summary>
     public AgentCoreConfiguration Configuration { get; }
+
+    /// <summary>
+    /// Gets every <c>vocabulary:</c> slot's domain, as it was sampled at call open (K40). The gate
+    /// below and <see cref="StateExtractor"/>'s linker read this one map, so neither can hold a
+    /// domain the other does not.
+    /// </summary>
+    internal IReadOnlyDictionary<string, VocabularyView> Vocabulary => _vocabulary;
 
     /// <summary>Gets or sets the reserved <c>stage</c> slot. The policy runtime owns it.</summary>
     public string Stage { get; set; }
@@ -125,6 +146,15 @@ public sealed class StateDocument
             return false;
         }
 
+        // K1/K8: vocabulary: is enum:'s large-domain sibling, read from a provider instead of
+        // hand-written. The gate is the same shape — a slot missing from the snapshot (never
+        // sampled, or a refresh that never landed) refuses every value, exactly as an enum: slot
+        // with no members would.
+        if (declared.Vocabulary is not null && !IsVocabularyMember(slot, coerced))
+        {
+            return false;
+        }
+
         _written[slot] = coerced;
         return true;
     }
@@ -145,6 +175,17 @@ public sealed class StateDocument
 
         return false;
     }
+
+    // Through the fold map rather than a walk of Originals: a value is a member exactly when it
+    // folds to a key the collection stores and that key maps back to this same spelling, which is
+    // one dictionary probe instead of a scan of up to maxValues entries per write. It also reads
+    // the one map the linker reads, so the gate and the linker cannot disagree about the domain.
+    private bool IsVocabularyMember(string slot, JsonNode? value)
+        => _vocabulary.TryGetValue(slot, out var view)
+            && value is JsonValue text
+            && text.TryGetValue<string>(out var written)
+            && view.NormalisedToOriginal.TryGetValue(VocabularyFold.Fold(written), out var original)
+            && string.Equals(original, written, StringComparison.Ordinal);
 
     /// <summary>Takes a snapshot the guards read. It holds every declared slot and the three reserved slots.</summary>
     /// <returns>The snapshot. It does not change when the document changes.</returns>

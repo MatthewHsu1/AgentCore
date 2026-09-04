@@ -10,6 +10,10 @@ public sealed record CallSessionState
     private static readonly IReadOnlyDictionary<string, JsonNode?> NoSlots =
         ReadOnlyDictionary<string, JsonNode?>.Empty;
 
+    /// <summary>The slots of a call whose ambiguity channels asked about none.</summary>
+    private static readonly IReadOnlyDictionary<string, CallClarificationState> NoClarifications =
+        ReadOnlyDictionary<string, CallClarificationState>.Empty;
+
     /// <summary>The shape this version of the library writes.</summary>
     public const int CurrentVersion = 1;
 
@@ -30,4 +34,10 @@ public sealed record CallSessionState
 
     /// <summary>Gets the declared slots a writer had filled, by name. An unfilled slot is absent.</summary>
     public IReadOnlyDictionary<string, JsonNode?> Slots { get; init; } = NoSlots;
+
+    /// <summary>
+    /// Gets what each slot's ambiguity channels have spent of their ask budget, by slot name. A slot
+    /// nothing has asked about is absent.
+    /// </summary>
+    public IReadOnlyDictionary<string, CallClarificationState> Clarifications { get; init; } = NoClarifications;
 }

@@ -96,6 +96,10 @@ public sealed class CallSession : IConversationPort
 
     private CallSessionState? _checkpoint;
 
+    private readonly Clarifications _clarifications = new();
+
+    private readonly IReadOnlyDictionary<string, VocabularyView> _vocabulary;
+
     // Whether the running turn has already handed the host something to speak. One rule for both
     // run shapes: a run that has handed the host nothing cannot be the turn the caller was hearing,
     // so a barge-in in that window belongs to the turn that finished before it. A streaming turn
@@ -120,7 +124,8 @@ public sealed class CallSession : IConversationPort
         StateExtractor? extractor,
         TimeProvider timeProvider,
         CallObserverDispatcher? observers = null,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        VocabularyCache? vocabulary = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(callId);
         ArgumentNullException.ThrowIfNull(compiled);
@@ -153,7 +158,11 @@ public sealed class CallSession : IConversationPort
         // read that way, and neither of them ever ends a call by itself.
         _policy = compiled.Configuration.Policy is null ? null : compiled.CreatePolicy(guards);
 
-        State = new StateDocument(compiled.Configuration, _policy?.Stage);
+        // Sampled once, here, and handed to both the gate and the linker (K40): a refresh landing
+        // mid-call must not let the two sides of one write disagree about what the vocabulary was.
+        _vocabulary = vocabulary?.Snapshot() ?? new Dictionary<string, VocabularyView>(StringComparer.Ordinal);
+
+        State = new StateDocument(compiled.Configuration, _policy?.Stage, _vocabulary);
 
         // The writers run in a fixed order, and this is its only record: const slots land before
         // any turn, then each turn applies tool results, the extractor, the clock fields and the
@@ -563,6 +572,8 @@ public sealed class CallSession : IConversationPort
             // commit path the provider overwrites it, because the ordinal this turn leaves behind is
             // not settled until the turn's rows are cut.
             NextOrdinal = Session() is { } session ? _history.NextOrdinal(session) : 0,
+
+            Clarifications = _clarifications.Spent(),
         };
     }
 
@@ -634,6 +645,11 @@ public sealed class CallSession : IConversationPort
             Dropped(refusedStage);
         }
 
+        // Before the slots, and unconditionally: the ask budget is per call, not per session, so a
+        // caller who dropped and reconnected must not buy a fresh maxAsks and hear every clarification
+        // over again. A refused stage does not refuse this — the questions were still asked.
+        _clarifications.RestoreSpent(stored.Clarifications);
+
         foreach (var slot in stored.Slots)
         {
             if (ReservedStateSlots.Contains(slot.Key))
@@ -652,8 +668,10 @@ public sealed class CallSession : IConversationPort
                 continue;
             }
 
-            // TryWrite answers false for exactly two things, and they cost an operator different
-            // things to fix, so the reason says which one happened rather than making them guess.
+            // TryWrite answers false for two kinds of reason that cost an operator different things
+            // to fix — a slot the document no longer declares, and a value its type, enum: or
+            // vocabulary: gate now refuses — so the reason says which one happened rather than
+            // making them guess.
             Dropped(
                 State.Configuration.State.ContainsKey(slot.Key)
                     ? $"the slot '{slot.Key}' no longer takes the value it was stored with."
@@ -693,7 +711,8 @@ public sealed class CallSession : IConversationPort
             turn.Sources,
             failure => _events.RaiseToolFailure(turn.Index, failure),
             TurnContextOf(turn),
-            turn.Knowledge);
+            turn.Knowledge,
+            _clarifications);
 
     /// <summary>
     /// Reads what one turn adds to its own model invocation.
@@ -707,6 +726,7 @@ public sealed class CallSession : IConversationPort
             Instructions = turn.Reminder,
             Tools = _delegatedTools?.Tools,
             ToolsFor = _delegatedTools?.ToolId,
+            CarriesHistory = _sessionCarriesHistory,
         };
 
     /// <summary>
@@ -759,59 +779,78 @@ public sealed class CallSession : IConversationPort
                 $"A turn of the call '{CallId}' is still running. One call runs one turn at a time.");
         }
 
-        // Behind both guards, because the withdrawal deletes: a turn refused for a terminal call or
-        // for one already running must not have taken the tail of the call with it on the way out.
-        // Ahead of the request below, because the words it withdraws have to be gone from the live
-        // history this run reads and not only from the store. The turn index is deliberately not
-        // wound back with them: store 3 keeps its rows for the withdrawn turns, and two turns at one
-        // index in the chain is worse than a gap in it.
-        WithdrawSuperseded(session, origin);
-
-        // The reminder rides a request that happens anyway, and it rides exactly one, as a message
-        // the framework appends for that invocation and stores nowhere. It reads the state document
-        // and never the transcript. Only a document with a policy: has a stage that waits on a slot.
-        var reminder = _policy is null ? null : UnfilledSlotReminder.Build(State, _policy.CurrentStage);
-        ChatMessage spoken = new(ChatRole.User, userInput);
-
-        // The framework has never heard of a turn, so the turn loop names this one before the run.
-        _history.BeginTurn(session, State.TurnIndex);
-
-        // Rows 1 and 2 read the call out of the session, so the run carries the new message alone
-        // and the provider prepends the rest. A workflow takes no provider, so its history rides
-        // the request, rendered into the one role a node still recognises. Neither shape puts the
-        // caller's message in store 1 yet: the turn writes what it said and what it heard together,
-        // when it commits, so the run that is about to read the history does not find its own
-        // prompt already in it.
-        List<ChatMessage> request = _sessionCarriesHistory
-            ? [spoken]
-            : TurnMessages.GraphHistory(_history.Read(session)) is { } rendered ? [rendered, spoken] : [spoken];
-
-        // One turn is one span. The call id rides here, on a span attribute, because T61 refuses it
-        // on a metric. The span is disposed in the finally of whichever run method opened the turn.
-        var activity = AgentCoreTelemetry.StartTurn(CallId, State.TurnIndex, State.Stage);
-
-        var knowledge = StateKnowledgeScope.Compose(
-            State, _compiled.Configuration.Providers?.Knowledge?.Scope, KnowledgeScopeScope.Current);
-
-        if (knowledge is { Origins.Count: > 0 })
+        Activity? activity = null;
+        try
         {
-            Log.KnowledgeScopeComposed(_logger, CallId, State.TurnIndex, knowledge.Origins);
-        }
+            // After both guards: a turn refused as terminal or already-running must not clear the
+            // per-turn mark out from under the turn actually in flight. Runs exactly once here, and
+            // never in EnterAmbients, which reopens per streaming step and would clear the mark
+            // several times inside one streaming turn (K41).
+            _clarifications.BeginTurn();
 
-        return new Turn(
-            agent,
-            session,
-            request,
-            spoken,
-            reminder,
-            State.Stage,
-            State.TurnIndex,
-            activity,
-            _time.GetTimestamp(),
-            _hasScreen ? new TurnRenders() : null,
-            new TurnSources(),
-            knowledge,
-            origin?.MessageId);
+            // Behind both guards, because the withdrawal deletes: a turn refused for a terminal call or
+            // for one already running must not have taken the tail of the call with it on the way out.
+            // Ahead of the request below, because the words it withdraws have to be gone from the live
+            // history this run reads and not only from the store. The turn index is deliberately not
+            // wound back with them: store 3 keeps its rows for the withdrawn turns, and two turns at one
+            // index in the chain is worse than a gap in it.
+            WithdrawSuperseded(session, origin);
+
+            // The reminder rides a request that happens anyway, and it rides exactly one, as a message
+            // the framework appends for that invocation and stores nowhere. It reads the state document
+            // and never the transcript. Only a document with a policy: has a stage that waits on a slot.
+            var reminder = _policy is null ? null : UnfilledSlotReminder.Build(State, _policy.CurrentStage);
+            ChatMessage spoken = new(ChatRole.User, userInput);
+
+            // The framework has never heard of a turn, so the turn loop names this one before the run.
+            _history.BeginTurn(session, State.TurnIndex);
+
+            // Rows 1 and 2 read the call out of the session, so the run carries the new message alone
+            // and the provider prepends the rest. A workflow takes no provider, so its history rides
+            // the request, rendered into the one role a node still recognises. Neither shape puts the
+            // caller's message in store 1 yet: the turn writes what it said and what it heard together,
+            // when it commits, so the run that is about to read the history does not find its own
+            // prompt already in it.
+            List<ChatMessage> request = _sessionCarriesHistory
+                ? [spoken]
+                : TurnMessages.GraphHistory(_history.Read(session)) is { } rendered ? [rendered, spoken] : [spoken];
+
+            // One turn is one span. The call id rides here, on a span attribute, because T61 refuses it
+            // on a metric. The span is disposed in the finally of whichever run method opened the turn.
+            activity = AgentCoreTelemetry.StartTurn(CallId, State.TurnIndex, State.Stage);
+
+            var knowledge = StateKnowledgeScope.Compose(
+                State, _compiled.Configuration.Providers?.Knowledge?.Scope, KnowledgeScopeScope.Current);
+
+            if (knowledge is { Origins.Count: > 0 })
+            {
+                Log.KnowledgeScopeComposed(_logger, CallId, State.TurnIndex, knowledge.Origins);
+            }
+
+            return new Turn(
+                agent,
+                session,
+                request,
+                spoken,
+                reminder,
+                State.Stage,
+                State.TurnIndex,
+                activity,
+                _time.GetTimestamp(),
+                _hasScreen ? new TurnRenders() : null,
+                new TurnSources(),
+                knowledge,
+                origin?.MessageId);
+        }
+        catch
+        {
+            // Only the run methods' own finally frees the session and closes the span, and it starts
+            // after this method returns. A throw while the turn is still being built would otherwise
+            // leave _running set, so every later turn of the call is refused as one already running.
+            activity?.Dispose();
+            Volatile.Write(ref _running, 0);
+            throw;
+        }
     }
 
     /// <summary>Takes back everything the call said after the message this turn hangs off.</summary>
@@ -822,6 +861,13 @@ public sealed class CallSession : IConversationPort
         {
             return;
         }
+
+        // Without this, lastNamed and the pending list would survive a withdrawal that deleted the
+        // very turns they recorded, and silence both ambiguity channels forever about a question the
+        // caller edited away. The ask counters are deliberately untouched here: what the caller
+        // heard, they still heard, and clearing them would let the withdrawn segment buy a fresh
+        // maxAsks budget.
+        _clarifications.Withdraw();
 
         // The turn index the event is filed under is the one about to run; the payload is what says
         // which turns it replaced. The rows of those turns are already deleted, so nothing else in
@@ -1007,6 +1053,15 @@ public sealed class CallSession : IConversationPort
         if (toolFault is null && failure is not null)
         {
             _events.RaiseDiagnostic(CallEventKind.EmptyReply, _time.GetUtcNow(), turn.Index);
+        }
+
+        // §7's ask is charged only for a turn whose own words reached the caller. The clarification
+        // rides an instruction injected before the run, so a run that ended in the fallback reply, or
+        // one moderation refused, never put the question — and a slot recorded as asked is silent for
+        // the rest of the call.
+        if (failure is null && !refused)
+        {
+            _clarifications.CommitAsks();
         }
 
         // What this turn adds to the transcript. It is built here and written at the end of the
@@ -1266,7 +1321,8 @@ public sealed class CallSession : IConversationPort
         }
 
         // A failed extraction never drops the turn. The result carries the reason instead.
-        var result = await _extractor.ExtractAsync(State, finished, cancellationToken).ConfigureAwait(false);
+        var result = await _extractor.ExtractAsync(State, finished, _clarifications, cancellationToken)
+            .ConfigureAwait(false);
         return result.Failure;
     }
 

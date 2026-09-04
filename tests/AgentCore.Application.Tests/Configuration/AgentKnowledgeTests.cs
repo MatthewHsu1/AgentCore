@@ -162,6 +162,20 @@ public sealed class AgentKnowledgeTests
     }
 
     [Fact]
+    public void TwoDefaultValuedInstances_AreEqualAndShareAHashCode()
+    {
+        // ResolvedKnowledge is a public record; its generated Equals and GetHashCode walk every
+        // member, including Clarification. A default value that allocates a fresh instance per
+        // ResolvedKnowledge would compare unequal to another default-valued one by reference,
+        // silently breaking the value semantics a record promises.
+        var a = new ResolvedKnowledge(KnowledgeMode.Prefetch, 5, Citations: false, Scoped: true);
+        var b = new ResolvedKnowledge(KnowledgeMode.Prefetch, 5, Citations: false, Scoped: true);
+
+        Assert.Equal(a, b);
+        Assert.Equal(a.GetHashCode(), b.GetHashCode());
+    }
+
+    [Fact]
     public void TheShippedSchema_CapsLimitAtTheSameValueAsTheConstant()
     {
         // JSON Schema cannot reference a C# constant, so agentcore-v1.schema.json hardcodes

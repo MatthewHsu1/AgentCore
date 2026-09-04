@@ -39,6 +39,7 @@ AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseObservers(params Ag
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseSkills(Microsoft.Agents.AI.AgentSkillsSource! source) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseSkills(string! path) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseSpeech(params AgentCore.Application.Ports.ISpeechAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseStateValueLinkers(params AgentCore.Application.State.IStateValueLinker![]! linkers) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseTelemetry(params AgentCore.Application.Ports.ITelemetryAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreServiceCollectionExtensions
 AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup

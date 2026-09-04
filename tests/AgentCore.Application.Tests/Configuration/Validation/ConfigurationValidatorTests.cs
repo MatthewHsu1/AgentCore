@@ -346,7 +346,9 @@ public sealed class ConfigurationValidatorTests
         IReadOnlyList<string> fromState,
         KnowledgeWildcardConfiguration? wildcard,
         IDictionary<string, StateSlotConfiguration> state,
-        ExtractorConfiguration? extractor = null) => new()
+        ExtractorConfiguration? extractor = null,
+        KnowledgeAmbiguityConfiguration? ambiguity = null,
+        string? mapper = null) => new()
     {
         ApiVersion = "agentcore/v1",
         Name = "doc",
@@ -354,17 +356,23 @@ public sealed class ConfigurationValidatorTests
         Extractor = extractor,
         Providers = new()
         {
+            // AnExtractor() references the model 'small'. Declaring it here means a caller that
+            // passes an extractor never also, silently, trips check 2's reference-resolution row —
+            // which every predicate-filtered assertion in this file would otherwise hide.
+            Llm = [new() { Kind = "openai", Model = "gpt", As = "small" }],
             Knowledge = new()
             {
                 Kind = "qdrant",
                 Collection = "kb",
                 Fields = new() { Body = "text" },
+                Mapper = mapper,
                 Scope = new()
                 {
                     Template = "facets.{key}",
                     Wildcard = wildcard,
                     FromState = fromState,
                 },
+                Ambiguity = ambiguity,
             },
         },
     };
@@ -375,6 +383,15 @@ public sealed class ConfigurationValidatorTests
         Writer = StateWriter.Extractor,
         EnumValues = [JsonValue.Create("f63")!],
     };
+
+    private static StateSlotConfiguration VocabSlot(SlotVocabularyConfiguration? vocabulary = null) => new()
+    {
+        Type = StateSlotType.String,
+        Writer = StateWriter.Extractor,
+        Vocabulary = vocabulary ?? new SlotVocabularyConfiguration { From = "knowledge" },
+    };
+
+    private static KnowledgeAmbiguityConfiguration AnAmbiguity() => new();
 
     private static readonly KnowledgeWildcardConfiguration Star =
         new() { Value = "*", Facets = ["applies_to"] };
@@ -483,7 +500,30 @@ public sealed class ConfigurationValidatorTests
     [Fact]
     public void Evaluate_FromStateNameNotInWildcardFacets_Fails()
     {
-        var wildcard = new KnowledgeWildcardConfiguration { Value = "*", Facets = ["other_facet"] };
+        // wildcard.facets omits 'applies_to' but every member it does name ('brand') is still in
+        // fromState, so only the fromState -> facets direction trips here; the reverse (facets ->
+        // fromState) has its own test below.
+        var wildcard = new KnowledgeWildcardConfiguration { Value = "*", Facets = ["brand"] };
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to", "brand"],
+                wildcard,
+                new Dictionary<string, StateSlotConfiguration>
+                {
+                    ["applies_to"] = FacetSlot(),
+                    ["brand"] = FacetSlot(),
+                },
+                AnExtractor()));
+
+        var error = Assert.Single(result.Errors, e => e.Pointer == "/providers/knowledge/scope/wildcard/facets");
+        Assert.Contains("applies_to", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Evaluate_WildcardFacetNotInFromState_Fails()
+    {
+        var wildcard = new KnowledgeWildcardConfiguration { Value = "*", Facets = ["applies_to", "other_facet"] };
 
         var result = ConfigurationValidator.EvaluateStructure(
             Scoped(
@@ -492,8 +532,9 @@ public sealed class ConfigurationValidatorTests
                 new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = FacetSlot() },
                 AnExtractor()));
 
-        var error = Assert.Single(result.Errors, e => e.Pointer == "/providers/knowledge/scope/wildcard/facets");
-        Assert.Contains("applies_to", error.Message, StringComparison.Ordinal);
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("/providers/knowledge/scope/wildcard/facets", error.Pointer);
+        Assert.Contains("other_facet", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -508,6 +549,17 @@ public sealed class ConfigurationValidatorTests
     }
 
     [Fact]
+    public void Evaluate_WildcardWithoutFromState_Passes()
+    {
+        // A deployment may resolve its own facets and open them as the host ambient, wanting only the
+        // wildcard's widening. StateKnowledgeScope.Compose refuses the reverse, never this.
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped([], Star, new Dictionary<string, StateSlotConfiguration>()));
+
+        Assert.Empty(result.Errors);
+    }
+
+    [Fact]
     public void Evaluate_FacetWildcardDeclaresNoFacets_Fails()
     {
         var wildcard = new KnowledgeWildcardConfiguration { Value = "*", Facets = [] };
@@ -516,6 +568,453 @@ public sealed class ConfigurationValidatorTests
             Scoped([], wildcard, new Dictionary<string, StateSlotConfiguration>()));
 
         Assert.Single(result.Errors, e => e.Pointer == "/providers/knowledge/scope/wildcard/facets");
+    }
+
+    [Fact]
+    public void Evaluate_FacetSlotDeclaresVocabularyInsteadOfEnum_PassesTheEnumRow()
+    {
+        var slot = FacetSlot() with { EnumValues = null, Vocabulary = new SlotVocabularyConfiguration { From = "knowledge" } };
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to"],
+                Star,
+                new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = slot },
+                AnExtractor(),
+                ambiguity: AnAmbiguity()));
+
+        Assert.Empty(result.Errors);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Check 2, vocabulary and ambiguity: section 10 of the ambiguity-and-vocabulary design.
+    //
+    // Every fixture below keeps fromState and wildcard.facets in lockstep (both naming exactly the
+    // facets the test declares slots for) so the row-8 and enum-or-vocabulary checks stay silent,
+    // and sets ambiguity: and wildcard: wherever their absence would otherwise trip rows 5 or 6.
+    // Each refusal test asserts the *total* error count, not just a filtered pointer match, so a
+    // fixture that quietly grows a second error cannot hide behind the assertion.
+    // ---------------------------------------------------------------------------------------------
+    [Fact]
+    public void Evaluate_SlotDeclaresBothEnumAndVocabulary_Fails()
+    {
+        var slot = VocabSlot() with { EnumValues = [JsonValue.Create("f63")!] };
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to"],
+                Star,
+                new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = slot },
+                AnExtractor(),
+                ambiguity: AnAmbiguity()));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("/state/applies_to/vocabulary", error.Pointer);
+        Assert.Contains("applies_to", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A <c>writer: const</c> slot can never legitimately sit in <c>fromState</c> (fromState's
+    /// per-facet check requires <c>writer: extractor</c>), so a slot exercising this row also,
+    /// unavoidably, trips row 3 (vocabulary.from on a slot fromState does not name). The pair is
+    /// asserted explicitly rather than isolated away.
+    /// </summary>
+    [Fact]
+    public void Evaluate_SlotDeclaresBothValueAndVocabulary_Fails()
+    {
+        var slot = VocabSlot() with { Writer = StateWriter.Const, Value = JsonValue.Create("f63") };
+        var wildcard = new KnowledgeWildcardConfiguration { Value = "*", Facets = ["brand"] };
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["brand"],
+                wildcard,
+                new Dictionary<string, StateSlotConfiguration>
+                {
+                    ["applies_to"] = slot,
+                    ["brand"] = FacetSlot(),
+                },
+                AnExtractor(),
+                ambiguity: AnAmbiguity()));
+
+        Assert.Equal(2, result.Errors.Count);
+        Assert.Contains(result.Errors, e => e.Pointer == "/state/applies_to/value");
+        Assert.Contains(result.Errors, e => e.Pointer == "/state/applies_to/vocabulary/from");
+    }
+
+    [Fact]
+    public void Evaluate_VocabularySlotAbsentFromFromState_Fails()
+    {
+        var wildcard = new KnowledgeWildcardConfiguration { Value = "*", Facets = ["brand"] };
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["brand"],
+                wildcard,
+                new Dictionary<string, StateSlotConfiguration>
+                {
+                    ["applies_to"] = VocabSlot(),
+                    ["brand"] = FacetSlot(),
+                },
+                AnExtractor(),
+                ambiguity: AnAmbiguity()));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("/state/applies_to/vocabulary/from", error.Pointer);
+        Assert.Contains("applies_to", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Evaluate_VocabularyMaxValuesBelowTwo_Fails()
+    {
+        var slot = VocabSlot(new SlotVocabularyConfiguration { From = "knowledge", MaxValues = 1 });
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to"],
+                Star,
+                new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = slot },
+                AnExtractor(),
+                ambiguity: AnAmbiguity()));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("/state/applies_to/vocabulary/maxValues", error.Pointer);
+        Assert.Contains("applies_to", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Evaluate_VocabularyRefreshSecondsNegative_Fails()
+    {
+        var slot = VocabSlot(new SlotVocabularyConfiguration { From = "knowledge", RefreshSeconds = -5 });
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to"],
+                Star,
+                new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = slot },
+                AnExtractor(),
+                ambiguity: AnAmbiguity()));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("/state/applies_to/vocabulary/refreshSeconds", error.Pointer);
+        Assert.Contains("applies_to", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Evaluate_VocabularyWithNoAmbiguity_Fails()
+    {
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to"],
+                Star,
+                new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = VocabSlot() },
+                AnExtractor()));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("/providers/knowledge/ambiguity", error.Pointer);
+    }
+
+    [Fact]
+    public void Evaluate_AmbiguityWithNoWildcard_Fails()
+    {
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped([], wildcard: null, new Dictionary<string, StateSlotConfiguration>(), ambiguity: AnAmbiguity()));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("/providers/knowledge/ambiguity", error.Pointer);
+    }
+
+    [Fact]
+    public void Evaluate_AmbiguityMaxCandidatesBelowTwo_Fails()
+    {
+        var ambiguity = new KnowledgeAmbiguityConfiguration { MaxCandidates = 1 };
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to"],
+                Star,
+                new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = FacetSlot() },
+                AnExtractor(),
+                ambiguity: ambiguity));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("/providers/knowledge/ambiguity/maxCandidates", error.Pointer);
+    }
+
+    [Fact]
+    public void Evaluate_AmbiguityMaxAsksBelowZero_Fails()
+    {
+        var ambiguity = new KnowledgeAmbiguityConfiguration { MaxAsks = -1 };
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to"],
+                Star,
+                new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = FacetSlot() },
+                AnExtractor(),
+                ambiguity: ambiguity));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("/providers/knowledge/ambiguity/maxAsks", error.Pointer);
+    }
+
+    [Fact]
+    public void Evaluate_AmbiguityMaxAsksOfZero_IsLegal()
+    {
+        // K38: 0 means gate only. It must never trip the same floor that refuses a negative count.
+        var ambiguity = new KnowledgeAmbiguityConfiguration { MaxAsks = 0 };
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to"],
+                Star,
+                new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = FacetSlot() },
+                AnExtractor(),
+                ambiguity: ambiguity));
+
+        Assert.Empty(result.Errors);
+    }
+
+    [Fact]
+    public void Evaluate_AmbiguityProbeDeadlineSecondsBelowOne_Fails()
+    {
+        var ambiguity = new KnowledgeAmbiguityConfiguration { ProbeDeadlineSeconds = 0 };
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to"],
+                Star,
+                new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = FacetSlot() },
+                AnExtractor(),
+                ambiguity: ambiguity));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("/providers/knowledge/ambiguity/probeDeadlineSeconds", error.Pointer);
+    }
+
+    [Fact]
+    public void Evaluate_AmbiguityProbeWaitMarginSecondsBelowOne_Fails()
+    {
+        var ambiguity = new KnowledgeAmbiguityConfiguration { ProbeWaitMarginSeconds = 0 };
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to"],
+                Star,
+                new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = FacetSlot() },
+                AnExtractor(),
+                ambiguity: ambiguity));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("/providers/knowledge/ambiguity/probeWaitMarginSeconds", error.Pointer);
+    }
+
+    [Fact]
+    public void Evaluate_VocabularyWithCustomMapper_Fails()
+    {
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to"],
+                Star,
+                new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = VocabSlot() },
+                AnExtractor(),
+                ambiguity: AnAmbiguity(),
+                mapper: "custom-mapper"));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("/providers/knowledge/mapper", error.Pointer);
+    }
+
+    [Fact]
+    public void Evaluate_AmbiguityWithCustomMapperAndNoVocabulary_Fails()
+    {
+        // The probe reads Extras, and nothing about vocabulary puts it there. A document that declares
+        // ambiguity without vocabulary must still be refused a mapper that leaves Extras empty.
+        var wildcard = new KnowledgeWildcardConfiguration { Value = "*", Facets = ["applies_to", "brand"] };
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to", "brand"],
+                wildcard,
+                new Dictionary<string, StateSlotConfiguration>
+                {
+                    ["applies_to"] = FacetSlot(),
+                    ["brand"] = FacetSlot(),
+                },
+                AnExtractor(),
+                ambiguity: AnAmbiguity(),
+                mapper: "custom-mapper"));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("/providers/knowledge/mapper", error.Pointer);
+    }
+
+    [Fact]
+    public void Evaluate_AmbiguityProbeDeadlineSecondsAboveTheTimerCeiling_Fails()
+    {
+        // CancelAfter throws above int.MaxValue milliseconds, from a call site with no pointer.
+        var ambiguity = new KnowledgeAmbiguityConfiguration { ProbeDeadlineSeconds = 3_000_000 };
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to"],
+                Star,
+                new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = FacetSlot() },
+                AnExtractor(),
+                ambiguity: ambiguity));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("/providers/knowledge/ambiguity/probeDeadlineSeconds", error.Pointer);
+        Assert.Equal(ConfigurationCheck.ValueRange, error.Check);
+    }
+
+    [Fact]
+    public void Evaluate_AmbiguityProbeWaitMarginSecondsAboveTheTimerCeiling_Fails()
+    {
+        var ambiguity = new KnowledgeAmbiguityConfiguration { ProbeWaitMarginSeconds = 3_000_000 };
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to"],
+                Star,
+                new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = FacetSlot() },
+                AnExtractor(),
+                ambiguity: ambiguity));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("/providers/knowledge/ambiguity/probeWaitMarginSeconds", error.Pointer);
+    }
+
+    [Fact]
+    public void Evaluate_VocabularyRefreshSecondsAboveTheTimerCeiling_Fails()
+    {
+        // PeriodicTimer throws above uint.MaxValue - 1 milliseconds, inside BootAsync.
+        var slot = VocabSlot(new SlotVocabularyConfiguration { From = "knowledge", RefreshSeconds = 86_400_000 });
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to"],
+                Star,
+                new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = slot },
+                AnExtractor(),
+                ambiguity: AnAmbiguity()));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("/state/applies_to/vocabulary/refreshSeconds", error.Pointer);
+        Assert.Equal(ConfigurationCheck.ValueRange, error.Check);
+    }
+
+    [Fact]
+    public void Evaluate_AmbiguityWithEmptyFromState_Warns()
+    {
+        // No facet to drop is as unreachable as one, and the wildcard-only shape now loads.
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped([], Star, new Dictionary<string, StateSlotConfiguration>(), ambiguity: AnAmbiguity()));
+
+        Assert.Empty(result.Errors);
+        var warning = Assert.Single(result.Warnings);
+        Assert.Equal("/providers/knowledge/ambiguity", warning.Pointer);
+    }
+
+    [Fact]
+    public void Evaluate_AmbiguityWithSingleFacetFromState_Warns()
+    {
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to"],
+                Star,
+                new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = FacetSlot() },
+                AnExtractor(),
+                ambiguity: AnAmbiguity()));
+
+        Assert.Empty(result.Errors);
+        var warning = Assert.Single(result.Warnings);
+        Assert.Equal("/providers/knowledge/ambiguity", warning.Pointer);
+    }
+
+    [Fact]
+    public void Evaluate_AmbiguityWithTwoFacetsFromState_DoesNotWarn()
+    {
+        var wildcard = new KnowledgeWildcardConfiguration { Value = "*", Facets = ["applies_to", "brand"] };
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to", "brand"],
+                wildcard,
+                new Dictionary<string, StateSlotConfiguration>
+                {
+                    ["applies_to"] = FacetSlot(),
+                    ["brand"] = FacetSlot(),
+                },
+                AnExtractor(),
+                ambiguity: AnAmbiguity()));
+
+        Assert.Empty(result.Errors);
+        Assert.Empty(result.Warnings);
+    }
+
+    [Fact]
+    public void Evaluate_AmbiguityOnAGraphDocument_Warns()
+    {
+        var wildcard = new KnowledgeWildcardConfiguration { Value = "*", Facets = ["applies_to", "brand"] };
+
+        var configuration = Scoped(
+                ["applies_to", "brand"],
+                wildcard,
+                new Dictionary<string, StateSlotConfiguration>
+                {
+                    ["applies_to"] = FacetSlot(),
+                    ["brand"] = FacetSlot(),
+                },
+                AnExtractor(),
+                ambiguity: AnAmbiguity())
+            with { Graph = new GraphConfiguration() };
+
+        var result = ConfigurationValidator.EvaluateStructure(configuration);
+
+        Assert.Empty(result.Errors);
+        var warning = Assert.Single(result.Warnings);
+        Assert.Equal("/providers/knowledge/ambiguity", warning.Pointer);
+    }
+
+    /// <summary>
+    /// Same two-facet base as <see cref="Evaluate_AmbiguityOnAGraphDocument_Warns"/>, minus
+    /// <c>graph:</c> — the direct control for it, and incidentally the same witness that proves
+    /// the two-facet count keeps the single-facet warning (K33) silent too.
+    /// </summary>
+    [Fact]
+    public void Evaluate_AmbiguityOnANonGraphDocument_DoesNotWarnAboutGraph()
+    {
+        var wildcard = new KnowledgeWildcardConfiguration { Value = "*", Facets = ["applies_to", "brand"] };
+
+        var result = ConfigurationValidator.EvaluateStructure(
+            Scoped(
+                ["applies_to", "brand"],
+                wildcard,
+                new Dictionary<string, StateSlotConfiguration>
+                {
+                    ["applies_to"] = FacetSlot(),
+                    ["brand"] = FacetSlot(),
+                },
+                AnExtractor(),
+                ambiguity: AnAmbiguity()));
+
+        Assert.Empty(result.Errors);
+        Assert.Empty(result.Warnings);
+    }
+
+    [Fact]
+    public void Evaluate_NoVocabularyAndNoAmbiguity_BindsNullAndAddsNothing()
+    {
+        var configuration = ConfigurationLoader.LoadYaml(ExampleDocument.Yaml);
+
+        Assert.All(configuration.State.Values, slot => Assert.Null(slot.Vocabulary));
+        Assert.Null(configuration.Providers?.Knowledge?.Ambiguity);
+
+        var result = ConfigurationValidator.Evaluate(configuration);
+
+        Assert.Empty(result.Errors);
+        Assert.Empty(result.Warnings);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -1220,6 +1719,59 @@ public sealed class ConfigurationValidatorTests
     }
 
     [Fact]
+    public void ValidateLinkerNames_ANameNothingRegistered_FailsNamingItAndThePointer()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken-linker
+            state:
+              applies_to: { type: string, writer: extractor, vocabulary: { from: knowledge, linker: bogus } }
+            providers:
+              call:   { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+        var registered = new HashSet<string>(["exact"], StringComparer.Ordinal);
+
+        var failure = Assert.Throws<ConfigurationLoadException>(
+            () => ConfigurationValidator.ValidateLinkerNames(configuration, registered));
+
+        var error = Assert.Single(failure.Errors);
+        Assert.Equal("/state/applies_to/vocabulary/linker", error.Pointer);
+        Assert.Equal(
+            "the slot 'applies_to' declares vocabulary.linker: 'bogus', which nothing registered. "
+            + "Register it with UseStateValueLinkers, or use 'exact'.",
+            error.Message);
+        Assert.Equal(ConfigurationCheck.ReferenceResolution, error.Check);
+    }
+
+    [Fact]
+    public void ValidateLinkerNames_ARegisteredName_DoesNotThrow()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: fine-linker
+            state:
+              applies_to: { type: string, writer: extractor, vocabulary: { from: knowledge, linker: exact } }
+            providers:
+              call:   { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+        var registered = new HashSet<string>(["exact"], StringComparer.Ordinal);
+
+        var exception = Record.Exception(() => ConfigurationValidator.ValidateLinkerNames(configuration, registered));
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
     public void ValidateSkillReferences_ANameTheFolderDoesNotServe_FailsNamingItAndWhatIsServed()
     {
         const string document = """
@@ -1350,7 +1902,7 @@ public sealed class ConfigurationValidatorTests
         text.AppendLine("state:");
         for (var index = 0; index < slots; index++)
         {
-            text.AppendLine($"  s{index}: {{ type: boolean, default: false, writer: extractor }}");
+            text.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"  s{index}: {{ type: boolean, default: false, writer: extractor }}");
         }
 
         text.AppendLine("guards:");
@@ -1358,7 +1910,7 @@ public sealed class ConfigurationValidatorTests
         text.Append("  second: { and: [ { \"!\": { var: s0 } }");
         for (var index = 1; index < slots; index++)
         {
-            text.Append($", {{ var: s{index} }}");
+            text.Append(System.Globalization.CultureInfo.InvariantCulture, $", {{ var: s{index} }}");
         }
 
         text.AppendLine(" ] }");

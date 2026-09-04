@@ -29,6 +29,14 @@ namespace AgentCore.Application.Configuration.Validation;
 /// </remarks>
 public static class ConfigurationValidator
 {
+    /// <summary>
+    /// The longest interval, in seconds, that every timer these values reach will accept.
+    /// <c>CancellationTokenSource.CancelAfter</c>, <c>Task.WaitAsync</c> and <c>PeriodicTimer</c> each
+    /// throw above <see cref="int.MaxValue"/> milliseconds, from a call site that carries no pointer
+    /// into the document.
+    /// </summary>
+    private const int MaxIntervalSeconds = int.MaxValue / 1000;
+
     /// <summary>Runs checks 2 to 8 and returns everything they find.</summary>
     /// <param name="configuration">The bound document.</param>
     /// <returns>Every error and every partial-coverage warning.</returns>
@@ -84,6 +92,7 @@ public static class ConfigurationValidator
         CheckReferences(configuration, names, errors);
         CheckSlotWriters(configuration, errors);
         CheckKnowledgeScopeSlots(configuration, errors);
+        CheckVocabularyAndAmbiguity(configuration, errors, warnings);
         CheckGuardRules(configuration, errors);
         CheckExclusivity(configuration, errors, warnings);
         CheckReachability(configuration, errors);
@@ -136,6 +145,32 @@ public static class ConfigurationValidator
 
         var errors = new List<ConfigurationError>();
         CheckToolReferences(configuration, servedToolIds, errors);
+
+        if (errors.Count > 0)
+        {
+            throw new ConfigurationLoadException(errors);
+        }
+    }
+
+    /// <summary>
+    /// Resolves every slot's <c>vocabulary.linker</c> against the names the linker registry actually
+    /// serves, and throws when one names a linker nothing registered.
+    /// </summary>
+    /// <remarks>
+    /// K12: a two-argument validator, run after the linker registry is built — the registry itself
+    /// lives in Application and is not reachable from here. A caller runs this after building it,
+    /// the same way <see cref="ValidateToolReferences"/> runs after MCP discovery.
+    /// </remarks>
+    /// <param name="configuration">The bound document.</param>
+    /// <param name="registered">Every linker name the registry serves. Always includes <c>exact</c>.</param>
+    /// <exception cref="ConfigurationLoadException">A slot names a linker nothing registered.</exception>
+    public static void ValidateLinkerNames(AgentCoreConfiguration configuration, IReadOnlySet<string> registered)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentNullException.ThrowIfNull(registered);
+
+        var errors = new List<ConfigurationError>();
+        CheckLinkerReferences(configuration, registered, errors);
 
         if (errors.Count > 0)
         {
@@ -373,6 +408,30 @@ public static class ConfigurationValidator
         }
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Check 2, linker names: K12's two-argument validator, run after the linker registry is built.
+    // ---------------------------------------------------------------------------------------------
+    /// <summary>Resolves every declared <c>vocabulary.linker</c> against what the registry serves.</summary>
+    /// <param name="configuration">The bound document.</param>
+    /// <param name="registered">Every linker name the registry serves.</param>
+    /// <param name="errors">The list every failure is added to.</param>
+    private static void CheckLinkerReferences(
+        AgentCoreConfiguration configuration, IReadOnlySet<string> registered, List<ConfigurationError> errors)
+    {
+        foreach (var slot in configuration.State)
+        {
+            if (slot.Value.Vocabulary is not { } vocabulary || registered.Contains(vocabulary.Linker))
+            {
+                continue;
+            }
+
+            errors.Add(Reference(
+                ConfigurationError.AppendPointer(ConfigurationError.AppendPointer(Pointer.State(slot.Key), "vocabulary"), "linker"),
+                $"the slot '{slot.Key}' declares vocabulary.linker: '{vocabulary.Linker}', which nothing "
+                + "registered. Register it with UseStateValueLinkers, or use 'exact'."));
+        }
+    }
+
     /// <summary>Resolves every agent's <c>skills:</c> entry against what the bound folder serves.</summary>
     /// <param name="configuration">The bound document.</param>
     /// <param name="servedSkillNames">Every skill name the bound folder serves.</param>
@@ -521,31 +580,59 @@ public static class ConfigurationValidator
             if (string.IsNullOrWhiteSpace(wildcard.Value))
             {
                 errors.Add(Reference(
-                    "/providers/knowledge/scope/wildcard/value",
+                    Pointer.WildcardValue,
                     "the wildcard value is blank, so it names no payload value a card could carry."));
             }
 
             if (wildcard.Facets.Count == 0)
             {
                 errors.Add(Reference(
-                    "/providers/knowledge/scope/wildcard/facets",
+                    Pointer.WildcardFacets,
                     "the wildcard names no facets, so it widens nothing. Name the reach facets, and "
                     + "never an isolation facet such as a customer id."));
             }
         }
 
+        // A wildcard without fromState is a supported shape: the deployment resolves its own facets
+        // and opens them as the host ambient, which the store still widens. See
+        // StateKnowledgeScope.Compose and KnowledgeStartup's K19 branch. Only the reverse is refused.
         if (scope.FromState.Count == 0)
         {
             return;
         }
 
-        if (scope.Wildcard is null)
+        if (scope.Wildcard is not { } widened)
         {
             errors.Add(Reference(
-                "/providers/knowledge/scope/wildcard",
+                Pointer.Wildcard,
                 "fromState is set and no wildcard is. An unknown slot would then leave its facet out "
                 + "of the scope, putting no condition on it, and every value of that facet would be "
                 + "in reach. Declare the wildcard, or drop fromState."));
+        }
+        else
+        {
+            foreach (var facet in widened.Facets)
+            {
+                if (!scope.FromState.Contains(facet, StringComparer.Ordinal))
+                {
+                    errors.Add(Reference(
+                        Pointer.WildcardFacets,
+                        $"wildcard.facets names '{facet}' and fromState does not. The scope filter only "
+                        + $"ever puts a condition on a fromState facet, so there is no condition on "
+                        + $"'{facet}' for the wildcard to widen."));
+                }
+            }
+
+            foreach (var name in scope.FromState)
+            {
+                if (!widened.Facets.Contains(name, StringComparer.Ordinal))
+                {
+                    errors.Add(Reference(
+                        Pointer.WildcardFacets,
+                        $"fromState names '{name}' and wildcard.facets does not, so an unfilled '{name}' "
+                        + "would be searched for the literal wildcard rather than widened by it."));
+                }
+            }
         }
 
         if (configuration.Extractor is null)
@@ -558,19 +645,10 @@ public static class ConfigurationValidator
 
         foreach (var name in scope.FromState)
         {
-            if (scope.Wildcard is { } declared
-                && !declared.Facets.Contains(name, StringComparer.Ordinal))
-            {
-                errors.Add(Reference(
-                    "/providers/knowledge/scope/wildcard/facets",
-                    $"fromState names '{name}' and wildcard.facets does not, so an unfilled '{name}' "
-                    + "would be searched for the literal wildcard rather than widened by it."));
-            }
-
             if (!configuration.State.TryGetValue(name, out var slot))
             {
                 errors.Add(Reference(
-                    "/providers/knowledge/scope/fromState",
+                    Pointer.FromState,
                     $"fromState names the slot '{name}', which this document does not declare."));
                 continue;
             }
@@ -602,14 +680,184 @@ public static class ConfigurationValidator
                     + "scope mid-call."));
             }
 
-            if (slot.EnumValues is not { Count: > 0 })
+            if (slot.EnumValues is not { Count: > 0 } && slot.Vocabulary is null)
             {
                 errors.Add(Reference(
                     ConfigurationError.AppendPointer(pointer, "enum"),
-                    $"the facet slot '{name}' declares no enum. Nothing would then stop a value the "
-                    + "corpus has never been tagged with, which the wildcard turns into an answer "
-                    + "from the wrong bucket rather than an empty result."));
+                    $"the facet slot '{name}' declares neither enum nor vocabulary. Nothing would then "
+                    + "stop a value the corpus has never been tagged with, which the wildcard turns "
+                    + "into an answer from the wrong bucket rather than an empty result."));
             }
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Check 2, vocabulary and ambiguity: section 10 of the ambiguity-and-vocabulary design.
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>Refuses a <c>vocabulary:</c> or <c>ambiguity:</c> block that could not do what it declares.</summary>
+    /// <remarks>
+    /// Unlike <see cref="CheckKnowledgeScopeSlots"/>, the slot-level rules here do not depend on the
+    /// slot being named in <c>scope.fromState</c>: a slot may declare <c>vocabulary:</c> without ever
+    /// being read by the scope, and that mismatch is itself one of the refusals below.
+    /// </remarks>
+    private static void CheckVocabularyAndAmbiguity(
+        AgentCoreConfiguration configuration, List<ConfigurationError> errors, List<ConfigurationError> warnings)
+    {
+        var knowledge = configuration.Providers?.Knowledge;
+        var fromState = knowledge?.Scope.FromState ?? [];
+        var anyVocabulary = false;
+
+        foreach (var entry in configuration.State)
+        {
+            if (entry.Value.Vocabulary is not { } vocabulary)
+            {
+                continue;
+            }
+
+            anyVocabulary = true;
+            var pointer = Pointer.State(entry.Key);
+            var vocabularyPointer = ConfigurationError.AppendPointer(pointer, "vocabulary");
+
+            if (entry.Value.EnumValues is { Count: > 0 })
+            {
+                errors.Add(Reference(
+                    vocabularyPointer,
+                    $"the slot '{entry.Key}' declares both enum and vocabulary. enum is a fixed, "
+                    + "hand-written list; vocabulary reads the domain from a provider at boot. A slot "
+                    + "cannot have both."));
+            }
+
+            if (entry.Value.Value is not null)
+            {
+                errors.Add(Reference(
+                    ConfigurationError.AppendPointer(pointer, "value"),
+                    $"the slot '{entry.Key}' declares both value and vocabulary. value is writer: "
+                    + "const's fixed value; vocabulary reads a domain the extractor fills at runtime. "
+                    + "A slot cannot have both."));
+            }
+
+            if (!fromState.Contains(entry.Key, StringComparer.Ordinal))
+            {
+                errors.Add(Reference(
+                    ConfigurationError.AppendPointer(vocabularyPointer, "from"),
+                    $"the slot '{entry.Key}' declares vocabulary.from: knowledge, and "
+                    + "providers.knowledge.scope.fromState does not name it. The gate and the linker "
+                    + "would then hold a domain no turn's scope ever narrows by."));
+            }
+
+            CheckRange(
+                vocabulary.MaxValues,
+                2,
+                int.MaxValue,
+                ConfigurationError.AppendPointer(vocabularyPointer, "maxValues"),
+                $"vocabulary.maxValues on the slot '{entry.Key}'",
+                "A read of fewer than two values could never be told apart from a truncated one.",
+                errors);
+
+            CheckRange(
+                vocabulary.RefreshSeconds,
+                0,
+                MaxIntervalSeconds,
+                ConfigurationError.AppendPointer(vocabularyPointer, "refreshSeconds"),
+                $"vocabulary.refreshSeconds on the slot '{entry.Key}'",
+                "0 means boot only. A negative interval matches AgentCoreBoot's own "
+                + "{ RefreshSeconds: > 0 } guard on nothing, so the slot would silently read once at "
+                + "boot and never refresh again, and one above the range throws out of the "
+                + "PeriodicTimer VocabularyRefreshService builds from it.",
+                errors);
+        }
+
+        if (anyVocabulary && knowledge?.Ambiguity is null)
+        {
+            errors.Add(Reference(
+                Pointer.Ambiguity,
+                "a slot declares vocabulary, and providers.knowledge.ambiguity is absent. vocabulary "
+                + "installs the linker, which can return Ambiguous — an outcome a plain enum gate never "
+                + "produces — and without ambiguity there is no channel to tell anyone."));
+        }
+
+        if (knowledge?.Ambiguity is not { } ambiguity)
+        {
+            return;
+        }
+
+        if (knowledge.Mapper is not null)
+        {
+            errors.Add(Reference(
+                Pointer.Mapper,
+                "providers.knowledge.ambiguity is declared, and providers.knowledge.mapper names a "
+                + "custom mapper. The probe reads each card's facet values out of Extras, which only "
+                + "the built-in field mapper fills, so every probe would find no values and the "
+                + "channel would stay silent."));
+        }
+
+        if (knowledge.Scope.Wildcard is null)
+        {
+            errors.Add(Reference(
+                Pointer.Ambiguity,
+                "providers.knowledge.ambiguity is declared and providers.knowledge.scope.wildcard is "
+                + "absent. The probe drops a facet the wildcard filled, so with no wildcard it has "
+                + "nothing to drop and the channel can never fire."));
+        }
+
+        CheckRange(
+            ambiguity.MaxCandidates,
+            2,
+            int.MaxValue,
+            ConfigurationError.AppendPointer(Pointer.Ambiguity, "maxCandidates"),
+            "ambiguity.maxCandidates",
+            "Below 2, the ask could never name a spread of candidates.",
+            errors);
+
+        CheckRange(
+            ambiguity.MaxAsks,
+            0,
+            int.MaxValue,
+            ConfigurationError.AppendPointer(Pointer.Ambiguity, "maxAsks"),
+            "ambiguity.maxAsks",
+            "0 is legal and means gate only; a negative count is not.",
+            errors);
+
+        CheckRange(
+            ambiguity.ProbeDeadlineSeconds,
+            1,
+            MaxIntervalSeconds,
+            ConfigurationError.AppendPointer(Pointer.Ambiguity, "probeDeadlineSeconds"),
+            "ambiguity.probeDeadlineSeconds",
+            "A budget below one second leaves the probe unable to complete even the fastest real "
+            + "search, and one above the range throws out of the CancelAfter that arms it.",
+            errors);
+
+        CheckRange(
+            ambiguity.ProbeWaitMarginSeconds,
+            1,
+            MaxIntervalSeconds,
+            ConfigurationError.AppendPointer(Pointer.Ambiguity, "probeWaitMarginSeconds"),
+            "ambiguity.probeWaitMarginSeconds",
+            "A margin of 0 reinstates the race it exists to close: the loser's wait would end as the "
+            + "winner's own search does, leaving a margin equal to the arrival spread. Above the "
+            + "range, the deadline this is added to no longer fits the wait it arms.",
+            errors);
+
+        // A probe drops one of the scope's own facets, so it needs a second one left to search by.
+        // Zero is as unreachable as one, and reaches this line whenever the host supplies every facet.
+        if (fromState.Count <= 1)
+        {
+            warnings.Add(Reference(
+                Pointer.Ambiguity,
+                "providers.knowledge.ambiguity is declared and scope.fromState names at most one "
+                + "facet. That deployment has no droppable facet other than its only one, so the probe "
+                + "is unreachable unless the host sets one too."));
+        }
+
+        if (configuration.Graph is not null)
+        {
+            warnings.Add(Reference(
+                Pointer.Ambiguity,
+                "providers.knowledge.ambiguity is declared on a graph: document. The clarification's "
+                + "turn-context guard only passes on a session whose row carries history, which a "
+                + "graph run does not, so channel 1 is silent here."));
         }
     }
 
@@ -1105,6 +1353,45 @@ public static class ConfigurationValidator
     private static ConfigurationError Reference(string pointer, string message)
         => new() { Pointer = pointer, Message = message, Check = ConfigurationCheck.ReferenceResolution };
 
+    private static ConfigurationError Range(string pointer, string message)
+        => new() { Pointer = pointer, Message = message, Check = ConfigurationCheck.ValueRange };
+
+    /// <summary>Refuses a count or an interval that falls outside the range the runtime accepts.</summary>
+    /// <param name="value">The configured value.</param>
+    /// <param name="min">The lowest accepted value, inclusive.</param>
+    /// <param name="max">The highest accepted value, inclusive. <see cref="int.MaxValue"/> means no ceiling.</param>
+    /// <param name="pointer">The pointer at the field itself.</param>
+    /// <param name="subject">How the message names the field, as a noun phrase.</param>
+    /// <param name="why">One or more sentences saying what the range protects.</param>
+    /// <param name="errors">Collects the refusal.</param>
+    /// <remarks>
+    /// Both bounds go through one call so a field cannot be given a floor and left without a ceiling:
+    /// every ceiling here stands between a document and a raw throw out of a timer at boot or mid-turn.
+    /// </remarks>
+    private static void CheckRange(
+        int value,
+        int min,
+        int max,
+        string pointer,
+        string subject,
+        string why,
+        List<ConfigurationError> errors)
+    {
+        if (value >= min && value <= max)
+        {
+            return;
+        }
+
+        var accepted = max == int.MaxValue
+            ? $"the lowest accepted value is {min.ToString(CultureInfo.InvariantCulture)}"
+            : $"the accepted range is {min.ToString(CultureInfo.InvariantCulture)} to "
+                + max.ToString(CultureInfo.InvariantCulture);
+
+        errors.Add(Range(
+            pointer,
+            $"{subject} is {value.ToString(CultureInfo.InvariantCulture)}, and {accepted}. {why}"));
+    }
+
     private static ConfigurationError Writers(string pointer, string message)
         => new() { Pointer = pointer, Message = message, Check = ConfigurationCheck.SlotWriters };
 
@@ -1148,6 +1435,18 @@ public static class ConfigurationValidator
 
     private static class Pointer
     {
+        public const string Wildcard = "/providers/knowledge/scope/wildcard";
+
+        public const string WildcardValue = Wildcard + "/value";
+
+        public const string WildcardFacets = Wildcard + "/facets";
+
+        public const string FromState = "/providers/knowledge/scope/fromState";
+
+        public const string Ambiguity = "/providers/knowledge/ambiguity";
+
+        public const string Mapper = "/providers/knowledge/mapper";
+
         public static string State(string slot) => ConfigurationError.AppendPointer("/state", slot);
 
         public static string Guard(string name) => ConfigurationError.AppendPointer("/guards", name);

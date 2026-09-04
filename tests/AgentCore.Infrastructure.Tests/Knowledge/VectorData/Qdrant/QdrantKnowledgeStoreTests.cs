@@ -132,6 +132,25 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
         Assert.Null(options.ScopeTemplate);
     }
 
+    [Fact]
+    public async Task ReadAsync_NegativeLimit_Throws()
+    {
+        // limit becomes (ulong)limit right below the guard; without it, a negative int wraps into a
+        // huge facet request instead of failing the way a public port method should.
+        var store = new QdrantKnowledgeStore(
+            new CapturingSearchChannel([]),
+            new FakeEmbeddingGenerator(1f),
+            new QdrantKnowledgeStoreOptions
+            {
+                Collection = "anything",
+                Scoped = false,
+                Fields = new KnowledgeFieldsConfiguration { Body = "body" },
+            });
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            async () => await store.ReadAsync("facets.brand", -1, TestContext.Current.CancellationToken));
+    }
+
     [QdrantFact]
     public async Task SearchAsync_LookalikeIdentifier_RanksTheIdentifierCardFirst()
     {

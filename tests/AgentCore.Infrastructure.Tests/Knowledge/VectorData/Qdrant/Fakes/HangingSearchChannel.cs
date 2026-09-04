@@ -29,4 +29,11 @@ internal sealed class HangingSearchChannel : IQdrantSearchChannel
         await Task.Delay(_delay, cancellationToken).ConfigureAwait(false);
         return [];
     }
+
+    public async Task<IReadOnlyList<string>> FacetAsync(
+        string collection, string key, ulong limit, CancellationToken cancellationToken)
+    {
+        await Task.Delay(_delay, cancellationToken).ConfigureAwait(false);
+        return [];
+    }
 }

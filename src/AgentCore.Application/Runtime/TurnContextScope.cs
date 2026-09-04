@@ -19,6 +19,15 @@ internal sealed record TurnContext
 
     /// <summary>Gets the id of the delegating tool <see cref="Tools"/> are meant for.</summary>
     public string? ToolsFor { get; init; }
+
+    /// <summary>
+    /// Gets whether this row's session carries the caller's own history — true on rows 1 and 2, false
+    /// on a graph row. §8 step 6 reads this to decide whether the probe may record what it named
+    /// (K39, drawn for the record rather than for the message): the probe runs inside a search
+    /// delegate that is never handed a session to compare, unlike <see cref="TurnContextScope.For"/>'s
+    /// <c>ReferenceEquals</c> guard, so it reads this flag off the ambient instead.
+    /// </summary>
+    public bool CarriesHistory { get; init; }
 }
 
 /// <summary>

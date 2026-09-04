@@ -191,4 +191,31 @@ internal static partial class Log
         string callId,
         int turnIndex,
         IReadOnlyDictionary<string, KnowledgeFacetOrigin> origins);
+
+    /// <summary>§8's probe answered: it dropped one facet, re-searched, and found this many candidates.</summary>
+    /// <param name="logger">The logger of the knowledge provider.</param>
+    /// <param name="agent">The id of the agent that asked.</param>
+    /// <param name="facet">The facet the probe dropped.</param>
+    /// <param name="candidateCount">How many distinct values the union of the probe's cards named.</param>
+    [LoggerMessage(
+        EventId = 16,
+        Level = LogLevel.Debug,
+        Message = "The probe of agent {Agent} dropped facet {Facet} and found {CandidateCount} candidates.")]
+    public static partial void KnowledgeProbeRan(ILogger logger, string agent, string facet, int candidateCount);
+
+    /// <summary>
+    /// §8 step 4's probe search threw or timed out. The turn was told the knowledge base holds nothing
+    /// rather than that it is unreachable, because the main search that already ran is what answers for
+    /// reachability; the probe is an extra question on top of it.
+    /// </summary>
+    /// <param name="logger">The logger of the knowledge provider.</param>
+    /// <param name="agent">The id of the agent that asked.</param>
+    /// <param name="facet">The facet the probe was trying to drop.</param>
+    /// <param name="exception">The cause.</param>
+    [LoggerMessage(
+        EventId = 17,
+        Level = LogLevel.Error,
+        Message = "The probe of agent {Agent} did not answer for facet {Facet}. The turn was told the "
+            + "knowledge base holds nothing and the call continues.")]
+    public static partial void KnowledgeProbeFailed(ILogger logger, string agent, string facet, Exception exception);
 }

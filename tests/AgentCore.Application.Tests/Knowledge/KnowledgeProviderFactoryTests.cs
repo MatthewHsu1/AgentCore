@@ -694,36 +694,12 @@ public sealed class KnowledgeProviderFactoryTests
     /// tool -- <c>TextSearchProvider</c> only decides which of those two happens, and in tool mode
     /// never calls the delegate on its own.
     /// </summary>
-    /// <remarks>
-    /// Reaches into <c>Microsoft.Agents.AI.TextSearchProvider</c>'s private
-    /// <c>Func&lt;string, CancellationToken, Task&lt;IEnumerable&lt;TextSearchResult&gt;&gt;&gt; _searchAsync</c>
-    /// field by reflection, verified against <c>Microsoft.Agents.AI</c> 1.17.0. That field is the only
-    /// way to reach the delegate uniformly across both <c>SearchTime</c> modes: in
-    /// <c>OnDemandFunctionCalling</c> the framework never calls it before the model does, and its own
-    /// <c>SearchAsync(string, CancellationToken)</c> wraps it into a formatted string rather than the
-    /// raw <see cref="TextSearchProvider.TextSearchResult"/> list these tests need to inspect.
-    /// </remarks>
     /// <param name="provider">The provider <see cref="Provider"/> built.</param>
     /// <param name="query">The search text.</param>
     /// <returns>What the delegate returned.</returns>
-    /// <exception cref="InvalidOperationException">
-    /// <c>TextSearchProvider</c> no longer declares the private <c>_searchAsync</c> field this helper
-    /// depends on -- a newer <c>Microsoft.Agents.AI</c> changed its internals and this helper needs
-    /// updating for the new shape, rather than the caller seeing a bare <see cref="NullReferenceException"/>.
-    /// </exception>
-    private static async Task<IReadOnlyList<TextSearchProvider.TextSearchResult>> InvokeSearchAsync(
+    private static Task<IReadOnlyList<TextSearchProvider.TextSearchResult>> InvokeSearchAsync(
         AIContextProvider provider, string query)
-    {
-        var field = typeof(TextSearchProvider).GetField("_searchAsync", BindingFlags.NonPublic | BindingFlags.Instance)
-            ?? throw new InvalidOperationException(
-                "TextSearchProvider no longer has a private field named '_searchAsync'. "
-                + "Microsoft.Agents.AI changed its internals; update InvokeSearchAsync for the new shape.");
-
-        var searchAsync = (Func<string, CancellationToken, Task<IEnumerable<TextSearchProvider.TextSearchResult>>>)
-            field.GetValue(provider)!;
-
-        return (await searchAsync(query, TestContext.Current.CancellationToken).ConfigureAwait(false)).ToList();
-    }
+        => TextSearchProviderInternals.SearchAsync(provider, query, TestContext.Current.CancellationToken);
 
     /// <summary>Every message text of a returned context, in one string.</summary>
     private static string Merged(AIContext context)

@@ -72,6 +72,19 @@ internal sealed class QdrantSearchChannel : IQdrantSearchChannel, IDisposable
         return response.Result;
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<string>> FacetAsync(
+        string collection, string key, ulong limit, CancellationToken cancellationToken)
+    {
+        // exact: true always. Measured equal to exact: false on 2- and 8-segment collections
+        // (P4); the guarantee is the caller's and the measured cost was 6 ms.
+        var response = await RunAsync(
+            () => _client.FacetAsync(collection, key, limit: limit, exact: true, cancellationToken: cancellationToken),
+            cancellationToken).ConfigureAwait(false);
+
+        return [.. response.Hits.Select(hit => hit.Value.StringValue)];
+    }
+
     /// <summary>
     /// Runs one gRPC call and converts a client-side cancellation into <see cref="OperationCanceledException"/>.
     /// </summary>

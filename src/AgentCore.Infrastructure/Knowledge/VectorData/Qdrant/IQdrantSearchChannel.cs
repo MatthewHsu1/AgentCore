@@ -38,4 +38,13 @@ internal interface IQdrantSearchChannel
     /// <returns>The points that matched. An empty result is not an error.</returns>
     Task<IReadOnlyList<RetrievedPoint>> ScrollAsync(
         string collection, Filter filter, uint limit, CancellationToken cancellationToken);
+
+    /// <summary>Reads the distinct values stored at one payload path.</summary>
+    /// <param name="collection">The collection.</param>
+    /// <param name="key">The payload path.</param>
+    /// <param name="limit">The most values to return.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    /// <returns>The distinct values, in the order Qdrant returns them.</returns>
+    Task<IReadOnlyList<string>> FacetAsync(
+        string collection, string key, ulong limit, CancellationToken cancellationToken);
 }

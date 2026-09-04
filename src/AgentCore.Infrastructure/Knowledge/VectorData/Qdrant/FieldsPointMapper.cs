@@ -38,7 +38,7 @@ public sealed class FieldsPointMapper : IKnowledgePointMapper
             Text = ReadString(point.Payload, _fields.Body) ?? string.Empty,
             SourceRef = ReadString(point.Payload, _fields.Source) ?? string.Empty,
             SourceLocator = ReadString(point.Payload, _fields.Locator) ?? string.Empty,
-            Authority = Read(point.Payload, _fields.Authority) is long authority ? (int)authority : null,
+            Authority = PayloadPath.Read(point.Payload, _fields.Authority) is long authority ? (int)authority : null,
             Score = point.Score,
             ViaLink = false,
 
@@ -50,28 +50,5 @@ public sealed class FieldsPointMapper : IKnowledgePointMapper
     }
 
     private static string? ReadString(IReadOnlyDictionary<string, object?> payload, string? path)
-        => Read(payload, path) as string;
-
-    /// <summary>The neutral twin of <c>QdrantPayload.Read</c>: one dotted-path walk, null-tolerant.</summary>
-    private static object? Read(IReadOnlyDictionary<string, object?> payload, string? path)
-    {
-        if (path is not { Length: > 0 })
-        {
-            return null;
-        }
-
-        object? current = null;
-        var fields = payload;
-        foreach (var part in path.Split('.'))
-        {
-            if (fields is null || !fields.TryGetValue(part, out current))
-            {
-                return null;
-            }
-
-            fields = current as IReadOnlyDictionary<string, object?>;
-        }
-
-        return current;
-    }
+        => PayloadPath.Read(payload, path) as string;
 }

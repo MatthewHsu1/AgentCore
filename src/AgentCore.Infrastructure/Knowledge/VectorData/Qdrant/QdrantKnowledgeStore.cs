@@ -1,3 +1,4 @@
+using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
@@ -12,12 +13,13 @@ namespace AgentCore.Infrastructure.Knowledge.VectorData.Qdrant;
 /// <summary>
 /// The whole knowledge base over one Qdrant collection.
 /// </summary>
-internal sealed class QdrantKnowledgeStore : IKnowledgeRetrievalPort, IDisposable
+internal sealed class QdrantKnowledgeStore : IKnowledgeRetrievalPort, IFacetVocabularyPort, IDisposable
 {
     private readonly IQdrantSearchChannel _channel;
     private readonly IEmbeddingGenerator<string, Embedding<float>> _embeddings;
     private readonly QdrantKnowledgeStoreOptions _options;
     private readonly IKnowledgePointMapper _mapper;
+    private readonly ScopeTemplate? _scopeTemplate;
 
     /// <summary>Binds one channel, one embedder and one collection.</summary>
     public QdrantKnowledgeStore(
@@ -32,6 +34,7 @@ internal sealed class QdrantKnowledgeStore : IKnowledgeRetrievalPort, IDisposabl
         _channel = channel;
         _embeddings = embeddings;
         _options = options;
+        _scopeTemplate = ScopeTemplate.Parse(options.ScopeTemplate);
         // A links block with no field names no payload key to read outbound ids from. The adapter
         // rejects that in the document; this rejects it for a store built in code, where the
         // alternative is a null dereference on the first search that ranks anything.
@@ -148,6 +151,22 @@ internal sealed class QdrantKnowledgeStore : IKnowledgeRetrievalPort, IDisposabl
         }
 
         return cards;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <paramref name="path"/> is resolved verbatim: the caller has already applied
+    /// <c>scope.template</c>, so this never prefixes or rewrites it.
+    /// </remarks>
+    public async ValueTask<IReadOnlyList<string>> ReadAsync(
+        string path, int limit, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        ArgumentOutOfRangeException.ThrowIfNegative(limit);
+
+        return await _channel
+            .FacetAsync(_options.Collection, path, (ulong)limit, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private SearchQuery BuildQuery(string query, ReadOnlyMemory<float> vector, KnowledgeScope? scope)
@@ -324,12 +343,12 @@ internal sealed class QdrantKnowledgeStore : IKnowledgeRetrievalPort, IDisposabl
     /// not at startup: a deployment whose agents never scope legitimately names no template.
     /// </remarks>
     private string ScopePath(string facet)
-        => _options.ScopeTemplate is { Length: > 0 } template
-            ? template.Replace("{key}", facet, StringComparison.Ordinal)
+        => _scopeTemplate is { } template
+            ? template.Resolve(facet)
             : throw new InvalidOperationException(
                 $"a KnowledgeScope names the facet '{facet}' and providers.knowledge.scope.template is "
-                + "unset, so AgentCore does not know what payload path that key becomes. There is no "
-                + "default. Write scope.template, such as '{key}' for flat facets.");
+                + "unset, so AgentCore does not know what payload path that key becomes. "
+                + ScopeTemplate.WriteOneAdvice);
 
     /// <summary>Mirrors Qdrant keyword matching, where a list facet matches when any element does.</summary>
     private static bool Holds(Value? facet, IReadOnlyList<string> wanted) => facet switch
