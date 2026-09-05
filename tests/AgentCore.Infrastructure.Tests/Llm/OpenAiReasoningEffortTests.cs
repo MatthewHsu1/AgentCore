@@ -37,7 +37,7 @@ public sealed class OpenAiReasoningEffortTests
     {
         CapturingChatClient inner = new();
 
-        var client = OpenAiChatClientAdapter.WithReasoningEffort(inner, effort);
+        var client = OpenAiChatClientAdapter.WithResponseDefaults(inner, effort);
         await client.GetResponseAsync("hi", cancellationToken: TestContext.Current.CancellationToken);
 
         var raw = Assert.IsType<CreateResponseOptions>(
@@ -53,7 +53,7 @@ public sealed class OpenAiReasoningEffortTests
         // provider. The SDK marks this type for evaluation (OPENAI001); this is what watches it.
         CapturingChatClient inner = new();
 
-        var client = OpenAiChatClientAdapter.WithReasoningEffort(inner, "none");
+        var client = OpenAiChatClientAdapter.WithResponseDefaults(inner, "none");
         await client.GetResponseAsync("hi", cancellationToken: TestContext.Current.CancellationToken);
 
         var raw = Assert.IsType<CreateResponseOptions>(inner.Seen!.RawRepresentationFactory!(inner));
@@ -63,26 +63,68 @@ public sealed class OpenAiReasoningEffortTests
     }
 
     [Fact]
-    public async Task RawOptionsTheCallerBuiltItself_AreLeftAlone()
+    public async Task RawOptionsTheCallerBuiltItself_KeepTheValuesTheyAlreadyHold()
     {
-        // A default for the entry, not an override of the call.
+        // A default for the entry, not an override of the call. The caller's own object is the one
+        // the vendor sees, and every value it already carries survives.
         CapturingChatClient inner = new();
-        CreateResponseOptions mine = new();
+        CreateResponseOptions mine = new()
+        {
+            ReasoningOptions = new ResponseReasoningOptions
+            {
+                ReasoningEffortLevel = ResponseReasoningEffortLevel.High,
+            },
+            StoredOutputEnabled = true,
+        };
 
-        var client = OpenAiChatClientAdapter.WithReasoningEffort(inner, "none");
+        var client = OpenAiChatClientAdapter.WithResponseDefaults(inner, "none");
         await client.GetResponseAsync(
             "hi",
             new ChatOptions { RawRepresentationFactory = _ => mine },
             TestContext.Current.CancellationToken);
 
         Assert.Same(mine, inner.Seen!.RawRepresentationFactory!(inner));
+        Assert.Equal(ResponseReasoningEffortLevel.High, mine.ReasoningOptions!.ReasoningEffortLevel);
+        Assert.True(mine.StoredOutputEnabled);
+    }
+
+    [Theory]
+    [InlineData("high")]
+    [InlineData(null)]
+    public async Task EveryRequest_TellsTheVendorNotToStoreTheConversation(string? effort)
+    {
+        // The call store owns the transcript. A stored response comes back with a conversation id,
+        // and ChatClientAgent refuses that next to the ChatHistoryProvider every agent carries.
+        CapturingChatClient inner = new();
+
+        var client = OpenAiChatClientAdapter.WithResponseDefaults(inner, effort);
+        await client.GetResponseAsync("hi", cancellationToken: TestContext.Current.CancellationToken);
+
+        var raw = Assert.IsType<CreateResponseOptions>(inner.Seen!.RawRepresentationFactory!(inner));
+
+        Assert.False(raw.StoredOutputEnabled);
+    }
+
+    [Fact]
+    public async Task AnEntryThatNamesNoEffort_SendsNoReasoningValueAtAll()
+    {
+        // Omitting it must not start sending a value the vendor would otherwise have chosen for
+        // itself. Only the store flag rides along.
+        CapturingChatClient inner = new();
+
+        var client = OpenAiChatClientAdapter.WithResponseDefaults(inner, null);
+        await client.GetResponseAsync("hi", cancellationToken: TestContext.Current.CancellationToken);
+
+        var raw = Assert.IsType<CreateResponseOptions>(inner.Seen!.RawRepresentationFactory!(inner));
+
+        Assert.Null(raw.ReasoningOptions);
     }
 
     [Fact]
     public void AValueThisVendorDoesNotKnow_FailsAndSaysWhatIsAllowed()
     {
         var failure = Assert.Throws<ConfigurationLoadException>(
-            () => OpenAiChatClientAdapter.WithReasoningEffort(new CapturingChatClient(), "exhaustive"));
+            () => OpenAiChatClientAdapter.WithResponseDefaults(new CapturingChatClient(), "exhaustive"));
 
         Assert.Contains(failure.Errors, error => error.Pointer == "/providers/llm");
         Assert.Contains("exhaustive", failure.Message, StringComparison.Ordinal);
@@ -90,10 +132,8 @@ public sealed class OpenAiReasoningEffortTests
     }
 
     [Fact]
-    public async Task AnEntryThatNamesNoEffort_IsNotWrappedAtAll()
+    public async Task AnEntryThatNamesNoEffort_StillCarriesTheStoreFlag()
     {
-        // Omitting it must not start sending a value the vendor would otherwise have chosen for
-        // itself. The adapter returns the bare client.
         MapSecretResolver secrets = new MapSecretResolver()
             .With(OpenAiChatClientAdapter.ApiKeySecretName, "sk-not-a-real-key");
 
@@ -108,7 +148,7 @@ public sealed class OpenAiReasoningEffortTests
             TestContext.Current.CancellationToken);
 
         // A wrapped client answers GetService for the configuring middleware; a bare one does not.
-        Assert.Null(client.GetService(typeof(ConfigureOptionsChatClient)));
+        Assert.NotNull(client.GetService(typeof(ConfigureOptionsChatClient)));
     }
 
     /// <summary>Records the options it was called with, and answers nothing.</summary>

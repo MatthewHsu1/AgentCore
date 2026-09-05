@@ -50,15 +50,6 @@ public sealed class OpenAiChatClientAdapter : IChatClientAdapter
     public string Kind => ProviderKind;
 
     /// <summary>Builds the client of one entry, reading the key on the first build only.</summary>
-    /// <param name="entry">The entry, whose <c>kind</c> named this adapter.</param>
-    /// <param name="secrets">The resolver chain, or <see langword="null"/> to read the environment only.</param>
-    /// <param name="cancellationToken">Cancels the key read.</param>
-    /// <returns>The client. The composite owns and disposes it.</returns>
-    /// <exception cref="SecretResolutionException">Neither the chain nor the environment holds a key.</exception>
-    /// <remarks>
-    /// The composite builds sequentially while the host starts, so this method is not called from
-    /// two threads at once and the one-client cache needs no lock.
-    /// </remarks>
     public async ValueTask<IChatClient> CreateClientAsync(
         LlmProviderConfiguration entry,
         ISecretResolverPort? secrets,
@@ -73,25 +64,40 @@ public sealed class OpenAiChatClientAdapter : IChatClientAdapter
 
         var client = _client.GetResponsesClient().AsIChatClient(entry.Model);
 
-        return entry.ReasoningEffort is { Length: > 0 } effort ? WithReasoningEffort(client, effort) : client;
+        return WithResponseDefaults(client, entry.ReasoningEffort);
     }
 
-    /// <summary>Puts <c>reasoning_effort</c> on every request this client sends.</summary>
-    /// <param name="client">The client of one entry.</param>
-    /// <param name="effort">The value the document wrote.</param>
-    /// <returns>The client the factory hands out.</returns>
-    /// <exception cref="ConfigurationLoadException">The value is not one this vendor knows.</exception>
-    internal static IChatClient WithReasoningEffort(IChatClient client, string effort)
+    /// <summary>Puts <c>store</c> and <c>reasoning_effort</c> on every request this client sends.</summary>
+    internal static IChatClient WithResponseDefaults(IChatClient client, string? effort)
     {
-        var level = Level(effort);
+        var level = effort is { Length: > 0 } value ? Level(value) : (ResponseReasoningEffortLevel?)null;
 
         return client
             .AsBuilder()
-            .ConfigureOptions(options => options.RawRepresentationFactory ??=
-                _ => new CreateResponseOptions
+            .ConfigureOptions(options =>
+            {
+                var caller = options.RawRepresentationFactory;
+
+                options.RawRepresentationFactory = inner =>
                 {
-                    ReasoningOptions = new ResponseReasoningOptions { ReasoningEffortLevel = level },
-                })
+                    if (caller?.Invoke(inner) is not CreateResponseOptions raw)
+                    {
+                        raw = new CreateResponseOptions();
+                    }
+
+                    raw.StoredOutputEnabled ??= false;
+
+                    if (level is { } chosen)
+                    {
+                        raw.ReasoningOptions ??= new ResponseReasoningOptions
+                        {
+                            ReasoningEffortLevel = chosen,
+                        };
+                    }
+
+                    return raw;
+                };
+            })
             .Build();
     }
 
