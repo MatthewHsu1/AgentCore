@@ -10,7 +10,14 @@ namespace AgentCore.Application.Configuration.Compilation;
 /// <param name="Limit">How many cards to retrieve.</param>
 /// <param name="Citations">Whether the model sees the source label.</param>
 /// <param name="Scoped">Whether this agent's searches are confined to a scope.</param>
-public sealed record ResolvedKnowledge(KnowledgeMode Mode, int Limit, bool Citations, bool Scoped);
+public sealed record ResolvedKnowledge(KnowledgeMode Mode, int Limit, bool Citations, bool Scoped)
+{
+    /// <summary>
+    /// Gets the document-level ambiguity wiring the search side reads, or
+    /// <see cref="ResolvedClarification.None"/> where the document configures none.
+    /// </summary>
+    public ResolvedClarification Clarification { get; init; } = ResolvedClarification.None;
+}
 
 /// <summary>
 /// Composes one agent's <c>knowledge:</c> block from <c>agents.defaults.knowledge</c> and the

@@ -30,7 +30,15 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        using var outerCall = OuterToolCall.Enter(context.CallContent.CallId);
+        using var outerCall = OuterToolCall.Enter(context.CallContent.CallId, out var nested);
+
+        // A delegated run must not touch the caller's Clarifications: it would burn the turn's probe
+        // and record a lastNamed from a note the caller never heard (K42). The knowledge search
+        // itself is a tool call, so the strip is conditional on being nested rather than unconditional
+        // — an unconditional strip would blind the caller's own search too.
+        using IDisposable? strippedClarifications = nested
+            ? TurnAmbients.Amend(ambients => ambients with { Clarifications = null })
+            : null;
 
         try
         {

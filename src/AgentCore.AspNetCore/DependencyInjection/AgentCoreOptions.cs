@@ -2,6 +2,7 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Llm;
 using AgentCore.Application.Ports;
+using AgentCore.Application.State;
 using AgentCore.Application.Tools.Binding;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging;
@@ -70,6 +71,9 @@ public sealed class AgentCoreOptions
 
     /// <summary>Gets the speech vendors the host registered, or <see langword="null"/>.</summary>
     internal IReadOnlyList<ISpeechAdapter>? Speech { get; private set; }
+
+    /// <summary>Gets the linkers a slot's <c>vocabulary.linker</c> may name, beyond the built-in <c>exact</c>.</summary>
+    internal IReadOnlyList<IStateValueLinker> StateValueLinkers { get; private set; } = [];
 
     /// <summary>Gets the folder that holds the SKILL.md directories, or <see langword="null"/>.</summary>
     internal string? SkillsPath { get; private set; }
@@ -233,6 +237,16 @@ public sealed class AgentCoreOptions
     {
         ArgumentNullException.ThrowIfNull(adapters);
         Speech = adapters;
+        return this;
+    }
+
+    /// <summary>Binds the state value linkers, and a slot's <c>vocabulary.linker</c> names one by its <see cref="IStateValueLinker.Name"/>.</summary>
+    /// <param name="linkers">The linkers this host adds beyond the built-in <c>exact</c>.</param>
+    /// <returns>These options, so a host chains its calls.</returns>
+    public AgentCoreOptions UseStateValueLinkers(params IStateValueLinker[] linkers)
+    {
+        ArgumentNullException.ThrowIfNull(linkers);
+        StateValueLinkers = linkers;
         return this;
     }
 

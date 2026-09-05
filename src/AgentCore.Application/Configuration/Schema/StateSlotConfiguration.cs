@@ -68,4 +68,48 @@ public sealed record StateSlotConfiguration
 
     /// <summary>Gets the fixed value of the slot. It is set when the writer is <see cref="StateWriter.Const"/>.</summary>
     public JsonNode? Value { get; init; }
+
+    /// <summary>
+    /// Gets the declaration that this slot's domain is read from a provider rather than hand-written
+    /// as <see cref="EnumValues"/>, or <see langword="null"/> when this document names none.
+    /// </summary>
+    public SlotVocabularyConfiguration? Vocabulary { get; init; }
+}
+
+/// <summary>
+/// A slot's domain, read from a provider at boot instead of written by hand as <c>enum:</c>. See
+/// section 4 of the ambiguity-and-vocabulary design.
+/// </summary>
+public sealed record SlotVocabularyConfiguration
+{
+    /// <summary>The linker name used when the document names none.</summary>
+    public const string DefaultLinker = "exact";
+
+    /// <summary>The refresh interval used when the document sets none, in seconds. Boot only.</summary>
+    public const int DefaultRefreshSeconds = 0;
+
+    /// <summary>The read limit used when the document sets none.</summary>
+    public const int DefaultMaxValues = 2000;
+
+    /// <summary>Gets the provider the domain is read from. <c>knowledge</c> is the only member.</summary>
+    public required string From { get; init; }
+
+    /// <summary>Gets the <c>IStateValueLinker</c> name. Only <c>exact</c> ships.</summary>
+    public string Linker { get; init; } = DefaultLinker;
+
+    /// <summary>Gets how often the domain is re-read, in seconds. <c>0</c> means boot only.</summary>
+    public int RefreshSeconds { get; init; } = DefaultRefreshSeconds;
+
+    /// <summary>
+    /// Gets the limit passed to the facet read. A read returning exactly this many fails startup: it
+    /// cannot be told from a truncation.
+    /// </summary>
+    public int MaxValues { get; init; } = DefaultMaxValues;
+
+    /// <summary>
+    /// Gets whether every id in the collection, and every mention the extractor emits, is already
+    /// NFC. Lifts the refusal on a runtime that cannot compose Unicode, and carries the obligation
+    /// that every id and every mention really is already normalised.
+    /// </summary>
+    public bool AssumeNormalized { get; init; }
 }

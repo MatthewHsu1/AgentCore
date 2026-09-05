@@ -1,4 +1,5 @@
 using AgentCore.Application.Knowledge;
+using AgentCore.Domain.Knowledge;
 using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Application.Diagnostics;
@@ -171,4 +172,50 @@ internal static partial class Log
         Message = "An edit withdrew call {CallId} from ordinal {FromOrdinal} onward, "
             + "at turn {TurnIndex}.")]
     public static partial void CallTruncated(ILogger logger, string callId, int fromOrdinal, int turnIndex);
+
+    /// <summary>
+    /// One turn composed its knowledge scope. Every facet logged <see cref="KnowledgeFacetOrigin.Wildcard"/>
+    /// is a facet nothing set: this line is the only warning a deployment gets that <c>wildcard.facets</c>
+    /// names a key nothing ever sets.
+    /// </summary>
+    /// <param name="logger">The logger of the session.</param>
+    /// <param name="callId">The id of the call.</param>
+    /// <param name="turnIndex">The zero-based index of the turn.</param>
+    /// <param name="origins">Where each facet's value came from.</param>
+    [LoggerMessage(
+        EventId = 15,
+        Level = LogLevel.Debug,
+        Message = "Call {CallId} turn {TurnIndex} composed the knowledge scope {Origins}.")]
+    public static partial void KnowledgeScopeComposed(
+        ILogger logger,
+        string callId,
+        int turnIndex,
+        IReadOnlyDictionary<string, KnowledgeFacetOrigin> origins);
+
+    /// <summary>§8's probe answered: it dropped one facet, re-searched, and found this many candidates.</summary>
+    /// <param name="logger">The logger of the knowledge provider.</param>
+    /// <param name="agent">The id of the agent that asked.</param>
+    /// <param name="facet">The facet the probe dropped.</param>
+    /// <param name="candidateCount">How many distinct values the union of the probe's cards named.</param>
+    [LoggerMessage(
+        EventId = 16,
+        Level = LogLevel.Debug,
+        Message = "The probe of agent {Agent} dropped facet {Facet} and found {CandidateCount} candidates.")]
+    public static partial void KnowledgeProbeRan(ILogger logger, string agent, string facet, int candidateCount);
+
+    /// <summary>
+    /// §8 step 4's probe search threw or timed out. The turn was told the knowledge base holds nothing
+    /// rather than that it is unreachable, because the main search that already ran is what answers for
+    /// reachability; the probe is an extra question on top of it.
+    /// </summary>
+    /// <param name="logger">The logger of the knowledge provider.</param>
+    /// <param name="agent">The id of the agent that asked.</param>
+    /// <param name="facet">The facet the probe was trying to drop.</param>
+    /// <param name="exception">The cause.</param>
+    [LoggerMessage(
+        EventId = 17,
+        Level = LogLevel.Error,
+        Message = "The probe of agent {Agent} did not answer for facet {Facet}. The turn was told the "
+            + "knowledge base holds nothing and the call continues.")]
+    public static partial void KnowledgeProbeFailed(ILogger logger, string agent, string facet, Exception exception);
 }

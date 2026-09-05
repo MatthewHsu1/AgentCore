@@ -49,6 +49,12 @@ namespace AgentCore.Application.Configuration.Compilation;
 /// </remarks>
 public static class ConfigurationCompiler
 {
+    /// <summary>
+    /// The formatter an agent cites through when the host bound none. Stateless, so every agent in
+    /// every document reads the one instance.
+    /// </summary>
+    private static readonly SourceLocatorCitationFormatter DefaultCitations = new();
+
     /// <summary>Picks the row of the compile table one document selects.</summary>
     /// <param name="configuration">The loaded document.</param>
     /// <returns>The row.</returns>
@@ -194,6 +200,15 @@ public static class ConfigurationCompiler
             return agents;
         }
 
+        var clarification = ResolvedClarification.From(configuration);
+
+        // Nothing on this provider is per agent: its three fields are the document's own wiring, and
+        // every other value it reads comes off the turn's ambients. The framework only ever calls
+        // into it, passing the agent and the session as arguments, so one instance serves them all.
+        var clarificationProvider = clarification.Ambiguity is { } documentAmbiguity
+            ? new ClarificationProvider(documentAmbiguity, clarification.FromState, clarification.SlotDescriptions)
+            : null;
+
         Dictionary<string, ToolConfiguration> tools = new(StringComparer.Ordinal);
         foreach (var tool in configuration.Tools)
         {
@@ -262,7 +277,8 @@ public static class ConfigurationCompiler
                         Tools = BuildTools(item, tools, context, pointer, Resolve),
                     },
                     ChatHistoryProvider = history,
-                    AIContextProviders = BuildContextProviders(section.Defaults, item, context, pointer),
+                    AIContextProviders = BuildContextProviders(
+                        section.Defaults, item, context, pointer, clarification, clarificationProvider),
                 });
             path.RemoveAt(path.Count - 1);
 
@@ -275,14 +291,28 @@ public static class ConfigurationCompiler
         }
     }
 
-    /// <summary>Builds the context providers of one agent.</summary>
+    /// <summary>
+    /// Builds the context providers of one agent. <paramref name="clarification"/> and
+    /// <paramref name="clarificationProvider"/> are the document's ambiguity wiring (§7), the same
+    /// for every agent — built once by the caller rather than re-derived per agent.
+    /// </summary>
     private static List<AIContextProvider> BuildContextProviders(
         AgentDefaults? defaults,
         AgentConfiguration item,
         AgentCompilationContext context,
-        string pointer)
+        string pointer,
+        ResolvedClarification clarification,
+        ClarificationProvider? clarificationProvider)
     {
         List<AIContextProvider> providers = [new TurnContextProvider()];
+
+        // Bound ahead of the knowledge early-return below: channel 1 asks about a scope's fromState
+        // slots regardless of whether THIS agent composes its own knowledge: block, because the
+        // clarification is document-level state, not a per-agent search setting.
+        if (clarificationProvider is not null)
+        {
+            providers.Add(clarificationProvider);
+        }
 
         if (item.Skills.Count > 0)
         {
@@ -298,7 +328,7 @@ public static class ConfigurationCompiler
             providers.Add(SkillsProviderFactory.Create(catalog, item.Skills, context.Loggers));
         }
 
-        if (AgentKnowledge.Compose(defaults, item) is not { } knowledge)
+        if (AgentKnowledge.Compose(defaults, item) is not { } composed)
         {
             return providers;
         }
@@ -313,11 +343,15 @@ public static class ConfigurationCompiler
                 + $"{nameof(IKnowledgeRetrievalPort)}, or remove the knowledge: block.");
         }
 
+        // The same document-level wiring channel 1 reads above, carried onto this agent's own
+        // resolved knowledge so the search side does not have to re-derive it.
+        var knowledge = composed with { Clarification = clarification };
+
         providers.Add(KnowledgeProviderFactory.Create(
             port,
             knowledge,
             item.Id,
-            context.Citations ?? new SourceLocatorCitationFormatter(),
+            context.Citations ?? DefaultCitations,
             context.Loggers));
 
         return providers;

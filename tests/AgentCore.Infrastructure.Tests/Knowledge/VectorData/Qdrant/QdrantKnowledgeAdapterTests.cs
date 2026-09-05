@@ -831,6 +831,30 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
         (store as IDisposable)?.Dispose();
     }
 
+    [QdrantFact]
+    public async Task CreateSearchAsync_DocumentDeclaresAWildcard_ReachesTheStoreOptions()
+    {
+        var entry = Entry() with
+        {
+            Scope = KbShapedCorpus.Scope with { Wildcard = new() { Value = "*", Facets = ["model"] } },
+        };
+
+        var port = await Adapter().CreateSearchAsync(
+            entry, secrets: null, Embedder(), requireScope: true, TestContext.Current.CancellationToken);
+
+        // QdrantKnowledgeStore keeps its options private, so reflection is the only way to observe
+        // what the adapter copied onto them. The filter those options go on to produce is covered by
+        // QdrantWildcardScopeTests.
+        var options = (QdrantKnowledgeStoreOptions)typeof(QdrantKnowledgeStore)
+            .GetField("_options", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(port)!;
+
+        Assert.Equal("*", options.ScopeWildcard);
+        Assert.Equal(["model"], options.ScopeWildcardFacets);
+
+        (port as IDisposable)?.Dispose();
+    }
+
     [Fact]
     public async Task CreateSearchAsync_UnknownMapper_FailsTheLoadPointingAtMapper()
     {

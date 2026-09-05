@@ -120,9 +120,9 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
         // Every other test names a limit and a floor, so a typo in either default ships silently.
         var options = new QdrantKnowledgeStoreOptions { Collection = "anything", Scoped = false };
 
-        // 0.25 is exact in float32. At 0.1 the value round-trips to 0.10000000149011612 and the
-        // floor's `>=` cannot be told from `>`.
-        Assert.Equal(0.25, options.ScoreFloor);
+        // The floor rides the dense prefetch as Qdrant's score_threshold, so Qdrant does the
+        // comparison in float32 and no C# `>=` against a double is involved.
+        Assert.Equal(0.35, options.ScoreFloor);
         Assert.Equal(5, options.Limit);
         // Left unset, VectorName means the collection's single anonymous vector.
         Assert.Null(options.VectorName);
@@ -130,6 +130,25 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
         // maps nothing at all -- which is why the store refuses to be built from one.
         Assert.Null(options.Fields);
         Assert.Null(options.ScopeTemplate);
+    }
+
+    [Fact]
+    public async Task ReadAsync_NegativeLimit_Throws()
+    {
+        // limit becomes (ulong)limit right below the guard; without it, a negative int wraps into a
+        // huge facet request instead of failing the way a public port method should.
+        var store = new QdrantKnowledgeStore(
+            new CapturingSearchChannel([]),
+            new FakeEmbeddingGenerator(1f),
+            new QdrantKnowledgeStoreOptions
+            {
+                Collection = "anything",
+                Scoped = false,
+                Fields = new KnowledgeFieldsConfiguration { Body = "body" },
+            });
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            async () => await store.ReadAsync("facets.brand", -1, TestContext.Current.CancellationToken));
     }
 
     [QdrantFact]
@@ -172,19 +191,19 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
     [QdrantFact]
     public async Task SearchAsync_ScoreFloor_KeepsExactlyTheCardsAtOrAboveIt()
     {
-        // The floor must be exact in float32, or `>=` cannot be told from `>`.
+        // Scores are cosine similarities now and Qdrant applies the floor, so the floor is chosen
+        // from what the corpus scores: halfway between the second and third card, which leaves two
+        // cards above it and the rest below, with no card sitting on the boundary itself.
         var all = await Store(floor: 0.0, limit: 20, scoped: false).SearchAsync(
             KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
-        var floored = await Store(floor: 0.25, limit: 20, scoped: false).SearchAsync(
+        Assert.True(all.Count >= 3);
+        var floor = (all[1].Score!.Value + all[2].Score!.Value) / 2;
+
+        var floored = await Store(floor: floor, limit: 20, scoped: false).SearchAsync(
             KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
 
-        var atOrAbove = all.Count(card => card.Score >= 0.25);
-
-        // The boundary is only testable while some card scores exactly 0.25 and some card scores
-        // less. Without both, `>=` and `>` agree and the comparison below proves nothing.
-        Assert.Contains(all, card => card.Score == 0.25);
-        Assert.Contains(all, card => card.Score < 0.25);
-        Assert.Equal(atOrAbove, floored.Count(card => !card.ViaLink));
+        Assert.Equal(2, floored.Count(card => !card.ViaLink));
+        Assert.All(floored.Where(card => !card.ViaLink), card => Assert.True(card.Score > floor));
     }
 
     [QdrantFact]

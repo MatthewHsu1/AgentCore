@@ -32,7 +32,7 @@ public sealed class QdrantSearchChannelTests
             };
 
             var points = await channel.QueryAsync(
-                new FusedQuery(collection, [prefetch], new Query { Fusion = Fusion.Rrf }, 5),
+                new SearchQuery(collection, [prefetch], new Query { Fusion = Fusion.Rrf }, 5),
                 TestContext.Current.CancellationToken);
 
             Assert.Equal(5, points.Count);
@@ -79,6 +79,6 @@ public sealed class QdrantSearchChannelTests
         await cancelled.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await channel.QueryAsync(
-            new FusedQuery("anything", [], new Query { Fusion = Fusion.Rrf }, 1), cancelled.Token));
+            new SearchQuery("anything", [], new Query { Fusion = Fusion.Rrf }, 1), cancelled.Token));
     }
 }

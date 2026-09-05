@@ -1,7 +1,8 @@
 namespace AgentCore.Application.Configuration.Parsing;
 
 /// <summary>
-/// The load-time check that rejected a document. The numbers are the rows of the table in section 8.5.
+/// The load-time check that rejected a document. The numbers are the rows of the table in section 8.5,
+/// except <see cref="ValueRange"/>, which that table has no row for.
 /// </summary>
 public enum ConfigurationCheck
 {
@@ -31,4 +32,11 @@ public enum ConfigurationCheck
 
     /// <summary>Check 8: delegation cycles through an agent-as-tool loop.</summary>
     DelegationCycles = 8,
+
+    /// <summary>
+    /// Check 9: a configured count or interval outside the range the runtime accepts. It exists so a
+    /// value that a timer or a cancellation source would throw on is refused at load, where the error
+    /// still carries a pointer into the document.
+    /// </summary>
+    ValueRange = 9,
 }

@@ -45,6 +45,92 @@ public sealed class StateDocumentTests
             - { id: only }
         """;
 
+    private static AgentCoreConfiguration WithEnumSlot() => new()
+    {
+        ApiVersion = "agentcore/v1",
+        Name = "doc",
+        State = new Dictionary<string, StateSlotConfiguration>(StringComparer.Ordinal)
+        {
+            ["applies_to"] = new()
+            {
+                Type = StateSlotType.String,
+                Writer = StateWriter.Extractor,
+                EnumValues = [JsonValue.Create("f63")!, JsonValue.Create("f65")!],
+            },
+        },
+    };
+
+    private static AgentCoreConfiguration WithVocabularySlot() => new()
+    {
+        ApiVersion = "agentcore/v1",
+        Name = "doc",
+        State = new Dictionary<string, StateSlotConfiguration>(StringComparer.Ordinal)
+        {
+            ["applies_to"] = new()
+            {
+                Type = StateSlotType.String,
+                Writer = StateWriter.Extractor,
+                Vocabulary = new SlotVocabularyConfiguration { From = "knowledge" },
+            },
+        },
+    };
+
+    private static Dictionary<string, VocabularyView> VocabularyOf(params string[] originals)
+        => new Dictionary<string, VocabularyView>(StringComparer.Ordinal)
+        {
+            ["applies_to"] = new VocabularyView
+            {
+                NormalisedToOriginal = originals.ToDictionary(VocabularyFold.Fold, StringComparer.Ordinal),
+                Originals = originals,
+            },
+        };
+
+    [Fact]
+    public void TryWrite_ValueOutsideTheEnum_IsRefused()
+    {
+        var state = new StateDocument(WithEnumSlot());
+
+        Assert.False(state.TryWrite("applies_to", JsonValue.Create("F63 Treadmill")));
+        Assert.True(state.IsUnfilled("applies_to"));
+    }
+
+    [Fact]
+    public void TryWrite_ValueOutsideTheEnum_KeepsThePreviousValue()
+    {
+        var state = new StateDocument(WithEnumSlot());
+        Assert.True(state.TryWrite("applies_to", JsonValue.Create("f63")));
+
+        Assert.False(state.TryWrite("applies_to", JsonValue.Create("f80")));
+        Assert.Equal("f63", state.Read("applies_to")?.GetValue<string>());
+    }
+
+    [Fact]
+    public void TryWrite_ValueInsideTheEnum_IsAccepted()
+    {
+        var state = new StateDocument(WithEnumSlot());
+
+        Assert.True(state.TryWrite("applies_to", JsonValue.Create("f65")));
+        Assert.Equal("f65", state.Read("applies_to")?.GetValue<string>());
+    }
+
+    [Fact]
+    public void TryWrite_ValueOutsideTheVocabularySnapshot_IsRefused()
+    {
+        var state = new StateDocument(WithVocabularySlot(), vocabulary: VocabularyOf("f63", "f65"));
+
+        Assert.False(state.TryWrite("applies_to", JsonValue.Create("f80")));
+        Assert.True(state.IsUnfilled("applies_to"));
+    }
+
+    [Fact]
+    public void TryWrite_ValueInsideTheVocabularySnapshot_IsAccepted()
+    {
+        var state = new StateDocument(WithVocabularySlot(), vocabulary: VocabularyOf("f63", "f65"));
+
+        Assert.True(state.TryWrite("applies_to", JsonValue.Create("f65")));
+        Assert.Equal("f65", state.Read("applies_to")?.GetValue<string>());
+    }
+
     [Fact]
     public void WrittenSlots_HandsOutAFreshCopyEveryCall()
     {

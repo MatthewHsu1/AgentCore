@@ -1,4 +1,5 @@
 using AgentCore.Application.Configuration.Parsing;
+using AgentCore.Application.Configuration.Schema;
 using Xunit;
 
 namespace AgentCore.Application.Tests.Configuration;
@@ -223,6 +224,212 @@ public sealed class ConfigurationBinderTests
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+    }
+
+    [Fact]
+    public void Bind_KnowledgeScopeWildcardAndFromState_ReadsBoth()
+    {
+        const string Document = """
+            apiVersion: agentcore/v1
+            name: doc
+            providers:
+              call:   { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
+              knowledge:
+                kind: qdrant
+                collection: kb
+                fields: { body: text }
+                scope:
+                  template: "facets.{key}"
+                  wildcard:
+                    value: "*"
+                    facets: [brand, applies_to]
+                  fromState: [brand, applies_to]
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(Document);
+        var scope = configuration.Providers!.Knowledge!.Scope;
+
+        Assert.Equal("*", scope.Wildcard!.Value);
+        Assert.Equal(["brand", "applies_to"], scope.Wildcard.Facets);
+        Assert.Equal(["brand", "applies_to"], scope.FromState);
+    }
+
+    [Fact]
+    public void Bind_VocabularySlot_ReadsFromAndDefaults()
+    {
+        const string Document = """
+            apiVersion: agentcore/v1
+            name: doc
+            state:
+              applies_to: { type: string, writer: extractor, vocabulary: { from: knowledge } }
+            providers:
+              call:   { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(Document);
+        var vocabulary = configuration.State["applies_to"].Vocabulary;
+
+        Assert.NotNull(vocabulary);
+        Assert.Equal("knowledge", vocabulary!.From);
+        Assert.Equal(SlotVocabularyConfiguration.DefaultLinker, vocabulary.Linker);
+        Assert.Equal(SlotVocabularyConfiguration.DefaultRefreshSeconds, vocabulary.RefreshSeconds);
+        Assert.Equal(SlotVocabularyConfiguration.DefaultMaxValues, vocabulary.MaxValues);
+        Assert.False(vocabulary.AssumeNormalized);
+    }
+
+    [Fact]
+    public void Bind_VocabularySlot_ReadsEveryField()
+    {
+        const string Document = """
+            apiVersion: agentcore/v1
+            name: doc
+            state:
+              applies_to:
+                type: string
+                writer: extractor
+                vocabulary: { from: knowledge, linker: exact, refreshSeconds: 900, maxValues: 500, assumeNormalized: true }
+            providers:
+              call:   { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(Document);
+        var vocabulary = configuration.State["applies_to"].Vocabulary!;
+
+        Assert.Equal("knowledge", vocabulary.From);
+        Assert.Equal("exact", vocabulary.Linker);
+        Assert.Equal(900, vocabulary.RefreshSeconds);
+        Assert.Equal(500, vocabulary.MaxValues);
+        Assert.True(vocabulary.AssumeNormalized);
+    }
+
+    /// <summary>from: is the one member the design allows, so the schema declares it as an enum of one.</summary>
+    [Fact]
+    public void Bind_VocabularyFromOtherThanKnowledge_FailsCheckOne()
+    {
+        const string Document = """
+            apiVersion: agentcore/v1
+            name: doc
+            state:
+              applies_to: { type: string, writer: extractor, vocabulary: { from: somewhere_else } }
+            providers:
+              call:   { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(Document));
+
+        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+        Assert.Contains(failure.Errors, error => error.Pointer == "/state/applies_to/vocabulary/from");
+    }
+
+    /// <summary>additionalProperties: false on the nested object, not only on stateSlot itself.</summary>
+    [Fact]
+    public void Bind_AnUnknownVocabularyKey_FailsCheckOne()
+    {
+        const string Document = """
+            apiVersion: agentcore/v1
+            name: doc
+            state:
+              applies_to: { type: string, writer: extractor, vocabulary: { from: knowledge, bogus: 1 } }
+            providers:
+              call:   { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(Document));
+
+        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+    }
+
+    [Fact]
+    public void Bind_AmbiguityBlock_ReadsDefaults()
+    {
+        const string Document = """
+            apiVersion: agentcore/v1
+            name: doc
+            providers:
+              call:   { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
+              knowledge:
+                kind: qdrant
+                collection: kb
+                fields: { body: text }
+                ambiguity: {}
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(Document);
+        var ambiguity = configuration.Providers!.Knowledge!.Ambiguity;
+
+        Assert.NotNull(ambiguity);
+        Assert.Equal(KnowledgeAmbiguityConfiguration.DefaultMaxCandidates, ambiguity!.MaxCandidates);
+        Assert.Equal(KnowledgeAmbiguityConfiguration.DefaultMaxAsks, ambiguity.MaxAsks);
+        Assert.Equal(KnowledgeAmbiguityConfiguration.DefaultProbeDeadlineSeconds, ambiguity.ProbeDeadlineSeconds);
+        Assert.Equal(KnowledgeAmbiguityConfiguration.DefaultProbeWaitMarginSeconds, ambiguity.ProbeWaitMarginSeconds);
+    }
+
+    [Fact]
+    public void Bind_AmbiguityBlock_ReadsEveryField()
+    {
+        const string Document = """
+            apiVersion: agentcore/v1
+            name: doc
+            providers:
+              call:   { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
+              knowledge:
+                kind: qdrant
+                collection: kb
+                fields: { body: text }
+                ambiguity: { maxCandidates: 4, maxAsks: 1, probeDeadlineSeconds: 3, probeWaitMarginSeconds: 2 }
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(Document);
+        var ambiguity = configuration.Providers!.Knowledge!.Ambiguity!;
+
+        Assert.Equal(4, ambiguity.MaxCandidates);
+        Assert.Equal(1, ambiguity.MaxAsks);
+        Assert.Equal(3, ambiguity.ProbeDeadlineSeconds);
+        Assert.Equal(2, ambiguity.ProbeWaitMarginSeconds);
+    }
+
+    [Fact]
+    public void Bind_AnUnknownAmbiguityKey_FailsCheckOne()
+    {
+        const string Document = """
+            apiVersion: agentcore/v1
+            name: doc
+            providers:
+              call:   { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
+              knowledge:
+                kind: qdrant
+                collection: kb
+                fields: { body: text }
+                ambiguity: { bogus: 1 }
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(Document));
 
         Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
     }

@@ -27,12 +27,17 @@ internal sealed class StubKnowledgePort : IKnowledgeRetrievalPort
     /// </remarks>
     public KnowledgeScope? ScopeAtTheStore { get; private set; }
 
+    /// <summary>Gets the <see cref="Clarifications"/> ambient on the flow when the last search arrived.</summary>
+    /// <remarks>Read at the same point as <see cref="ScopeAtTheStore"/>, for the same reason.</remarks>
+    public Clarifications? ClarificationsAtTheStore { get; private set; }
+
     public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
         string query,
         CancellationToken cancellationToken = default)
     {
         LastQuery = query;
         ScopeAtTheStore = KnowledgeScopeScope.Current;
+        ClarificationsAtTheStore = TurnAmbients.Current?.Clarifications;
         Calls++;
         return ValueTask.FromResult(_cards);
     }

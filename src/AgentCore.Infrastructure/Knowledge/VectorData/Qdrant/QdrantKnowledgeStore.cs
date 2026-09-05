@@ -1,3 +1,4 @@
+using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
@@ -12,12 +13,13 @@ namespace AgentCore.Infrastructure.Knowledge.VectorData.Qdrant;
 /// <summary>
 /// The whole knowledge base over one Qdrant collection.
 /// </summary>
-internal sealed class QdrantKnowledgeStore : IKnowledgeRetrievalPort, IDisposable
+internal sealed class QdrantKnowledgeStore : IKnowledgeRetrievalPort, IFacetVocabularyPort, IDisposable
 {
     private readonly IQdrantSearchChannel _channel;
     private readonly IEmbeddingGenerator<string, Embedding<float>> _embeddings;
     private readonly QdrantKnowledgeStoreOptions _options;
     private readonly IKnowledgePointMapper _mapper;
+    private readonly ScopeTemplate? _scopeTemplate;
 
     /// <summary>Binds one channel, one embedder and one collection.</summary>
     public QdrantKnowledgeStore(
@@ -32,6 +34,7 @@ internal sealed class QdrantKnowledgeStore : IKnowledgeRetrievalPort, IDisposabl
         _channel = channel;
         _embeddings = embeddings;
         _options = options;
+        _scopeTemplate = ScopeTemplate.Parse(options.ScopeTemplate);
         // A links block with no field names no payload key to read outbound ids from. The adapter
         // rejects that in the document; this rejects it for a store built in code, where the
         // alternative is a null dereference on the first search that ranks anything.
@@ -110,11 +113,9 @@ internal sealed class QdrantKnowledgeStore : IKnowledgeRetrievalPort, IDisposabl
         var points = await _channel
             .QueryAsync(BuildQuery(query, embedding.Vector, scope), deadline.Token).ConfigureAwait(false);
 
-        var ranked = points.Where(point => point.Score >= _options.ScoreFloor).ToList();
-
         List<KnowledgeCard> cards = [];
 
-        foreach (var point in ranked)
+        foreach (var point in points)
         {
             if (Map(point.Id, point.Payload, point.Score, viaLink: false) is { } card)
             {
@@ -122,7 +123,7 @@ internal sealed class QdrantKnowledgeStore : IKnowledgeRetrievalPort, IDisposabl
             }
         }
 
-        if (ranked.Count == 0 || _options.Links is not { } linksConfiguration)
+        if (points.Count == 0 || _options.Links is not { } linksConfiguration)
         {
             return cards;
         }
@@ -130,7 +131,7 @@ internal sealed class QdrantKnowledgeStore : IKnowledgeRetrievalPort, IDisposabl
         var have = cards.Select(card => card.CardId).ToHashSet(StringComparer.Ordinal);
 
         // The adapter refuses a links block that names no field, so this is never null here.
-        var links = QdrantPayload.ReadList(ranked[0].Payload, linksConfiguration.Field!)
+        var links = QdrantPayload.ReadList(points[0].Payload, linksConfiguration.Field!)
             .Where(id => !have.Contains(id))
             .Distinct(StringComparer.Ordinal)
             .ToList();
@@ -152,7 +153,23 @@ internal sealed class QdrantKnowledgeStore : IKnowledgeRetrievalPort, IDisposabl
         return cards;
     }
 
-    private FusedQuery BuildQuery(string query, ReadOnlyMemory<float> vector, KnowledgeScope? scope)
+    /// <inheritdoc />
+    /// <remarks>
+    /// <paramref name="path"/> is resolved verbatim: the caller has already applied
+    /// <c>scope.template</c>, so this never prefixes or rewrites it.
+    /// </remarks>
+    public async ValueTask<IReadOnlyList<string>> ReadAsync(
+        string path, int limit, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        ArgumentOutOfRangeException.ThrowIfNegative(limit);
+
+        return await _channel
+            .FacetAsync(_options.Collection, path, (ulong)limit, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private SearchQuery BuildQuery(string query, ReadOnlyMemory<float> vector, KnowledgeScope? scope)
     {
         var scopeFilter = new Filter();
         foreach (var (facet, value) in Facets(scope))
@@ -163,7 +180,7 @@ internal sealed class QdrantKnowledgeStore : IKnowledgeRetrievalPort, IDisposabl
                 // struct; a flat key does not. Getting that wrong matches nothing at all, silently,
                 // which is why the template is the deployment's to write and never AgentCore's to
                 // guess.
-                Field = new FieldCondition { Key = ScopePath(facet), Match = new Match { Keyword = value } },
+                Field = new FieldCondition { Key = ScopePath(facet), Match = MatchFor(facet, value) },
             });
         }
 
@@ -193,8 +210,49 @@ internal sealed class QdrantKnowledgeStore : IKnowledgeRetrievalPort, IDisposabl
             }
         }
 
-        return new FusedQuery(
-            _options.Collection, prefetch, new Query { Fusion = Fusion.Rrf }, (ulong)_options.Limit);
+        // One leg has nothing to fuse, and fusing it anyway replaces every score with 1/(rank+1).
+        // Re-scoring the prefetch with the same vector keeps a card's score a similarity, on the
+        // scale the floor was written in.
+        // Qdrant refuses "using" beside a fusion — the legs already name their vectors — so the
+        // name rides the top level only when the top level is itself a nearest query.
+        return prefetch.Count == 1
+            ? new SearchQuery(
+                _options.Collection,
+                prefetch,
+                new Query { Nearest = new VectorInput { Dense = new DenseVector { Data = { vector.ToArray() } } } },
+                (ulong)_options.Limit,
+                VectorName)
+            : new SearchQuery(_options.Collection, prefetch, new Query { Fusion = Fusion.Rrf }, (ulong)_options.Limit);
+    }
+
+    /// <summary>The values one facet accepts: its own, and the wildcard when this facet is named.</summary>
+    private IReadOnlyList<string> Values(string facet, string value)
+    {
+        if (_options.ScopeWildcard is not { Length: > 0 } wildcard
+            || !_options.ScopeWildcardFacets.Contains(facet, StringComparer.Ordinal)
+            || string.Equals(value, wildcard, StringComparison.Ordinal))
+        {
+            return [value];
+        }
+
+        return [.. new[] { value, wildcard }.Order(StringComparer.Ordinal)];
+    }
+
+    /// <summary>
+    /// Builds the match one facet condition carries.
+    /// </summary>
+    /// <remarks>
+    /// Keyword and Keywords are different oneof cases, so a single-value Keywords list is a
+    /// different message from today's. A deployment that configures no wildcard has to emit the
+    /// message it emits now, or every stored query plan and every filter assertion changes under it.
+    /// </remarks>
+    private Match MatchFor(string facet, string value)
+    {
+        var values = Values(facet, value);
+
+        return values.Count == 1
+            ? new Match { Keyword = values[0] }
+            : new Match { Keywords = new RepeatedStrings { Strings = { values } } };
     }
 
     private static IEnumerable<KeyValuePair<string, string>> Facets(KnowledgeScope? scope) =>
@@ -212,14 +270,32 @@ internal sealed class QdrantKnowledgeStore : IKnowledgeRetrievalPort, IDisposabl
             },
         };
 
+        // The floor belongs here, on the leg, where the score is still a cosine similarity. Applying
+        // it to what comes back is a different cut whenever the legs were fused: RRF replaces every
+        // score with 1/(rank+1), so a floor on that number is a fixed rank cut whatever was asked.
+        //
+        // A floor of 0 means no floor: every cosine similarity is >= 0, so a threshold of 0 would
+        // never cut anything, but it would still ride the wire and show up in a captured query.
+        if (_options.ScoreFloor > 0)
+        {
+            leg.ScoreThreshold = (float)_options.ScoreFloor;
+        }
+
         // "using" left unset queries the collection's anonymous vector; protobuf refuses null.
-        if (_options.VectorName is { Length: > 0 } name)
+        if (VectorName is { } name)
         {
             leg.Using = name;
         }
 
         return leg;
     }
+
+    /// <summary>
+    /// The named vector every query scores with, or <see langword="null"/> for the collection's
+    /// anonymous vector. An unset name and a blank one mean the same collection shape, and the
+    /// prefetch leg and the top-level query have to agree on which.
+    /// </summary>
+    private string? VectorName => _options.VectorName is { Length: > 0 } name ? name : null;
 
     /// <summary>Fetches the cards a link named, under this deployment's lookup mode.</summary>
     private Task<IReadOnlyList<RetrievedPoint>> FetchLinkedAsync(
@@ -258,7 +334,8 @@ internal sealed class QdrantKnowledgeStore : IKnowledgeRetrievalPort, IDisposabl
 
     /// <summary>Whether a card the ranking never chose is still inside the turn's scope.</summary>
     private bool InScope(MapField<string, Value> payload, KnowledgeScope? scope) =>
-        Facets(scope).All(entry => Holds(QdrantPayload.Read(payload, ScopePath(entry.Key)), entry.Value));
+        Facets(scope).All(entry =>
+            Holds(QdrantPayload.Read(payload, ScopePath(entry.Key)), Values(entry.Key, entry.Value)));
 
     /// <summary>Turns one facet key into the payload path this collection keeps it at.</summary>
     /// <remarks>
@@ -266,20 +343,20 @@ internal sealed class QdrantKnowledgeStore : IKnowledgeRetrievalPort, IDisposabl
     /// not at startup: a deployment whose agents never scope legitimately names no template.
     /// </remarks>
     private string ScopePath(string facet)
-        => _options.ScopeTemplate is { Length: > 0 } template
-            ? template.Replace("{key}", facet, StringComparison.Ordinal)
+        => _scopeTemplate is { } template
+            ? template.Resolve(facet)
             : throw new InvalidOperationException(
                 $"a KnowledgeScope names the facet '{facet}' and providers.knowledge.scope.template is "
-                + "unset, so AgentCore does not know what payload path that key becomes. There is no "
-                + "default. Write scope.template, such as '{key}' for flat facets.");
+                + "unset, so AgentCore does not know what payload path that key becomes. "
+                + ScopeTemplate.WriteOneAdvice);
 
     /// <summary>Mirrors Qdrant keyword matching, where a list facet matches when any element does.</summary>
-    private static bool Holds(Value? facet, string wanted) => facet switch
+    private static bool Holds(Value? facet, IReadOnlyList<string> wanted) => facet switch
     {
         { KindCase: Value.KindOneofCase.StringValue } value =>
-            string.Equals(value.StringValue, wanted, StringComparison.Ordinal),
+            wanted.Contains(value.StringValue, StringComparer.Ordinal),
         { KindCase: Value.KindOneofCase.ListValue } value =>
-            value.ListValue.Values.Any(item => string.Equals(item.StringValue, wanted, StringComparison.Ordinal)),
+            value.ListValue.Values.Any(item => wanted.Contains(item.StringValue, StringComparer.Ordinal)),
         _ => false,
     };
 

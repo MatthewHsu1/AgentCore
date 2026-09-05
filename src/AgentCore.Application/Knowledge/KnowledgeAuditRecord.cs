@@ -11,6 +11,9 @@ internal sealed record KnowledgeAuditRecord
     private static readonly IReadOnlyDictionary<string, string> EmptyScope =
         new Dictionary<string, string>(StringComparer.Ordinal);
 
+    private static readonly IReadOnlyDictionary<string, KnowledgeFacetOrigin> EmptyOrigins =
+        new Dictionary<string, KnowledgeFacetOrigin>(StringComparer.Ordinal);
+
     /// <summary>Gets the turn the retrieval ran inside, or <see langword="null"/> when nothing names it.</summary>
     public string? TurnId { get; init; }
 
@@ -25,6 +28,9 @@ internal sealed record KnowledgeAuditRecord
 
     /// <summary>Gets the facets the turn's scope carried, or empty when none was open.</summary>
     public required IReadOnlyDictionary<string, string> Scope { get; init; }
+
+    /// <summary>Gets where each facet's value came from, or empty when none was open.</summary>
+    public required IReadOnlyDictionary<string, KnowledgeFacetOrigin> ScopeOrigins { get; init; }
 
     /// <summary>Gets how long the whole retrieval took, in milliseconds.</summary>
     public required double LatencyMs { get; init; }
@@ -57,6 +63,7 @@ internal sealed record KnowledgeAuditRecord
             Mode = mode,
             Query = query,
             Scope = scope?.Facets ?? EmptyScope,
+            ScopeOrigins = scope?.Origins ?? EmptyOrigins,
             LatencyMs = latencyMs,
             Cards = [.. cards.Select(CardEntry.For)],
             Failure = failure?.ToString(),
@@ -72,6 +79,7 @@ internal sealed record KnowledgeAuditRecord
         Mode = Mode,
         QueryLength = Query.Length,
         Scope = Scope,
+        ScopeOrigins = ScopeOrigins,
         LatencyMs = LatencyMs,
         Cards = Cards,
     };
@@ -96,6 +104,9 @@ internal sealed record KnowledgeAuditRecord
         /// <summary>Gets the facets the turn's scope carried, or empty when none was open.</summary>
         public required IReadOnlyDictionary<string, string> Scope { get; init; }
 
+        /// <summary>Gets where each facet's value came from, or empty when none was open.</summary>
+        public required IReadOnlyDictionary<string, KnowledgeFacetOrigin> ScopeOrigins { get; init; }
+
         /// <summary>Gets how long the whole retrieval took, in milliseconds.</summary>
         public required double LatencyMs { get; init; }
 
@@ -109,7 +120,7 @@ internal sealed record KnowledgeAuditRecord
         /// <summary>Gets the card id.</summary>
         public required string CardId { get; init; }
 
-        /// <summary>Gets the fused score, or <see langword="null"/> when a link pulled the card in.</summary>
+        /// <summary>Gets the retrieval score — cosine similarity under one leg, a fused rank score under several — or <see langword="null"/> when a link pulled the card in.</summary>
         public double? Score { get; init; }
 
         /// <summary>Gets how much the source is trusted, or null when the store maps no such field.</summary>

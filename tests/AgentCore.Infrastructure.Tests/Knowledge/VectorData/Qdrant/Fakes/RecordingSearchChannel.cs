@@ -22,7 +22,7 @@ internal sealed class RecordingSearchChannel : IQdrantSearchChannel
     /// <summary>Gets every id set <see cref="RetrieveAsync"/> was called with, in call order.</summary>
     public List<IReadOnlyList<Guid>> RetrievedIds { get; } = [];
 
-    public Task<IReadOnlyList<ScoredPoint>> QueryAsync(FusedQuery query, CancellationToken cancellationToken) =>
+    public Task<IReadOnlyList<ScoredPoint>> QueryAsync(SearchQuery query, CancellationToken cancellationToken) =>
         Task.FromResult(_queryResult);
 
     public Task<IReadOnlyList<RetrievedPoint>> RetrieveAsync(
@@ -35,4 +35,8 @@ internal sealed class RecordingSearchChannel : IQdrantSearchChannel
     public Task<IReadOnlyList<RetrievedPoint>> ScrollAsync(
         string collection, Filter filter, uint limit, CancellationToken cancellationToken) =>
         throw new NotSupportedException("These tests drive links.lookup: direct, which never scrolls.");
+
+    public Task<IReadOnlyList<string>> FacetAsync(
+        string collection, string key, ulong limit, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("These tests drive links.lookup: direct, which never facets.");
 }

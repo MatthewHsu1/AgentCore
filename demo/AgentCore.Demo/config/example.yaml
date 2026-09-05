@@ -49,6 +49,20 @@ state:
   # AgentCore coerces the value, and leaves the slot at its default when coercion fails.
   orderStatus:         { type: string,  writer: tool, from: lookup_order.status }
 
+  # writer: extractor, and also named in providers.knowledge.scope.fromState below, which is what
+  # turns these two into the turn's knowledge facets. A fromState slot has to be this exact shape —
+  # writer: extractor, type: string, an enum:, and no default — and the boot check says which of the
+  # four is missing rather than failing the load with no pointer. enum: is enforced on every write,
+  # not merely requested of the model: a value outside it is refused and the slot keeps its previous
+  # value, so a resumed call whose stored blob carries a value the corpus was never tagged with comes
+  # back with that slot unfilled rather than scoped to a typo.
+  #
+  # applies_to breaks this file's camelCase slot naming on purpose. A fromState slot name IS the
+  # facet key, and scope.template turns it straight into the payload path, so these two names have to
+  # be spelled the way the collection spells them rather than the way the schema spells its own keys.
+  brand:      { type: string, writer: extractor, description: "The brand of the caller's machine.", enum: [sole, spirit] }
+  applies_to: { type: string, writer: extractor, description: "The model, as printed on the machine.", enum: [f63, f65, f80] }
+
   # writer: counter. The slot increments whenever the increment rule is true.
   failedResolveTurns:
     type: integer
@@ -322,10 +336,34 @@ providers:
 
     scope:
       template: "facets.{key}"
-    # How one facet key becomes a payload path. There is no default, because a template is a claim
-    # about where one collection keeps its facets. Flat facets are "{key}"; facets nested under one
-    # struct are "facets.{key}". Required as soon as ANY agent declares scoped: true — which is the
-    # default, so most documents need it.
+      # How one facet key becomes a payload path. There is no default, because a template is a claim
+      # about where one collection keeps its facets. Flat facets are "{key}"; facets nested under one
+      # struct are "facets.{key}". Required as soon as ANY agent declares scoped: true — which is the
+      # default, so most documents need it.
+
+      wildcard:
+        value: "*"
+        facets: [brand, applies_to]
+      # How a card opts out of exact-match scoping, one facet at a time — never the whole scope. A
+      # card tagged facets.brand: "*" is reachable from a scope open on any brand, which is where
+      # opening hours, returns and warranty terms belong: they are true of no single machine. Name
+      # only the REACH facets here, and never an isolation facet such as a customer id — a wildcard
+      # on that would serve one mis-tagged card to every caller on every call, silently. The block is
+      # opt-in: leave it out and the emitted filter is byte-identical to a document that has never
+      # heard of it.
+      #
+      # Configure the wildcard first, and tag the corpus after. Re-tagging a company-wide card to
+      # facets.brand: "*" while this block is still absent means exact match keeps refusing it for
+      # the whole re-tag window; flipped first, the same tag starts working the moment it lands, and
+      # an untagged corpus answers exactly as it did before the block existed.
+
+      fromState: [brand, applies_to]
+      # The state slots the turn's scope is built from, on top of whatever the host itself opens.
+      # Each name must point at a slot declared under state: above with writer: extractor,
+      # type: string, an enum:, and no default. A slot nothing has filled yet still appears in the
+      # scope, holding the wildcard, rather than being left out — leaving it out would put no
+      # condition on that facet at all, and every value of it would be in reach before the caller has
+      # said anything.
 
     links:
       field: see_also
@@ -356,8 +394,11 @@ providers:
     # on the card, including fields no role above names. Registering under this same name replaces
     # the shipped wording for every agent without touching this document.
 
-    scoreFloor: 0.25
-    # The smallest fused score a card may carry, 0 to 1.
+    scoreFloor: 0.35
+    # The cosine similarity a card must score strictly above, 0 to 1. Qdrant applies it on the
+    # dense prefetch, so a question the corpus does not answer returns nothing instead of its three
+    # nearest cards. On text-embedding-3-small, 0.25 was too low to tell the two apart; 0.35 was not.
+    # 0 disables the floor.
 
     # mapper: my-mapper
     # An IKnowledgePointMapper registered with options.UseKnowledgePointMappers. Named, it owns the

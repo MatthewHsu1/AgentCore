@@ -28,6 +28,12 @@ internal sealed record QdrantKnowledgeStoreOptions
     /// </summary>
     public string? ScopeTemplate { get; init; }
 
+    /// <summary>Gets the payload value that satisfies any scope on a named facet, or null for exact match.</summary>
+    public string? ScopeWildcard { get; init; }
+
+    /// <summary>Gets the facet keys the wildcard widens. Every other facet stays exact match.</summary>
+    public IReadOnlyList<string> ScopeWildcardFacets { get; init; } = [];
+
     /// <summary>Gets how links between cards are read and followed, or <see langword="null"/> for no expansion.</summary>
     public KnowledgeLinksConfiguration? Links { get; init; }
 
@@ -41,7 +47,8 @@ internal sealed record QdrantKnowledgeStoreOptions
     public int Limit { get; init; } = 5;
 
     /// <summary>
-    /// Gets the smallest fused score a card may carry, in the range 0 to 1.
+    /// Gets the cosine similarity a card must score strictly above, in the range 0 to 1. Applied on
+    /// the dense prefetch as Qdrant's score_threshold, never to a fused score. 0 disables the floor.
     /// </summary>
     public double ScoreFloor { get; init; } = KnowledgeProviderConfiguration.DefaultScoreFloor;
 

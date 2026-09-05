@@ -53,9 +53,8 @@ public static class CompositeKnowledgeStoreFactory
             throw Fail(
                 "/providers/knowledge/scope/template",
                 "an agent declares knowledge: { scoped: true } and providers.knowledge.scope names no "
-                + "template, so AgentCore does not know where this collection keeps its facets. There "
-                + "is no default: write scope.template as the payload path one facet key becomes, such "
-                + "as '{key}' for flat facets or 'facets.{key}' for facets nested under one struct.");
+                + "template, so AgentCore does not know where this collection keeps its facets. "
+                + ScopeTemplate.WriteOneAdvice);
         }
 
         if (entry.Mapper is null

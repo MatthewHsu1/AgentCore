@@ -17,19 +17,6 @@ namespace AgentCore.Application.Knowledge;
 internal static class KnowledgeProviderFactory
 {
     /// <summary>
-    /// What the model is told when the search itself failed.
-    /// </summary>
-    private const string UnreachableNotice =
-        "The knowledge base is unreachable for this turn. Say so, and do not answer from memory.";
-
-    /// <summary>
-    /// What the model is told when this agent is scoped and the turn has no scope open.
-    /// </summary>
-    private const string NoScopeNotice =
-        "The knowledge base was not searched for this turn, because no scope is open to search "
-        + "within. Say you cannot look this up, and do not answer from memory.";
-
-    /// <summary>
     /// The scope an agent that declares <c>scoped: false</c> searches under.
     /// </summary>
     private static readonly KnowledgeScope WholeCorpus =
@@ -86,67 +73,62 @@ internal static class KnowledgeProviderFactory
             // customer's cards.
             if (knowledge.Scoped && KnowledgeScopeScope.Current is not { Facets.Count: > 0 })
             {
-                return [Notice(NoScopeNotice)];
+                return [KnowledgeNotices.Of(KnowledgeNotices.NoScope)];
             }
 
             using var whole = knowledge.Scoped ? null : KnowledgeScopeScope.Open(WholeCorpus);
 
             var started = Stopwatch.GetTimestamp();
 
+            // Held from the moment the main search returns, so a failure raised by anything after it —
+            // the probe's own second search included — is still recorded against the time the main
+            // search took, rather than against however long the probe went on to run.
+            double? searched = null;
+
             try
             {
                 var cards = await port.SearchAsync(query, cancellationToken).ConfigureAwait(false);
+                searched = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
 
                 if (logger.IsEnabled(LogLevel.Debug))
                 {
-                    var record = Record(agent, knowledge, query, cards, started, failure: null).ForLog();
+                    var record = KnowledgeSearchRecord
+                        .Of(agent, knowledge, query, cards, searched.Value, failure: null)
+                        .ForLog();
+
                     Log.KnowledgeRetrieved(logger, agent, cards.Count, record);
                 }
 
-                var shown = Kept(cards, knowledge);
+                // §8 step 1-2: the probe runs only for a tool-mode search that cleared no card at
+                // all (K13) and only for a scoped agent — an unscoped agent opened WholeCorpus, which
+                // holds no facets, and its empty search stays an empty list, exactly as today (K19).
+                if (cards.Count == 0
+                    && knowledge.Mode == KnowledgeMode.Tool
+                    && KnowledgeScopeScope.Current is { Facets.Count: > 0 } scope)
+                {
+                    return await KnowledgeProbe
+                        .RunAsync(port, knowledge, scope, agent, query, logger, cancellationToken)
+                        .ConfigureAwait(false);
+                }
 
+                var shown = Kept(cards, knowledge);
                 Cite(shown, knowledge, citations);
 
                 return Map(shown, knowledge, citations);
             }
-            catch (Exception failure) when (!CallerCancelled(failure, cancellationToken))
+            catch (Exception failure) when (!KnowledgeCancellation.ByCaller(failure, cancellationToken))
             {
-                var record = Record(agent, knowledge, query, [], started, failure).ForLog();
+                var latency = searched ?? Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+                var record = KnowledgeSearchRecord
+                    .Of(agent, knowledge, query, [], latency, failure)
+                    .ForLog();
+
                 Log.KnowledgeRetrievalFailed(logger, agent, record, failure);
 
-                return [Notice(UnreachableNotice)];
+                return [KnowledgeNotices.Of(KnowledgeNotices.Unreachable)];
             }
         }
     }
-
-    /// <summary>Whether a failure is the caller ending the turn, rather than the retrieval failing.</summary>
-    private static bool CallerCancelled(Exception failure, CancellationToken cancellationToken)
-        => failure is OperationCanceledException && cancellationToken.IsCancellationRequested;
-
-    /// <summary>Reads one finished retrieval into the record an operator debugs an outage from.</summary>
-    /// <param name="agent">The id of the agent that asked.</param>
-    /// <param name="knowledge">The agent's resolved <c>knowledge:</c> block.</param>
-    /// <param name="query">The search text the framework composed.</param>
-    /// <param name="cards">What the store returned, or empty when it threw.</param>
-    /// <param name="started">The timestamp taken immediately before the port call.</param>
-    /// <param name="failure">What the port threw, or <see langword="null"/> when it answered.</param>
-    /// <returns>The record.</returns>
-    private static KnowledgeAuditRecord Record(
-        string agent,
-        ResolvedKnowledge knowledge,
-        string query,
-        IReadOnlyList<KnowledgeCard> cards,
-        long started,
-        Exception? failure)
-        => KnowledgeAuditRecord.For(
-            turnId: null,
-            agent,
-            knowledge.Mode,
-            query,
-            KnowledgeScopeScope.Current,
-            cards,
-            Stopwatch.GetElapsedTime(started).TotalMilliseconds,
-            failure);
 
     /// <summary>Cites what this search read, for the caller's screen.</summary>
     /// <param name="cards">The cards the agent is actually shown, after <see cref="Kept"/> cuts the search down to the agent's <c>limit:</c> — not everything the store returned.</param>
@@ -212,10 +194,4 @@ internal static class KnowledgeProviderFactory
 
         return mapped;
     }
-
-    /// <summary>Wraps one sentence for the model in the shape the framework injects.</summary>
-    /// <param name="text">What the model is told.</param>
-    /// <returns>The result.</returns>
-    private static TextSearchProvider.TextSearchResult Notice(string text)
-        => new() { Text = text };
 }

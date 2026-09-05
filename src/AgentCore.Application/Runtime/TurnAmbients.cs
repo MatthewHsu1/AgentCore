@@ -40,25 +40,35 @@ internal sealed record TurnAmbients
     /// <summary>Gets what the turn may see of the knowledge base, or <see langword="null"/>.</summary>
     public KnowledgeScope? Knowledge { get; init; }
 
+    /// <summary>Gets the call's ambiguity holder (K36), or <see langword="null"/> inside a nested tool call (K42).</summary>
+    public Clarifications? Clarifications { get; init; }
+
     /// <summary>Opens what a turn owns, and carries every other ambient through unchanged.</summary>
     /// <param name="state">The state document the call reads and writes.</param>
     /// <param name="renders">What this turn draws into, or <see langword="null"/> when it has no screen.</param>
     /// <param name="sources">What this turn cites into. Never null: a call with no screen still has sources.</param>
     /// <param name="onToolFailure">What to do with a tool failure the run reports.</param>
     /// <param name="context">The turn the tools are running inside.</param>
+    /// <param name="knowledge">What this turn may see of the knowledge base, or <see langword="null"/> when the document composes none.</param>
+    /// <param name="clarifications">The call's ambiguity holder.</param>
     internal static IDisposable Enter(
         StateDocument state,
         TurnRenders? renders,
         TurnSources sources,
         Action<ToolFailure> onToolFailure,
-        TurnContext context)
+        TurnContext context,
+        KnowledgeScope? knowledge,
+        Clarifications clarifications)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(onToolFailure);
         ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(clarifications);
 
-        return Push((Ambient.Value ?? None) with
+        var current = Ambient.Value ?? None;
+
+        return Push(current with
         {
             State = state,
             Screen = renders,
@@ -66,6 +76,8 @@ internal sealed record TurnAmbients
             Sources = sources,
             OnToolFailure = onToolFailure,
             Context = context,
+            Knowledge = knowledge ?? current.Knowledge,
+            Clarifications = clarifications,
         });
     }
 

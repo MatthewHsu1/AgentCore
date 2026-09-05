@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using AgentCore.TestSupport;
 using AgentCore.Application.Configuration.Compilation;
@@ -604,6 +605,79 @@ public sealed class KnowledgeProviderFactoryTests
         Assert.Contains("does it need a part?", port.LastQuery!, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Search_ToolModeWithNoResults_InjectsTheEmptyNotice()
+    {
+        var provider = Provider(new StubKnowledgePort([]), Resolved(KnowledgeMode.Tool, scoped: true));
+        using var open = KnowledgeScopeScope.Open(
+            new KnowledgeScope { Facets = new Dictionary<string, string> { ["model"] = "ct900" } });
+
+        var results = await InvokeSearchAsync(provider, "f63 error e03");
+
+        Assert.Contains(results, r => r.Text.Contains("holds nothing", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Search_PrefetchModeWithNoResults_InjectsNothing()
+    {
+        var provider = Provider(new StubKnowledgePort([]), Resolved(KnowledgeMode.Prefetch));
+
+        var results = await InvokeSearchAsync(provider, "hello");
+
+        Assert.Empty(results);
+    }
+
+    [Fact]
+    public async Task Search_ScopedPrefetchModeWithNoResults_InjectsNothing()
+    {
+        // Both halves of the notice guard matter. A scoped agent with a real facet open already
+        // clears the Facets.Count > 0 half, so only the KnowledgeMode.Tool clause keeps a prefetch
+        // agent's empty search silent.
+        var provider = Provider(new StubKnowledgePort([]), Resolved(KnowledgeMode.Prefetch, scoped: true));
+        using var open = KnowledgeScopeScope.Open(
+            new KnowledgeScope { Facets = new Dictionary<string, string> { ["model"] = "ct900" } });
+
+        var results = await InvokeSearchAsync(provider, "the screen says e33");
+
+        Assert.Empty(results);
+    }
+
+    [Fact]
+    public async Task Search_UnscopedToolModeWithNoResults_InjectsNothing()
+    {
+        // scoped: false opens WholeCorpus, which holds no facets. Such an agent's empty search stays
+        // byte-identical to an unscoped one: an empty list, no notice.
+        var provider = Provider(new StubKnowledgePort([]), Resolved(KnowledgeMode.Tool, scoped: false));
+
+        var results = await InvokeSearchAsync(provider, "f63 error e03");
+
+        Assert.Empty(results);
+    }
+
+    [Fact]
+    public async Task Search_EveryNotice_CarriesTheReservedSourceName()
+    {
+        // A notice must never be citable as a card, and the reserved source name is what stops it.
+        var provider = Provider(new StubKnowledgePort([]), Resolved(KnowledgeMode.Tool, scoped: true));
+        using var open = KnowledgeScopeScope.Open(
+            new KnowledgeScope { Facets = new Dictionary<string, string> { ["model"] = "ct900" } });
+
+        var results = await InvokeSearchAsync(provider, "f63 error e03");
+
+        Assert.All(results, r => Assert.Equal("agentcore:notice", r.SourceName));
+    }
+
+    [Fact]
+    public async Task Search_ToolModeThatThrows_StillSaysUnreachable()
+    {
+        var provider = Provider(
+            new ThrowingKnowledgePort(new InvalidOperationException("boom")), Resolved(KnowledgeMode.Tool));
+
+        var results = await InvokeSearchAsync(provider, "f63");
+
+        Assert.Contains(results, r => r.Text.Contains("unreachable", StringComparison.Ordinal));
+    }
+
     /// <summary>Builds the provider under test, with the agent id and logger these facts do not read.</summary>
     /// <param name="port">The store the provider searches.</param>
     /// <param name="knowledge">The agent's resolved <c>knowledge:</c> block.</param>
@@ -611,6 +685,21 @@ public sealed class KnowledgeProviderFactoryTests
     private static AIContextProvider Provider(IKnowledgeRetrievalPort port, ResolvedKnowledge knowledge)
         => KnowledgeProviderFactory.Create(
             port, knowledge, "agent-under-test", new SourceLocatorCitationFormatter(), loggers: null);
+
+    /// <summary>
+    /// Calls the factory's own search delegate directly, rather than through
+    /// <see cref="AIContextProvider.InvokingAsync"/>. The guard under test reads
+    /// <see cref="ResolvedKnowledge.Mode"/> itself, so it behaves identically whether the framework
+    /// would have called the delegate before the model (prefetch) or handed it to the model as a
+    /// tool -- <c>TextSearchProvider</c> only decides which of those two happens, and in tool mode
+    /// never calls the delegate on its own.
+    /// </summary>
+    /// <param name="provider">The provider <see cref="Provider"/> built.</param>
+    /// <param name="query">The search text.</param>
+    /// <returns>What the delegate returned.</returns>
+    private static Task<IReadOnlyList<TextSearchProvider.TextSearchResult>> InvokeSearchAsync(
+        AIContextProvider provider, string query)
+        => TextSearchProviderInternals.SearchAsync(provider, query, TestContext.Current.CancellationToken);
 
     /// <summary>Every message text of a returned context, in one string.</summary>
     private static string Merged(AIContext context)

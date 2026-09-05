@@ -104,6 +104,24 @@ public sealed class KnowledgeAuditRecordTests
         Assert.Equal("ranked", entry.Via);
     }
 
+    [Fact]
+    public void For_CarriesTheScopeOrigins()
+    {
+        KnowledgeScope scope = new()
+        {
+            Facets = new Dictionary<string, string>(StringComparer.Ordinal) { ["brand"] = "*" },
+            Origins = new Dictionary<string, KnowledgeFacetOrigin>(StringComparer.Ordinal)
+            {
+                ["brand"] = KnowledgeFacetOrigin.Wildcard,
+            },
+        };
+
+        var record = KnowledgeAuditRecord.For(
+            null, "agent", KnowledgeMode.Tool, "q", scope, [], 1.0, null);
+
+        Assert.Equal(KnowledgeFacetOrigin.Wildcard, record.ScopeOrigins["brand"]);
+    }
+
     private static KnowledgeScope Scope()
         => new() { Facets = new Dictionary<string, string> { ["model"] = "ct900" } };
 

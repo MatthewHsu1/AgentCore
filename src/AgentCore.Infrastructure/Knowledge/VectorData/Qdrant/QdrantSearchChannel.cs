@@ -21,7 +21,7 @@ internal sealed class QdrantSearchChannel : IQdrantSearchChannel, IDisposable
     public void Dispose() => _client.Dispose();
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<ScoredPoint>> QueryAsync(FusedQuery query, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<ScoredPoint>> QueryAsync(SearchQuery query, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(query);
 
@@ -30,6 +30,7 @@ internal sealed class QdrantSearchChannel : IQdrantSearchChannel, IDisposable
                 query.Collection,
                 prefetch: query.Prefetch,
                 query: query.Query,
+                usingVector: query.Using,
                 limit: query.Limit,
                 payloadSelector: new WithPayloadSelector { Enable = true },
                 cancellationToken: cancellationToken),
@@ -69,6 +70,19 @@ internal sealed class QdrantSearchChannel : IQdrantSearchChannel, IDisposable
             cancellationToken).ConfigureAwait(false);
 
         return response.Result;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<string>> FacetAsync(
+        string collection, string key, ulong limit, CancellationToken cancellationToken)
+    {
+        // exact: true always. Measured equal to exact: false on 2- and 8-segment collections
+        // (P4); the guarantee is the caller's and the measured cost was 6 ms.
+        var response = await RunAsync(
+            () => _client.FacetAsync(collection, key, limit: limit, exact: true, cancellationToken: cancellationToken),
+            cancellationToken).ConfigureAwait(false);
+
+        return [.. response.Hits.Select(hit => hit.Value.StringValue)];
     }
 
     /// <summary>
