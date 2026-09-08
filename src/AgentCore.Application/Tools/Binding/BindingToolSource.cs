@@ -22,7 +22,10 @@ public sealed class BindingToolSource : IToolSource
     }
 
     /// <inheritdoc />
-    /// <exception cref="ConfigurationLoadException">A <c>binds:</c> name is missing or not registered.</exception>
+    /// <exception cref="ConfigurationLoadException">
+    /// A <c>binds:</c> name is missing, is not registered, or names a typed method while the
+    /// declaration also writes <c>parameters:</c>.
+    /// </exception>
     public ValueTask<IReadOnlyList<ToolRegistration>> ProvideAsync(
         ToolSourceContext context, CancellationToken cancellationToken = default)
     {
@@ -34,6 +37,23 @@ public sealed class BindingToolSource : IToolSource
             if (declared.Binds is not { Length: > 0 } name)
             {
                 throw ToolSourceError.Fail($"the tool '{declared.Id}' is kind: binding and names no binds:.");
+            }
+
+            if (_registry.TryGetMethod(name, out var method) && method is not null)
+            {
+                if (declared.Parameters is not null)
+                {
+                    throw ToolSourceError.Fail(
+                        $"the tool '{declared.Id}' binds to '{name}', which the host registered as a typed "
+                        + "method, and it also declares parameters:. The method signature is the schema, so "
+                        + "the two disagree the moment either one changes. Take the parameters: off the "
+                        + "declaration, or register the name as a ToolBinding instead.");
+                }
+
+                var typed = method;
+                registrations.Add(new ToolRegistration(
+                    declared.Id, declared.Description ?? string.Empty, () => new TypedBindingTool(declared, typed)));
+                continue;
             }
 
             if (!_registry.TryGetBinding(name, out var binding) || binding is null)

@@ -163,6 +163,10 @@ tools:
       # ISecretResolverPort resolves it at startup through the four-step chain in D22.
       headers: { Authorization: "Bearer ${secret:orders-api-key}" }
 
+  # A binds: name is registered one of two ways, and the way decides who writes the schema.
+  #
+  # options.Bind("CreateCase", (json, ct) => ...) reads the arguments as one JSON object, so the
+  # declaration writes parameters: below and the host digs the values out by hand.
   - id: create_case
     kind: binding
     binds: CreateCase
@@ -171,6 +175,16 @@ tools:
       type: object
       properties: { summary: { type: string } }
       required: [ summary ]
+
+  # options.Bind("CloseCase", (string caseId, string reason) => ...) registers a typed method
+  # instead. Its parameters are the arguments, and their schema, so this declaration writes no
+  # parameters: at all. Writing one anyway is a boot failure: the two would drift apart.
+  # A [Description] attribute on a parameter is what the model reads about it.
+  #
+  # - id: close_case
+  #   kind: binding
+  #   binds: CloseCase
+  #   description: Close a service case once the customer is happy.
 
   # kind: agent is agent-as-tool, and it is not handoff. The outer agent calls the inner agent,
   # reads the reply, and keeps control. graph: with pattern: handoff transfers control instead,
