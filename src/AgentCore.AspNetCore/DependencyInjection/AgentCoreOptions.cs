@@ -303,4 +303,18 @@ public sealed class AgentCoreOptions
         Bindings.Register(name, binding);
         return this;
     }
+
+    /// <summary>Registers one host method behind a <c>binds:</c> name.</summary>
+    /// <param name="name">The name a <c>binds:</c> field writes, such as <c>CreateCase</c>.</param>
+    /// <param name="method">
+    /// The method the tool calls. Its parameters are the arguments the model fills, and their JSON
+    /// Schema, so the declaration writes no <c>parameters:</c>.
+    /// </param>
+    /// <returns>These options, so a host chains its calls.</returns>
+    /// <exception cref="ArgumentException">The name is already registered.</exception>
+    public AgentCoreOptions Bind(string name, Delegate method)
+    {
+        Bindings.Register(name, method);
+        return this;
+    }
 }

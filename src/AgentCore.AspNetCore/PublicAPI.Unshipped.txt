@@ -11,6 +11,7 @@ AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.AddToolSource(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Ports.IToolSource!>! toolSource) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.AgentCoreOptions() -> void
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Bind(string! name, AgentCore.Application.Tools.Binding.ToolBinding! binding) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Bind(string! name, System.Delegate! method) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Bindings.get -> AgentCore.Application.Tools.Binding.ToolBindingRegistry!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Configuration.get -> AgentCore.Application.Configuration.Schema.AgentCoreConfiguration?
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Configuration.set -> void

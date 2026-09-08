@@ -1199,8 +1199,10 @@ AgentCore.Application.Tools.Binding.ToolBindingRegistry.Contains(string! name) -
 AgentCore.Application.Tools.Binding.ToolBindingRegistry.Count.get -> int
 AgentCore.Application.Tools.Binding.ToolBindingRegistry.Names.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
 AgentCore.Application.Tools.Binding.ToolBindingRegistry.Register(string! name, AgentCore.Application.Tools.Binding.ToolBinding! binding) -> AgentCore.Application.Tools.Binding.ToolBindingRegistry!
+AgentCore.Application.Tools.Binding.ToolBindingRegistry.Register(string! name, System.Delegate! method) -> AgentCore.Application.Tools.Binding.ToolBindingRegistry!
 AgentCore.Application.Tools.Binding.ToolBindingRegistry.ToolBindingRegistry() -> void
 AgentCore.Application.Tools.Binding.ToolBindingRegistry.TryGetBinding(string! name, out AgentCore.Application.Tools.Binding.ToolBinding? binding) -> bool
+AgentCore.Application.Tools.Binding.ToolBindingRegistry.TryGetMethod(string! name, out System.Delegate? method) -> bool
 AgentCore.Application.Tools.Builtin.BuiltinToolNames
 AgentCore.Application.Tools.Builtin.BuiltinToolPorts
 AgentCore.Application.Tools.Builtin.BuiltinToolPorts.<Clone>$() -> AgentCore.Application.Tools.Builtin.BuiltinToolPorts!
