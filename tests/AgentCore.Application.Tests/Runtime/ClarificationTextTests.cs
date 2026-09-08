@@ -23,8 +23,8 @@ public sealed class ClarificationTextTests
 
         Assert.Equal(
             "One thing is not yet known: The model, as printed on the machine. It is one of ct900 or "
-            + "ct900ent. Ask the caller, and do not give advice that is specific to one until they answer. "
-            + "Anything that applies to all of them is still fair game.",
+            + "ct900ent. Answer what the caller just said; where that calls for advice specific to one, ask "
+            + "the caller which first. Anything that applies to all of them is still fair game.",
             text);
     }
 
@@ -36,8 +36,8 @@ public sealed class ClarificationTextTests
 
         Assert.Equal(
             "One thing is not yet known: The model, as printed on the machine. It is one of ct800, ct900, "
-            + "or ct900ent. Ask the caller, and do not give advice that is specific to one until they answer. "
-            + "Anything that applies to all of them is still fair game.",
+            + "or ct900ent. Answer what the caller just said; where that calls for advice specific to one, "
+            + "ask the caller which first. Anything that applies to all of them is still fair game.",
             text);
     }
 
@@ -49,7 +49,8 @@ public sealed class ClarificationTextTests
 
         Assert.Equal(
             "One thing is not yet confirmed: The model, as printed on the machine. Everything found is for "
-            + "ct900. Ask the caller whether that is what they have before giving advice specific to it.",
+            + "ct900. Answer what the caller just said; where that calls for advice specific to it, ask the "
+            + "caller first whether that is what they have.",
             text);
     }
 
@@ -63,8 +64,8 @@ public sealed class ClarificationTextTests
             first: true);
 
         Assert.Equal(
-            "One thing is not yet known: The model, as printed on the machine. Ask the caller, and do not "
-            + "give advice specific to one until they answer.",
+            "One thing is not yet known: The model, as printed on the machine. Answer what the caller just "
+            + "said; where that calls for advice specific to one, ask the caller first.",
             text);
     }
 
@@ -96,9 +97,9 @@ public sealed class ClarificationTextTests
         var text = ClarificationText.Instruction("applies_to", ["ct900", "ct900ent"], maxCandidates: 6, first: true);
 
         Assert.Equal(
-            "One thing is not yet known: applies_to It is one of ct900 or ct900ent. Ask the caller, and do "
-            + "not give advice that is specific to one until they answer. Anything that applies to all of "
-            + "them is still fair game.",
+            "One thing is not yet known: applies_to It is one of ct900 or ct900ent. Answer what the caller "
+            + "just said; where that calls for advice specific to one, ask the caller which first. Anything "
+            + "that applies to all of them is still fair game.",
             text);
     }
 

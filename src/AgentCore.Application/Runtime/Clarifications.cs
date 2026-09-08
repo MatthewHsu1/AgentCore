@@ -101,14 +101,22 @@ internal sealed class Clarifications
         }
     }
 
-    /// <summary>Makes every ask this turn staged permanent (see <see cref="Ask"/>).</summary>
-    internal void CommitAsks()
+    /// <summary>Makes the asks this turn staged and put permanent (see <see cref="Ask"/>).</summary>
+    /// <param name="reply">The words the caller heard, which decide which staged asks were put.</param>
+    internal void CommitAsks(string reply)
     {
+        ArgumentNullException.ThrowIfNull(reply);
+
         lock (_gate)
         {
             foreach (var state in _slots.Values)
             {
                 if (state.StagedAsk is not { } ask)
+                {
+                    continue;
+                }
+
+                if (!SpokenAsk.NamedIn(reply, ask.Named))
                 {
                     continue;
                 }

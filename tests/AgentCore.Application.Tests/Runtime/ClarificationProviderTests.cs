@@ -289,7 +289,7 @@ public sealed class ClarificationProviderTests
         var turn1 = await provider.InvokingAsync(Invoking(session), TestContext.Current.CancellationToken);
         Assert.NotNull(turn1.Messages);
         Assert.Equal(1, clarifications.Read("applies_to").NamedAsks);
-        clarifications.CommitAsks();
+        clarifications.CommitAsks("Is it a ct900 or a ct900ent?");
 
         // Turn 2: the same set. namedAsks is at the cap (1), but K37 suppresses before the cap is
         // even reached, because nothing changed.
@@ -298,7 +298,7 @@ public sealed class ClarificationProviderTests
         Assert.Null(turn2.Messages);
         Assert.Equal(1, clarifications.Read("applies_to").NamedAsks);
         Assert.False(clarifications.Read("applies_to").ResetSpent);
-        clarifications.CommitAsks();
+        clarifications.CommitAsks("okay.");
 
         // Turn 3: the set changes. namedAsks is at the cap and differs from lastNamed, so the one
         // reset fires: namedAsks returns to 1 (not 0), and the reset is spent.
@@ -306,7 +306,7 @@ public sealed class ClarificationProviderTests
         clarifications.Update("applies_to", s => s.Pending = ["ct800", "ct800ent"]);
         var turn3 = await provider.InvokingAsync(Invoking(session), TestContext.Current.CancellationToken);
         Assert.NotNull(turn3.Messages);
-        clarifications.CommitAsks();
+        clarifications.CommitAsks("Is it a ct800 or a ct800ent?");
         var afterReset = clarifications.Read("applies_to");
         Assert.Equal(1, afterReset.NamedAsks);
         Assert.True(afterReset.ResetSpent);
@@ -340,7 +340,7 @@ public sealed class ClarificationProviderTests
         var turn1 = await provider.InvokingAsync(Invoking(session), TestContext.Current.CancellationToken);
         Assert.NotNull(turn1.Messages);
         Assert.Equal(1, clarifications.Read("applies_to").NamedAsks);
-        clarifications.CommitAsks();
+        clarifications.CommitAsks("Which model is it?");
 
         clarifications.BeginTurn();
         clarifications.Update("applies_to", s => s.Pending = ["h", "i", "j", "k", "l", "m", "n"]);

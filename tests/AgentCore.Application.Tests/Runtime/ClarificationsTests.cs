@@ -266,7 +266,7 @@ public sealed class ClarificationsTests
         var named = Clarifications.LastNamed.Of(new HashSet<string>(StringComparer.Ordinal) { "ct900" });
 
         clarifications.Ask("applies_to", named, spendsReset: false);
-        clarifications.CommitAsks();
+        clarifications.CommitAsks("Is it a ct900?");
         clarifications.BeginTurn();
 
         var kept = clarifications.Read("applies_to");
