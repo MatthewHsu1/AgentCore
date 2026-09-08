@@ -1055,13 +1055,9 @@ public sealed class CallSession : IConversationPort
             _events.RaiseDiagnostic(CallEventKind.EmptyReply, _time.GetUtcNow(), turn.Index);
         }
 
-        // §7's ask is charged only for a turn whose own words reached the caller. The clarification
-        // rides an instruction injected before the run, so a run that ended in the fallback reply, or
-        // one moderation refused, never put the question — and a slot recorded as asked is silent for
-        // the rest of the call.
         if (failure is null && !refused)
         {
-            _clarifications.CommitAsks();
+            _clarifications.CommitAsks(reply);
         }
 
         // What this turn adds to the transcript. It is built here and written at the end of the

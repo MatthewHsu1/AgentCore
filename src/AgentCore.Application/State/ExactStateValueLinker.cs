@@ -81,34 +81,24 @@ public sealed class ExactStateValueLinker : IStateValueLinker
             return new LinkResult(LinkOutcome.Linked, [original]);
         }
 
-        var prefixedBy = PrefixedSiblings(vocabulary, only);
+        var prefixedBy = PrefixedSiblings(vocabulary, only, Extensions(candidates, hits[only]));
 
         if (prefixedBy.Count == 0)
         {
             return new LinkResult(LinkOutcome.Linked, [original]);
         }
 
-        // K21's tie-break did not apply, and `only` is a strict prefix of another value in the
-        // collection: the caller could mean either, so this stays a near-tie rather than a guess.
-        // The full set is re-sorted rather than just prepending `original` ahead of a sorted
-        // `prefixedBy`: a mixed-case vocabulary can make `original` compare greater than one of its
-        // own prefixed siblings under ordinal order (uppercase sorts before lowercase), which a bare
-        // prepend would leave out of order.
         prefixedBy.Add(original);
         prefixedBy.Sort(StringComparer.Ordinal);
         return new LinkResult(LinkOutcome.Ambiguous, prefixedBy);
     }
 
     /// <summary>
-    /// Every value whose normalised key has <paramref name="key"/> as a strict prefix, in the
-    /// collection's own spelling.
+    /// Every value whose normalised key has <paramref name="key"/> as a strict prefix and that
+    /// <paramref name="extensions"/> does not rule out, in the collection's own spelling.
     /// </summary>
-    /// <remarks>
-    /// Under ordinal order every strict prefix extension of <paramref name="key"/> sorts after it
-    /// and the extensions are contiguous, so this is a binary search plus a walk over the matches
-    /// rather than a scan of the whole vocabulary.
-    /// </remarks>
-    private static List<string> PrefixedSiblings(VocabularyView vocabulary, string key)
+    private static List<string> PrefixedSiblings(
+        VocabularyView vocabulary, string key, IReadOnlyList<string> extensions)
     {
         var ordered = KeysInOrder.GetValue(
             vocabulary,
@@ -120,10 +110,89 @@ public sealed class ExactStateValueLinker : IStateValueLinker
         List<string> siblings = [];
         for (; scan < ordered.Length && ordered[scan].StartsWith(key, StringComparison.Ordinal); scan++)
         {
-            siblings.Add(vocabulary.NormalisedToOriginal[ordered[scan]]);
+            if (!RuledOut(ordered[scan], key, extensions))
+            {
+                siblings.Add(vocabulary.NormalisedToOriginal[ordered[scan]]);
+            }
         }
 
         return siblings;
+    }
+
+    /// <summary>
+    /// Every candidate spelling the mention offers that begins where the matched value begins and
+    /// runs past its end — what the caller spelled around the hit, rather than what the collection
+    /// holds.
+    /// </summary>
+    /// <param name="candidates">Every spelling the mention admits, from <see cref="BuildCandidates"/>.</param>
+    /// <param name="matched">The token spans the matched value was read from.</param>
+    /// <returns>The extended spellings, each carrying the matched key as a strict prefix.</returns>
+    private static List<string> Extensions(
+        Dictionary<string, HashSet<(int Start, int End)>> candidates,
+        HashSet<(int Start, int End)> matched)
+    {
+        List<string> extensions = [];
+
+        foreach (var (key, spans) in candidates)
+        {
+            if (spans.Any(span => matched.Any(hit => hit.Start == span.Start && span.End > hit.End)))
+            {
+                extensions.Add(key);
+            }
+        }
+
+        return extensions;
+    }
+
+    /// <summary>
+    /// Whether the caller's own spelling rules this sibling out: they spelled a peer of the
+    /// sibling's own tail — as long, and of the same character class — that is not it.
+    /// </summary>
+    /// <param name="sibling">The sibling's normalised key.</param>
+    /// <param name="key">The matched value's normalised key, a strict prefix of both sides.</param>
+    /// <param name="extensions">What the caller spelled past the match.</param>
+    /// <returns><see langword="true"/> to drop the sibling.</returns>
+    private static bool RuledOut(string sibling, string key, IReadOnlyList<string> extensions)
+    {
+        var tail = sibling[key.Length..];
+        var ruledOut = false;
+
+        foreach (var extension in extensions)
+        {
+            // The caller is still spelling toward this sibling, so nothing they said rules it out —
+            // and no other extension of the same mention can overturn that.
+            if (sibling.StartsWith(extension, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            ruledOut = ruledOut || IsPeer(extension[key.Length..], tail);
+        }
+
+        return ruledOut;
+    }
+
+    /// <summary>Whether two tails are alternatives: the same length, and both all numbers or both all letters.</summary>
+    private static bool IsPeer(string left, string right)
+        => left.Length == right.Length
+            && ((All(left, IsNumber) && All(right, IsNumber)) || (All(left, Rune.IsLetter) && All(right, Rune.IsLetter)));
+
+    private static bool All(string text, Func<Rune, bool> predicate)
+    {
+        if (text.Length == 0)
+        {
+            return false;
+        }
+
+        foreach (var rune in text.EnumerateRunes())
+        {
+            if (!predicate(rune))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>

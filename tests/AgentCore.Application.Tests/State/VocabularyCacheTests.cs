@@ -180,7 +180,10 @@ public sealed class VocabularyCacheTests
         using ManualResetEventSlim reading = new();
         using CancellationTokenSource stop = new();
 
-        var reader = Task.Run(
+        // Its own thread (LongRunning), never a pooled one: the reader spins for the whole test and
+        // the wait below has no timeout, so a reader left queued behind a busy thread pool — the
+        // rest of the suite running in parallel — would hang the test rather than fail it.
+        var reader = Task.Factory.StartNew(
             () =>
             {
                 reading.Set();
@@ -190,7 +193,9 @@ public sealed class VocabularyCacheTests
                     _ = snapshot["machine"].Originals.Count;
                 }
             },
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
 
         reading.Wait(TestContext.Current.CancellationToken);
 
@@ -250,12 +255,22 @@ public sealed class VocabularyCacheTests
             }
         }
 
-        var threadA = Task.Run(() => RaceWithTag("A"), TestContext.Current.CancellationToken);
-        var threadB = Task.Run(() => RaceWithTag("B"), TestContext.Current.CancellationToken);
+        // Each racer gets its own thread (LongRunning), never a pooled one: a Barrier only makes
+        // progress while both participants are running at once, and under a full thread pool — the
+        // rest of the suite running in parallel — the second Task.Run can wait longer for a thread
+        // than the barrier timeout allows, which fails the round rather than the invariant.
+        var threadA = StartRacer("A");
+        var threadB = StartRacer("B");
         start.Set();
         await Task.WhenAll(threadA, threadB);
 
         Assert.Equal(Rounds * 2, provider.Calls.Count);
+
+        Task StartRacer(string prefix) => Task.Factory.StartNew(
+            () => RaceWithTag(prefix),
+            TestContext.Current.CancellationToken,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
     }
 
     private static void AssertQuiescentAgreement(TaggingTimeProvider provider, VocabularyCache cache)

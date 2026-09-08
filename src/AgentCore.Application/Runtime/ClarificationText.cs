@@ -47,20 +47,21 @@ internal static class ClarificationText
         {
             var confirm = first ? "One thing is not yet confirmed" : "Another thing is not yet confirmed";
             return $"{confirm}: {description} Everything found is for {candidates[0]}. "
-                + "Ask the caller whether that is what they have before giving advice specific to it.";
+                + "Answer what the caller just said; where that calls for advice specific to it, ask the "
+                + "caller first whether that is what they have.";
         }
 
         var known = first ? "One thing is not yet known" : "Another thing is not yet known";
 
         if (candidates.Count > maxCandidates)
         {
-            return $"{known}: {description} Ask the caller, and do not give advice specific to one until "
-                + "they answer.";
+            return $"{known}: {description} Answer what the caller just said; where that calls for advice "
+                + "specific to one, ask the caller first.";
         }
 
-        return $"{known}: {description} It is one of {JoinAlternatives(candidates)}. Ask the caller, and do "
-            + "not give advice that is specific to one until they answer. Anything that applies to all of "
-            + "them is still fair game.";
+        return $"{known}: {description} It is one of {JoinAlternatives(candidates)}. Answer what the caller "
+            + "just said; where that calls for advice specific to one, ask the caller which first. Anything "
+            + "that applies to all of them is still fair game.";
     }
 
     /// <summary>Renders channel 2's sentence: the probe's note, as a search result.</summary>
