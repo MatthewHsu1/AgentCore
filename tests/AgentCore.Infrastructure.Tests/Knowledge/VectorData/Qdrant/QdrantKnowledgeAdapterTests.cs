@@ -32,13 +32,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
         // A29. AgentCore never creates. If it did, it would put an empty concrete collection where
         // the ingester's alias belongs, and the next ingest run then has a name it cannot claim.
         var adapter = new QdrantKnowledgeAdapter(_ => QdrantServer.CreateClient(), Embeddings);
-        var entry = new KnowledgeProviderConfiguration
-        {
-            Kind = "qdrant",
-            Collection = "does-not-exist",
-            Vector = "dense",
-            Fields = KbShapedCorpus.Fields,
-        };
+        var entry = DenseEntry("does-not-exist");
 
         var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
             async () => await adapter.CreateSearchAsync(entry, secrets: null, embeddings: null, requireScope: true, TestContext.Current.CancellationToken));
@@ -66,13 +60,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
                 return captured;
             },
             Embeddings);
-        var entry = new KnowledgeProviderConfiguration
-        {
-            Kind = "qdrant",
-            Collection = "does-not-exist",
-            Vector = "dense",
-            Fields = KbShapedCorpus.Fields,
-        };
+        var entry = DenseEntry("does-not-exist");
 
         await Assert.ThrowsAsync<InvalidOperationException>(
             async () => await adapter.CreateSearchAsync(
@@ -151,13 +139,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
         try
         {
             var adapter = new QdrantKnowledgeAdapter(_ => QdrantServer.CreateClient(), Embeddings);
-            var entry = new KnowledgeProviderConfiguration
-            {
-                Kind = "qdrant",
-                Collection = collection,
-                Vector = "dense",
-                Fields = KbShapedCorpus.Fields,
-            };
+            var entry = DenseEntry(collection);
 
             var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
                 async () => await adapter.CreateSearchAsync(
@@ -179,24 +161,12 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
         // vector that is NOT 8-wide, so only the size comparison -- not the name check -- can catch it.
         var collection = $"wrongwidth-{Guid.NewGuid():N}";
         using var client = QdrantServer.CreateClient();
-        await client.CreateCollectionAsync(
-            collection,
-            vectorsConfig: new VectorParamsMap
-            {
-                Map = { ["dense"] = new VectorParams { Size = 4, Distance = Distance.Cosine } },
-            },
-            cancellationToken: TestContext.Current.CancellationToken);
+        await CreateDenseCollectionAsync(client, collection, 4);
 
         try
         {
             var adapter = new QdrantKnowledgeAdapter(_ => QdrantServer.CreateClient(), Embeddings);
-            var entry = new KnowledgeProviderConfiguration
-            {
-                Kind = "qdrant",
-                Collection = collection,
-                Vector = "dense",
-                Fields = KbShapedCorpus.Fields,
-            };
+            var entry = DenseEntry(collection);
 
             var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
                 async () => await adapter.CreateSearchAsync(
@@ -228,13 +198,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
         try
         {
             var adapter = new QdrantKnowledgeAdapter(_ => QdrantServer.CreateClient(), Embeddings);
-            var entry = new KnowledgeProviderConfiguration
-            {
-                Kind = "qdrant",
-                Collection = collection,
-                Vector = "dense",
-                Fields = KbShapedCorpus.Fields,
-            };
+            var entry = DenseEntry(collection);
 
             var port = await adapter.CreateSearchAsync(entry, secrets: null, embeddings: null, requireScope: true, TestContext.Current.CancellationToken);
 
@@ -269,20 +233,12 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
         try
         {
             var adapter = new QdrantKnowledgeAdapter(_ => QdrantServer.CreateClient(), Embeddings);
-            var entry = new KnowledgeProviderConfiguration
-            {
-                Kind = "qdrant",
-                Collection = collection,
-                Vector = "dense",
-                Fields = KbShapedCorpus.Fields,
-            };
+            var entry = DenseEntry(collection);
 
             using var port = (IDisposable)await adapter.CreateSearchAsync(
                 entry, secrets: null, embeddings: null, requireScope: false, TestContext.Current.CancellationToken);
 
-            var options = (QdrantKnowledgeStoreOptions)typeof(QdrantKnowledgeStore)
-                .GetField("_options", BindingFlags.NonPublic | BindingFlags.Instance)!
-                .GetValue(port)!;
+            var options = OptionsOf(port);
 
             Assert.Equal(AgentKnowledgeConfiguration.MaximumLimit, options.Limit);
             Assert.True(
@@ -314,20 +270,12 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
         try
         {
             var adapter = new QdrantKnowledgeAdapter(_ => QdrantServer.CreateClient(), Embeddings);
-            var entry = new KnowledgeProviderConfiguration
-            {
-                Kind = "qdrant",
-                Collection = collection,
-                Vector = "dense",
-                Fields = KbShapedCorpus.Fields,
-            };
+            var entry = DenseEntry(collection);
 
             using var port = (IDisposable)await adapter.CreateSearchAsync(
                 entry, secrets: null, embeddings: null, requireScope: false, TestContext.Current.CancellationToken);
 
-            var options = (QdrantKnowledgeStoreOptions)typeof(QdrantKnowledgeStore)
-                .GetField("_options", BindingFlags.NonPublic | BindingFlags.Instance)!
-                .GetValue(port)!;
+            var options = OptionsOf(port);
 
             Assert.Equal("dense", options.VectorName, StringComparer.Ordinal);
             Assert.Equal("text", options.Fields!.Lexical, StringComparer.Ordinal);
@@ -360,13 +308,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
                 collection, ["body"], everyPoint, cancellationToken: TestContext.Current.CancellationToken);
 
             var adapter = new QdrantKnowledgeAdapter(_ => QdrantServer.CreateClient(), Embeddings);
-            var entry = new KnowledgeProviderConfiguration
-            {
-                Kind = "qdrant",
-                Collection = collection,
-                Vector = "dense",
-                Fields = KbShapedCorpus.Fields,
-            };
+            var entry = DenseEntry(collection);
 
             var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
                 async () => await adapter.CreateSearchAsync(
@@ -390,24 +332,12 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
         // unbootable in the window between creating the alias and the first ingest run filling it.
         var collection = $"empty-{Guid.NewGuid():N}";
         using var client = QdrantServer.CreateClient();
-        await client.CreateCollectionAsync(
-            collection,
-            vectorsConfig: new VectorParamsMap
-            {
-                Map = { ["dense"] = new VectorParams { Size = KbShapedCorpus.Dim, Distance = Distance.Cosine } },
-            },
-            cancellationToken: TestContext.Current.CancellationToken);
+        await CreateDenseCollectionAsync(client, collection);
 
         try
         {
             var adapter = new QdrantKnowledgeAdapter(_ => QdrantServer.CreateClient(), Embeddings);
-            var entry = new KnowledgeProviderConfiguration
-            {
-                Kind = "qdrant",
-                Collection = collection,
-                Vector = "dense",
-                Fields = KbShapedCorpus.Fields,
-            };
+            var entry = DenseEntry(collection);
 
             using var port = (IDisposable)await adapter.CreateSearchAsync(
                 entry, secrets: null, embeddings: null, requireScope: false, TestContext.Current.CancellationToken);
@@ -427,13 +357,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
         // needs one such point -- with a numeric key, which no uuid5 or direct formula ever produces.
         var collection = $"numeric-{Guid.NewGuid():N}";
         using var client = QdrantServer.CreateClient();
-        await client.CreateCollectionAsync(
-            collection,
-            vectorsConfig: new VectorParamsMap
-            {
-                Map = { ["dense"] = new VectorParams { Size = KbShapedCorpus.Dim, Distance = Distance.Cosine } },
-            },
-            cancellationToken: TestContext.Current.CancellationToken);
+        await CreateDenseCollectionAsync(client, collection);
 
         try
         {
@@ -486,13 +410,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
     {
         var collection = $"empty-{Guid.NewGuid():N}";
         using var client = QdrantServer.CreateClient();
-        await client.CreateCollectionAsync(
-            collection,
-            vectorsConfig: new VectorParamsMap
-            {
-                Map = { ["dense"] = new VectorParams { Size = KbShapedCorpus.Dim, Distance = Distance.Cosine } },
-            },
-            cancellationToken: TestContext.Current.CancellationToken);
+        await CreateDenseCollectionAsync(client, collection);
 
         try
         {
@@ -565,13 +483,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
         try
         {
             var adapter = new QdrantKnowledgeAdapter(_ => QdrantServer.CreateClient());
-            var entry = new KnowledgeProviderConfiguration
-            {
-                Kind = "qdrant",
-                Collection = collection,
-                Vector = "dense",
-                Fields = KbShapedCorpus.Fields,
-            };
+            var entry = DenseEntry(collection);
 
             using var port = (IDisposable)await adapter.CreateSearchAsync(
                 entry, secrets: null, embeddings: Embeddings, requireScope: false, TestContext.Current.CancellationToken);
@@ -652,24 +564,11 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
         const string cardId = "direct-01";
         var collection = $"direct-{Guid.NewGuid():N}";
         using var client = QdrantServer.CreateClient();
-        await client.CreateCollectionAsync(
-            collection,
-            vectorsConfig: new VectorParamsMap
-            {
-                Map = { ["dense"] = new VectorParams { Size = KbShapedCorpus.Dim, Distance = Distance.Cosine } },
-            },
-            cancellationToken: TestContext.Current.CancellationToken);
+        await CreateDenseCollectionAsync(client, collection);
 
         try
         {
-            var point = new PointStruct
-            {
-                Id = new PointId { Uuid = Guid.NewGuid().ToString() },
-                Vectors = new Vectors
-                {
-                    Vectors_ = new NamedVectors { Vectors = { ["dense"] = new float[KbShapedCorpus.Dim] } },
-                },
-            };
+            var point = DensePoint();
             point.Payload["card_id"] = cardId;
             point.Payload["body"] = "direct lookup card";
             point.Payload["see_also"] = new Value { ListValue = new ListValue() };
@@ -842,12 +741,8 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
         var port = await Adapter().CreateSearchAsync(
             entry, secrets: null, Embedder(), requireScope: true, TestContext.Current.CancellationToken);
 
-        // QdrantKnowledgeStore keeps its options private, so reflection is the only way to observe
-        // what the adapter copied onto them. The filter those options go on to produce is covered by
-        // QdrantWildcardScopeTests.
-        var options = (QdrantKnowledgeStoreOptions)typeof(QdrantKnowledgeStore)
-            .GetField("_options", BindingFlags.NonPublic | BindingFlags.Instance)!
-            .GetValue(port)!;
+        // The filter these options go on to produce is covered by QdrantWildcardScopeTests.
+        var options = OptionsOf(port);
 
         Assert.Equal("*", options.ScopeWildcard);
         Assert.Equal(["model"], options.ScopeWildcardFacets);
@@ -917,24 +812,11 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
         // nothing but body, and the document says so with fields.id: null.
         var collection = $"noid-{Guid.NewGuid():N}";
         using var client = QdrantServer.CreateClient();
-        await client.CreateCollectionAsync(
-            collection,
-            vectorsConfig: new VectorParamsMap
-            {
-                Map = { ["dense"] = new VectorParams { Size = KbShapedCorpus.Dim, Distance = Distance.Cosine } },
-            },
-            cancellationToken: TestContext.Current.CancellationToken);
+        await CreateDenseCollectionAsync(client, collection);
 
         try
         {
-            var point = new PointStruct
-            {
-                Id = new PointId { Uuid = Guid.NewGuid().ToString() },
-                Vectors = new Vectors
-                {
-                    Vectors_ = new NamedVectors { Vectors = { ["dense"] = new float[KbShapedCorpus.Dim] } },
-                },
-            };
+            var point = DensePoint();
             point.Payload["body"] = "a card with no id concept";
             await client.UpsertAsync(collection, [point], cancellationToken: TestContext.Current.CancellationToken);
 
@@ -968,35 +850,16 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
         // mentions fields.id declared card_id, and a collection without it is still drift.
         var collection = $"noiddefault-{Guid.NewGuid():N}";
         using var client = QdrantServer.CreateClient();
-        await client.CreateCollectionAsync(
-            collection,
-            vectorsConfig: new VectorParamsMap
-            {
-                Map = { ["dense"] = new VectorParams { Size = KbShapedCorpus.Dim, Distance = Distance.Cosine } },
-            },
-            cancellationToken: TestContext.Current.CancellationToken);
+        await CreateDenseCollectionAsync(client, collection);
 
         try
         {
-            var point = new PointStruct
-            {
-                Id = new PointId { Uuid = Guid.NewGuid().ToString() },
-                Vectors = new Vectors
-                {
-                    Vectors_ = new NamedVectors { Vectors = { ["dense"] = new float[KbShapedCorpus.Dim] } },
-                },
-            };
+            var point = DensePoint();
             point.Payload["body"] = "a card with no id concept";
             await client.UpsertAsync(collection, [point], cancellationToken: TestContext.Current.CancellationToken);
 
             var adapter = new QdrantKnowledgeAdapter(_ => QdrantServer.CreateClient(), Embeddings);
-            var entry = new KnowledgeProviderConfiguration
-            {
-                Kind = "qdrant",
-                Collection = collection,
-                Vector = "dense",
-                Fields = KbShapedCorpus.Fields,
-            };
+            var entry = DenseEntry(collection);
 
             var failure = await Assert.ThrowsAsync<InvalidOperationException>(
                 async () => await adapter.CreateSearchAsync(
@@ -1109,6 +972,46 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
         Fields = KbShapedCorpus.Fields,
         Scope = KbShapedCorpus.Scope,
     };
+
+    /// <summary>A point carrying an 8-wide "dense" vector and no payload. The caller fills it.</summary>
+    private static PointStruct DensePoint() => new()
+    {
+        Id = new PointId { Uuid = Guid.NewGuid().ToString() },
+        Vectors = new Vectors
+        {
+            Vectors_ = new NamedVectors { Vectors = { ["dense"] = new float[KbShapedCorpus.Dim] } },
+        },
+    };
+
+    /// <summary>
+    /// The options the adapter handed the store. No corpus can tell "queried the right name" from
+    /// "queried a name that happens to match", so these facts read the store's own field.
+    /// </summary>
+    private static QdrantKnowledgeStoreOptions OptionsOf(object port) =>
+        (QdrantKnowledgeStoreOptions)typeof(QdrantKnowledgeStore)
+            .GetField("_options", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(port)!;
+
+    private static KnowledgeProviderConfiguration DenseEntry(string collection) => new()
+    {
+        Kind = "qdrant",
+        Collection = collection,
+        Vector = "dense",
+        Fields = KbShapedCorpus.Fields,
+    };
+
+    /// <summary>A collection carrying one named "dense" vector, the shape every fixture here uses.</summary>
+    private static Task CreateDenseCollectionAsync(
+        QdrantClient client,
+        string collection,
+        ulong size = KbShapedCorpus.Dim) =>
+        client.CreateCollectionAsync(
+            collection,
+            vectorsConfig: new VectorParamsMap
+            {
+                Map = { ["dense"] = new VectorParams { Size = size, Distance = Distance.Cosine } },
+            },
+            cancellationToken: TestContext.Current.CancellationToken);
 
     private static QdrantKnowledgeAdapter Adapter() => new(_ => QdrantServer.CreateClient());
 

@@ -43,78 +43,74 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection;
 /// </remarks>
 public sealed class AddAgentCoreTests
 {
-    private const string OneAgentYaml =
+    /// <summary>The call and speech providers every document below shares.</summary>
+    private const string SpeechAndCall =
         """
-        apiVersion: agentcore/v1
-        name: composed
-        agents:
-          items:
-            - { id: only, instructions: "I answer everything" }
         providers:
           call:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
+        """;
+
+    /// <summary><see cref="SpeechAndCall"/> plus the single reply model most documents declare.</summary>
+    private const string MinimalProviders =
+        $$"""
+        {{SpeechAndCall}}
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
         """;
 
-    // The same agent, and a document that names a telemetry vendor.
-    private const string TelemetryYaml =
-        """
+    private const string OneAgentYaml =
+        $$"""
         apiVersion: agentcore/v1
         name: composed
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        {{MinimalProviders}}
+        """;
+
+    // The same agent, and a document that names a telemetry vendor.
+    private const string TelemetryYaml =
+        $$"""
+        apiVersion: agentcore/v1
+        name: composed
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything" }
+        {{MinimalProviders}}
           telemetry: { kind: test }
         """;
 
     // The same agent, and a document that names a moderation vendor.
     private const string ModeratedYaml =
-        """
+        $$"""
         apiVersion: agentcore/v1
         name: composed
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        {{MinimalProviders}}
           moderation: { kind: test }
         """;
 
     // The same agent, served by a vendor this host's fake adapter does not answer to.
     private const string OtherVendorYaml =
-        """
+        $$"""
         apiVersion: agentcore/v1
         name: other-vendor
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
+        {{SpeechAndCall}}
           llm:
             - { kind: anthropic, model: claude-sonnet-5, as: reply }
         """;
 
     // The same agent, with both tunable keys of the document set away from their default.
     private const string TunedYaml =
-        """
+        $$"""
         apiVersion: agentcore/v1
         name: tuned
         fallbackReply: "One moment please. I will try that again."
@@ -123,17 +119,11 @@ public sealed class AddAgentCoreTests
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        {{MinimalProviders}}
         """;
 
     private const string BindingYaml =
-        """
+        $$"""
         apiVersion: agentcore/v1
         name: with-binding
         tools:
@@ -148,17 +138,11 @@ public sealed class AddAgentCoreTests
         agents:
           items:
             - { id: only, instructions: "I answer everything", tools: [ create_case ] }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        {{MinimalProviders}}
         """;
 
     private const string SecretYaml =
-        """
+        $$"""
         apiVersion: agentcore/v1
         name: with-secret
         tools:
@@ -176,19 +160,13 @@ public sealed class AddAgentCoreTests
         agents:
           items:
             - { id: only, instructions: "I answer everything", tools: [ lookup_order ] }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        {{MinimalProviders}}
         """;
 
     // Row 4 of the section 8.2 compile table, with a guarded edge on each exit of the start node.
     // Check 5 proves the two guards exclusive, so exactly one edge fires for each call.
     private const string GuardedGraphYaml =
-        """
+        $$"""
         apiVersion: agentcore/v1
         name: guarded-composed
         state:
@@ -209,11 +187,7 @@ public sealed class AddAgentCoreTests
           edges:
             - { from: route, to: escalated, when: wants_human }
             - { from: route, to: handled, when: stays_with_bot }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
+        {{SpeechAndCall}}
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: router }
             - { kind: openai, model: gpt-4.1-mini, as: human }
@@ -222,7 +196,7 @@ public sealed class AddAgentCoreTests
 
     // A stage names a target that policy.stages does not declare, so check 2 fails the load.
     private const string BrokenYaml =
-        """
+        $$"""
         apiVersion: agentcore/v1
         name: broken
         agents:
@@ -232,19 +206,13 @@ public sealed class AddAgentCoreTests
           initial: start
           stages:
             - { id: start, agent: only, to: [ { stage: nowhere } ] }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        {{MinimalProviders}}
         """;
 
     // A state slot's from: names a tool no tools: entry declares, and no mcp: server offers it
     // either, so nothing in the served set ever resolves it.
     private const string UndeclaredToolYaml =
-        """
+        $$"""
         apiVersion: agentcore/v1
         name: broken-tool-reference
         state:
@@ -252,51 +220,33 @@ public sealed class AddAgentCoreTests
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        {{MinimalProviders}}
         """;
 
     // An agent's tools: names an id nothing serves. Unlike UndeclaredToolYaml, the fault sits in
     // agents.items[].tools rather than state:, so the pointer must name the agent and not a bare
     // /tools.
     private const string UndeclaredAgentToolYaml =
-        """
+        $$"""
         apiVersion: agentcore/v1
         name: broken-agent-tool-reference
         agents:
           items:
             - { id: only, instructions: "I answer everything", tools: [ no_such_tool ] }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        {{MinimalProviders}}
         """;
 
     // Declares no tools: at all. 'discovered_only' is served only by a fake IToolSource the test
     // registers, never named anywhere in the document itself, so the only way this boots is if the
     // reference pass resolves against what got discovered rather than what got declared.
     private const string DiscoveredOnlyToolYaml =
-        """
+        $$"""
         apiVersion: agentcore/v1
         name: discovered-only-tool
         agents:
           items:
             - { id: only, instructions: "I answer everything", tools: [ discovered_only ] }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        {{MinimalProviders}}
         """;
 
     // A kind: agent tool reaches no source at all: the compiler builds it once the agent it names
@@ -305,7 +255,7 @@ public sealed class AddAgentCoreTests
     // A declared kind: agent tool whose id a registered source also discovers. The collision is only
     // found after every source has answered, so by then the source is open.
     private const string CollidingAgentToolYaml =
-        """
+        $$"""
         apiVersion: agentcore/v1
         name: colliding
         tools:
@@ -325,17 +275,11 @@ public sealed class AddAgentCoreTests
           initial: talk
           stages:
             - { id: talk, agent: front, terminal: true }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        {{MinimalProviders}}
         """;
 
     private const string DelegatingAgentToolYaml =
-        """
+        $$"""
         apiVersion: agentcore/v1
         name: delegating
         tools:
@@ -355,13 +299,7 @@ public sealed class AddAgentCoreTests
           initial: talk
           stages:
             - { id: talk, agent: front, terminal: true }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        {{MinimalProviders}}
         """;
 
     // BrokenYaml's structural defect (an unreachable policy transition), plus an mcp: server whose
@@ -370,7 +308,7 @@ public sealed class AddAgentCoreTests
     // executable fails Process.Start synchronously, so if discovery ran first this would instead
     // report the MCP failure. See AddAgentCore_TheStructuralFaultSurfaces_BeforeMcpIsEverAsked.
     private const string StructuralFaultPlusUnreachableMcpYaml =
-        """
+        $$"""
         apiVersion: agentcore/v1
         name: broken-plus-mcp
         mcp:
@@ -385,13 +323,7 @@ public sealed class AddAgentCoreTests
           initial: start
           stages:
             - { id: start, agent: only, to: [ { stage: nowhere } ] }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        {{MinimalProviders}}
         """;
 
     // -------------------------------------------------------------------------------------------
@@ -1043,7 +975,7 @@ public sealed class AddAgentCoreTests
 
     // The same agent, and a document that gives the titler a model of its own.
     private const string TitlerYaml =
-        """
+        $$"""
         apiVersion: agentcore/v1
         name: composed
         agents:
@@ -1051,13 +983,7 @@ public sealed class AddAgentCoreTests
             - { id: only, instructions: "I answer everything" }
         titler:
           model: { ref: titles }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        {{MinimalProviders}}
             - { kind: openai, model: gpt-4.1-nano, as: titles }
         """;
 
@@ -1125,37 +1051,25 @@ public sealed class AddAgentCoreTests
 
     // The same agent, and a document that names the built-in memory kind on purpose.
     private const string MemoryAuditYaml =
-        """
+        $$"""
         apiVersion: agentcore/v1
         name: composed
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        {{MinimalProviders}}
           audit: { kind: memory }
         """;
 
     // The same agent, served by an audit vendor the host registers itself.
     private const string VendorAuditYaml =
-        """
+        $$"""
         apiVersion: agentcore/v1
         name: composed
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        {{MinimalProviders}}
           audit: { kind: test }
         """;
 
@@ -1261,37 +1175,25 @@ public sealed class AddAgentCoreTests
 
     // The same agent, served by a call-store vendor the host registers itself.
     private const string VendorTranscriptYaml =
-        """
+        $$"""
         apiVersion: agentcore/v1
         name: composed
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        {{MinimalProviders}}
           calls: { kind: test }
         """;
 
     // The same agent, served by a knowledge vendor the host registers itself.
     private const string VendorKnowledgeYaml =
-        """
+        $$"""
         apiVersion: agentcore/v1
         name: composed
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        {{MinimalProviders}}
           knowledge: { kind: test, collection: manuals, fields: { body: body } }
         """;
 
@@ -1299,19 +1201,13 @@ public sealed class AddAgentCoreTests
     // document that names both puts a failure strictly after an open. Nothing else in the boot has
     // that shape.
     private const string CallStoreThenModerationFailureYaml =
-        """
+        $$"""
         apiVersion: agentcore/v1
         name: composed
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        {{MinimalProviders}}
           calls: { kind: test }
           moderation: { kind: test }
         """;
