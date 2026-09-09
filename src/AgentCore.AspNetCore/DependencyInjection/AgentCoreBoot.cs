@@ -86,6 +86,9 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
     /// <summary>Gets the factory that builds one session per call.</summary>
     internal ICallSessionFactory Sessions => Started.Sessions;
 
+    /// <summary>Gets the vocabulary every call session reads, and every refresh installs into.</summary>
+    internal VocabularyCache Vocabulary => Started.Vocabulary;
+
     /// <summary>Gets the same turn loop, behind the framework's own agent seam.</summary>
     internal AgentCoreAgent Agent => Started.Agent;
 
@@ -261,6 +264,7 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
             call.Sessions,
             call.Agent,
             call.Queue,
+            vocabulary,
             seams.Call,
             seams.Speech,
             seams.Handler,
@@ -387,6 +391,7 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
         ICallSessionFactory Sessions,
         AgentCoreAgent Agent,
         QueuedAuditSink AuditQueue,
+        VocabularyCache Vocabulary,
         IReadOnlyList<ICallAdapter>? CallAdapters,
         IReadOnlyList<ISpeechAdapter>? SpeechAdapters,
         RequestDelegate? CallHandler,

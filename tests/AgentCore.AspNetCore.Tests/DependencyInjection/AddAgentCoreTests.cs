@@ -25,6 +25,7 @@ using AgentCore.Infrastructure.Tools;
 using Microsoft.Extensions.AI.Evaluation;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
+using AgentCore.Application.State;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Text.Json.Nodes;
@@ -357,6 +358,19 @@ public sealed class AddAgentCoreTests
         var second = factory.Create();
         Assert.NotSame(first, second);
         Assert.NotEqual(first.CallId, second.CallId);
+    }
+
+    [Fact]
+    public async Task AddAgentCore_RegistersTheVocabularyEveryRefreshWritesInto()
+    {
+        using var provider = await BuildAsync(OneAgentYaml);
+
+        var vocabulary = provider.GetRequiredService<VocabularyCache>();
+
+        // The one the refresh services and every call session share. A consumer that reads a slot's
+        // values — to gate a search on the product names the knowledge base publishes, say — must
+        // reach that instance and not a fresh one, which would always read empty.
+        Assert.Same(vocabulary, provider.GetRequiredService<VocabularyCache>());
     }
 
     [Fact]
