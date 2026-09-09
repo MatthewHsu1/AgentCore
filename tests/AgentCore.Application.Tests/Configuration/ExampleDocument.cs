@@ -108,6 +108,7 @@ internal static class ExampleDocument
               type: object
               properties: { summary: { type: string } }
               required: [ summary ]
+          - { id: search, kind: builtin, uses: web.search }
 
         agents:
           defaults:
@@ -115,13 +116,14 @@ internal static class ExampleDocument
             instructions: |
               <the stable cached prefix: persona, safety, transfer rules, and tool etiquette>
             knowledge: { mode: prefetch, limit: 5, citations: false }
+            compaction: { strategy: context_window, trigger: { messages: 40 }, keep: 6, foldResultChars: 300 }
           items:
             - { id: greeter,    instructions: "<stage delta>", tools: [] }
             - { id: identifier, instructions: "<stage delta>", tools: [ lookup_order ] }
             - { id: resolver,   instructions: "<stage delta>", tools: [] }
             - { id: escalator,  instructions: "<stage delta>", tools: [ create_case ] }
             - { id: closer,     instructions: "<stage delta>", tools: [] }
-            - { id: analyst, instructions: "<stage delta>", tools: [ lookup_order, create_case ],
+            - { id: analyst, instructions: "<stage delta>", tools: [ lookup_order, create_case, search ],
                 knowledge: { mode: tool, limit: 8, citations: true, scoped: false } }
             - { id: webchat, instructions: "<stage delta>", tools: [ lookup_order ],
                 knowledge: { mode: tool, citations: false } }
@@ -155,7 +157,7 @@ internal static class ExampleDocument
             - { kind: openai, model: gpt-4.1-mini, as: reply }      # the voice path, chosen on latency
             - { kind: openai, model: gpt-5.4-nano, as: fill }       # the extractor, chosen on null discipline
             - { kind: openai, model: gpt-4.1,      as: judge }      # evaluation only, chosen on judgement
-            - { kind: openai, model: gpt-4.1-nano, as: cheap }      # ui.draw only, chosen on price
+            - { kind: openai, model: gpt-4.1-nano, as: cheap, webSearch: false }      # ui.draw only, chosen on price
           call:      { kind: telnyx-relay }        # the pipe: who carries the call and owns /v1/call
           speech:                                  # the ears and the mouth, named one role at a time
             stt: { kind: telnyx-relay }            # recognition. Bundled here, so it matches call
@@ -409,6 +411,11 @@ internal static class ExampleDocument
                   "summary"
                 ]
               }
+            },
+            {
+              "id": "search",
+              "kind": "builtin",
+              "uses": "web.search"
             }
           ],
           "agents": {
@@ -422,6 +429,14 @@ internal static class ExampleDocument
                 "mode": "prefetch",
                 "limit": 5,
                 "citations": false
+              },
+              "compaction": {
+                "strategy": "context_window",
+                "trigger": {
+                  "messages": 40
+                },
+                "keep": 6,
+                "foldResultChars": 300
               }
             },
             "items": [
@@ -459,7 +474,8 @@ internal static class ExampleDocument
                 "instructions": "<stage delta>",
                 "tools": [
                   "lookup_order",
-                  "create_case"
+                  "create_case",
+                  "search"
                 ],
                 "knowledge": {
                   "mode": "tool",
@@ -561,7 +577,8 @@ internal static class ExampleDocument
               {
                 "kind": "openai",
                 "model": "gpt-4.1-nano",
-                "as": "cheap"
+                "as": "cheap",
+                "webSearch": false
               }
             ],
             "call": {

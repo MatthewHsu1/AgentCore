@@ -695,6 +695,9 @@
             },
             "knowledge": {
               "$ref": "#/$defs/agentKnowledge"
+            },
+            "compaction": {
+              "$ref": "#/$defs/compaction"
             }
           }
         },
@@ -750,6 +753,9 @@
         "knowledge": {
           "$ref": "#/$defs/agentKnowledge"
         },
+        "compaction": {
+          "$ref": "#/$defs/compaction"
+        },
         "tools": {
           "type": "array",
           "items": {
@@ -762,6 +768,32 @@
             "$ref": "#/$defs/skillName"
           }
         }
+      }
+    },
+    "compaction": {
+      "type": ["object", "null"],
+      "description": "Decision 3: no strategy here calls a model. A resumed call rebuilds a new session and re-derives from the replayed words, so a strategy that called a model would give one call two histories.",
+      "additionalProperties": false,
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "enum": ["tool_result", "truncate", "sliding_window", "context_window"]
+        },
+        "trigger": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "maxProperties": 1,
+          "description": "Exactly one condition. Zero would compact on every turn; two would leave the document silent about whether they are combined with All or Any.",
+          "properties": {
+            "tokens":   { "type": "integer", "minimum": 1 },
+            "messages": { "type": "integer", "minimum": 1 },
+            "turns":    { "type": "integer", "minimum": 1 },
+            "groups":   { "type": "integer", "minimum": 1 }
+          }
+        },
+        "keep": { "type": "integer", "minimum": 0 },
+        "foldResultChars": { "type": "integer", "minimum": 1 }
       }
     },
     "policy": {
@@ -1017,6 +1049,10 @@
             "high"
           ],
           "description": "How hard a reasoning model thinks before it answers. Omit it to send nothing and let the vendor decide. Some reasoning models refuse function tools on the chat-completions path unless this is 'none'."
+        },
+        "webSearch": {
+          "type": "boolean",
+          "description": "Whether this entry may run a hosted web search. An opt-out: omitted or true lets the vendor's adapter decide, false vetoes it even on a model the adapter thinks is capable."
         }
       }
     },

@@ -13,7 +13,10 @@ namespace AgentCore.Application.Tools.Builtin;
 public sealed class BuiltinToolSource : IToolSource
 {
     private static readonly Dictionary<string, IBuiltinToolDefinition> Definitions =
-        new(StringComparer.Ordinal);
+        new IBuiltinToolDefinition[]
+        {
+            new WebSearchToolDefinition(),
+        }.ToDictionary(definition => definition.Name, StringComparer.Ordinal);
 
     private static readonly Dictionary<string, IShippedAgentDefinition> ShippedAgents =
         new IShippedAgentDefinition[]

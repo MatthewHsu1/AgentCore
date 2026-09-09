@@ -37,6 +37,7 @@ public sealed class CompositeChatClientFactory : IChatClientFactory, IDisposable
     private readonly Dictionary<string, LlmProviderConfiguration> _entries = new(StringComparer.Ordinal);
     private readonly Dictionary<string, IChatClient> _vendor = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, IChatClient> _shaped = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, bool> _capable = new(StringComparer.Ordinal);
     private LlmProviderConfiguration? _default;
     private int _disposed;
 
@@ -87,6 +88,7 @@ public sealed class CompositeChatClientFactory : IChatClientFactory, IDisposable
             factory._vendor[entry.As] = await adapter
                 .CreateClientAsync(entry, secrets, cancellationToken)
                 .ConfigureAwait(false);
+            factory._capable[entry.As] = adapter.SupportsHostedWebSearch(entry);
 
             factory._default ??= entry;
         }
@@ -122,6 +124,14 @@ public sealed class CompositeChatClientFactory : IChatClientFactory, IDisposable
                 .AsBuilder()
                 .ConfigureOptions(options => options.Temperature ??= (float)temperature)
                 .Build());
+    }
+
+    /// <inheritdoc />
+    public bool SupportsHostedWebSearch(ModelReference? model)
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) == 1, this);
+
+        return _capable.TryGetValue(model?.Ref ?? _default?.As ?? string.Empty, out var capable) && capable;
     }
 
     /// <summary>Releases every client the adapters built.</summary>
