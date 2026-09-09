@@ -24,6 +24,29 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection;
 public sealed class VocabularyStartupTests
 {
     [Fact]
+    public async Task ApplyVocabularyAsync_UnscopedSlot_StripsTheWildcardAndKeepsTheRest()
+    {
+        // The sentinel is stored in the collection, so a read of any facet path returns it. It
+        // normalises to nothing, so a domain that keeps it can be neither linked nor gated — and the
+        // slot need not be scoped by for that to be true. wildcard.facets says which scope conditions
+        // this deployment widens, which is a different question and cannot answer this one.
+        var configuration = Configuration(
+            [("model", Vocabulary(maxValues: 10))],
+            new KnowledgeWildcardConfiguration { Value = "*", Facets = ["brand"] },
+            extraFromState: ["brand"],
+            scopeVocabularySlots: false);
+
+        var port = new FakeFacetPort().With("facets.model", "lcr-2023", "*", "f63-2019");
+        VocabularyCache cache = new();
+
+        await KnowledgeStartup.ApplyVocabularyAsync(
+            configuration, port, cache, NullLogger.Instance, TestContext.Current.CancellationToken,
+            composesUnicode: () => true);
+
+        Assert.Equal(["lcr-2023", "f63-2019"], cache.Snapshot()["model"].Originals);
+    }
+
+    [Fact]
     public async Task ApplyVocabularyAsync_ZeroValues_FailsNamingTheSlotAndPath()
     {
         var configuration = Configuration([("brand", Vocabulary(maxValues: 10))]);
@@ -297,7 +320,8 @@ public sealed class VocabularyStartupTests
     private static AgentCoreConfiguration Configuration(
         (string Slot, SlotVocabularyConfiguration Vocabulary)[]? vocabularySlots = null,
         KnowledgeWildcardConfiguration? wildcard = null,
-        IReadOnlyList<string>? extraFromState = null)
+        IReadOnlyList<string>? extraFromState = null,
+        bool scopeVocabularySlots = true)
     {
         vocabularySlots ??= [];
         extraFromState ??= [];
@@ -318,7 +342,9 @@ public sealed class VocabularyStartupTests
             state.TryAdd(slot, new StateSlotConfiguration { Type = StateSlotType.String, Writer = StateWriter.Extractor });
         }
 
-        List<string> fromState = [.. vocabularySlots.Select(entry => entry.Slot), .. extraFromState];
+        List<string> fromState = scopeVocabularySlots
+            ? [.. vocabularySlots.Select(entry => entry.Slot), .. extraFromState]
+            : [.. extraFromState];
 
         return new AgentCoreConfiguration
         {
