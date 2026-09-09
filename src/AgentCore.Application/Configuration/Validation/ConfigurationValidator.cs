@@ -699,14 +699,17 @@ public static class ConfigurationValidator
     /// <summary>Refuses a <c>vocabulary:</c> or <c>ambiguity:</c> block that could not do what it declares.</summary>
     /// <remarks>
     /// Unlike <see cref="CheckKnowledgeScopeSlots"/>, the slot-level rules here do not depend on the
-    /// slot being named in <c>scope.fromState</c>: a slot may declare <c>vocabulary:</c> without ever
-    /// being read by the scope, and that mismatch is itself one of the refusals below.
+    /// slot being named in <c>scope.fromState</c>. A slot may declare <c>vocabulary:</c> and never be
+    /// scoped by: the gate still holds the extractor to values the provider published, the linker
+    /// still folds a mention onto one of them, and a host may read the domain for itself — a
+    /// knowledge search that requires a product name the manuals use, say. Scoping is what
+    /// <c>fromState</c> declares, and it is a separate decision from where a slot's domain comes
+    /// from.
     /// </remarks>
     private static void CheckVocabularyAndAmbiguity(
         AgentCoreConfiguration configuration, List<ConfigurationError> errors, List<ConfigurationError> warnings)
     {
         var knowledge = configuration.Providers?.Knowledge;
-        var fromState = knowledge?.Scope.FromState ?? [];
         var anyVocabulary = false;
 
         foreach (var entry in configuration.State)
@@ -736,15 +739,6 @@ public static class ConfigurationValidator
                     $"the slot '{entry.Key}' declares both value and vocabulary. value is writer: "
                     + "const's fixed value; vocabulary reads a domain the extractor fills at runtime. "
                     + "A slot cannot have both."));
-            }
-
-            if (!fromState.Contains(entry.Key, StringComparer.Ordinal))
-            {
-                errors.Add(Reference(
-                    ConfigurationError.AppendPointer(vocabularyPointer, "from"),
-                    $"the slot '{entry.Key}' declares vocabulary.from: knowledge, and "
-                    + "providers.knowledge.scope.fromState does not name it. The gate and the linker "
-                    + "would then hold a domain no turn's scope ever narrows by."));
             }
 
             CheckRange(
@@ -843,7 +837,7 @@ public static class ConfigurationValidator
 
         // A probe drops one of the scope's own facets, so it needs a second one left to search by.
         // Zero is as unreachable as one, and reaches this line whenever the host supplies every facet.
-        if (fromState.Count <= 1)
+        if ((knowledge.Scope.FromState ?? []).Count <= 1)
         {
             warnings.Add(Reference(
                 Pointer.Ambiguity,

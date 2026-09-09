@@ -352,9 +352,11 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
             }
 
             var path = template.Resolve(slotName);
-            var wildcardValue = wildcard is not null && wildcard.Facets.Contains(slotName, StringComparer.Ordinal)
-                ? wildcard.Value
-                : null;
+
+            // Stripped for every declared wildcard, on the same reasoning as the boot read in
+            // KnowledgeStartup.ApplyVocabularyAsync: the sentinel is stored in the collection, so a
+            // refresh reads it back at any facet path, scoped or not.
+            var wildcardValue = wildcard?.Value;
 
             var service = Track(new VocabularyRefreshService(
                 slotName,
