@@ -59,6 +59,7 @@ public static class AgentCoreServiceCollectionExtensions
         // returns null makes GetService answer null — which is what a caller of an optional seam
         // reads them with.
         services.AddSingleton(Boot(boot => boot.Telemetry!));
+        services.AddSingleton(Boot(boot => boot.Knowledge!));
         services.AddSingleton(Boot(boot => boot.CallAdapters!));
         services.AddSingleton(Boot(boot => boot.SpeechAdapters!));
 

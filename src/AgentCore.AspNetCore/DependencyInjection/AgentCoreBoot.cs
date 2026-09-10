@@ -89,6 +89,14 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
     /// <summary>Gets the vocabulary every call session reads, and every refresh installs into.</summary>
     internal VocabularyCache Vocabulary => Started.Vocabulary;
 
+    /// <summary>Gets the knowledge base, or <see langword="null"/> when no agent reads one.</summary>
+    /// <remarks>
+    /// One object for the whole store. A capability beyond search — reading a facet vocabulary, or
+    /// whole cards by an exact facet value — is asked of this port through
+    /// <see cref="IKnowledgeRetrievalPort.GetService"/>, never registered beside it.
+    /// </remarks>
+    internal IKnowledgeRetrievalPort? Knowledge => Started.Knowledge;
+
     /// <summary>Gets the same turn loop, behind the framework's own agent seam.</summary>
     internal AgentCoreAgent Agent => Started.Agent;
 
@@ -265,6 +273,7 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
             call.Agent,
             call.Queue,
             vocabulary,
+            knowledge,
             seams.Call,
             seams.Speech,
             seams.Handler,
@@ -394,6 +403,7 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
         AgentCoreAgent Agent,
         QueuedAuditSink AuditQueue,
         VocabularyCache Vocabulary,
+        IKnowledgeRetrievalPort? Knowledge,
         IReadOnlyList<ICallAdapter>? CallAdapters,
         IReadOnlyList<ISpeechAdapter>? SpeechAdapters,
         RequestDelegate? CallHandler,
