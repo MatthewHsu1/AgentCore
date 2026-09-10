@@ -1020,6 +1020,8 @@ AgentCore.Application.Ports.IEvaluationScorePublisher
 AgentCore.Application.Ports.IEvaluationScorePublisher.PublishAsync(AgentCore.Application.Evaluation.EvaluationScore! score, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Ports.IFacetVocabularyPort
 AgentCore.Application.Ports.IFacetVocabularyPort.ReadAsync(string! path, int limit, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<string!>!>
+AgentCore.Application.Ports.IKnowledgeFacetReadPort
+AgentCore.Application.Ports.IKnowledgeFacetReadPort.ReadByFacetAsync(string! path, string! value, int limit, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Domain.Knowledge.KnowledgeCard!>!>
 AgentCore.Application.Ports.IKnowledgeRetrievalPort
 AgentCore.Application.Ports.IKnowledgeRetrievalPort.GetService(System.Type! serviceType, object? serviceKey = null) -> object?
 AgentCore.Application.Ports.IKnowledgeRetrievalPort.SearchAsync(string! query, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Domain.Knowledge.KnowledgeCard!>!>
