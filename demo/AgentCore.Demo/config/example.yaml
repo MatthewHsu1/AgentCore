@@ -423,10 +423,14 @@ providers:
       # model's filter is its guess at the subject, and a wrong guess must not become "nothing is
       # documented". That costs one extra search only on a filtered search that found nothing.
       #
-      # A key whose name matches a vocabulary: slot is matched through that slot's fold, so "the 2023
-      # LCR" reaches the stored lcr-2023 rather than filtering on a string no card carries, and a
-      # value the collection has never held is dropped rather than searched for. A key with no such
-      # slot is matched exactly as the model wrote it.
+      # A key whose name matches a vocabulary: slot is matched through that slot's fold, so a mention
+      # written "the 2023 LCR" reaches the stored lcr-2023 rather than filtering on a string no card
+      # carries, and a value the collection has never held is dropped rather than searched for. A key
+      # with no such slot is matched exactly as the model wrote it.
+      #
+      # Prefer a key that HAS such a slot. Without one nothing checks what the model invents, so it
+      # filters on values no card carries and the retry pays for a second search most times out.
+      # A facet worth filtering by is usually worth a vocabulary: slot of its own.
       #
       # Prefetch agents ignore this block: they advertise no function, so there is no argument to fill.
 

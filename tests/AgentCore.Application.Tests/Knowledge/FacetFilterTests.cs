@@ -7,9 +7,11 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.State;
 using AgentCore.Application.Tests.Knowledge.Fakes;
 using AgentCore.Domain.Knowledge;
+using AgentCore.TestSupport;
 
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 
 using Xunit;
 
@@ -157,17 +159,38 @@ public sealed class FacetFilterTests
         Assert.Empty(port.ScopeAtTheStore!.Facets);
     }
 
+    [Fact]
+    public async Task Filters_AreNamedInTheRecordAnOperatorDebugsFrom()
+    {
+        // The record reads the LIVE scope ambient, so it has to be written while the search's own
+        // scope is still open. Built a line later, it names whatever the turn composed instead --
+        // and the one thing an operator opens this record to see, which facet narrowed the search
+        // that found nothing, is exactly the part that goes missing.
+        RecordingLoggerFactory loggers = new();
+
+        var tool = await SearchToolAsync(new StubKnowledgePort([Card("a")]), Declared, loggers: loggers);
+        await CallAsync(tool, "what belt fits it?", ("model", "lcr-2023"));
+
+        var line = Assert.Single(loggers.Of(11));
+        var record = line.Field<KnowledgeAuditRecord.LogView>("Record");
+
+        Assert.NotNull(record);
+        Assert.Equal("lcr-2023", record!.Scope["model"]);
+        Assert.Equal(KnowledgeFacetOrigin.Tool, record.ScopeOrigins["model"]);
+    }
+
     private static async Task<AIFunction> SearchToolAsync(
         IKnowledgeRetrievalPort port,
         KnowledgeScopeConfiguration? scope,
-        VocabularyCache? vocabulary = null)
+        VocabularyCache? vocabulary = null,
+        ILoggerFactory? loggers = null)
     {
         var provider = KnowledgeProviderFactory.Create(
             port,
             new ResolvedKnowledge(KnowledgeMode.Tool, Limit: 5, Citations: false, Scoped: false),
             "agent-under-test",
             new SourceLocatorCitationFormatter(),
-            loggers: null,
+            loggers,
             scope,
             vocabulary);
 

@@ -89,28 +89,23 @@ internal static class KnowledgeProviderFactory
             }
 
             var composed = knowledge.Scoped ? KnowledgeScopeScope.Current! : WholeCorpus;
+
             var (narrowed, byTool) = ToolFacetOverlay.Apply(composed, ToolFacetScope.Current);
 
             var started = Stopwatch.GetTimestamp();
 
-            // Held from the moment the main search returns, so a failure raised by anything after it —
-            // the probe's own second search included — is still recorded against the time the main
-            // search took, rather than against however long the probe went on to run.
             double? searched = null;
 
             try
             {
                 var under = narrowed;
-                var cards = await Under(narrowed).ConfigureAwait(false);
-                searched = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
-
-                Record(cards, searched.Value);
+                var (cards, latency) = await Under(narrowed).ConfigureAwait(false);
+                searched = latency;
 
                 if (cards.Count == 0 && byTool)
                 {
                     under = composed;
-                    cards = await Under(composed).ConfigureAwait(false);
-                    Record(cards, Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                    (cards, _) = await Under(composed).ConfigureAwait(false);
                 }
 
                 using var tail = KnowledgeScopeScope.Open(under);
@@ -141,25 +136,24 @@ internal static class KnowledgeProviderFactory
                 return [KnowledgeNotices.Of(KnowledgeNotices.Unreachable)];
             }
 
-            async Task<IReadOnlyList<KnowledgeCard>> Under(KnowledgeScope open)
+            async Task<(IReadOnlyList<KnowledgeCard> Cards, double LatencyMs)> Under(KnowledgeScope open)
             {
                 using var held = KnowledgeScopeScope.Open(open);
 
-                return await port.SearchAsync(query, cancellationToken).ConfigureAwait(false);
-            }
+                var cards = await port.SearchAsync(query, cancellationToken).ConfigureAwait(false);
 
-            void Record(IReadOnlyList<KnowledgeCard> cards, double latency)
-            {
-                if (!logger.IsEnabled(LogLevel.Debug))
+                var latency = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+
+                if (logger.IsEnabled(LogLevel.Debug))
                 {
-                    return;
+                    var record = KnowledgeSearchRecord
+                        .Of(agent, knowledge, query, cards, latency, failure: null)
+                        .ForLog();
+
+                    Log.KnowledgeRetrieved(logger, agent, cards.Count, record);
                 }
 
-                var record = KnowledgeSearchRecord
-                    .Of(agent, knowledge, query, cards, latency, failure: null)
-                    .ForLog();
-
-                Log.KnowledgeRetrieved(logger, agent, cards.Count, record);
+                return (cards, latency);
             }
         }
     }
