@@ -9,24 +9,6 @@ namespace AgentCore.Application.Configuration.Validation;
 /// <summary>
 /// Checks 2 to 8 of section 8.5, over one bound document.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Check 1 runs in <see cref="ConfigurationSchemaValidator"/>, before the document binds. This type
-/// runs every later check and reports all of them at once, so one load names every defect.
-/// </para>
-/// <para>
-/// MAF performs none of these checks. This validator is what makes <c>graph:</c> as safe as
-/// <c>policy:</c>, and it is therefore what lets AgentCore expose both.
-/// </para>
-/// <para>
-/// Decision 15 splits check 2 in two. <see cref="EvaluateStructure"/> runs every check that does not
-/// depend on which tools MCP discovery ends up serving, so a YAML typo never costs a round trip to
-/// every MCP server. <see cref="ValidateToolReferences"/> resolves tool ids afterwards, against
-/// whatever the tool registry actually serves. <see cref="Evaluate"/> and <see cref="Validate"/> still
-/// run both passes together, against the ids <c>tools:</c> declares, so every caller that predates MCP
-/// keeps its current meaning.
-/// </para>
-/// </remarks>
 public static class ConfigurationValidator
 {
     /// <summary>
@@ -358,12 +340,6 @@ public static class ConfigurationValidator
     }
 
     /// <summary>Resolves one model reference against the <c>as:</c> names of <c>providers.llm</c>.</summary>
-    /// <remarks>
-    /// An absent <c>providers:</c> section, or an absent <c>providers.llm</c>, declares no model
-    /// name, so every reference into it is unknown. That is how check 2 already reads an absent
-    /// <c>tools:</c> and an absent <c>agents:</c>, and a model reference is the sixth reference kind.
-    /// A document that names no model declares nothing to resolve and stays clean.
-    /// </remarks>
     private static void AddUnknownModel(ModelReference? model, string pointer, DeclaredNames names, List<ConfigurationError> errors)
     {
         if (model is { } reference && !names.Models.Contains(reference.Ref))
@@ -697,15 +673,6 @@ public static class ConfigurationValidator
     // ---------------------------------------------------------------------------------------------
 
     /// <summary>Refuses a <c>vocabulary:</c> or <c>ambiguity:</c> block that could not do what it declares.</summary>
-    /// <remarks>
-    /// Unlike <see cref="CheckKnowledgeScopeSlots"/>, the slot-level rules here do not depend on the
-    /// slot being named in <c>scope.fromState</c>. A slot may declare <c>vocabulary:</c> and never be
-    /// scoped by: the gate still holds the extractor to values the provider published, the linker
-    /// still folds a mention onto one of them, and a host may read the domain for itself — a
-    /// knowledge search that requires a product name the manuals use, say. Scoping is what
-    /// <c>fromState</c> declares, and it is a separate decision from where a slot's domain comes
-    /// from.
-    /// </remarks>
     private static void CheckVocabularyAndAmbiguity(
         AgentCoreConfiguration configuration, List<ConfigurationError> errors, List<ConfigurationError> warnings)
     {

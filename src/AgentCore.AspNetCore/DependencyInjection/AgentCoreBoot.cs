@@ -53,10 +53,6 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
     internal ResolvedSecrets Secrets => Started.Secrets;
 
     /// <summary>Gets the bindings the host registered by name.</summary>
-    /// <remarks>
-    /// Readable before the boot runs: a host filled it, so no document had to be loaded for it to
-    /// hold what it holds.
-    /// </remarks>
     internal ToolBindingRegistry Bindings => _options.Bindings;
 
     /// <summary>Gets the registry that compiled the document, and would compile it again.</summary>
@@ -90,11 +86,6 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
     internal VocabularyCache Vocabulary => Started.Vocabulary;
 
     /// <summary>Gets the knowledge base, or <see langword="null"/> when no agent reads one.</summary>
-    /// <remarks>
-    /// One object for the whole store. A capability beyond search — reading a facet vocabulary, or
-    /// whole cards by an exact facet value — is asked of this port through
-    /// <see cref="IKnowledgeRetrievalPort.GetService"/>, never registered beside it.
-    /// </remarks>
     internal IKnowledgeRetrievalPort? Knowledge => Started.Knowledge;
 
     /// <summary>Gets the same turn loop, behind the framework's own agent seam.</summary>

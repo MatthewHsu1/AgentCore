@@ -160,14 +160,11 @@ internal static class KnowledgeStartup
             foreach (var (slotName, slot) in vocabularySlots)
             {
                 var vocab = slot.Vocabulary!;
+
                 var path = template.Resolve(slotName);
+
                 var values = await port.ReadAsync(path, vocab.MaxValues, cancellationToken).ConfigureAwait(false);
 
-                // Every declared wildcard, not only the facets wildcard.facets names. The sentinel is
-                // a value the collection stores at a facet path, so a read of that path returns it
-                // whether or not a scope ever widens by it — and it normalises to nothing, so leaving
-                // it in the domain refuses the document. wildcard.facets answers a different
-                // question: which scope conditions this deployment widens.
                 var wildcardValue = wildcard?.Value;
 
                 try
