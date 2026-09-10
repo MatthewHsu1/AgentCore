@@ -243,6 +243,7 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
                 knowledge,
                 skills,
                 KnowledgeCitationFormatterFactory.Resolve(configuration, _options.KnowledgeCitations),
+                vocabulary,
                 _loggers)
             .ConfigureAwait(false);
 

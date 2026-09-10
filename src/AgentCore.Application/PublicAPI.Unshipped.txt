@@ -166,6 +166,8 @@ AgentCore.Application.Configuration.Compilation.AgentCompilationContext.StateSna
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.StateSnapshot.init -> void
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Tools.get -> AgentCore.Application.Tools.Registry.ToolRegistry?
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Tools.init -> void
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Vocabulary.get -> AgentCore.Application.State.VocabularyCache?
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Vocabulary.init -> void
 AgentCore.Application.Configuration.Compilation.AgentInstructions
 AgentCore.Application.Configuration.Compilation.AgentKnowledge
 AgentCore.Application.Configuration.Compilation.CompiledAgent
@@ -527,6 +529,14 @@ AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.Locator.
 AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.Locator.init -> void
 AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.Source.get -> string?
 AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.Source.init -> void
+AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration
+AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration!
+AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration.Description.get -> string!
+AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration.Description.init -> void
+AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration.Equals(AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration.Key.get -> string!
+AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration.Key.init -> void
+AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration.KnowledgeFilterableFacetConfiguration() -> void
 AgentCore.Application.Configuration.Schema.KnowledgeLinkLookup
 AgentCore.Application.Configuration.Schema.KnowledgeLinkLookup.Direct = 1 -> AgentCore.Application.Configuration.Schema.KnowledgeLinkLookup
 AgentCore.Application.Configuration.Schema.KnowledgeLinkLookup.Filter = 2 -> AgentCore.Application.Configuration.Schema.KnowledgeLinkLookup
@@ -577,6 +587,8 @@ AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Vector
 AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration
 AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration!
 AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.Equals(AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.Filterable.get -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration!>!
+AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.Filterable.init -> void
 AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.FromState.get -> System.Collections.Generic.IReadOnlyList<string!>!
 AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.FromState.init -> void
 AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.KnowledgeScopeConfiguration() -> void
@@ -1342,12 +1354,6 @@ AgentCore.Application.Transcript.SourceContent.SourceContent() -> void
 AgentCore.Application.Transcript.TranscriptJson
 abstract AgentCore.Application.Call.CallInput.<Clone>$() -> AgentCore.Application.Call.CallInput!
 abstract AgentCore.Application.Tools.DeclaredTool.CallAsync(Microsoft.Extensions.AI.AIFunctionArguments! arguments, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<object?>
-virtual AgentCore.Application.Call.CallInput.EqualityContract.get -> System.Type!
-virtual AgentCore.Application.Call.CallInput.Equals(AgentCore.Application.Call.CallInput? other) -> bool
-virtual AgentCore.Application.Call.CallInput.PrintMembers(System.Text.StringBuilder! builder) -> bool
-virtual AgentCore.Application.Tools.Binding.ToolBinding.Invoke(System.Text.Json.Nodes.JsonObject! arguments, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<object?>
-~override AgentCore.Application.Providers.VendorSeam.Equals(object obj) -> bool
-~override AgentCore.Application.Providers.VendorSeam.ToString() -> string
 const AgentCore.Application.Audit.AuditSinkFactory.MemoryKind = "memory" -> string!
 const AgentCore.Application.Audit.QueuedAuditSink.DefaultBatchSize = 100 -> int
 const AgentCore.Application.Audit.QueuedAuditSink.DefaultCapacity = 10000 -> int
@@ -1422,6 +1428,230 @@ const AgentCore.Application.Tools.Builtin.BuiltinToolNames.WebSearch = "web.sear
 const AgentCore.Application.Tools.ToolErrorResult.ErrorProperty = "error" -> string!
 const AgentCore.Application.Tools.ToolErrorResult.MessageProperty = "message" -> string!
 const AgentCore.Application.Tools.ToolErrorResult.ToolProperty = "tool" -> string!
+override AgentCore.Application.Call.CallChannel.Equals(object? obj) -> bool
+override AgentCore.Application.Call.CallChannel.GetHashCode() -> int
+override AgentCore.Application.Call.CallChannel.ToString() -> string!
+override AgentCore.Application.Call.CallChannelContext.Equals(object? obj) -> bool
+override AgentCore.Application.Call.CallChannelContext.GetHashCode() -> int
+override AgentCore.Application.Call.CallChannelContext.ToString() -> string!
+override AgentCore.Application.Call.CallInput.Barge.<Clone>$() -> AgentCore.Application.Call.CallInput.Barge!
+override AgentCore.Application.Call.CallInput.Barge.Equals(object? obj) -> bool
+override AgentCore.Application.Call.CallInput.Barge.GetHashCode() -> int
+override AgentCore.Application.Call.CallInput.Barge.ToString() -> string!
+override AgentCore.Application.Call.CallInput.Equals(object? obj) -> bool
+override AgentCore.Application.Call.CallInput.GetHashCode() -> int
+override AgentCore.Application.Call.CallInput.Keypress.<Clone>$() -> AgentCore.Application.Call.CallInput.Keypress!
+override AgentCore.Application.Call.CallInput.Keypress.Equals(object? obj) -> bool
+override AgentCore.Application.Call.CallInput.Keypress.GetHashCode() -> int
+override AgentCore.Application.Call.CallInput.Keypress.ToString() -> string!
+override AgentCore.Application.Call.CallInput.ToString() -> string!
+override AgentCore.Application.Call.CallInput.Utterance.<Clone>$() -> AgentCore.Application.Call.CallInput.Utterance!
+override AgentCore.Application.Call.CallInput.Utterance.Equals(object? obj) -> bool
+override AgentCore.Application.Call.CallInput.Utterance.GetHashCode() -> int
+override AgentCore.Application.Call.CallInput.Utterance.ToString() -> string!
+override AgentCore.Application.Calls.CallClarificationState.Equals(object? obj) -> bool
+override AgentCore.Application.Calls.CallClarificationState.GetHashCode() -> int
+override AgentCore.Application.Calls.CallClarificationState.ToString() -> string!
+override AgentCore.Application.Calls.CallPage.Equals(object? obj) -> bool
+override AgentCore.Application.Calls.CallPage.GetHashCode() -> int
+override AgentCore.Application.Calls.CallPage.ToString() -> string!
+override AgentCore.Application.Calls.CallRecord.Equals(object? obj) -> bool
+override AgentCore.Application.Calls.CallRecord.GetHashCode() -> int
+override AgentCore.Application.Calls.CallRecord.ToString() -> string!
+override AgentCore.Application.Calls.CallSessionState.Equals(object? obj) -> bool
+override AgentCore.Application.Calls.CallSessionState.GetHashCode() -> int
+override AgentCore.Application.Calls.CallSessionState.ToString() -> string!
+override AgentCore.Application.Configuration.Compilation.ResolvedClarification.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Compilation.ResolvedClarification.GetHashCode() -> int
+override AgentCore.Application.Configuration.Compilation.ResolvedClarification.ToString() -> string!
+override AgentCore.Application.Configuration.Compilation.ResolvedCompaction.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Compilation.ResolvedCompaction.GetHashCode() -> int
+override AgentCore.Application.Configuration.Compilation.ResolvedCompaction.ToString() -> string!
+override AgentCore.Application.Configuration.Compilation.ResolvedKnowledge.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Compilation.ResolvedKnowledge.GetHashCode() -> int
+override AgentCore.Application.Configuration.Compilation.ResolvedKnowledge.ToString() -> string!
+override AgentCore.Application.Configuration.Parsing.ConfigurationError.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Parsing.ConfigurationError.GetHashCode() -> int
+override AgentCore.Application.Configuration.Parsing.ConfigurationError.ToString() -> string!
+override AgentCore.Application.Configuration.Parsing.ScopeTemplate.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Parsing.ScopeTemplate.GetHashCode() -> int
+override AgentCore.Application.Configuration.Parsing.ScopeTemplate.ToString() -> string!
+override AgentCore.Application.Configuration.Parsing.SecretReference.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Parsing.SecretReference.GetHashCode() -> int
+override AgentCore.Application.Configuration.Parsing.SecretReference.ToString() -> string!
+override AgentCore.Application.Configuration.Parsing.SecretTemplate.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Parsing.SecretTemplate.GetHashCode() -> int
+override AgentCore.Application.Configuration.Parsing.SecretTemplate.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.AgentConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.AgentConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.AgentConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.AgentDefaults.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.AgentDefaults.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.AgentDefaults.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.AgentsConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.AgentsConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.AgentsConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.CallProviderConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.CallProviderConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.CallProviderConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.CompactionConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.CompactionConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.CompactionConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.CompactionTriggerConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.CompactionTriggerConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.CompactionTriggerConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.EvaluationConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.EvaluationConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.EvaluationConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.ExtractorConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.ExtractorConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.ExtractorConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.GraphConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.GraphConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.GraphConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.GraphNodeConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.GraphNodeConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.GraphNodeConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.GuardReference.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.GuardReference.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.GuardReference.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.KnowledgeAmbiguityConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.KnowledgeAmbiguityConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.KnowledgeAmbiguityConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.McpAllowEntry.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.McpAllowEntry.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.McpAllowEntry.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.McpRetryConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.McpRetryConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.McpRetryConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.McpServerConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.McpServerConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.McpServerConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.ModelReference.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.ModelReference.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.ModelReference.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.PolicyConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.PolicyConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.PolicyConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.ProvidersConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.ProvidersConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.SlotVocabularyConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.SlotVocabularyConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.SlotVocabularyConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.StageConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.StageConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.StageConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.StageTransition.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.StageTransition.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.StageTransition.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.StateSlotConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.StateSlotConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.StateSlotConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.TitlerConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.TitlerConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.TitlerConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.ToolConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.ToolConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.ToolConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.ToolResultReference.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.ToolResultReference.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.ToolResultReference.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.VendorProviderConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.VendorProviderConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.VendorProviderConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Validation.ConfigurationValidationResult.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Validation.ConfigurationValidationResult.GetHashCode() -> int
+override AgentCore.Application.Configuration.Validation.ConfigurationValidationResult.ToString() -> string!
+override AgentCore.Application.Evaluation.EvaluationScore.Equals(object? obj) -> bool
+override AgentCore.Application.Evaluation.EvaluationScore.GetHashCode() -> int
+override AgentCore.Application.Evaluation.EvaluationScore.ToString() -> string!
+override AgentCore.Application.Knowledge.KnowledgePoint.Equals(object? obj) -> bool
+override AgentCore.Application.Knowledge.KnowledgePoint.GetHashCode() -> int
+override AgentCore.Application.Knowledge.KnowledgePoint.ToString() -> string!
+override AgentCore.Application.Providers.VendorSeam.GetHashCode() -> int
+override AgentCore.Application.Runtime.AgentCoreAgent.Description.get -> string?
+override AgentCore.Application.Runtime.AgentCoreAgent.Name.get -> string?
+override AgentCore.Application.Runtime.CallEvent.Equals(object? obj) -> bool
+override AgentCore.Application.Runtime.CallEvent.GetHashCode() -> int
+override AgentCore.Application.Runtime.CallEvent.ToString() -> string!
+override AgentCore.Application.Runtime.CallTurnOrigin.Equals(object? obj) -> bool
+override AgentCore.Application.Runtime.CallTurnOrigin.GetHashCode() -> int
+override AgentCore.Application.Runtime.CallTurnOrigin.ToString() -> string!
+override AgentCore.Application.Secrets.ResolvedSecrets.ToString() -> string!
+override AgentCore.Application.Secrets.SecretName.Equals(object? obj) -> bool
+override AgentCore.Application.Secrets.SecretName.GetHashCode() -> int
+override AgentCore.Application.Secrets.SecretName.ToString() -> string!
+override AgentCore.Application.State.LinkResult.Equals(object? obj) -> bool
+override AgentCore.Application.State.LinkResult.GetHashCode() -> int
+override AgentCore.Application.State.LinkResult.ToString() -> string!
+override AgentCore.Application.State.StateExtractionResult.Equals(object? obj) -> bool
+override AgentCore.Application.State.StateExtractionResult.GetHashCode() -> int
+override AgentCore.Application.State.StateExtractionResult.ToString() -> string!
+override AgentCore.Application.State.VocabularyView.Equals(object? obj) -> bool
+override AgentCore.Application.State.VocabularyView.GetHashCode() -> int
+override AgentCore.Application.State.VocabularyView.ToString() -> string!
+override AgentCore.Application.Tools.Builtin.BuiltinToolPorts.Equals(object? obj) -> bool
+override AgentCore.Application.Tools.Builtin.BuiltinToolPorts.GetHashCode() -> int
+override AgentCore.Application.Tools.Builtin.BuiltinToolPorts.ToString() -> string!
+override AgentCore.Application.Tools.DeclaredTool.Description.get -> string!
+override AgentCore.Application.Tools.DeclaredTool.JsonSchema.get -> System.Text.Json.JsonElement
+override AgentCore.Application.Tools.DeclaredTool.Name.get -> string!
+override AgentCore.Application.Tools.Registry.ToolRegistration.Equals(object? obj) -> bool
+override AgentCore.Application.Tools.Registry.ToolRegistration.GetHashCode() -> int
+override AgentCore.Application.Tools.Registry.ToolRegistration.ToString() -> string!
+override AgentCore.Application.Tools.Registry.ToolSourceContext.Equals(object? obj) -> bool
+override AgentCore.Application.Tools.Registry.ToolSourceContext.GetHashCode() -> int
+override AgentCore.Application.Tools.Registry.ToolSourceContext.ToString() -> string!
+override AgentCore.Application.Transcript.CallMessage.Equals(object? obj) -> bool
+override AgentCore.Application.Transcript.CallMessage.GetHashCode() -> int
+override AgentCore.Application.Transcript.CallMessage.ToString() -> string!
+override sealed AgentCore.Application.Call.CallInput.Barge.Equals(AgentCore.Application.Call.CallInput? other) -> bool
+override sealed AgentCore.Application.Call.CallInput.Keypress.Equals(AgentCore.Application.Call.CallInput? other) -> bool
+override sealed AgentCore.Application.Call.CallInput.Utterance.Equals(AgentCore.Application.Call.CallInput? other) -> bool
+override sealed AgentCore.Application.Tools.DeclaredTool.InvokeCoreAsync(Microsoft.Extensions.AI.AIFunctionArguments! arguments, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<object?>
 static AgentCore.Application.Audit.AuditSinkFactory.OpenAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.IAuditSinkAdapter!>! adapters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IAuditSinkPort!>
 static AgentCore.Application.Call.CallChannel.operator !=(AgentCore.Application.Call.CallChannel? left, AgentCore.Application.Call.CallChannel? right) -> bool
 static AgentCore.Application.Call.CallChannel.operator ==(AgentCore.Application.Call.CallChannel? left, AgentCore.Application.Call.CallChannel? right) -> bool
@@ -1436,10 +1666,10 @@ static AgentCore.Application.Call.CallInput.Utterance.operator ==(AgentCore.Appl
 static AgentCore.Application.Call.CallInput.operator !=(AgentCore.Application.Call.CallInput? left, AgentCore.Application.Call.CallInput? right) -> bool
 static AgentCore.Application.Call.CallInput.operator ==(AgentCore.Application.Call.CallInput? left, AgentCore.Application.Call.CallInput? right) -> bool
 static AgentCore.Application.Call.CallSpeechPairing.Validate(AgentCore.Application.Configuration.Schema.CallProviderConfiguration! call, AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration! speech, AgentCore.Application.Ports.ICallAdapter! selectedCall) -> void
-static AgentCore.Application.Calls.CallCursor.Encode(System.DateTimeOffset sortAt, string! callId) -> string!
-static AgentCore.Application.Calls.CallCursor.TryDecode(string? cursor, out System.DateTimeOffset sortAt, out string! callId) -> bool
 static AgentCore.Application.Calls.CallClarificationState.operator !=(AgentCore.Application.Calls.CallClarificationState? left, AgentCore.Application.Calls.CallClarificationState? right) -> bool
 static AgentCore.Application.Calls.CallClarificationState.operator ==(AgentCore.Application.Calls.CallClarificationState? left, AgentCore.Application.Calls.CallClarificationState? right) -> bool
+static AgentCore.Application.Calls.CallCursor.Encode(System.DateTimeOffset sortAt, string! callId) -> string!
+static AgentCore.Application.Calls.CallCursor.TryDecode(string? cursor, out System.DateTimeOffset sortAt, out string! callId) -> bool
 static AgentCore.Application.Calls.CallPage.operator !=(AgentCore.Application.Calls.CallPage? left, AgentCore.Application.Calls.CallPage? right) -> bool
 static AgentCore.Application.Calls.CallPage.operator ==(AgentCore.Application.Calls.CallPage? left, AgentCore.Application.Calls.CallPage? right) -> bool
 static AgentCore.Application.Calls.CallRecord.operator !=(AgentCore.Application.Calls.CallRecord? left, AgentCore.Application.Calls.CallRecord? right) -> bool
@@ -1523,6 +1753,8 @@ static AgentCore.Application.Configuration.Schema.KnowledgeAmbiguityConfiguratio
 static AgentCore.Application.Configuration.Schema.KnowledgeAmbiguityConfiguration.operator ==(AgentCore.Application.Configuration.Schema.KnowledgeAmbiguityConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeAmbiguityConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.operator !=(AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.operator ==(AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration.operator !=(AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration.operator ==(AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration.operator !=(AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration.operator ==(AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.operator !=(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration? right) -> bool
@@ -1669,224 +1901,9 @@ static readonly AgentCore.Application.Secrets.KnownSecrets.OpenAi -> AgentCore.A
 static readonly AgentCore.Application.Secrets.KnownSecrets.PostgresConnectionString -> AgentCore.Application.Secrets.SecretName!
 static readonly AgentCore.Application.Secrets.KnownSecrets.Qdrant -> AgentCore.Application.Secrets.SecretName!
 static readonly AgentCore.Application.Sessions.Memory.InMemoryCallSessions.DefaultIdleTimeout -> System.TimeSpan
-override AgentCore.Application.Call.CallChannel.Equals(object? obj) -> bool
-override AgentCore.Application.Call.CallChannel.GetHashCode() -> int
-override AgentCore.Application.Call.CallChannel.ToString() -> string!
-override AgentCore.Application.Call.CallChannelContext.Equals(object? obj) -> bool
-override AgentCore.Application.Call.CallChannelContext.GetHashCode() -> int
-override AgentCore.Application.Call.CallChannelContext.ToString() -> string!
-override AgentCore.Application.Call.CallInput.Barge.<Clone>$() -> AgentCore.Application.Call.CallInput.Barge!
-override AgentCore.Application.Call.CallInput.Barge.Equals(object? obj) -> bool
-override AgentCore.Application.Call.CallInput.Barge.GetHashCode() -> int
-override AgentCore.Application.Call.CallInput.Barge.ToString() -> string!
-override AgentCore.Application.Call.CallInput.Equals(object? obj) -> bool
-override AgentCore.Application.Call.CallInput.GetHashCode() -> int
-override AgentCore.Application.Call.CallInput.Keypress.<Clone>$() -> AgentCore.Application.Call.CallInput.Keypress!
-override AgentCore.Application.Call.CallInput.Keypress.Equals(object? obj) -> bool
-override AgentCore.Application.Call.CallInput.Keypress.GetHashCode() -> int
-override AgentCore.Application.Call.CallInput.Keypress.ToString() -> string!
-override AgentCore.Application.Call.CallInput.ToString() -> string!
-override AgentCore.Application.Call.CallInput.Utterance.<Clone>$() -> AgentCore.Application.Call.CallInput.Utterance!
-override AgentCore.Application.Call.CallInput.Utterance.Equals(object? obj) -> bool
-override AgentCore.Application.Call.CallInput.Utterance.GetHashCode() -> int
-override AgentCore.Application.Call.CallInput.Utterance.ToString() -> string!
-override AgentCore.Application.Calls.CallClarificationState.Equals(object? obj) -> bool
-override AgentCore.Application.Calls.CallClarificationState.GetHashCode() -> int
-override AgentCore.Application.Calls.CallClarificationState.ToString() -> string!
-override AgentCore.Application.Calls.CallPage.Equals(object? obj) -> bool
-override AgentCore.Application.Calls.CallPage.GetHashCode() -> int
-override AgentCore.Application.Calls.CallPage.ToString() -> string!
-override AgentCore.Application.Calls.CallRecord.Equals(object? obj) -> bool
-override AgentCore.Application.Calls.CallRecord.GetHashCode() -> int
-override AgentCore.Application.Calls.CallRecord.ToString() -> string!
-override AgentCore.Application.Calls.CallSessionState.Equals(object? obj) -> bool
-override AgentCore.Application.Calls.CallSessionState.GetHashCode() -> int
-override AgentCore.Application.Calls.CallSessionState.ToString() -> string!
-override AgentCore.Application.Configuration.Compilation.ResolvedClarification.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Compilation.ResolvedClarification.GetHashCode() -> int
-override AgentCore.Application.Configuration.Compilation.ResolvedClarification.ToString() -> string!
-override AgentCore.Application.Configuration.Compilation.ResolvedCompaction.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Compilation.ResolvedCompaction.GetHashCode() -> int
-override AgentCore.Application.Configuration.Compilation.ResolvedCompaction.ToString() -> string!
-override AgentCore.Application.Configuration.Compilation.ResolvedKnowledge.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Compilation.ResolvedKnowledge.GetHashCode() -> int
-override AgentCore.Application.Configuration.Compilation.ResolvedKnowledge.ToString() -> string!
-override AgentCore.Application.Configuration.Parsing.ConfigurationError.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Parsing.ConfigurationError.GetHashCode() -> int
-override AgentCore.Application.Configuration.Parsing.ConfigurationError.ToString() -> string!
-override AgentCore.Application.Configuration.Parsing.ScopeTemplate.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Parsing.ScopeTemplate.GetHashCode() -> int
-override AgentCore.Application.Configuration.Parsing.ScopeTemplate.ToString() -> string!
-override AgentCore.Application.Configuration.Parsing.SecretReference.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Parsing.SecretReference.GetHashCode() -> int
-override AgentCore.Application.Configuration.Parsing.SecretReference.ToString() -> string!
-override AgentCore.Application.Configuration.Parsing.SecretTemplate.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Parsing.SecretTemplate.GetHashCode() -> int
-override AgentCore.Application.Configuration.Parsing.SecretTemplate.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.AgentConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.AgentConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.AgentConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.AgentDefaults.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.AgentDefaults.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.AgentDefaults.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.AgentsConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.AgentsConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.AgentsConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.CallProviderConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.CallProviderConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.CallProviderConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.CompactionConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.CompactionConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.CompactionConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.CompactionTriggerConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.CompactionTriggerConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.CompactionTriggerConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.EvaluationConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.EvaluationConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.EvaluationConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.ExtractorConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.ExtractorConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.ExtractorConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.GraphConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.GraphConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.GraphConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.GraphEdgeConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.GraphNodeConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.GraphNodeConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.GraphNodeConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.GuardReference.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.GuardReference.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.GuardReference.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.KnowledgeAmbiguityConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.KnowledgeAmbiguityConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.KnowledgeAmbiguityConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.KnowledgeLinksConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.KnowledgeScopeConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.McpAllowEntry.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.McpAllowEntry.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.McpAllowEntry.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.McpRetryConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.McpRetryConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.McpRetryConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.McpServerConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.McpServerConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.McpServerConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.ModelReference.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.ModelReference.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.ModelReference.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.PolicyConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.PolicyConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.PolicyConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.ProvidersConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.ProvidersConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.SlotVocabularyConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.SlotVocabularyConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.SlotVocabularyConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.StageConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.StageConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.StageConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.StageTransition.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.StageTransition.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.StageTransition.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.StateSlotConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.StateSlotConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.StateSlotConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.TitlerConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.TitlerConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.TitlerConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.ToolConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.ToolConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.ToolConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.ToolResultReference.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.ToolResultReference.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.ToolResultReference.ToString() -> string!
-override AgentCore.Application.Configuration.Schema.VendorProviderConfiguration.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Schema.VendorProviderConfiguration.GetHashCode() -> int
-override AgentCore.Application.Configuration.Schema.VendorProviderConfiguration.ToString() -> string!
-override AgentCore.Application.Configuration.Validation.ConfigurationValidationResult.Equals(object? obj) -> bool
-override AgentCore.Application.Configuration.Validation.ConfigurationValidationResult.GetHashCode() -> int
-override AgentCore.Application.Configuration.Validation.ConfigurationValidationResult.ToString() -> string!
-override AgentCore.Application.Evaluation.EvaluationScore.Equals(object? obj) -> bool
-override AgentCore.Application.Evaluation.EvaluationScore.GetHashCode() -> int
-override AgentCore.Application.Evaluation.EvaluationScore.ToString() -> string!
-override AgentCore.Application.Knowledge.KnowledgePoint.Equals(object? obj) -> bool
-override AgentCore.Application.Knowledge.KnowledgePoint.GetHashCode() -> int
-override AgentCore.Application.Knowledge.KnowledgePoint.ToString() -> string!
-override AgentCore.Application.Providers.VendorSeam.GetHashCode() -> int
-override AgentCore.Application.Runtime.AgentCoreAgent.Description.get -> string?
-override AgentCore.Application.Runtime.AgentCoreAgent.Name.get -> string?
-override AgentCore.Application.Runtime.CallEvent.Equals(object? obj) -> bool
-override AgentCore.Application.Runtime.CallEvent.GetHashCode() -> int
-override AgentCore.Application.Runtime.CallEvent.ToString() -> string!
-override AgentCore.Application.Runtime.CallTurnOrigin.Equals(object? obj) -> bool
-override AgentCore.Application.Runtime.CallTurnOrigin.GetHashCode() -> int
-override AgentCore.Application.Runtime.CallTurnOrigin.ToString() -> string!
-override AgentCore.Application.Secrets.ResolvedSecrets.ToString() -> string!
-override AgentCore.Application.Secrets.SecretName.Equals(object? obj) -> bool
-override AgentCore.Application.Secrets.SecretName.GetHashCode() -> int
-override AgentCore.Application.Secrets.SecretName.ToString() -> string!
-override AgentCore.Application.State.LinkResult.Equals(object? obj) -> bool
-override AgentCore.Application.State.LinkResult.GetHashCode() -> int
-override AgentCore.Application.State.LinkResult.ToString() -> string!
-override AgentCore.Application.State.StateExtractionResult.Equals(object? obj) -> bool
-override AgentCore.Application.State.StateExtractionResult.GetHashCode() -> int
-override AgentCore.Application.State.StateExtractionResult.ToString() -> string!
-override AgentCore.Application.State.VocabularyView.Equals(object? obj) -> bool
-override AgentCore.Application.State.VocabularyView.GetHashCode() -> int
-override AgentCore.Application.State.VocabularyView.ToString() -> string!
-override AgentCore.Application.Tools.Builtin.BuiltinToolPorts.Equals(object? obj) -> bool
-override AgentCore.Application.Tools.Builtin.BuiltinToolPorts.GetHashCode() -> int
-override AgentCore.Application.Tools.Builtin.BuiltinToolPorts.ToString() -> string!
-override AgentCore.Application.Tools.DeclaredTool.Description.get -> string!
-override AgentCore.Application.Tools.DeclaredTool.JsonSchema.get -> System.Text.Json.JsonElement
-override AgentCore.Application.Tools.DeclaredTool.Name.get -> string!
-override AgentCore.Application.Tools.Registry.ToolRegistration.Equals(object? obj) -> bool
-override AgentCore.Application.Tools.Registry.ToolRegistration.GetHashCode() -> int
-override AgentCore.Application.Tools.Registry.ToolRegistration.ToString() -> string!
-override AgentCore.Application.Tools.Registry.ToolSourceContext.Equals(object? obj) -> bool
-override AgentCore.Application.Tools.Registry.ToolSourceContext.GetHashCode() -> int
-override AgentCore.Application.Tools.Registry.ToolSourceContext.ToString() -> string!
-override AgentCore.Application.Transcript.CallMessage.Equals(object? obj) -> bool
-override AgentCore.Application.Transcript.CallMessage.GetHashCode() -> int
-override AgentCore.Application.Transcript.CallMessage.ToString() -> string!
-override sealed AgentCore.Application.Call.CallInput.Barge.Equals(AgentCore.Application.Call.CallInput? other) -> bool
-override sealed AgentCore.Application.Call.CallInput.Keypress.Equals(AgentCore.Application.Call.CallInput? other) -> bool
-override sealed AgentCore.Application.Call.CallInput.Utterance.Equals(AgentCore.Application.Call.CallInput? other) -> bool
-override sealed AgentCore.Application.Tools.DeclaredTool.InvokeCoreAsync(Microsoft.Extensions.AI.AIFunctionArguments! arguments, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<object?>
+virtual AgentCore.Application.Call.CallInput.EqualityContract.get -> System.Type!
+virtual AgentCore.Application.Call.CallInput.Equals(AgentCore.Application.Call.CallInput? other) -> bool
+virtual AgentCore.Application.Call.CallInput.PrintMembers(System.Text.StringBuilder! builder) -> bool
+virtual AgentCore.Application.Tools.Binding.ToolBinding.Invoke(System.Text.Json.Nodes.JsonObject! arguments, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<object?>
+~override AgentCore.Application.Providers.VendorSeam.Equals(object obj) -> bool
+~override AgentCore.Application.Providers.VendorSeam.ToString() -> string

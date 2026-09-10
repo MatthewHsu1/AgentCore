@@ -59,6 +59,19 @@ public sealed record KnowledgeScopeConfiguration
 
     /// <summary>Gets the state slots the turn's scope is built from. Each name becomes one facet key.</summary>
     public IReadOnlyList<string> FromState { get; init; } = [];
+
+    /// <summary>Gets the facets a tool-mode agent may narrow its own search by. Empty offers none.</summary>
+    public IReadOnlyList<KnowledgeFilterableFacetConfiguration> Filterable { get; init; } = [];
+}
+
+/// <summary>One facet the model may name in the search tool's <c>filters</c> argument.</summary>
+public sealed record KnowledgeFilterableFacetConfiguration
+{
+    /// <summary>Gets the facet key, which <c>scope.template</c> turns into the payload path.</summary>
+    public required string Key { get; init; }
+
+    /// <summary>Gets what this facet means, in the words the model reads before it picks a value.</summary>
+    public required string Description { get; init; }
 }
 
 /// <summary>Which facets a card may opt out of, and the value it opts out with.</summary>

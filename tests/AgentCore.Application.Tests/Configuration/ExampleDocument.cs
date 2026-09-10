@@ -183,6 +183,9 @@ internal static class ExampleDocument
                 value: "*"
                 facets: [brand, applies_to]
               fromState: [brand, applies_to]
+              filterable:
+                - key: applies_to
+                  description: "The machine the question is about, as one tag, such as ct900 or f63-2019."
             links:
               field: see_also
               lookup: uuid5
@@ -627,6 +630,12 @@ internal static class ExampleDocument
                 "fromState": [
                   "brand",
                   "applies_to"
+                ],
+                "filterable": [
+                  {
+                    "key": "applies_to",
+                    "description": "The machine the question is about, as one tag, such as ct900 or f63-2019."
+                  }
                 ]
               },
               "links": {

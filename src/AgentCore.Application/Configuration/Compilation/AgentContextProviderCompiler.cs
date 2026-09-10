@@ -28,7 +28,8 @@ internal static class AgentContextProviderCompiler
         AgentCompilationContext context,
         string pointer,
         ResolvedClarification clarification,
-        ClarificationProvider? clarificationProvider)
+        ClarificationProvider? clarificationProvider,
+        KnowledgeScopeConfiguration? scope)
     {
         List<AIContextProvider> providers = [new TurnContextProvider()];
 
@@ -101,7 +102,9 @@ internal static class AgentContextProviderCompiler
             knowledge,
             item.Id,
             context.Citations ?? DefaultCitations,
-            context.Loggers));
+            context.Loggers,
+            scope,
+            context.Vocabulary));
 
         return providers;
     }

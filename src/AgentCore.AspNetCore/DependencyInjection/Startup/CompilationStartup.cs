@@ -7,6 +7,7 @@ using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Skills;
+using AgentCore.Application.State;
 using AgentCore.Application.Tools.Registry;
 using Microsoft.Extensions.Logging;
 
@@ -38,6 +39,7 @@ internal static class CompilationStartup
     /// <param name="knowledge">The port step 3b opened, or <see langword="null"/> when the host bound no knowledge vendor.</param>
     /// <param name="skills">The catalog step "skills" opened, or <see langword="null"/> when the host bound no skills folder.</param>
     /// <param name="citations">The wording <c>providers.knowledge.citation</c> named.</param>
+    /// <param name="vocabulary">The cache a filterable facet's values are linked through.</param>
     /// <param name="loggers">The factory the guard evaluator and the knowledge provider take their loggers from.</param>
     /// <returns>The compiled graph, and the seams that made it.</returns>
     /// <exception cref="ConfigurationLoadException">The document does not compile.</exception>
@@ -50,6 +52,7 @@ internal static class CompilationStartup
         IKnowledgeRetrievalPort? knowledge,
         SkillCatalog? skills,
         IKnowledgeCitationFormatter citations,
+        VocabularyCache vocabulary,
         ILoggerFactory loggers)
     {
         GuardEvaluator guards = new(configuration.Guards, loggers.CreateLogger<GuardEvaluator>());
@@ -67,6 +70,7 @@ internal static class CompilationStartup
                 Knowledge = knowledge,
                 Skills = skills,
                 Citations = citations,
+                Vocabulary = vocabulary,
                 Loggers = loggers,
             });
 

@@ -4,6 +4,7 @@ using AgentCore.Application.Evaluation;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Skills;
+using AgentCore.Application.State;
 using AgentCore.Application.Tools.Registry;
 using Microsoft.Extensions.Logging;
 
@@ -69,6 +70,12 @@ public sealed class AgentCompilationContext
     /// Gets or sets the wording each card's source label is written in.
     /// </summary>
     public IKnowledgeCitationFormatter? Citations { get; init; }
+
+    /// <summary>
+    /// Gets or sets the cache a filterable facet's values are linked through, or
+    /// <see langword="null"/> when the host built none.
+    /// </summary>
+    public VocabularyCache? Vocabulary { get; init; }
 
     /// <summary>
     /// Gets or sets where the compiled agents write their own diagnostics, or <see langword="null"/>.

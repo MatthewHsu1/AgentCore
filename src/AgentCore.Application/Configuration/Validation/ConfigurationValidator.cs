@@ -552,6 +552,8 @@ public static class ConfigurationValidator
             return;
         }
 
+        KnowledgeFilterValidator.Check(scope, errors);
+
         if (scope.Wildcard is { } wildcard)
         {
             if (string.IsNullOrWhiteSpace(wildcard.Value))

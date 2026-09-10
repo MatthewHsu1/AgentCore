@@ -1244,6 +1244,27 @@
               "type": "array",
               "items": { "type": "string", "minLength": 1 },
               "description": "The state slots the turn's scope is built from. Each becomes one facet key."
+            },
+            "filterable": {
+              "type": "array",
+              "description": "The facets a tool-mode agent may narrow its own search by. Each becomes one choice in the search tool's filters argument. A facet the host or the extractor already answered is never overwritten by one.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["key", "description"],
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The facet key, which scope.template turns into the payload path."
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "What this facet means, in the words the model reads before it picks a value."
+                  }
+                }
+              }
             }
           }
         },

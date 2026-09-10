@@ -11,6 +11,9 @@ public enum KnowledgeFacetOrigin
 
     /// <summary>Nothing knew it, so the facet holds the wildcard and narrows nothing.</summary>
     Wildcard,
+
+    /// <summary>The search tool's <c>filters</c> argument carried it.</summary>
+    Tool,
 }
 
 /// <summary>

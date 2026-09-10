@@ -406,6 +406,30 @@ providers:
       # condition on that facet at all, and every value of it would be in reach before the caller has
       # said anything.
 
+      filterable:
+        - key: applies_to
+          description: "The machine the question is about, as one tag, such as ct900 or f63-2019."
+      # The facets a mode: tool agent may narrow its own search by. Each entry becomes one choice in
+      # the search tool's filters argument, and the description is the only thing the model reads
+      # before it picks a value — so write it for the model, not for the deployer. Adding a facet
+      # here is the whole job: no host writes code for one.
+      #
+      # A filter can only ever narrow. A facet the host opened or the extractor filled is left
+      # exactly as it was, because those two are who is asking and what they said; only a facet
+      # holding the wildcard, or one the scope does not carry at all, is open for the model to write.
+      # So this is safe to name a reach facet in, and still never a way out of an isolation facet.
+      #
+      # A filter that clears no card at all is dropped and the search runs once more without it. The
+      # model's filter is its guess at the subject, and a wrong guess must not become "nothing is
+      # documented". That costs one extra search only on a filtered search that found nothing.
+      #
+      # A key whose name matches a vocabulary: slot is matched through that slot's fold, so "the 2023
+      # LCR" reaches the stored lcr-2023 rather than filtering on a string no card carries, and a
+      # value the collection has never held is dropped rather than searched for. A key with no such
+      # slot is matched exactly as the model wrote it.
+      #
+      # Prefetch agents ignore this block: they advertise no function, so there is no argument to fill.
+
     links:
       field: see_also
       lookup: uuid5            # uuid5 | direct | filter

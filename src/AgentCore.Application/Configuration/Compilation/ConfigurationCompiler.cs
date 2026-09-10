@@ -272,7 +272,13 @@ public static class ConfigurationCompiler
                     },
                     ChatHistoryProvider = history,
                     AIContextProviders = AgentContextProviderCompiler.Build(
-                        section.Defaults, item, context, pointer, clarification, clarificationProvider),
+                        section.Defaults,
+                        item,
+                        context,
+                        pointer,
+                        clarification,
+                        clarificationProvider,
+                        configuration.Providers?.Knowledge?.Scope),
                 });
             path.RemoveAt(path.Count - 1);
 
