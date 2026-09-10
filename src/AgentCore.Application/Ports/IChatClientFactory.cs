@@ -6,11 +6,6 @@ namespace AgentCore.Application.Ports;
 /// <summary>
 /// Resolves a <c>{ ref: reply }</c> model reference to a chat client.
 /// </summary>
-/// <remarks>
-/// <c>providers:</c> configures adapters and never changes agent shape, so the compiler never reads
-/// a vendor name. It asks for the client behind the <c>as</c> name and builds the same agent either
-/// way. This is the seam where the LLM port binds.
-/// </remarks>
 public interface IChatClientFactory
 {
     /// <summary>Gets the chat client one model reference names.</summary>
@@ -20,4 +15,9 @@ public interface IChatClientFactory
     /// </param>
     /// <returns>The chat client. The compiler never disposes it.</returns>
     IChatClient GetChatClient(ModelReference? model);
+
+    /// <summary>Whether the vendor behind one model reference runs a hosted web search.</summary>
+    /// <param name="model">The reference, or <see langword="null"/> for the factory's default entry.</param>
+    /// <returns><see langword="true"/> when the vendor runs the search itself.</returns>
+    bool SupportsHostedWebSearch(ModelReference? model) => false;
 }

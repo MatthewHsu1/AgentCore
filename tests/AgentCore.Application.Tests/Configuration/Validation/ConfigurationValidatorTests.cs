@@ -631,12 +631,6 @@ public sealed class ConfigurationValidatorTests
         Assert.Contains("applies_to", error.Message, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// A <c>writer: const</c> slot can never legitimately sit in <c>fromState</c> (fromState's
-    /// per-facet check requires <c>writer: extractor</c>), so a slot exercising this row also,
-    /// unavoidably, trips row 3 (vocabulary.from on a slot fromState does not name). The pair is
-    /// asserted explicitly rather than isolated away.
-    /// </summary>
     [Fact]
     public void Evaluate_SlotDeclaresBothValueAndVocabulary_Fails()
     {
@@ -655,13 +649,21 @@ public sealed class ConfigurationValidatorTests
                 AnExtractor(),
                 ambiguity: AnAmbiguity()));
 
-        Assert.Equal(2, result.Errors.Count);
-        Assert.Contains(result.Errors, e => e.Pointer == "/state/applies_to/value");
-        Assert.Contains(result.Errors, e => e.Pointer == "/state/applies_to/vocabulary/from");
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("/state/applies_to/value", error.Pointer);
     }
 
+    /// <summary>
+    /// A slot may take its domain from the knowledge base and never be scoped by.
+    /// </summary>
+    /// <remarks>
+    /// The gate still holds the extractor to values the provider published, and the linker still
+    /// folds a mention onto one of them. A host may also read the domain for itself — requiring a
+    /// knowledge search to carry a product name the manuals use, say — which needs the vocabulary
+    /// and would be actively harmed by narrowing every search to it.
+    /// </remarks>
     [Fact]
-    public void Evaluate_VocabularySlotAbsentFromFromState_Fails()
+    public void Evaluate_VocabularySlotAbsentFromFromState_Passes()
     {
         var wildcard = new KnowledgeWildcardConfiguration { Value = "*", Facets = ["brand"] };
 
@@ -677,9 +679,7 @@ public sealed class ConfigurationValidatorTests
                 AnExtractor(),
                 ambiguity: AnAmbiguity()));
 
-        var error = Assert.Single(result.Errors);
-        Assert.Equal("/state/applies_to/vocabulary/from", error.Pointer);
-        Assert.Contains("applies_to", error.Message, StringComparison.Ordinal);
+        Assert.Empty(result.Errors);
     }
 
     [Fact]

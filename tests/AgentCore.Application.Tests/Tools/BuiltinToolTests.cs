@@ -14,11 +14,13 @@ namespace AgentCore.Application.Tests.Tools;
 /// The first tool kind of section 8.1: <c>kind: builtin</c>, which AgentCore ships.
 /// </summary>
 /// <remarks>
-/// The shipped example's only built-in today is <c>ui.draw</c>, a shipped agent built through
-/// <see cref="ShippedAgentBuilder"/> and tested in <c>ShippedAgentBuilderTests</c>. AgentCore ships
-/// no plain-function built-in right now, so the call path, the section 8.7 error-result shape,
-/// description resolution, and cancellation that a plain built-in exercises are untested until one
-/// ships again.
+/// The shipped example holds two built-ins: <c>ui.draw</c>, a shipped agent built through
+/// <see cref="ShippedAgentBuilder"/> and tested in <c>ShippedAgentBuilderTests</c>; and
+/// <c>web.search</c>, a plain function that builds one <c>HostedWebSearchTool</c> marker and runs
+/// no code of its own — see <c>HostedWebSearchDropTests</c> for what reaches a compiled agent.
+/// Neither calls anything, so the call path, the section 8.7 error-result shape, description
+/// resolution, and cancellation that a plain built-in which actually runs would exercise stay
+/// untested until one ships.
 /// </remarks>
 public sealed class BuiltinToolTests
 {

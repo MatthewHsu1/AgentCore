@@ -176,6 +176,12 @@ tools:
       properties: { summary: { type: string } }
       required: [ summary ]
 
+  # A marker, not code: it tells the model provider it may run a hosted web search, and only a
+  # provider that runs one acts on it. AgentToolCompiler drops this tool, per agent, for a model
+  # providers.llm[] never named webSearch: false for but whose adapter reports it cannot search —
+  # a warning at compile time, never a boot failure.
+  - { id: search, kind: builtin, uses: web.search }
+
   # options.Bind("CloseCase", (string caseId, string reason) => ...) registers a typed method
   # instead. Its parameters are the arguments, and their schema, so this declaration writes no
   # parameters: at all. Writing one anyway is a boot failure: the two would drift apart.
@@ -225,6 +231,24 @@ agents:
     # scoped agent with no scope open says it cannot look the answer up rather than searching
     # everything. Set scoped: false on an agent that is meant to read the whole corpus.
     knowledge: { mode: prefetch, limit: 5, citations: false }
+
+    # Every strategy here is deterministic: the same messages give the same result, from empty
+    # state. Summarization is not offered on purpose — a resumed call rebuilds a new session and
+    # re-derives from the replayed words, so a strategy that called a model would give one call two
+    # different histories. tool_result folds old tool-call groups into one short line each; the
+    # other three are truncate, sliding_window and context_window. trigger: names exactly one of
+    # tokens, messages, turns or groups — naming zero or two is a load error. keep: is how many
+    # newest groups the strategy never touches; foldResultChars: is how much of a tool result
+    # tool_result carries forward per fold. There is no per-agent opt-out: an omitted block inherits
+    # this one, so give compaction to some agents and not others by declaring the block on those
+    # agents instead of here.
+    #
+    # context_window here, not tool_result: tool_result folds only function tool calls, and the
+    # analyst agent below carries search, a hosted tool whose results are no such thing — tool_result
+    # would leave them growing the conversation forever. context_window folds tool_result's own work
+    # first and then truncates, and truncate drops whole groups regardless of what is inside them, so
+    # it still bounds a conversation a hosted tool is filling.
+    compaction: { strategy: context_window, trigger: { messages: 40 }, keep: 6, foldResultChars: 300 }
   items:
     # voice, scripted — one model round trip, no source labels spoken aloud. Inherits mode:
     # prefetch, limit: 5, citations: false from defaults above.
@@ -235,7 +259,7 @@ agents:
     - { id: closer,     instructions: "<stage delta>", tools: [] }
 
     # internal — everything on, and it searches every product on purpose
-    - { id: analyst, instructions: "<stage delta>", tools: [ lookup_order, create_case ],
+    - { id: analyst, instructions: "<stage delta>", tools: [ lookup_order, create_case, search ],
         knowledge: { mode: tool, limit: 8, citations: true, scoped: false } }
 
     # customer facing — tools yes, citations no. It sets two keys and inherits limit: 5.
@@ -289,7 +313,10 @@ providers:
     - { kind: openai, model: gpt-4.1-mini, as: reply }      # the voice path, chosen on latency
     - { kind: openai, model: gpt-5.4-nano, as: fill }       # the extractor, chosen on null discipline
     - { kind: openai, model: gpt-4.1,      as: judge }      # evaluation only, chosen on judgement
-    - { kind: openai, model: gpt-4.1-nano, as: cheap }      # ui.draw only, chosen on price
+    - { kind: openai, model: gpt-4.1-nano, as: cheap, webSearch: false }      # ui.draw only, chosen on price
+  # webSearch: false above is a veto, not a default: omitted or true both leave the choice to the
+  # vendor's adapter. cheap only ever draws pictures, so vetoing it here costs nothing and stops a
+  # future search tool from ever running on the least capable model by accident.
   # Three planes, and they are not duplicates. call is the media pipe and owns the inbound route.
   # speech is recognition and synthesis. telephony is call control, which must outlive any one
   # media leg because a warm transfer creates a second one.

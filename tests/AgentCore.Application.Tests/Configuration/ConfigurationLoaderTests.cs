@@ -70,7 +70,7 @@ public sealed class ConfigurationLoaderTests
     [Fact]
     public void Example_BindsEveryToolKind()
     {
-        Assert.Equal(3, Example.Tools.Count);
+        Assert.Equal(4, Example.Tools.Count);
 
         Assert.Equal(ToolKind.Builtin, Example.Tools[0].Kind);
         Assert.Equal("ui.draw", Example.Tools[0].Uses);
@@ -80,6 +80,9 @@ public sealed class ConfigurationLoaderTests
         Assert.Equal("CreateCase", binding.Binds);
         Assert.NotNull(binding.Parameters);
         Assert.Equal("object", binding.Parameters!["type"]!.GetValue<string>());
+
+        Assert.Equal(ToolKind.Builtin, Example.Tools[3].Kind);
+        Assert.Equal("web.search", Example.Tools[3].Uses);
     }
 
     [Fact]
@@ -149,6 +152,7 @@ public sealed class ConfigurationLoaderTests
         Assert.Equal("fill", Example.Providers.Llm[1].As);
         Assert.Equal("judge", Example.Providers.Llm[2].As);
         Assert.Equal("cheap", Example.Providers.Llm[3].As);
+        Assert.Equal(false, Example.Providers.Llm[3].WebSearch);
         Assert.Equal("telnyx-relay", Example.Providers.Speech!.Stt.Kind);
         Assert.Equal("telnyx-relay", Example.Providers.Speech.Tts.Kind);
         Assert.Equal("telnyx", Example.Providers.Telephony!.Kind);

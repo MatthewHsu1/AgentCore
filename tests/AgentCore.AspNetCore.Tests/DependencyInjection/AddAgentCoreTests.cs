@@ -25,6 +25,7 @@ using AgentCore.Infrastructure.Tools;
 using Microsoft.Extensions.AI.Evaluation;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
+using AgentCore.Application.State;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Text.Json.Nodes;
@@ -357,6 +358,55 @@ public sealed class AddAgentCoreTests
         var second = factory.Create();
         Assert.NotSame(first, second);
         Assert.NotEqual(first.CallId, second.CallId);
+    }
+
+    [Fact]
+    public async Task AddAgentCore_RegistersTheKnowledgePortTheHostBound()
+    {
+        FacetCapablePort port = new();
+
+        using var provider = await BuildAsync(
+            OneAgentYaml, options => options.UseKnowledgeRetrieval(_ => port));
+
+        Assert.Same(port, provider.GetRequiredService<IKnowledgeRetrievalPort>());
+    }
+
+    [Fact]
+    public async Task AddAgentCore_TheResolvedPortAnswersWhatElseItServes()
+    {
+        // What a consumer actually does with it: resolve the one port, then ask that port for the
+        // capability it needs. Registering each capability separately would hand out a second
+        // object for the same store, and a store that serves none would have to be registered as
+        // null anyway.
+        FacetCapablePort port = new();
+
+        using var provider = await BuildAsync(
+            OneAgentYaml, options => options.UseKnowledgeRetrieval(_ => port));
+
+        var knowledge = provider.GetRequiredService<IKnowledgeRetrievalPort>();
+
+        Assert.Same(port, knowledge.GetService<IKnowledgeFacetReadPort>());
+    }
+
+    [Fact]
+    public async Task AddAgentCore_ADocumentThatReadsNoKnowledge_ResolvesNoPort()
+    {
+        using var provider = await BuildAsync(OneAgentYaml);
+
+        Assert.Null(provider.GetService<IKnowledgeRetrievalPort>());
+    }
+
+    [Fact]
+    public async Task AddAgentCore_RegistersTheVocabularyEveryRefreshWritesInto()
+    {
+        using var provider = await BuildAsync(OneAgentYaml);
+
+        var vocabulary = provider.GetRequiredService<VocabularyCache>();
+
+        // The one the refresh services and every call session share. A consumer that reads a slot's
+        // values — to gate a search on the product names the knowledge base publishes, say — must
+        // reach that instance and not a fresh one, which would always read empty.
+        Assert.Same(vocabulary, provider.GetRequiredService<VocabularyCache>());
     }
 
     [Fact]
@@ -1350,6 +1400,18 @@ public sealed class AddAgentCoreTests
     }
 
     /// <summary>A knowledge port that answers with nothing and tracks whether it was closed.</summary>
+    /// <summary>A knowledge port that also reads whole cards by an exact facet value.</summary>
+    private sealed class FacetCapablePort : IKnowledgeRetrievalPort, IKnowledgeFacetReadPort
+    {
+        public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
+            string query, CancellationToken cancellationToken = default)
+            => ValueTask.FromResult<IReadOnlyList<KnowledgeCard>>([]);
+
+        public ValueTask<IReadOnlyList<KnowledgeCard>> ReadByFacetAsync(
+            string path, string value, int limit, CancellationToken cancellationToken = default)
+            => ValueTask.FromResult<IReadOnlyList<KnowledgeCard>>([]);
+    }
+
     private sealed class DisposeTrackingKnowledgePort : IKnowledgeRetrievalPort, IDisposable
     {
         /// <summary>Gets whether this port was closed.</summary>

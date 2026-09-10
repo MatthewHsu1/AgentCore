@@ -49,12 +49,6 @@ namespace AgentCore.Application.Configuration.Compilation;
 /// </remarks>
 public static class ConfigurationCompiler
 {
-    /// <summary>
-    /// The formatter an agent cites through when the host bound none. Stateless, so every agent in
-    /// every document reads the one instance.
-    /// </summary>
-    private static readonly SourceLocatorCitationFormatter DefaultCitations = new();
-
     /// <summary>Picks the row of the compile table one document selects.</summary>
     /// <param name="configuration">The loaded document.</param>
     /// <returns>The row.</returns>
@@ -274,10 +268,10 @@ public static class ConfigurationCompiler
                     ChatOptions = new ChatOptions
                     {
                         Instructions = AgentInstructions.Compose(section.Defaults, item),
-                        Tools = BuildTools(item, tools, context, pointer, Resolve),
+                        Tools = AgentToolCompiler.Build(item, item.Model ?? section.Defaults?.Model, tools, context, pointer, Resolve),
                     },
                     ChatHistoryProvider = history,
-                    AIContextProviders = BuildContextProviders(
+                    AIContextProviders = AgentContextProviderCompiler.Build(
                         section.Defaults, item, context, pointer, clarification, clarificationProvider),
                 });
             path.RemoveAt(path.Count - 1);
@@ -291,150 +285,12 @@ public static class ConfigurationCompiler
         }
     }
 
-    /// <summary>
-    /// Builds the context providers of one agent. <paramref name="clarification"/> and
-    /// <paramref name="clarificationProvider"/> are the document's ambiguity wiring (§7), the same
-    /// for every agent — built once by the caller rather than re-derived per agent.
-    /// </summary>
-    private static List<AIContextProvider> BuildContextProviders(
-        AgentDefaults? defaults,
-        AgentConfiguration item,
-        AgentCompilationContext context,
-        string pointer,
-        ResolvedClarification clarification,
-        ClarificationProvider? clarificationProvider)
-    {
-        List<AIContextProvider> providers = [new TurnContextProvider()];
-
-        // Bound ahead of the knowledge early-return below: channel 1 asks about a scope's fromState
-        // slots regardless of whether THIS agent composes its own knowledge: block, because the
-        // clarification is document-level state, not a per-agent search setting.
-        if (clarificationProvider is not null)
-        {
-            providers.Add(clarificationProvider);
-        }
-
-        if (item.Skills.Count > 0)
-        {
-            if (context.Skills is not { } catalog)
-            {
-                throw Fail(
-                    ConfigurationError.AppendPointer(pointer, "skills"),
-                    $"the agent '{item.Id}' declares a skills: list and this host bound no skills "
-                    + "folder, so there is nothing to load. Call options.UseSkills(...) with the "
-                    + "folder that holds the SKILL.md directories, or remove the skills: list.");
-            }
-
-            providers.Add(SkillsProviderFactory.Create(catalog, item.Skills, context.Loggers));
-        }
-
-        if (AgentKnowledge.Compose(defaults, item) is not { } composed)
-        {
-            return providers;
-        }
-
-        if (context.Knowledge is not { } port)
-        {
-            throw Fail(
-                ConfigurationError.AppendPointer(pointer, "knowledge"),
-                $"the agent '{item.Id}' declares a knowledge: block and this host registered no "
-                + "knowledge vendor, so there is no store to read. Call "
-                + "options.UseKnowledgeStores(...) with an adapter that serves "
-                + $"{nameof(IKnowledgeRetrievalPort)}, or remove the knowledge: block.");
-        }
-
-        // The same document-level wiring channel 1 reads above, carried onto this agent's own
-        // resolved knowledge so the search side does not have to re-derive it.
-        var knowledge = composed with { Clarification = clarification };
-
-        providers.Add(KnowledgeProviderFactory.Create(
-            port,
-            knowledge,
-            item.Id,
-            context.Citations ?? DefaultCitations,
-            context.Loggers));
-
-        return providers;
-    }
-
     /// <summary>Puts the auditing function-invocation loop into the pipeline of one agent.</summary>
     private static AuditingFunctionInvokingChatClient WithToolFailureAuditing(IChatClient model)
         => new(model.AsBuilder()
                     .UseOpenTelemetry(configure: static client => client.EnableSensitiveData = false)
                     .Use(static innerClient => new ModelFacingChatClient(innerClient))
                     .Build());
-
-    private static List<AITool>? BuildTools(
-        AgentConfiguration item,
-        Dictionary<string, ToolConfiguration> declared,
-        AgentCompilationContext context,
-        string pointer,
-        Func<string, AIAgent?> resolveAgent)
-    {
-        if (item.Tools.Count == 0)
-        {
-            return null;
-        }
-
-        List<AITool> tools = [];
-        for (var index = 0; index < item.Tools.Count; index++)
-        {
-            var id = item.Tools[index];
-
-            var toolPointer = ConfigurationError.AppendPointer(
-                ConfigurationError.AppendPointer(pointer, "tools"), index);
-
-            if (!declared.TryGetValue(id, out var tool))
-            {
-                if (context.Tools is { } discovered && discovered.Contains(id))
-                {
-                    tools.Add(discovered.Resolve(id));
-                    continue;
-                }
-
-                if (context.Tools is null)
-                {
-                    // No factory, so nothing this loop could have built anyway.
-                    continue;
-                }
-
-                throw Fail(toolPointer, $"the tool id '{id}' is not declared in tools:, and no tool source serves it.");
-            }
-
-            if (tool.Kind == ToolKind.Agent)
-            {
-                // A kind: agent tool needs no tool factory. Section 7 says section 8 adds no port,
-                // and this kind adds none either: the inner agent is already in the document.
-                tools.Add(AgentDelegationTool.Create(tool, ResolveInner(tool, resolveAgent, toolPointer)));
-                continue;
-            }
-
-            if (context.Tools is { } registry)
-            {
-                if (!registry.Contains(id))
-                {
-                    throw Fail(toolPointer, $"the tool id '{id}' is declared, and no tool source serves it.");
-                }
-
-                tools.Add(registry.Resolve(id));
-            }
-        }
-
-        return tools.Count == 0 ? null : tools;
-    }
-
-    private static AIAgent ResolveInner(ToolConfiguration tool, Func<string, AIAgent?> resolveAgent, string pointer)
-    {
-        if (tool.Agent is not { Length: > 0 } id)
-        {
-            throw Fail(pointer, $"the tool '{tool.Id}' is kind: agent and names no agent:.");
-        }
-
-        return resolveAgent(id)
-            ?? throw Fail(
-                pointer,
-                $"the tool '{tool.Id}' delegates to the agent '{id}', which agents.items does not declare.");
-    }
 
     internal static ConfigurationLoadException Fail(string pointer, string message)
         => new(new ConfigurationError

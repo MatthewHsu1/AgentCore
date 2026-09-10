@@ -67,6 +67,14 @@ public sealed class OpenAiChatClientAdapter : IChatClientAdapter
         return WithResponseDefaults(client, entry.ReasoningEffort);
     }
 
+    /// <inheritdoc />
+    public bool SupportsHostedWebSearch(LlmProviderConfiguration entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        return entry.WebSearch != false;
+    }
+
     /// <summary>Puts <c>store</c> and <c>reasoning_effort</c> on every request this client sends.</summary>
     internal static IChatClient WithResponseDefaults(IChatClient client, string? effort)
     {

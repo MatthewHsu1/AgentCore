@@ -218,4 +218,22 @@ internal static partial class Log
         Message = "The probe of agent {Agent} did not answer for facet {Facet}. The turn was told the "
             + "knowledge base holds nothing and the call continues.")]
     public static partial void KnowledgeProbeFailed(ILogger logger, string agent, string facet, Exception exception);
+
+    /// <summary>An agent declared a hosted-search tool, and its model reports no hosted web search.</summary>
+    /// <param name="logger">The logger of the compiler.</param>
+    /// <param name="agentId">The id of the agent that declared the tool.</param>
+    /// <param name="toolId">The id of the tool that was dropped.</param>
+    /// <param name="model">
+    /// A phrase naming the model, such as <c>"the model 'reply'"</c> or <c>"this agent's default
+    /// model"</c> when the agent names none. Built at the call site so this message never renders an
+    /// empty pair of quotes.
+    /// </param>
+    [LoggerMessage(
+        EventId = 18,
+        Level = LogLevel.Warning,
+        Message = "The agent '{AgentId}' declares the tool '{ToolId}', which asks the model provider "
+            + "to run a web search, and {Model} reports no hosted web search, so the tool was not "
+            + "added. Point this agent at a model whose vendor runs a hosted web search, or remove "
+            + "the tool from this agent.")]
+    public static partial void HostedWebSearchDropped(ILogger logger, string agentId, string toolId, string model);
 }

@@ -53,10 +53,6 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
     internal ResolvedSecrets Secrets => Started.Secrets;
 
     /// <summary>Gets the bindings the host registered by name.</summary>
-    /// <remarks>
-    /// Readable before the boot runs: a host filled it, so no document had to be loaded for it to
-    /// hold what it holds.
-    /// </remarks>
     internal ToolBindingRegistry Bindings => _options.Bindings;
 
     /// <summary>Gets the registry that compiled the document, and would compile it again.</summary>
@@ -85,6 +81,12 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
 
     /// <summary>Gets the factory that builds one session per call.</summary>
     internal ICallSessionFactory Sessions => Started.Sessions;
+
+    /// <summary>Gets the vocabulary every call session reads, and every refresh installs into.</summary>
+    internal VocabularyCache Vocabulary => Started.Vocabulary;
+
+    /// <summary>Gets the knowledge base, or <see langword="null"/> when no agent reads one.</summary>
+    internal IKnowledgeRetrievalPort? Knowledge => Started.Knowledge;
 
     /// <summary>Gets the same turn loop, behind the framework's own agent seam.</summary>
     internal AgentCoreAgent Agent => Started.Agent;
@@ -261,6 +263,8 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
             call.Sessions,
             call.Agent,
             call.Queue,
+            vocabulary,
+            knowledge,
             seams.Call,
             seams.Speech,
             seams.Handler,
@@ -327,7 +331,7 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
         VocabularyCache vocabulary,
         CancellationToken cancellationToken)
     {
-        if (knowledge is not IFacetVocabularyPort port)
+        if (knowledge?.GetService<IFacetVocabularyPort>() is not { } port)
         {
             return;
         }
@@ -348,9 +352,11 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
             }
 
             var path = template.Resolve(slotName);
-            var wildcardValue = wildcard is not null && wildcard.Facets.Contains(slotName, StringComparer.Ordinal)
-                ? wildcard.Value
-                : null;
+
+            // Stripped for every declared wildcard, on the same reasoning as the boot read in
+            // KnowledgeStartup.ApplyVocabularyAsync: the sentinel is stored in the collection, so a
+            // refresh reads it back at any facet path, scoped or not.
+            var wildcardValue = wildcard?.Value;
 
             var service = Track(new VocabularyRefreshService(
                 slotName,
@@ -387,6 +393,8 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
         ICallSessionFactory Sessions,
         AgentCoreAgent Agent,
         QueuedAuditSink AuditQueue,
+        VocabularyCache Vocabulary,
+        IKnowledgeRetrievalPort? Knowledge,
         IReadOnlyList<ICallAdapter>? CallAdapters,
         IReadOnlyList<ISpeechAdapter>? SpeechAdapters,
         RequestDelegate? CallHandler,

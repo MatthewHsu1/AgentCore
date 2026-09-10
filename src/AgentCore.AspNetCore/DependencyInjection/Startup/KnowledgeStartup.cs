@@ -105,7 +105,7 @@ internal static class KnowledgeStartup
             return;
         }
 
-        if (knowledge is not IFacetVocabularyPort port)
+        if (knowledge?.GetService<IFacetVocabularyPort>() is not { } port)
         {
             if (vocabularySlots.Count == 0)
             {
@@ -118,7 +118,7 @@ internal static class KnowledgeStartup
 
             var reason = knowledge is null
                 ? "no knowledge port was built, so there is nothing to read a facet vocabulary from"
-                : $"the built port ({knowledge.GetType().Name}) does not implement {nameof(IFacetVocabularyPort)}";
+                : $"the built port ({knowledge.GetType().Name}) does not serve {nameof(IFacetVocabularyPort)}";
 
             throw FailSlots(
                 vocabularySlots.Select(entry => entry.Key),
@@ -160,11 +160,12 @@ internal static class KnowledgeStartup
             foreach (var (slotName, slot) in vocabularySlots)
             {
                 var vocab = slot.Vocabulary!;
+
                 var path = template.Resolve(slotName);
+
                 var values = await port.ReadAsync(path, vocab.MaxValues, cancellationToken).ConfigureAwait(false);
-                var wildcardValue = wildcardFacets.Contains(slotName, StringComparer.Ordinal)
-                    ? wildcard!.Value
-                    : null;
+
+                var wildcardValue = wildcard?.Value;
 
                 try
                 {
