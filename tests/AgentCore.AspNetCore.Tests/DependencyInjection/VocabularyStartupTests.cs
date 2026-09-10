@@ -47,6 +47,25 @@ public sealed class VocabularyStartupTests
     }
 
     [Fact]
+    public async Task ApplyVocabularyAsync_AWrappedPort_ReadsTheVocabularyThroughTheWrapper()
+    {
+        // The wrapper does not read facets itself, so a cast to IFacetVocabularyPort answers false
+        // on it and the vocabulary would be refused. Asking the port instead reaches the store
+        // inside, which is what lets a cache or a log sit in front of a store without silently
+        // costing the document a feature.
+        var configuration = Configuration([("brand", Vocabulary(maxValues: 10))]);
+        var inner = new FakeFacetPort().With("facets.brand", "acme", "globex");
+        ForwardingPort wrapper = new(inner);
+        VocabularyCache cache = new();
+
+        await KnowledgeStartup.ApplyVocabularyAsync(
+            configuration, wrapper, cache, NullLogger.Instance, TestContext.Current.CancellationToken,
+            composesUnicode: () => true);
+
+        Assert.Equal(["acme", "globex"], cache.Snapshot()["brand"].Originals);
+    }
+
+    [Fact]
     public async Task ApplyVocabularyAsync_ZeroValues_FailsNamingTheSlotAndPath()
     {
         var configuration = Configuration([("brand", Vocabulary(maxValues: 10))]);
@@ -405,6 +424,23 @@ public sealed class VocabularyStartupTests
         public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
             string query, CancellationToken cancellationToken = default)
             => ValueTask.FromResult<IReadOnlyList<KnowledgeCard>>([]);
+    }
+
+    /// <summary>A port wrapped in another, as a cache or a log would wrap one.</summary>
+    private sealed class ForwardingPort(IKnowledgeRetrievalPort inner) : IKnowledgeRetrievalPort
+    {
+        public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
+            string query, CancellationToken cancellationToken = default)
+            => inner.SearchAsync(query, cancellationToken);
+
+        public object? GetService(Type serviceType, object? serviceKey = null)
+        {
+            ArgumentNullException.ThrowIfNull(serviceType);
+
+            return serviceKey is null && serviceType.IsInstanceOfType(this)
+                ? this
+                : inner.GetService(serviceType, serviceKey);
+        }
     }
 
     /// <summary>Stands in for a port <c>options.UseKnowledgeRetrieval</c> named, with no facet read.</summary>

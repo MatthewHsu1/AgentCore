@@ -105,7 +105,7 @@ internal static class KnowledgeStartup
             return;
         }
 
-        if (knowledge is not IFacetVocabularyPort port)
+        if (knowledge?.GetService<IFacetVocabularyPort>() is not { } port)
         {
             if (vocabularySlots.Count == 0)
             {
@@ -118,7 +118,7 @@ internal static class KnowledgeStartup
 
             var reason = knowledge is null
                 ? "no knowledge port was built, so there is nothing to read a facet vocabulary from"
-                : $"the built port ({knowledge.GetType().Name}) does not implement {nameof(IFacetVocabularyPort)}";
+                : $"the built port ({knowledge.GetType().Name}) does not serve {nameof(IFacetVocabularyPort)}";
 
             throw FailSlots(
                 vocabularySlots.Select(entry => entry.Key),

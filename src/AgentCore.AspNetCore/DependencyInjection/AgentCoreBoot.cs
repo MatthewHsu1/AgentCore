@@ -331,7 +331,7 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
         VocabularyCache vocabulary,
         CancellationToken cancellationToken)
     {
-        if (knowledge is not IFacetVocabularyPort port)
+        if (knowledge?.GetService<IFacetVocabularyPort>() is not { } port)
         {
             return;
         }
