@@ -4,7 +4,6 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
-using AgentCore.Application.State;
 using AgentCore.Application.Tests.Knowledge.Fakes;
 using AgentCore.Domain.Knowledge;
 using AgentCore.TestSupport;
@@ -132,34 +131,6 @@ public sealed class FacetFilterTests
     }
 
     [Fact]
-    public async Task Filters_AValueTheVocabularyHolds_ReachesTheStoreAsTheStoredForm()
-    {
-        VocabularyCache vocabulary = new();
-        vocabulary.Replace("model", ["lcr-2023", "lcr-2019"], maxValues: 100);
-
-        StubKnowledgePort port = new([Card("a")]);
-        var tool = await SearchToolAsync(port, Declared, vocabulary);
-
-        await CallAsync(tool, "what belt fits it?", ("model", "LCR 2023"));
-
-        Assert.Equal("lcr-2023", port.ScopeAtTheStore!.Facets["model"]);
-    }
-
-    [Fact]
-    public async Task Filters_AValueTheVocabularyDoesNotHold_IsDropped()
-    {
-        VocabularyCache vocabulary = new();
-        vocabulary.Replace("model", ["lcr-2023", "lcr-2019"], maxValues: 100);
-
-        StubKnowledgePort port = new([Card("a")]);
-        var tool = await SearchToolAsync(port, Declared, vocabulary);
-
-        await CallAsync(tool, "what belt fits it?", ("model", "f63-2026"));
-
-        Assert.Empty(port.ScopeAtTheStore!.Facets);
-    }
-
-    [Fact]
     public async Task Filters_AreNamedInTheRecordAnOperatorDebugsFrom()
     {
         // The record reads the LIVE scope ambient, so it has to be written while the search's own
@@ -182,7 +153,6 @@ public sealed class FacetFilterTests
     private static async Task<AIFunction> SearchToolAsync(
         IKnowledgeRetrievalPort port,
         KnowledgeScopeConfiguration? scope,
-        VocabularyCache? vocabulary = null,
         ILoggerFactory? loggers = null)
     {
         var provider = KnowledgeProviderFactory.Create(
@@ -191,8 +161,7 @@ public sealed class FacetFilterTests
             "agent-under-test",
             new SourceLocatorCitationFormatter(),
             loggers,
-            scope,
-            vocabulary);
+            scope);
 
 #pragma warning disable MAAI001 // The context constructors are the framework's own experimental surface.
         var context = await provider.InvokingAsync(

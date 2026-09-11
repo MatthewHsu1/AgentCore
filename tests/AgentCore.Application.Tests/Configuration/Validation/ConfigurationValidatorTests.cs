@@ -370,13 +370,6 @@ public sealed class ConfigurationValidatorTests
         EnumValues = [JsonValue.Create("f63")!],
     };
 
-    private static StateSlotConfiguration VocabSlot(SlotVocabularyConfiguration? vocabulary = null) => new()
-    {
-        Type = StateSlotType.String,
-        Writer = StateWriter.Extractor,
-        Vocabulary = vocabulary ?? new SlotVocabularyConfiguration { From = "knowledge" },
-    };
-
     private static KnowledgeAmbiguityConfiguration AnAmbiguity() => new();
 
     private static readonly KnowledgeWildcardConfiguration Star =
@@ -393,19 +386,6 @@ public sealed class ConfigurationValidatorTests
             ["applies_to"],
             Star,
             new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = FacetSlot() },
-            AnExtractor(),
-            ambiguity,
-            mapper);
-
-    /// <summary><see cref="OneFacetScope"/> with a vocabulary slot in place of the facet slot.</summary>
-    private static AgentCoreConfiguration OneVocabularyScope(
-        StateSlotConfiguration slot,
-        KnowledgeAmbiguityConfiguration? ambiguity = null,
-        string? mapper = null) =>
-        Scoped(
-            ["applies_to"],
-            Star,
-            new Dictionary<string, StateSlotConfiguration> { ["applies_to"] = slot },
             AnExtractor(),
             ambiguity,
             mapper);
@@ -600,121 +580,15 @@ public sealed class ConfigurationValidatorTests
         Assert.Single(result.Errors, e => e.Pointer == "/providers/knowledge/scope/wildcard/facets");
     }
 
-    [Fact]
-    public void Evaluate_FacetSlotDeclaresVocabularyInsteadOfEnum_PassesTheEnumRow()
-    {
-        var slot = FacetSlot() with { EnumValues = null, Vocabulary = new SlotVocabularyConfiguration { From = "knowledge" } };
-
-        var result = ConfigurationValidator.EvaluateStructure(OneVocabularyScope(slot, AnAmbiguity()));
-
-        Assert.Empty(result.Errors);
-    }
-
     // ---------------------------------------------------------------------------------------------
-    // Check 2, vocabulary and ambiguity: section 10 of the ambiguity-and-vocabulary design.
+    // Check 2, ambiguity: section 10 of the ambiguity design.
     //
     // Every fixture below keeps fromState and wildcard.facets in lockstep (both naming exactly the
-    // facets the test declares slots for) so the row-8 and enum-or-vocabulary checks stay silent,
-    // and sets ambiguity: and wildcard: wherever their absence would otherwise trip rows 5 or 6.
+    // facets the test declares slots for) so the row-8 and enum checks stay silent, and sets
+    // ambiguity: and wildcard: wherever their absence would otherwise trip rows 5 or 6.
     // Each refusal test asserts the *total* error count, not just a filtered pointer match, so a
     // fixture that quietly grows a second error cannot hide behind the assertion.
     // ---------------------------------------------------------------------------------------------
-    [Fact]
-    public void Evaluate_SlotDeclaresBothEnumAndVocabulary_Fails()
-    {
-        var slot = VocabSlot() with { EnumValues = [JsonValue.Create("f63")!] };
-
-        var result = ConfigurationValidator.EvaluateStructure(OneVocabularyScope(slot, AnAmbiguity()));
-
-        var error = Assert.Single(result.Errors);
-        Assert.Equal("/state/applies_to/vocabulary", error.Pointer);
-        Assert.Contains("applies_to", error.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Evaluate_SlotDeclaresBothValueAndVocabulary_Fails()
-    {
-        var slot = VocabSlot() with { Writer = StateWriter.Const, Value = JsonValue.Create("f63") };
-        var wildcard = new KnowledgeWildcardConfiguration { Value = "*", Facets = ["brand"] };
-
-        var result = ConfigurationValidator.EvaluateStructure(
-            Scoped(
-                ["brand"],
-                wildcard,
-                new Dictionary<string, StateSlotConfiguration>
-                {
-                    ["applies_to"] = slot,
-                    ["brand"] = FacetSlot(),
-                },
-                AnExtractor(),
-                ambiguity: AnAmbiguity()));
-
-        var error = Assert.Single(result.Errors);
-        Assert.Equal("/state/applies_to/value", error.Pointer);
-    }
-
-    /// <summary>
-    /// A slot may take its domain from the knowledge base and never be scoped by.
-    /// </summary>
-    /// <remarks>
-    /// The gate still holds the extractor to values the provider published, and the linker still
-    /// folds a mention onto one of them. A host may also read the domain for itself — requiring a
-    /// knowledge search to carry a product name the manuals use, say — which needs the vocabulary
-    /// and would be actively harmed by narrowing every search to it.
-    /// </remarks>
-    [Fact]
-    public void Evaluate_VocabularySlotAbsentFromFromState_Passes()
-    {
-        var wildcard = new KnowledgeWildcardConfiguration { Value = "*", Facets = ["brand"] };
-
-        var result = ConfigurationValidator.EvaluateStructure(
-            Scoped(
-                ["brand"],
-                wildcard,
-                new Dictionary<string, StateSlotConfiguration>
-                {
-                    ["applies_to"] = VocabSlot(),
-                    ["brand"] = FacetSlot(),
-                },
-                AnExtractor(),
-                ambiguity: AnAmbiguity()));
-
-        Assert.Empty(result.Errors);
-    }
-
-    [Fact]
-    public void Evaluate_VocabularyMaxValuesBelowTwo_Fails()
-    {
-        var slot = VocabSlot(new SlotVocabularyConfiguration { From = "knowledge", MaxValues = 1 });
-
-        var result = ConfigurationValidator.EvaluateStructure(OneVocabularyScope(slot, AnAmbiguity()));
-
-        var error = Assert.Single(result.Errors);
-        Assert.Equal("/state/applies_to/vocabulary/maxValues", error.Pointer);
-        Assert.Contains("applies_to", error.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Evaluate_VocabularyRefreshSecondsNegative_Fails()
-    {
-        var slot = VocabSlot(new SlotVocabularyConfiguration { From = "knowledge", RefreshSeconds = -5 });
-
-        var result = ConfigurationValidator.EvaluateStructure(OneVocabularyScope(slot, AnAmbiguity()));
-
-        var error = Assert.Single(result.Errors);
-        Assert.Equal("/state/applies_to/vocabulary/refreshSeconds", error.Pointer);
-        Assert.Contains("applies_to", error.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Evaluate_VocabularyWithNoAmbiguity_Fails()
-    {
-        var result = ConfigurationValidator.EvaluateStructure(OneVocabularyScope(VocabSlot()));
-
-        var error = Assert.Single(result.Errors);
-        Assert.Equal("/providers/knowledge/ambiguity", error.Pointer);
-    }
-
     [Fact]
     public void Evaluate_AmbiguityWithNoWildcard_Fails()
     {
@@ -781,20 +655,9 @@ public sealed class ConfigurationValidatorTests
     }
 
     [Fact]
-    public void Evaluate_VocabularyWithCustomMapper_Fails()
+    public void Evaluate_AmbiguityWithCustomMapper_Fails()
     {
-        var result = ConfigurationValidator.EvaluateStructure(
-            OneVocabularyScope(VocabSlot(), AnAmbiguity(), mapper: "custom-mapper"));
-
-        var error = Assert.Single(result.Errors);
-        Assert.Equal("/providers/knowledge/mapper", error.Pointer);
-    }
-
-    [Fact]
-    public void Evaluate_AmbiguityWithCustomMapperAndNoVocabulary_Fails()
-    {
-        // The probe reads Extras, and nothing about vocabulary puts it there. A document that declares
-        // ambiguity without vocabulary must still be refused a mapper that leaves Extras empty.
+        // The probe reads Extras, which only the built-in field mapper fills.
         var result = ConfigurationValidator.EvaluateStructure(
             TwoFacetScope(AnAmbiguity(), mapper: "custom-mapper"));
 
@@ -824,19 +687,6 @@ public sealed class ConfigurationValidatorTests
 
         var error = Assert.Single(result.Errors);
         Assert.Equal("/providers/knowledge/ambiguity/probeWaitMarginSeconds", error.Pointer);
-    }
-
-    [Fact]
-    public void Evaluate_VocabularyRefreshSecondsAboveTheTimerCeiling_Fails()
-    {
-        // PeriodicTimer throws above uint.MaxValue - 1 milliseconds, inside BootAsync.
-        var slot = VocabSlot(new SlotVocabularyConfiguration { From = "knowledge", RefreshSeconds = 86_400_000 });
-
-        var result = ConfigurationValidator.EvaluateStructure(OneVocabularyScope(slot, AnAmbiguity()));
-
-        var error = Assert.Single(result.Errors);
-        Assert.Equal("/state/applies_to/vocabulary/refreshSeconds", error.Pointer);
-        Assert.Equal(ConfigurationCheck.ValueRange, error.Check);
     }
 
     [Fact]
@@ -897,11 +747,10 @@ public sealed class ConfigurationValidatorTests
     }
 
     [Fact]
-    public void Evaluate_NoVocabularyAndNoAmbiguity_BindsNullAndAddsNothing()
+    public void Evaluate_NoAmbiguity_BindsNullAndAddsNothing()
     {
         var configuration = ConfigurationLoader.LoadYaml(ExampleDocument.Yaml);
 
-        Assert.All(configuration.State.Values, slot => Assert.Null(slot.Vocabulary));
         Assert.Null(configuration.Providers?.Knowledge?.Ambiguity);
 
         var result = ConfigurationValidator.Evaluate(configuration);
@@ -1607,51 +1456,6 @@ public sealed class ConfigurationValidatorTests
         var servedToolIds = new HashSet<string>(StringComparer.Ordinal) { "jira.create_issue" };
 
         var exception = Record.Exception(() => ConfigurationValidator.ValidateToolReferences(configuration, servedToolIds));
-
-        Assert.Null(exception);
-    }
-
-    [Fact]
-    public void ValidateLinkerNames_ANameNothingRegistered_FailsNamingItAndThePointer()
-    {
-        const string document = $$"""
-            apiVersion: agentcore/v1
-            name: broken-linker
-            state:
-              applies_to: { type: string, writer: extractor, vocabulary: { from: knowledge, linker: bogus } }
-            {{SpeechOnlyProviders}}
-            """;
-
-        var configuration = ConfigurationLoader.LoadYaml(document);
-        var registered = new HashSet<string>(["exact"], StringComparer.Ordinal);
-
-        var failure = Assert.Throws<ConfigurationLoadException>(
-            () => ConfigurationValidator.ValidateLinkerNames(configuration, registered));
-
-        var error = Assert.Single(failure.Errors);
-        Assert.Equal("/state/applies_to/vocabulary/linker", error.Pointer);
-        Assert.Equal(
-            "the slot 'applies_to' declares vocabulary.linker: 'bogus', which nothing registered. "
-            + "Register it with UseStateValueLinkers, or use 'exact'.",
-            error.Message);
-        Assert.Equal(ConfigurationCheck.ReferenceResolution, error.Check);
-    }
-
-    [Fact]
-    public void ValidateLinkerNames_ARegisteredName_DoesNotThrow()
-    {
-        const string document = $$"""
-            apiVersion: agentcore/v1
-            name: fine-linker
-            state:
-              applies_to: { type: string, writer: extractor, vocabulary: { from: knowledge, linker: exact } }
-            {{SpeechOnlyProviders}}
-            """;
-
-        var configuration = ConfigurationLoader.LoadYaml(document);
-        var registered = new HashSet<string>(["exact"], StringComparer.Ordinal);
-
-        var exception = Record.Exception(() => ConfigurationValidator.ValidateLinkerNames(configuration, registered));
 
         Assert.Null(exception);
     }

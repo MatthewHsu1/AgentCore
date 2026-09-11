@@ -210,8 +210,7 @@ public sealed record KnowledgeProviderConfiguration
 
 /// <summary>
 /// How the knowledge search asks the caller which machine they meant, when the scope narrows to more
-/// than one and the search itself came back empty. See section 4 of the ambiguity-and-vocabulary
-/// design.
+/// than one and the search itself came back empty. See section 4 of the ambiguity design.
 /// </summary>
 public sealed record KnowledgeAmbiguityConfiguration
 {
@@ -231,8 +230,8 @@ public sealed record KnowledgeAmbiguityConfiguration
     public int MaxCandidates { get; init; } = DefaultMaxCandidates;
 
     /// <summary>
-    /// Gets the cap on each of a slot's two ask counters. <c>0</c> means never ask: the vocabulary
-    /// and the gate still work.
+    /// Gets the cap on each of a slot's two ask counters. <c>0</c> means never ask: the gate still
+    /// works.
     /// </summary>
     public int MaxAsks { get; init; } = DefaultMaxAsks;
 

@@ -198,43 +198,6 @@
         },
         "value": {
           "description": "writer: const. The fixed value of the slot."
-        },
-        "vocabulary": {
-          "type": "object",
-          "description": "Declares that this slot's domain is read from a provider at boot, rather than hand-written as enum:. Absent by default.",
-          "additionalProperties": false,
-          "required": [
-            "from"
-          ],
-          "properties": {
-            "from": {
-              "enum": [
-                "knowledge"
-              ],
-              "description": "The provider to read the domain from. knowledge is the only member."
-            },
-            "linker": {
-              "type": "string",
-              "minLength": 1,
-              "default": "exact",
-              "description": "The IStateValueLinker name. Only exact ships."
-            },
-            "refreshSeconds": {
-              "type": "integer",
-              "default": 0,
-              "description": "How often the domain is re-read. 0 means boot only."
-            },
-            "maxValues": {
-              "type": "integer",
-              "default": 2000,
-              "description": "The limit passed to the facet read. A read returning exactly this many fails startup: it cannot be told from a truncation."
-            },
-            "assumeNormalized": {
-              "type": "boolean",
-              "default": false,
-              "description": "Declares that every id in the collection, and every mention the extractor emits, is already NFC. Lifts the refusal on a runtime that cannot compose Unicode."
-            }
-          }
         }
       },
       "allOf": [
@@ -1281,7 +1244,7 @@
             "maxAsks": {
               "type": "integer",
               "default": 2,
-              "description": "The cap on each of a slot's two ask counters. 0 means never ask: the vocabulary and the gate still work."
+              "description": "The cap on each of a slot's two ask counters. 0 means never ask: the gate still works."
             },
             "probeDeadlineSeconds": {
               "type": "integer",

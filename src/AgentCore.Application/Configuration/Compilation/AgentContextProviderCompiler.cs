@@ -103,8 +103,7 @@ internal static class AgentContextProviderCompiler
             item.Id,
             context.Citations ?? DefaultCitations,
             context.Loggers,
-            scope,
-            context.Vocabulary));
+            scope));
 
         return providers;
     }

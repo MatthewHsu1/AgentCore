@@ -1,7 +1,6 @@
 using System.Text.Json;
 
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.State;
 
 using Microsoft.Extensions.AI;
 
@@ -14,26 +13,21 @@ internal sealed class FacetFilteredSearch : DelegatingAIFunction
 {
     private readonly IReadOnlyList<KnowledgeFilterableFacetConfiguration> _facets;
 
-    private readonly VocabularyCache? _vocabulary;
-    
     private readonly JsonElement _schema;
 
     /// <summary>Wraps one search function.</summary>
     /// <param name="innerFunction">The function the framework built.</param>
     /// <param name="facets">What <c>scope.filterable</c> declared, in document order.</param>
-    /// <param name="vocabulary">The cache a declared facet's values are linked through, or <see langword="null"/>.</param>
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
     internal FacetFilteredSearch(
         AIFunction innerFunction,
-        IReadOnlyList<KnowledgeFilterableFacetConfiguration> facets,
-        VocabularyCache? vocabulary)
+        IReadOnlyList<KnowledgeFilterableFacetConfiguration> facets)
         : base(innerFunction)
     {
         ArgumentNullException.ThrowIfNull(innerFunction);
         ArgumentNullException.ThrowIfNull(facets);
 
         _facets = facets;
-        _vocabulary = vocabulary;
         _schema = FacetFilterSchema.Extend(innerFunction.JsonSchema, facets);
     }
 
@@ -46,7 +40,7 @@ internal sealed class FacetFilteredSearch : DelegatingAIFunction
     {
         ArgumentNullException.ThrowIfNull(arguments);
 
-        var named = FacetFilterReader.Read(arguments, _facets, _vocabulary);
+        var named = FacetFilterReader.Read(arguments, _facets);
 
         using var scope = named.Count > 0 ? ToolFacetScope.Open(named) : null;
 

@@ -24,11 +24,11 @@ internal static class SpokenAsk
             return true;
         }
 
-        var folded = VocabularyFold.Fold(reply);
+        var folded = TextFold.Fold(reply);
 
         foreach (var value in values)
         {
-            var candidate = VocabularyFold.Fold(value);
+            var candidate = TextFold.Fold(value);
 
             if (candidate.Length > 0 && folded.Contains(candidate, StringComparison.Ordinal))
             {

@@ -35,10 +35,6 @@ internal static class KnowledgeProviderFactory
     /// ambient carries down here.
     /// </param>
     /// <param name="scope">The document's <c>providers.knowledge.scope</c> block, or <see langword="null"/>.</param>
-    /// <param name="vocabulary">
-    /// The cache a filterable facet's values are linked through, or <see langword="null"/> when the
-    /// host built none. Without it a filter value is matched exactly as the model wrote it.
-    /// </param>
     /// <returns>The provider to hang on that agent.</returns>
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
     internal static AIContextProvider Create(
@@ -47,8 +43,7 @@ internal static class KnowledgeProviderFactory
         string agent,
         IKnowledgeCitationFormatter citations,
         ILoggerFactory? loggers,
-        KnowledgeScopeConfiguration? scope = null,
-        VocabularyCache? vocabulary = null)
+        KnowledgeScopeConfiguration? scope = null)
     {
         ArgumentNullException.ThrowIfNull(port);
         ArgumentNullException.ThrowIfNull(knowledge);
@@ -73,7 +68,7 @@ internal static class KnowledgeProviderFactory
         AIContextProvider provider = new TextSearchProvider(SearchAsync, options, loggers);
 
         return knowledge.Mode == KnowledgeMode.Tool && scope?.Filterable is { Count: > 0 } filterable
-            ? new FacetFilterProvider(provider, filterable, vocabulary)
+            ? new FacetFilterProvider(provider, filterable)
             : provider;
 
         async Task<IEnumerable<TextSearchProvider.TextSearchResult>> SearchAsync(

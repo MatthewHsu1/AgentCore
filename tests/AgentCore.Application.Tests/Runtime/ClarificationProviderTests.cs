@@ -31,7 +31,7 @@ public sealed class ClarificationProviderTests
         apiVersion: agentcore/v1
         name: clarification-wiring
         state:
-          applies_to: { type: string, writer: extractor, description: "The model, as printed on the machine.", vocabulary: { from: knowledge } }
+          applies_to: { type: string, writer: extractor, description: "The model, as printed on the machine.", enum: [ct900, ct900ent] }
         extractor:
           model: { ref: fill }
           when: after_reply
@@ -146,7 +146,7 @@ public sealed class ClarificationProviderTests
     [Fact]
     public async Task MaxAsksZero_InjectsNothing_EvenWithAPendingSlot()
     {
-        // K38's gate-only mode: the vocabulary and the gate still work, but the channel never speaks.
+        // K38's gate-only mode: the gate still works, but the channel never speaks.
         StubSession session = new();
         var clarifications = new Clarifications();
         clarifications.Update("applies_to", s => s.Pending = ["ct900", "ct900ent"]);

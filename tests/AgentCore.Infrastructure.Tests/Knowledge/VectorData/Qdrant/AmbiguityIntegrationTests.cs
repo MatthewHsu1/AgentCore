@@ -6,7 +6,6 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
-using AgentCore.Application.State;
 using AgentCore.Domain.Knowledge;
 using AgentCore.Infrastructure.Knowledge.VectorData.Qdrant;
 using AgentCore.Infrastructure.Tests.Fakes;
@@ -21,9 +20,7 @@ using Xunit;
 namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant;
 
 /// <summary>
-/// Section 12's "Vocabulary and probe -- against real Qdrant" list, and the Task A7 debt: a live
-/// <see cref="CallSession"/> turn proving the boot-filled <see cref="VocabularyCache"/> reaches the
-/// extractor's gate, not just a hand-seeded one.
+/// Section 12's "probe -- against real Qdrant" list.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -50,8 +47,7 @@ namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant;
 /// the row that needs exactly one card (the two-machine card) combines a distinctive token with a
 /// store <c>Limit</c> of 1, so only the fused winner survives. Every row that needs a card population
 /// this shared fixture must not carry for every other row -- the company-wide card, the one-machine
-/// multi-card union, and the empty-search row -- builds and drops its own small collection instead,
-/// the same way <see cref="FacetVocabularyTests"/>'s wildcard fact does.
+/// multi-card union, and the empty-search row -- builds and drops its own small collection instead.
 /// </para>
 /// </remarks>
 public sealed class AmbiguityCorpusFixture : IAsyncLifetime
@@ -202,7 +198,7 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
             type: string
             writer: extractor
             description: "The model, as printed on the machine."
-            vocabulary: { from: knowledge }
+            enum: [ct900, ctsbs900, ct900ent]
           audience:
             type: string
             writer: const
@@ -239,7 +235,7 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
           model:
             type: string
             writer: extractor
-            vocabulary: { from: knowledge }
+            enum: [ct900, ctsbs900, ct900ent]
         extractor:
           model: { ref: fill }
         providers:
@@ -270,36 +266,6 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
         agents:
           items:
             - { id: only, instructions: "answer the caller", knowledge: { mode: tool, scoped: false } }
-        """;
-
-    /// <summary>No ambiguity, no wildcard: a plain <c>vocabulary:</c> slot the extractor writes and the gate checks.</summary>
-    private const string VocabularyOnlyYaml =
-        """
-        apiVersion: agentcore/v1
-        name: vocabulary-cache-reaches-extractor
-        state:
-          model:
-            type: string
-            writer: extractor
-            description: "The model, as printed on the machine."
-            vocabulary: { from: knowledge }
-        extractor:
-          model: { ref: fill }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          knowledge:
-            kind: qdrant
-            collection: kb
-            fields: { body: text }
-            scope:
-              template: "facets.{key}"
-        agents:
-          items:
-            - id: only
-              instructions: "answer the caller"
         """;
 
     private readonly AmbiguityCorpusFixture _corpus;
@@ -448,40 +414,6 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
         Assert.All(named.Results, r => Assert.Equal(NoticeSourceName, r.SourceName));
     }
 
-    /// <summary>A facet read against a collection with <c>maxValues</c> values fails startup.</summary>
-    [QdrantFact]
-    public async Task FacetRead_AgainstACollectionWithMaxValuesValues_FailsStartup()
-    {
-        // This is the exact call sequence KnowledgeStartup.ApplyVocabularyAsync runs for one slot
-        // (port.ReadAsync then VocabularyCache.Replace with the same limit) -- KnowledgeStartup itself
-        // is internal to AgentCore.AspNetCore, a project this one does not reference.
-        var port = BuildStore();
-        var values = await port.ReadAsync("facets.model", limit: 3, TestContext.Current.CancellationToken);
-
-        Assert.Equal(3, values.Count);
-
-        var vocabulary = new VocabularyCache();
-        var failure = Assert.Throws<VocabularyException>(() => vocabulary.Replace("model", values, maxValues: 3));
-        Assert.Equal("model", failure.Slot);
-    }
-
-    /// <summary>A facet read against a path with no keyword index fails startup.</summary>
-    [QdrantFact]
-    public async Task FacetRead_AgainstAPathWithNoKeywordIndex_FailsStartup()
-    {
-        var port = BuildStore();
-
-        // "body" carries no payload index at all in this corpus -- the same uncaught exception
-        // ApplyVocabularyAsync would let propagate straight out of a boot it never wraps in a try.
-        var failure = await Assert.ThrowsAsync<RpcException>(
-            async () => await port.ReadAsync("body", 100, TestContext.Current.CancellationToken));
-
-        Assert.Equal(StatusCode.InvalidArgument, failure.StatusCode);
-        // §10 requires the exception to name the offending path -- the only part of this row a real
-        // Qdrant response actually decides, as opposed to the fact of throwing at all.
-        Assert.Contains("body", failure.Message, StringComparison.Ordinal);
-    }
-
     /// <summary>A single-facet <c>fromState</c> deployment does not throw: the probe is skipped and the turn returns "holds nothing" (K33).</summary>
     [QdrantFact]
     public async Task SingleFacetFromStateDeployment_DoesNotThrow_ProbeIsSkipped_HoldsNothing()
@@ -552,78 +484,8 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
     }
 
     // -----------------------------------------------------------------------------------------
-    // The Task A7 debt: a live turn proving the boot-filled vocabulary cache reaches the extractor.
-    // -----------------------------------------------------------------------------------------
-
-    /// <summary>
-    /// A value read live from the real collection's own facet -- never hand-seeded -- reaches the
-    /// extractor's gate and links. Task A7 proved the cache reaches <c>CallSessionFactory</c> only by
-    /// code review, a construction smoke test and a shared-instance proof in the refresh test; this is
-    /// the first place a value that could only have come from that boot read is actually linked.
-    /// </summary>
-    [QdrantFact]
-    public async Task LiveTurn_BootFilledVocabularyCache_LinksAReallyReadValue()
-    {
-        var vocabulary = await SeedVocabularyFromRealQdrantAsync();
-
-        RoutingChatClientFactory chatClients = new(new FixedTextChatClient("okay."));
-        chatClients.Route("fill", new FixedTextChatClient("""{"model":"ct900ent"}"""));
-
-        var compiled = ConfigurationCompiler.Compile(
-            ConfigurationLoader.LoadYaml(VocabularyOnlyYaml),
-            new AgentCompilationContext(chatClients) { Knowledge = BuildStore() });
-
-        var extractor = CallSessionFactory.CreateExtractor(compiled, chatClients);
-        var session = new CallSessionFactory(
-            compiled, new GuardEvaluator(compiled.Configuration.Guards), extractor, vocabulary: vocabulary)
-            .Create("call-a7-live-extractor-positive");
-
-        await session.RunTurnAsync("I have a CT900ENT", TestContext.Current.CancellationToken);
-
-        // "ct900ent" is not a value this test wrote anywhere -- it is the corpus's own spelling, read
-        // back from Qdrant into `vocabulary` a few lines above and nowhere else in this method.
-        Assert.Equal("ct900ent", session.State.Read("model")?.GetValue<string>());
-    }
-
-    /// <summary>
-    /// The gate's other half: a value the same real read never produced is refused, proving the accept
-    /// above is really checking the boot-filled cache and not simply accepting any string.
-    /// </summary>
-    [QdrantFact]
-    public async Task LiveTurn_AValueTheBootReadNeverProduced_IsRefused()
-    {
-        var vocabulary = await SeedVocabularyFromRealQdrantAsync();
-
-        RoutingChatClientFactory chatClients = new(new FixedTextChatClient("okay."));
-        chatClients.Route("fill", new FixedTextChatClient("""{"model":"xt385"}"""));
-
-        var compiled = ConfigurationCompiler.Compile(
-            ConfigurationLoader.LoadYaml(VocabularyOnlyYaml),
-            new AgentCompilationContext(chatClients) { Knowledge = BuildStore() });
-
-        var extractor = CallSessionFactory.CreateExtractor(compiled, chatClients);
-        var session = new CallSessionFactory(
-            compiled, new GuardEvaluator(compiled.Configuration.Guards), extractor, vocabulary: vocabulary)
-            .Create("call-a7-live-extractor-negative");
-
-        await session.RunTurnAsync("I have an XT385", TestContext.Current.CancellationToken);
-
-        Assert.Null(session.State.Read("model"));
-    }
-
-    // -----------------------------------------------------------------------------------------
     // Helpers.
     // -----------------------------------------------------------------------------------------
-
-    private async Task<VocabularyCache> SeedVocabularyFromRealQdrantAsync()
-    {
-        var port = BuildStore();
-        var values = await port.ReadAsync("facets.model", limit: 2000, TestContext.Current.CancellationToken);
-
-        var vocabulary = new VocabularyCache();
-        vocabulary.Replace("model", values, maxValues: 2000, wildcardValue: "*");
-        return vocabulary;
-    }
 
     private async Task<SearchCapturingChatClient> RunAsync(
         string yaml,
@@ -648,7 +510,7 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
 
         var extractor = CallSessionFactory.CreateExtractor(compiled, chatClients);
         var session = new CallSessionFactory(
-            compiled, new GuardEvaluator(compiled.Configuration.Guards), extractor, vocabulary: new VocabularyCache())
+            compiled, new GuardEvaluator(compiled.Configuration.Guards), extractor)
             .Create($"call-{Guid.NewGuid():N}");
 
         await session.RunTurnAsync(callerQuestion, TestContext.Current.CancellationToken);
@@ -688,9 +550,8 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
     /// calling this -- never the reverse. Collection creation, every index, and the upsert can each
     /// throw against a live, sometimes-contended server, and if that happened inside an un-tried
     /// helper the collection this call already created on the server would be orphaned with nothing
-    /// left to drop it. Matches <see cref="FacetVocabularyTests.ReadAsync_WildcardValueComesBackAsAnOrdinaryValue"/>'s
-    /// own shape: creation, indexing and upsert all inside one <c>try</c>, one unconditional
-    /// <c>DeleteCollectionAsync</c> in the caller's own <c>finally</c>.
+    /// left to drop it. Creation, indexing and upsert all sit inside one <c>try</c>, with one
+    /// unconditional <c>DeleteCollectionAsync</c> in the caller's own <c>finally</c>.
     /// </remarks>
     private async Task<QdrantKnowledgeStore> FillAdHocCollectionAsync(
         string collection, PointStruct[] points, bool scoped)

@@ -98,8 +98,6 @@ public sealed class CallSession : IConversationPort
 
     private readonly Clarifications _clarifications = new();
 
-    private readonly IReadOnlyDictionary<string, VocabularyView> _vocabulary;
-
     // Whether the running turn has already handed the host something to speak. One rule for both
     // run shapes: a run that has handed the host nothing cannot be the turn the caller was hearing,
     // so a barge-in in that window belongs to the turn that finished before it. A streaming turn
@@ -124,8 +122,7 @@ public sealed class CallSession : IConversationPort
         StateExtractor? extractor,
         TimeProvider timeProvider,
         CallObserverDispatcher? observers = null,
-        ILogger? logger = null,
-        VocabularyCache? vocabulary = null)
+        ILogger? logger = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(callId);
         ArgumentNullException.ThrowIfNull(compiled);
@@ -158,11 +155,7 @@ public sealed class CallSession : IConversationPort
         // read that way, and neither of them ever ends a call by itself.
         _policy = compiled.Configuration.Policy is null ? null : compiled.CreatePolicy(guards);
 
-        // Sampled once, here, and handed to both the gate and the linker (K40): a refresh landing
-        // mid-call must not let the two sides of one write disagree about what the vocabulary was.
-        _vocabulary = vocabulary?.Snapshot() ?? new Dictionary<string, VocabularyView>(StringComparer.Ordinal);
-
-        State = new StateDocument(compiled.Configuration, _policy?.Stage, _vocabulary);
+        State = new StateDocument(compiled.Configuration, _policy?.Stage);
 
         // The writers run in a fixed order, and this is its only record: const slots land before
         // any turn, then each turn applies tool results, the extractor, the clock fields and the
@@ -669,9 +662,8 @@ public sealed class CallSession : IConversationPort
             }
 
             // TryWrite answers false for two kinds of reason that cost an operator different things
-            // to fix — a slot the document no longer declares, and a value its type, enum: or
-            // vocabulary: gate now refuses — so the reason says which one happened rather than
-            // making them guess.
+            // to fix — a slot the document no longer declares, and a value its type or enum: gate
+            // now refuses — so the reason says which one happened rather than making them guess.
             Dropped(
                 State.Configuration.State.ContainsKey(slot.Key)
                     ? $"the slot '{slot.Key}' no longer takes the value it was stored with."

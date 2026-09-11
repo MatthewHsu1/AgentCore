@@ -8,7 +8,6 @@ using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Secrets;
-using AgentCore.Application.State;
 using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Tools.Registry;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
@@ -82,9 +81,6 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
     /// <summary>Gets the factory that builds one session per call.</summary>
     internal ICallSessionFactory Sessions => Started.Sessions;
 
-    /// <summary>Gets the vocabulary every call session reads, and every refresh installs into.</summary>
-    internal VocabularyCache Vocabulary => Started.Vocabulary;
-
     /// <summary>Gets the knowledge base, or <see langword="null"/> when no agent reads one.</summary>
     internal IKnowledgeRetrievalPort? Knowledge => Started.Knowledge;
 
@@ -157,10 +153,6 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
     {
         var (configuration, configurationWarnings) = ConfigurationStartup.Load(_options);
 
-        HashSet<string> registeredLinkers = new(StringComparer.Ordinal) { SlotVocabularyConfiguration.DefaultLinker };
-        registeredLinkers.UnionWith(_options.StateValueLinkers.Select(static linker => linker.Name));
-        ConfigurationValidator.ValidateLinkerNames(configuration, registeredLinkers);
-
         var telemetry = Track(await TelemetryStartup
             .StartAsync(configuration, _options, _loggers, cancellationToken)
             .ConfigureAwait(false));
@@ -193,15 +185,6 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
                 requireScope: AgentKnowledge.AllScoped(agents),
                 cancellationToken)
             .ConfigureAwait(false));
-
-        VocabularyCache vocabulary = new(_options.TimeProvider);
-
-        await KnowledgeStartup
-            .ApplyVocabularyAsync(
-                configuration, knowledge, vocabulary, _loggers.CreateLogger(typeof(KnowledgeStartup)), cancellationToken)
-            .ConfigureAwait(false);
-
-        StartVocabularyRefresh(configuration, knowledge, vocabulary, cancellationToken);
 
         var chatClients = Track(await ChatClientStartup
             .BuildAsync(_options, startup, cancellationToken)
@@ -243,14 +226,13 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
                 knowledge,
                 skills,
                 KnowledgeCitationFormatterFactory.Resolve(configuration, _options.KnowledgeCitations),
-                vocabulary,
                 _loggers)
             .ConfigureAwait(false);
 
         var seams = CallSeamStartup.Build(configuration, _options);
 
         var call = await CallSessionStartup
-            .OpenAsync(this, configuration, _options, graph, vocabulary, _loggers, cancellationToken)
+            .OpenAsync(this, configuration, _options, graph, _loggers, cancellationToken)
             .ConfigureAwait(false);
 
         _state = new BootState(
@@ -264,7 +246,6 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
             call.Sessions,
             call.Agent,
             call.Queue,
-            vocabulary,
             knowledge,
             seams.Call,
             seams.Speech,
@@ -318,65 +299,6 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
         }
     }
 
-    /// <summary>
-    /// Starts one <see cref="VocabularyRefreshService"/> per <c>vocabulary:</c> slot that declares a
-    /// <c>refreshSeconds</c> above zero. <c>0</c> means boot only (§4), so those slots start none.
-    /// </summary>
-    /// <param name="configuration">The loaded document.</param>
-    /// <param name="knowledge">The port <see cref="KnowledgeStartup.OpenAsync"/> built, or <see langword="null"/>.</param>
-    /// <param name="vocabulary">The cache every refresh installs into — the same one every call session reads.</param>
-    /// <param name="cancellationToken">Passed to each service's own <c>StartAsync</c>.</param>
-    private void StartVocabularyRefresh(
-        AgentCoreConfiguration configuration,
-        IKnowledgeRetrievalPort? knowledge,
-        VocabularyCache vocabulary,
-        CancellationToken cancellationToken)
-    {
-        if (knowledge?.GetService<IFacetVocabularyPort>() is not { } port)
-        {
-            return;
-        }
-
-        var scope = configuration.Providers?.Knowledge?.Scope;
-        if (scope is null || ScopeTemplate.Parse(scope.Template) is not { } template)
-        {
-            return;
-        }
-
-        var wildcard = scope.Wildcard;
-
-        foreach (var (slotName, slot) in configuration.State)
-        {
-            if (slot.Vocabulary is not { RefreshSeconds: > 0 } vocab)
-            {
-                continue;
-            }
-
-            var path = template.Resolve(slotName);
-
-            // Stripped for every declared wildcard, on the same reasoning as the boot read in
-            // KnowledgeStartup.ApplyVocabularyAsync: the sentinel is stored in the collection, so a
-            // refresh reads it back at any facet path, scoped or not.
-            var wildcardValue = wildcard?.Value;
-
-            var service = Track(new VocabularyRefreshService(
-                slotName,
-                path,
-                vocab.MaxValues,
-                wildcardValue,
-                vocab.RefreshSeconds,
-                port,
-                vocabulary,
-                _options.TimeProvider ?? TimeProvider.System,
-                _loggers.CreateLogger<VocabularyRefreshService>()));
-
-            // BackgroundService.StartAsync only arms the loop — it runs ExecuteAsync through
-            // Task.Run and returns immediately, so awaiting it here would not wait for a single
-            // refresh, only for the arm itself.
-            _ = service.StartAsync(cancellationToken);
-        }
-    }
-
     private static InvalidOperationException NotStarted()
         => new(
             "AgentCore has not booted: the document is loaded, and every adapter it names is opened, "
@@ -394,7 +316,6 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
         ICallSessionFactory Sessions,
         AgentCoreAgent Agent,
         QueuedAuditSink AuditQueue,
-        VocabularyCache Vocabulary,
         IKnowledgeRetrievalPort? Knowledge,
         IReadOnlyList<ICallAdapter>? CallAdapters,
         IReadOnlyList<ISpeechAdapter>? SpeechAdapters,

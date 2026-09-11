@@ -1,7 +1,6 @@
 using System.Text.Json;
 
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.State;
 
 using Microsoft.Extensions.AI;
 
@@ -12,16 +11,14 @@ namespace AgentCore.Application.Knowledge;
 /// </summary>
 internal static class FacetFilterReader
 {
-    /// <summary>Reads the argument, keeping only what the collection can match.</summary>
+    /// <summary>Reads the argument, keeping only the facets the document declared.</summary>
     /// <param name="arguments">What the model called the search tool with.</param>
     /// <param name="facets">What <c>scope.filterable</c> declared.</param>
-    /// <param name="vocabulary">The cache a declared facet's values are linked through, or <see langword="null"/>.</param>
-    /// <returns>The facet key to stored value. Empty when the argument named none, or none survived.</returns>
+    /// <returns>The facet key to value, as the model wrote it. Empty when the argument named none, or none survived.</returns>
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
     internal static IReadOnlyDictionary<string, string> Read(
         AIFunctionArguments arguments,
-        IReadOnlyList<KnowledgeFilterableFacetConfiguration> facets,
-        VocabularyCache? vocabulary)
+        IReadOnlyList<KnowledgeFilterableFacetConfiguration> facets)
     {
         ArgumentNullException.ThrowIfNull(arguments);
         ArgumentNullException.ThrowIfNull(facets);
@@ -38,8 +35,6 @@ internal static class FacetFilterReader
             return read;
         }
 
-        var views = vocabulary?.Snapshot();
-
         foreach (var entry in entries.EnumerateArray())
         {
             if (Text(entry, FacetFilterSchema.KeyProperty) is not { Length: > 0 } key
@@ -49,27 +44,10 @@ internal static class FacetFilterReader
                 continue;
             }
 
-            if (Stored(views, key, value) is { } stored)
-            {
-                read[key] = stored;
-            }
+            read[key] = value;
         }
 
         return read;
-    }
-
-    /// <summary>The stored value this mention names, or nothing when the collection holds none.</summary>
-    private static string? Stored(
-        IReadOnlyDictionary<string, VocabularyView>? views, string key, string value)
-    {
-        if (views is null || !views.TryGetValue(key, out var view))
-        {
-            return value;
-        }
-
-        return view.NormalisedToOriginal.TryGetValue(VocabularyFold.Fold(value), out var stored)
-            ? stored
-            : null;
     }
 
     /// <summary>The argument as an array, whatever shape the caller handed it in.</summary>

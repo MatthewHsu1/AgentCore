@@ -221,8 +221,8 @@ internal static class KnowledgeProbe
                 return;
             }
 
-            // K41: the probe sets a pending list only where there is none. The linker's own list is
-            // what the caller was actually answering, and a search's guess must never replace it.
+            // K41: the probe sets a pending list only where there is none. An earlier turn's list is
+            // what the caller is actually answering, and a later search's guess must never replace it.
             s.Pending ??= candidates;
 
             if (carriesHistory)

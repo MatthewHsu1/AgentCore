@@ -1,5 +1,4 @@
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.State;
 
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -11,8 +10,7 @@ namespace AgentCore.Application.Knowledge;
 /// </summary>
 internal sealed class FacetFilterProvider(
     AIContextProvider innerProvider,
-    IReadOnlyList<KnowledgeFilterableFacetConfiguration> facets,
-    VocabularyCache? vocabulary)
+    IReadOnlyList<KnowledgeFilterableFacetConfiguration> facets)
     : AIContextProvider
 {
     private readonly AIContextProvider _inner = innerProvider
@@ -50,7 +48,7 @@ internal sealed class FacetFilterProvider(
         foreach (var tool in tools)
         {
             wrapped.Add(tool is AIFunction function
-                ? new FacetFilteredSearch(function, _facets, vocabulary)
+                ? new FacetFilteredSearch(function, _facets)
                 : tool);
         }
 
