@@ -721,32 +721,6 @@ public sealed class ConfigurationValidatorTests
     }
 
     [Fact]
-    public void Evaluate_AmbiguityOnAGraphDocument_Warns()
-    {
-        var configuration = TwoFacetScope(AnAmbiguity()) with { Graph = new GraphConfiguration() };
-
-        var result = ConfigurationValidator.EvaluateStructure(configuration);
-
-        Assert.Empty(result.Errors);
-        var warning = Assert.Single(result.Warnings);
-        Assert.Equal("/providers/knowledge/ambiguity", warning.Pointer);
-    }
-
-    /// <summary>
-    /// Same two-facet base as <see cref="Evaluate_AmbiguityOnAGraphDocument_Warns"/>, minus
-    /// <c>graph:</c> — the direct control for it, and incidentally the same witness that proves
-    /// the two-facet count keeps the single-facet warning (K33) silent too.
-    /// </summary>
-    [Fact]
-    public void Evaluate_AmbiguityOnANonGraphDocument_DoesNotWarnAboutGraph()
-    {
-        var result = ConfigurationValidator.EvaluateStructure(TwoFacetScope(AnAmbiguity()));
-
-        Assert.Empty(result.Errors);
-        Assert.Empty(result.Warnings);
-    }
-
-    [Fact]
     public void Evaluate_NoAmbiguity_BindsNullAndAddsNothing()
     {
         var configuration = ConfigurationLoader.LoadYaml(ExampleDocument.Yaml);

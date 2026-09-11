@@ -208,8 +208,8 @@ public sealed class StateExtractor
     /// <param name="state">The state of one call.</param>
     /// <param name="replyText">The raw JSON the model returned.</param>
     /// <param name="clarifications">
-    /// The call's ambiguity holder (K36). A write that lands clears the slot's pending list and its
-    /// <c>lastNamed</c> record (K30); a refused write touches neither.
+    /// The call's ambiguity holder (K36). A write that lands clears the slot's <c>lastNamed</c>
+    /// record (K30); a refused write leaves it alone.
     /// </param>
     /// <returns>What the reply did to the state.</returns>
     internal StateExtractionResult Write(
@@ -275,13 +275,9 @@ public sealed class StateExtractor
         return true;
     }
 
-    /// <summary>K30: a successful write clears the slot's pending list and its lastNamed record together.</summary>
+    /// <summary>K30: a successful write clears the slot's lastNamed record.</summary>
     private static void ClearAmbiguity(Clarifications clarifications, string slot)
-        => clarifications.Update(slot, s =>
-        {
-            s.Pending = null;
-            s.LastNamed = Clarifications.LastNamed.None;
-        });
+        => clarifications.Update(slot, s => s.LastNamed = Clarifications.LastNamed.None);
 
     private static string TypeName(StateSlotType slotType) => slotType switch
     {

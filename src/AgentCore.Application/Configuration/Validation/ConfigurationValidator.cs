@@ -703,15 +703,6 @@ public static class ConfigurationValidator
                 + "facet. That deployment has no droppable facet other than its only one, so the probe "
                 + "is unreachable unless the host sets one too."));
         }
-
-        if (configuration.Graph is not null)
-        {
-            warnings.Add(Reference(
-                Pointer.Ambiguity,
-                "providers.knowledge.ambiguity is declared on a graph: document. The clarification's "
-                + "turn-context guard only passes on a session whose row carries history, which a "
-                + "graph run does not, so channel 1 is silent here."));
-        }
     }
 
     // ---------------------------------------------------------------------------------------------

@@ -4,8 +4,8 @@ using Xunit;
 namespace AgentCore.Application.Tests.Runtime;
 
 /// <summary>
-/// The sentences §7 specifies for both ambiguity channels, rendered against §4's own
-/// <c>description:</c> values so a human can read the result as English rather than a template.
+/// The probe's note (§8), rendered against §4's own <c>description:</c> values so a human can read
+/// the result as English rather than a template.
 /// </summary>
 public sealed class ClarificationTextTests
 {
@@ -14,94 +14,6 @@ public sealed class ClarificationTextTests
 
     // §4's own value, verbatim: "The brand of the caller's machine."
     private const string BrandDescription = "The brand of the caller's machine.";
-
-    [Fact]
-    public void Instruction_TwoCandidates_FirstMessage_RendersTheBaseSentence()
-    {
-        var text = ClarificationText.Instruction(
-            AppliesToDescription, ["ct900", "ct900ent"], maxCandidates: 6, first: true);
-
-        Assert.Equal(
-            "One thing is not yet known: The model, as printed on the machine. It is one of ct900 or "
-            + "ct900ent. Answer what the caller just said; where that calls for advice specific to one, ask "
-            + "the caller which first. Anything that applies to all of them is still fair game.",
-            text);
-    }
-
-    [Fact]
-    public void Instruction_ThreeCandidates_JoinsWithAnOxfordComma()
-    {
-        var text = ClarificationText.Instruction(
-            AppliesToDescription, ["ct800", "ct900", "ct900ent"], maxCandidates: 6, first: true);
-
-        Assert.Equal(
-            "One thing is not yet known: The model, as printed on the machine. It is one of ct800, ct900, "
-            + "or ct900ent. Answer what the caller just said; where that calls for advice specific to one, "
-            + "ask the caller which first. Anything that applies to all of them is still fair game.",
-            text);
-    }
-
-    [Fact]
-    public void Instruction_OneCandidate_RendersTheConfirmSentence()
-    {
-        var text = ClarificationText.Instruction(
-            AppliesToDescription, ["ct900"], maxCandidates: 6, first: true);
-
-        Assert.Equal(
-            "One thing is not yet confirmed: The model, as printed on the machine. Everything found is for "
-            + "ct900. Answer what the caller just said; where that calls for advice specific to it, ask the "
-            + "caller first whether that is what they have.",
-            text);
-    }
-
-    [Fact]
-    public void Instruction_OverMaxCandidates_OmitsTheList()
-    {
-        var text = ClarificationText.Instruction(
-            AppliesToDescription,
-            ["ct800", "ct800ent", "ct900", "ct900ent", "xt285", "xt385", "xt485"],
-            maxCandidates: 6,
-            first: true);
-
-        Assert.Equal(
-            "One thing is not yet known: The model, as printed on the machine. Answer what the caller just "
-            + "said; where that calls for advice specific to one, ask the caller first.",
-            text);
-    }
-
-    [Fact]
-    public void Instruction_SecondMessage_OpensWithAnotherThing()
-    {
-        var text = ClarificationText.Instruction(
-            BrandDescription, ["sole", "spirit"], maxCandidates: 6, first: false);
-
-        Assert.StartsWith("Another thing is not yet known: ", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("One thing is not yet known", text, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Instruction_SecondMessage_OneCandidate_OpensWithAnotherThing()
-    {
-        var text = ClarificationText.Instruction(
-            AppliesToDescription, ["ct900"], maxCandidates: 6, first: false);
-
-        Assert.StartsWith("Another thing is not yet confirmed: ", text, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Instruction_DescriptionFallsBackToTheSlotName_WhenTheCallerPassesIt()
-    {
-        // ClarificationText itself does not know about slots; the fallback to the slot name is the
-        // caller's job (ClarificationProvider). This fact only pins that the renderer treats
-        // whatever string it is given as the apposition, verbatim.
-        var text = ClarificationText.Instruction("applies_to", ["ct900", "ct900ent"], maxCandidates: 6, first: true);
-
-        Assert.Equal(
-            "One thing is not yet known: applies_to It is one of ct900 or ct900ent. Answer what the caller "
-            + "just said; where that calls for advice specific to one, ask the caller which first. Anything "
-            + "that applies to all of them is still fair game.",
-            text);
-    }
 
     [Fact]
     public void Note_TwoCandidates_JoinsWithAPlainComma_NotOr()
@@ -139,18 +51,5 @@ public sealed class ClarificationTextTests
             "One thing decides the answer here and is not yet known: The model, as printed on the machine. "
             + "Ask the caller, and do not answer from the knowledge base about it until they say.",
             text);
-    }
-
-    [Fact]
-    public void TwoOverCapSets_RenderTheIdenticalSentence()
-    {
-        // K37: two different over-maxCandidates sets say the same thing, which is what lets the
-        // sentinel record suppress the second one as a repeat rather than a new question.
-        var first = ClarificationText.Instruction(
-            AppliesToDescription, ["a", "b", "c", "d", "e", "f", "g"], maxCandidates: 6, first: true);
-        var second = ClarificationText.Instruction(
-            AppliesToDescription, ["h", "i", "j", "k", "l", "m", "n"], maxCandidates: 6, first: true);
-
-        Assert.Equal(first, second);
     }
 }

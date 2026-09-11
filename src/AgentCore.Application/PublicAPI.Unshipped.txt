@@ -62,12 +62,8 @@ AgentCore.Application.Calls.CallClarificationState
 AgentCore.Application.Calls.CallClarificationState.<Clone>$() -> AgentCore.Application.Calls.CallClarificationState!
 AgentCore.Application.Calls.CallClarificationState.CallClarificationState() -> void
 AgentCore.Application.Calls.CallClarificationState.Equals(AgentCore.Application.Calls.CallClarificationState? other) -> bool
-AgentCore.Application.Calls.CallClarificationState.NamedAsks.get -> int
-AgentCore.Application.Calls.CallClarificationState.NamedAsks.init -> void
 AgentCore.Application.Calls.CallClarificationState.ProbeAsks.get -> int
 AgentCore.Application.Calls.CallClarificationState.ProbeAsks.init -> void
-AgentCore.Application.Calls.CallClarificationState.ResetSpent.get -> bool
-AgentCore.Application.Calls.CallClarificationState.ResetSpent.init -> void
 AgentCore.Application.Calls.CallCursor
 AgentCore.Application.Calls.CallPage
 AgentCore.Application.Calls.CallPage.<Clone>$() -> AgentCore.Application.Calls.CallPage!

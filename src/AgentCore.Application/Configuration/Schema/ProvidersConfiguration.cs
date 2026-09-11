@@ -230,8 +230,7 @@ public sealed record KnowledgeAmbiguityConfiguration
     public int MaxCandidates { get; init; } = DefaultMaxCandidates;
 
     /// <summary>
-    /// Gets the cap on each of a slot's two ask counters. <c>0</c> means never ask: the gate still
-    /// works.
+    /// Gets the cap on a slot's probe ask counter. <c>0</c> means never ask: the gate still works.
     /// </summary>
     public int MaxAsks { get; init; } = DefaultMaxAsks;
 

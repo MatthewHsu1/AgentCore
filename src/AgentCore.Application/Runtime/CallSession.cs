@@ -774,10 +774,10 @@ public sealed class CallSession : IConversationPort
         Activity? activity = null;
         try
         {
-            // After both guards: a turn refused as terminal or already-running must not clear the
-            // per-turn mark out from under the turn actually in flight. Runs exactly once here, and
-            // never in EnterAmbients, which reopens per streaming step and would clear the mark
-            // several times inside one streaming turn (K41).
+            // After both guards: a turn refused as terminal or already-running must not drop the
+            // probe latch out from under the turn actually in flight. Runs exactly once here, and
+            // never in EnterAmbients, which reopens per streaming step and would drop the latch
+            // several times inside one streaming turn.
             _clarifications.BeginTurn();
 
             // Behind both guards, because the withdrawal deletes: a turn refused for a terminal call or
@@ -854,11 +854,10 @@ public sealed class CallSession : IConversationPort
             return;
         }
 
-        // Without this, lastNamed and the pending list would survive a withdrawal that deleted the
-        // very turns they recorded, and silence both ambiguity channels forever about a question the
-        // caller edited away. The ask counters are deliberately untouched here: what the caller
-        // heard, they still heard, and clearing them would let the withdrawn segment buy a fresh
-        // maxAsks budget.
+        // Without this, lastNamed would survive a withdrawal that deleted the very turns it recorded,
+        // and silence the probe forever about a question the caller edited away. The ask counter is
+        // deliberately untouched here: what the caller heard, they still heard, and clearing it
+        // would let the withdrawn segment buy a fresh maxAsks budget.
         _clarifications.Withdraw();
 
         // The turn index the event is filed under is the one about to run; the payload is what says
@@ -1045,11 +1044,6 @@ public sealed class CallSession : IConversationPort
         if (toolFault is null && failure is not null)
         {
             _events.RaiseDiagnostic(CallEventKind.EmptyReply, _time.GetUtcNow(), turn.Index);
-        }
-
-        if (failure is null && !refused)
-        {
-            _clarifications.CommitAsks(reply);
         }
 
         // What this turn adds to the transcript. It is built here and written at the end of the

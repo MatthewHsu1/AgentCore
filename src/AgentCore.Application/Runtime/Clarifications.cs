@@ -4,8 +4,8 @@ using Microsoft.Agents.AI;
 namespace AgentCore.Application.Runtime;
 
 /// <summary>
-/// One call's memory of what its ambiguity channels have asked and named, and the per-turn latch
-/// that lets several search-tool calls in one turn share a single probe (K36, K41, K43).
+/// One call's memory of what the knowledge probe has asked and named, and the per-turn latch that
+/// lets several search-tool calls in one turn share a single probe (K36, K43).
 /// </summary>
 /// <remarks>
 /// Constructed once by <see cref="CallSession"/> and put on <see cref="TurnAmbients"/> as the same
@@ -14,7 +14,7 @@ namespace AgentCore.Application.Runtime;
 /// instance at once, so every read and every write takes <see cref="_gate"/> — there is no member on
 /// this type that touches a field without it. Reads go through <see cref="Read"/> and writes through
 /// <see cref="Update"/>, each taking the lock once for the whole snapshot or transition, so a
-/// concurrent participant can never observe a slot half way through §7 or §8's compound updates.
+/// concurrent participant can never observe a slot half way through §8's compound updates.
 /// </remarks>
 internal sealed class Clarifications
 {
@@ -24,13 +24,12 @@ internal sealed class Clarifications
 
     private Probe? _probe;
 
-    /// <summary>Reads a consistent snapshot of one slot's six fields, as of one lock acquisition.</summary>
+    /// <summary>Reads a consistent snapshot of one slot's two fields, as of one lock acquisition.</summary>
     /// <param name="name">The slot's name.</param>
     /// <returns>
-    /// The snapshot, with this turn's staged ask folded over what is committed (see
-    /// <see cref="Ask"/>). Every field in it was read under the same lock acquisition, so a
-    /// concurrent <see cref="Update"/> is either fully before it or fully after it — never half of
-    /// one and half of the other.
+    /// The snapshot. Every field in it was read under the same lock acquisition, so a concurrent
+    /// <see cref="Update"/> is either fully before it or fully after it — never half of one and half
+    /// of the other.
     /// </returns>
     internal SlotSnapshot Read(string name)
     {
@@ -66,70 +65,6 @@ internal sealed class Clarifications
     }
 
     /// <summary>
-    /// Records channel 1's §7 transition for one slot, to be kept only once the turn it belongs to
-    /// has actually answered the caller.
-    /// </summary>
-    /// <param name="name">The slot's name.</param>
-    /// <param name="named">What this ask names to the caller (K37).</param>
-    /// <param name="spendsReset">
-    /// Whether this is §7 step 3's one reset. A reset returns <c>namedAsks</c> to 1 rather than 0,
-    /// because 0 would buy an extra ask and make the bound 2 x maxAsks + 1.
-    /// </param>
-    /// <remarks>
-    /// <see cref="Read"/> shows the ask at once, because §7 step 1 and the probe's K41 skip both
-    /// have to act on it inside this same turn. It becomes permanent only at
-    /// <see cref="CommitAsks"/>, which the turn calls once it knows the caller heard the agent's own
-    /// words. A turn that ended in the fallback reply never put the question, so the next
-    /// <see cref="BeginTurn"/> drops the ask instead: charging it would silence that slot for the
-    /// rest of the call over a question nobody was asked.
-    /// </remarks>
-    internal void Ask(string name, LastNamed named, bool spendsReset)
-    {
-        ArgumentNullException.ThrowIfNull(name);
-
-        lock (_gate)
-        {
-            var state = GetOrAdd(name);
-            var current = Snapshot(state);
-
-            state.StagedAsk = new StagedAsk(
-                named,
-                spendsReset ? 1 : current.NamedAsks + 1,
-                current.ResetSpent || spendsReset);
-
-            state.AskedThisTurn = true;
-        }
-    }
-
-    /// <summary>Makes the asks this turn staged and put permanent (see <see cref="Ask"/>).</summary>
-    /// <param name="reply">The words the caller heard, which decide which staged asks were put.</param>
-    internal void CommitAsks(string reply)
-    {
-        ArgumentNullException.ThrowIfNull(reply);
-
-        lock (_gate)
-        {
-            foreach (var state in _slots.Values)
-            {
-                if (state.StagedAsk is not { } ask)
-                {
-                    continue;
-                }
-
-                if (!SpokenAsk.NamedIn(reply, ask.Named))
-                {
-                    continue;
-                }
-
-                state.LastNamed = ask.Named;
-                state.NamedAsks = ask.NamedAsks;
-                state.ResetSpent = ask.ResetSpent;
-                state.StagedAsk = null;
-            }
-        }
-    }
-
-    /// <summary>
     /// Claims this turn's one probe search. Several search-tool calls in one turn, or several graph
     /// participants sharing this call, race here, and exactly one wins.
     /// </summary>
@@ -161,33 +96,25 @@ internal sealed class Clarifications
     }
 
     /// <summary>
-    /// Opens a new turn: clears K41's per-turn mark and any uncommitted ask on every slot, and drops
-    /// the turn's probe latch, so a fresh turn claims and replays its own probe rather than the turn
-    /// before it.
+    /// Opens a new turn: drops the turn's probe latch, so a fresh turn claims and replays its own
+    /// probe rather than the turn before it.
     /// </summary>
     /// <remarks>
     /// Must run exactly once per turn, from <c>CallSession.BeginTurn</c> and nowhere else.
-    /// <c>CallSession.EnterAmbients</c> reopens its ambient scope once per streaming step, and
-    /// clearing there instead would void K41's mark several times inside one streaming turn.
+    /// <c>CallSession.EnterAmbients</c> reopens its ambient scope once per streaming step.
     /// </remarks>
     internal void BeginTurn()
     {
         lock (_gate)
         {
-            foreach (var state in _slots.Values)
-            {
-                state.AskedThisTurn = false;
-                state.StagedAsk = null;
-            }
-
             _probe = null;
         }
     }
 
     /// <summary>
-    /// Takes back what an edit-and-resend withdrew: every slot's pending list and its record of what
-    /// was last named to the caller. The ask counters are left alone — the caller heard what they
-    /// heard, and clearing them would let the withdrawn segment buy a fresh <c>maxAsks</c> budget.
+    /// Takes back what an edit-and-resend withdrew: every slot's record of what was last named to
+    /// the caller. The ask counter is left alone — the caller heard what they heard, and clearing it
+    /// would let the withdrawn segment buy a fresh <c>maxAsks</c> budget.
     /// </summary>
     internal void Withdraw()
     {
@@ -195,7 +122,6 @@ internal sealed class Clarifications
         {
             foreach (var state in _slots.Values)
             {
-                state.Pending = null;
                 state.LastNamed = LastNamed.None;
             }
         }
@@ -214,19 +140,12 @@ internal sealed class Clarifications
 
             foreach (var (name, state) in _slots)
             {
-                // Committed only. A staged ask belongs to a turn that has not yet answered the
-                // caller, and a snapshot taken mid-turn must not carry a charge that turn may drop.
-                if (state.ProbeAsks == 0 && state.NamedAsks == 0 && !state.ResetSpent)
+                if (state.ProbeAsks == 0)
                 {
                     continue;
                 }
 
-                spent[name] = new CallClarificationState
-                {
-                    ProbeAsks = state.ProbeAsks,
-                    NamedAsks = state.NamedAsks,
-                    ResetSpent = state.ResetSpent,
-                };
+                spent[name] = new CallClarificationState { ProbeAsks = state.ProbeAsks };
             }
 
             return spent;
@@ -236,10 +155,10 @@ internal sealed class Clarifications
     /// <summary>Puts back what an earlier session of this call spent of its ask budget.</summary>
     /// <param name="spent">What <see cref="Spent"/> read from that session.</param>
     /// <remarks>
-    /// The pending lists and the record of what was last named are deliberately not restored: they
-    /// belong to a turn the reconnected caller is no longer in. Only the budget has to survive, and
-    /// for the reason <see cref="Withdraw"/> gives — a caller who drops and comes back must not buy
-    /// a fresh <c>maxAsks</c> and hear the same question all over again.
+    /// The record of what was last named is deliberately not restored: it belongs to a turn the
+    /// reconnected caller is no longer in. Only the budget has to survive, and for the reason
+    /// <see cref="Withdraw"/> gives — a caller who drops and comes back must not buy a fresh
+    /// <c>maxAsks</c> and hear the same question all over again.
     /// </remarks>
     internal void RestoreSpent(IReadOnlyDictionary<string, CallClarificationState> spent)
     {
@@ -249,10 +168,7 @@ internal sealed class Clarifications
         {
             foreach (var (name, stored) in spent)
             {
-                var state = GetOrAdd(name);
-                state.ProbeAsks = stored.ProbeAsks;
-                state.NamedAsks = stored.NamedAsks;
-                state.ResetSpent = stored.ResetSpent;
+                GetOrAdd(name).ProbeAsks = stored.ProbeAsks;
             }
         }
     }
@@ -269,18 +185,7 @@ internal sealed class Clarifications
         return state;
     }
 
-    private static SlotSnapshot Snapshot(SlotState state)
-    {
-        var ask = state.StagedAsk;
-
-        return new(
-            state.Pending,
-            state.EffectiveLastNamed,
-            state.ProbeAsks,
-            ask?.NamedAsks ?? state.NamedAsks,
-            ask?.ResetSpent ?? state.ResetSpent,
-            state.AskedThisTurn);
-    }
+    private static SlotSnapshot Snapshot(SlotState state) => new(state.LastNamed, state.ProbeAsks);
 
     /// <summary>What decided the wildcard a slot's last named record holds.</summary>
     internal enum LastNamedKind
@@ -294,9 +199,6 @@ internal sealed class Clarifications
         /// <summary>The candidate set was above <c>maxCandidates</c>, so no list was ever spoken.</summary>
         TooMany,
     }
-
-    /// <summary>One turn's channel-1 ask, staged until the turn answers the caller (see <see cref="Ask"/>).</summary>
-    internal sealed record StagedAsk(LastNamed Named, int NamedAsks, bool ResetSpent);
 
     /// <summary>
     /// One turn's probe latch, held by the caller that claimed it.
@@ -369,14 +271,12 @@ internal sealed class Clarifications
             return new LastNamed(LastNamedKind.Set, values);
         }
 
-        /// <summary>What a channel would record for one candidate set (K37).</summary>
-        /// <param name="candidates">The candidates that channel is about to name.</param>
+        /// <summary>What the probe would record for one candidate set (K37).</summary>
+        /// <param name="candidates">The candidates the probe is about to name.</param>
         /// <param name="maxCandidates">The document's <c>maxCandidates</c>.</param>
         /// <returns>
         /// <see cref="TooMany"/> when the set is over the cap, so no list is spoken; otherwise the
-        /// exact set. Both ambiguity channels record through here rather than each deciding the cap
-        /// for itself, so channel 1's record and the probe's are always comparable — including the
-        /// ordinal comparer <see cref="Names"/> relies on.
+        /// exact set, under the ordinal comparer <see cref="Names"/> relies on.
         /// </returns>
         internal static LastNamed For(IReadOnlyCollection<string> candidates, int maxCandidates)
         {
@@ -399,14 +299,8 @@ internal sealed class Clarifications
             => Kind == other.Kind && (Kind != LastNamedKind.Set || Values!.SetEquals(other.Values!));
     }
 
-    /// <summary>A consistent, point-in-time copy of one slot's six fields (see <see cref="Read"/>).</summary>
-    internal readonly record struct SlotSnapshot(
-        IReadOnlyList<string>? Pending,
-        LastNamed LastNamed,
-        int ProbeAsks,
-        int NamedAsks,
-        bool ResetSpent,
-        bool AskedThisTurn);
+    /// <summary>A consistent, point-in-time copy of one slot's two fields (see <see cref="Read"/>).</summary>
+    internal readonly record struct SlotSnapshot(LastNamed LastNamed, int ProbeAsks);
 
     /// <summary>
     /// One slot's mutable ambiguity state. Read through <see cref="Read"/> and written through
@@ -415,29 +309,8 @@ internal sealed class Clarifications
     /// </summary>
     internal sealed class SlotState
     {
-        internal IReadOnlyList<string>? Pending;
-
         internal LastNamed LastNamed = LastNamed.None;
 
         internal int ProbeAsks;
-
-        internal int NamedAsks;
-
-        internal bool ResetSpent;
-
-        internal bool AskedThisTurn;
-
-        /// <summary>This turn's uncommitted channel-1 ask, or null when it has not asked.</summary>
-        internal StagedAsk? StagedAsk;
-
-        /// <summary>
-        /// What the caller has most recently been told, this turn's uncommitted ask included.
-        /// </summary>
-        /// <remarks>
-        /// The field alone is the committed record and lags a turn that has asked but not yet
-        /// answered. A writer inside an <see cref="Update"/> callback that has to compare against what
-        /// the caller would hear must read this, not <see cref="LastNamed"/>.
-        /// </remarks>
-        internal LastNamed EffectiveLastNamed => StagedAsk is { } ask ? ask.Named : LastNamed;
     }
 }

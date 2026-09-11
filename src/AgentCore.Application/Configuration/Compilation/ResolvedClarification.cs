@@ -5,13 +5,12 @@ using AgentCore.Application.Configuration.Schema;
 namespace AgentCore.Application.Configuration.Compilation;
 
 /// <summary>
-/// The document-level ambiguity wiring §7 needs, read once from <c>providers.knowledge</c> and the
-/// declared <c>state:</c> slots.
+/// The document-level ambiguity wiring the knowledge probe needs (§8), read once from
+/// <c>providers.knowledge</c> and the declared <c>state:</c> slots.
 /// </summary>
 /// <remarks>
 /// The same for every agent, so <see cref="ConfigurationCompiler"/> builds it once rather than
-/// letting each agent re-derive it, and both channels — the clarification provider and the agent's
-/// own search — read the one instance.
+/// letting each agent re-derive it.
 /// </remarks>
 public sealed record ResolvedClarification
 {

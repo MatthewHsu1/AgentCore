@@ -8,16 +8,15 @@ using AgentCore.Domain.Knowledge;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace AgentCore.AspNetCore.Tests.DependencyInjection;
 
 /// <summary>
-/// The <c>ambiguity:</c> warnings the validator raises, exercised through
-/// <see cref="ConfigurationStartup.Load"/> and <see cref="AgentCoreBoot.BootAsync"/> so the
-/// plumbing that carries them to the log is what is under test.
+/// The <c>ambiguity:</c> warning the validator raises, exercised through
+/// <see cref="AgentCoreBoot.BootAsync"/> so the plumbing that carries it to the log is what is
+/// under test.
 /// </summary>
 public sealed class AmbiguityStartupTests
 {
@@ -45,52 +44,6 @@ public sealed class AmbiguityStartupTests
             .ToList();
 
         Assert.Contains(warnings, line => line.Message.Contains("at most one", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public void Load_AGraphDocumentWithAmbiguity_ReturnsTheK39Warning()
-    {
-        // K39: channel 1 cannot fire on a graph: document, so ambiguity: there is a boot warning
-        // that ConfigurationStartup.Load must not discard.
-        var wildcard = new KnowledgeWildcardConfiguration { Value = "*", Facets = ["applies_to", "brand"] };
-        StateSlotConfiguration facet = new() { Type = StateSlotType.String, Writer = StateWriter.Extractor, EnumValues = [] };
-
-        var configuration = new AgentCoreConfiguration
-        {
-            ApiVersion = "agentcore/v1",
-            Name = "graph-ambiguity",
-            Graph = new GraphConfiguration(),
-            Extractor = new ExtractorConfiguration { Model = new ModelReference { Ref = "small" } },
-            State = new Dictionary<string, StateSlotConfiguration>(StringComparer.Ordinal)
-            {
-                ["applies_to"] = facet with { EnumValues = [JsonValue.Create("a")!] },
-                ["brand"] = facet with { EnumValues = [JsonValue.Create("b")!] },
-            },
-            Providers = new ProvidersConfiguration
-            {
-                Llm = [new LlmProviderConfiguration { Kind = "openai", Model = "gpt", As = "small" }],
-                Knowledge = new KnowledgeProviderConfiguration
-                {
-                    Kind = "qdrant",
-                    Collection = "kb",
-                    Fields = new KnowledgeFieldsConfiguration { Body = "text" },
-                    Scope = new KnowledgeScopeConfiguration
-                    {
-                        Template = "facets.{key}",
-                        FromState = ["applies_to", "brand"],
-                        Wildcard = wildcard,
-                    },
-                    Ambiguity = new KnowledgeAmbiguityConfiguration(),
-                },
-            },
-        };
-
-        AgentCoreOptions options = new() { Configuration = configuration };
-
-        var result = ConfigurationStartup.Load(options);
-
-        var warning = Assert.Single(result.Warnings);
-        Assert.Equal("/providers/knowledge/ambiguity", warning.Pointer);
     }
 
     private static AgentCoreConfiguration SingleFacetDocument()

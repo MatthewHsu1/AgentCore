@@ -12,8 +12,8 @@ using Microsoft.Extensions.Logging;
 namespace AgentCore.Application.Knowledge;
 
 /// <summary>
-/// §8 steps 3-6: the probe. Channel 2 of the ambiguity design — when a scoped search clears no card,
-/// it drops one wildcard-filled facet, searches again, and names what the wider search holds.
+/// §8 steps 3-6: the probe. When a scoped search clears no card, it drops one wildcard-filled facet,
+/// searches again, and names what the wider search holds.
 /// </summary>
 internal static class KnowledgeProbe
 {
@@ -207,25 +207,16 @@ internal static class KnowledgeProbe
         // out, but the record of what was named — which arms K21's tie-break — does not.
         var carriesHistory = TurnAmbients.Current?.Context?.CarriesHistory ?? false;
 
-        // Whether the note repeats what was last named, and the pending list and record that follow
-        // from it, are one transition under one lock acquisition. Deciding from an earlier Read() and
-        // writing after would let a concurrent participant on the same call slip between the two.
+        // Whether the note repeats what was last named, and the record that follows from it, are one
+        // transition under one lock acquisition. Deciding from an earlier Read() and writing after
+        // would let a concurrent participant on the same call slip between the two.
         var repeats = false;
 
         clarifications.Update(facet, s =>
         {
-            repeats = wouldName.Names(s.EffectiveLastNamed);
+            repeats = wouldName.Names(s.LastNamed);
 
-            if (repeats)
-            {
-                return;
-            }
-
-            // K41: the probe sets a pending list only where there is none. An earlier turn's list is
-            // what the caller is actually answering, and a later search's guess must never replace it.
-            s.Pending ??= candidates;
-
-            if (carriesHistory)
+            if (!repeats && carriesHistory)
             {
                 s.LastNamed = wouldName;
             }
@@ -252,8 +243,7 @@ internal static class KnowledgeProbe
 
     /// <summary>
     /// §8 step 3: the first facet, in <c>fromState</c> declaration order, the wildcard filled and that
-    /// dropping would not empty the scope, skip a slot at its ask cap, or repeat channel 1's own
-    /// question this turn.
+    /// dropping would not empty the scope or skip a slot at its ask cap.
     /// </summary>
     private static string? DroppableFacet(
         IReadOnlyList<string> fromState,
@@ -287,12 +277,8 @@ internal static class KnowledgeProbe
                 continue;
             }
 
-            var snapshot = clarifications.Read(name);
-
-            // K22: the probe's own counter is monotone and capped at maxAsks. K41: channel 1 already
-            // asked about this slot this turn, so the probe moves on rather than paying for a search
-            // it would then abandon.
-            if (snapshot.ProbeAsks >= ambiguity.MaxAsks || snapshot.AskedThisTurn)
+            // K22: the probe's own counter is monotone and capped at maxAsks.
+            if (clarifications.Read(name).ProbeAsks >= ambiguity.MaxAsks)
             {
                 continue;
             }
