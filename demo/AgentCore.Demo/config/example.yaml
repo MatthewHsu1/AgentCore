@@ -432,6 +432,24 @@ providers:
       # filters on values no card carries and the retry pays for a second search most times out.
       # A facet worth filtering by is usually worth a vocabulary: slot of its own.
       #
+      # When the vocabulary is too big for a slot or a prompt — thousands of machine tags — give the
+      # facet a resolve: block instead. It names a lookup the MODEL runs before it filters: one
+      # search narrowed to the index cards under another facet, then the value copied off the card
+      # it finds. The host prints the recipe on the search tool and runs nothing itself.
+      #
+      #   - key: lookup
+      #     description: "The only value is model-numbers. It returns the model cards and nothing else."
+      #   - key: model
+      #     description: "One machine and the year it was built, as one tag, such as lcr-2023."
+      #     resolve:
+      #       via: { key: lookup, value: model-numbers }
+      #       query: "<product> model number"
+      #       read: the Tag column of the row for the person's year
+      #
+      # via must name another filterable facet, and that one may not resolve in turn: one hop only.
+      # The start refuses a resolve that points at itself, at a key not listed here, or at a facet
+      # that has a resolve of its own.
+      #
       # Prefetch agents ignore this block: they advertise no function, so there is no argument to fill.
 
     links:

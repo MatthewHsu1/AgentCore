@@ -72,6 +72,42 @@ public sealed record KnowledgeFilterableFacetConfiguration
 
     /// <summary>Gets what this facet means, in the words the model reads before it picks a value.</summary>
     public required string Description { get; init; }
+
+    /// <summary>
+    /// Gets how the model finds an exact value for this facet, or <see langword="null"/> when the
+    /// description alone is enough to pick one.
+    /// </summary>
+    public KnowledgeFacetResolveConfiguration? Resolve { get; init; }
+}
+
+/// <summary>
+/// The lookup that turns what the person said into the one value a facet is stored under.
+/// </summary>
+/// <remarks>
+/// A vocabulary of thousands cannot sit in a prompt. The model instead searches a small index — the
+/// cards under one other facet — and copies the value off the card it finds. This block is printed
+/// on the search tool, not run by the host: the model does the lookup itself.
+/// </remarks>
+public sealed record KnowledgeFacetResolveConfiguration
+{
+    /// <summary>Gets the facet and value that narrow the lookup search to the index cards.</summary>
+    public required KnowledgeFacetValueConfiguration Via { get; init; }
+
+    /// <summary>Gets what the model searches for, with placeholders in angle brackets for what the person said.</summary>
+    public required string Query { get; init; }
+
+    /// <summary>Gets where on the card the value is, in the words the model reads.</summary>
+    public required string Read { get; init; }
+}
+
+/// <summary>One facet key and the value it must carry.</summary>
+public sealed record KnowledgeFacetValueConfiguration
+{
+    /// <summary>Gets the facet key.</summary>
+    public required string Key { get; init; }
+
+    /// <summary>Gets the value the cards must carry.</summary>
+    public required string Value { get; init; }
 }
 
 /// <summary>Which facets a card may opt out of, and the value it opts out with.</summary>

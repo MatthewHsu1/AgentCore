@@ -1225,6 +1225,34 @@
                     "type": "string",
                     "minLength": 1,
                     "description": "What this facet means, in the words the model reads before it picks a value."
+                  },
+                  "resolve": {
+                    "type": "object",
+                    "description": "How the model finds an exact value for this facet when the vocabulary is too big to describe: one filtered search of the cards under another facet, then a value copied off the card. Printed on the search tool; the model runs it. Absent means the description alone is enough to pick a value.",
+                    "additionalProperties": false,
+                    "required": ["via", "query", "read"],
+                    "properties": {
+                      "via": {
+                        "type": "object",
+                        "description": "The facet and value that narrow the lookup search to the index cards. Must name another filterable facet, one without a resolve of its own.",
+                        "additionalProperties": false,
+                        "required": ["key", "value"],
+                        "properties": {
+                          "key": { "type": "string", "minLength": 1, "description": "The filterable facet the lookup filters on." },
+                          "value": { "type": "string", "minLength": 1, "description": "The value the index cards carry under that facet." }
+                        }
+                      },
+                      "query": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "What the model searches for, with placeholders in angle brackets for what the person said, such as \"<product> model number\"."
+                      },
+                      "read": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Where on the card the value is, in the words the model reads, such as \"the Tag column of the row for the person's year\"."
+                      }
+                    }
                   }
                 }
               }

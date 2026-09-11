@@ -59,6 +59,73 @@ internal static class KnowledgeFilterValidator
                     + "the model reads before it picks a value, so a facet without one is a key it "
                     + "can only guess at."));
             }
+
+            if (facet.Resolve is { } resolve)
+            {
+                CheckResolve(facet, resolve, filterable, ConfigurationError.AppendPointer(pointer, "resolve"), errors);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The lookup runs one hop: a facet resolves through the cards of another facet, and that one
+    /// must be pickable from its description alone, or the model would chase a chain of lookups.
+    /// </summary>
+    private static void CheckResolve(
+        KnowledgeFilterableFacetConfiguration facet,
+        KnowledgeFacetResolveConfiguration resolve,
+        IReadOnlyList<KnowledgeFilterableFacetConfiguration> filterable,
+        string pointer,
+        List<ConfigurationError> errors)
+    {
+        var via = ConfigurationError.AppendPointer(pointer, "via");
+        var viaKey = ConfigurationError.AppendPointer(via, "key");
+
+        if (string.Equals(resolve.Via.Key, facet.Key, StringComparison.Ordinal))
+        {
+            errors.Add(Reference(
+                viaKey,
+                $"the facet '{facet.Key}' resolves through itself. The lookup must search the cards "
+                + "of another facet, one whose value the model can pick without a lookup."));
+        }
+        else if (filterable.FirstOrDefault(other => string.Equals(other.Key, resolve.Via.Key, StringComparison.Ordinal))
+            is not { } index)
+        {
+            errors.Add(Reference(
+                viaKey,
+                $"the facet '{facet.Key}' resolves through '{resolve.Via.Key}', which is not a "
+                + "filterable facet. The lookup is a filtered search, so the facet it filters on must "
+                + "be one the model may set."));
+        }
+        else if (index.Resolve is not null)
+        {
+            errors.Add(Reference(
+                viaKey,
+                $"the facet '{facet.Key}' resolves through '{index.Key}', which resolves through "
+                + "something else in turn. One hop only: the facet a lookup filters on must be "
+                + "pickable from its description alone."));
+        }
+
+        if (string.IsNullOrWhiteSpace(resolve.Via.Value))
+        {
+            errors.Add(Reference(
+                ConfigurationError.AppendPointer(via, "value"),
+                $"the facet '{facet.Key}' resolves through '{resolve.Via.Key}' with a blank value, so "
+                + "the lookup would filter on nothing."));
+        }
+
+        if (string.IsNullOrWhiteSpace(resolve.Query))
+        {
+            errors.Add(Reference(
+                ConfigurationError.AppendPointer(pointer, "query"),
+                $"the facet '{facet.Key}' has a blank resolve query, so the model has nothing to search for."));
+        }
+
+        if (string.IsNullOrWhiteSpace(resolve.Read))
+        {
+            errors.Add(Reference(
+                ConfigurationError.AppendPointer(pointer, "read"),
+                $"the facet '{facet.Key}' does not say where on the card the value is read from."));
         }
     }
 
