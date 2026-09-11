@@ -78,6 +78,30 @@ public sealed class CallSessionStoreFailureTests
     }
 
     /// <summary>
+    /// A turn that cannot re-read store 1 as it opens says so, and runs on the words it holds.
+    /// </summary>
+    [Fact]
+    public async Task Resync_StoreThrows_RaisesDiagnosticAndTheTurnRuns()
+    {
+        // Arrange
+        using RequestRecordingChatClient reply = new("hi there", "it ships Friday");
+        RecordingObserver observer = new();
+        var session = CreateSession(OneAgentYaml, reply, new ThrowingCallStore(), observer);
+        _ = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
+
+        // Act
+        var second = await session.RunTurnAsync("order 41?", TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("it ships Friday", second.ReplyText);
+        var failed = Assert.Single(
+            observer.Events,
+            callEvent => callEvent.Kind == CallEventKind.TranscriptResyncFailed);
+        Assert.Null(failed.EventId);
+        Assert.Equal(1, failed.TurnIndex);
+    }
+
+    /// <summary>
     /// A dropped write is a fact about the system and never about the call, so it is counted and
     /// logged and stored nowhere.
     /// </summary>

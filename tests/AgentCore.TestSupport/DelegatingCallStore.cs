@@ -59,16 +59,17 @@ public abstract class DelegatingCallStore(ICallStore inner) : ICallStore
         => Inner.DeleteAsync(callId, cancellationToken);
 
     /// <inheritdoc />
-    public virtual ValueTask AppendAsync(
-        IReadOnlyList<CallMessage> messages,
+    public virtual ValueTask<IReadOnlyList<CallMessage>> AppendAsync(
+        string callId,
+        IReadOnlyList<CallMessageDraft> messages,
         CallSessionState? state = null,
         CancellationToken cancellationToken = default)
-        => Inner.AppendAsync(messages, state, cancellationToken);
+        => Inner.AppendAsync(callId, messages, state, cancellationToken);
 
     /// <inheritdoc />
     public virtual ValueTask RewriteAsync(
-        string callId, int ordinal, ChatMessage content, CancellationToken cancellationToken = default)
-        => Inner.RewriteAsync(callId, ordinal, content, cancellationToken);
+        string callId, string messageId, ChatMessage content, CancellationToken cancellationToken = default)
+        => Inner.RewriteAsync(callId, messageId, content, cancellationToken);
 
     /// <inheritdoc />
     public virtual ValueTask<IReadOnlyList<CallMessage>> ReadAsync(

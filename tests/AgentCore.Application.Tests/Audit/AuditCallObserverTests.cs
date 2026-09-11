@@ -25,6 +25,7 @@ public sealed class AuditCallObserverTests
         CallEventKind.ExtractionFailed,
         CallEventKind.TranscriptWriteFailed,
         CallEventKind.StateRestorePartial,
+        CallEventKind.TranscriptResyncFailed,
     ];
 
     /// <summary>Every kind, once, across the two tables above.</summary>

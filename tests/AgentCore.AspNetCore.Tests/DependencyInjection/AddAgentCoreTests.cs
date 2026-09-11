@@ -1327,8 +1327,9 @@ public sealed class AddAgentCoreTests
             }
         }
 
-        public override ValueTask AppendAsync(
-            IReadOnlyList<CallMessage> messages,
+        public override ValueTask<IReadOnlyList<CallMessage>> AppendAsync(
+            string callId,
+            IReadOnlyList<CallMessageDraft> messages,
             CallSessionState? state = null,
             CancellationToken cancellationToken = default)
         {
@@ -1337,11 +1338,13 @@ public sealed class AddAgentCoreTests
                 _roles.AddRange(messages.Select(message => message.Content.Role.Value));
             }
 
-            return ValueTask.CompletedTask;
+            IReadOnlyList<CallMessage> rows = [.. messages.Select(
+                (message, index) => new CallMessage(callId, index, message.TurnIndex ?? 0, message.Content, message.MessageId))];
+            return ValueTask.FromResult(rows);
         }
 
         public override ValueTask RewriteAsync(
-            string callId, int ordinal, ChatMessage content, CancellationToken cancellationToken = default)
+            string callId, string messageId, ChatMessage content, CancellationToken cancellationToken = default)
             => ValueTask.CompletedTask;
 
         public override ValueTask<IReadOnlyList<CallMessage>> ReadAsync(

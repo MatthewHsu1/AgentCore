@@ -18,8 +18,11 @@ internal sealed class RecordingCallStore() : DelegatingCallStore(new InMemoryCal
     /// <summary>Gets every row the provider appended, in the order it appended them.</summary>
     public List<CallMessage> Rows { get; } = [];
 
-    /// <summary>Gets every rewrite the provider asked for, in order. <c>TurnIndex</c> is not carried.</summary>
+    /// <summary>Gets every rewrite the provider asked for, in order.</summary>
     public List<CallMessage> Rewrites { get; } = [];
+
+    /// <summary>Gets how many times a whole call was read back.</summary>
+    public int Reads { get; private set; }
 
     /// <summary>Reads one call as the store holds it now, oldest message first.</summary>
     /// <param name="callId">The call to read.</param>
@@ -32,46 +35,60 @@ internal sealed class RecordingCallStore() : DelegatingCallStore(new InMemoryCal
     }
 
     /// <inheritdoc />
-    public override ValueTask AppendAsync(
-        IReadOnlyList<CallMessage> messages,
+    public override async ValueTask<IReadOnlyList<CallMessage>> AppendAsync(
+        string callId,
+        IReadOnlyList<CallMessageDraft> messages,
         CallSessionState? state = null,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(messages);
+        var rows = await base.AppendAsync(callId, messages, state, cancellationToken).ConfigureAwait(false);
 
         lock (_lock)
         {
-            Rows.AddRange(messages);
-            foreach (var message in messages)
+            Rows.AddRange(rows);
+            foreach (var row in rows)
             {
-                _rows.Add((message.CallId, message.Ordinal), message);
+                _rows[(row.CallId, row.Ordinal)] = row;
             }
         }
 
-        return default;
+        return rows;
     }
 
     /// <inheritdoc />
-    public override ValueTask RewriteAsync(
-        string callId, int ordinal, ChatMessage content, CancellationToken cancellationToken = default)
+    public override async ValueTask RewriteAsync(
+        string callId, string messageId, ChatMessage content, CancellationToken cancellationToken = default)
     {
+        await base.RewriteAsync(callId, messageId, content, cancellationToken).ConfigureAwait(false);
+
         lock (_lock)
         {
-            Rewrites.Add(new CallMessage(callId, ordinal, TurnIndex: -1, content, $"m{ordinal}"));
-
-            if (_rows.TryGetValue((callId, ordinal), out var row))
+            foreach (var pair in _rows)
             {
-                _rows[(callId, ordinal)] = row with { Content = content };
+                if (pair.Key.CallId != callId || pair.Value.MessageId != messageId)
+                {
+                    continue;
+                }
+
+                var rewritten = pair.Value with { Content = content };
+                _rows[pair.Key] = rewritten;
+                Rewrites.Add(rewritten);
+                break;
             }
         }
-
-        return default;
     }
 
     /// <inheritdoc />
     public override ValueTask<IReadOnlyList<CallMessage>> ReadAsync(
         string callId, CancellationToken cancellationToken = default)
-        => ValueTask.FromResult(Live(callId));
+    {
+        lock (_lock)
+        {
+            Reads++;
+        }
+
+        return ValueTask.FromResult(Live(callId));
+    }
 
     /// <inheritdoc />
     public override ValueTask<int> EraseAsync(string callId, CancellationToken cancellationToken = default)

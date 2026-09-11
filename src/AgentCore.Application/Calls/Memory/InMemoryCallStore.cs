@@ -17,6 +17,9 @@ public sealed class InMemoryCallStore : ICallStore
     /// <summary>The resume blob of each call, beside the row rather than on it.</summary>
     private readonly Dictionary<string, CallSessionState> _state = [];
 
+    /// <summary>The next free ordinal of each call. Never rewound, even when its words are.</summary>
+    private readonly Dictionary<string, int> _nextOrdinal = [];
+
     private readonly HashSet<(string CallId, string PrincipalKey)> _claims = [];
 
     private readonly TimeProvider _time;
@@ -39,7 +42,11 @@ public sealed class InMemoryCallStore : ICallStore
                 _calls[callId] = existing;
             }
 
-            return ValueTask.FromResult(existing with { State = _state.GetValueOrDefault(callId) });
+            return ValueTask.FromResult(existing with
+            {
+                State = _state.GetValueOrDefault(callId),
+                NextOrdinal = _nextOrdinal.GetValueOrDefault(callId),
+            });
         }
     }
 
@@ -51,7 +58,14 @@ public sealed class InMemoryCallStore : ICallStore
         lock (_lock)
         {
             var call = _calls.GetValueOrDefault(callId);
-            return ValueTask.FromResult(call is null ? null : call with { State = _state.GetValueOrDefault(callId) });
+            
+            return ValueTask.FromResult(call is null
+                ? null
+                : call with
+                {
+                    State = _state.GetValueOrDefault(callId),
+                    NextOrdinal = _nextOrdinal.GetValueOrDefault(callId),
+                });
         }
     }
 
@@ -137,6 +151,7 @@ public sealed class InMemoryCallStore : ICallStore
             _calls.Remove(callId);
             _claims.RemoveWhere(claim => claim.CallId == callId);
             _state.Remove(callId);
+            _nextOrdinal.Remove(callId);
             RemoveWords(callId);
         }
 
@@ -170,6 +185,7 @@ public sealed class InMemoryCallStore : ICallStore
                 _calls.Remove(callId);
                 _claims.RemoveWhere(claim => claim.CallId == callId);
                 _state.Remove(callId);
+                _nextOrdinal.Remove(callId);
                 RemoveWords(callId);
             }
 
@@ -209,48 +225,74 @@ public sealed class InMemoryCallStore : ICallStore
     }
 
     /// <inheritdoc />
-    public ValueTask AppendAsync(
-        IReadOnlyList<CallMessage> messages,
+    public ValueTask<IReadOnlyList<CallMessage>> AppendAsync(
+        string callId,
+        IReadOnlyList<CallMessageDraft> messages,
         CallSessionState? state = null,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(callId);
         ArgumentNullException.ThrowIfNull(messages);
+
+        if (messages.Count == 0)
+        {
+            return ValueTask.FromResult<IReadOnlyList<CallMessage>>([]);
+        }
 
         lock (_lock)
         {
+            if (!_calls.TryGetValue(callId, out var call))
+            {
+                throw new InvalidOperationException($"Store 0 holds no call '{callId}' to append words to.");
+            }
+
+            var fallbackTurnIndex = _state.GetValueOrDefault(callId)?.NextTurnIndex ?? 0;
+            var first = _nextOrdinal.GetValueOrDefault(callId);
+
+            var rows = new List<CallMessage>(messages.Count);
+            for (var index = 0; index < messages.Count; index++)
+            {
+                var draft = messages[index];
+                CallMessage row = new(
+                    callId, first + index, draft.TurnIndex ?? fallbackTurnIndex, draft.Content, draft.MessageId);
+
+                rows.Add(row);
+                _rows.Add((row.CallId, row.Ordinal), row);
+            }
+
+            _nextOrdinal[callId] = first + messages.Count;
+
             var now = _time.GetUtcNow();
+            _calls[callId] = call with { LastMessageAt = now };
 
-            foreach (var message in messages)
+            if (state is not null)
             {
-                _rows.Add((message.CallId, message.Ordinal), message);
-
-                if (_calls.TryGetValue(message.CallId, out var call))
-                {
-                    _calls[message.CallId] = call with { LastMessageAt = now };
-                }
+                _state[callId] = state;
             }
 
-            if (state is not null && messages.Count > 0)
-            {
-                _state[messages[0].CallId] = state;
-            }
+            return ValueTask.FromResult<IReadOnlyList<CallMessage>>(rows);
         }
-
-        return default;
     }
 
     /// <inheritdoc />
     public ValueTask RewriteAsync(
-        string callId, int ordinal, ChatMessage content, CancellationToken cancellationToken = default)
+        string callId, string messageId, ChatMessage content, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(callId);
+        ArgumentException.ThrowIfNullOrEmpty(messageId);
         ArgumentNullException.ThrowIfNull(content);
 
         lock (_lock)
         {
-            if (_rows.TryGetValue((callId, ordinal), out var row))
+            foreach (var pair in _rows)
             {
-                _rows[(callId, ordinal)] = row with { Content = content };
+                if (pair.Key.CallId != callId || pair.Value.MessageId != messageId)
+                {
+                    continue;
+                }
+
+                _rows[pair.Key] = pair.Value with { Content = content };
+                break;
             }
         }
 

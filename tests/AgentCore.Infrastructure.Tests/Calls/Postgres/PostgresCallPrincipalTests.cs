@@ -21,7 +21,7 @@ public sealed class PostgresCallPrincipalTests : PostgresDatabaseTest
         await store.AttachPrincipalAsync("c1", "person-a", "caller", Token);
 
         // Assert
-        Assert.Equal(1, await ScalarAsync<long>("SELECT count(*) FROM call_principal"));
+        Assert.Equal(1, await ScalarAsync<long>("SELECT count(*) FROM agentcore.call_principal"));
     }
 
     [PostgresFact]
@@ -38,7 +38,7 @@ public sealed class PostgresCallPrincipalTests : PostgresDatabaseTest
 
         // Assert
         Assert.Null(thrown);
-        Assert.Equal(1, await ScalarAsync<long>("SELECT count(*) FROM call_principal"));
+        Assert.Equal(1, await ScalarAsync<long>("SELECT count(*) FROM agentcore.call_principal"));
     }
 
     [PostgresFact]
@@ -48,13 +48,13 @@ public sealed class PostgresCallPrincipalTests : PostgresDatabaseTest
         PostgresCallStore store = new(DataSource);
         await store.CreateAsync("c1", Token);
         await store.AttachPrincipalAsync("c1", "person-a", "caller", Token);
-        var first = await ScalarAsync<DateTime>("SELECT attached_at FROM call_principal");
+        var first = await ScalarAsync<DateTime>("SELECT attached_at FROM agentcore.call_principal");
 
         // Act
         await store.AttachPrincipalAsync("c1", "person-a", "caller", Token);
 
         // Assert
-        Assert.Equal(first, await ScalarAsync<DateTime>("SELECT attached_at FROM call_principal"));
+        Assert.Equal(first, await ScalarAsync<DateTime>("SELECT attached_at FROM agentcore.call_principal"));
     }
 
     [PostgresFact]
@@ -69,7 +69,7 @@ public sealed class PostgresCallPrincipalTests : PostgresDatabaseTest
         await store.AttachPrincipalAsync("c1", "person-a", "caller", Token);
 
         // Assert
-        Assert.Equal(2, await ScalarAsync<long>("SELECT count(*) FROM call_principal"));
+        Assert.Equal(2, await ScalarAsync<long>("SELECT count(*) FROM agentcore.call_principal"));
     }
 
     [PostgresFact]
@@ -85,7 +85,7 @@ public sealed class PostgresCallPrincipalTests : PostgresDatabaseTest
         await store.DetachPrincipalAsync("c1", "person-a", Token);
 
         // Assert
-        Assert.Equal("tenant-a", await ScalarAsync<string>("SELECT principal_key FROM call_principal"));
+        Assert.Equal("tenant-a", await ScalarAsync<string>("SELECT principal_key FROM agentcore.call_principal"));
     }
 
     [PostgresFact]

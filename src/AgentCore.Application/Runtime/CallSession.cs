@@ -486,7 +486,42 @@ public sealed class CallSession : IConversationPort
     }
 
     /// <summary>
-    /// Opens the session of this call, once, and hands the same one to every later turn.
+    /// Brings the session's words back in line with store 1 before a turn after the first, when and
+    /// only when someone else wrote to the call in between.
+    /// </summary>
+    /// <param name="opened">The session of this call.</param>
+    /// <param name="cancellationToken">Cancels the reads.</param>
+    private async ValueTask ResyncTranscriptAsync(AgentSession opened, CancellationToken cancellationToken)
+    {
+        await _history.DrainAsync(opened).ConfigureAwait(false);
+
+        try
+        {
+            var refreshed = await _compiled.CallStore.GetAsync(CallId, cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidOperationException(
+                    $"Store 0 holds no call '{CallId}' for its own session to resync against.");
+
+            if (refreshed.NextOrdinal == _history.NextOrdinal(opened))
+            {
+                return;
+            }
+
+            var rows = await _compiled.CallStore.ReadAsync(CallId, cancellationToken).ConfigureAwait(false);
+
+            _history.Resync(opened, rows, refreshed.NextOrdinal);
+        }
+#pragma warning disable CA1031 // A store that cannot be read never ends a call: the turn runs on the words the session holds.
+        catch (Exception exception) when (exception is not OperationCanceledException)
+#pragma warning restore CA1031
+        {
+            Log.TranscriptResyncFailed(_logger, CallId, State.TurnIndex, exception);
+            _events.RaiseFailedTranscriptResync(State.TurnIndex, exception);
+        }
+    }
+
+    /// <summary>
+    /// Opens the session of this call, once, and re-syncs it with store 0 before handing it to every
+    /// later turn.
     /// </summary>
     /// <param name="cancellationToken">Cancels the open.</param>
     /// <returns>The session.</returns>
@@ -494,6 +529,7 @@ public sealed class CallSession : IConversationPort
     {
         if (Session() is { } opened)
         {
+            await ResyncTranscriptAsync(opened, cancellationToken).ConfigureAwait(false);
             return opened;
         }
 
@@ -514,7 +550,12 @@ public sealed class CallSession : IConversationPort
                 _agentSession = session;
 
                 State.TurnIndex = _history.BeginCall(
-                    session, CallId, spoken, _events.RaiseDroppedTranscriptWrite, record.State ?? _checkpoint);
+                    session,
+                    CallId,
+                    spoken,
+                    _events.RaiseDroppedTranscriptWrite,
+                    new TranscriptMarks(
+                        record.NextOrdinal, (record.State ?? _checkpoint)?.NextTurnIndex ?? 0));
 
                 // After the constructor, never inside it. The const writer has already run by now,
                 // so a slot a previous session filled lands on top of the const default rather than
@@ -560,11 +601,6 @@ public sealed class CallSession : IConversationPort
             // The turn index this call has reached, which is already the NEXT one by the time the
             // commit reads it.
             NextTurnIndex = State.TurnIndex,
-
-            // Read here so a snapshot taken outside a turn — the serialize seam — carries it. On the
-            // commit path the provider overwrites it, because the ordinal this turn leaves behind is
-            // not settled until the turn's rows are cut.
-            NextOrdinal = Session() is { } session ? _history.NextOrdinal(session) : 0,
 
             Clarifications = _clarifications.Spent(),
         };

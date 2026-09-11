@@ -28,7 +28,7 @@ public sealed class PostgresAuditSinkTests : PostgresDatabaseTest
         await sink.AppendAsync(Started("C1"), Token);
 
         // Assert
-        Assert.Equal(1L, await ScalarAsync<long>("SELECT count(*) FROM audit_event"));
+        Assert.Equal(1L, await ScalarAsync<long>("SELECT count(*) FROM agentcore.audit_event"));
     }
 
     [PostgresFact]
@@ -57,7 +57,7 @@ public sealed class PostgresAuditSinkTests : PostgresDatabaseTest
         await sink.AppendAsync(Started("C1"), Token);
 
         // Assert
-        var nulls = await ScalarAsync<bool>("SELECT turn_index IS NULL AND amends_event_id IS NULL FROM audit_event");
+        var nulls = await ScalarAsync<bool>("SELECT turn_index IS NULL AND amends_event_id IS NULL FROM agentcore.audit_event");
         Assert.True(nulls);
     }
 
@@ -71,7 +71,7 @@ public sealed class PostgresAuditSinkTests : PostgresDatabaseTest
         await sink.AppendAsync(TurnCompleted("C1", 0), Token);
 
         // Assert
-        var reply = await ScalarAsync<string>($"SELECT payload ->> '{AuditPayloadKeys.ReplyTextSha256}' FROM audit_event");
+        var reply = await ScalarAsync<string>($"SELECT payload ->> '{AuditPayloadKeys.ReplyTextSha256}' FROM agentcore.audit_event");
         Assert.Equal(AuditHash.OfText("the belt ships Friday").Value, reply);
     }
 
@@ -88,7 +88,7 @@ public sealed class PostgresAuditSinkTests : PostgresDatabaseTest
         await Assert.ThrowsAsync<ArgumentException>(() => sink.AppendManyAsync(run, Token).AsTask());
 
         // Assert
-        Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM audit_event"));
+        Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM agentcore.audit_event"));
     }
 
     [PostgresFact]
@@ -115,7 +115,7 @@ public sealed class PostgresAuditSinkTests : PostgresDatabaseTest
         await Task.WhenAll(writers);
 
         // Assert
-        Assert.Equal(20L, await ScalarAsync<long>("SELECT count(*) FROM audit_event"));
+        Assert.Equal(20L, await ScalarAsync<long>("SELECT count(*) FROM agentcore.audit_event"));
     }
 
     [PostgresFact]
@@ -298,7 +298,7 @@ public sealed class PostgresAuditSinkTests : PostgresDatabaseTest
         List<long> sequences = [];
 
         await using NpgsqlCommand command = DataSource.CreateCommand(
-            "SELECT sequence FROM audit_event ORDER BY write_position");
+            "SELECT sequence FROM agentcore.audit_event ORDER BY write_position");
         await using var reader = await command.ExecuteReaderAsync(Token);
 
         while (await reader.ReadAsync(Token))
@@ -312,7 +312,7 @@ public sealed class PostgresAuditSinkTests : PostgresDatabaseTest
     private async Task<long[]> SequencesOfAsync(string callId)
     {
         await using var command = DataSource.CreateCommand(
-            "SELECT sequence FROM audit_event WHERE call_id = $1 ORDER BY sequence");
+            "SELECT sequence FROM agentcore.audit_event WHERE call_id = $1 ORDER BY sequence");
         command.Parameters.Add(new NpgsqlParameter { Value = callId });
 
         List<long> sequences = [];
@@ -329,7 +329,7 @@ public sealed class PostgresAuditSinkTests : PostgresDatabaseTest
     private async Task<string[]> KindsOfAsync(string callId)
     {
         await using var command = DataSource.CreateCommand(
-            "SELECT kind FROM audit_event WHERE call_id = $1 ORDER BY sequence");
+            "SELECT kind FROM agentcore.audit_event WHERE call_id = $1 ORDER BY sequence");
         command.Parameters.Add(new NpgsqlParameter { Value = callId });
 
         List<string> kinds = [];

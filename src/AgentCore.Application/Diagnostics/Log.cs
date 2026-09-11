@@ -236,4 +236,17 @@ internal static partial class Log
             + "added. Point this agent at a model whose vendor runs a hosted web search, or remove "
             + "the tool from this agent.")]
     public static partial void HostedWebSearchDropped(ILogger logger, string agentId, string toolId, string model);
+
+    /// <summary>Store 1 could not be read as a turn opened, so the turn ran on the words already held.</summary>
+    /// <param name="logger">The logger of the session.</param>
+    /// <param name="callId">The id of the call.</param>
+    /// <param name="turnIndex">The zero-based index of the turn that was opening.</param>
+    /// <param name="exception">The cause.</param>
+    [LoggerMessage(
+        EventId = 19,
+        Level = LogLevel.Warning,
+        Message = "The transcript store could not be read as turn {TurnIndex} of call {CallId} opened. "
+            + "The turn runs on the words the session already holds; a message appended outside a "
+            + "turn since the last read is not among them.")]
+    public static partial void TranscriptResyncFailed(ILogger logger, string callId, int turnIndex, Exception exception);
 }

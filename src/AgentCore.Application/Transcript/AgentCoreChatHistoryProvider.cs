@@ -49,10 +49,10 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
     /// session of one call is handed the first session's words here, and nowhere else.
     /// </param>
     /// <param name="report">Where a dropped store 1 write is reported, if anywhere.</param>
-    /// <param name="stored">
-    /// The state kept beside these words, or <see langword="null"/> for a call that has none because
-    /// it has never spoken. Its marks say how far the call had got; the words cannot, because an edit
-    /// deletes the rows that would otherwise answer for it.
+    /// <param name="marks">
+    /// How far the call had got, from store 0's own counters — or the zero marks of a call that has
+    /// never spoken. The words cannot say this on their own, because an edit deletes the rows that
+    /// would otherwise answer for it.
     /// </param>
     /// <returns>The index the next turn of this call takes.</returns>
     public int BeginCall(
@@ -60,15 +60,11 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
         string callId,
         IReadOnlyList<CallMessage> spoken,
         TranscriptWriteDropped? report = null,
-        CallSessionState? stored = null)
+        TranscriptMarks marks = default)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentException.ThrowIfNullOrEmpty(callId);
         ArgumentNullException.ThrowIfNull(spoken);
-
-        var marks = stored is null
-            ? default
-            : new TranscriptMarks(stored.NextOrdinal, stored.NextTurnIndex);
 
         return UnderLock(
             session,
@@ -77,6 +73,40 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
                 transcript.CallId = callId;
                 gate.Dropped = report;
                 return transcript.Resume(spoken, marks);
+            });
+    }
+
+    /// <summary>Reads the ordinal the session expects the call's next row to take.</summary>
+    /// <param name="session">The session this call runs on.</param>
+    /// <returns>
+    /// The next free ordinal as the session counts it. Equal to store 0's own counter unless a row was
+    /// written by someone else, or one of this session's own writes was dropped.
+    /// </returns>
+    public int NextOrdinal(AgentSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        return UnderLock(session, static transcript => transcript.NextOrdinal);
+    }
+
+    /// <summary>
+    /// Replaces the call's live history with what store 1 now holds, so a later turn sees a row a
+    /// host appended from outside any turn.
+    /// </summary>
+    /// <param name="session">The session this call runs on.</param>
+    /// <param name="rows">Every stored message of the call, as store 1 now holds it.</param>
+    /// <param name="nextOrdinal">The next free ordinal of the call, from store 0's own counter.</param>
+    public void Resync(AgentSession session, IReadOnlyList<CallMessage> rows, int nextOrdinal)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(rows);
+
+        UnderLock(
+            session,
+            transcript =>
+            {
+                transcript.Resync(rows, nextOrdinal);
+                return true;
             });
     }
 
@@ -104,16 +134,6 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
         ArgumentNullException.ThrowIfNull(session);
 
         return UnderLock(session, static transcript => transcript.Read());
-    }
-
-    /// <summary>Reads the next free ordinal of the call on one session.</summary>
-    /// <param name="session">The session this call runs on.</param>
-    /// <returns>The ordinal the call's next row takes.</returns>
-    public int NextOrdinal(AgentSession session)
-    {
-        ArgumentNullException.ThrowIfNull(session);
-
-        return UnderLock(session, static transcript => transcript.NextOrdinal);
     }
 
     /// <summary>Adds one finished turn's messages to the call, and the state that follows them.</summary>
@@ -154,13 +174,15 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
             {
                 var rows = transcript.Append(messages, firstMessageId);
 
-                // After the append, never before. The caller reads the state on its own thread and
-                // hands it in — which is right for everything else it carries — but the ordinal this
-                // turn leaves behind is not known until the rows are cut, and a state that named the
-                // ordinal from before them would resume the call one turn short and overwrite them.
-                var stored = state is null ? null : state with { NextOrdinal = transcript.NextOrdinal };
+                var drafts = rows
+                    .Select(row => new CallMessageDraft(row.TurnIndex, row.Content, row.MessageId))
+                    .ToArray();
 
-                Enqueue(gate, () => _store.AppendAsync(rows, stored, CancellationToken.None), transcript);
+                Enqueue(
+                    gate,
+                    () => new ValueTask(_store.AppendAsync(
+                        transcript.CallId, drafts, state, CancellationToken.None).AsTask()),
+                    transcript);
                 return rows[^1].MessageId;
             });
     }
@@ -262,7 +284,7 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
                 {
                     Enqueue(
                         gate,
-                        () => _store.RewriteAsync(row.CallId, row.Ordinal, row.Content, CancellationToken.None),
+                        () => _store.RewriteAsync(row.CallId, row.MessageId, row.Content, CancellationToken.None),
                         transcript);
                 }
 

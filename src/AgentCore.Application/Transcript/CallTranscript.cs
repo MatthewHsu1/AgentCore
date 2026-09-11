@@ -29,6 +29,19 @@ internal sealed class CallTranscript
     /// <returns>The index the next turn of this call takes.</returns>
     public int Resume(IReadOnlyList<CallMessage> rows, TranscriptMarks marks)
     {
+        Resync(rows, marks.NextOrdinal);
+
+        return marks.NextTurnIndex;
+    }
+
+    /// <summary>
+    /// Replaces the live history with what store 1 now holds, without disturbing <see cref="TurnIndex"/>
+    /// or <see cref="CallId"/>.
+    /// </summary>
+    /// <param name="rows">Every stored message of the call, as store 1 now holds it. Order does not matter.</param>
+    /// <param name="nextOrdinal">The next free ordinal of the call, from store 0's own counter.</param>
+    public void Resync(IReadOnlyList<CallMessage> rows, int nextOrdinal)
+    {
         ArgumentNullException.ThrowIfNull(rows);
 
         // Stripped for the reason Append gives: the live history is serialised into the session
@@ -43,14 +56,12 @@ internal sealed class CallTranscript
                 Message = row.Content.WithoutHostContent(),
             })];
 
-        NextOrdinal = marks.NextOrdinal;
+        NextOrdinal = nextOrdinal;
 
         // Without this a caller who barges in on the first reply of a resumed session is not heard:
         // TruncateLastReply finds no ordinal to cut at and returns nothing, and the provider reports
         // that as a write it declined rather than as a cut it lost.
         RestoreLastAssistantOrdinal();
-
-        return marks.NextTurnIndex;
     }
 
     /// <summary>Finds the ordinal a message sits at, by the name a caller knows it under.</summary>
@@ -190,7 +201,7 @@ internal sealed class CallTranscript
     }
 
     /// <summary>Mints a name for a row the caller had no name for.</summary>
-    private static string NewMessageId() => Guid.CreateVersion7().ToString("n");
+    private static string NewMessageId() => CallMessageIds.New();
 
     /// <summary>One message of the live history, with the ordinal its stored row carries.</summary>
     internal sealed class StoredMessage

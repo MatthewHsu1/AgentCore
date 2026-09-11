@@ -228,6 +228,17 @@ internal sealed class CallEventChain
                 [CallEventPayloadKeys.Reason] = $"{exception.GetType().Name}: {exception.Message}",
             });
 
+    /// <summary>Raises the fact of one store 1 read that failed as a turn opened.</summary>
+    internal void RaiseFailedTranscriptResync(int turnIndex, Exception exception)
+        => RaiseDiagnostic(
+            CallEventKind.TranscriptResyncFailed,
+            _time.GetUtcNow(),
+            turnIndex,
+            payload: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [CallEventPayloadKeys.Reason] = $"{exception.GetType().Name}: {exception.Message}",
+            });
+
     /// <summary>Hands one fact to everything watching the call, and never waits for it.</summary>
     /// <param name="kind">What happened.</param>
     /// <param name="occurredAt">When it happened.</param>

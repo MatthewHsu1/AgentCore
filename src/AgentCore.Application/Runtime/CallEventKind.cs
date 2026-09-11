@@ -43,4 +43,10 @@ public enum CallEventKind
 
     /// <summary>A resumed call could not restore part of its stored state: the document changed under it.</summary>
     StateRestorePartial = 11,
+
+    /// <summary>
+    /// Store 1 could not be read as a turn opened, so the turn ran on the words the session already
+    /// held. A message appended outside a turn since the last read is not among them.
+    /// </summary>
+    TranscriptResyncFailed = 13,
 }

@@ -18,6 +18,11 @@ namespace AgentCore.Application.Calls;
 /// under a build that writes it. Read by <c>GetAsync</c> and <c>CreateAsync</c> only: a listing does
 /// not need it and does not pay for it.
 /// </param>
+/// <param name="NextOrdinal">
+/// The ordinal the call's next appended row takes. Read by <c>GetAsync</c> and <c>CreateAsync</c>
+/// only, on the same terms as <paramref name="State"/>: a listing leaves it at its default 0 rather
+/// than paying to read it.
+/// </param>
 public sealed record CallRecord(
     string CallId,
     string? Title,
@@ -26,4 +31,5 @@ public sealed record CallRecord(
     JsonElement? Custom,
     DateTimeOffset CreatedAt,
     DateTimeOffset? LastMessageAt,
-    CallSessionState? State = null);
+    CallSessionState? State = null,
+    int NextOrdinal = 0);

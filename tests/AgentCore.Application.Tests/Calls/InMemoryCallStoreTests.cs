@@ -236,7 +236,7 @@ public sealed class InMemoryCallStoreTests
         // two backings answering differently is the defect this pins.
         InMemoryCallStore store = new();
         await store.CreateAsync("c1", Token);
-        await store.AppendAsync([Word("c1")], new CallSessionState { Stage = "collecting" }, Token);
+        await store.AppendAsync("c1", [Word()], new CallSessionState { Stage = "collecting" }, Token);
 
         // Act
         await store.DeleteAsync("c1", Token);
@@ -254,7 +254,7 @@ public sealed class InMemoryCallStoreTests
         TestTimeProvider clock = new();
         InMemoryCallStore store = new(clock);
         await store.CreateAsync("c1", Token);
-        await store.AppendAsync([Word("c1")], new CallSessionState { Stage = "collecting" }, Token);
+        await store.AppendAsync("c1", [Word()], new CallSessionState { Stage = "collecting" }, Token);
 
         // Act
         clock.Advance(TimeSpan.FromDays(2));
@@ -265,6 +265,6 @@ public sealed class InMemoryCallStoreTests
         Assert.Null((await store.CreateAsync("c1", Token)).State);
     }
 
-    private static CallMessage Word(string callId)
-        => new(callId, 0, 0, new ChatMessage(ChatRole.User, "hello"), "m0");
+    private static CallMessageDraft Word()
+        => new(0, new ChatMessage(ChatRole.User, "hello"), "m0");
 }

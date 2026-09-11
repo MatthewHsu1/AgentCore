@@ -5,6 +5,7 @@ using AgentCore.Application.Transcript;
 using Microsoft.Extensions.AI;
 using Npgsql;
 using NpgsqlTypes;
+using static AgentCore.Infrastructure.Calls.Postgres.PostgresCallRows;
 using static AgentCore.Infrastructure.Calls.Postgres.PostgresCallStoreSql;
 
 namespace AgentCore.Infrastructure.Calls.Postgres;
@@ -216,47 +217,6 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
     /// <returns>A task that completes when the pool is closed.</returns>
     public ValueTask DisposeAsync() => _dataSource.DisposeAsync();
 
-    /// <summary>
-    /// One call's row from <see cref="GetSql"/>, whose ninth column is the state a resume reads back.
-    /// </summary>
-    private static CallRecord Read(NpgsqlDataReader reader) =>
-        ReadListing(reader) with { State = reader.IsDBNull(8) ? null : ReadState(reader.GetString(8)) };
-
-    /// <summary>Reads one call's resume blob, or nothing when the blob cannot be read.</summary>
-    /// <param name="blob">The JSON in <c>call.state</c>.</param>
-    /// <returns>The state, or <see langword="null"/> when it did not parse into one.</returns>
-    private static CallSessionState? ReadState(string blob)
-    {
-        try
-        {
-            return JsonSerializer.Deserialize<CallSessionState>(blob, CallStateJson.Options);
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// One call's row from <see cref="ListSql"/>, which projects <see cref="Projection"/> alone. It
-    /// has no ninth column to read, so <see cref="CallRecord.State"/> is left at its default
-    /// <see langword="null"/> rather than paying to deserialize a blob a listing never shows.
-    /// </summary>
-    private static CallRecord ReadListing(NpgsqlDataReader reader) =>
-        new(
-            reader.GetString(0),
-            reader.IsDBNull(1) ? null : reader.GetString(1),
-            ToStatus(reader.GetString(2)),
-            reader.IsDBNull(3) ? null : reader.GetString(3),
-            reader.IsDBNull(4) ? null : JsonDocument.Parse(reader.GetString(4)).RootElement.Clone(),
-            reader.GetFieldValue<DateTimeOffset>(5),
-            reader.IsDBNull(7) ? null : reader.GetFieldValue<DateTimeOffset>(7));
-
-    private static string ToText(CallStatus status) => status == CallStatus.Archived ? Archived : Regular;
-
-    private static CallStatus ToStatus(string text) =>
-        text == Archived ? CallStatus.Archived : CallStatus.Regular;
-
     private async ValueTask AmendAsync(
         string sql, string callId, NpgsqlParameter value, CancellationToken cancellationToken)
     {
@@ -267,39 +227,48 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public async ValueTask AppendAsync(
-        IReadOnlyList<CallMessage> messages,
+    public async ValueTask<IReadOnlyList<CallMessage>> AppendAsync(
+        string callId,
+        IReadOnlyList<CallMessageDraft> messages,
         CallSessionState? state = null,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(callId);
         ArgumentNullException.ThrowIfNull(messages);
 
         if (messages.Count == 0)
         {
-            return;
+            return [];
         }
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using NpgsqlBatch batch = new(connection);
 
-        foreach (CallMessage message in messages)
+        NpgsqlBatchCommand appendCommand = new(AppendSql);
+        appendCommand.Parameters.Add(new NpgsqlParameter { Value = callId });
+        appendCommand.Parameters.Add(new NpgsqlParameter<int?[]>
         {
-            NpgsqlBatchCommand command = new(AppendSql);
-            command.Parameters.Add(new NpgsqlParameter { Value = message.CallId });
-            command.Parameters.Add(new NpgsqlParameter { Value = message.Ordinal });
-            command.Parameters.Add(new NpgsqlParameter { Value = message.TurnIndex });
-            command.Parameters.Add(new NpgsqlParameter { Value = message.Content.Role.Value });
-            command.Parameters.Add(
-                new NpgsqlParameter { Value = Serialise(message.Content), NpgsqlDbType = NpgsqlDbType.Jsonb });
-            command.Parameters.Add(new NpgsqlParameter { Value = message.MessageId });
-
-            batch.BatchCommands.Add(command);
-        }
+            TypedValue = [.. messages.Select(message => message.TurnIndex)],
+        });
+        appendCommand.Parameters.Add(new NpgsqlParameter<string[]>
+        {
+            TypedValue = [.. messages.Select(message => message.Content.Role.Value)],
+        });
+        appendCommand.Parameters.Add(new NpgsqlParameter
+        {
+            Value = messages.Select(message => Serialise(message.Content)).ToArray(),
+            NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Jsonb,
+        });
+        appendCommand.Parameters.Add(new NpgsqlParameter<string[]>
+        {
+            TypedValue = [.. messages.Select(message => message.MessageId)],
+        });
+        batch.BatchCommands.Add(appendCommand);
 
         if (state is not null)
         {
             NpgsqlBatchCommand stateCommand = new(StateSql);
-            stateCommand.Parameters.Add(new NpgsqlParameter { Value = messages[0].CallId });
+            stateCommand.Parameters.Add(new NpgsqlParameter { Value = callId });
             stateCommand.Parameters.Add(new NpgsqlParameter
             {
                 Value = JsonSerializer.Serialize(state, CallStateJson.Options),
@@ -309,19 +278,42 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
             batch.BatchCommands.Add(stateCommand);
         }
 
-        await batch.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        // AppendSql is the only command with a RETURNING clause, so its result set is the only one
+        // this reads. Matched by message_id and not by row order: PostgreSQL makes no promise that a
+        // multi-row INSERT ... SELECT returns in the order its source rows arrived.
+        Dictionary<string, (int Ordinal, int TurnIndex)> written = [];
+
+        await using (var reader = await batch.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+        {
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                written[reader.GetString(2)] = (reader.GetInt32(0), reader.GetInt32(1));
+            }
+        }
+
+        if (written.Count == 0)
+        {
+            throw new InvalidOperationException($"Store 0 holds no call '{callId}' to append words to.");
+        }
+
+        return [.. messages.Select(draft =>
+        {
+            var (ordinal, turnIndex) = written[draft.MessageId];
+            return new CallMessage(callId, ordinal, turnIndex, draft.Content, draft.MessageId);
+        })];
     }
 
     /// <inheritdoc />
     public async ValueTask RewriteAsync(
-        string callId, int ordinal, ChatMessage content, CancellationToken cancellationToken = default)
+        string callId, string messageId, ChatMessage content, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(callId);
+        ArgumentException.ThrowIfNullOrEmpty(messageId);
         ArgumentNullException.ThrowIfNull(content);
 
         await using var command = _dataSource.CreateCommand(RewriteSql);
         command.Parameters.Add(new NpgsqlParameter { Value = callId });
-        command.Parameters.Add(new NpgsqlParameter { Value = ordinal });
+        command.Parameters.Add(new NpgsqlParameter { Value = messageId });
         command.Parameters.Add(new NpgsqlParameter { Value = Serialise(content), NpgsqlDbType = NpgsqlDbType.Jsonb });
 
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
@@ -384,42 +376,7 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>One row for each spoken turn, oldest turn first.</returns>
     /// <exception cref="ArgumentNullException">The call id is <see langword="null"/>.</exception>
-    public async Task<IReadOnlyList<TranscriptTurnDigest>> ReadSpokenTurnsAsync(
+    public Task<IReadOnlyList<TranscriptTurnDigest>> ReadSpokenTurnsAsync(
         string callId, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(callId);
-
-        await using var command = _dataSource.CreateCommand(VerifySql);
-        command.Parameters.Add(new NpgsqlParameter { Value = callId });
-
-        List<TranscriptTurnDigest> turns = [];
-
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            turns.Add(new TranscriptTurnDigest(
-                reader.GetInt32(0),
-                reader.GetString(1),
-                reader.IsDBNull(2) ? null : reader.GetString(2)));
-        }
-
-        return turns;
-    }
-
-
-    private static string Serialise(ChatMessage message)
-        => JsonSerializer.Serialize(message, TranscriptJson.Options);
-
-    private static ChatMessage Deserialise(string content)
-        => JsonSerializer.Deserialize<ChatMessage>(content, TranscriptJson.Options)
-            ?? throw new InvalidOperationException("A call_message row holds JSON null in content.");
-
+        => PostgresCallVerification.ReadSpokenTurnsAsync(_dataSource, callId, cancellationToken);
 }
-
-/// <summary>One spoken turn, as store 1 holds it and as store 3 proves it.</summary>
-/// <param name="TurnIndex">The turn, which is the join between the two stores.</param>
-/// <param name="Spoken">The words store 1 holds. A barge-in cut them down to what the caller heard.</param>
-/// <param name="ReplyTextSha256">
-/// The digest the chain holds for the turn, or <see langword="null"/> when its event carried none.
-/// </param>
-internal sealed record TranscriptTurnDigest(int TurnIndex, string Spoken, string? ReplyTextSha256);
