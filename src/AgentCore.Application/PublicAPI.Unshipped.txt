@@ -507,6 +507,24 @@ AgentCore.Application.Configuration.Schema.KnowledgeAmbiguityConfiguration.Probe
 AgentCore.Application.Configuration.Schema.KnowledgeAmbiguityConfiguration.ProbeDeadlineSeconds.init -> void
 AgentCore.Application.Configuration.Schema.KnowledgeAmbiguityConfiguration.ProbeWaitMarginSeconds.get -> int
 AgentCore.Application.Configuration.Schema.KnowledgeAmbiguityConfiguration.ProbeWaitMarginSeconds.init -> void
+AgentCore.Application.Configuration.Schema.KnowledgeFacetResolveConfiguration
+AgentCore.Application.Configuration.Schema.KnowledgeFacetResolveConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.KnowledgeFacetResolveConfiguration!
+AgentCore.Application.Configuration.Schema.KnowledgeFacetResolveConfiguration.Equals(AgentCore.Application.Configuration.Schema.KnowledgeFacetResolveConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.KnowledgeFacetResolveConfiguration.KnowledgeFacetResolveConfiguration() -> void
+AgentCore.Application.Configuration.Schema.KnowledgeFacetResolveConfiguration.Query.get -> string!
+AgentCore.Application.Configuration.Schema.KnowledgeFacetResolveConfiguration.Query.init -> void
+AgentCore.Application.Configuration.Schema.KnowledgeFacetResolveConfiguration.Read.get -> string!
+AgentCore.Application.Configuration.Schema.KnowledgeFacetResolveConfiguration.Read.init -> void
+AgentCore.Application.Configuration.Schema.KnowledgeFacetResolveConfiguration.Via.get -> AgentCore.Application.Configuration.Schema.KnowledgeFacetValueConfiguration!
+AgentCore.Application.Configuration.Schema.KnowledgeFacetResolveConfiguration.Via.init -> void
+AgentCore.Application.Configuration.Schema.KnowledgeFacetValueConfiguration
+AgentCore.Application.Configuration.Schema.KnowledgeFacetValueConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.KnowledgeFacetValueConfiguration!
+AgentCore.Application.Configuration.Schema.KnowledgeFacetValueConfiguration.Equals(AgentCore.Application.Configuration.Schema.KnowledgeFacetValueConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.KnowledgeFacetValueConfiguration.Key.get -> string!
+AgentCore.Application.Configuration.Schema.KnowledgeFacetValueConfiguration.Key.init -> void
+AgentCore.Application.Configuration.Schema.KnowledgeFacetValueConfiguration.KnowledgeFacetValueConfiguration() -> void
+AgentCore.Application.Configuration.Schema.KnowledgeFacetValueConfiguration.Value.get -> string!
+AgentCore.Application.Configuration.Schema.KnowledgeFacetValueConfiguration.Value.init -> void
 AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration
 AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration!
 AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.Authority.get -> string?
@@ -531,6 +549,8 @@ AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration
 AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration.Key.get -> string!
 AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration.Key.init -> void
 AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration.KnowledgeFilterableFacetConfiguration() -> void
+AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration.Resolve.get -> AgentCore.Application.Configuration.Schema.KnowledgeFacetResolveConfiguration?
+AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration.Resolve.init -> void
 AgentCore.Application.Configuration.Schema.KnowledgeLinkLookup
 AgentCore.Application.Configuration.Schema.KnowledgeLinkLookup.Direct = 1 -> AgentCore.Application.Configuration.Schema.KnowledgeLinkLookup
 AgentCore.Application.Configuration.Schema.KnowledgeLinkLookup.Filter = 2 -> AgentCore.Application.Configuration.Schema.KnowledgeLinkLookup
@@ -1468,6 +1488,12 @@ override AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.ToS
 override AgentCore.Application.Configuration.Schema.KnowledgeAmbiguityConfiguration.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.KnowledgeAmbiguityConfiguration.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.KnowledgeAmbiguityConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.KnowledgeFacetResolveConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.KnowledgeFacetResolveConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.KnowledgeFacetResolveConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.KnowledgeFacetValueConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.KnowledgeFacetValueConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.KnowledgeFacetValueConfiguration.ToString() -> string!
 override AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.ToString() -> string!
@@ -1677,6 +1703,10 @@ static AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.opera
 static AgentCore.Application.Configuration.Schema.HttpRequestConfiguration.operator ==(AgentCore.Application.Configuration.Schema.HttpRequestConfiguration? left, AgentCore.Application.Configuration.Schema.HttpRequestConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.KnowledgeAmbiguityConfiguration.operator !=(AgentCore.Application.Configuration.Schema.KnowledgeAmbiguityConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeAmbiguityConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.KnowledgeAmbiguityConfiguration.operator ==(AgentCore.Application.Configuration.Schema.KnowledgeAmbiguityConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeAmbiguityConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.KnowledgeFacetResolveConfiguration.operator !=(AgentCore.Application.Configuration.Schema.KnowledgeFacetResolveConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeFacetResolveConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.KnowledgeFacetResolveConfiguration.operator ==(AgentCore.Application.Configuration.Schema.KnowledgeFacetResolveConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeFacetResolveConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.KnowledgeFacetValueConfiguration.operator !=(AgentCore.Application.Configuration.Schema.KnowledgeFacetValueConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeFacetValueConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.KnowledgeFacetValueConfiguration.operator ==(AgentCore.Application.Configuration.Schema.KnowledgeFacetValueConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeFacetValueConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.operator !=(AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration.operator ==(AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeFieldsConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration.operator !=(AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeFilterableFacetConfiguration? right) -> bool

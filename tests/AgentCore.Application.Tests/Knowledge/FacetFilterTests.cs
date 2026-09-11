@@ -70,6 +70,61 @@ public sealed class FacetFilterTests
     }
 
     [Fact]
+    public async Task ToolMode_FacetWithResolve_TellsTheModelHowToFindTheValue()
+    {
+        KnowledgeScopeConfiguration scope = new()
+        {
+            Template = "facets.{key}",
+            Filterable =
+            [
+                new() { Key = "lookup", Description = "The only value is model-numbers." },
+                new()
+                {
+                    Key = "model",
+                    Description = "The machine and the year, as one tag.",
+                    Resolve = new()
+                    {
+                        Via = new() { Key = "lookup", Value = "model-numbers" },
+                        Query = "<product> model number",
+                        Read = "the Tag column of the row for the person's year",
+                    },
+                },
+            ],
+        };
+
+        var tool = await SearchToolAsync(new StubKnowledgePort([]), scope);
+
+        var wording = tool.JsonSchema
+            .GetProperty("properties").GetProperty("filters")
+            .GetProperty("description")
+            .GetString();
+
+        Assert.Contains(
+            "model: The machine and the year, as one tag. To find the value: search once for "
+            + "\"<product> model number\" with filters [{key: lookup, value: model-numbers}], and read "
+            + "the Tag column of the row for the person's year. Copy it exactly; never build one.",
+            wording,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ToolMode_FilterableDeclared_SaysTheValueIsMatchedExactly()
+    {
+        var tool = await SearchToolAsync(new StubKnowledgePort([]), Declared);
+
+        var wording = tool.JsonSchema
+            .GetProperty("properties").GetProperty("filters")
+            .GetProperty("items").GetProperty("properties").GetProperty("value")
+            .GetProperty("description")
+            .GetString();
+
+        Assert.Equal(
+            "The value, exactly as the cards store it; it is matched exactly. A key that says how to "
+            + "find its value must be found that way first.",
+            wording);
+    }
+
+    [Fact]
     public async Task Filters_NarrowTheScopeTheStoreSees()
     {
         StubKnowledgePort port = new([Card("a")]);

@@ -65,8 +65,8 @@ internal static class FacetFilterSchema
                     {
                         ["type"] = "string",
                         ["description"] =
-                            "The value the cards must carry, as the collection stores it. Write what "
-                            + "the person said and it will be matched against the stored values.",
+                            "The value, exactly as the cards store it; it is matched exactly. A key "
+                            + "that says how to find its value must be found that way first.",
                     },
                 },
                 ["required"] = new JsonArray(KeyProperty, ValueProperty),
@@ -89,8 +89,18 @@ internal static class FacetFilterSchema
         foreach (var facet in facets)
         {
             wording.Append("\n- ").Append(facet.Key).Append(": ").Append(facet.Description);
+
+            if (facet.Resolve is { } resolve)
+            {
+                wording.Append(' ').Append(Recipe(resolve));
+            }
         }
 
         return wording.ToString();
     }
+
+    private static string Recipe(KnowledgeFacetResolveConfiguration resolve)
+        => $"To find the value: search once for \"{resolve.Query}\" with filters "
+            + $"[{{key: {resolve.Via.Key}, value: {resolve.Via.Value}}}], and read {resolve.Read}. "
+            + "Copy it exactly; never build one.";
 }
