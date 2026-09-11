@@ -122,6 +122,50 @@ public sealed class KnowledgeAuditRecordTests
         Assert.Equal(KnowledgeFacetOrigin.Wildcard, record.ScopeOrigins["brand"]);
     }
 
+    [Fact]
+    public void ForLog_WritesEachFacetWithItsOriginAsText()
+    {
+        // The log line prints the view with the record's own ToString, and a dictionary prints as
+        // its type name there. The one thing an operator opens the line to see, which facet
+        // narrowed the search, has to be in the text.
+        KnowledgeScope scope = new()
+        {
+            Facets = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["model"] = "f85-2019",
+                ["code"] = "*",
+            },
+            Origins = new Dictionary<string, KnowledgeFacetOrigin>(StringComparer.Ordinal)
+            {
+                ["model"] = KnowledgeFacetOrigin.Tool,
+                ["code"] = KnowledgeFacetOrigin.Wildcard,
+            },
+        };
+
+        var view = KnowledgeAuditRecord.For(null, "agent", KnowledgeMode.Tool, "q", scope, [], 1.0, null)
+            .ForLog();
+
+        Assert.Equal("code=* (Wildcard), model=f85-2019 (Tool)", view.Scope);
+    }
+
+    [Fact]
+    public void ForLog_FacetWithNoRecordedOrigin_WritesTheValueAlone()
+    {
+        var view = KnowledgeAuditRecord.For(null, "agent", KnowledgeMode.Tool, "q", Scope(), [], 1.0, null)
+            .ForLog();
+
+        Assert.Equal("model=ct900", view.Scope);
+    }
+
+    [Fact]
+    public void ForLog_NoScopeWasOpen_WritesAnEmptyString()
+    {
+        var view = KnowledgeAuditRecord.For(null, "agent", KnowledgeMode.Tool, "q", scope: null, [], 1.0, null)
+            .ForLog();
+
+        Assert.Equal(string.Empty, view.Scope);
+    }
+
     private static KnowledgeScope Scope()
         => new() { Facets = new Dictionary<string, string> { ["model"] = "ct900" } };
 

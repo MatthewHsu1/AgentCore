@@ -146,8 +146,7 @@ public sealed class FacetFilterTests
         var record = line.Field<KnowledgeAuditRecord.LogView>("Record");
 
         Assert.NotNull(record);
-        Assert.Equal("lcr-2023", record!.Scope["model"]);
-        Assert.Equal(KnowledgeFacetOrigin.Tool, record.ScopeOrigins["model"]);
+        Assert.Equal("model=lcr-2023 (Tool)", record!.Scope);
     }
 
     private static async Task<AIFunction> SearchToolAsync(
