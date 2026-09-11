@@ -61,64 +61,6 @@ public sealed class ClarificationWiringBindingTests
               knowledge: { mode: tool, scoped: true }
         """;
 
-    private const string TwoAgentYaml =
-        """
-        apiVersion: agentcore/v1
-        name: clarification-wiring-two-agents
-        state:
-          model:
-            type: string
-            writer: extractor
-            description: "The model, as printed on the machine."
-          audience:
-            type: string
-            writer: const
-            value: everyone
-            enum: [everyone]
-        policy:
-          initial: greeting
-          stages:
-            - { id: greeting, agent: greeter }
-            - { id: answering, agent: reader }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          knowledge:
-            kind: qdrant
-            collection: kb
-            fields: { body: text }
-            scope:
-              template: "facets.{key}"
-              fromState: [model, audience]
-              wildcard: { value: "*", facets: [model] }
-            ambiguity: { maxCandidates: 3, maxAsks: 2 }
-        agents:
-          items:
-            - { id: greeter, instructions: "I say hello" }
-            - { id: reader, instructions: "I read the bank", knowledge: { mode: tool, scoped: true } }
-        """;
-
-    [Fact]
-    public void EveryAgentInOneDocument_SharesTheOneClarificationProvider()
-    {
-        // The provider's three fields are the document's wiring and it keeps nothing per agent, so a
-        // second instance would be a second copy of the same thing. Channel 1 is bound to agents that
-        // declare no knowledge: block of their own, so this is every agent in the document, not just
-        // the ones that search.
-        using SequencedChatClient reply = new("hello there.");
-
-        var compiled = ConfigurationCompiler.Compile(
-            ConfigurationLoader.LoadYaml(TwoAgentYaml),
-            new AgentCompilationContext(new FakeChatClientFactory(reply)) { Knowledge = new ScopedFakePort() });
-
-        var greeter = Assert.Single(Providers(compiled.Agents["greeter"]).OfType<ClarificationProvider>());
-        var reader = Assert.Single(Providers(compiled.Agents["reader"]).OfType<ClarificationProvider>());
-
-        Assert.Same(greeter, reader);
-    }
-
     [Fact]
     public async Task TheDocumentsAmbiguityWiring_ReachesTheAgentsOwnBoundSearch()
     {

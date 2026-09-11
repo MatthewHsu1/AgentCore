@@ -14,7 +14,7 @@ namespace AgentCore.Infrastructure.Knowledge.VectorData.Qdrant;
 /// The whole knowledge base over one Qdrant collection.
 /// </summary>
 internal sealed class QdrantKnowledgeStore
-    : IKnowledgeRetrievalPort, IFacetVocabularyPort, IKnowledgeFacetReadPort, IDisposable
+    : IKnowledgeRetrievalPort, IKnowledgeFacetReadPort, IDisposable
 {
     private readonly IQdrantSearchChannel _channel;
     private readonly IEmbeddingGenerator<string, Embedding<float>> _embeddings;
@@ -152,22 +152,6 @@ internal sealed class QdrantKnowledgeStore
         }
 
         return cards;
-    }
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// <paramref name="path"/> is resolved verbatim: the caller has already applied
-    /// <c>scope.template</c>, so this never prefixes or rewrites it.
-    /// </remarks>
-    public async ValueTask<IReadOnlyList<string>> ReadAsync(
-        string path, int limit, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(path);
-        ArgumentOutOfRangeException.ThrowIfNegative(limit);
-
-        return await _channel
-            .FacetAsync(_options.Collection, path, (ulong)limit, cancellationToken)
-            .ConfigureAwait(false);
     }
 
     /// <inheritdoc />

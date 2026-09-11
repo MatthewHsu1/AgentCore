@@ -196,13 +196,6 @@ public static class ConfigurationCompiler
 
         var clarification = ResolvedClarification.From(configuration);
 
-        // Nothing on this provider is per agent: its three fields are the document's own wiring, and
-        // every other value it reads comes off the turn's ambients. The framework only ever calls
-        // into it, passing the agent and the session as arguments, so one instance serves them all.
-        var clarificationProvider = clarification.Ambiguity is { } documentAmbiguity
-            ? new ClarificationProvider(documentAmbiguity, clarification.FromState, clarification.SlotDescriptions)
-            : null;
-
         Dictionary<string, ToolConfiguration> tools = new(StringComparer.Ordinal);
         foreach (var tool in configuration.Tools)
         {
@@ -272,7 +265,12 @@ public static class ConfigurationCompiler
                     },
                     ChatHistoryProvider = history,
                     AIContextProviders = AgentContextProviderCompiler.Build(
-                        section.Defaults, item, context, pointer, clarification, clarificationProvider),
+                        section.Defaults,
+                        item,
+                        context,
+                        pointer,
+                        clarification,
+                        configuration.Providers?.Knowledge?.Scope),
                 });
             path.RemoveAt(path.Count - 1);
 

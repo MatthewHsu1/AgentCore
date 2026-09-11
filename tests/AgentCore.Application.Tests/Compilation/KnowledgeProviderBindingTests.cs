@@ -7,6 +7,7 @@ using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Knowledge.Fakes;
 using AgentCore.Application.Tests.Runtime;
 using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 using Xunit;
 
 namespace AgentCore.Application.Tests.Compilation;
@@ -39,6 +40,29 @@ public sealed class KnowledgeProviderBindingTests
           items:
             - { id: reader, instructions: "I read the bank", knowledge: { mode: tool, scoped: false } }
             - { id: quiet,  instructions: "I answer from my own instructions" }
+        """;
+
+    private const string FilterableYaml =
+        """
+        apiVersion: agentcore/v1
+        name: knowledge-binding-filterable
+        providers:
+          call:   { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
+          knowledge:
+            kind: qdrant
+            collection: kb
+            fields: { body: text }
+            scope:
+              template: "facets.{key}"
+              filterable:
+                - key: model
+                  description: "The machine and the year, as one tag, such as lcr-2023."
+        agents:
+          items:
+            - { id: only, instructions: "I read the bank", knowledge: { mode: tool, scoped: false } }
         """;
 
     private const string NoKnowledgeYaml =
@@ -122,6 +146,36 @@ public sealed class KnowledgeProviderBindingTests
         Assert.Contains("agent 'only'", failure.Message, StringComparison.Ordinal);
         Assert.Contains("no knowledge vendor", failure.Message, StringComparison.Ordinal);
         Assert.Equal("/agents/items/0/knowledge", Assert.Single(failure.Errors).Pointer);
+    }
+
+    [Fact]
+    public async Task AFilterableFacet_ReachesTheSearchToolTheAgentIsGiven()
+    {
+        // The declaration crosses four layers before the model sees it: the document schema has to
+        // allow the block, the record has to bind it, the compiler has to carry it to the factory,
+        // and the factory has to wrap the function. Every one of those is silent when it drops it,
+        // and the agent then searches the whole corpus and nobody is told.
+        var agent = CompileOne(FilterableYaml, new StubKnowledgePort([]));
+
+        List<AIFunction> offered = [];
+        foreach (var provider in Providers(agent))
+        {
+#pragma warning disable MAAI001 // The context constructors are the framework's own experimental surface.
+            AIContextProvider.InvokingContext context = new(agent, null, new AIContext());
+#pragma warning restore MAAI001
+            var result = await provider.InvokingAsync(context, TestContext.Current.CancellationToken);
+            offered.AddRange((result.Tools ?? []).OfType<AIFunction>());
+        }
+
+        var tool = Assert.Single(offered);
+        var keys = tool.JsonSchema
+            .GetProperty("properties").GetProperty("filters")
+            .GetProperty("items").GetProperty("properties").GetProperty("key")
+            .GetProperty("enum")
+            .EnumerateArray()
+            .Select(value => value.GetString());
+
+        Assert.Equal(["model"], keys);
     }
 
     private static AIAgent CompileOne(string yaml, IKnowledgeRetrievalPort? port)

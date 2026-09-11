@@ -18,9 +18,9 @@ internal static class AgentContextProviderCompiler
     private static readonly SourceLocatorCitationFormatter DefaultCitations = new();
 
     /// <summary>
-    /// Builds the context providers of one agent. <paramref name="clarification"/> and
-    /// <paramref name="clarificationProvider"/> are the document's ambiguity wiring (§7), the same
-    /// for every agent — built once by the caller rather than re-derived per agent.
+    /// Builds the context providers of one agent. <paramref name="clarification"/> is the document's
+    /// ambiguity wiring (§8), the same for every agent — built once by the caller rather than
+    /// re-derived per agent.
     /// </summary>
     public static List<AIContextProvider> Build(
         AgentDefaults? defaults,
@@ -28,17 +28,9 @@ internal static class AgentContextProviderCompiler
         AgentCompilationContext context,
         string pointer,
         ResolvedClarification clarification,
-        ClarificationProvider? clarificationProvider)
+        KnowledgeScopeConfiguration? scope)
     {
         List<AIContextProvider> providers = [new TurnContextProvider()];
-
-        // Bound ahead of the knowledge early-return below: channel 1 asks about a scope's fromState
-        // slots regardless of whether THIS agent composes its own knowledge: block, because the
-        // clarification is document-level state, not a per-agent search setting.
-        if (clarificationProvider is not null)
-        {
-            providers.Add(clarificationProvider);
-        }
 
         if (item.Skills.Count > 0)
         {
@@ -92,8 +84,8 @@ internal static class AgentContextProviderCompiler
                 + $"{nameof(IKnowledgeRetrievalPort)}, or remove the knowledge: block.");
         }
 
-        // The same document-level wiring channel 1 reads above, carried onto this agent's own
-        // resolved knowledge so the search side does not have to re-derive it.
+        // The document-level wiring, carried onto this agent's own resolved knowledge so the search
+        // side does not have to re-derive it.
         var knowledge = composed with { Clarification = clarification };
 
         providers.Add(KnowledgeProviderFactory.Create(
@@ -101,7 +93,8 @@ internal static class AgentContextProviderCompiler
             knowledge,
             item.Id,
             context.Citations ?? DefaultCitations,
-            context.Loggers));
+            context.Loggers,
+            scope));
 
         return providers;
     }

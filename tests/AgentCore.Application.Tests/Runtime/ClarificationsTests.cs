@@ -123,31 +123,21 @@ public sealed class ClarificationsTests
     }
 
     // -----------------------------------------------------------------------------------------
-    // K41 and K43: BeginTurn opens a fresh turn. It clears the per-turn mark and the probe latch
-    // and its payload together, and never the counters — those are per-call, not per-turn.
+    // K43: BeginTurn opens a fresh turn. It clears the probe latch and its payload together, and
+    // never the counter — that is per-call, not per-turn.
     // -----------------------------------------------------------------------------------------
     [Fact]
-    public void BeginTurn_ClearsTheLatchAndTheMark_AndLeavesTheCounters()
+    public void BeginTurn_ClearsTheLatch_AndLeavesTheCounter()
     {
         var clarifications = new Clarifications();
 
         clarifications.ClaimProbe().Publish([]);
 
-        clarifications.Update("brand", s =>
-        {
-            s.AskedThisTurn = true;
-            s.ProbeAsks = 3;
-            s.NamedAsks = 2;
-            s.ResetSpent = true;
-        });
+        clarifications.Update("brand", s => s.ProbeAsks = 3);
 
         clarifications.BeginTurn();
 
-        var brand = clarifications.Read("brand");
-        Assert.False(brand.AskedThisTurn);
-        Assert.Equal(3, brand.ProbeAsks);
-        Assert.Equal(2, brand.NamedAsks);
-        Assert.True(brand.ResetSpent);
+        Assert.Equal(3, clarifications.Read("brand").ProbeAsks);
 
         // The latch is free again.
         Assert.True(clarifications.ClaimProbe().Won);
@@ -205,9 +195,6 @@ public sealed class ClarificationsTests
         first.Update("applies_to", s =>
         {
             s.ProbeAsks = 2;
-            s.NamedAsks = 1;
-            s.ResetSpent = true;
-            s.Pending = ["ct900", "ct900ent"];
             s.LastNamed = Clarifications.LastNamed.Of(new HashSet<string>(StringComparer.Ordinal) { "ct900" });
         });
 
@@ -218,11 +205,8 @@ public sealed class ClarificationsTests
 
         var slot = resumed.Read("applies_to");
         Assert.Equal(2, slot.ProbeAsks);
-        Assert.Equal(1, slot.NamedAsks);
-        Assert.True(slot.ResetSpent);
 
-        // The pending list and what was named belong to a turn the reconnected caller is not in.
-        Assert.Null(slot.Pending);
+        // What was named belongs to a turn the reconnected caller is not in.
         Assert.Equal(Clarifications.LastNamedKind.None, slot.LastNamed.Kind);
     }
 
@@ -230,93 +214,33 @@ public sealed class ClarificationsTests
     public void Spent_LeavesOutASlotNothingHasAskedAbout()
     {
         var clarifications = new Clarifications();
-        clarifications.Update("brand", s => s.Pending = ["sole", "spirit"]);
+        clarifications.Update(
+            "brand",
+            s => s.LastNamed = Clarifications.LastNamed.Of(new HashSet<string>(StringComparer.Ordinal) { "sole" }));
 
         Assert.Empty(clarifications.Spent());
     }
 
     // -----------------------------------------------------------------------------------------
-    // §7's ask is staged: reads see it at once, because step 1 and the probe's K41 skip both act on
-    // it this turn, but only a turn that answered the caller keeps it.
+    // Edit-and-resend: Withdraw clears what was named, and leaves the ask counter untouched so a
+    // withdrawn segment cannot buy a fresh maxAsks budget.
     // -----------------------------------------------------------------------------------------
     [Fact]
-    public void Ask_IsVisibleAtOnce_ButDroppedByTheNextBeginTurn()
-    {
-        var clarifications = new Clarifications();
-        var named = Clarifications.LastNamed.Of(new HashSet<string>(StringComparer.Ordinal) { "ct900" });
-
-        clarifications.Ask("applies_to", named, spendsReset: false);
-
-        var asked = clarifications.Read("applies_to");
-        Assert.Equal(1, asked.NamedAsks);
-        Assert.True(asked.AskedThisTurn);
-        Assert.True(named.Names(asked.LastNamed));
-
-        clarifications.BeginTurn();
-
-        var dropped = clarifications.Read("applies_to");
-        Assert.Equal(0, dropped.NamedAsks);
-        Assert.Equal(Clarifications.LastNamedKind.None, dropped.LastNamed.Kind);
-    }
-
-    [Fact]
-    public void CommitAsks_KeepsTheAsk_AcrossTheTurnBoundary()
-    {
-        var clarifications = new Clarifications();
-        var named = Clarifications.LastNamed.Of(new HashSet<string>(StringComparer.Ordinal) { "ct900" });
-
-        clarifications.Ask("applies_to", named, spendsReset: false);
-        clarifications.CommitAsks("Is it a ct900?");
-        clarifications.BeginTurn();
-
-        var kept = clarifications.Read("applies_to");
-        Assert.Equal(1, kept.NamedAsks);
-        Assert.True(named.Names(kept.LastNamed));
-    }
-
-    [Fact]
-    public void Ask_ThatSpendsTheReset_ReturnsTheCounterToOne()
-    {
-        var clarifications = new Clarifications();
-        clarifications.Update("applies_to", s => s.NamedAsks = 3);
-
-        clarifications.Ask("applies_to", Clarifications.LastNamed.TooMany, spendsReset: true);
-
-        var snapshot = clarifications.Read("applies_to");
-        Assert.Equal(1, snapshot.NamedAsks);
-        Assert.True(snapshot.ResetSpent);
-    }
-
-    // -----------------------------------------------------------------------------------------
-    // Edit-and-resend: Withdraw clears what was named and what is pending, and leaves the ask
-    // counters untouched so a withdrawn segment cannot buy a fresh maxAsks budget.
-    // -----------------------------------------------------------------------------------------
-    [Fact]
-    public void Withdraw_ClearsPendingAndLastNamed_AndLeavesTheCounters()
+    public void Withdraw_ClearsLastNamed_AndLeavesTheCounter()
     {
         var clarifications = new Clarifications();
 
         clarifications.Update("brand", s =>
         {
-            s.Pending = ["ct900", "ct900ent"];
             s.LastNamed = Clarifications.LastNamed.Of(new HashSet<string>(StringComparer.Ordinal) { "ct900", "ct900ent" });
             s.ProbeAsks = 4;
-            s.NamedAsks = 1;
-            s.ResetSpent = true;
-            s.AskedThisTurn = true;
         });
 
         clarifications.Withdraw();
 
         var after = clarifications.Read("brand");
-        Assert.Null(after.Pending);
         Assert.Equal(Clarifications.LastNamed.None, after.LastNamed);
         Assert.Equal(4, after.ProbeAsks);
-        Assert.Equal(1, after.NamedAsks);
-        Assert.True(after.ResetSpent);
-
-        // BeginTurn's mark is a different lifetime; Withdraw must not touch it.
-        Assert.True(after.AskedThisTurn);
     }
 
     [Fact]
@@ -326,12 +250,8 @@ public sealed class ClarificationsTests
 
         var slot = clarifications.Read("applies_to");
 
-        Assert.Null(slot.Pending);
         Assert.Equal(Clarifications.LastNamed.None, slot.LastNamed);
         Assert.Equal(0, slot.ProbeAsks);
-        Assert.Equal(0, slot.NamedAsks);
-        Assert.False(slot.ResetSpent);
-        Assert.False(slot.AskedThisTurn);
     }
 
     [Fact]
@@ -345,10 +265,10 @@ public sealed class ClarificationsTests
     }
 
     // -----------------------------------------------------------------------------------------
-    // §7/§8's compound transitions (K36): a slot's fields must move together as one step, or a
-    // concurrent reader can catch it between the two writes. This is the §8-step-6 shape - set the
-    // pending list and move a counter - reduced to its atomicity core: Pending is set exactly when
-    // ProbeAsks is odd, and a reader that ever sees them disagree caught a torn write.
+    // §8's compound transitions (K36): a slot's fields must move together as one step, or a
+    // concurrent reader can catch it between the two writes. This is the §8-step-6 shape - record
+    // what was named and move a counter - reduced to its atomicity core: LastNamed is set exactly
+    // when ProbeAsks is odd, and a reader that ever sees them disagree caught a torn write.
     // -----------------------------------------------------------------------------------------
     [Fact]
     public async Task Update_ACompoundTransition_IsNeverObservedHalfApplied()
@@ -365,15 +285,17 @@ public sealed class ClarificationsTests
             while (!stop.IsCancellationRequested)
             {
                 var snapshot = clarifications.Read(slot);
-                var pendingIsSet = snapshot.Pending is not null;
+                var namedIsSet = snapshot.LastNamed.Kind == Clarifications.LastNamedKind.Set;
                 var probeAsksIsOdd = snapshot.ProbeAsks % 2 != 0;
 
-                if (pendingIsSet != probeAsksIsOdd)
+                if (namedIsSet != probeAsksIsOdd)
                 {
                     Interlocked.Increment(ref tornObservations);
                 }
             }
         }, TestContext.Current.CancellationToken);
+
+        var named = Clarifications.LastNamed.Of(new HashSet<string>(StringComparer.Ordinal) { "ct900", "ct900ent" });
 
         for (var i = 0; i < iterations; i++)
         {
@@ -381,7 +303,7 @@ public sealed class ClarificationsTests
 
             clarifications.Update(slot, state =>
             {
-                state.Pending = opening ? ["ct900", "ct900ent"] : null;
+                state.LastNamed = opening ? named : Clarifications.LastNamed.None;
                 state.ProbeAsks++;
             });
         }

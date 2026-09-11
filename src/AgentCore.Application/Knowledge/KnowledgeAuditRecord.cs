@@ -78,11 +78,22 @@ internal sealed record KnowledgeAuditRecord
         Agent = Agent,
         Mode = Mode,
         QueryLength = Query.Length,
-        Scope = Scope,
-        ScopeOrigins = ScopeOrigins,
+        Scope = ScopeText(),
         LatencyMs = LatencyMs,
         Cards = Cards,
     };
+
+    /// <summary>
+    /// Writes the scope as <c>code=* (Wildcard), model=f85-2019 (Tool)</c>, keys in ordinal order.
+    /// The log line prints the view with the record's own <c>ToString</c>, and a dictionary prints
+    /// as its type name there.
+    /// </summary>
+    private string ScopeText()
+        => string.Join(", ", Scope
+            .OrderBy(facet => facet.Key, StringComparer.Ordinal)
+            .Select(facet => ScopeOrigins.TryGetValue(facet.Key, out var origin)
+                ? $"{facet.Key}={facet.Value} ({origin})"
+                : $"{facet.Key}={facet.Value}"));
 
     /// <summary>
     /// The part of one retrieval that may be written to a log store.
@@ -101,11 +112,11 @@ internal sealed record KnowledgeAuditRecord
         /// <summary>Gets how many characters the search input held. Never the input itself.</summary>
         public required int QueryLength { get; init; }
 
-        /// <summary>Gets the facets the turn's scope carried, or empty when none was open.</summary>
-        public required IReadOnlyDictionary<string, string> Scope { get; init; }
-
-        /// <summary>Gets where each facet's value came from, or empty when none was open.</summary>
-        public required IReadOnlyDictionary<string, KnowledgeFacetOrigin> ScopeOrigins { get; init; }
+        /// <summary>
+        /// Gets the facets the turn's scope carried, each with where its value came from, as
+        /// <c>code=* (Wildcard), model=f85-2019 (Tool)</c>. Empty when no scope was open.
+        /// </summary>
+        public required string Scope { get; init; }
 
         /// <summary>Gets how long the whole retrieval took, in milliseconds.</summary>
         public required double LatencyMs { get; init; }

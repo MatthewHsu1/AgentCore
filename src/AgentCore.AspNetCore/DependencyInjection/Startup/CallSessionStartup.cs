@@ -3,7 +3,6 @@ using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
-using AgentCore.Application.State;
 using Microsoft.Extensions.Logging;
 
 namespace AgentCore.AspNetCore.DependencyInjection.Startup;
@@ -23,7 +22,6 @@ internal static class CallSessionStartup
     /// <param name="configuration">The loaded document. It carries <c>providers.audit</c>.</param>
     /// <param name="options">The options the host filled. It carries the audit vendors, the clock, and any observer.</param>
     /// <param name="graph">The compiled graph and the seams step 5 made.</param>
-    /// <param name="vocabulary">The cache <c>KnowledgeStartup.ApplyVocabularyAsync</c> filled.</param>
     /// <param name="loggers">The factory the session and the audit queue take their loggers from.</param>
     /// <param name="cancellationToken">Cancels the store open.</param>
     /// <returns>The session factory, the agent shim, and the queue in front of the store.</returns>
@@ -32,7 +30,6 @@ internal static class CallSessionStartup
         AgentCoreConfiguration configuration,
         AgentCoreOptions options,
         CompiledGraph graph,
-        VocabularyCache vocabulary,
         ILoggerFactory loggers,
         CancellationToken cancellationToken)
     {
@@ -56,11 +53,10 @@ internal static class CallSessionStartup
         CallSessionFactory sessions = new(
             graph.Compiled,
             graph.Guards,
-            CallSessionFactory.CreateExtractor(graph.Compiled, graph.ChatClients, options.StateValueLinkers),
+            CallSessionFactory.CreateExtractor(graph.Compiled, graph.ChatClients),
             options.TimeProvider,
             sessionLogger,
-            CallObservers.Standard(auditSink, sessionLogger, options.Observers),
-            vocabulary);
+            CallObservers.Standard(auditSink, sessionLogger, options.Observers));
 
         return new CallSessionSeam(sessions, new AgentCoreAgent(sessions, configuration.Name), auditSink);
     }

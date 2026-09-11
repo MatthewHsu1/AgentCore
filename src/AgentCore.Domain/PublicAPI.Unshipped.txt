@@ -65,6 +65,7 @@ AgentCore.Domain.Knowledge.KnowledgeCard.ViaLink.init -> void
 AgentCore.Domain.Knowledge.KnowledgeFacetOrigin
 AgentCore.Domain.Knowledge.KnowledgeFacetOrigin.Extractor = 1 -> AgentCore.Domain.Knowledge.KnowledgeFacetOrigin
 AgentCore.Domain.Knowledge.KnowledgeFacetOrigin.Host = 0 -> AgentCore.Domain.Knowledge.KnowledgeFacetOrigin
+AgentCore.Domain.Knowledge.KnowledgeFacetOrigin.Tool = 3 -> AgentCore.Domain.Knowledge.KnowledgeFacetOrigin
 AgentCore.Domain.Knowledge.KnowledgeFacetOrigin.Wildcard = 2 -> AgentCore.Domain.Knowledge.KnowledgeFacetOrigin
 AgentCore.Domain.Knowledge.KnowledgeScope
 AgentCore.Domain.Knowledge.KnowledgeScope.<Clone>$() -> AgentCore.Domain.Knowledge.KnowledgeScope!

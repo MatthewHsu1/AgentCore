@@ -75,7 +75,7 @@ public static class ConfigurationValidator
         ReasoningTemperatureCheck.Run(configuration, errors);
         CheckSlotWriters(configuration, errors);
         CheckKnowledgeScopeSlots(configuration, errors);
-        CheckVocabularyAndAmbiguity(configuration, errors, warnings);
+        CheckAmbiguity(configuration, errors, warnings);
         CheckGuardRules(configuration, errors);
         CheckExclusivity(configuration, errors, warnings);
         CheckReachability(configuration, errors);
@@ -128,32 +128,6 @@ public static class ConfigurationValidator
 
         var errors = new List<ConfigurationError>();
         CheckToolReferences(configuration, servedToolIds, errors);
-
-        if (errors.Count > 0)
-        {
-            throw new ConfigurationLoadException(errors);
-        }
-    }
-
-    /// <summary>
-    /// Resolves every slot's <c>vocabulary.linker</c> against the names the linker registry actually
-    /// serves, and throws when one names a linker nothing registered.
-    /// </summary>
-    /// <remarks>
-    /// K12: a two-argument validator, run after the linker registry is built — the registry itself
-    /// lives in Application and is not reachable from here. A caller runs this after building it,
-    /// the same way <see cref="ValidateToolReferences"/> runs after MCP discovery.
-    /// </remarks>
-    /// <param name="configuration">The bound document.</param>
-    /// <param name="registered">Every linker name the registry serves. Always includes <c>exact</c>.</param>
-    /// <exception cref="ConfigurationLoadException">A slot names a linker nothing registered.</exception>
-    public static void ValidateLinkerNames(AgentCoreConfiguration configuration, IReadOnlySet<string> registered)
-    {
-        ArgumentNullException.ThrowIfNull(configuration);
-        ArgumentNullException.ThrowIfNull(registered);
-
-        var errors = new List<ConfigurationError>();
-        CheckLinkerReferences(configuration, registered, errors);
 
         if (errors.Count > 0)
         {
@@ -385,30 +359,6 @@ public static class ConfigurationValidator
         }
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // Check 2, linker names: K12's two-argument validator, run after the linker registry is built.
-    // ---------------------------------------------------------------------------------------------
-    /// <summary>Resolves every declared <c>vocabulary.linker</c> against what the registry serves.</summary>
-    /// <param name="configuration">The bound document.</param>
-    /// <param name="registered">Every linker name the registry serves.</param>
-    /// <param name="errors">The list every failure is added to.</param>
-    private static void CheckLinkerReferences(
-        AgentCoreConfiguration configuration, IReadOnlySet<string> registered, List<ConfigurationError> errors)
-    {
-        foreach (var slot in configuration.State)
-        {
-            if (slot.Value.Vocabulary is not { } vocabulary || registered.Contains(vocabulary.Linker))
-            {
-                continue;
-            }
-
-            errors.Add(Reference(
-                ConfigurationError.AppendPointer(ConfigurationError.AppendPointer(Pointer.State(slot.Key), "vocabulary"), "linker"),
-                $"the slot '{slot.Key}' declares vocabulary.linker: '{vocabulary.Linker}', which nothing "
-                + "registered. Register it with UseStateValueLinkers, or use 'exact'."));
-        }
-    }
-
     /// <summary>Resolves every agent's <c>skills:</c> entry against what the bound folder serves.</summary>
     /// <param name="configuration">The bound document.</param>
     /// <param name="servedSkillNames">Every skill name the bound folder serves.</param>
@@ -552,6 +502,8 @@ public static class ConfigurationValidator
             return;
         }
 
+        KnowledgeFilterValidator.Check(scope, errors);
+
         if (scope.Wildcard is { } wildcard)
         {
             if (string.IsNullOrWhiteSpace(wildcard.Value))
@@ -657,87 +609,26 @@ public static class ConfigurationValidator
                     + "scope mid-call."));
             }
 
-            if (slot.EnumValues is not { Count: > 0 } && slot.Vocabulary is null)
+            if (slot.EnumValues is not { Count: > 0 })
             {
                 errors.Add(Reference(
                     ConfigurationError.AppendPointer(pointer, "enum"),
-                    $"the facet slot '{name}' declares neither enum nor vocabulary. Nothing would then "
-                    + "stop a value the corpus has never been tagged with, which the wildcard turns "
-                    + "into an answer from the wrong bucket rather than an empty result."));
+                    $"the facet slot '{name}' declares no enum. Nothing would then stop a value the "
+                    + "corpus has never been tagged with, which the wildcard turns into an answer "
+                    + "from the wrong bucket rather than an empty result."));
             }
         }
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Check 2, vocabulary and ambiguity: section 10 of the ambiguity-and-vocabulary design.
+    // Check 2, ambiguity: section 10 of the ambiguity design.
     // ---------------------------------------------------------------------------------------------
 
-    /// <summary>Refuses a <c>vocabulary:</c> or <c>ambiguity:</c> block that could not do what it declares.</summary>
-    private static void CheckVocabularyAndAmbiguity(
+    /// <summary>Refuses an <c>ambiguity:</c> block that could not do what it declares.</summary>
+    private static void CheckAmbiguity(
         AgentCoreConfiguration configuration, List<ConfigurationError> errors, List<ConfigurationError> warnings)
     {
         var knowledge = configuration.Providers?.Knowledge;
-        var anyVocabulary = false;
-
-        foreach (var entry in configuration.State)
-        {
-            if (entry.Value.Vocabulary is not { } vocabulary)
-            {
-                continue;
-            }
-
-            anyVocabulary = true;
-            var pointer = Pointer.State(entry.Key);
-            var vocabularyPointer = ConfigurationError.AppendPointer(pointer, "vocabulary");
-
-            if (entry.Value.EnumValues is { Count: > 0 })
-            {
-                errors.Add(Reference(
-                    vocabularyPointer,
-                    $"the slot '{entry.Key}' declares both enum and vocabulary. enum is a fixed, "
-                    + "hand-written list; vocabulary reads the domain from a provider at boot. A slot "
-                    + "cannot have both."));
-            }
-
-            if (entry.Value.Value is not null)
-            {
-                errors.Add(Reference(
-                    ConfigurationError.AppendPointer(pointer, "value"),
-                    $"the slot '{entry.Key}' declares both value and vocabulary. value is writer: "
-                    + "const's fixed value; vocabulary reads a domain the extractor fills at runtime. "
-                    + "A slot cannot have both."));
-            }
-
-            CheckRange(
-                vocabulary.MaxValues,
-                2,
-                int.MaxValue,
-                ConfigurationError.AppendPointer(vocabularyPointer, "maxValues"),
-                $"vocabulary.maxValues on the slot '{entry.Key}'",
-                "A read of fewer than two values could never be told apart from a truncated one.",
-                errors);
-
-            CheckRange(
-                vocabulary.RefreshSeconds,
-                0,
-                MaxIntervalSeconds,
-                ConfigurationError.AppendPointer(vocabularyPointer, "refreshSeconds"),
-                $"vocabulary.refreshSeconds on the slot '{entry.Key}'",
-                "0 means boot only. A negative interval matches AgentCoreBoot's own "
-                + "{ RefreshSeconds: > 0 } guard on nothing, so the slot would silently read once at "
-                + "boot and never refresh again, and one above the range throws out of the "
-                + "PeriodicTimer VocabularyRefreshService builds from it.",
-                errors);
-        }
-
-        if (anyVocabulary && knowledge?.Ambiguity is null)
-        {
-            errors.Add(Reference(
-                Pointer.Ambiguity,
-                "a slot declares vocabulary, and providers.knowledge.ambiguity is absent. vocabulary "
-                + "installs the linker, which can return Ambiguous — an outcome a plain enum gate never "
-                + "produces — and without ambiguity there is no channel to tell anyone."));
-        }
 
         if (knowledge?.Ambiguity is not { } ambiguity)
         {
@@ -811,15 +702,6 @@ public static class ConfigurationValidator
                 "providers.knowledge.ambiguity is declared and scope.fromState names at most one "
                 + "facet. That deployment has no droppable facet other than its only one, so the probe "
                 + "is unreachable unless the host sets one too."));
-        }
-
-        if (configuration.Graph is not null)
-        {
-            warnings.Add(Reference(
-                Pointer.Ambiguity,
-                "providers.knowledge.ambiguity is declared on a graph: document. The clarification's "
-                + "turn-context guard only passes on a session whose row carries history, which a "
-                + "graph run does not, so channel 1 is silent here."));
         }
     }
 

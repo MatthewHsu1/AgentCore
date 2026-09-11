@@ -4,6 +4,7 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.State;
 using AgentCore.Domain.Knowledge;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging;
@@ -33,6 +34,7 @@ internal static class KnowledgeProviderFactory
     /// sink is not, because <c>AuditEvent</c> requires a call id and a sequence number that no
     /// ambient carries down here.
     /// </param>
+    /// <param name="scope">The document's <c>providers.knowledge.scope</c> block, or <see langword="null"/>.</param>
     /// <returns>The provider to hang on that agent.</returns>
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
     internal static AIContextProvider Create(
@@ -40,7 +42,8 @@ internal static class KnowledgeProviderFactory
         ResolvedKnowledge knowledge,
         string agent,
         IKnowledgeCitationFormatter citations,
-        ILoggerFactory? loggers)
+        ILoggerFactory? loggers,
+        KnowledgeScopeConfiguration? scope = null)
     {
         ArgumentNullException.ThrowIfNull(port);
         ArgumentNullException.ThrowIfNull(knowledge);
@@ -62,7 +65,11 @@ internal static class KnowledgeProviderFactory
             RecentMessageMemoryLimit = 4,
         };
 
-        return new TextSearchProvider(SearchAsync, options, loggers);
+        AIContextProvider provider = new TextSearchProvider(SearchAsync, options, loggers);
+
+        return knowledge.Mode == KnowledgeMode.Tool && scope?.Filterable is { Count: > 0 } filterable
+            ? new FacetFilterProvider(provider, filterable)
+            : provider;
 
         async Task<IEnumerable<TextSearchProvider.TextSearchResult>> SearchAsync(
             string query, CancellationToken cancellationToken)
@@ -76,38 +83,34 @@ internal static class KnowledgeProviderFactory
                 return [KnowledgeNotices.Of(KnowledgeNotices.NoScope)];
             }
 
-            using var whole = knowledge.Scoped ? null : KnowledgeScopeScope.Open(WholeCorpus);
+            var composed = knowledge.Scoped ? KnowledgeScopeScope.Current! : WholeCorpus;
+
+            var (narrowed, byTool) = ToolFacetOverlay.Apply(composed, ToolFacetScope.Current);
 
             var started = Stopwatch.GetTimestamp();
 
-            // Held from the moment the main search returns, so a failure raised by anything after it —
-            // the probe's own second search included — is still recorded against the time the main
-            // search took, rather than against however long the probe went on to run.
             double? searched = null;
 
             try
             {
-                var cards = await port.SearchAsync(query, cancellationToken).ConfigureAwait(false);
-                searched = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+                var under = narrowed;
+                var (cards, latency) = await Under(narrowed).ConfigureAwait(false);
+                searched = latency;
 
-                if (logger.IsEnabled(LogLevel.Debug))
+                if (cards.Count == 0 && byTool)
                 {
-                    var record = KnowledgeSearchRecord
-                        .Of(agent, knowledge, query, cards, searched.Value, failure: null)
-                        .ForLog();
-
-                    Log.KnowledgeRetrieved(logger, agent, cards.Count, record);
+                    under = composed;
+                    (cards, _) = await Under(composed).ConfigureAwait(false);
                 }
 
-                // §8 step 1-2: the probe runs only for a tool-mode search that cleared no card at
-                // all (K13) and only for a scoped agent — an unscoped agent opened WholeCorpus, which
-                // holds no facets, and its empty search stays an empty list, exactly as today (K19).
+                using var tail = KnowledgeScopeScope.Open(under);
+
                 if (cards.Count == 0
                     && knowledge.Mode == KnowledgeMode.Tool
-                    && KnowledgeScopeScope.Current is { Facets.Count: > 0 } scope)
+                    && under.Facets.Count > 0)
                 {
                     return await KnowledgeProbe
-                        .RunAsync(port, knowledge, scope, agent, query, logger, cancellationToken)
+                        .RunAsync(port, knowledge, under, agent, query, logger, cancellationToken)
                         .ConfigureAwait(false);
                 }
 
@@ -126,6 +129,26 @@ internal static class KnowledgeProviderFactory
                 Log.KnowledgeRetrievalFailed(logger, agent, record, failure);
 
                 return [KnowledgeNotices.Of(KnowledgeNotices.Unreachable)];
+            }
+
+            async Task<(IReadOnlyList<KnowledgeCard> Cards, double LatencyMs)> Under(KnowledgeScope open)
+            {
+                using var held = KnowledgeScopeScope.Open(open);
+
+                var cards = await port.SearchAsync(query, cancellationToken).ConfigureAwait(false);
+
+                var latency = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+
+                if (logger.IsEnabled(LogLevel.Debug))
+                {
+                    var record = KnowledgeSearchRecord
+                        .Of(agent, knowledge, query, cards, latency, failure: null)
+                        .ForLog();
+
+                    Log.KnowledgeRetrieved(logger, agent, cards.Count, record);
+                }
+
+                return (cards, latency);
             }
         }
     }

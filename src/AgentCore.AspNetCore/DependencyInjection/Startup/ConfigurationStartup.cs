@@ -7,8 +7,7 @@ namespace AgentCore.AspNetCore.DependencyInjection;
 /// <summary>What <see cref="ConfigurationStartup.Load"/> hands back: the document, and the warnings its validation carried.</summary>
 /// <param name="Configuration">The loaded document. See <see cref="ConfigurationStartup.Load"/> for what it has already passed.</param>
 /// <param name="Warnings">
-/// Every partial-coverage warning check 5 raises, and section 10's two ambiguity-and-vocabulary
-/// warnings (K33, K39). <see cref="ConfigurationStartup"/> no longer discards these — a caller logs
+/// Every partial-coverage warning check 5 raises, and section 10's ambiguity warning (K33). <see cref="ConfigurationStartup"/> no longer discards these — a caller logs
 /// them once a logger exists.
 /// </param>
 internal readonly record struct ConfigurationLoadResult(

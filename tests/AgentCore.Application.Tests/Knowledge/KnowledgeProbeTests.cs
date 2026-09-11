@@ -131,27 +131,6 @@ public sealed class KnowledgeProbeTests
     }
 
     [Fact]
-    public async Task Step3_FacetChannel1AlreadyAskedThisTurn_IsSkipped()
-    {
-        // K41: one slot is asked by at most one channel per turn. brand is skipped, so applies_to --
-        // the only other droppable facet -- is what the probe's second search actually drops.
-        var port = new ProbeFakePort((facets, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>(
-            facets.ContainsKey("applies_to") ? [] : [CardWithFacet("a", "applies_to", "ct900")]));
-
-        var clarificationsObject = new Clarifications();
-        clarificationsObject.Update("brand", s => s.AskedThisTurn = true);
-        using var clarifications = OpenClarifications(clarificationsObject);
-        using var scope = KnowledgeScopeScope.Open(FullScope("brand", "applies_to"));
-
-        var knowledge = Resolved(["brand", "applies_to"]);
-        var results = await InvokeSearchAsync(Provider(port, knowledge), "e33");
-
-        Assert.Contains(results, r => r.Text.Contains("ct900", StringComparison.Ordinal));
-        Assert.Equal(0, clarificationsObject.Read("brand").ProbeAsks);
-        Assert.Equal(1, clarificationsObject.Read("applies_to").ProbeAsks);
-    }
-
-    [Fact]
     public async Task Step4_DropsTheFirstDroppableFacet_InFromStateDeclarationOrder()
     {
         var port = new ProbeFakePort((facets, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>(
@@ -171,7 +150,7 @@ public sealed class KnowledgeProbeTests
     // §8 steps 5-6: reading candidates and choosing the message.
 
     [Fact]
-    public async Task Steps5And6_FindsCandidates_SetsThePendingListAndEmitsTheNote()
+    public async Task Steps5And6_FindsCandidates_RecordsWhatItNamedAndEmitsTheNote()
     {
         var port = new ProbeFakePort((facets, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>(
             facets.ContainsKey("applies_to")
@@ -191,7 +170,6 @@ public sealed class KnowledgeProbeTests
             Assert.Single(results).Text);
 
         var snapshot = clarificationsObject.Read("applies_to");
-        Assert.Equal(["ct900", "ct900ent"], snapshot.Pending);
         Assert.Equal(Clarifications.LastNamedKind.Set, snapshot.LastNamed.Kind);
         Assert.Equal(
             new HashSet<string>(["ct900", "ct900ent"], StringComparer.Ordinal), snapshot.LastNamed.Values);
@@ -352,12 +330,9 @@ public sealed class KnowledgeProbeTests
 
         Assert.Contains("ct900", Assert.Single(results).Text, StringComparison.Ordinal);
 
-        var snapshot = clarificationsObject.Read("applies_to");
-        // The pending list is still set: a later turn on the SAME graph row's session may still get
-        // an answer through the linker. Only the RECORD of what was named is withheld (K21's
-        // tie-break rests on the caller having heard the list, which AgentCore cannot know here).
-        Assert.Equal(["ct900"], snapshot.Pending);
-        Assert.Equal(Clarifications.LastNamedKind.None, snapshot.LastNamed.Kind);
+        // The record of what was named is withheld: K21's tie-break rests on the caller having heard
+        // the list, which AgentCore cannot know on a graph row.
+        Assert.Equal(Clarifications.LastNamedKind.None, clarificationsObject.Read("applies_to").LastNamed.Kind);
     }
 
     // K42: no holder, no probe -- but the notice is still owed to a scoped run.

@@ -36,8 +36,4 @@ internal sealed class FacetScrollChannel(params RetrievedPoint[] points) : IQdra
         LastLimit = limit;
         return Task.FromResult(_points);
     }
-
-    public Task<IReadOnlyList<string>> FacetAsync(
-        string collection, string key, ulong limit, CancellationToken cancellationToken) =>
-        throw new NotSupportedException("a facet read never reads distinct values.");
 }
