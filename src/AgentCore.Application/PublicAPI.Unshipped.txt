@@ -290,19 +290,35 @@ AgentCore.Application.Configuration.Parsing.YamlToJson
 AgentCore.Application.Configuration.Schema.AgentConfiguration
 AgentCore.Application.Configuration.Schema.AgentConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.AgentConfiguration!
 AgentCore.Application.Configuration.Schema.AgentConfiguration.AgentConfiguration() -> void
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Approval.get -> AgentCore.Application.Configuration.Schema.ApprovalConfiguration?
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Approval.init -> void
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Background.get -> System.Collections.Generic.IReadOnlyList<string!>!
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Background.init -> void
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Compaction.get -> AgentCore.Application.Configuration.Schema.CompactionConfiguration?
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Compaction.init -> void
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Equals(AgentCore.Application.Configuration.Schema.AgentConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Files.get -> AgentCore.Application.Configuration.Schema.AgentFilesConfiguration?
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Files.init -> void
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Id.get -> string!
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Id.init -> void
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Instructions.get -> string?
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Instructions.init -> void
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Knowledge.get -> AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration?
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Knowledge.init -> void
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Loop.get -> AgentCore.Application.Configuration.Schema.LoopConfiguration?
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Loop.init -> void
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Memory.get -> AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration?
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Memory.init -> void
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Mode.get -> bool?
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Mode.init -> void
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Model.get -> AgentCore.Application.Configuration.Schema.ModelReference?
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Model.init -> void
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Shell.get -> AgentCore.Application.Configuration.Schema.ShellConfiguration?
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Shell.init -> void
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Skills.get -> System.Collections.Generic.IReadOnlyList<string!>!
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Skills.init -> void
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Todos.get -> bool?
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Todos.init -> void
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Tools.get -> System.Collections.Generic.IReadOnlyList<string!>!
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Tools.init -> void
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration
@@ -342,6 +358,8 @@ AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Tools.init -> 
 AgentCore.Application.Configuration.Schema.AgentDefaults
 AgentCore.Application.Configuration.Schema.AgentDefaults.<Clone>$() -> AgentCore.Application.Configuration.Schema.AgentDefaults!
 AgentCore.Application.Configuration.Schema.AgentDefaults.AgentDefaults() -> void
+AgentCore.Application.Configuration.Schema.AgentDefaults.Approval.get -> AgentCore.Application.Configuration.Schema.ApprovalConfiguration?
+AgentCore.Application.Configuration.Schema.AgentDefaults.Approval.init -> void
 AgentCore.Application.Configuration.Schema.AgentDefaults.Compaction.get -> AgentCore.Application.Configuration.Schema.CompactionConfiguration?
 AgentCore.Application.Configuration.Schema.AgentDefaults.Compaction.init -> void
 AgentCore.Application.Configuration.Schema.AgentDefaults.Equals(AgentCore.Application.Configuration.Schema.AgentDefaults? other) -> bool
@@ -349,8 +367,22 @@ AgentCore.Application.Configuration.Schema.AgentDefaults.Instructions.get -> str
 AgentCore.Application.Configuration.Schema.AgentDefaults.Instructions.init -> void
 AgentCore.Application.Configuration.Schema.AgentDefaults.Knowledge.get -> AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration?
 AgentCore.Application.Configuration.Schema.AgentDefaults.Knowledge.init -> void
+AgentCore.Application.Configuration.Schema.AgentDefaults.Mode.get -> bool?
+AgentCore.Application.Configuration.Schema.AgentDefaults.Mode.init -> void
 AgentCore.Application.Configuration.Schema.AgentDefaults.Model.get -> AgentCore.Application.Configuration.Schema.ModelReference?
 AgentCore.Application.Configuration.Schema.AgentDefaults.Model.init -> void
+AgentCore.Application.Configuration.Schema.AgentDefaults.Todos.get -> bool?
+AgentCore.Application.Configuration.Schema.AgentDefaults.Todos.init -> void
+AgentCore.Application.Configuration.Schema.AgentFileStoreKind
+AgentCore.Application.Configuration.Schema.AgentFileStoreKind.Workspace = 0 -> AgentCore.Application.Configuration.Schema.AgentFileStoreKind
+AgentCore.Application.Configuration.Schema.AgentFilesConfiguration
+AgentCore.Application.Configuration.Schema.AgentFilesConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.AgentFilesConfiguration!
+AgentCore.Application.Configuration.Schema.AgentFilesConfiguration.AgentFilesConfiguration() -> void
+AgentCore.Application.Configuration.Schema.AgentFilesConfiguration.Equals(AgentCore.Application.Configuration.Schema.AgentFilesConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.AgentFilesConfiguration.Store.get -> AgentCore.Application.Configuration.Schema.AgentFileStoreKind
+AgentCore.Application.Configuration.Schema.AgentFilesConfiguration.Store.init -> void
+AgentCore.Application.Configuration.Schema.AgentFilesConfiguration.Write.get -> bool
+AgentCore.Application.Configuration.Schema.AgentFilesConfiguration.Write.init -> void
 AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration
 AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration!
 AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.AgentKnowledgeConfiguration() -> void
@@ -363,6 +395,12 @@ AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.Mode.get 
 AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.Mode.init -> void
 AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.Scoped.get -> bool?
 AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.Scoped.init -> void
+AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration
+AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration!
+AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration.AgentMemoryConfiguration() -> void
+AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration.Equals(AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration.Store.get -> AgentCore.Application.Configuration.Schema.AgentFileStoreKind
+AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration.Store.init -> void
 AgentCore.Application.Configuration.Schema.AgentsConfiguration
 AgentCore.Application.Configuration.Schema.AgentsConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.AgentsConfiguration!
 AgentCore.Application.Configuration.Schema.AgentsConfiguration.AgentsConfiguration() -> void
@@ -371,6 +409,12 @@ AgentCore.Application.Configuration.Schema.AgentsConfiguration.Defaults.init -> 
 AgentCore.Application.Configuration.Schema.AgentsConfiguration.Equals(AgentCore.Application.Configuration.Schema.AgentsConfiguration? other) -> bool
 AgentCore.Application.Configuration.Schema.AgentsConfiguration.Items.get -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Configuration.Schema.AgentConfiguration!>!
 AgentCore.Application.Configuration.Schema.AgentsConfiguration.Items.init -> void
+AgentCore.Application.Configuration.Schema.ApprovalConfiguration
+AgentCore.Application.Configuration.Schema.ApprovalConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.ApprovalConfiguration!
+AgentCore.Application.Configuration.Schema.ApprovalConfiguration.ApprovalConfiguration() -> void
+AgentCore.Application.Configuration.Schema.ApprovalConfiguration.Auto.get -> System.Collections.Generic.IReadOnlyList<string!>!
+AgentCore.Application.Configuration.Schema.ApprovalConfiguration.Auto.init -> void
+AgentCore.Application.Configuration.Schema.ApprovalConfiguration.Equals(AgentCore.Application.Configuration.Schema.ApprovalConfiguration? other) -> bool
 AgentCore.Application.Configuration.Schema.CallProviderConfiguration
 AgentCore.Application.Configuration.Schema.CallProviderConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.CallProviderConfiguration!
 AgentCore.Application.Configuration.Schema.CallProviderConfiguration.CallProviderConfiguration() -> void
@@ -632,6 +676,26 @@ AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.ReasoningEff
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.ReasoningEffort.init -> void
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.WebSearch.get -> bool?
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.WebSearch.init -> void
+AgentCore.Application.Configuration.Schema.LoopConditionOptions
+AgentCore.Application.Configuration.Schema.LoopConditionOptions.<Clone>$() -> AgentCore.Application.Configuration.Schema.LoopConditionOptions!
+AgentCore.Application.Configuration.Schema.LoopConditionOptions.Equals(AgentCore.Application.Configuration.Schema.LoopConditionOptions? other) -> bool
+AgentCore.Application.Configuration.Schema.LoopConditionOptions.LoopConditionOptions() -> void
+AgentCore.Application.Configuration.Schema.LoopConfiguration
+AgentCore.Application.Configuration.Schema.LoopConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.LoopConfiguration!
+AgentCore.Application.Configuration.Schema.LoopConfiguration.Equals(AgentCore.Application.Configuration.Schema.LoopConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.LoopConfiguration.LoopConfiguration() -> void
+AgentCore.Application.Configuration.Schema.LoopConfiguration.MaxRounds.get -> int?
+AgentCore.Application.Configuration.Schema.LoopConfiguration.MaxRounds.init -> void
+AgentCore.Application.Configuration.Schema.LoopConfiguration.Until.get -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Configuration.Schema.LoopUntilConfiguration!>?
+AgentCore.Application.Configuration.Schema.LoopConfiguration.Until.init -> void
+AgentCore.Application.Configuration.Schema.LoopUntilConfiguration
+AgentCore.Application.Configuration.Schema.LoopUntilConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.LoopUntilConfiguration!
+AgentCore.Application.Configuration.Schema.LoopUntilConfiguration.Background.get -> AgentCore.Application.Configuration.Schema.LoopConditionOptions?
+AgentCore.Application.Configuration.Schema.LoopUntilConfiguration.Background.init -> void
+AgentCore.Application.Configuration.Schema.LoopUntilConfiguration.Equals(AgentCore.Application.Configuration.Schema.LoopUntilConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.LoopUntilConfiguration.LoopUntilConfiguration() -> void
+AgentCore.Application.Configuration.Schema.LoopUntilConfiguration.Todos.get -> AgentCore.Application.Configuration.Schema.LoopConditionOptions?
+AgentCore.Application.Configuration.Schema.LoopUntilConfiguration.Todos.init -> void
 AgentCore.Application.Configuration.Schema.McpAllowEntry
 AgentCore.Application.Configuration.Schema.McpAllowEntry.<Clone>$() -> AgentCore.Application.Configuration.Schema.McpAllowEntry!
 AgentCore.Application.Configuration.Schema.McpAllowEntry.As.get -> string?
@@ -718,6 +782,27 @@ AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Telemetry.init
 AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Telephony.get -> AgentCore.Application.Configuration.Schema.VendorProviderConfiguration?
 AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Telephony.init -> void
 AgentCore.Application.Configuration.Schema.ReservedStateSlots
+AgentCore.Application.Configuration.Schema.ShellConfiguration
+AgentCore.Application.Configuration.Schema.ShellConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.ShellConfiguration!
+AgentCore.Application.Configuration.Schema.ShellConfiguration.Equals(AgentCore.Application.Configuration.Schema.ShellConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.ShellConfiguration.Kind.get -> AgentCore.Application.Configuration.Schema.ShellKind
+AgentCore.Application.Configuration.Schema.ShellConfiguration.Kind.init -> void
+AgentCore.Application.Configuration.Schema.ShellConfiguration.Policy.get -> AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration?
+AgentCore.Application.Configuration.Schema.ShellConfiguration.Policy.init -> void
+AgentCore.Application.Configuration.Schema.ShellConfiguration.ShellConfiguration() -> void
+AgentCore.Application.Configuration.Schema.ShellConfiguration.TimeoutSeconds.get -> int?
+AgentCore.Application.Configuration.Schema.ShellConfiguration.TimeoutSeconds.init -> void
+AgentCore.Application.Configuration.Schema.ShellKind
+AgentCore.Application.Configuration.Schema.ShellKind.Docker = 0 -> AgentCore.Application.Configuration.Schema.ShellKind
+AgentCore.Application.Configuration.Schema.ShellKind.Local = 1 -> AgentCore.Application.Configuration.Schema.ShellKind
+AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration
+AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration!
+AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration.Allow.get -> System.Collections.Generic.IReadOnlyList<string!>!
+AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration.Allow.init -> void
+AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration.Deny.get -> System.Collections.Generic.IReadOnlyList<string!>!
+AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration.Deny.init -> void
+AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration.Equals(AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration.ShellPolicyConfiguration() -> void
 AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration
 AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration!
 AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.Equals(AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration? other) -> bool
@@ -1473,12 +1558,21 @@ override AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.ToStr
 override AgentCore.Application.Configuration.Schema.AgentDefaults.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.AgentDefaults.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.AgentDefaults.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.AgentFilesConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.AgentFilesConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.AgentFilesConfiguration.ToString() -> string!
 override AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration.ToString() -> string!
 override AgentCore.Application.Configuration.Schema.AgentsConfiguration.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.AgentsConfiguration.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.AgentsConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.ApprovalConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.ApprovalConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.ApprovalConfiguration.ToString() -> string!
 override AgentCore.Application.Configuration.Schema.CallProviderConfiguration.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.CallProviderConfiguration.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.CallProviderConfiguration.ToString() -> string!
@@ -1542,6 +1636,15 @@ override AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfigurati
 override AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.LoopConditionOptions.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.LoopConditionOptions.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.LoopConditionOptions.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.LoopConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.LoopConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.LoopConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.LoopUntilConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.LoopUntilConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.LoopUntilConfiguration.ToString() -> string!
 override AgentCore.Application.Configuration.Schema.McpAllowEntry.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.McpAllowEntry.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.McpAllowEntry.ToString() -> string!
@@ -1560,6 +1663,12 @@ override AgentCore.Application.Configuration.Schema.PolicyConfiguration.ToString
 override AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.ProvidersConfiguration.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.ProvidersConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.ShellConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.ShellConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.ShellConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration.ToString() -> string!
 override AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.ToString() -> string!
@@ -1706,10 +1815,16 @@ static AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.operato
 static AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.operator ==(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration? left, AgentCore.Application.Configuration.Schema.AgentCoreConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.AgentDefaults.operator !=(AgentCore.Application.Configuration.Schema.AgentDefaults? left, AgentCore.Application.Configuration.Schema.AgentDefaults? right) -> bool
 static AgentCore.Application.Configuration.Schema.AgentDefaults.operator ==(AgentCore.Application.Configuration.Schema.AgentDefaults? left, AgentCore.Application.Configuration.Schema.AgentDefaults? right) -> bool
+static AgentCore.Application.Configuration.Schema.AgentFilesConfiguration.operator !=(AgentCore.Application.Configuration.Schema.AgentFilesConfiguration? left, AgentCore.Application.Configuration.Schema.AgentFilesConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.AgentFilesConfiguration.operator ==(AgentCore.Application.Configuration.Schema.AgentFilesConfiguration? left, AgentCore.Application.Configuration.Schema.AgentFilesConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.operator !=(AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration? left, AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.operator ==(AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration? left, AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration.operator !=(AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration? left, AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration.operator ==(AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration? left, AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.AgentsConfiguration.operator !=(AgentCore.Application.Configuration.Schema.AgentsConfiguration? left, AgentCore.Application.Configuration.Schema.AgentsConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.AgentsConfiguration.operator ==(AgentCore.Application.Configuration.Schema.AgentsConfiguration? left, AgentCore.Application.Configuration.Schema.AgentsConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.ApprovalConfiguration.operator !=(AgentCore.Application.Configuration.Schema.ApprovalConfiguration? left, AgentCore.Application.Configuration.Schema.ApprovalConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.ApprovalConfiguration.operator ==(AgentCore.Application.Configuration.Schema.ApprovalConfiguration? left, AgentCore.Application.Configuration.Schema.ApprovalConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.CallProviderConfiguration.operator !=(AgentCore.Application.Configuration.Schema.CallProviderConfiguration? left, AgentCore.Application.Configuration.Schema.CallProviderConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.CallProviderConfiguration.operator ==(AgentCore.Application.Configuration.Schema.CallProviderConfiguration? left, AgentCore.Application.Configuration.Schema.CallProviderConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.CompactionConfiguration.operator !=(AgentCore.Application.Configuration.Schema.CompactionConfiguration? left, AgentCore.Application.Configuration.Schema.CompactionConfiguration? right) -> bool
@@ -1754,6 +1869,12 @@ static AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration
 static AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration.operator ==(AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.operator !=(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? left, AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.operator ==(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? left, AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.LoopConditionOptions.operator !=(AgentCore.Application.Configuration.Schema.LoopConditionOptions? left, AgentCore.Application.Configuration.Schema.LoopConditionOptions? right) -> bool
+static AgentCore.Application.Configuration.Schema.LoopConditionOptions.operator ==(AgentCore.Application.Configuration.Schema.LoopConditionOptions? left, AgentCore.Application.Configuration.Schema.LoopConditionOptions? right) -> bool
+static AgentCore.Application.Configuration.Schema.LoopConfiguration.operator !=(AgentCore.Application.Configuration.Schema.LoopConfiguration? left, AgentCore.Application.Configuration.Schema.LoopConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.LoopConfiguration.operator ==(AgentCore.Application.Configuration.Schema.LoopConfiguration? left, AgentCore.Application.Configuration.Schema.LoopConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.LoopUntilConfiguration.operator !=(AgentCore.Application.Configuration.Schema.LoopUntilConfiguration? left, AgentCore.Application.Configuration.Schema.LoopUntilConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.LoopUntilConfiguration.operator ==(AgentCore.Application.Configuration.Schema.LoopUntilConfiguration? left, AgentCore.Application.Configuration.Schema.LoopUntilConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.McpAllowEntry.operator !=(AgentCore.Application.Configuration.Schema.McpAllowEntry? left, AgentCore.Application.Configuration.Schema.McpAllowEntry? right) -> bool
 static AgentCore.Application.Configuration.Schema.McpAllowEntry.operator ==(AgentCore.Application.Configuration.Schema.McpAllowEntry? left, AgentCore.Application.Configuration.Schema.McpAllowEntry? right) -> bool
 static AgentCore.Application.Configuration.Schema.McpRetryConfiguration.operator !=(AgentCore.Application.Configuration.Schema.McpRetryConfiguration? left, AgentCore.Application.Configuration.Schema.McpRetryConfiguration? right) -> bool
@@ -1768,6 +1889,10 @@ static AgentCore.Application.Configuration.Schema.ProvidersConfiguration.operato
 static AgentCore.Application.Configuration.Schema.ProvidersConfiguration.operator ==(AgentCore.Application.Configuration.Schema.ProvidersConfiguration? left, AgentCore.Application.Configuration.Schema.ProvidersConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.ReservedStateSlots.All.get -> System.Collections.Generic.IReadOnlyList<string!>!
 static AgentCore.Application.Configuration.Schema.ReservedStateSlots.Contains(string! name) -> bool
+static AgentCore.Application.Configuration.Schema.ShellConfiguration.operator !=(AgentCore.Application.Configuration.Schema.ShellConfiguration? left, AgentCore.Application.Configuration.Schema.ShellConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.ShellConfiguration.operator ==(AgentCore.Application.Configuration.Schema.ShellConfiguration? left, AgentCore.Application.Configuration.Schema.ShellConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration.operator !=(AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration? left, AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration.operator ==(AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration? left, AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.operator !=(AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration? left, AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.operator ==(AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration? left, AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.StageConfiguration.operator !=(AgentCore.Application.Configuration.Schema.StageConfiguration? left, AgentCore.Application.Configuration.Schema.StageConfiguration? right) -> bool

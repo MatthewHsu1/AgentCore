@@ -621,4 +621,114 @@ public sealed class ConfigurationSchemaValidatorTests
         Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
         Assert.Contains(failure.Errors, error => error.Pointer == "/agents/defaults/compaction/trigger");
     }
+
+    [Fact]
+    public void AFullAgenticAgent_PassesCheckOne()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: agentic
+            agents:
+              defaults:
+                todos: false
+                mode: true
+                approval: { auto: [get_time] }
+              items:
+                - id: searcher
+                  instructions: Answer only the task you were given.
+                - id: coder
+                  todos: true
+                  mode: true
+                  memory: { store: workspace }
+                  files: { store: workspace, write: false }
+                  shell:
+                    kind: docker
+                    policy: { deny: ["^rm "], allow: ["^echo "] }
+                    timeoutSeconds: 30
+                  approval: { auto: [get_time, "file_access_read*"] }
+                  background: [searcher]
+                  loop:
+                    maxRounds: 5
+                    until:
+                      - todos: {}
+                      - background: {}
+            """;
+
+        var parsed = ConfigurationLoader.ReadDocument(document, ConfigurationFormat.Yaml);
+
+        Assert.Empty(ConfigurationSchemaValidator.Evaluate(parsed));
+        Assert.NotNull(ConfigurationLoader.LoadYaml(document).Agents!.Items[1].Shell);
+    }
+
+    [Fact]
+    public void AnUnknownShellKind_FailsWithThePointerOfThatKind()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            agents:
+              items:
+                - id: coder
+                  shell: { kind: k8s }
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+        Assert.Contains(failure.Errors, error => error.Pointer == "/agents/items/0/shell/kind");
+    }
+
+    [Fact]
+    public void AMemoryBlockWithoutAStore_FailsWithThePointerOfTheBlock()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            agents:
+              items:
+                - id: coder
+                  memory: {}
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Contains(failure.Errors, error => error.Pointer == "/agents/items/0/memory");
+    }
+
+    [Fact]
+    public void ATwoConditionUntilEntry_FailsWithThePointerOfThatEntry()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            agents:
+              items:
+                - id: coder
+                  loop:
+                    until:
+                      - todos: {}
+                        background: {}
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Contains(failure.Errors, error => error.Pointer == "/agents/items/0/loop/until/0");
+    }
+
+    [Fact]
+    public void ADuplicateBackgroundChild_FailsWithThePointerOfTheList()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            agents:
+              items:
+                - id: coder
+                  background: [searcher, searcher]
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Contains(failure.Errors, error => error.Pointer == "/agents/items/0/background");
+    }
 }

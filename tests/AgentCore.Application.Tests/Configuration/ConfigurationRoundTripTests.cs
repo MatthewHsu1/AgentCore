@@ -204,4 +204,72 @@ public sealed class ConfigurationRoundTripTests
 
         Assert.Equal(0.3, document["value"]!.GetValue<double>());
     }
+
+    [Fact]
+    public void TheAgenticKeys_ReadTheSameFromYamlAndFromJson()
+    {
+        const string yaml = """
+            apiVersion: agentcore/v1
+            name: agentic
+            agents:
+              defaults:
+                todos: true
+                mode: true
+                approval: { auto: [get_time] }
+              items:
+                - id: coder
+                  todos: true
+                  mode: true
+                  memory: { store: workspace }
+                  files: { store: workspace, write: false }
+                  shell:
+                    kind: local
+                    policy: { deny: ["^rm "] }
+                    timeoutSeconds: 30
+                  approval: { auto: [get_time, "file_access_read*"] }
+                  background: [searcher]
+                  loop:
+                    maxRounds: 5
+                    until:
+                      - todos: {}
+                      - background: {}
+            """;
+        const string json = $$"""
+            {
+              "apiVersion": "agentcore/v1",
+              "name": "agentic",
+              "agents": {
+                "defaults": {
+                  "todos": true,
+                  "mode": true,
+                  "approval": { "auto": ["get_time"] }
+                },
+                "items": [
+                  {
+                    "id": "coder",
+                    "todos": true,
+                    "mode": true,
+                    "memory": { "store": "workspace" },
+                    "files": { "store": "workspace", "write": false },
+                    "shell": {
+                      "kind": "local",
+                      "policy": { "deny": ["^rm "] },
+                      "timeoutSeconds": 30
+                    },
+                    "approval": { "auto": ["get_time", "file_access_read*"] },
+                    "background": ["searcher"],
+                    "loop": {
+                      "maxRounds": 5,
+                      "until": [ { "todos": {} }, { "background": {} } ]
+                    }
+                  }
+                ]
+              }
+            }
+            """;
+
+        var fromYaml = ConfigurationLoader.LoadYaml(yaml);
+
+        Assert.Equal(Content(fromYaml), Content(ConfigurationLoader.LoadJson(json)));
+    }
 }

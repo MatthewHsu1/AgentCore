@@ -50,6 +50,15 @@ public sealed record AgentDefaults
 
     /// <summary>Gets the shared <c>compaction:</c> block, or <see langword="null"/> when the document declares none.</summary>
     public CompactionConfiguration? Compaction { get; init; }
+
+    /// <summary>Gets whether agents inherit the todo tools, or <see langword="null"/> to name nothing.</summary>
+    public bool? Todos { get; init; }
+
+    /// <summary>Gets whether agents inherit the mode tools, or <see langword="null"/> to name nothing.</summary>
+    public bool? Mode { get; init; }
+
+    /// <summary>Gets the shared <c>approval:</c> block, or <see langword="null"/> when the document declares none.</summary>
+    public ApprovalConfiguration? Approval { get; init; }
 }
 
 /// <summary>
@@ -77,6 +86,33 @@ public sealed record AgentConfiguration
 
     /// <summary>Gets this agent's <c>compaction:</c> block, or <see langword="null"/> to inherit key by key.</summary>
     public CompactionConfiguration? Compaction { get; init; }
+
+    /// <summary>Gets whether this agent gets the todo tools, or <see langword="null"/> to inherit.</summary>
+    public bool? Todos { get; init; }
+
+    /// <summary>Gets whether this agent gets the mode tools, or <see langword="null"/> to inherit.</summary>
+    public bool? Mode { get; init; }
+
+    /// <summary>Gets this agent's <c>memory:</c> block, or <see langword="null"/> for none.</summary>
+    public AgentMemoryConfiguration? Memory { get; init; }
+
+    /// <summary>Gets this agent's <c>files:</c> block, or <see langword="null"/> for none.</summary>
+    public AgentFilesConfiguration? Files { get; init; }
+
+    /// <summary>
+    /// Gets this agent's <c>shell:</c> block, or <see langword="null"/> for none. One executor per
+    /// call, never a process singleton.
+    /// </summary>
+    public ShellConfiguration? Shell { get; init; }
+
+    /// <summary>Gets this agent's <c>approval:</c> block, or <see langword="null"/> to inherit key by key.</summary>
+    public ApprovalConfiguration? Approval { get; init; }
+
+    /// <summary>Gets the ids of the background children this agent may start. Same list as <c>agents.items</c>.</summary>
+    public IReadOnlyList<string> Background { get; init; } = [];
+
+    /// <summary>Gets this agent's <c>loop:</c> block, or <see langword="null"/> for none.</summary>
+    public LoopConfiguration? Loop { get; init; }
 }
 
 /// <summary>

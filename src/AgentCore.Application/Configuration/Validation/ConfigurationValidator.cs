@@ -223,6 +223,18 @@ public static class ConfigurationValidator
                 ConfigurationError.AppendPointer(ConfigurationError.AppendPointer(Pointer.Agent(index), "model"), "ref"),
                 names,
                 errors);
+
+            for (var child = 0; child < agent.Background.Count; child++)
+            {
+                var childId = agent.Background[child];
+                if (!names.Agents.Contains(childId))
+                {
+                    errors.Add(Reference(
+                        ConfigurationError.AppendPointer(
+                            ConfigurationError.AppendPointer(Pointer.Agent(index), "background"), child),
+                        $"the agent '{childId}' is not declared in agents.items"));
+                }
+            }
         }
 
         if (configuration.Policy is { } policy)

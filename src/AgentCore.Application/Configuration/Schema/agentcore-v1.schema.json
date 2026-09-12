@@ -661,6 +661,18 @@
             },
             "compaction": {
               "$ref": "#/$defs/compaction"
+            },
+            "todos": {
+              "type": "boolean",
+              "description": "Whether agents inherit the todos tools."
+            },
+            "mode": {
+              "type": "boolean",
+              "description": "Whether agents inherit the mode tools."
+            },
+            "approval": {
+              "$ref": "#/$defs/approval",
+              "description": "The standing approval rules every agent inherits."
             }
           }
         },
@@ -719,6 +731,38 @@
         "compaction": {
           "$ref": "#/$defs/compaction"
         },
+        "todos": {
+          "type": "boolean",
+          "description": "The agent gets the todos tools (TodoProvider)."
+        },
+        "mode": {
+          "type": "boolean",
+          "description": "The agent gets the mode tools (AgentModeProvider)."
+        },
+        "memory": {
+          "$ref": "#/$defs/memory",
+          "description": "The file-memory tools over a store."
+        },
+        "files": {
+          "$ref": "#/$defs/files",
+          "description": "The file-access tools over a store."
+        },
+        "shell": {
+          "$ref": "#/$defs/shell",
+          "description": "One shell executor per call."
+        },
+        "approval": {
+          "$ref": "#/$defs/approval",
+          "description": "The standing approval rules; everything else still asks."
+        },
+        "background": {
+          "$ref": "#/$defs/background",
+          "description": "The background children this agent may start."
+        },
+        "loop": {
+          "$ref": "#/$defs/loop",
+          "description": "How the agent's own loop runs."
+        },
         "tools": {
           "type": "array",
           "items": {
@@ -758,6 +802,152 @@
         "keep": { "type": "integer", "minimum": 0 },
         "foldResultChars": { "type": "integer", "minimum": 1 }
       }
+    },
+    "agentStore": {
+      "type": "string",
+      "enum": [
+        "workspace"
+      ],
+      "description": "The host-created per-call directory, deleted with the call. The only store today."
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "auto": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/toolPattern"
+          }
+        }
+      }
+    },
+    "background": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/identifier"
+      },
+      "description": "The ids of the background children this agent may start. Same list as agents.items."
+    },
+    "files": {
+      "type": "object",
+      "required": [
+        "store"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "store": {
+          "$ref": "#/$defs/agentStore"
+        },
+        "write": {
+          "type": "boolean",
+          "default": true,
+          "description": "false leaves the read tools only."
+        }
+      }
+    },
+    "loop": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxRounds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "until": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/loopUntil"
+          },
+          "description": "The conditions that end the loop early, in document order."
+        }
+      }
+    },
+    "loopUntil": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 1,
+      "description": "Exactly one condition per entry.",
+      "properties": {
+        "todos": {
+          "type": "object",
+          "description": "The todo list drains to empty."
+        },
+        "background": {
+          "type": "object",
+          "description": "Every background task finishes."
+        }
+      }
+    },
+    "memory": {
+      "type": "object",
+      "required": [
+        "store"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "store": {
+          "$ref": "#/$defs/agentStore"
+        }
+      }
+    },
+    "shell": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/shellKind"
+        },
+        "policy": {
+          "$ref": "#/$defs/shellPolicy"
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "shellKind": {
+      "type": "string",
+      "enum": [
+        "docker",
+        "local"
+      ],
+      "description": "Where a shell runs is the consumer's call, so the document names one: there is no default."
+    },
+    "shellPattern": {
+      "type": "string",
+      "minLength": 1,
+      "description": "A pattern the executor policy compiles. A guardrail for the model, not a security boundary."
+    },
+    "shellPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "deny": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/shellPattern"
+          }
+        },
+        "allow": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/shellPattern"
+          }
+        }
+      }
+    },
+    "toolPattern": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Names one tool exactly, or a prefix with a trailing *."
     },
     "policy": {
       "type": "object",

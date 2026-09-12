@@ -112,6 +112,24 @@ public sealed class ConfigurationValidatorTests
     }
 
     [Fact]
+    public void ABackgroundChildThatIsNotAnAgent_FailsCheckTwoWithThePointerOfThatChild()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            name: broken
+            agents:
+              items:
+                - id: coder
+                  background: [searcher]
+            """;
+
+        var error = Assert.Single(Evaluate(document, ConfigurationCheck.ReferenceResolution));
+
+        Assert.Equal("/agents/items/0/background/0", error.Pointer);
+        Assert.Equal("the agent 'searcher' is not declared in agents.items", error.Message);
+    }
+
+    [Fact]
     public void AnUnknownGuard_FailsCheckTwoWithThePointerOfTheExit()
     {
         const string document = """
