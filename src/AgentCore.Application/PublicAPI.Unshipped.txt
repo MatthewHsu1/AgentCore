@@ -141,6 +141,7 @@ AgentCore.Application.Calls.Memory.InMemoryCallStore.SetStatusAsync(string! call
 AgentCore.Application.Calls.Memory.InMemoryCallStore.SweepAsync(System.TimeSpan retention, int batchSize = 500, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<int>
 AgentCore.Application.Calls.Memory.InMemoryCallStore.TruncateAsync(string! callId, int fromOrdinal, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<int>
 AgentCore.Application.Configuration.Compilation.AgentCompaction
+AgentCore.Application.Configuration.Compilation.AgentHarness
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.AgentCompilationContext(AgentCore.Application.Ports.IChatClientFactory! chatClients) -> void
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.CallStore.get -> AgentCore.Application.Ports.ICallStore?
@@ -211,6 +212,15 @@ AgentCore.Application.Configuration.Compilation.ResolvedCompaction.Strategy.get 
 AgentCore.Application.Configuration.Compilation.ResolvedCompaction.Strategy.init -> void
 AgentCore.Application.Configuration.Compilation.ResolvedCompaction.Trigger.get -> AgentCore.Application.Configuration.Schema.CompactionTriggerConfiguration!
 AgentCore.Application.Configuration.Compilation.ResolvedCompaction.Trigger.init -> void
+AgentCore.Application.Configuration.Compilation.ResolvedHarness
+AgentCore.Application.Configuration.Compilation.ResolvedHarness.<Clone>$() -> AgentCore.Application.Configuration.Compilation.ResolvedHarness!
+AgentCore.Application.Configuration.Compilation.ResolvedHarness.Deconstruct(out bool Todos, out bool Mode) -> void
+AgentCore.Application.Configuration.Compilation.ResolvedHarness.Equals(AgentCore.Application.Configuration.Compilation.ResolvedHarness? other) -> bool
+AgentCore.Application.Configuration.Compilation.ResolvedHarness.Mode.get -> bool
+AgentCore.Application.Configuration.Compilation.ResolvedHarness.Mode.init -> void
+AgentCore.Application.Configuration.Compilation.ResolvedHarness.ResolvedHarness(bool Todos, bool Mode) -> void
+AgentCore.Application.Configuration.Compilation.ResolvedHarness.Todos.get -> bool
+AgentCore.Application.Configuration.Compilation.ResolvedHarness.Todos.init -> void
 AgentCore.Application.Configuration.Compilation.ResolvedKnowledge
 AgentCore.Application.Configuration.Compilation.ResolvedKnowledge.<Clone>$() -> AgentCore.Application.Configuration.Compilation.ResolvedKnowledge!
 AgentCore.Application.Configuration.Compilation.ResolvedKnowledge.Citations.get -> bool
@@ -1534,6 +1544,9 @@ override AgentCore.Application.Configuration.Compilation.ResolvedClarification.T
 override AgentCore.Application.Configuration.Compilation.ResolvedCompaction.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Compilation.ResolvedCompaction.GetHashCode() -> int
 override AgentCore.Application.Configuration.Compilation.ResolvedCompaction.ToString() -> string!
+override AgentCore.Application.Configuration.Compilation.ResolvedHarness.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Compilation.ResolvedHarness.GetHashCode() -> int
+override AgentCore.Application.Configuration.Compilation.ResolvedHarness.ToString() -> string!
 override AgentCore.Application.Configuration.Compilation.ResolvedKnowledge.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Compilation.ResolvedKnowledge.GetHashCode() -> int
 override AgentCore.Application.Configuration.Compilation.ResolvedKnowledge.ToString() -> string!
@@ -1773,6 +1786,7 @@ static AgentCore.Application.Calls.CallSessionState.operator ==(AgentCore.Applic
 static AgentCore.Application.Calls.CallStateJson.Options.get -> System.Text.Json.JsonSerializerOptions!
 static AgentCore.Application.Calls.CallStoreFactory.OpenAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.ICallStoreAdapter!>! adapters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.ICallStore!>
 static AgentCore.Application.Configuration.Compilation.AgentCompaction.Compose(AgentCore.Application.Configuration.Schema.AgentDefaults? defaults, AgentCore.Application.Configuration.Schema.AgentConfiguration! agent) -> AgentCore.Application.Configuration.Compilation.ResolvedCompaction?
+static AgentCore.Application.Configuration.Compilation.AgentHarness.Compose(AgentCore.Application.Configuration.Schema.AgentDefaults? defaults, AgentCore.Application.Configuration.Schema.AgentConfiguration! agent) -> AgentCore.Application.Configuration.Compilation.ResolvedHarness!
 static AgentCore.Application.Configuration.Compilation.AgentInstructions.Compose(AgentCore.Application.Configuration.Schema.AgentDefaults? defaults, AgentCore.Application.Configuration.Schema.AgentConfiguration! agent) -> string?
 static AgentCore.Application.Configuration.Compilation.AgentKnowledge.AllScoped(AgentCore.Application.Configuration.Schema.AgentsConfiguration! agents) -> bool
 static AgentCore.Application.Configuration.Compilation.AgentKnowledge.AnyDeclared(AgentCore.Application.Configuration.Schema.AgentsConfiguration! agents) -> bool
@@ -1785,6 +1799,8 @@ static AgentCore.Application.Configuration.Compilation.ResolvedClarification.ope
 static AgentCore.Application.Configuration.Compilation.ResolvedClarification.operator ==(AgentCore.Application.Configuration.Compilation.ResolvedClarification? left, AgentCore.Application.Configuration.Compilation.ResolvedClarification? right) -> bool
 static AgentCore.Application.Configuration.Compilation.ResolvedCompaction.operator !=(AgentCore.Application.Configuration.Compilation.ResolvedCompaction? left, AgentCore.Application.Configuration.Compilation.ResolvedCompaction? right) -> bool
 static AgentCore.Application.Configuration.Compilation.ResolvedCompaction.operator ==(AgentCore.Application.Configuration.Compilation.ResolvedCompaction? left, AgentCore.Application.Configuration.Compilation.ResolvedCompaction? right) -> bool
+static AgentCore.Application.Configuration.Compilation.ResolvedHarness.operator !=(AgentCore.Application.Configuration.Compilation.ResolvedHarness? left, AgentCore.Application.Configuration.Compilation.ResolvedHarness? right) -> bool
+static AgentCore.Application.Configuration.Compilation.ResolvedHarness.operator ==(AgentCore.Application.Configuration.Compilation.ResolvedHarness? left, AgentCore.Application.Configuration.Compilation.ResolvedHarness? right) -> bool
 static AgentCore.Application.Configuration.Compilation.ResolvedKnowledge.operator !=(AgentCore.Application.Configuration.Compilation.ResolvedKnowledge? left, AgentCore.Application.Configuration.Compilation.ResolvedKnowledge? right) -> bool
 static AgentCore.Application.Configuration.Compilation.ResolvedKnowledge.operator ==(AgentCore.Application.Configuration.Compilation.ResolvedKnowledge? left, AgentCore.Application.Configuration.Compilation.ResolvedKnowledge? right) -> bool
 static AgentCore.Application.Configuration.Parsing.ConfigurationError.AppendPointer(string! pointer, int index) -> string!

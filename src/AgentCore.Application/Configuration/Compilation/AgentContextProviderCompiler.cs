@@ -69,6 +69,18 @@ internal static class AgentContextProviderCompiler
 #pragma warning restore MAAI001
         }
 
+        var harness = AgentHarness.Compose(defaults, item);
+
+        if (harness.Todos)
+        {
+            providers.Add(new TodoProvider());
+        }
+
+        if (harness.Mode)
+        {
+            providers.Add(new AgentModeProvider());
+        }
+
         if (AgentKnowledge.Compose(defaults, item) is not { } composed)
         {
             return providers;
