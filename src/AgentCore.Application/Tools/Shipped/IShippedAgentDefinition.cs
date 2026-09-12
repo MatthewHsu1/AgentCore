@@ -29,4 +29,9 @@ internal interface IShippedAgentDefinition : IToolDefinition
     /// <param name="ports">The adapters the host bound.</param>
     /// <returns>The port name, or <see langword="null"/> when everything it needs is bound.</returns>
     string? MissingPort(BuiltinToolPorts ports);
+
+    /// <summary>Builds the request this agent reads from what the outer agent wrote.</summary>
+    /// <param name="query">The outer agent's one string.</param>
+    /// <returns>The request. Most agents hand the string through unchanged.</returns>
+    string Compose(string query);
 }

@@ -1,6 +1,7 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Tests.Configuration;
+using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tools.Registry;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Tools.Builtin;
@@ -82,10 +83,11 @@ public sealed class BuiltinToolTests
     /// <summary>Builds one declared tool through <see cref="BuiltinToolSource"/>, synchronously.</summary>
     private sealed class BuiltinFactory
     {
-        // The chat client factory is always bound: ui.draw is a shipped agent, and one declared in
-        // a document with no factory behind it fails the boot rather than building.
+        // The chat client factory and the script runner are always bound: ui.draw is a shipped
+        // agent that reads both, and one declared in a document with either missing fails the boot
+        // rather than building.
         private readonly BuiltinToolSource _source =
-            new(new BuiltinToolPorts(new RecordingChatClientFactory()));
+            new(new BuiltinToolPorts(new RecordingChatClientFactory(), new FakeScriptRunner()));
 
         public AITool? Create(ToolConfiguration tool)
         {

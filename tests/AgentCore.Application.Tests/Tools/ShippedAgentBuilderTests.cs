@@ -284,5 +284,7 @@ public sealed class ShippedAgentBuilderTests
         public IReadOnlyList<AITool> InnerTools(ToolConfiguration tool, BuiltinToolPorts ports) => _innerTools;
 
         public string? MissingPort(BuiltinToolPorts ports) => _missingPort;
+
+        public string Compose(string query) => query;
     }
 }

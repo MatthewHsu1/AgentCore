@@ -5,8 +5,8 @@ namespace AgentCore.Application.Tools.Drawing;
 /// <summary>The prose vocabulary the drawing agent is instructed with.</summary>
 /// <remarks>
 /// Prose rather than a JSON Schema: the shipped schema for the same 27 components is 19,355 bytes
-/// and would ride every request of every turn of every agent that may draw. The prose is a third of
-/// that and rides only the drawing call.
+/// and would ride every request of every turn of every agent that may draw. The prose is under half
+/// of that and rides only the drawing call.
 /// </remarks>
 internal static class DrawingVocabulary
 {

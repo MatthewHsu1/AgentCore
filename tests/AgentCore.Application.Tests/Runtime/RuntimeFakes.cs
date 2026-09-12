@@ -626,12 +626,13 @@ internal sealed class RecordingRenderPort : IRenderPort
 
 /// <summary>
 /// A drawing model: it answers each request with one call to <c>present</c> carrying the next
-/// scripted tree, and answers with plain text once the script runs out.
+/// scripted piece of code, and answers with plain text once the script runs out.
 /// </summary>
 /// <remarks>
 /// Enough to drive a real <c>ChatClientAgent</c> end to end, including recovery: a tree the
 /// validator rejects comes back to the agent as <c>present</c>'s error result, the agent asks again,
-/// and this client hands it the next tree. The text answer is what ends the run.
+/// and this client hands it the next code. The text answer is what ends the run. Under
+/// <see cref="Fakes.FakeScriptRunner"/> the code is the JSON the script would have returned.
 /// </remarks>
 internal sealed class PresentCallingChatClient : IChatClient
 {
@@ -643,6 +644,9 @@ internal sealed class PresentCallingChatClient : IChatClient
     /// <summary>Gets how many requests this client answered.</summary>
     public int Calls => Volatile.Read(ref _calls);
 
+    /// <summary>Gets the text of the last user message of each request, in call order.</summary>
+    public List<string> Prompts { get; } = [];
+
     public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IEnumerable<ChatMessage> messages,
         ChatOptions? options = null,
@@ -652,6 +656,11 @@ internal sealed class PresentCallingChatClient : IChatClient
 
         var index = Interlocked.Increment(ref _calls) - 1;
         await Task.Yield();
+
+        lock (Prompts)
+        {
+            Prompts.Add(messages.LastOrDefault(message => message.Role == ChatRole.User)?.Text ?? string.Empty);
+        }
 
         var responseId = Guid.NewGuid().ToString("N");
 
@@ -672,7 +681,7 @@ internal sealed class PresentCallingChatClient : IChatClient
                 "present",
                 new Dictionary<string, object?>(StringComparer.Ordinal)
                 {
-                    ["tree"] = JsonSerializer.Deserialize<JsonElement>(_trees[index]),
+                    ["code"] = _trees[index],
                 })])
         {
             ResponseId = responseId,

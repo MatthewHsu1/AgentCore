@@ -1055,7 +1055,7 @@ AgentCore.Application.Ports.IToolSource
 AgentCore.Application.Ports.IToolSource.ProvideAsync(AgentCore.Application.Tools.Registry.ToolSourceContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Application.Tools.Registry.ToolRegistration!>!>
 AgentCore.Application.Ports.IVendorAdapter
 AgentCore.Application.Ports.IVendorAdapter.Kind.get -> string!
-AgentCore.Application.Ports.KnowledgeRetrievalPortExtensions
+AgentCore.Application.Knowledge.KnowledgeRetrievalPortExtensions
 AgentCore.Application.Providers.VendorAdapterSelector
 AgentCore.Application.Providers.VendorSeam
 AgentCore.Application.Providers.VendorSeam.Deconstruct(out string! DocumentPath, out string! Pointer, out string! RegistrationHint, out string! Plural) -> void
@@ -1234,10 +1234,12 @@ AgentCore.Application.Tools.Binding.ToolBindingRegistry.TryGetMethod(string! nam
 AgentCore.Application.Tools.Builtin.BuiltinToolNames
 AgentCore.Application.Tools.Builtin.BuiltinToolPorts
 AgentCore.Application.Tools.Builtin.BuiltinToolPorts.<Clone>$() -> AgentCore.Application.Tools.Builtin.BuiltinToolPorts!
-AgentCore.Application.Tools.Builtin.BuiltinToolPorts.BuiltinToolPorts(AgentCore.Application.Ports.IChatClientFactory? ChatClients) -> void
+AgentCore.Application.Tools.Builtin.BuiltinToolPorts.BuiltinToolPorts(AgentCore.Application.Ports.IChatClientFactory? ChatClients, AgentCore.Application.Ports.IScriptRunnerPort? Scripts = null) -> void
 AgentCore.Application.Tools.Builtin.BuiltinToolPorts.ChatClients.get -> AgentCore.Application.Ports.IChatClientFactory?
 AgentCore.Application.Tools.Builtin.BuiltinToolPorts.ChatClients.init -> void
-AgentCore.Application.Tools.Builtin.BuiltinToolPorts.Deconstruct(out AgentCore.Application.Ports.IChatClientFactory? ChatClients) -> void
+AgentCore.Application.Tools.Builtin.BuiltinToolPorts.Deconstruct(out AgentCore.Application.Ports.IChatClientFactory? ChatClients, out AgentCore.Application.Ports.IScriptRunnerPort? Scripts) -> void
+AgentCore.Application.Tools.Builtin.BuiltinToolPorts.Scripts.get -> AgentCore.Application.Ports.IScriptRunnerPort?
+AgentCore.Application.Tools.Builtin.BuiltinToolPorts.Scripts.init -> void
 AgentCore.Application.Tools.Builtin.BuiltinToolPorts.Equals(AgentCore.Application.Tools.Builtin.BuiltinToolPorts? other) -> bool
 AgentCore.Application.Tools.Builtin.BuiltinToolSource
 AgentCore.Application.Tools.Builtin.BuiltinToolSource.BuiltinToolSource(AgentCore.Application.Tools.Builtin.BuiltinToolPorts! ports) -> void
@@ -1816,7 +1818,7 @@ static AgentCore.Application.Knowledge.KnowledgeCitationFormatterFactory.Resolve
 static AgentCore.Application.Knowledge.KnowledgePoint.operator !=(AgentCore.Application.Knowledge.KnowledgePoint? left, AgentCore.Application.Knowledge.KnowledgePoint? right) -> bool
 static AgentCore.Application.Knowledge.KnowledgePoint.operator ==(AgentCore.Application.Knowledge.KnowledgePoint? left, AgentCore.Application.Knowledge.KnowledgePoint? right) -> bool
 static AgentCore.Application.Llm.CompositeChatClientFactory.CreateAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.IChatClientAdapter!>! adapters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Llm.CompositeChatClientFactory!>
-static AgentCore.Application.Ports.KnowledgeRetrievalPortExtensions.GetService<TService>(this AgentCore.Application.Ports.IKnowledgeRetrievalPort! port, object? serviceKey = null) -> TService?
+static AgentCore.Application.Knowledge.KnowledgeRetrievalPortExtensions.GetService<TService>(this AgentCore.Application.Ports.IKnowledgeRetrievalPort! port, object? serviceKey = null) -> TService?
 static AgentCore.Application.Providers.VendorAdapterSelector.Select<TAdapter>(string! kind, System.Collections.Generic.IReadOnlyList<TAdapter>! adapters, AgentCore.Application.Providers.VendorSeam seam) -> TAdapter
 static AgentCore.Application.Providers.VendorSeam.operator !=(AgentCore.Application.Providers.VendorSeam left, AgentCore.Application.Providers.VendorSeam right) -> bool
 static AgentCore.Application.Providers.VendorSeam.operator ==(AgentCore.Application.Providers.VendorSeam left, AgentCore.Application.Providers.VendorSeam right) -> bool
@@ -1887,3 +1889,36 @@ virtual AgentCore.Application.Call.CallInput.PrintMembers(System.Text.StringBuil
 virtual AgentCore.Application.Tools.Binding.ToolBinding.Invoke(System.Text.Json.Nodes.JsonObject! arguments, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<object?>
 ~override AgentCore.Application.Providers.VendorSeam.Equals(object obj) -> bool
 ~override AgentCore.Application.Providers.VendorSeam.ToString() -> string
+AgentCore.Application.Ports.IScriptRunnerPort
+AgentCore.Application.Ports.IScriptRunnerPort.RunAsync(AgentCore.Application.Scripting.ScriptRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Scripting.ScriptResult!>
+AgentCore.Application.Scripting.ScriptRequest
+AgentCore.Application.Scripting.ScriptRequest.<Clone>$() -> AgentCore.Application.Scripting.ScriptRequest!
+AgentCore.Application.Scripting.ScriptRequest.Code.get -> string!
+AgentCore.Application.Scripting.ScriptRequest.Code.init -> void
+AgentCore.Application.Scripting.ScriptRequest.Data.get -> System.Text.Json.Nodes.JsonNode!
+AgentCore.Application.Scripting.ScriptRequest.Data.init -> void
+AgentCore.Application.Scripting.ScriptRequest.Deconstruct(out string! Code, out System.Text.Json.Nodes.JsonNode! Data) -> void
+AgentCore.Application.Scripting.ScriptRequest.Emit.get -> string?
+AgentCore.Application.Scripting.ScriptRequest.Emit.init -> void
+AgentCore.Application.Scripting.ScriptRequest.Equals(AgentCore.Application.Scripting.ScriptRequest? other) -> bool
+AgentCore.Application.Scripting.ScriptRequest.ScriptRequest(string! Code, System.Text.Json.Nodes.JsonNode! Data) -> void
+AgentCore.Application.Scripting.ScriptResult
+AgentCore.Application.Scripting.ScriptResult.<Clone>$() -> AgentCore.Application.Scripting.ScriptResult!
+AgentCore.Application.Scripting.ScriptResult.Equals(AgentCore.Application.Scripting.ScriptResult? other) -> bool
+AgentCore.Application.Scripting.ScriptResult.Error.get -> string?
+AgentCore.Application.Scripting.ScriptResult.Error.init -> void
+AgentCore.Application.Scripting.ScriptResult.ScriptResult() -> void
+AgentCore.Application.Scripting.ScriptResult.Value.get -> System.Text.Json.Nodes.JsonNode?
+AgentCore.Application.Scripting.ScriptResult.Value.init -> void
+override AgentCore.Application.Scripting.ScriptRequest.Equals(object? obj) -> bool
+override AgentCore.Application.Scripting.ScriptRequest.GetHashCode() -> int
+override AgentCore.Application.Scripting.ScriptRequest.ToString() -> string!
+override AgentCore.Application.Scripting.ScriptResult.Equals(object? obj) -> bool
+override AgentCore.Application.Scripting.ScriptResult.GetHashCode() -> int
+override AgentCore.Application.Scripting.ScriptResult.ToString() -> string!
+static AgentCore.Application.Scripting.ScriptRequest.operator ==(AgentCore.Application.Scripting.ScriptRequest? left, AgentCore.Application.Scripting.ScriptRequest? right) -> bool
+static AgentCore.Application.Scripting.ScriptRequest.operator !=(AgentCore.Application.Scripting.ScriptRequest? left, AgentCore.Application.Scripting.ScriptRequest? right) -> bool
+static AgentCore.Application.Scripting.ScriptResult.Failed(string! error) -> AgentCore.Application.Scripting.ScriptResult!
+static AgentCore.Application.Scripting.ScriptResult.operator ==(AgentCore.Application.Scripting.ScriptResult? left, AgentCore.Application.Scripting.ScriptResult? right) -> bool
+static AgentCore.Application.Scripting.ScriptResult.operator !=(AgentCore.Application.Scripting.ScriptResult? left, AgentCore.Application.Scripting.ScriptResult? right) -> bool
+static AgentCore.Application.Scripting.ScriptResult.Returned(System.Text.Json.Nodes.JsonNode? value) -> AgentCore.Application.Scripting.ScriptResult!

@@ -148,7 +148,7 @@ public sealed class AuditingFunctionInvokingChatClientRenderTests
         var drawTool = ShippedAgentBuilder.Build(
             new DrawingAgentDefinition(),
             DrawDeclaration,
-            new BuiltinToolPorts(new RecordingChatClientFactory(new PresentCallingChatClient(Card))));
+            new BuiltinToolPorts(new RecordingChatClientFactory(new PresentCallingChatClient(Card)), new FakeScriptRunner()));
 
         TurnRenders renders = new();
         using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = renders, Renders = renders });

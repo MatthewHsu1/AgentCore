@@ -42,7 +42,14 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
 
         try
         {
-            return await base.InvokeFunctionAsync(context, cancellationToken).ConfigureAwait(false);
+            var result = await base.InvokeFunctionAsync(context, cancellationToken).ConfigureAwait(false);
+
+            if (!nested)
+            {
+                TurnAmbients.Current?.Results?.Record(context.Function.Name, result);
+            }
+
+            return result;
         }
         catch (Exception failure) when (!IsCallerCancellation(failure, cancellationToken)
                                         && !IsBeyondTheModel(failure))

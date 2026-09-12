@@ -2,7 +2,9 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Tools.Builtin;
@@ -16,7 +18,8 @@ using Xunit;
 namespace AgentCore.Application.Tests.Tools;
 
 /// <summary>
-/// <c>ui.draw</c>: a shipped agent whose one inner tool is <c>present</c>.
+/// <c>ui.draw</c>: a shipped agent whose one inner tool is <c>present</c>, which runs the script
+/// the drawing model wrote over what this turn's tools answered.
 /// </summary>
 /// <remarks>
 /// The point of the design is what the calling agent never sees. The 27-component vocabulary is
@@ -185,6 +188,53 @@ public sealed class DrawingAgentTests
     }
 
     [Fact]
+    public async Task TheSource_WithNoScriptRunner_FailsTheBoot()
+    {
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+            async () => await Provide(Declaration, new RecordingChatClientFactory(), scripts: null));
+
+        Assert.Contains("draw", failure.Message, StringComparison.Ordinal);
+        Assert.Contains(nameof(IScriptRunnerPort), failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheDrawingModel_IsToldWhatThisTurnsToolsAnswered_AfterTheRequest()
+    {
+        // The whole point of the script: the calling agent names the result, the drawing model reads
+        // its shape and three rows, and the rows themselves go to the script and never to a model.
+        RecordingRenderPort screen = new();
+        TurnResults results = new();
+        results.Record("lookup_orders", JsonNode.Parse("""[{"id":"SO-1","total":5},{"id":"SO-2","total":7}]""")!);
+        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen, Results = results });
+        PresentCallingChatClient model = new(Card);
+
+        var function = Build(new RecordingChatClientFactory(model));
+        await function.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "a table of the lookup_orders result" }),
+            TestContext.Current.CancellationToken);
+
+        var prompt = model.Prompts[0];
+        Assert.StartsWith("a table of the lookup_orders result", prompt, StringComparison.Ordinal);
+        Assert.Contains("`data.lookup_orders`", prompt, StringComparison.Ordinal);
+        Assert.Contains("SO-2", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WithNothingAnswered_TheRequestGoesThroughUntouched()
+    {
+        RecordingRenderPort screen = new();
+        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen, Results = new TurnResults() });
+        PresentCallingChatClient model = new(Card);
+
+        var function = Build(new RecordingChatClientFactory(model));
+        await function.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "draw a card" }),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("draw a card", model.Prompts[0]);
+    }
+
+    [Fact]
     public async Task AUsesNameNobodyShips_IsToldWhatIsShipped_IncludingTheShippedAgents()
     {
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
@@ -250,12 +300,16 @@ public sealed class DrawingAgentTests
 
     private static AIFunction Build(RecordingChatClientFactory factory)
         => ShippedAgentBuilder.Build(
-            new DrawingAgentDefinition(), Declaration, new BuiltinToolPorts(factory));
+            new DrawingAgentDefinition(), Declaration, new BuiltinToolPorts(factory, new FakeScriptRunner()));
 
     /// <summary>Builds one declared tool through <see cref="BuiltinToolSource"/>.</summary>
     private static async Task<ToolRegistration> Provide(ToolConfiguration tool, RecordingChatClientFactory? factory)
+        => await Provide(tool, factory, new FakeScriptRunner());
+
+    private static async Task<ToolRegistration> Provide(
+        ToolConfiguration tool, RecordingChatClientFactory? factory, IScriptRunnerPort? scripts)
     {
-        BuiltinToolSource source = new(new BuiltinToolPorts(factory));
+        BuiltinToolSource source = new(new BuiltinToolPorts(factory, scripts));
         var context = new ToolSourceContext(new AgentCoreConfiguration
         {
             ApiVersion = "agentcore/v1",

@@ -45,7 +45,7 @@ internal static class ToolRegistryStartup
     {
         List<IToolSource> sources =
         [
-            new BuiltinToolSource(new BuiltinToolPorts(chatClients)),
+            new BuiltinToolSource(new BuiltinToolPorts(chatClients, options.Scripts)),
             new BindingToolSource(options.Bindings),
         ];
 

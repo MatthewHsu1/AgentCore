@@ -1,4 +1,5 @@
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Infrastructure.Knowledge.VectorData.Qdrant;
 using AgentCore.Infrastructure.Tests.Fakes;

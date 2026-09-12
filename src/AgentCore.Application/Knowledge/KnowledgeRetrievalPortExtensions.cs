@@ -1,4 +1,6 @@
-namespace AgentCore.Application.Ports;
+using AgentCore.Application.Ports;
+
+namespace AgentCore.Application.Knowledge;
 
 /// <summary>
 /// Typed helpers over <see cref="IKnowledgeRetrievalPort.GetService"/>.

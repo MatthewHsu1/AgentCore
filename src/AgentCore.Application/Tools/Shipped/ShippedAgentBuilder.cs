@@ -54,14 +54,59 @@ internal static class ShippedAgentBuilder
             });
 
         return new SpentRoundsAreAnError(
-            agent.AsAIFunction(new AIFunctionFactoryOptions
-            {
-                Name = tool.Id,
-                Description = described.Description!,
-                ExcludeResultSchema = true,
-            }),
+            new ComposedRequest(
+                agent.AsAIFunction(new AIFunctionFactoryOptions
+                {
+                    Name = tool.Id,
+                    Description = described.Description!,
+                    ExcludeResultSchema = true,
+                }),
+                definition),
             tool.Id,
             rounds);
+    }
+
+    /// <summary>
+    /// Hands the inner agent the request its definition composes from the outer agent's string.
+    /// </summary>
+    private sealed class ComposedRequest : DelegatingAIFunction
+    {
+        /// <summary>The one parameter <c>AsAIFunction</c> advertises.</summary>
+        private const string QueryParameter = "query";
+
+        private readonly IShippedAgentDefinition _definition;
+
+        internal ComposedRequest(AIFunction inner, IShippedAgentDefinition definition)
+            : base(inner)
+        {
+            _definition = definition;
+        }
+
+        protected override ValueTask<object?> InvokeCoreAsync(
+            AIFunctionArguments arguments,
+            CancellationToken cancellationToken)
+        {
+            if (arguments.TryGetValue(QueryParameter, out var value) && Text(value) is { } query)
+            {
+                var composed = new AIFunctionArguments(new Dictionary<string, object?>(arguments, StringComparer.Ordinal))
+                {
+                    Services = arguments.Services,
+                    Context = arguments.Context,
+                };
+                composed[QueryParameter] = _definition.Compose(query);
+                return InnerFunction.InvokeAsync(composed, cancellationToken);
+            }
+
+            return InnerFunction.InvokeAsync(arguments, cancellationToken);
+        }
+
+        private static string? Text(object? value)
+            => value switch
+            {
+                string text => text,
+                JsonElement { ValueKind: JsonValueKind.String } element => element.GetString(),
+                _ => null,
+            };
     }
 
     /// <summary>

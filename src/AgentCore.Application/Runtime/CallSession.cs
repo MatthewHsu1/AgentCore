@@ -738,6 +738,7 @@ public sealed class CallSession : IConversationPort
             State,
             turn.Renders,
             turn.Sources,
+            turn.Results,
             failure => _events.RaiseToolFailure(turn.Index, failure),
             TurnContextOf(turn),
             turn.Knowledge,
@@ -868,6 +869,7 @@ public sealed class CallSession : IConversationPort
                 _time.GetTimestamp(),
                 _hasScreen ? new TurnRenders() : null,
                 new TurnSources(),
+                new TurnResults(),
                 knowledge,
                 origin?.MessageId);
         }
@@ -1414,6 +1416,10 @@ public sealed class CallSession : IConversationPort
     /// What this turn cites into. Built once per turn for the same reason <see cref="Renders"/> is,
     /// and never null: a call with no screen still answers from documents.
     /// </param>
+    /// <param name="Results">
+    /// What this turn's tools answer into, so a drawing script can read the rows. Built once per
+    /// turn: a later turn's rows are not this turn's.
+    /// </param>
     /// <param name="Knowledge">
     /// What this turn may see of the knowledge base. Built once per turn for the same reason
     /// <see cref="Renders"/> is, and additionally because a scope that changed between two updates
@@ -1435,6 +1441,7 @@ public sealed class CallSession : IConversationPort
         long StartedAt,
         TurnRenders? Renders,
         TurnSources Sources,
+        TurnResults Results,
         KnowledgeScope? Knowledge,
         string? MessageId);
 

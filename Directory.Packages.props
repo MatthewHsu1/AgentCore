@@ -37,6 +37,9 @@
     <PackageVersion Include="Stateless" Version="5.20.1" />
   </ItemGroup>
   <ItemGroup>
+    <PackageVersion Include="Jint" Version="4.16.2" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
     <PackageVersion Include="JsonSchema.Net" Version="9.4.0" />
     <PackageVersion Include="JsonLogic" Version="6.1.0" />

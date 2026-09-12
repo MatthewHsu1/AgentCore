@@ -31,6 +31,9 @@ internal sealed record TurnAmbients
     /// <summary>Gets what a turn has cited and not yet attached to a message.</summary>
     public TurnSources? Sources { get; init; }
 
+    /// <summary>Gets what the turn's tools answered, for a script to read, or <see langword="null"/>.</summary>
+    public TurnResults? Results { get; init; }
+
     /// <summary>Gets what to do with a tool failure the run reports.</summary>
     public Action<ToolFailure>? OnToolFailure { get; init; }
 
@@ -51,6 +54,7 @@ internal sealed record TurnAmbients
     /// <param name="state">The state document the call reads and writes.</param>
     /// <param name="renders">What this turn draws into, or <see langword="null"/> when it has no screen.</param>
     /// <param name="sources">What this turn cites into. Never null: a call with no screen still has sources.</param>
+    /// <param name="results">What this turn's tools answer into.</param>
     /// <param name="onToolFailure">What to do with a tool failure the run reports.</param>
     /// <param name="context">The turn the tools are running inside.</param>
     /// <param name="knowledge">What this turn may see of the knowledge base, or <see langword="null"/> when the document composes none.</param>
@@ -60,6 +64,7 @@ internal sealed record TurnAmbients
         StateDocument state,
         TurnRenders? renders,
         TurnSources sources,
+        TurnResults results,
         Action<ToolFailure> onToolFailure,
         TurnContext context,
         KnowledgeScope? knowledge,
@@ -68,6 +73,7 @@ internal sealed record TurnAmbients
         ArgumentNullException.ThrowIfNull(callId);
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(sources);
+        ArgumentNullException.ThrowIfNull(results);
         ArgumentNullException.ThrowIfNull(onToolFailure);
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(clarifications);
@@ -81,6 +87,7 @@ internal sealed record TurnAmbients
             Screen = renders,
             Renders = renders,
             Sources = sources,
+            Results = results,
             OnToolFailure = onToolFailure,
             Context = context,
             Knowledge = knowledge ?? current.Knowledge,
