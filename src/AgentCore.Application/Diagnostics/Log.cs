@@ -249,4 +249,14 @@ internal static partial class Log
             + "The turn runs on the words the session already holds; a message appended outside a "
             + "turn since the last read is not among them.")]
     public static partial void TranscriptResyncFailed(ILogger logger, string callId, int turnIndex, Exception exception);
+
+    /// <summary>A call's workspace folder could not be deleted when the call ended.</summary>
+    /// <param name="logger">The logger of the session.</param>
+    /// <param name="path">The folder that could not be deleted.</param>
+    /// <param name="exception">The cause.</param>
+    [LoggerMessage(
+        EventId = 20,
+        Level = LogLevel.Warning,
+        Message = "Could not delete the call workspace at '{Path}'.")]
+    public static partial void WorkspaceDeleteFailed(ILogger logger, string path, Exception exception);
 }

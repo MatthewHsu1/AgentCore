@@ -32,6 +32,7 @@ using System.Text.Json.Nodes;
 using Xunit;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
 using Microsoft.Agents.AI;
+using static AgentCore.AspNetCore.Tests.DependencyInjection.StartedHostFixture;
 
 namespace AgentCore.AspNetCore.Tests.DependencyInjection;
 
@@ -60,16 +61,6 @@ public sealed class AddAgentCoreTests
         {{SpeechAndCall}}
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
-        """;
-
-    private const string OneAgentYaml =
-        $$"""
-        apiVersion: agentcore/v1
-        name: composed
-        agents:
-          items:
-            - { id: only, instructions: "I answer everything" }
-        {{MinimalProviders}}
         """;
 
     // The same agent, and a document that names a telemetry vendor.
@@ -1875,62 +1866,6 @@ public sealed class AddAgentCoreTests
         OccurredAt = DateTimeOffset.UnixEpoch.AddSeconds(secondsPastEpoch),
     };
 
-    /// <summary>Starts a host on one document, which is where the whole boot happens.</summary>
-    /// <param name="yaml">The document to boot.</param>
-    /// <param name="configure">The host's own word on the options.</param>
-    /// <returns>The started host, read as the container it is.</returns>
-    private static async Task<StartedHost> BuildAsync(string yaml, Action<AgentCoreOptions>? configure = null)
-    {
-        HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
-        ConfigureServices(builder.Services, yaml, configure);
-
-        return await StartAsync(builder.Build());
-    }
-
-    /// <summary>Starts one host, and closes it itself when the start fails.</summary>
-    /// <param name="host">The host to start.</param>
-    /// <returns>The started host.</returns>
-    /// <remarks>
-    /// A failed start never stops what already started, so disposal is the only cleanup path — and
-    /// it is the one a real host takes too, inside <c>RunAsync</c>'s own finally. StopAsync is
-    /// deliberately not called here: on net10 a host that failed to start throws
-    /// <see cref="ArgumentNullException"/> out of StopAsync when the failure was a constructor.
-    /// </remarks>
-    private static async Task<StartedHost> StartAsync(IHost host)
-    {
-        try
-        {
-            await host.StartAsync(TestContext.Current.CancellationToken);
-        }
-        catch
-        {
-            host.Dispose();
-            throw;
-        }
-
-        return new StartedHost(host);
-    }
-
-    /// <summary>Starts a host on nothing but the options a test writes, with no document default.</summary>
-    /// <param name="configure">The only word on the options.</param>
-    /// <returns>The started host, for the tests that expect it never to get one.</returns>
-    private static async Task<StartedHost> StartBareAsync(Action<AgentCoreOptions> configure)
-    {
-        HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
-        builder.Services.AddAgentCore(configure);
-
-        return await StartAsync(builder.Build());
-    }
-
-    private static void ConfigureServices(
-        IServiceCollection services, string yaml, Action<AgentCoreOptions>? configure)
-        => services.AddAgentCore(options =>
-        {
-            options.Configuration = ConfigurationLoader.LoadYaml(yaml);
-            options.UseChatClients(_ => new RoutingChatClientFactory(new FragmentingChatClient("hello")));
-            configure?.Invoke(options);
-        });
-
     /// <summary>An adapter that starts nothing and hands back a session that records its flush.</summary>
     private sealed class FlushRecordingTelemetryAdapter(string kind) : ITelemetryAdapter
     {
@@ -2147,19 +2082,6 @@ public sealed class AddAgentCoreTests
             onProvide();
             return ValueTask.FromResult<IReadOnlyList<ToolRegistration>>([]);
         }
-    }
-
-    /// <summary>A started host, read as the container it is.</summary>
-    /// <param name="host">The host to read services from, and to close on the way out.</param>
-    /// <remarks>
-    /// Disposing this disposes the host, which disposes the container. That is the whole shutdown
-    /// path: nothing here calls StopAsync, because a host that failed to start never gets one.
-    /// </remarks>
-    private sealed class StartedHost(IHost host) : IServiceProvider, IDisposable
-    {
-        public object? GetService(Type serviceType) => host.Services.GetService(serviceType);
-
-        public void Dispose() => host.Dispose();
     }
 
     /// <summary>A tool source a host registers, which records whether it was ever closed.</summary>

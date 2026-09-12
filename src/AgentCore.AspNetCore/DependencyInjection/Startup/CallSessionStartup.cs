@@ -1,5 +1,6 @@
 using AgentCore.Application.Audit;
 using AgentCore.Application.Audit.Memory;
+using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
@@ -50,13 +51,30 @@ internal static class CallSessionStartup
 
         var sessionLogger = loggers.CreateLogger<CallSession>();
 
+        if (options.WorkspaceRoot is { } root)
+        {
+            try
+            {
+                Directory.CreateDirectory(root);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                throw new ConfigurationLoadException(
+                    $"The configuration document did not load. The workspace root '{root}' could not be "
+                    + $"created: {exception.Message} Check the path passed to options.UseWorkspace(...), "
+                    + "and that the process has permission to create it.",
+                    exception);
+            }
+        }
+
         CallSessionFactory sessions = new(
             graph.Compiled,
             graph.Guards,
             CallSessionFactory.CreateExtractor(graph.Compiled, graph.ChatClients),
             options.TimeProvider,
             sessionLogger,
-            CallObservers.Standard(auditSink, sessionLogger, options.Observers));
+            CallObservers.Standard(auditSink, sessionLogger, options.Observers),
+            options.WorkspaceRoot);
 
         return new CallSessionSeam(sessions, new AgentCoreAgent(sessions, configuration.Name), auditSink);
     }

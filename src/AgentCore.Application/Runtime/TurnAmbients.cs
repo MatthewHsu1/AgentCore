@@ -49,6 +49,9 @@ internal sealed record TurnAmbients
     /// <summary>Gets the call's ambiguity holder (K36), or <see langword="null"/> inside a nested tool call (K42).</summary>
     public Clarifications? Clarifications { get; init; }
 
+    /// <summary>Gets the folder this call owns on disk, or <see langword="null"/> when the host bound no workspace root.</summary>
+    public string? Workspace { get; init; }
+
     /// <summary>Opens what a turn owns, and carries every other ambient through unchanged.</summary>
     /// <param name="callId">The id of the call the turn belongs to.</param>
     /// <param name="state">The state document the call reads and writes.</param>
@@ -59,6 +62,7 @@ internal sealed record TurnAmbients
     /// <param name="context">The turn the tools are running inside.</param>
     /// <param name="knowledge">What this turn may see of the knowledge base, or <see langword="null"/> when the document composes none.</param>
     /// <param name="clarifications">The call's ambiguity holder.</param>
+    /// <param name="workspace">The folder this call owns on disk, or <see langword="null"/> when the host bound no workspace root.</param>
     internal static IDisposable Enter(
         string callId,
         StateDocument state,
@@ -68,7 +72,8 @@ internal sealed record TurnAmbients
         Action<ToolFailure> onToolFailure,
         TurnContext context,
         KnowledgeScope? knowledge,
-        Clarifications clarifications)
+        Clarifications clarifications,
+        string? workspace)
     {
         ArgumentNullException.ThrowIfNull(callId);
         ArgumentNullException.ThrowIfNull(state);
@@ -92,6 +97,7 @@ internal sealed record TurnAmbients
             Context = context,
             Knowledge = knowledge ?? current.Knowledge,
             Clarifications = clarifications,
+            Workspace = workspace,
         });
     }
 

@@ -4,4 +4,5 @@ namespace AgentCore.Application.Tools;
 /// <param name="CallId">The call the turn belongs to.</param>
 /// <param name="TurnIndex">The zero-based index of the turn now running.</param>
 /// <param name="Stage">The stage the call's state machine holds. Empty when the document declares no policy.</param>
-public sealed record ToolCallScope(string CallId, int TurnIndex, string Stage);
+/// <param name="Workspace">The call's folder on disk, or <see langword="null"/> when the host bound no workspace root.</param>
+public sealed record ToolCallScope(string CallId, int TurnIndex, string Stage, string? Workspace = null);

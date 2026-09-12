@@ -1222,8 +1222,9 @@ AgentCore.Application.Runtime.CallSession.SetHasScreen(bool hasScreen) -> void
 AgentCore.Application.Runtime.CallSession.Stage.get -> string!
 AgentCore.Application.Runtime.CallSession.State.get -> AgentCore.Application.State.StateDocument!
 AgentCore.Application.Runtime.CallSession.Transcript.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatMessage!>!
+AgentCore.Application.Runtime.CallSession.Workspace.get -> string?
 AgentCore.Application.Runtime.CallSessionFactory
-AgentCore.Application.Runtime.CallSessionFactory.CallSessionFactory(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Configuration.Validation.IGuardEvaluator! guards, AgentCore.Application.State.StateExtractor? extractor = null, System.TimeProvider? timeProvider = null, Microsoft.Extensions.Logging.ILogger? logger = null, System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ICallObserver!>? observers = null) -> void
+AgentCore.Application.Runtime.CallSessionFactory.CallSessionFactory(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Configuration.Validation.IGuardEvaluator! guards, AgentCore.Application.State.StateExtractor? extractor = null, System.TimeProvider? timeProvider = null, Microsoft.Extensions.Logging.ILogger? logger = null, System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ICallObserver!>? observers = null, string? workspaceRoot = null) -> void
 AgentCore.Application.Runtime.CallSessionFactory.Create(string? callId = null, AgentCore.Application.Calls.CallSessionState? state = null) -> AgentCore.Application.Runtime.CallSession!
 AgentCore.Application.Runtime.CallSourceScope
 AgentCore.Application.Runtime.CallStateScope
@@ -1381,13 +1382,15 @@ AgentCore.Application.Tools.ToolCallScope
 AgentCore.Application.Tools.ToolCallScope.<Clone>$() -> AgentCore.Application.Tools.ToolCallScope!
 AgentCore.Application.Tools.ToolCallScope.CallId.get -> string!
 AgentCore.Application.Tools.ToolCallScope.CallId.init -> void
-AgentCore.Application.Tools.ToolCallScope.Deconstruct(out string! CallId, out int TurnIndex, out string! Stage) -> void
+AgentCore.Application.Tools.ToolCallScope.Deconstruct(out string! CallId, out int TurnIndex, out string! Stage, out string? Workspace) -> void
 AgentCore.Application.Tools.ToolCallScope.Equals(AgentCore.Application.Tools.ToolCallScope? other) -> bool
 AgentCore.Application.Tools.ToolCallScope.Stage.get -> string!
 AgentCore.Application.Tools.ToolCallScope.Stage.init -> void
-AgentCore.Application.Tools.ToolCallScope.ToolCallScope(string! CallId, int TurnIndex, string! Stage) -> void
+AgentCore.Application.Tools.ToolCallScope.ToolCallScope(string! CallId, int TurnIndex, string! Stage, string? Workspace = null) -> void
 AgentCore.Application.Tools.ToolCallScope.TurnIndex.get -> int
 AgentCore.Application.Tools.ToolCallScope.TurnIndex.init -> void
+AgentCore.Application.Tools.ToolCallScope.Workspace.get -> string?
+AgentCore.Application.Tools.ToolCallScope.Workspace.init -> void
 AgentCore.Application.Tools.ToolErrorResult
 AgentCore.Application.Tools.ToolResultJson
 AgentCore.Application.Transcript.CallMessage

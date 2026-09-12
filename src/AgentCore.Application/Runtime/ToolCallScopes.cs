@@ -27,6 +27,6 @@ internal static class ToolCallScopes
             throw new InvalidOperationException(NoTurnMessage);
         }
 
-        return new ToolCallScope(callId, state.TurnIndex, state.Stage);
+        return new ToolCallScope(callId, state.TurnIndex, state.Stage, ambients.Workspace);
     }
 }

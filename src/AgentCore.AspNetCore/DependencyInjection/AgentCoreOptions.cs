@@ -84,6 +84,9 @@ public sealed class AgentCoreOptions
     /// <summary>Gets the call transports this host supports, or <see langword="null"/>.</summary>
     internal IReadOnlyList<ICallAdapter>? Call { get; private set; }
 
+    /// <summary>Gets the folder under which every call gets its own workspace, or <see langword="null"/>.</summary>
+    internal string? WorkspaceRoot { get; private set; }
+
     /// <summary>Gets the extra tool sources, in the order the registry asks them.</summary>
     internal IReadOnlyList<Func<AgentCoreStartup, IToolSource>> ToolSources => _toolSources;
 
@@ -290,6 +293,17 @@ public sealed class AgentCoreOptions
     {
         ArgumentNullException.ThrowIfNull(toolSource);
         _toolSources.Add(toolSource);
+        return this;
+    }
+
+    /// <summary>
+    /// Binds the folder under which every call gets its own workspace directory,
+    /// <c>&lt;root&gt;/&lt;callId&gt;/</c>, created with the call and deleted when the call ends.
+    /// </summary>
+    public AgentCoreOptions UseWorkspace(string root)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(root);
+        WorkspaceRoot = root;
         return this;
     }
 

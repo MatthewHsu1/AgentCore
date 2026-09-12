@@ -98,6 +98,8 @@ public sealed class CallSession : IConversationPort
 
     private readonly Clarifications _clarifications = new();
 
+    private readonly CallWorkspace? _workspace;
+
     // Whether the running turn has already handed the host something to speak. One rule for both
     // run shapes: a run that has handed the host nothing cannot be the turn the caller was hearing,
     // so a barge-in in that window belongs to the turn that finished before it. A streaming turn
@@ -122,7 +124,8 @@ public sealed class CallSession : IConversationPort
         StateExtractor? extractor,
         TimeProvider timeProvider,
         CallObserverDispatcher? observers = null,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        CallWorkspace? workspace = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(callId);
         ArgumentNullException.ThrowIfNull(compiled);
@@ -132,6 +135,8 @@ public sealed class CallSession : IConversationPort
         CallId = callId;
 
         _logger = logger ?? NullLogger.Instance;
+
+        _workspace = workspace;
 
         _compiled = compiled;
 
@@ -179,6 +184,12 @@ public sealed class CallSession : IConversationPort
     /// Gets the id of the call.
     /// </summary>
     public string CallId { get; }
+
+    /// <summary>
+    /// Gets the folder this call owns on disk, or <see langword="null"/> when the host bound no
+    /// workspace root. The folder is deleted when the call ends.
+    /// </summary>
+    public string? Workspace => _workspace?.Path;
 
     /// <summary>
     /// Gets the stage the machine holds. It is empty when the document declares no policy.
@@ -482,8 +493,15 @@ public sealed class CallSession : IConversationPort
         // no call and writes nothing.
         var wrote = _events.EndCall(reason, _time.GetUtcNow());
         IsComplete = true;
+        DeleteWorkspace();
         return wrote;
     }
+
+    /// <summary>
+    /// Deletes this call's workspace, if it has one. Called once the chain has recorded why the
+    /// call ended, from every path that can end it.
+    /// </summary>
+    private void DeleteWorkspace() => _workspace?.Delete(_logger);
 
     /// <summary>
     /// Brings the session's words back in line with store 1 before a turn after the first, when and
@@ -742,7 +760,8 @@ public sealed class CallSession : IConversationPort
             failure => _events.RaiseToolFailure(turn.Index, failure),
             TurnContextOf(turn),
             turn.Knowledge,
-            _clarifications);
+            _clarifications,
+            Workspace);
 
     /// <summary>
     /// Reads what one turn adds to its own model invocation.
@@ -1274,6 +1293,7 @@ public sealed class CallSession : IConversationPort
             // The stage rides as detail, because the reason a report counts is the same one for
             // every terminal stage the document declares.
             _events.EndCall(CallEndReason.AgentCompleted, endedAt, stageAfter);
+            DeleteWorkspace();
         }
 
         return result;
