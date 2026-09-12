@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Runtime;
 using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Tools.Binding;
@@ -13,7 +14,14 @@ internal sealed class TypedBindingTool : DeclaredTool
 
     internal TypedBindingTool(ToolConfiguration tool, Delegate method)
         : base(tool)
-        => _inner = AIFunctionFactory.Create(method, tool.Id, tool.Description);
+        => _inner = AIFunctionFactory.Create(method, new AIFunctionFactoryOptions
+        {
+            Name = tool.Id,
+            Description = tool.Description,
+            ConfigureParameterBinding = parameter => parameter.ParameterType == typeof(ToolCallScope)
+                ? new() { ExcludeFromSchema = true, BindParameter = static (_, _) => ToolCallScopes.Current() }
+                : default,
+        });
 
     /// <summary>
     /// Gets the schema the host method's parameters describe. It replaces the base schema, which

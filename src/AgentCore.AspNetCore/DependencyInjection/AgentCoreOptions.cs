@@ -2,6 +2,7 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Llm;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Tools;
 using AgentCore.Application.Tools.Binding;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging;
@@ -294,7 +295,9 @@ public sealed class AgentCoreOptions
     /// <param name="name">The name a <c>binds:</c> field writes, such as <c>CreateCase</c>.</param>
     /// <param name="method">
     /// The method the tool calls. Its parameters are the arguments the model fills, and their JSON
-    /// Schema, so the declaration writes no <c>parameters:</c>.
+    /// Schema, so the declaration writes no <c>parameters:</c>. A parameter of type
+    /// <see cref="ToolCallScope"/> is filled by the runtime with the call the turn belongs to, and
+    /// is not exposed to the model.
     /// </param>
     /// <returns>These options, so a host chains its calls.</returns>
     /// <exception cref="ArgumentException">The name is already registered.</exception>

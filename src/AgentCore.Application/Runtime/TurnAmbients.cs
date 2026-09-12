@@ -16,6 +16,9 @@ internal sealed record TurnAmbients
     /// <summary>Gets what is ambient on this flow, or <see langword="null"/> when nothing is open.</summary>
     internal static TurnAmbients? Current => Ambient.Value;
 
+    /// <summary>Gets the id of the call the turn belongs to.</summary>
+    public string? CallId { get; init; }
+
     /// <summary>Gets the state document the call reads and writes.</summary>
     public StateDocument? State { get; init; }
 
@@ -44,6 +47,7 @@ internal sealed record TurnAmbients
     public Clarifications? Clarifications { get; init; }
 
     /// <summary>Opens what a turn owns, and carries every other ambient through unchanged.</summary>
+    /// <param name="callId">The id of the call the turn belongs to.</param>
     /// <param name="state">The state document the call reads and writes.</param>
     /// <param name="renders">What this turn draws into, or <see langword="null"/> when it has no screen.</param>
     /// <param name="sources">What this turn cites into. Never null: a call with no screen still has sources.</param>
@@ -52,6 +56,7 @@ internal sealed record TurnAmbients
     /// <param name="knowledge">What this turn may see of the knowledge base, or <see langword="null"/> when the document composes none.</param>
     /// <param name="clarifications">The call's ambiguity holder.</param>
     internal static IDisposable Enter(
+        string callId,
         StateDocument state,
         TurnRenders? renders,
         TurnSources sources,
@@ -60,6 +65,7 @@ internal sealed record TurnAmbients
         KnowledgeScope? knowledge,
         Clarifications clarifications)
     {
+        ArgumentNullException.ThrowIfNull(callId);
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(onToolFailure);
@@ -70,6 +76,7 @@ internal sealed record TurnAmbients
 
         return Push(current with
         {
+            CallId = callId,
             State = state,
             Screen = renders,
             Renders = renders,

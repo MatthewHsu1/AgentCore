@@ -1280,6 +1280,17 @@ AgentCore.Application.Tools.ToolCallNames
 AgentCore.Application.Tools.ToolCallNames.Called(Microsoft.Extensions.AI.FunctionCallContent! call) -> void
 AgentCore.Application.Tools.ToolCallNames.Of(Microsoft.Extensions.AI.FunctionResultContent! result) -> string?
 AgentCore.Application.Tools.ToolCallNames.ToolCallNames() -> void
+AgentCore.Application.Tools.ToolCallScope
+AgentCore.Application.Tools.ToolCallScope.<Clone>$() -> AgentCore.Application.Tools.ToolCallScope!
+AgentCore.Application.Tools.ToolCallScope.CallId.get -> string!
+AgentCore.Application.Tools.ToolCallScope.CallId.init -> void
+AgentCore.Application.Tools.ToolCallScope.Deconstruct(out string! CallId, out int TurnIndex, out string! Stage) -> void
+AgentCore.Application.Tools.ToolCallScope.Equals(AgentCore.Application.Tools.ToolCallScope? other) -> bool
+AgentCore.Application.Tools.ToolCallScope.Stage.get -> string!
+AgentCore.Application.Tools.ToolCallScope.Stage.init -> void
+AgentCore.Application.Tools.ToolCallScope.ToolCallScope(string! CallId, int TurnIndex, string! Stage) -> void
+AgentCore.Application.Tools.ToolCallScope.TurnIndex.get -> int
+AgentCore.Application.Tools.ToolCallScope.TurnIndex.init -> void
 AgentCore.Application.Tools.ToolErrorResult
 AgentCore.Application.Tools.ToolResultJson
 AgentCore.Application.Transcript.CallMessage
@@ -1611,6 +1622,9 @@ override AgentCore.Application.Tools.Registry.ToolRegistration.ToString() -> str
 override AgentCore.Application.Tools.Registry.ToolSourceContext.Equals(object? obj) -> bool
 override AgentCore.Application.Tools.Registry.ToolSourceContext.GetHashCode() -> int
 override AgentCore.Application.Tools.Registry.ToolSourceContext.ToString() -> string!
+override AgentCore.Application.Tools.ToolCallScope.Equals(object? obj) -> bool
+override AgentCore.Application.Tools.ToolCallScope.GetHashCode() -> int
+override AgentCore.Application.Tools.ToolCallScope.ToString() -> string!
 override AgentCore.Application.Transcript.CallMessage.Equals(object? obj) -> bool
 override AgentCore.Application.Transcript.CallMessage.GetHashCode() -> int
 override AgentCore.Application.Transcript.CallMessage.ToString() -> string!
@@ -1847,6 +1861,8 @@ static AgentCore.Application.Tools.Registry.ToolSourceContext.operator !=(AgentC
 static AgentCore.Application.Tools.Registry.ToolSourceContext.operator ==(AgentCore.Application.Tools.Registry.ToolSourceContext? left, AgentCore.Application.Tools.Registry.ToolSourceContext? right) -> bool
 static AgentCore.Application.Tools.Registry.ToolSourceError.Fail(string! message) -> AgentCore.Application.Configuration.Parsing.ConfigurationLoadException!
 static AgentCore.Application.Tools.ToolArgumentJson.ToJsonObject(System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string!, object?>>! arguments) -> System.Text.Json.Nodes.JsonObject!
+static AgentCore.Application.Tools.ToolCallScope.operator !=(AgentCore.Application.Tools.ToolCallScope? left, AgentCore.Application.Tools.ToolCallScope? right) -> bool
+static AgentCore.Application.Tools.ToolCallScope.operator ==(AgentCore.Application.Tools.ToolCallScope? left, AgentCore.Application.Tools.ToolCallScope? right) -> bool
 static AgentCore.Application.Tools.ToolErrorResult.Create(string! tool, string! message) -> System.Text.Json.Nodes.JsonObject!
 static AgentCore.Application.Tools.ToolErrorResult.IsError(System.Text.Json.Nodes.JsonNode? result) -> bool
 static AgentCore.Application.Tools.ToolResultJson.ToNode(object? value) -> System.Text.Json.Nodes.JsonNode?

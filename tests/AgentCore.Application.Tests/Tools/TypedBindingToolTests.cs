@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Runtime;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Tools.Registry;
@@ -106,6 +107,18 @@ public sealed class TypedBindingToolTests
         Assert.Equal("Open a service case for a human agent.", tool.Description);
     }
 
+    /// <summary>The model never sees the scope parameter: it names the running call, not an argument the model fills.</summary>
+    [Fact]
+    public async Task AToolCallScopeParameter_IsLeftOutOfTheSchema()
+    {
+        var tool = await CreateAsync((string reason, ToolCallScope scope, CancellationToken ct) => reason);
+
+        var properties = tool.JsonSchema.GetProperty("properties");
+        Assert.True(properties.TryGetProperty("reason", out _));
+        Assert.False(properties.TryGetProperty("scope", out _));
+        Assert.DoesNotContain("CallId", tool.JsonSchema.GetRawText(), StringComparison.Ordinal);
+    }
+
     // ---------------------------------------------------------------------------------------------
     // Calling.
     // ---------------------------------------------------------------------------------------------
@@ -173,6 +186,24 @@ public sealed class TypedBindingToolTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
             await tool.InvokeAsync(new AIFunctionArguments { ["summary"] = "anything" }, cancelled.Token));
+    }
+
+    /// <summary>
+    /// A binding declares a <see cref="ToolCallScope"/> parameter to read the call it runs in, but a
+    /// call to the tool with no turn open on this flow has no call to report.
+    /// </summary>
+    [Fact]
+    public async Task AToolCallScopeParameterWithNoTurnOpen_Throws()
+    {
+        var tool = await CreateAsync((string reason, ToolCallScope scope) => reason);
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await tool.InvokeAsync(
+                new AIFunctionArguments { ["reason"] = "the caller wants a person" },
+                TestContext.Current.CancellationToken));
+
+        Assert.Contains("ToolCallScope", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal(ToolCallScopes.NoTurnMessage, thrown.Message);
     }
 
     /// <summary>The error policy of section 8.7 keys off <see cref="DeclaredTool"/>, not off the delegate.</summary>

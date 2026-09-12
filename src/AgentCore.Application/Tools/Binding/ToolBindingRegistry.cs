@@ -41,7 +41,9 @@ public sealed class ToolBindingRegistry
     /// <param name="method">
     /// The method the tool calls. Its parameters are the arguments the model fills, and their JSON
     /// Schema, so the declaration this name serves must write no <c>parameters:</c>. A
-    /// <see cref="System.ComponentModel.DescriptionAttribute"/> on a parameter reaches the model.
+    /// <see cref="System.ComponentModel.DescriptionAttribute"/> on a parameter reaches the model. A
+    /// parameter of type <see cref="ToolCallScope"/> is filled by the runtime with the call the turn
+    /// belongs to, and is not exposed to the model.
     /// </param>
     /// <returns>This registry, so a host chains its registrations.</returns>
     /// <exception cref="ArgumentException">The name is already registered.</exception>

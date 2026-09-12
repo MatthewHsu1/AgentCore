@@ -734,6 +734,7 @@ public sealed class CallSession : IConversationPort
     /// <returns>The scope. Disposing it closes every ambient it opened.</returns>
     private IDisposable EnterAmbients(Turn turn)
         => TurnAmbients.Enter(
+            CallId,
             State,
             turn.Renders,
             turn.Sources,
