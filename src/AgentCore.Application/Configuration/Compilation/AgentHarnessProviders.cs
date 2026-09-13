@@ -88,6 +88,32 @@ internal static class AgentHarnessProviders
         }
     }
 
+    /// <summary>
+    /// The state keys of the harness providers among <paramref name="providers"/> — never the
+    /// history provider's key, which is the transcript and belongs to store 1.
+    /// </summary>
+#pragma warning disable MAAI001 // File-store types are evaluation-only in Microsoft.Agents.AI 1.21.0.
+    internal static IReadOnlySet<string> StateKeysOf(IEnumerable<AIContextProvider> providers)
+    {
+        HashSet<string> keys = new(StringComparer.Ordinal);
+
+        foreach (var provider in providers)
+        {
+            if (provider is not (TodoProvider or AgentModeProvider or FileMemoryProvider or FileAccessProvider))
+            {
+                continue;
+            }
+
+            foreach (var key in provider.StateKeys)
+            {
+                keys.Add(key);
+            }
+        }
+
+        return keys;
+    }
+#pragma warning restore MAAI001
+
     private static FileMemoryProvider BuildMemoryProvider(
         AgentConfiguration item, AgentCompilationContext context, string pointer)
     {

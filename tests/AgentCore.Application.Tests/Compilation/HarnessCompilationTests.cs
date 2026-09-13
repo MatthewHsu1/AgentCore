@@ -101,6 +101,77 @@ public sealed class HarnessCompilationTests
         Assert.Equal(ExpectedModeTools, toolNames, StringComparer.Ordinal);
     }
 
+    [Fact]
+    public void Compile_TodosAndModeTrue_HarnessStateKeysIsTheUnionOfBoth()
+    {
+        var compiled = ConfigurationCompiler.Compile(
+            new AgentCoreConfiguration
+            {
+                ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
+                Name = "harness-keys",
+                Agents = new AgentsConfiguration
+                {
+                    Items = [new AgentConfiguration { Id = "only", Todos = true, Mode = true }],
+                },
+            },
+            new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hello there."))));
+
+        Assert.Equal(
+            new HashSet<string>(StringComparer.Ordinal)
+            {
+                new TodoProvider().StateKeys[0],
+                new AgentModeProvider().StateKeys[0],
+            },
+            compiled.HarnessStateKeys);
+    }
+
+    [Fact]
+    public void Compile_NeitherTodosNorMode_HarnessStateKeysIsEmpty()
+    {
+        var compiled = ConfigurationCompiler.Compile(
+            new AgentCoreConfiguration
+            {
+                ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
+                Name = "harness-no-keys",
+                Agents = new AgentsConfiguration
+                {
+                    Items = [new AgentConfiguration { Id = "only" }],
+                },
+            },
+            new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hello there."))));
+
+        Assert.Empty(compiled.HarnessStateKeys);
+    }
+
+    private const string TwoAgentsOnlyOneWithTodosYaml =
+        """
+        apiVersion: agentcore/v1
+        name: harness-policy-keys
+        guards:
+          always: { ">=": [ { var: turnIndex }, 0 ] }
+        agents:
+          items:
+            - { id: todoer, instructions: "track todos", todos: true }
+            - { id: plain, instructions: "just talk" }
+        policy:
+          initial: working
+          stages:
+            - { id: working, agent: todoer, to: [ { stage: done, when: always } ] }
+            - { id: done, agent: plain, terminal: true }
+        """;
+
+    [Fact]
+    public void Compile_TwoAgentsOnlyOneWithTodos_HarnessStateKeysHasTheTodoKey()
+    {
+        var compiled = ConfigurationCompiler.Compile(
+            ConfigurationLoader.LoadYaml(TwoAgentsOnlyOneWithTodosYaml),
+            new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hello there."))));
+
+        Assert.Equal(
+            new HashSet<string>(StringComparer.Ordinal) { new TodoProvider().StateKeys[0] },
+            compiled.HarnessStateKeys);
+    }
+
     private static AIAgent CompileOne(bool withTodos, bool withMode)
     {
         using SequencedChatClient reply = new("hello there.");

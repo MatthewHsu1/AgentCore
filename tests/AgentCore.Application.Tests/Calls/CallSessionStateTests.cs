@@ -49,4 +49,44 @@ public sealed class CallSessionStateTests
     [Fact]
     public void ANewStateCarriesTheCurrentVersion()
         => Assert.Equal(CallSessionState.CurrentVersion, new CallSessionState().Version);
+
+    [Fact]
+    public void ItRoundTripsProvidersThroughJson()
+    {
+        CallSessionState state = new()
+        {
+            Providers = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+            {
+                ["TodoProvider"] = JsonDocument.Parse(
+                    """{"items":[{"id":1,"title":"buy milk","isComplete":false}],"nextId":2}""").RootElement,
+                ["AgentModeProvider"] = JsonDocument.Parse("""{"currentMode":"plan"}""").RootElement,
+            },
+        };
+
+        var json = JsonSerializer.Serialize(state, CallStateJson.Options);
+        var read = JsonSerializer.Deserialize<CallSessionState>(json, CallStateJson.Options);
+
+        Assert.NotNull(read);
+        Assert.Equal(2, read.Providers.Count);
+        Assert.Equal(
+            state.Providers["TodoProvider"].GetRawText(),
+            read.Providers["TodoProvider"].GetRawText());
+        Assert.Equal(
+            state.Providers["AgentModeProvider"].GetRawText(),
+            read.Providers["AgentModeProvider"].GetRawText());
+    }
+
+    [Fact]
+    public void ABlobWithNoProvidersMember_DeserializesWithEmptyProviders()
+    {
+        var read = JsonSerializer.Deserialize<CallSessionState>(
+            """{"version":1,"nextTurnIndex":0,"stage":"","isComplete":false}""", CallStateJson.Options);
+
+        Assert.NotNull(read);
+        Assert.Empty(read.Providers);
+    }
+
+    [Fact]
+    public void ANewState_HasEmptyProviders()
+        => Assert.Empty(new CallSessionState().Providers);
 }

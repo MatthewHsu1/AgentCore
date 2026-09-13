@@ -551,11 +551,33 @@ public sealed class CallSession : IConversationPort
             return opened;
         }
 
-        var session = _sessionCarriesHistory
-            ? await _compiled.TurnAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false)
-            : new CallHistorySession();
-
         var record = await _compiled.CallStore.CreateAsync(CallId, cancellationToken).ConfigureAwait(false);
+
+        CallSessionState? checkpoint;
+        lock (_interruptLock)
+        {
+            checkpoint = _checkpoint;
+        }
+
+        // One restore point for both sources, and store 0 outranks the host's checkpoint outright
+        // rather than merging with it. Store 0's blob is written in the same batch as the turn's
+        // words, so its state and store 1's words are of one moment and cannot disagree; a
+        // checkpoint's state beside store 1's words can be of two. So the checkpoint decides only a
+        // call store 0 does not know, or knows without state.
+        var stored = record.State ?? checkpoint;
+
+        AgentSession session;
+        if (_sessionCarriesHistory)
+        {
+            session = stored is { Version: CallSessionState.CurrentVersion, Providers.Count: > 0 }
+                ? await _compiled.TurnAgent.DeserializeSessionAsync(
+                    HarnessSessionState.Wrap(stored.Providers), cancellationToken: cancellationToken).ConfigureAwait(false)
+                : await _compiled.TurnAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            session = new CallHistorySession();
+        }
 
         IReadOnlyList<CallMessage> spoken = record.LastMessageAt is null
             ? []
@@ -572,21 +594,14 @@ public sealed class CallSession : IConversationPort
                     CallId,
                     spoken,
                     _events.RaiseDroppedTranscriptWrite,
-                    new TranscriptMarks(
-                        record.NextOrdinal, (record.State ?? _checkpoint)?.NextTurnIndex ?? 0));
+                    new TranscriptMarks(record.NextOrdinal, stored?.NextTurnIndex ?? 0));
 
                 // After the constructor, never inside it. The const writer has already run by now,
                 // so a slot a previous session filled lands on top of the const default rather than
                 // under it — and the record it is read from only exists after an async store read.
-                //
-                // One restore point for both sources, and store 0 outranks the host's checkpoint
-                // outright rather than merging with it. Store 0's blob is written in the same batch
-                // as the turn's words, so its state and store 1's words are of one moment and cannot
-                // disagree; a checkpoint's state beside store 1's words can be of two. So the
-                // checkpoint decides only a call store 0 does not know, or knows without state.
-                if ((record.State ?? _checkpoint) is { } stored)
+                if (stored is { } s)
                 {
-                    Restore(stored);
+                    Restore(s);
                 }
             }
 
@@ -594,7 +609,11 @@ public sealed class CallSession : IConversationPort
         }
     }
 
-    /// <summary>Reads the state this call would resume from, as it stands right now.</summary>
+    /// <summary>
+    /// Reads the state this call would resume from, as it stands right now. The provider state is
+    /// read off the live bag with no turn lock around it, so a host serializing mid-turn gets the
+    /// bag as it stands at that instant, not a turn-boundary snapshot.
+    /// </summary>
     internal CallSessionState Snapshot()
     {
         lock (_interruptLock)
@@ -621,6 +640,8 @@ public sealed class CallSession : IConversationPort
             NextTurnIndex = State.TurnIndex,
 
             Clarifications = _clarifications.Spent(),
+
+            Providers = HarnessSessionState.Capture(_agentSession, _compiled.HarnessStateKeys),
         };
     }
 

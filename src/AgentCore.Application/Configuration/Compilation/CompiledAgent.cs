@@ -27,6 +27,7 @@ public sealed class CompiledAgent
         Dictionary<string, string> agentIdByStage,
         IReadOnlySet<string>? spokenBy,
         AgentCoreChatHistoryProvider history,
+        IReadOnlySet<string> harnessStateKeys,
         Func<AIAgent, AIAgent> turnLayers)
     {
         Configuration = configuration;
@@ -36,6 +37,7 @@ public sealed class CompiledAgent
         CallStore = calls;
         SpokenBy = spokenBy;
         History = history;
+        HarnessStateKeys = harnessStateKeys;
 
         _byAgentId = byAgentId;
         _agentIdByStage = agentIdByStage;
@@ -81,6 +83,13 @@ public sealed class CompiledAgent
 
     /// <summary>Gets the store this agent's calls and every word of them are kept in.</summary>
     internal ICallStore CallStore { get; }
+
+    /// <summary>
+    /// Gets the union of every harness provider's state keys, over every agent this document
+    /// compiled — never the history provider's key. Empty when the document names no harness
+    /// switch. This is what a call's <c>Providers</c> keeps beside its stage and its slots.
+    /// </summary>
+    internal IReadOnlySet<string> HarnessStateKeys { get; }
 
     /// <summary>
     /// Gets the agent a turn runs, with the turn-disposition layers on it.

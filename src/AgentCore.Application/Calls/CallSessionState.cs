@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace AgentCore.Application.Calls;
@@ -13,6 +14,10 @@ public sealed record CallSessionState
     /// <summary>The slots of a call whose knowledge probe asked about none.</summary>
     private static readonly IReadOnlyDictionary<string, CallClarificationState> NoClarifications =
         ReadOnlyDictionary<string, CallClarificationState>.Empty;
+
+    /// <summary>The providers of a call whose document declares no harness switch.</summary>
+    private static readonly IReadOnlyDictionary<string, JsonElement> NoProviders =
+        ReadOnlyDictionary<string, JsonElement>.Empty;
 
     /// <summary>The shape this version of the library writes.</summary>
     public const int CurrentVersion = 1;
@@ -37,4 +42,11 @@ public sealed record CallSessionState
     /// nothing has asked about is absent.
     /// </summary>
     public IReadOnlyDictionary<string, CallClarificationState> Clarifications { get; init; } = NoClarifications;
+
+    /// <summary>
+    /// Gets the MAF provider state a harness switch (<c>todos:</c>, <c>mode:</c>, <c>memory:</c>,
+    /// <c>files:</c>) held, keyed by that provider's state key. A document with no harness switch
+    /// holds none. Absent in an old blob, which restores its stage and slots as before.
+    /// </summary>
+    public IReadOnlyDictionary<string, JsonElement> Providers { get; init; } = NoProviders;
 }

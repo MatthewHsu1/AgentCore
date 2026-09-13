@@ -141,7 +141,7 @@ public static class ConfigurationCompiler
 
         AgentCoreChatHistoryProvider history = new(calls);
 
-        var agents = BuildAgents(configuration, context, row.SessionCarriesHistory ? history : null);
+        var (agents, harnessStateKeys) = BuildAgents(configuration, context, row.SessionCarriesHistory ? history : null);
 
         var (entry, stages) = row.BuildEntry(configuration, agents, context);
 
@@ -156,6 +156,7 @@ public static class ConfigurationCompiler
             stages,
             spokenBy,
             history,
+            harnessStateKeys,
             inner => WithTurnDisposition(inner, configuration, context.Moderation, spokenBy));
     }
 
@@ -182,16 +183,18 @@ public static class ConfigurationCompiler
     /// <param name="configuration">The loaded document.</param>
     /// <param name="context">The seams the document names.</param>
     /// <param name="history">Store 1, or <see langword="null"/> to leave the framework default in place.</param>
-    /// <returns>The agents, keyed by id.</returns>
-    private static Dictionary<string, AIAgent> BuildAgents(
+    /// <returns>The agents, keyed by id, and the union of every harness provider's state keys.</returns>
+    private static (Dictionary<string, AIAgent> Agents, IReadOnlySet<string> HarnessStateKeys) BuildAgents(
         AgentCoreConfiguration configuration,
         AgentCompilationContext context,
         AgentCoreChatHistoryProvider? history)
     {
         Dictionary<string, AIAgent> agents = new(StringComparer.Ordinal);
+        HashSet<string> harnessStateKeys = new(StringComparer.Ordinal);
+
         if (configuration.Agents is not { } section)
         {
-            return agents;
+            return (agents, harnessStateKeys);
         }
 
         var clarification = ResolvedClarification.From(configuration);
@@ -224,7 +227,7 @@ public static class ConfigurationCompiler
             Resolve(item.Id);
         }
 
-        return agents;
+        return (agents, harnessStateKeys);
 
         AIAgent? Resolve(string id)
         {
@@ -253,6 +256,19 @@ public static class ConfigurationCompiler
             }
 
             path.Add(id);
+
+            var compiledTools = AgentToolCompiler.Build(
+                item, item.Model ?? section.Defaults?.Model, tools, context, pointer, Resolve);
+
+            var providers = AgentContextProviderCompiler.Build(
+                section.Defaults,
+                item,
+                context,
+                pointer,
+                clarification,
+                configuration.Providers?.Knowledge?.Scope);
+            harnessStateKeys.UnionWith(AgentHarnessProviders.StateKeysOf(providers));
+
             var built = new ChatClientAgent(
                 WithToolFailureAuditing(context.ChatClients.GetChatClient(item.Model ?? section.Defaults?.Model)),
                 new ChatClientAgentOptions
@@ -261,16 +277,10 @@ public static class ConfigurationCompiler
                     ChatOptions = new ChatOptions
                     {
                         Instructions = AgentInstructions.Compose(section.Defaults, item),
-                        Tools = AgentToolCompiler.Build(item, item.Model ?? section.Defaults?.Model, tools, context, pointer, Resolve),
+                        Tools = compiledTools,
                     },
                     ChatHistoryProvider = history,
-                    AIContextProviders = AgentContextProviderCompiler.Build(
-                        section.Defaults,
-                        item,
-                        context,
-                        pointer,
-                        clarification,
-                        configuration.Providers?.Knowledge?.Scope),
+                    AIContextProviders = providers,
                 });
             path.RemoveAt(path.Count - 1);
 
