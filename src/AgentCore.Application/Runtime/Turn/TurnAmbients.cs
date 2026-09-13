@@ -3,7 +3,7 @@ using AgentCore.Application.Runtime.Harness;
 using AgentCore.Application.State;
 using AgentCore.Domain.Knowledge;
 
-namespace AgentCore.Application.Runtime;
+namespace AgentCore.Application.Runtime.Turn;
 
 /// <summary>
 /// Everything one turn makes ambient, carried as a single value on the flow of execution.

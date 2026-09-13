@@ -5,6 +5,7 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Turn;
 using AgentCore.Domain.Knowledge;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging;

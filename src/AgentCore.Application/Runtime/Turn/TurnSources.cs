@@ -2,7 +2,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Transcript;
 using AgentCore.Domain.Sources;
 
-namespace AgentCore.Application.Runtime;
+namespace AgentCore.Application.Runtime.Turn;
 
 /// <summary>What a turn has cited and not yet attached to a message.</summary>
 internal sealed class TurnSources : ISourcePort

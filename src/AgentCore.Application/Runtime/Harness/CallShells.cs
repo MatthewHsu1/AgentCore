@@ -7,8 +7,8 @@ namespace AgentCore.Application.Runtime.Harness;
 
 /// <summary>
 /// The shell executors one call has started. One <see cref="ShellExecutor"/> per
-/// <see cref="CallShellOptions"/> instance the agent declares, created on the first command it
-/// runs — a call that never runs a command starts no bash and no container.
+/// <see cref="CallShellOptions"/> instance the agent declares, created on first ask, plus one
+/// probed environment snapshot per options for the model to read before its first command.
 /// </summary>
 internal sealed class CallShells : IAsyncDisposable
 {
@@ -19,6 +19,8 @@ internal sealed class CallShells : IAsyncDisposable
     private readonly Lock _lock = new();
 
     private readonly Dictionary<CallShellOptions, ShellExecutor> _executors = new(ReferenceEqualityComparer.Instance);
+
+    private readonly Dictionary<CallShellOptions, Task<ShellEnvironmentSnapshot>> _environments = new(ReferenceEqualityComparer.Instance);
 
     private bool _disposed;
 
@@ -43,16 +45,78 @@ internal sealed class CallShells : IAsyncDisposable
         lock (_lock)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+            return GetLocked(options);
+        }
+    }
 
-            if (_executors.TryGetValue(options, out var existing))
+    private ShellExecutor GetLocked(CallShellOptions options)
+    {
+        if (_executors.TryGetValue(options, out var existing))
+        {
+            return existing;
+        }
+
+        var created = Create(options);
+        _executors.Add(options, created);
+        return created;
+    }
+
+    /// <summary>
+    /// Probes this call's executor for <paramref name="options"/> once and caches the snapshot
+    /// for the rest of the call. A faulted or cancelled probe is dropped so the next turn
+    /// retries; resume re-probes a fresh environment.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">This call's shells have already been torn down.</exception>
+    public Task<ShellEnvironmentSnapshot> GetEnvironmentAsync(
+        CallShellOptions options, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        lock (_lock)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            if (_environments.TryGetValue(options, out var cached))
             {
-                return existing;
+                return cached;
             }
 
-            var created = Create(options);
-            _executors.Add(options, created);
-            return created;
+            var probe = ProbeAsync(GetLocked(options), cancellationToken);
+            _environments.Add(options, probe);
+            _ = probe.ContinueWith(
+                static (task, state) =>
+                {
+                    if (task.IsFaulted || task.IsCanceled)
+                    {
+                        var (shells, key) = ((CallShells, CallShellOptions))state!;
+                        lock (shells._lock)
+                        {
+                            if (shells._environments.TryGetValue(key, out var current)
+                                && ReferenceEquals(current, task))
+                            {
+                                shells._environments.Remove(key);
+                            }
+                        }
+                    }
+                },
+                (this, options),
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            return probe;
         }
+    }
+
+    private static async Task<ShellEnvironmentSnapshot> ProbeAsync(
+        ShellExecutor executor, CancellationToken cancellationToken)
+    {
+        // A throwaway MAF prober per call: its single-executor pin is harmless because the
+        // instance never leaves this probe. Probing runs commands, so for kind: docker the
+        // container starts on the first turn even when the model never runs a command. That
+        // is the price of the block: shell: declares intent, and the hints matter most
+        // before the first command.
+        ShellEnvironmentProvider prober = new(executor);
+        return await prober.RefreshAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private ShellExecutor Create(CallShellOptions options)

@@ -1,7 +1,7 @@
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
-namespace AgentCore.Application.Runtime;
+namespace AgentCore.Application.Runtime.Turn;
 
 /// <summary>
 /// The framework's per-invocation seam, bound to every compiled agent.

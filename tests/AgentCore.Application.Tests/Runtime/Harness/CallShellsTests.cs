@@ -151,4 +151,43 @@ public sealed class CallShellsTests : IDisposable
 
         Assert.IsType<DockerShellExecutor>(executor);
     }
+
+    [Fact]
+    public async Task GetEnvironmentAsync_ProbesThroughThisCallsExecutor_AndCachesTheSnapshot()
+    {
+        await using CallShells shells = new(_workspace, logger: null);
+        CallShellOptions options = new(ShellKind.Local, Policy: null, Timeout: null);
+
+        var first = await shells.GetEnvironmentAsync(options, TestContext.Current.CancellationToken);
+        var second = await shells.GetEnvironmentAsync(options, TestContext.Current.CancellationToken);
+
+        Assert.Same(first, second);
+        Assert.Contains(
+            new DirectoryInfo(_workspace).FullName, first.WorkingDirectory, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GetEnvironmentAsync_WithADenyAllPolicy_StillReturnsARenderableSnapshot()
+    {
+        // Every probe a deny-all policy refuses comes back a null field rather than a throw
+        // (MAF's own swallowing), so the instructions still render their header.
+        await using CallShells shells = new(_workspace, logger: null);
+        CallShellOptions options = new(ShellKind.Local, new ShellPolicy(denyList: ["^."]), Timeout: null);
+
+        var snapshot = await shells.GetEnvironmentAsync(options, TestContext.Current.CancellationToken);
+        var text = ShellEnvironmentProvider.DefaultInstructionsFormatter(snapshot);
+
+        Assert.StartsWith("## Shell environment", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GetEnvironmentAsync_AfterDispose_ThrowsObjectDisposedException()
+    {
+        CallShells shells = new(_workspace, logger: null);
+        await shells.DisposeAsync();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => shells.GetEnvironmentAsync(
+            new CallShellOptions(ShellKind.Local, Policy: null, Timeout: null),
+            TestContext.Current.CancellationToken));
+    }
 }

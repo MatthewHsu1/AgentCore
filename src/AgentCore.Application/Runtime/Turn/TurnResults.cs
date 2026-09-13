@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 using AgentCore.Application.Tools;
 using Microsoft.Extensions.AI;
 
-namespace AgentCore.Application.Runtime;
+namespace AgentCore.Application.Runtime.Turn;
 
 /// <summary>
 /// What the tools the model called this turn answered, kept so a script can read the rows instead of

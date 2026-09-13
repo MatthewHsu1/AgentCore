@@ -2,7 +2,7 @@ using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Transcript;
 
-namespace AgentCore.Application.Runtime;
+namespace AgentCore.Application.Runtime.Turn;
 
 /// <summary>What a turn has drawn and not yet attached to a message.</summary>
 internal sealed class TurnRenders : IRenderPort

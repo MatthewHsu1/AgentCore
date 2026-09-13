@@ -185,6 +185,8 @@ public sealed class CallSessionShellTests : IDisposable
 
         var toolNames = reply.Options[^1]?.Tools?.Select(tool => tool.Name).ToArray() ?? [];
         Assert.DoesNotContain(RunShellToolName, toolNames);
+        Assert.DoesNotContain(
+            "## Shell environment", reply.Options[^1]?.Instructions ?? string.Empty, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -200,6 +202,40 @@ public sealed class CallSessionShellTests : IDisposable
         var pid = ParsePid(client.ToolResults[0]);
 
         await ProcHelpers.AssertGoneAsync(pid, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task FirstRequest_CarriesShellEnvironmentInstructions_NamingTheCallsWorkspace()
+    {
+        var client = new ShellScriptedClient(RunShellToolName, "pwd");
+        var factory = BuildFactory(ShellYaml, client);
+        await using var session = factory.Create("call-1");
+
+        await session.RunTurnAsync("go", TestContext.Current.CancellationToken);
+
+        var instructions = client.Requests[0].Options?.Instructions;
+        Assert.Contains("## Shell environment", instructions, StringComparison.Ordinal);
+        Assert.Contains(session.Workspace!, instructions, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ASecondCall_GetsItsOwnWorkspaceInItsInstructions()
+    {
+        var client = new ShellScriptedClient(RunShellToolName);
+        var factory = BuildFactory(ShellYaml, client);
+
+        await using var sessionA = factory.Create("call-a");
+        await sessionA.RunTurnAsync("go", TestContext.Current.CancellationToken);
+
+        await using var sessionB = factory.Create("call-b");
+        await sessionB.RunTurnAsync("go", TestContext.Current.CancellationToken);
+
+        var instructionsA = client.Requests[0].Options?.Instructions;
+        var instructionsB = client.Requests[1].Options?.Instructions;
+
+        Assert.Contains(sessionA.Workspace!, instructionsA, StringComparison.Ordinal);
+        Assert.Contains(sessionB.Workspace!, instructionsB, StringComparison.Ordinal);
+        Assert.DoesNotContain(sessionB.Workspace!, instructionsA, StringComparison.Ordinal);
     }
 
     /// <summary>

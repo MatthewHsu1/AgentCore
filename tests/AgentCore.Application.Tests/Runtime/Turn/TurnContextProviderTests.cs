@@ -4,6 +4,7 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.State;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Transcript;
@@ -11,7 +12,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Runtime;
+namespace AgentCore.Application.Tests.Runtime.Turn;
 
 /// <summary>
 /// The per-invocation seam: what one turn hands the model on top of the agent's own instructions.

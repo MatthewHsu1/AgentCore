@@ -1,4 +1,4 @@
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Turn;
 using Microsoft.Agents.AI;
 
 namespace AgentCore.Application.Runtime.Harness;

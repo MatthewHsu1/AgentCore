@@ -1,12 +1,13 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tools;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Runtime;
+namespace AgentCore.Application.Tests.Runtime.Turn;
 
 /// <summary>
 /// <see cref="TurnResults"/>: what the turn's tools answered, kept so a drawing script can read the

@@ -1,6 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime;
 using AgentCore.Application.Tools;

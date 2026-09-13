@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Turn;
 
 namespace AgentCore.Application.Tools.Drawing;
 

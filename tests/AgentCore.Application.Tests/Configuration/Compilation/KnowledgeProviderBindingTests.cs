@@ -2,7 +2,7 @@ using AgentCore.TestSupport;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Knowledge.Fakes;
 using AgentCore.Application.Tests.Runtime;

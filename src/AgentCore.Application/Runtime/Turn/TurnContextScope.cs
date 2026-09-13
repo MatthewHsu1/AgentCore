@@ -1,7 +1,7 @@
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
-namespace AgentCore.Application.Runtime;
+namespace AgentCore.Application.Runtime.Turn;
 
 /// <summary>
 /// What one turn adds to the model invocation, on top of what the compiled agent already carries.

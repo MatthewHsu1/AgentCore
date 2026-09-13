@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Scripting;
 using Microsoft.Extensions.AI;
 

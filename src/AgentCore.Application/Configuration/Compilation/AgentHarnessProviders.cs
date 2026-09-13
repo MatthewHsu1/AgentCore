@@ -1,8 +1,8 @@
 using System.Text.RegularExpressions;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Harness;
+using AgentCore.Application.Runtime.Turn;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Tools.Shell;
 
@@ -97,7 +97,9 @@ internal static class AgentHarnessProviders
 
         if (item.Shell is { } shell)
         {
-            providers.Add(BuildShellProvider(item, shell, context, pointer));
+            var options = BuildShellOptions(item, shell, context, pointer);
+            providers.Add(new CallShellProvider(options));
+            providers.Add(new CallShellEnvironmentProvider(options));
         }
 
         if (item.Background.Count > 0)
@@ -309,7 +311,7 @@ internal static class AgentHarnessProviders
     }
 #pragma warning restore MAAI001
 
-    private static CallShellProvider BuildShellProvider(
+    private static CallShellOptions BuildShellOptions(
         AgentConfiguration item, ShellConfiguration shell, AgentCompilationContext context, string pointer)
     {
         if (context.WorkspaceRoot is null)
@@ -324,7 +326,7 @@ internal static class AgentHarnessProviders
         var policy = shell.Policy is { } declared ? BuildPolicy(item, declared, pointer) : null;
         var timeout = shell.TimeoutSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : (TimeSpan?)null;
 
-        return new CallShellProvider(new CallShellOptions(shell.Kind, policy, timeout));
+        return new CallShellOptions(shell.Kind, policy, timeout);
     }
 
     private static ShellPolicy BuildPolicy(

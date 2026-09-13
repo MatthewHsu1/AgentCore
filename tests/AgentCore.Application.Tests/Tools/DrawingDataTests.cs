@@ -1,5 +1,5 @@
 using System.Text.Json.Nodes;
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tools.Drawing;
 using Xunit;
 

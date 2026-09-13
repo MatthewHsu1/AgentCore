@@ -1,6 +1,6 @@
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tools.Builtin;
 using AgentCore.Application.Tools.Shipped;
 using Microsoft.Extensions.AI;

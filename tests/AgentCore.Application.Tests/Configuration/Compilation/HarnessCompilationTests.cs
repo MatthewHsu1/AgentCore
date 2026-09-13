@@ -1,6 +1,7 @@
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Runtime.Harness;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime;
 using Microsoft.Agents.AI;
@@ -234,6 +235,33 @@ public sealed class HarnessCompilationTests
 
             Assert.Single(compiled.Agents.Values);
             Assert.Empty(compiled.HarnessStateKeys);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void Compile_ShellBlock_GetsAToolProviderAndAnEnvironmentProvider()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "agentcore-shell-env-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var compiled = ConfigurationCompiler.Compile(
+                ConfigurationLoader.LoadYaml(ShellYaml),
+                new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hi")))
+                {
+                    WorkspaceRoot = root,
+                });
+
+            var providers = Providers(Assert.Single(compiled.Agents.Values));
+
+            Assert.Contains(providers, provider => provider is CallShellProvider);
+            Assert.Contains(providers, provider => provider is CallShellEnvironmentProvider);
         }
         finally
         {

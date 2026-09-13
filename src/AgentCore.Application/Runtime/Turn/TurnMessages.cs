@@ -1,7 +1,7 @@
 using System.Text;
 using Microsoft.Extensions.AI;
 
-namespace AgentCore.Application.Runtime;
+namespace AgentCore.Application.Runtime.Turn;
 
 /// <summary>
 /// The message shapes one turn builds and filters. Every member is pure: messages in, messages out.

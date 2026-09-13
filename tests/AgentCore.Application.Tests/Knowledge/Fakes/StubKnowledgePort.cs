@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Turn;
 using AgentCore.Domain.Knowledge;
 
 namespace AgentCore.Application.Tests.Knowledge.Fakes;

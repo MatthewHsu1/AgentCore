@@ -1,8 +1,9 @@
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Turn;
 using AgentCore.Domain.Sources;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Runtime;
+namespace AgentCore.Application.Tests.Runtime.Turn;
 
 /// <summary>
 /// What a turn has cited and not yet attached to a message.

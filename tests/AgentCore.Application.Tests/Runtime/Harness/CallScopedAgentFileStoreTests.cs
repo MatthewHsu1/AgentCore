@@ -1,5 +1,7 @@
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Harness;
+using AgentCore.Application.Runtime.Turn;
+using AgentCore.Application.Tests.Runtime.Turn;
 using Xunit;
 
 namespace AgentCore.Application.Tests.Runtime.Harness;

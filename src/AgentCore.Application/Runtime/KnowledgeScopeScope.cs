@@ -1,3 +1,4 @@
+using AgentCore.Application.Runtime.Turn;
 using AgentCore.Domain.Knowledge;
 
 namespace AgentCore.Application.Runtime;

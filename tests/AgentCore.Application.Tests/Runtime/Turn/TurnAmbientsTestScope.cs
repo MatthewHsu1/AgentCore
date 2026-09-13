@@ -1,7 +1,8 @@
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Turn;
 using Microsoft.Agents.AI;
 
-namespace AgentCore.Application.Tests.Runtime;
+namespace AgentCore.Application.Tests.Runtime.Turn;
 
 /// <summary>
 /// Opens one ambient at a time, so a collector can be tested without standing up a whole call.
