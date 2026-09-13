@@ -202,7 +202,7 @@ public sealed class AgentCoreAgent : AIAgent
         ArgumentNullException.ThrowIfNull(messages);
 
         var call = Resolve(session);
-        var turn = await call.RunTurnAsync(UserText(messages), cancellationToken).ConfigureAwait(false);
+        var turn = await call.RunTurnMessageAsync(UserMessage(messages), cancellationToken).ConfigureAwait(false);
 
         return new AgentResponse(new ChatMessage(ChatRole.Assistant, turn.ReplyText))
         {
@@ -225,7 +225,7 @@ public sealed class AgentCoreAgent : AIAgent
 
         // The stream is already filtered: CallSession drops the lifecycle updates, so every update
         // here carries content. The wrap changes the type and nothing else.
-        await foreach (var update in call.RunTurnStreamingAsync(UserText(messages), cancellationToken)
+        await foreach (var update in call.RunTurnMessageStreamingAsync(UserMessage(messages), cancellationToken)
             .ConfigureAwait(false))
         {
             yield return new AgentResponseUpdate(update) { AgentId = Id };
@@ -253,29 +253,31 @@ public sealed class AgentCoreAgent : AIAgent
             nameof(session)),
     };
 
-    /// <summary>Reads what the caller said out of the run's messages.</summary>
+    /// <summary>Reads what the caller said or answered out of the run's messages.</summary>
     /// <param name="messages">The messages the caller passed to the run.</param>
-    /// <returns>The text of the last user message.</returns>
+    /// <returns>The last user message that carries words or an approval answer.</returns>
     /// <remarks>
     /// The same rule the <c>/v1/chat/completions</c> endpoint applies: the session owns the
     /// transcript, so an earlier message of the request is already in the call, and only the last
     /// user message is new. See the remarks on <see cref="AgentCoreAgent"/>.
     /// </remarks>
-    /// <exception cref="ArgumentException">No user message carries text, so there is no turn to run.</exception>
-    private static string UserText(IEnumerable<ChatMessage> messages)
+    /// <exception cref="ArgumentException">No user message carries words or an answer, so there is no turn to run.</exception>
+    private static ChatMessage UserMessage(IEnumerable<ChatMessage> messages)
     {
-        string? text = null;
+        ChatMessage? picked = null;
         foreach (var message in messages)
         {
-            if (message.Role == ChatRole.User && message.Text is { Length: > 0 } spoken)
+            if (message.Role == ChatRole.User
+                && (message.Text is { Length: > 0 }
+                    || message.Contents.OfType<ToolApprovalResponseContent>().Any()))
             {
-                text = spoken;
+                picked = message;
             }
         }
 
-        return text ?? throw new ArgumentException(
-            "The run carries no user message with text, so there is no turn to run. The session owns "
-            + "the transcript: pass what the caller just said, not a history.",
+        return picked ?? throw new ArgumentException(
+            "The run carries no user message with words or an approval answer, so there is no turn "
+            + "to run. The session owns the transcript: pass what the caller just said, not a history.",
             nameof(messages));
     }
 

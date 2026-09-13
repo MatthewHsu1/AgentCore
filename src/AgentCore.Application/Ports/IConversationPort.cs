@@ -53,6 +53,15 @@ public interface IConversationPort
     /// </exception>
     Task<TurnResult> RunTurnAsync(string userInput, CancellationToken cancellationToken = default);
 
+    /// <summary>Runs one turn end to end from a message the caller built, and returns what it did.</summary>
+    /// <param name="userInput">What the caller said or answered: words, an approval answer, or both.</param>
+    /// <param name="cancellationToken">Cancels the model calls.</param>
+    /// <returns>The finished turn. Its reply is empty while approval requests are pending.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The call already ended, or another turn of this call is still running.
+    /// </exception>
+    Task<TurnResult> RunTurnMessageAsync(ChatMessage userInput, CancellationToken cancellationToken);
+
     /// <summary>Runs one turn and streams the reply as it arrives.</summary>
     /// <param name="userInput">What the caller said.</param>
     /// <param name="cancellationToken">Cancels the model calls.</param>
@@ -68,6 +77,17 @@ public interface IConversationPort
     IAsyncEnumerable<ChatResponseUpdate> RunTurnStreamingAsync(
         string userInput,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Runs one turn from a message the caller built and streams the reply as it arrives.</summary>
+    /// <param name="userInput">What the caller said or answered: words, an approval answer, or both.</param>
+    /// <param name="cancellationToken">Cancels the model calls.</param>
+    /// <returns>The reply, one update at a time. Every update carries content.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The call already ended, or another turn of this call is still running.
+    /// </exception>
+    IAsyncEnumerable<ChatResponseUpdate> RunTurnMessageStreamingAsync(
+        ChatMessage userInput,
+        CancellationToken cancellationToken);
 
     /// <summary>Ends the running turn where the caller cut the reply off.</summary>
     /// <param name="utteranceUntilInterrupt">The text the caller actually heard.</param>

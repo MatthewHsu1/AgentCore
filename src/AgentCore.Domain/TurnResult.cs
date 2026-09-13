@@ -69,4 +69,12 @@ public sealed record TurnResult(
     string? ExtractionFailure,
     string? Failure = null,
     TimeSpan? InterruptedAfter = null,
-    DateTimeOffset EndedAt = default);
+    DateTimeOffset EndedAt = default)
+{
+    /// <summary>
+    /// Gets the tool calls still waiting on a human answer when the turn ended, oldest first.
+    /// Empty on every other turn. A pending turn is not a failure: <see cref="Failure"/> stays
+    /// <see langword="null"/> and <see cref="ReplyText"/> stays empty while these are set.
+    /// </summary>
+    public IReadOnlyList<PendingApproval> Approvals { get; init; } = [];
+}

@@ -144,11 +144,33 @@ public sealed class ApprovalCompilationTests
     }
 
     [Fact]
-    public void Compile_ApprovalAuto_AddsNoStateKeys()
+    public void Compile_ApprovalSurface_KeepsTheQueueAndStandingKeys()
     {
         var token = TestContext.Current.CancellationToken;
         using ToolCallingChatClient client = new("unused");
         var compiled = Compile(GatedToolYaml, client, () => { }, token);
+
+        Assert.Equal(
+            ["_pendingApprovalRequests", "toolApprovalState"],
+            compiled.HarnessStateKeys.OrderBy(key => key));
+    }
+
+    [Fact]
+    public void Compile_PlainAgent_KeepsNoApprovalKeys()
+    {
+        const string plainYaml =
+            """
+            apiVersion: agentcore/v1
+            name: plain
+            agents:
+              items:
+                - { id: only, instructions: "answer" }
+            """;
+        var token = TestContext.Current.CancellationToken;
+        using ToolCallingChatClient client = new("unused");
+        var document = ConfigurationLoader.LoadYaml(plainYaml);
+        var compiled = ConfigurationCompiler.Compile(
+            document, new AgentCompilationContext(new FakeChatClientFactory(client)));
 
         Assert.Empty(compiled.HarnessStateKeys);
     }

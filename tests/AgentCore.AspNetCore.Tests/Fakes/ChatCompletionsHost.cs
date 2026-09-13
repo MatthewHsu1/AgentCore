@@ -102,6 +102,24 @@ internal sealed class ChatCompletionsHost : IAsyncDisposable
     public Task<HttpResponseMessage> PostStreamingAsync(string text, string? session = null)
         => SendAsync(text, session, stream: true, HttpCompletionOption.ResponseHeadersRead);
 
+    /// <summary>Answers one pending approval, and reads the answer as it arrives.</summary>
+    /// <param name="session">The id of the call the request suspended.</param>
+    /// <param name="requestId">The id of the pending request.</param>
+    /// <param name="approved">Whether the tool may run.</param>
+    /// <param name="stream">Whether the client wants server-sent events.</param>
+    /// <returns>The answer, with the body still open when streaming.</returns>
+    public Task<HttpResponseMessage> PostApprovalAsync(string session, string requestId, bool approved, bool stream)
+        => SendJsonAsync(
+            new
+            {
+                model = "service-voice",
+                messages = Array.Empty<object>(),
+                stream,
+                agentcore = new { approval = new { request_id = requestId, approved } },
+            },
+            session,
+            stream ? HttpCompletionOption.ResponseHeadersRead : HttpCompletionOption.ResponseContentRead);
+
     /// <summary>Reads every server-sent event of one answer.</summary>
     /// <param name="response">The answer, with the body still open.</param>
     /// <returns>The text after each <c>data:</c> prefix, in order.</returns>
@@ -191,16 +209,25 @@ internal sealed class ChatCompletionsHost : IAsyncDisposable
         bool stream,
         HttpCompletionOption completion)
     {
+        return SendJsonAsync(
+            new
+            {
+                model = "service-voice",
+                messages = new[] { new { role = "user", content = text } },
+                stream,
+            },
+            session,
+            completion);
+    }
+
+    private Task<HttpResponseMessage> SendJsonAsync(
+        object body,
+        string? session,
+        HttpCompletionOption completion)
+    {
         HttpRequestMessage request = new(HttpMethod.Post, ChatCompletionsEndpointRouteBuilderExtensions.DefaultPattern)
         {
-            Content = JsonContent.Create(
-                new
-                {
-                    model = "service-voice",
-                    messages = new[] { new { role = "user", content = text } },
-                    stream,
-                },
-                options: JsonSerializerOptions.Web),
+            Content = JsonContent.Create(body, options: JsonSerializerOptions.Web),
         };
 
         if (session is { Length: > 0 })

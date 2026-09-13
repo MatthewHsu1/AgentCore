@@ -86,7 +86,7 @@ internal static class TurnMessages
                 }),
             ];
 
-            if (!tools.Any(content => content is FunctionCallContent or FunctionResultContent))
+            if (!tools.Any(content => content is FunctionCallContent or FunctionResultContent or ToolApprovalRequestContent))
             {
                 // Plain prose, or a message whose every call is still in flight. Neither belongs in
                 // the next turn.

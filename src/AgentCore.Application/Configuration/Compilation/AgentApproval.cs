@@ -1,5 +1,7 @@
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Runtime.Harness;
 using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Configuration.Compilation;
 
@@ -39,6 +41,29 @@ internal static class AgentApproval
         return pattern.EndsWith('*')
             ? toolName.StartsWith(pattern[..^1], StringComparison.Ordinal)
             : toolName == pattern;
+    }
+
+    /// <summary>Reads the state keys an agent's approval surface needs persisted across resume.</summary>
+    /// <param name="defaults">The <c>agents.defaults</c> section, or <see langword="null"/>.</param>
+    /// <param name="item">The agent being compiled.</param>
+    /// <param name="tools">The tools the agent offers the model, if any.</param>
+    /// <returns>
+    /// The pending queue and the standing-rule keys when the agent may surface an approval —
+    /// through <c>auto:</c>, which adds the approval layer, or through an approval-required tool —
+    /// else empty. An absent key is never kept, so both ride together.
+    /// </returns>
+    public static IReadOnlyList<string> StateKeysFor(
+        AgentDefaults? defaults, AgentConfiguration item, IEnumerable<AITool>? tools)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+
+        if (Compose(defaults, item).Count == 0
+            && tools?.OfType<ApprovalRequiredAIFunction>().Any() != true)
+        {
+            return [];
+        }
+
+        return [PendingApprovalQueue.PendingStateKey, PendingApprovalQueue.StandingStateKey];
     }
 
     /// <summary>

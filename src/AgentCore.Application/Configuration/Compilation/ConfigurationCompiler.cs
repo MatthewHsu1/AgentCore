@@ -271,6 +271,7 @@ public static class ConfigurationCompiler
                 Resolve,
                 backgroundProviders);
             harnessStateKeys.UnionWith(AgentHarnessProviders.StateKeysOf(providers));
+            harnessStateKeys.UnionWith(AgentApproval.StateKeysFor(section.Defaults, item, compiledTools));
 
             var built = new ChatClientAgent(
                 WithToolFailureAuditing(context.ChatClients.GetChatClient(item.Model ?? section.Defaults?.Model)),

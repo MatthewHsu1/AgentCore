@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.AspNetCore.Call;
 using AgentCore.AspNetCore.Tests.Fakes;
@@ -29,6 +30,28 @@ public sealed class CallTurnArbiterTests
         await arbiter.CurrentTurn;
 
         Assert.Equal(["one", "two"], session.TurnsRun);
+    }
+
+    [Fact(Timeout = 30_000)]
+    public async Task APendingApprovalTurn_SpeaksTheNoticeInsteadOfHangingInSilence()
+    {
+        // A voice call has no surface to answer an approval on, so the pending turn speaks
+        // nothing. The arbiter says so instead of closing the reply in silence.
+        var session = new ScriptedConversationPort();
+        var output = new FakeCallOutput();
+        var arbiter = NewArbiter(session, output);
+        session.ReleaseTurn();
+
+        using var empty = JsonDocument.Parse("{}");
+        session.LastTurn = new TurnResult("call-scripted", 0, string.Empty, string.Empty, string.Empty, false, null)
+        {
+            Approvals = [new PendingApproval("req-1", "send_email", empty.RootElement.Clone())],
+        };
+
+        await arbiter.StartTurnAsync("one");
+        await arbiter.CurrentTurn;
+
+        Assert.Contains(CallTurnArbiter.PendingApprovalNotice, output.Spoken);
     }
 
     [Fact(Timeout = 30_000)]
@@ -179,7 +202,7 @@ internal sealed class ScriptedConversationPort : IConversationPort
     public bool IsComplete => false;
 
     /// <inheritdoc />
-    public TurnResult? LastTurn => null;
+    public TurnResult? LastTurn { get; set; }
 
     /// <summary>Gets what the caller was told it heard, or null before a barge-in.</summary>
     public string? LastHeardText { get; private set; }
@@ -227,6 +250,9 @@ internal sealed class ScriptedConversationPort : IConversationPort
     /// <inheritdoc />
     public Task<TurnResult> RunTurnAsync(string userInput, CancellationToken cancellationToken = default)
         => throw new NotSupportedException("the arbiter only ever streams a turn.");
+    /// <inheritdoc />
+    public Task<TurnResult> RunTurnMessageAsync(ChatMessage userInput, CancellationToken cancellationToken)
+        => throw new NotSupportedException("the arbiter only ever streams a turn.");
 
     /// <inheritdoc />
     public async IAsyncEnumerable<ChatResponseUpdate> RunTurnStreamingAsync(
@@ -245,6 +271,12 @@ internal sealed class ScriptedConversationPort : IConversationPort
         yield return new ChatResponseUpdate(ChatRole.Assistant, userInput);
         yield return new ChatResponseUpdate(ChatRole.Assistant, " done");
     }
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<ChatResponseUpdate> RunTurnMessageStreamingAsync(
+        ChatMessage userInput,
+        CancellationToken cancellationToken)
+        => RunTurnStreamingAsync(userInput.Text ?? string.Empty, cancellationToken);
 
     /// <inheritdoc />
     public bool Interrupt(

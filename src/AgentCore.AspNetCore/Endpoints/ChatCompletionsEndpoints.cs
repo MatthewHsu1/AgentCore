@@ -80,25 +80,54 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
             return;
         }
 
-        if (LastUserText(request) is not { Length: > 0 } input)
-        {
-            await WriteErrorAsync(
-                http,
-                StatusCodes.Status400BadRequest,
-                "the request carries no user message with text, so there is no turn to run.",
-                "invalid_request_error",
-                "no_user_message",
-                cancellationToken).ConfigureAwait(false);
-            return;
-        }
-
         var sessions = http.RequestServices.GetRequiredService<ICallSessions>();
         var named = http.Request.Headers[SessionHeaderName].ToString();
 
+        // One turn carries either words or an approval answer, never both: the answer resumes
+        // the exact call the request suspended, and words would start something new instead.
+        ChatMessage input;
         CallSession session;
-        if (named is { Length: > 0 })
+        if (request?.AgentCore?.Approval is { } approval)
         {
-            if (await sessions.TryGetAsync(named, cancellationToken).ConfigureAwait(false) is not { } found)
+            if (LastUserText(request) is { Length: > 0 })
+            {
+                await WriteErrorAsync(
+                    http,
+                    StatusCodes.Status400BadRequest,
+                    "the request carries both a user message and an approval answer. One turn carries "
+                    + "either words or an answer, never both.",
+                    "invalid_request_error",
+                    "mixed_turn",
+                    cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            if (string.IsNullOrEmpty(approval.RequestId))
+            {
+                await WriteErrorAsync(
+                    http,
+                    StatusCodes.Status400BadRequest,
+                    "the approval answer names no request.",
+                    "invalid_request_error",
+                    "missing_request_id",
+                    cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            if (named is not { Length: > 0 })
+            {
+                await WriteErrorAsync(
+                    http,
+                    StatusCodes.Status400BadRequest,
+                    "an approval answer names the call it resumes. Send it with the "
+                    + SessionHeaderName + " header the request arrived with.",
+                    "invalid_request_error",
+                    "missing_session",
+                    cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            if (await sessions.TryGetAsync(named, cancellationToken).ConfigureAwait(false) is not { } open)
             {
                 await WriteErrorAsync(
                     http,
@@ -111,11 +140,59 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
                 return;
             }
 
-            session = found;
+            session = open;
+            if (session.TryCreateApprovalAnswer(approval.RequestId, approval.Approved) is not { } answer)
+            {
+                await WriteErrorAsync(
+                    http,
+                    StatusCodes.Status409Conflict,
+                    $"the call '{named}' queues no approval under id '{approval.RequestId}'. It was "
+                    + "answered already, belongs to another call, or was never asked.",
+                    "invalid_request_error",
+                    "no_pending_approval",
+                    cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            input = answer;
         }
         else
         {
-            session = await sessions.OpenAsync(null, cancellationToken).ConfigureAwait(false);
+            if (LastUserText(request) is not { Length: > 0 } text)
+            {
+                await WriteErrorAsync(
+                    http,
+                    StatusCodes.Status400BadRequest,
+                    "the request carries no user message with text, so there is no turn to run.",
+                    "invalid_request_error",
+                    "no_user_message",
+                    cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            if (named is { Length: > 0 })
+            {
+                if (await sessions.TryGetAsync(named, cancellationToken).ConfigureAwait(false) is not { } found)
+                {
+                    await WriteErrorAsync(
+                        http,
+                        StatusCodes.Status404NotFound,
+                        $"no call named '{named}' is open on this host. Send the request with no "
+                        + SessionHeaderName + " header to start one.",
+                        "invalid_request_error",
+                        "session_not_found",
+                        cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+
+                session = found;
+            }
+            else
+            {
+                session = await sessions.OpenAsync(null, cancellationToken).ConfigureAwait(false);
+            }
+
+            input = new ChatMessage(ChatRole.User, text);
         }
 
         var streaming = request?.Stream == true;
@@ -171,12 +248,12 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
     private static async Task WriteTurnAsync(
         HttpContext http,
         CallSession session,
-        string input,
+        ChatMessage input,
         string model,
         CallTurnOrigin? origin,
         CancellationToken cancellationToken)
     {
-        var turn = await session.RunTurnAtOriginAsync(input, origin, cancellationToken).ConfigureAwait(false);
+        var turn = await session.RunTurnMessageAtOriginAsync(input, origin, cancellationToken).ConfigureAwait(false);
 
         http.Response.StatusCode = StatusCodes.Status200OK;
         http.Response.Headers[SessionHeaderName] = session.CallId;
@@ -214,7 +291,7 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
     private static async Task StreamTurnAsync(
         HttpContext http,
         CallSession session,
-        string input,
+        ChatMessage input,
         string model,
         CallTurnOrigin? origin,
         CancellationToken cancellationToken)
@@ -239,7 +316,7 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
         // One turn's worth of ids: the pairing dies with the stream.
         ToolCallNames toolNames = new();
 
-        await foreach (var update in session.RunTurnStreamingAtOriginAsync(input, origin, cancellationToken).ConfigureAwait(false))
+        await foreach (var update in session.RunTurnMessageStreamingAtOriginAsync(input, origin, cancellationToken).ConfigureAwait(false))
         {
             foreach (var drawn in update.Contents.OfType<RenderContent>())
             {
@@ -268,6 +345,30 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
                     Chunk(id, created, model, new ChatCompletionMessage(), finishReason: null, turn: null)
                         with
                     { AgentCoreTool = tool },
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            foreach (var asked in update.Contents.OfType<ToolApprovalRequestContent>())
+            {
+                // A request arrives with no text, so without this the update falls into the
+                // empty-text skip below and the caller never learns a tool waits on them.
+                if (asked.ToolCall is not FunctionCallContent call)
+                {
+                    continue;
+                }
+
+                await WriteEventAsync(
+                    http,
+                    Chunk(id, created, model, new ChatCompletionMessage(), finishReason: null, turn: null)
+                        with
+                    {
+                        AgentCoreApproval = new ApprovalPayload
+                        {
+                            RequestId = asked.RequestId,
+                            Tool = call.Name,
+                            Arguments = ArgumentsOf(call),
+                        },
+                    },
                     cancellationToken).ConfigureAwait(false);
             }
 
@@ -473,6 +574,14 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
             IsTerminal = turn.IsTerminal,
             ExtractionFailure = turn.ExtractionFailure,
             MessageId = session.LastReplyMessageId,
+            Approvals = turn.Approvals.Count == 0
+                ? null
+                : [.. turn.Approvals.Select(static approval => new ApprovalPayload
+                {
+                    RequestId = approval.RequestId,
+                    Tool = approval.ToolName,
+                    Arguments = JsonNode.Parse(approval.Arguments.GetRawText()),
+                })],
         };
 
     /// <summary>Builds the id of one reply.</summary>

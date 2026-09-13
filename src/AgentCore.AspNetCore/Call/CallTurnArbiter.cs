@@ -64,6 +64,10 @@ internal sealed class CallTurnArbiter
     private bool _turnActive;
     private string? _pendingPrompt;
 
+    /// <summary>What a voice caller hears when a tool waits on an approval the call cannot take.</summary>
+    internal const string PendingApprovalNotice =
+        "That action needs a human approval, which this call can't take.";
+
     /// <summary>Builds the arbiter one call runs its turns through.</summary>
     /// <param name="session">The call this arbiter runs turns against, until <see cref="Rebind"/> names another.</param>
     /// <param name="output">Where a turn's reply goes, one fragment at a time.</param>
@@ -363,6 +367,13 @@ internal sealed class CallTurnArbiter
 
             if (Interlocked.Read(ref _interruptedTurnId) != turnId)
             {
+                if (session.LastTurn?.Approvals is { Count: > 0 })
+                {
+                    // A tool waits on a human answer, and a voice call has no surface to give one.
+                    // Say so instead of hanging in the silence the pending turn speaks.
+                    await _output.SpeakAsync(PendingApprovalNotice, _connectionToken).ConfigureAwait(false);
+                }
+
                 // The vendor closes a reply on last: true, and the sample uses an empty final
                 // token when the stream ended with no trailing text. A barge-in already ended
                 // this turn, so a closing frame now would speak a reply the caller cut off.

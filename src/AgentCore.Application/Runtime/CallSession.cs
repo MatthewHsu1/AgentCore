@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using AgentCore.Application.Calls;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Schema;
@@ -262,6 +263,14 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
         => RunTurnAtOriginAsync(userInput, origin: null, cancellationToken);
 
     /// <summary>
+    /// Runs one turn end to end from a message the caller built, and returns what it did.
+    /// </summary>
+    /// <param name="userInput">What the caller said or answered: words, an approval answer, or both.</param>
+    /// <param name="cancellationToken">Cancels the turn.</param>
+    public Task<TurnResult> RunTurnMessageAsync(ChatMessage userInput, CancellationToken cancellationToken)
+        => RunTurnMessageAtOriginAsync(userInput, origin: null, cancellationToken);
+
+    /// <summary>
     /// Runs one turn that knows where it sits in the conversation the caller can see.
     /// </summary>
     /// <param name="userInput">What the caller said.</param>
@@ -276,6 +285,36 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(userInput);
 
+        return await RunTurnCoreAsync(new ChatMessage(ChatRole.User, userInput), origin, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Runs one turn from a message the caller built, that knows where it sits in the conversation
+    /// the caller can see.
+    /// </summary>
+    /// <param name="userInput">What the caller said or answered: words, an approval answer, or both.</param>
+    /// <param name="origin">
+    /// Where these words hang, or <see langword="null"/> for a caller that does not track its
+    /// messages by name. See <see cref="RunTurnAtOriginAsync"/>, which this mirrors.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the turn.</param>
+    public async Task<TurnResult> RunTurnMessageAtOriginAsync(
+        ChatMessage userInput, CallTurnOrigin? origin, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(userInput);
+
+        return await RunTurnCoreAsync(userInput, origin, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Runs one turn of the call against the session the call holds.</summary>
+    /// <param name="userInput">What the caller said or answered.</param>
+    /// <param name="origin">Where the turn hangs, or null for a caller that does not say.</param>
+    /// <param name="cancellationToken">Cancels the turn.</param>
+    /// <returns>What the turn did.</returns>
+    private async Task<TurnResult> RunTurnCoreAsync(
+        ChatMessage userInput, CallTurnOrigin? origin, CancellationToken cancellationToken)
+    {
         var session = await OpenSessionAsync(cancellationToken).ConfigureAwait(false);
 
         var turn = BeginTurn(userInput, session, origin);
@@ -334,6 +373,36 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
         string userInput, CancellationToken cancellationToken = default)
         => RunTurnStreamingAtOriginAsync(userInput, origin: null, cancellationToken);
 
+    /// <summary>Runs one turn from a message the caller built and streams the reply as it arrives.</summary>
+    /// <param name="userInput">What the caller said or answered: words, an approval answer, or both.</param>
+    /// <param name="cancellationToken">Cancels the model calls.</param>
+    /// <returns>The reply, one update at a time. Every update carries content.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The call already reached a terminal stage, another turn of this call is still running, or the
+    /// stage the machine holds names no agent.
+    /// </exception>
+    public IAsyncEnumerable<ChatResponseUpdate> RunTurnMessageStreamingAsync(
+        ChatMessage userInput, CancellationToken cancellationToken)
+        => RunTurnMessageStreamingAtOriginAsync(userInput, origin: null, cancellationToken);
+
+    /// <summary>Builds the answer message for one queued approval request of this call.</summary>
+    /// <param name="requestId">The id the caller answers.</param>
+    /// <param name="approved">Whether the tool may run.</param>
+    /// <returns>
+    /// The user message carrying the approval response, or <see langword="null"/> when this call
+    /// queues no request under that id: answered already, another call's, or never asked. The
+    /// answer re-enters through <see cref="RunTurnMessageAsync"/> on this same call — an answer
+    /// another call built is dropped in silence, so callers must match them.
+    /// </returns>
+    public ChatMessage? TryCreateApprovalAnswer(string requestId, bool approved)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(requestId);
+
+        return Session() is { } session
+            ? PendingApprovalQueue.AnswerFor(session.StateBag.Serialize(), requestId, approved)
+            : null;
+    }
+
     /// <summary>
     /// Runs one streaming turn that knows where it sits in the conversation the caller can see.
     /// </summary>
@@ -348,6 +417,49 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
         string userInput,
         CallTurnOrigin? origin,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(userInput);
+
+        await foreach (var update in RunTurnStreamingCoreAsync(
+            new ChatMessage(ChatRole.User, userInput), origin, cancellationToken).ConfigureAwait(false))
+        {
+            yield return update;
+        }
+    }
+
+    /// <summary>
+    /// Runs one streaming turn from a message the caller built, that knows where it sits in the
+    /// conversation the caller can see.
+    /// </summary>
+    /// <param name="userInput">What the caller said or answered: words, an approval answer, or both.</param>
+    /// <param name="origin">
+    /// Where these words hang, or <see langword="null"/> for a caller that does not track its
+    /// messages by name. See <see cref="RunTurnAtOriginAsync"/>, which this mirrors.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the model calls.</param>
+    /// <returns>The reply, one update at a time. Every update carries content.</returns>
+    public async IAsyncEnumerable<ChatResponseUpdate> RunTurnMessageStreamingAtOriginAsync(
+        ChatMessage userInput,
+        CallTurnOrigin? origin,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(userInput);
+
+        await foreach (var update in RunTurnStreamingCoreAsync(userInput, origin, cancellationToken).ConfigureAwait(false))
+        {
+            yield return update;
+        }
+    }
+
+    /// <summary>Streams one turn of the call against the session the call holds.</summary>
+    /// <param name="userInput">What the caller said or answered.</param>
+    /// <param name="origin">Where the turn hangs, or null for a caller that does not say.</param>
+    /// <param name="cancellationToken">Cancels the model calls.</param>
+    /// <returns>The reply, one update at a time.</returns>
+    private async IAsyncEnumerable<ChatResponseUpdate> RunTurnStreamingCoreAsync(
+        ChatMessage userInput,
+        CallTurnOrigin? origin,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(userInput);
 
@@ -872,11 +984,11 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
     /// Picks the agent, withdraws whatever this turn replaces, builds the model input, and takes the
     /// turn.
     /// </summary>
-    /// <param name="userInput">What the caller said.</param>
+    /// <param name="userInput">What the caller said or answered: words, an approval answer, or both.</param>
     /// <param name="session">The session of this call.</param>
     /// <param name="origin">Where the turn hangs, or null for a caller that does not say.</param>
     /// <returns>Everything the rest of the turn needs.</returns>
-    private Turn BeginTurn(string userInput, AgentSession session, CallTurnOrigin? origin = null)
+    private Turn BeginTurn(ChatMessage userInput, AgentSession session, CallTurnOrigin? origin = null)
     {
         if (IsComplete)
         {
@@ -915,7 +1027,7 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
             // the framework appends for that invocation and stores nowhere. It reads the state document
             // and never the transcript. Only a document with a policy: has a stage that waits on a slot.
             var reminder = _policy is null ? null : UnfilledSlotReminder.Build(State, _policy.CurrentStage);
-            ChatMessage spoken = new(ChatRole.User, userInput);
+            ChatMessage spoken = userInput;
 
             // The framework has never heard of a turn, so the turn loop names this one before the run.
             _history.BeginTurn(session, State.TurnIndex);
@@ -1140,6 +1252,10 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
         var spokenReply = reply;
         TimeSpan? interruptedAfter = null;
         string? failure = toolFault is null ? null : ToolFailureReason + " " + toolFault;
+        // The tool calls still waiting on a human answer. A pending turn is not a failure: the
+        // run suspended instead of answering, so the empty-reply substitution below is skipped,
+        // the extractor has nothing decided to read, and the requests ride TurnResult to the host.
+        var approvals = ApprovalRequestsOf(response);
 
         if (interruption is { } cut)
         {
@@ -1149,9 +1265,9 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
             reply = cut.HeardText.Trim();
             interruptedAfter = cut.PlayedDuration;
         }
-        else if (failure is not null
+        else if (approvals.Count == 0 && (failure is not null
             || string.IsNullOrWhiteSpace(reply)
-            || disposition?.Fallback is FallbackCause.EmptyReply)
+            || disposition?.Fallback is FallbackCause.EmptyReply))
         {
             // Section 8.7, last row. A quiet run is silence on a voice call, so an empty reply is a
             // failure even though nothing threw.
@@ -1218,7 +1334,7 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
         // input, so a slot filled from them would carry the flagged content into the state document
         // and into every later prompt. The refusal itself says nothing worth extracting either, and
         // the extractor costs a model call, so this also spends nothing on a turn nobody answered.
-        if (!refused)
+        if (!refused && approvals.Count == 0)
         {
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             deadline.CancelAfter(TurnCompletionTimeout);
@@ -1274,7 +1390,10 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
             extractionFailure,
             failure,
             interruptedAfter,
-            endedAt);
+            endedAt)
+        {
+            Approvals = approvals,
+        };
 
         // One lock, one moment. A late barge-in reads all four of these together, so a window in
         // which LastTurn already names this turn while the span or the ordinal still names the one
@@ -1391,6 +1510,31 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
         (_, not null) => AgentCoreTelemetry.OutcomeInterrupted,
         _ => AgentCoreTelemetry.OutcomeCompleted,
     };
+
+    /// <summary>Reads the approval requests one finished turn still waits on.</summary>
+    /// <param name="response">What the agent answered.</param>
+    /// <returns>One entry per request content, oldest first; empty when the turn asked nothing.</returns>
+    private static List<PendingApproval> ApprovalRequestsOf(AgentResponse response)
+    {
+        List<PendingApproval> approvals = [];
+        foreach (var request in response.Messages
+            .SelectMany(message => message.Contents)
+            .OfType<ToolApprovalRequestContent>())
+        {
+            if (request.ToolCall is not FunctionCallContent call)
+            {
+                continue;
+            }
+
+            approvals.Add(new PendingApproval(
+                request.RequestId,
+                call.Name,
+                JsonSerializer.SerializeToElement(
+                    call.Arguments ?? new Dictionary<string, object?>(StringComparer.Ordinal))));
+        }
+
+        return approvals;
+    }
 
     /// <summary>Reads what the turn layers reported about one finished turn.</summary>
     /// <param name="response">What the agent answered.</param>

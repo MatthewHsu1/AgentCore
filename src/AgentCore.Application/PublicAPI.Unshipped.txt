@@ -1122,6 +1122,8 @@ AgentCore.Application.Ports.IConversationPort.Interrupt(string! utteranceUntilIn
 AgentCore.Application.Ports.IConversationPort.IsComplete.get -> bool
 AgentCore.Application.Ports.IConversationPort.LastTurn.get -> AgentCore.Domain.TurnResult?
 AgentCore.Application.Ports.IConversationPort.RunTurnAsync(string! userInput, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<AgentCore.Domain.TurnResult!>!
+AgentCore.Application.Ports.IConversationPort.RunTurnMessageAsync(Microsoft.Extensions.AI.ChatMessage! userInput, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<AgentCore.Domain.TurnResult!>!
+AgentCore.Application.Ports.IConversationPort.RunTurnMessageStreamingAsync(Microsoft.Extensions.AI.ChatMessage! userInput, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
 AgentCore.Application.Ports.IConversationPort.RunTurnStreamingAsync(string! userInput, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
 AgentCore.Application.Ports.IConversationPort.Stage.get -> string!
 AgentCore.Application.Ports.IEmbeddingGeneratorAdapter
@@ -1220,6 +1222,10 @@ AgentCore.Application.Runtime.CallSession.LastReplyMessageId.get -> string?
 AgentCore.Application.Runtime.CallSession.LastTurn.get -> AgentCore.Domain.TurnResult?
 AgentCore.Application.Runtime.CallSession.RunTurnAsync(string! userInput, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<AgentCore.Domain.TurnResult!>!
 AgentCore.Application.Runtime.CallSession.RunTurnAtOriginAsync(string! userInput, AgentCore.Application.Runtime.CallTurnOrigin? origin, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<AgentCore.Domain.TurnResult!>!
+AgentCore.Application.Runtime.CallSession.RunTurnMessageAsync(Microsoft.Extensions.AI.ChatMessage! userInput, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<AgentCore.Domain.TurnResult!>!
+AgentCore.Application.Runtime.CallSession.RunTurnMessageAtOriginAsync(Microsoft.Extensions.AI.ChatMessage! userInput, AgentCore.Application.Runtime.CallTurnOrigin? origin, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<AgentCore.Domain.TurnResult!>!
+AgentCore.Application.Runtime.CallSession.RunTurnMessageStreamingAsync(Microsoft.Extensions.AI.ChatMessage! userInput, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
+AgentCore.Application.Runtime.CallSession.RunTurnMessageStreamingAtOriginAsync(Microsoft.Extensions.AI.ChatMessage! userInput, AgentCore.Application.Runtime.CallTurnOrigin? origin, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
 AgentCore.Application.Runtime.CallSession.RunTurnStreamingAsync(string! userInput, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
 AgentCore.Application.Runtime.CallSession.RunTurnStreamingAtOriginAsync(string! userInput, AgentCore.Application.Runtime.CallTurnOrigin? origin, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
 AgentCore.Application.Runtime.CallSession.SetDelegatedTools(string! delegatingToolId, System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.AITool!>! tools) -> void
@@ -1227,6 +1233,7 @@ AgentCore.Application.Runtime.CallSession.SetHasScreen(bool hasScreen) -> void
 AgentCore.Application.Runtime.CallSession.Stage.get -> string!
 AgentCore.Application.Runtime.CallSession.State.get -> AgentCore.Application.State.StateDocument!
 AgentCore.Application.Runtime.CallSession.Transcript.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatMessage!>!
+AgentCore.Application.Runtime.CallSession.TryCreateApprovalAnswer(string! requestId, bool approved) -> Microsoft.Extensions.AI.ChatMessage?
 AgentCore.Application.Runtime.CallSession.Workspace.get -> string?
 AgentCore.Application.Runtime.CallSessionFactory
 AgentCore.Application.Runtime.CallSessionFactory.CallSessionFactory(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Configuration.Validation.IGuardEvaluator! guards, AgentCore.Application.State.StateExtractor? extractor = null, System.TimeProvider? timeProvider = null, Microsoft.Extensions.Logging.ILogger? logger = null, System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ICallObserver!>? observers = null, string? workspaceRoot = null) -> void

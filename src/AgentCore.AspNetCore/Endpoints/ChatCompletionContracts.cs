@@ -63,11 +63,26 @@ internal sealed record AgentCoreRequestInfo
         }
     }
 
+    /// <summary>Gets the approval answer this request carries, or <see langword="null"/> when its message holds words.</summary>
+    [JsonPropertyName("approval")]
+    public AgentCoreApprovalAnswer? Approval { get; init; }
+
     /// <summary>Gets whether the body carried <c>parent_id</c> at all.</summary>
     [JsonIgnore]
     public bool NamesParent { get; private init; }
 
     private readonly string? _parentId;
+}
+
+/// <summary>One approval answer: which request the caller answers, and whether the tool may run.</summary>
+internal sealed record AgentCoreApprovalAnswer
+{
+    /// <summary>Gets the id of the pending request this answers.</summary>
+    [JsonPropertyName("request_id")]
+    public required string RequestId { get; init; }
+
+    /// <summary>Gets whether the tool may run.</summary>
+    public required bool Approved { get; init; }
 }
 
 /// <summary>What one finished turn did, carried beside the OpenAI shape.</summary>
@@ -94,6 +109,9 @@ internal sealed record AgentCoreTurnInfo
     /// <summary>Gets what the host calls the reply it just wrote, for a later edit to hang off.</summary>
     [JsonPropertyName("message_id")]
     public string? MessageId { get; init; }
+
+    /// <summary>Gets the tool calls still waiting on a human answer when the turn ended, or <see langword="null"/> when the turn asked nothing.</summary>
+    public IReadOnlyList<ApprovalPayload>? Approvals { get; init; }
 }
 
 /// <summary>One choice of a reply. It carries <c>message</c> when whole and <c>delta</c> when streamed.</summary>
@@ -146,6 +164,10 @@ internal sealed record ChatCompletionResponse
     /// <summary>Gets the source this chunk carries, or <see langword="null"/> when none.</summary>
     [JsonPropertyName("agentcore_source")]
     public SourcePayload? AgentCoreSource { get; init; }
+
+    /// <summary>Gets the approval request this chunk carries, or <see langword="null"/> when none.</summary>
+    [JsonPropertyName("agentcore_approval")]
+    public ApprovalPayload? AgentCoreApproval { get; init; }
 }
 
 /// <summary>One half of one tool call, as the browser reads it.</summary>
@@ -168,6 +190,20 @@ internal sealed record ToolPayload
 
     /// <summary>Gets whether the tool failed, on the <c>result</c> half only.</summary>
     public bool? Failed { get; init; }
+}
+
+/// <summary>One tool call waiting on the caller, as the browser reads it.</summary>
+internal sealed record ApprovalPayload
+{
+    /// <summary>Gets the id the approval answer carries back.</summary>
+    [JsonPropertyName("request_id")]
+    public required string RequestId { get; init; }
+
+    /// <summary>Gets the name of the tool the model asked to call.</summary>
+    public required string Tool { get; init; }
+
+    /// <summary>Gets what the model passed, or <see langword="null"/> when it passed nothing.</summary>
+    public JsonNode? Arguments { get; init; }
 }
 
 /// <summary>Where one answer came from, as the browser reads it.</summary>
