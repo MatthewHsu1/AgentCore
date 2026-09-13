@@ -291,7 +291,8 @@ public static class ConfigurationCompiler
                 .UseOpenTelemetry(configure: static agent => agent.EnableSensitiveData = false)
                 .Build();
 
-            var looped = AgentHarnessProviders.ApplyLoop(instrumented, section.Defaults, item, pointer);
+            var approved = AgentApproval.Apply(instrumented, section.Defaults, item);
+            var looped = AgentHarnessProviders.ApplyLoop(approved, section.Defaults, item, pointer);
             agents[id] = looped;
             return looped;
         }
