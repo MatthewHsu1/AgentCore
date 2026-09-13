@@ -98,6 +98,26 @@ public sealed class WorkspaceStartupTests : IDisposable
         Assert.Contains(unusableRoot, failure.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task AFilesAgent_WithAWorkspaceRootBound_Starts()
+    {
+        using var provider = await BuildAsync(FilesAgentYaml, options => options.UseWorkspace(_tempRoot));
+
+        var sessions = provider.GetRequiredService<ICallSessions>();
+        var session = await sessions.OpenAsync("call-1", TestContext.Current.CancellationToken);
+
+        Assert.StartsWith(_tempRoot, session.Workspace, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AFilesAgent_WithNoWorkspaceRootBound_FailsStartupNamingUseWorkspace()
+    {
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+            () => BuildAsync(FilesAgentYaml));
+
+        Assert.Contains("options.UseWorkspace(", failure.Message, StringComparison.Ordinal);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempRoot))
@@ -113,6 +133,22 @@ public sealed class WorkspaceStartupTests : IDisposable
         agents:
           items:
             - { id: only, instructions: "I answer everything", memory: { store: workspace } }
+        providers:
+          call:   { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        """;
+
+    private const string FilesAgentYaml =
+        """
+        apiVersion: agentcore/v1
+        name: composed
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything", files: { store: workspace } }
         providers:
           call:   { kind: telnyx-relay }
           speech:

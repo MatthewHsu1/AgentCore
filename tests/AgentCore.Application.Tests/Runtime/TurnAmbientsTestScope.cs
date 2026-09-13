@@ -19,6 +19,10 @@ internal static class TurnAmbientsTestScope
     internal static IDisposable WithClarifications(Clarifications clarifications)
         => TurnAmbients.Amend(ambients => ambients with { Clarifications = clarifications });
 
+    /// <summary>Opens the call's workspace folder over this flow, the way <c>CallSession</c> does.</summary>
+    internal static IDisposable WithWorkspace(string? workspace)
+        => TurnAmbients.Amend(ambients => ambients with { Workspace = workspace });
+
     /// <summary>
     /// Opens a turn context whose <see cref="TurnContext.CarriesHistory"/> is <paramref name="carriesHistory"/>
     /// — true for a row 1 or 2 turn, false for a graph row's own participant invocation (K39).

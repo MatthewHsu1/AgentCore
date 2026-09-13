@@ -113,6 +113,27 @@ public sealed class MemoryCompilationTests : IDisposable
     }
 
     [Fact]
+    public async Task Compile_MemoryWorkspaceWithARoot_TheModelsInstructionsAreTruthfulAboutDeletion()
+    {
+        using SequencedChatClient reply = new("hello there.");
+        var document = ConfigurationLoader.LoadYaml(MemoryYaml);
+        var chatClients = new RoutingChatClientFactory(reply);
+
+        var compiled = ConfigurationCompiler.Compile(
+            document,
+            new AgentCompilationContext(chatClients) { WorkspaceRoot = _root });
+        var factory = new CallSessionFactory(
+            compiled, new GuardEvaluator(compiled.Configuration.Guards), workspaceRoot: _root);
+        var session = factory.Create("call-1");
+
+        await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+
+        var instructions = reply.Options[^1]?.Instructions ?? string.Empty;
+        Assert.Contains("deleted when the call ends", instructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("persist beyond", instructions, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Compile_NoMemoryBlock_GetsNoFileMemoryProviderAndNoTool()
     {
         using SequencedChatClient reply = new("hello there.");
