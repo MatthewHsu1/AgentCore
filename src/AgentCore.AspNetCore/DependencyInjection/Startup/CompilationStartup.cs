@@ -39,6 +39,7 @@ internal static class CompilationStartup
     /// <param name="skills">The catalog step "skills" opened, or <see langword="null"/> when the host bound no skills folder.</param>
     /// <param name="citations">The wording <c>providers.knowledge.citation</c> named.</param>
     /// <param name="loggers">The factory the guard evaluator and the knowledge provider take their loggers from.</param>
+    /// <param name="workspaceRoot">The root <c>options.UseWorkspace(...)</c> bound, or <see langword="null"/>.</param>
     /// <returns>The compiled graph, and the seams that made it.</returns>
     /// <exception cref="ConfigurationLoadException">The document does not compile.</exception>
     internal static ValueTask<CompiledGraph> CompileAsync(
@@ -50,7 +51,8 @@ internal static class CompilationStartup
         IKnowledgeRetrievalPort? knowledge,
         SkillCatalog? skills,
         IKnowledgeCitationFormatter citations,
-        ILoggerFactory loggers)
+        ILoggerFactory loggers,
+        string? workspaceRoot = null)
     {
         GuardEvaluator guards = new(configuration.Guards, loggers.CreateLogger<GuardEvaluator>());
         CompiledAgentRegistry registry = new();
@@ -68,6 +70,7 @@ internal static class CompilationStartup
                 Skills = skills,
                 Citations = citations,
                 Loggers = loggers,
+                WorkspaceRoot = workspaceRoot,
             });
 
         return ValueTask.FromResult(new CompiledGraph(chatClients, guards, registry, compiled));

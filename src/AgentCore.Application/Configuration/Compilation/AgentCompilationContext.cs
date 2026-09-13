@@ -74,4 +74,10 @@ public sealed class AgentCompilationContext
     /// Gets or sets where the compiled agents write their own diagnostics, or <see langword="null"/>.
     /// </summary>
     public ILoggerFactory? Loggers { get; init; }
+
+    /// <summary>
+    /// Gets or sets the root a <c>memory:</c> block's files are kept under, or <see langword="null"/>
+    /// when the host bound no workspace root.
+    /// </summary>
+    public string? WorkspaceRoot { get; init; }
 }

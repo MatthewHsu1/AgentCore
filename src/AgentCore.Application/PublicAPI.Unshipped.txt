@@ -163,6 +163,8 @@ AgentCore.Application.Configuration.Compilation.AgentCompilationContext.StateSna
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.StateSnapshot.init -> void
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Tools.get -> AgentCore.Application.Tools.Registry.ToolRegistry?
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Tools.init -> void
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.WorkspaceRoot.get -> string?
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.WorkspaceRoot.init -> void
 AgentCore.Application.Configuration.Compilation.AgentInstructions
 AgentCore.Application.Configuration.Compilation.AgentKnowledge
 AgentCore.Application.Configuration.Compilation.CompiledAgent

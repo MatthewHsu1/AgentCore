@@ -63,6 +63,41 @@ public sealed class WorkspaceStartupTests : IDisposable
         Assert.Contains(unusableRoot, failure.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task AMemoryAgent_WithAWorkspaceRootBound_Starts()
+    {
+        using var provider = await BuildAsync(MemoryAgentYaml, options => options.UseWorkspace(_tempRoot));
+
+        var sessions = provider.GetRequiredService<ICallSessions>();
+        var session = await sessions.OpenAsync("call-1", TestContext.Current.CancellationToken);
+
+        Assert.StartsWith(_tempRoot, session.Workspace, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AMemoryAgent_WithNoWorkspaceRootBound_FailsStartupNamingUseWorkspace()
+    {
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+            () => BuildAsync(MemoryAgentYaml));
+
+        Assert.Contains("options.UseWorkspace(", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AMemoryAgent_WithARootThatCannotBeCreated_FailsStartupWithThePathAndTheOption()
+    {
+        var blockingFile = Path.Combine(_tempRoot, "blocks-the-root");
+        Directory.CreateDirectory(_tempRoot);
+        await File.WriteAllTextAsync(blockingFile, "not a directory", TestContext.Current.CancellationToken);
+        var unusableRoot = Path.Combine(blockingFile, "x");
+
+        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+            () => BuildAsync(MemoryAgentYaml, options => options.UseWorkspace(unusableRoot)));
+
+        Assert.Contains("options.UseWorkspace(", failure.Message, StringComparison.Ordinal);
+        Assert.Contains(unusableRoot, failure.Message, StringComparison.Ordinal);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempRoot))
@@ -70,4 +105,20 @@ public sealed class WorkspaceStartupTests : IDisposable
             Directory.Delete(_tempRoot, recursive: true);
         }
     }
+
+    private const string MemoryAgentYaml =
+        """
+        apiVersion: agentcore/v1
+        name: composed
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything", memory: { store: workspace } }
+        providers:
+          call:   { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        """;
 }

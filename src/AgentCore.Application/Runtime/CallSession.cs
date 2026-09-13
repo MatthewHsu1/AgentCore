@@ -1293,6 +1293,14 @@ public sealed class CallSession : IConversationPort
             // The stage rides as detail, because the reason a report counts is the same one for
             // every terminal stage the document declares.
             _events.EndCall(CallEndReason.AgentCompleted, endedAt, stageAfter);
+        }
+
+        if (IsComplete || _events.HasEnded)
+        {
+            // A tool running mid-turn (a file_memory_write, say) can call EndCall itself, which
+            // deletes the workspace and then IsComplete overwrites the flag when the policy also
+            // reaches a terminal stage. _events.HasEnded survives that overwrite, so the folder a
+            // tool recreated after the mid-turn delete is still cleaned up here.
             DeleteWorkspace();
         }
 
