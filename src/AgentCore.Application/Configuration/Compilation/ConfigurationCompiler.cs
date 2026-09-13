@@ -266,7 +266,8 @@ public static class ConfigurationCompiler
                 context,
                 pointer,
                 clarification,
-                configuration.Providers?.Knowledge?.Scope);
+                configuration.Providers?.Knowledge?.Scope,
+                Resolve);
             harnessStateKeys.UnionWith(AgentHarnessProviders.StateKeysOf(providers));
 
             var built = new ChatClientAgent(

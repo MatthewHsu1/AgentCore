@@ -2,6 +2,7 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Harness;
 using AgentCore.Application.Sessions.Memory;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.TestSupport;
@@ -9,7 +10,7 @@ using Microsoft.Agents.AI.Tools.Shell;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Runtime;
+namespace AgentCore.Application.Tests.Runtime.Harness;
 
 /// <summary>
 /// The end-to-end path of a <c>shell:</c> block: the tool the model is handed, the workspace it

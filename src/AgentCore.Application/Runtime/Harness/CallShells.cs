@@ -3,7 +3,7 @@ using AgentCore.Application.Diagnostics;
 using Microsoft.Agents.AI.Tools.Shell;
 using Microsoft.Extensions.Logging;
 
-namespace AgentCore.Application.Runtime;
+namespace AgentCore.Application.Runtime.Harness;
 
 /// <summary>
 /// The shell executors one call has started. One <see cref="ShellExecutor"/> per

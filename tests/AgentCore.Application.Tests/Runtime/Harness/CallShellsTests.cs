@@ -1,9 +1,10 @@
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Harness;
 using Microsoft.Agents.AI.Tools.Shell;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Runtime;
+namespace AgentCore.Application.Tests.Runtime.Harness;
 
 /// <summary>
 /// <see cref="CallShells"/>: one executor per <see cref="CallShellOptions"/> instance, created on

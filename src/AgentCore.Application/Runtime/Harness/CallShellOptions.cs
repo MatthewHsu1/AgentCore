@@ -1,7 +1,7 @@
 using AgentCore.Application.Configuration.Schema;
 using Microsoft.Agents.AI.Tools.Shell;
 
-namespace AgentCore.Application.Runtime;
+namespace AgentCore.Application.Runtime.Harness;
 
 /// <summary>
 /// What one agent's <c>shell:</c> block resolved to. Built once at compile time and shared by every

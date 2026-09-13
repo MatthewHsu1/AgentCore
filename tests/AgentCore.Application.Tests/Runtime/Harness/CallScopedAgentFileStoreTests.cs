@@ -1,7 +1,8 @@
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Harness;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Runtime;
+namespace AgentCore.Application.Tests.Runtime.Harness;
 
 /// <summary>
 /// <see cref="CallScopedAgentFileStore"/> as a unit: it resolves the running call's workspace off

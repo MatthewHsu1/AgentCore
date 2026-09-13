@@ -9,6 +9,7 @@ using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Policy;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Runtime.Harness;
 using AgentCore.Application.State;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Transcript;

@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Harness;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Tools.Shell;
 
@@ -9,7 +10,8 @@ namespace AgentCore.Application.Configuration.Compilation;
 
 /// <summary>
 /// The context providers behind one agent's harness switches (<c>todos:</c>, <c>mode:</c>,
-/// <c>memory:</c>, <c>files:</c>, <c>shell:</c>), added into the provider list <see cref="AgentContextProviderCompiler"/> builds.
+/// <c>memory:</c>, <c>files:</c>, <c>shell:</c>, <c>background:</c>), added into the provider list
+/// <see cref="AgentContextProviderCompiler"/> builds.
 /// </summary>
 internal static class AgentHarnessProviders
 {
@@ -53,19 +55,20 @@ internal static class AgentHarnessProviders
         + "- To change part of a file, find the line numbers with `file_access_grep`, read the range around them\n"
         + "  with `file_access_read_lines`, then edit with `file_access_replace_lines`. Reading the whole file\n"
         + "  first is rarely necessary.";
-
-    /// <summary>Adds this agent's harness providers, in declaration order: todos, mode, memory, files.</summary>
+    /// <summary>Adds this agent's harness providers, in declaration order: todos, mode, memory, files, shell, background.</summary>
     /// <param name="providers">The provider list under construction.</param>
     /// <param name="defaults">The <c>agents.defaults</c> section, or <see langword="null"/>.</param>
     /// <param name="item">The agent being compiled.</param>
     /// <param name="context">The compile-time seams, including the bound workspace root.</param>
-    /// <param name="pointer">This agent's JSON pointer, for a <c>memory:</c> or <c>files:</c> failure.</param>
+    /// <param name="pointer">This agent's JSON pointer, for a <c>memory:</c>, <c>files:</c>, <c>shell:</c>, or <c>background:</c> failure.</param>
+    /// <param name="resolve">Resolves an <c>agents.items</c> id to its compiled agent, or <see langword="null"/> when undeclared.</param>
     public static void Add(
         List<AIContextProvider> providers,
         AgentDefaults? defaults,
         AgentConfiguration item,
         AgentCompilationContext context,
-        string pointer)
+        string pointer,
+        Func<string, AIAgent?> resolve)
     {
         var harness = AgentHarness.Compose(defaults, item);
 
@@ -93,6 +96,11 @@ internal static class AgentHarnessProviders
         {
             providers.Add(BuildShellProvider(item, shell, context, pointer));
         }
+
+        if (item.Background.Count > 0)
+        {
+            providers.Add(BuildBackgroundProvider(item, pointer, resolve));
+        }
     }
 
     /// <summary>
@@ -106,7 +114,7 @@ internal static class AgentHarnessProviders
 
         foreach (var provider in providers)
         {
-            if (provider is not (TodoProvider or AgentModeProvider or FileMemoryProvider or FileAccessProvider))
+            if (provider is not (TodoProvider or AgentModeProvider or FileMemoryProvider or FileAccessProvider or BackgroundAgentsProvider))
             {
                 continue;
             }
@@ -118,6 +126,49 @@ internal static class AgentHarnessProviders
         }
 
         return keys;
+    }
+#pragma warning restore MAAI001
+
+#pragma warning disable MAAI001 // BackgroundAgentsProvider is evaluation-only in Microsoft.Agents.AI 1.21.0.
+    private static BackgroundAgentsProvider BuildBackgroundProvider(
+        AgentConfiguration item, string pointer, Func<string, AIAgent?> resolve)
+    {
+        if (item.Background.Contains(item.Id, StringComparer.Ordinal))
+        {
+            throw ConfigurationCompiler.Fail(
+                ConfigurationError.AppendPointer(pointer, "background"),
+                $"the agent '{item.Id}' names itself in background:, so it would start itself as its own child. "
+                + "Remove it from the list, or point at another agent.");
+        }
+
+        List<AIAgent> children = new(item.Background.Count);
+        for (var index = 0; index < item.Background.Count; index++)
+        {
+            var childPointer = ConfigurationError.AppendPointer(
+                ConfigurationError.AppendPointer(pointer, "background"), index);
+            var childId = item.Background[index];
+
+            children.Add(resolve(childId)
+                ?? throw ConfigurationCompiler.Fail(
+                    childPointer,
+                    $"the agent '{childId}' is not declared in agents.items"));
+        }
+
+        try
+        {
+            // Children run with their own compiled tools, which carry no approval-required tool
+            // today — every harness tool runs with approval off — so a child never stalls waiting
+            // for an approval the parent would only see as a completed task with empty output.
+            return new BackgroundAgentsProvider(children);
+        }
+        catch (ArgumentException exception)
+        {
+            // The provider keys children by name case-insensitively, so two ids that differ only
+            // by case collide here rather than at either declaration.
+            throw ConfigurationCompiler.Fail(
+                ConfigurationError.AppendPointer(pointer, "background"),
+                $"the agent '{item.Id}' declares background: children whose names collide: {exception.Message}");
+        }
     }
 #pragma warning restore MAAI001
 

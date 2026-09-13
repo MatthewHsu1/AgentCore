@@ -28,7 +28,8 @@ internal static class AgentContextProviderCompiler
         AgentCompilationContext context,
         string pointer,
         ResolvedClarification clarification,
-        KnowledgeScopeConfiguration? scope)
+        KnowledgeScopeConfiguration? scope,
+        Func<string, AIAgent?> resolve)
     {
         List<AIContextProvider> providers = [new TurnContextProvider()];
 
@@ -69,7 +70,7 @@ internal static class AgentContextProviderCompiler
 #pragma warning restore MAAI001
         }
 
-        AgentHarnessProviders.Add(providers, defaults, item, context, pointer);
+        AgentHarnessProviders.Add(providers, defaults, item, context, pointer, resolve);
 
         if (AgentKnowledge.Compose(defaults, item) is not { } composed)
         {

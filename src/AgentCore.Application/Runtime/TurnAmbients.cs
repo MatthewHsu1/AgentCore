@@ -1,4 +1,5 @@
 using AgentCore.Application.Ports;
+using AgentCore.Application.Runtime.Harness;
 using AgentCore.Application.State;
 using AgentCore.Domain.Knowledge;
 

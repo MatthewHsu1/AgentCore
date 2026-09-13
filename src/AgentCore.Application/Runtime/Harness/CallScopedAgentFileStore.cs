@@ -1,6 +1,7 @@
+using AgentCore.Application.Runtime;
 using Microsoft.Agents.AI;
 
-namespace AgentCore.Application.Runtime;
+namespace AgentCore.Application.Runtime.Harness;
 
 /// <summary>
 /// The store behind an agent's <c>files:</c> block. One instance serves every call: each operation

@@ -1,6 +1,7 @@
+using AgentCore.Application.Runtime;
 using Microsoft.Agents.AI;
 
-namespace AgentCore.Application.Runtime;
+namespace AgentCore.Application.Runtime.Harness;
 
 /// <summary>
 /// The context provider behind an agent's <c>shell:</c> block: on every invocation it hands the

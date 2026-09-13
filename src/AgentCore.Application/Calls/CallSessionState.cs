@@ -45,8 +45,8 @@ public sealed record CallSessionState
 
     /// <summary>
     /// Gets the MAF provider state a harness switch (<c>todos:</c>, <c>mode:</c>, <c>memory:</c>,
-    /// <c>files:</c>) held, keyed by that provider's state key. A document with no harness switch
-    /// holds none. Absent in an old blob, which restores its stage and slots as before.
+    /// <c>files:</c>, <c>background:</c>) held, keyed by that provider's state key. A document with
+    /// no harness switch holds none. Absent in an old blob, which restores its stage and slots as before.
     /// </summary>
     public IReadOnlyDictionary<string, JsonElement> Providers { get; init; } = NoProviders;
 }

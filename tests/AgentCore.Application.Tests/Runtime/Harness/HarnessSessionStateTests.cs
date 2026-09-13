@@ -1,9 +1,10 @@
 using System.Text.Json;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Harness;
 using Microsoft.Agents.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Runtime;
+namespace AgentCore.Application.Tests.Runtime.Harness;
 
 /// <summary>
 /// <see cref="HarnessSessionState.Capture"/> and <see cref="HarnessSessionState.Wrap"/> — the two

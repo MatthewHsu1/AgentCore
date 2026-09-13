@@ -1,6 +1,6 @@
 using Xunit;
 
-namespace AgentCore.Application.Tests.Runtime;
+namespace AgentCore.Application.Tests.Runtime.Harness;
 
 /// <summary>
 /// Waits for a Linux process to actually be gone, instead of guessing a fixed delay: dispose is
