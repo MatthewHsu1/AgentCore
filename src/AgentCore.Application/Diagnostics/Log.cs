@@ -259,4 +259,14 @@ internal static partial class Log
         Level = LogLevel.Warning,
         Message = "Could not delete the call workspace at '{Path}'.")]
     public static partial void WorkspaceDeleteFailed(ILogger logger, string path, Exception exception);
+
+    /// <summary>A call's shell executor could not be disposed when the call ended.</summary>
+    /// <param name="logger">The logger of the session.</param>
+    /// <param name="workspace">The call's workspace folder, whose shell failed to dispose.</param>
+    /// <param name="exception">The cause.</param>
+    [LoggerMessage(
+        EventId = 21,
+        Level = LogLevel.Warning,
+        Message = "Could not dispose a shell: executor of the call at workspace '{Workspace}'.")]
+    public static partial void ShellDisposeFailed(ILogger logger, string workspace, Exception exception);
 }

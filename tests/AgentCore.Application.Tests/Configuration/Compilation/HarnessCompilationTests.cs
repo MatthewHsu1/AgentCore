@@ -6,7 +6,7 @@ using AgentCore.Application.Tests.Runtime;
 using Microsoft.Agents.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Compilation;
+namespace AgentCore.Application.Tests.Configuration.Compilation;
 
 /// <summary>
 /// The <c>todos:</c> / <c>mode:</c> switches reaching a compiled agent's context providers, and the
@@ -170,6 +170,78 @@ public sealed class HarnessCompilationTests
         Assert.Equal(
             new HashSet<string>(StringComparer.Ordinal) { new TodoProvider().StateKeys[0] },
             compiled.HarnessStateKeys);
+    }
+
+    private const string ShellYaml =
+        """
+        apiVersion: agentcore/v1
+        name: harness-shell
+        agents:
+          items:
+            - { id: only, instructions: "run commands", shell: { kind: local } }
+        """;
+
+    private const string ShellBadPolicyYaml =
+        """
+        apiVersion: agentcore/v1
+        name: harness-shell-bad-policy
+        agents:
+          items:
+            - { id: only, instructions: "run commands", shell: { kind: local, policy: { deny: ["("] } } }
+        """;
+
+    [Fact]
+    public void Compile_ShellWithNoWorkspaceRoot_FailsNamingTheShellPointer()
+    {
+        var document = ConfigurationLoader.LoadYaml(ShellYaml);
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationCompiler.Compile(
+            document,
+            new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hi")))));
+
+        Assert.Equal("/agents/items/0/shell", failure.Pointer);
+        Assert.Contains("options.UseWorkspace(", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Compile_ShellWithABadPolicyRegex_FailsNamingTheShellPolicyPointerAndThePattern()
+    {
+        var document = ConfigurationLoader.LoadYaml(ShellBadPolicyYaml);
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationCompiler.Compile(
+            document,
+            new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hi")))
+            {
+                WorkspaceRoot = Path.Combine(Path.GetTempPath(), "agentcore-shell-" + Guid.NewGuid().ToString("N")),
+            }));
+
+        Assert.Equal("/agents/items/0/shell/policy", failure.Pointer);
+        Assert.Contains("'('", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Compile_ShellWithAValidBlockAndARoot_Compiles()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "agentcore-shell-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var compiled = ConfigurationCompiler.Compile(
+                ConfigurationLoader.LoadYaml(ShellYaml),
+                new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hi")))
+                {
+                    WorkspaceRoot = root,
+                });
+
+            Assert.Single(compiled.Agents.Values);
+            Assert.Empty(compiled.HarnessStateKeys);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
     }
 
     private static AIAgent CompileOne(bool withTodos, bool withMode)

@@ -6,7 +6,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Compilation;
+namespace AgentCore.Application.Tests.Configuration.Compilation;
 
 /// <summary>
 /// The fourth tool kind of section 8.1: <c>kind: agent</c>, which is agent-as-tool.

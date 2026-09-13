@@ -3,7 +3,7 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Tests.Fakes;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Compilation;
+namespace AgentCore.Application.Tests.Configuration.Compilation;
 
 /// <summary>
 /// Rule 16 of section 11, and T44. A fan-out of 26 simultaneous calls against one compiled agent is

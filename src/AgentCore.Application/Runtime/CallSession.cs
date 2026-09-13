@@ -25,7 +25,7 @@ namespace AgentCore.Application.Runtime;
 /// <summary>
 /// The turn loop of one call. It owns the state, the stage machine, and the transcript.
 /// </summary>
-public sealed class CallSession : IConversationPort
+public sealed class CallSession : IConversationPort, IAsyncDisposable
 {
     /// <summary>
     /// The line the caller hears when a turn fails and the document names none.
@@ -100,6 +100,8 @@ public sealed class CallSession : IConversationPort
 
     private readonly CallWorkspace? _workspace;
 
+    private readonly CallShells? _shells;
+
     // Whether the running turn has already handed the host something to speak. One rule for both
     // run shapes: a run that has handed the host nothing cannot be the turn the caller was hearing,
     // so a barge-in in that window belongs to the turn that finished before it. A streaming turn
@@ -137,6 +139,8 @@ public sealed class CallSession : IConversationPort
         _logger = logger ?? NullLogger.Instance;
 
         _workspace = workspace;
+
+        _shells = workspace is null ? null : new CallShells(workspace.Path, _logger);
 
         _compiled = compiled;
 
@@ -504,6 +508,19 @@ public sealed class CallSession : IConversationPort
     private void DeleteWorkspace() => _workspace?.Delete(_logger);
 
     /// <summary>
+    /// Disposes this call's shell executors, if it has any. <see cref="EndCall"/> does not call
+    /// this: a tool that ends the call mid-turn still needs the shell for the rest of that turn, so
+    /// only the turn-end path and <see cref="DisposeAsync"/> tear it down.
+    /// </summary>
+    private ValueTask DisposeShellsAsync() => _shells?.DisposeAsync() ?? ValueTask.CompletedTask;
+
+    /// <summary>
+    /// Disposes this call's shell executors. Idempotent: a session already disposed, or one that
+    /// never had a workspace, disposes nothing.
+    /// </summary>
+    public ValueTask DisposeAsync() => DisposeShellsAsync();
+
+    /// <summary>
     /// Brings the session's words back in line with store 1 before a turn after the first, when and
     /// only when someone else wrote to the call in between.
     /// </summary>
@@ -782,7 +799,8 @@ public sealed class CallSession : IConversationPort
             TurnContextOf(turn),
             turn.Knowledge,
             _clarifications,
-            Workspace);
+            Workspace,
+            _shells);
 
     /// <summary>
     /// Reads what one turn adds to its own model invocation.
@@ -1318,6 +1336,10 @@ public sealed class CallSession : IConversationPort
 
         if (IsComplete || _events.HasEnded)
         {
+            // Shells first: a Docker executor's bind mount is this workspace, and it must not be
+            // deleted out from under a still-live container.
+            await DisposeShellsAsync().ConfigureAwait(false);
+
             // A tool running mid-turn (a file_memory_write, say) can call EndCall itself, which
             // deletes the workspace and then IsComplete overwrites the flag when the policy also
             // reaches a terminal stage. _events.HasEnded survives that overwrite, so the folder a

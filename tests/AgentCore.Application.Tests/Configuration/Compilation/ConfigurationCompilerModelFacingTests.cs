@@ -7,7 +7,7 @@ using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Compilation;
+namespace AgentCore.Application.Tests.Configuration.Compilation;
 
 /// <summary>
 /// <c>ConfigurationCompiler.WithToolFailureAuditing</c> is one of the two sites, besides

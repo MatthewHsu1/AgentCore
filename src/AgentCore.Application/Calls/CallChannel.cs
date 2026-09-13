@@ -1,6 +1,6 @@
 using AgentCore.Application.Ports;
 
-namespace AgentCore.Application.Call;
+namespace AgentCore.Application.Calls;
 
 /// <summary>
 /// The two halves of one call, opened together and disposed together.

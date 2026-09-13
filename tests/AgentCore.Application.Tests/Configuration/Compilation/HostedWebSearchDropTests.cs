@@ -9,7 +9,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Compilation;
+namespace AgentCore.Application.Tests.Configuration.Compilation;
 
 /// <summary>
 /// The hosted web-search marker reaching, or not reaching, one compiled agent.

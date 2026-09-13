@@ -1,8 +1,8 @@
 using AgentCore.Application.Ports;
-using AgentCore.Application.Call;
+using AgentCore.Application.Calls;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Call;
+namespace AgentCore.Application.Tests.Calls;
 
 /// <summary>
 /// The channel pair, including the case where one object fills both slots.

@@ -39,7 +39,8 @@ public interface ICallSessions
     /// turn still in flight, and the session is the only thing that can wait for those writes — once
     /// it is dropped nothing can, and the durable record loses the turn the caller just had with no
     /// error anywhere to say so. Every way a session ends comes through here, expiry included, so
-    /// no path can be written that skips the wait.
+    /// no path can be written that skips the wait. An implementation must also dispose the session:
+    /// it owns processes (a call's shell: executors) that a dropped reference would leak.
     /// </remarks>
     ValueTask CloseAsync(string callId, CancellationToken cancellationToken = default);
 }

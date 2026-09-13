@@ -2,7 +2,7 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
 
-namespace AgentCore.Application.Call;
+namespace AgentCore.Application.Calls;
 
 /// <summary>
 /// Refuses a document whose call transport and speech vendors cannot coexist.

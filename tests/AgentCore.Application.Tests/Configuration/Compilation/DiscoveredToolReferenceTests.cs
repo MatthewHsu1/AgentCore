@@ -8,7 +8,7 @@ using AgentCore.Application.Tools.Registry;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Compilation;
+namespace AgentCore.Application.Tests.Configuration.Compilation;
 
 /// <summary>
 /// Decision 15 at the compile layer: an agent's <c>tools:</c> entry may name an id the registry

@@ -12,52 +12,52 @@ AgentCore.Application.Audit.QueuedAuditSink.DisposeAsync() -> System.Threading.T
 AgentCore.Application.Audit.QueuedAuditSink.FlushAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Audit.QueuedAuditSink.QueuedAuditSink(AgentCore.Application.Ports.IAuditSinkPort! inner, Microsoft.Extensions.Logging.ILogger? logger = null, int capacity = 10000, int batchSize = 100) -> void
 AgentCore.Application.Audit.QueuedAuditSink.Store.get -> AgentCore.Application.Ports.IAuditSinkPort!
-AgentCore.Application.Call.CallChannel
-AgentCore.Application.Call.CallChannel.<Clone>$() -> AgentCore.Application.Call.CallChannel!
-AgentCore.Application.Call.CallChannel.CallChannel(AgentCore.Application.Ports.ICallInputPort! Input, AgentCore.Application.Ports.ICallOutputPort! Output) -> void
-AgentCore.Application.Call.CallChannel.Deconstruct(out AgentCore.Application.Ports.ICallInputPort! Input, out AgentCore.Application.Ports.ICallOutputPort! Output) -> void
-AgentCore.Application.Call.CallChannel.DisposeAsync() -> System.Threading.Tasks.ValueTask
-AgentCore.Application.Call.CallChannel.Equals(AgentCore.Application.Call.CallChannel? other) -> bool
-AgentCore.Application.Call.CallChannel.Input.get -> AgentCore.Application.Ports.ICallInputPort!
-AgentCore.Application.Call.CallChannel.Input.init -> void
-AgentCore.Application.Call.CallChannel.Output.get -> AgentCore.Application.Ports.ICallOutputPort!
-AgentCore.Application.Call.CallChannel.Output.init -> void
-AgentCore.Application.Call.CallChannelContext
-AgentCore.Application.Call.CallChannelContext.<Clone>$() -> AgentCore.Application.Call.CallChannelContext!
-AgentCore.Application.Call.CallChannelContext.CallChannelContext(string! CallId, System.Collections.Generic.IReadOnlyDictionary<string!, string!>? CustomParameters) -> void
-AgentCore.Application.Call.CallChannelContext.CallId.get -> string!
-AgentCore.Application.Call.CallChannelContext.CallId.init -> void
-AgentCore.Application.Call.CallChannelContext.CustomParameters.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>?
-AgentCore.Application.Call.CallChannelContext.CustomParameters.init -> void
-AgentCore.Application.Call.CallChannelContext.Deconstruct(out string! CallId, out System.Collections.Generic.IReadOnlyDictionary<string!, string!>? CustomParameters) -> void
-AgentCore.Application.Call.CallChannelContext.Equals(AgentCore.Application.Call.CallChannelContext? other) -> bool
-AgentCore.Application.Call.CallInput
-AgentCore.Application.Call.CallInput.Barge
-AgentCore.Application.Call.CallInput.Barge.Barge(string! HeardText, System.TimeSpan PlayedDuration) -> void
-AgentCore.Application.Call.CallInput.Barge.Deconstruct(out string! HeardText, out System.TimeSpan PlayedDuration) -> void
-AgentCore.Application.Call.CallInput.Barge.Equals(AgentCore.Application.Call.CallInput.Barge? other) -> bool
-AgentCore.Application.Call.CallInput.Barge.HeardText.get -> string!
-AgentCore.Application.Call.CallInput.Barge.HeardText.init -> void
-AgentCore.Application.Call.CallInput.Barge.PlayedDuration.get -> System.TimeSpan
-AgentCore.Application.Call.CallInput.Barge.PlayedDuration.init -> void
-AgentCore.Application.Call.CallInput.CallInput(AgentCore.Application.Call.CallInput! original) -> void
-AgentCore.Application.Call.CallInput.Keypress
-AgentCore.Application.Call.CallInput.Keypress.Deconstruct(out string! Key) -> void
-AgentCore.Application.Call.CallInput.Keypress.Equals(AgentCore.Application.Call.CallInput.Keypress? other) -> bool
-AgentCore.Application.Call.CallInput.Keypress.Key.get -> string!
-AgentCore.Application.Call.CallInput.Keypress.Key.init -> void
-AgentCore.Application.Call.CallInput.Keypress.Keypress(string! Key) -> void
-AgentCore.Application.Call.CallInput.Utterance
-AgentCore.Application.Call.CallInput.Utterance.Deconstruct(out string! Text, out string! Language, out bool IsFinal) -> void
-AgentCore.Application.Call.CallInput.Utterance.Equals(AgentCore.Application.Call.CallInput.Utterance? other) -> bool
-AgentCore.Application.Call.CallInput.Utterance.IsFinal.get -> bool
-AgentCore.Application.Call.CallInput.Utterance.IsFinal.init -> void
-AgentCore.Application.Call.CallInput.Utterance.Language.get -> string!
-AgentCore.Application.Call.CallInput.Utterance.Language.init -> void
-AgentCore.Application.Call.CallInput.Utterance.Text.get -> string!
-AgentCore.Application.Call.CallInput.Utterance.Text.init -> void
-AgentCore.Application.Call.CallInput.Utterance.Utterance(string! Text, string! Language, bool IsFinal) -> void
-AgentCore.Application.Call.CallSpeechPairing
+AgentCore.Application.Calls.CallChannel
+AgentCore.Application.Calls.CallChannel.<Clone>$() -> AgentCore.Application.Calls.CallChannel!
+AgentCore.Application.Calls.CallChannel.CallChannel(AgentCore.Application.Ports.ICallInputPort! Input, AgentCore.Application.Ports.ICallOutputPort! Output) -> void
+AgentCore.Application.Calls.CallChannel.Deconstruct(out AgentCore.Application.Ports.ICallInputPort! Input, out AgentCore.Application.Ports.ICallOutputPort! Output) -> void
+AgentCore.Application.Calls.CallChannel.DisposeAsync() -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Calls.CallChannel.Equals(AgentCore.Application.Calls.CallChannel? other) -> bool
+AgentCore.Application.Calls.CallChannel.Input.get -> AgentCore.Application.Ports.ICallInputPort!
+AgentCore.Application.Calls.CallChannel.Input.init -> void
+AgentCore.Application.Calls.CallChannel.Output.get -> AgentCore.Application.Ports.ICallOutputPort!
+AgentCore.Application.Calls.CallChannel.Output.init -> void
+AgentCore.Application.Calls.CallChannelContext
+AgentCore.Application.Calls.CallChannelContext.<Clone>$() -> AgentCore.Application.Calls.CallChannelContext!
+AgentCore.Application.Calls.CallChannelContext.CallChannelContext(string! CallId, System.Collections.Generic.IReadOnlyDictionary<string!, string!>? CustomParameters) -> void
+AgentCore.Application.Calls.CallChannelContext.CallId.get -> string!
+AgentCore.Application.Calls.CallChannelContext.CallId.init -> void
+AgentCore.Application.Calls.CallChannelContext.CustomParameters.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>?
+AgentCore.Application.Calls.CallChannelContext.CustomParameters.init -> void
+AgentCore.Application.Calls.CallChannelContext.Deconstruct(out string! CallId, out System.Collections.Generic.IReadOnlyDictionary<string!, string!>? CustomParameters) -> void
+AgentCore.Application.Calls.CallChannelContext.Equals(AgentCore.Application.Calls.CallChannelContext? other) -> bool
+AgentCore.Application.Calls.CallInput
+AgentCore.Application.Calls.CallInput.Barge
+AgentCore.Application.Calls.CallInput.Barge.Barge(string! HeardText, System.TimeSpan PlayedDuration) -> void
+AgentCore.Application.Calls.CallInput.Barge.Deconstruct(out string! HeardText, out System.TimeSpan PlayedDuration) -> void
+AgentCore.Application.Calls.CallInput.Barge.Equals(AgentCore.Application.Calls.CallInput.Barge? other) -> bool
+AgentCore.Application.Calls.CallInput.Barge.HeardText.get -> string!
+AgentCore.Application.Calls.CallInput.Barge.HeardText.init -> void
+AgentCore.Application.Calls.CallInput.Barge.PlayedDuration.get -> System.TimeSpan
+AgentCore.Application.Calls.CallInput.Barge.PlayedDuration.init -> void
+AgentCore.Application.Calls.CallInput.CallInput(AgentCore.Application.Calls.CallInput! original) -> void
+AgentCore.Application.Calls.CallInput.Keypress
+AgentCore.Application.Calls.CallInput.Keypress.Deconstruct(out string! Key) -> void
+AgentCore.Application.Calls.CallInput.Keypress.Equals(AgentCore.Application.Calls.CallInput.Keypress? other) -> bool
+AgentCore.Application.Calls.CallInput.Keypress.Key.get -> string!
+AgentCore.Application.Calls.CallInput.Keypress.Key.init -> void
+AgentCore.Application.Calls.CallInput.Keypress.Keypress(string! Key) -> void
+AgentCore.Application.Calls.CallInput.Utterance
+AgentCore.Application.Calls.CallInput.Utterance.Deconstruct(out string! Text, out string! Language, out bool IsFinal) -> void
+AgentCore.Application.Calls.CallInput.Utterance.Equals(AgentCore.Application.Calls.CallInput.Utterance? other) -> bool
+AgentCore.Application.Calls.CallInput.Utterance.IsFinal.get -> bool
+AgentCore.Application.Calls.CallInput.Utterance.IsFinal.init -> void
+AgentCore.Application.Calls.CallInput.Utterance.Language.get -> string!
+AgentCore.Application.Calls.CallInput.Utterance.Language.init -> void
+AgentCore.Application.Calls.CallInput.Utterance.Text.get -> string!
+AgentCore.Application.Calls.CallInput.Utterance.Text.init -> void
+AgentCore.Application.Calls.CallInput.Utterance.Utterance(string! Text, string! Language, bool IsFinal) -> void
+AgentCore.Application.Calls.CallSpeechPairing
 AgentCore.Application.Calls.CallClarificationState
 AgentCore.Application.Calls.CallClarificationState.<Clone>$() -> AgentCore.Application.Calls.CallClarificationState!
 AgentCore.Application.Calls.CallClarificationState.CallClarificationState() -> void
@@ -1072,9 +1072,9 @@ AgentCore.Application.Ports.IAuditSinkPort.AppendManyAsync(System.Collections.Ge
 AgentCore.Application.Ports.ICallAdapter
 AgentCore.Application.Ports.ICallAdapter.CarriesText.get -> bool
 AgentCore.Application.Ports.ICallChannelFactory
-AgentCore.Application.Ports.ICallChannelFactory.OpenAsync(AgentCore.Application.Call.CallChannelContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Call.CallChannel!>
+AgentCore.Application.Ports.ICallChannelFactory.OpenAsync(AgentCore.Application.Calls.CallChannelContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Calls.CallChannel!>
 AgentCore.Application.Ports.ICallInputPort
-AgentCore.Application.Ports.ICallInputPort.ListenAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<AgentCore.Application.Call.CallInput!>!
+AgentCore.Application.Ports.ICallInputPort.ListenAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<AgentCore.Application.Calls.CallInput!>!
 AgentCore.Application.Ports.ICallObserver
 AgentCore.Application.Ports.ICallObserver.OnCallEventAsync(AgentCore.Application.Runtime.CallEvent! callEvent, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Ports.ICallOutputPort
@@ -1211,6 +1211,7 @@ AgentCore.Application.Runtime.CallRenderScope
 AgentCore.Application.Runtime.CallSession
 AgentCore.Application.Runtime.CallSession.CallId.get -> string!
 AgentCore.Application.Runtime.CallSession.Compiled.get -> AgentCore.Application.Configuration.Compilation.CompiledAgent!
+AgentCore.Application.Runtime.CallSession.DisposeAsync() -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Runtime.CallSession.EndCall(AgentCore.Domain.Audit.CallEndReason reason) -> bool
 AgentCore.Application.Runtime.CallSession.FlushTranscriptAsync() -> System.Threading.Tasks.Task!
 AgentCore.Application.Runtime.CallSession.Interrupt(string! utteranceUntilInterrupt, System.TimeSpan durationUntilInterrupt, bool cutsRunningTurn = true) -> bool
@@ -1439,7 +1440,7 @@ AgentCore.Application.Transcript.SourceContent.Source.get -> AgentCore.Domain.So
 AgentCore.Application.Transcript.SourceContent.Source.set -> void
 AgentCore.Application.Transcript.SourceContent.SourceContent() -> void
 AgentCore.Application.Transcript.TranscriptJson
-abstract AgentCore.Application.Call.CallInput.<Clone>$() -> AgentCore.Application.Call.CallInput!
+abstract AgentCore.Application.Calls.CallInput.<Clone>$() -> AgentCore.Application.Calls.CallInput!
 abstract AgentCore.Application.Tools.DeclaredTool.CallAsync(Microsoft.Extensions.AI.AIFunctionArguments! arguments, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<object?>
 const AgentCore.Application.Audit.AuditSinkFactory.MemoryKind = "memory" -> string!
 const AgentCore.Application.Audit.QueuedAuditSink.DefaultBatchSize = 100 -> int
@@ -1512,27 +1513,27 @@ const AgentCore.Application.Tools.Builtin.BuiltinToolNames.WebSearch = "web.sear
 const AgentCore.Application.Tools.ToolErrorResult.ErrorProperty = "error" -> string!
 const AgentCore.Application.Tools.ToolErrorResult.MessageProperty = "message" -> string!
 const AgentCore.Application.Tools.ToolErrorResult.ToolProperty = "tool" -> string!
-override AgentCore.Application.Call.CallChannel.Equals(object? obj) -> bool
-override AgentCore.Application.Call.CallChannel.GetHashCode() -> int
-override AgentCore.Application.Call.CallChannel.ToString() -> string!
-override AgentCore.Application.Call.CallChannelContext.Equals(object? obj) -> bool
-override AgentCore.Application.Call.CallChannelContext.GetHashCode() -> int
-override AgentCore.Application.Call.CallChannelContext.ToString() -> string!
-override AgentCore.Application.Call.CallInput.Barge.<Clone>$() -> AgentCore.Application.Call.CallInput.Barge!
-override AgentCore.Application.Call.CallInput.Barge.Equals(object? obj) -> bool
-override AgentCore.Application.Call.CallInput.Barge.GetHashCode() -> int
-override AgentCore.Application.Call.CallInput.Barge.ToString() -> string!
-override AgentCore.Application.Call.CallInput.Equals(object? obj) -> bool
-override AgentCore.Application.Call.CallInput.GetHashCode() -> int
-override AgentCore.Application.Call.CallInput.Keypress.<Clone>$() -> AgentCore.Application.Call.CallInput.Keypress!
-override AgentCore.Application.Call.CallInput.Keypress.Equals(object? obj) -> bool
-override AgentCore.Application.Call.CallInput.Keypress.GetHashCode() -> int
-override AgentCore.Application.Call.CallInput.Keypress.ToString() -> string!
-override AgentCore.Application.Call.CallInput.ToString() -> string!
-override AgentCore.Application.Call.CallInput.Utterance.<Clone>$() -> AgentCore.Application.Call.CallInput.Utterance!
-override AgentCore.Application.Call.CallInput.Utterance.Equals(object? obj) -> bool
-override AgentCore.Application.Call.CallInput.Utterance.GetHashCode() -> int
-override AgentCore.Application.Call.CallInput.Utterance.ToString() -> string!
+override AgentCore.Application.Calls.CallChannel.Equals(object? obj) -> bool
+override AgentCore.Application.Calls.CallChannel.GetHashCode() -> int
+override AgentCore.Application.Calls.CallChannel.ToString() -> string!
+override AgentCore.Application.Calls.CallChannelContext.Equals(object? obj) -> bool
+override AgentCore.Application.Calls.CallChannelContext.GetHashCode() -> int
+override AgentCore.Application.Calls.CallChannelContext.ToString() -> string!
+override AgentCore.Application.Calls.CallInput.Barge.<Clone>$() -> AgentCore.Application.Calls.CallInput.Barge!
+override AgentCore.Application.Calls.CallInput.Barge.Equals(object? obj) -> bool
+override AgentCore.Application.Calls.CallInput.Barge.GetHashCode() -> int
+override AgentCore.Application.Calls.CallInput.Barge.ToString() -> string!
+override AgentCore.Application.Calls.CallInput.Equals(object? obj) -> bool
+override AgentCore.Application.Calls.CallInput.GetHashCode() -> int
+override AgentCore.Application.Calls.CallInput.Keypress.<Clone>$() -> AgentCore.Application.Calls.CallInput.Keypress!
+override AgentCore.Application.Calls.CallInput.Keypress.Equals(object? obj) -> bool
+override AgentCore.Application.Calls.CallInput.Keypress.GetHashCode() -> int
+override AgentCore.Application.Calls.CallInput.Keypress.ToString() -> string!
+override AgentCore.Application.Calls.CallInput.ToString() -> string!
+override AgentCore.Application.Calls.CallInput.Utterance.<Clone>$() -> AgentCore.Application.Calls.CallInput.Utterance!
+override AgentCore.Application.Calls.CallInput.Utterance.Equals(object? obj) -> bool
+override AgentCore.Application.Calls.CallInput.Utterance.GetHashCode() -> int
+override AgentCore.Application.Calls.CallInput.Utterance.ToString() -> string!
 override AgentCore.Application.Calls.CallClarificationState.Equals(object? obj) -> bool
 override AgentCore.Application.Calls.CallClarificationState.GetHashCode() -> int
 override AgentCore.Application.Calls.CallClarificationState.ToString() -> string!
@@ -1762,24 +1763,24 @@ override AgentCore.Application.Transcript.CallMessage.ToString() -> string!
 override AgentCore.Application.Transcript.CallMessageDraft.Equals(object? obj) -> bool
 override AgentCore.Application.Transcript.CallMessageDraft.GetHashCode() -> int
 override AgentCore.Application.Transcript.CallMessageDraft.ToString() -> string!
-override sealed AgentCore.Application.Call.CallInput.Barge.Equals(AgentCore.Application.Call.CallInput? other) -> bool
-override sealed AgentCore.Application.Call.CallInput.Keypress.Equals(AgentCore.Application.Call.CallInput? other) -> bool
-override sealed AgentCore.Application.Call.CallInput.Utterance.Equals(AgentCore.Application.Call.CallInput? other) -> bool
+override sealed AgentCore.Application.Calls.CallInput.Barge.Equals(AgentCore.Application.Calls.CallInput? other) -> bool
+override sealed AgentCore.Application.Calls.CallInput.Keypress.Equals(AgentCore.Application.Calls.CallInput? other) -> bool
+override sealed AgentCore.Application.Calls.CallInput.Utterance.Equals(AgentCore.Application.Calls.CallInput? other) -> bool
 override sealed AgentCore.Application.Tools.DeclaredTool.InvokeCoreAsync(Microsoft.Extensions.AI.AIFunctionArguments! arguments, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<object?>
 static AgentCore.Application.Audit.AuditSinkFactory.OpenAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.IAuditSinkAdapter!>! adapters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IAuditSinkPort!>
-static AgentCore.Application.Call.CallChannel.operator !=(AgentCore.Application.Call.CallChannel? left, AgentCore.Application.Call.CallChannel? right) -> bool
-static AgentCore.Application.Call.CallChannel.operator ==(AgentCore.Application.Call.CallChannel? left, AgentCore.Application.Call.CallChannel? right) -> bool
-static AgentCore.Application.Call.CallChannelContext.operator !=(AgentCore.Application.Call.CallChannelContext? left, AgentCore.Application.Call.CallChannelContext? right) -> bool
-static AgentCore.Application.Call.CallChannelContext.operator ==(AgentCore.Application.Call.CallChannelContext? left, AgentCore.Application.Call.CallChannelContext? right) -> bool
-static AgentCore.Application.Call.CallInput.Barge.operator !=(AgentCore.Application.Call.CallInput.Barge? left, AgentCore.Application.Call.CallInput.Barge? right) -> bool
-static AgentCore.Application.Call.CallInput.Barge.operator ==(AgentCore.Application.Call.CallInput.Barge? left, AgentCore.Application.Call.CallInput.Barge? right) -> bool
-static AgentCore.Application.Call.CallInput.Keypress.operator !=(AgentCore.Application.Call.CallInput.Keypress? left, AgentCore.Application.Call.CallInput.Keypress? right) -> bool
-static AgentCore.Application.Call.CallInput.Keypress.operator ==(AgentCore.Application.Call.CallInput.Keypress? left, AgentCore.Application.Call.CallInput.Keypress? right) -> bool
-static AgentCore.Application.Call.CallInput.Utterance.operator !=(AgentCore.Application.Call.CallInput.Utterance? left, AgentCore.Application.Call.CallInput.Utterance? right) -> bool
-static AgentCore.Application.Call.CallInput.Utterance.operator ==(AgentCore.Application.Call.CallInput.Utterance? left, AgentCore.Application.Call.CallInput.Utterance? right) -> bool
-static AgentCore.Application.Call.CallInput.operator !=(AgentCore.Application.Call.CallInput? left, AgentCore.Application.Call.CallInput? right) -> bool
-static AgentCore.Application.Call.CallInput.operator ==(AgentCore.Application.Call.CallInput? left, AgentCore.Application.Call.CallInput? right) -> bool
-static AgentCore.Application.Call.CallSpeechPairing.Validate(AgentCore.Application.Configuration.Schema.CallProviderConfiguration! call, AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration! speech, AgentCore.Application.Ports.ICallAdapter! selectedCall) -> void
+static AgentCore.Application.Calls.CallChannel.operator !=(AgentCore.Application.Calls.CallChannel? left, AgentCore.Application.Calls.CallChannel? right) -> bool
+static AgentCore.Application.Calls.CallChannel.operator ==(AgentCore.Application.Calls.CallChannel? left, AgentCore.Application.Calls.CallChannel? right) -> bool
+static AgentCore.Application.Calls.CallChannelContext.operator !=(AgentCore.Application.Calls.CallChannelContext? left, AgentCore.Application.Calls.CallChannelContext? right) -> bool
+static AgentCore.Application.Calls.CallChannelContext.operator ==(AgentCore.Application.Calls.CallChannelContext? left, AgentCore.Application.Calls.CallChannelContext? right) -> bool
+static AgentCore.Application.Calls.CallInput.Barge.operator !=(AgentCore.Application.Calls.CallInput.Barge? left, AgentCore.Application.Calls.CallInput.Barge? right) -> bool
+static AgentCore.Application.Calls.CallInput.Barge.operator ==(AgentCore.Application.Calls.CallInput.Barge? left, AgentCore.Application.Calls.CallInput.Barge? right) -> bool
+static AgentCore.Application.Calls.CallInput.Keypress.operator !=(AgentCore.Application.Calls.CallInput.Keypress? left, AgentCore.Application.Calls.CallInput.Keypress? right) -> bool
+static AgentCore.Application.Calls.CallInput.Keypress.operator ==(AgentCore.Application.Calls.CallInput.Keypress? left, AgentCore.Application.Calls.CallInput.Keypress? right) -> bool
+static AgentCore.Application.Calls.CallInput.Utterance.operator !=(AgentCore.Application.Calls.CallInput.Utterance? left, AgentCore.Application.Calls.CallInput.Utterance? right) -> bool
+static AgentCore.Application.Calls.CallInput.Utterance.operator ==(AgentCore.Application.Calls.CallInput.Utterance? left, AgentCore.Application.Calls.CallInput.Utterance? right) -> bool
+static AgentCore.Application.Calls.CallInput.operator !=(AgentCore.Application.Calls.CallInput? left, AgentCore.Application.Calls.CallInput? right) -> bool
+static AgentCore.Application.Calls.CallInput.operator ==(AgentCore.Application.Calls.CallInput? left, AgentCore.Application.Calls.CallInput? right) -> bool
+static AgentCore.Application.Calls.CallSpeechPairing.Validate(AgentCore.Application.Configuration.Schema.CallProviderConfiguration! call, AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration! speech, AgentCore.Application.Ports.ICallAdapter! selectedCall) -> void
 static AgentCore.Application.Calls.CallClarificationState.operator !=(AgentCore.Application.Calls.CallClarificationState? left, AgentCore.Application.Calls.CallClarificationState? right) -> bool
 static AgentCore.Application.Calls.CallClarificationState.operator ==(AgentCore.Application.Calls.CallClarificationState? left, AgentCore.Application.Calls.CallClarificationState? right) -> bool
 static AgentCore.Application.Calls.CallCursor.Encode(System.DateTimeOffset sortAt, string! callId) -> string!
@@ -2031,9 +2032,9 @@ static readonly AgentCore.Application.Secrets.KnownSecrets.OpenAi -> AgentCore.A
 static readonly AgentCore.Application.Secrets.KnownSecrets.PostgresConnectionString -> AgentCore.Application.Secrets.SecretName!
 static readonly AgentCore.Application.Secrets.KnownSecrets.Qdrant -> AgentCore.Application.Secrets.SecretName!
 static readonly AgentCore.Application.Sessions.Memory.InMemoryCallSessions.DefaultIdleTimeout -> System.TimeSpan
-virtual AgentCore.Application.Call.CallInput.EqualityContract.get -> System.Type!
-virtual AgentCore.Application.Call.CallInput.Equals(AgentCore.Application.Call.CallInput? other) -> bool
-virtual AgentCore.Application.Call.CallInput.PrintMembers(System.Text.StringBuilder! builder) -> bool
+virtual AgentCore.Application.Calls.CallInput.EqualityContract.get -> System.Type!
+virtual AgentCore.Application.Calls.CallInput.Equals(AgentCore.Application.Calls.CallInput? other) -> bool
+virtual AgentCore.Application.Calls.CallInput.PrintMembers(System.Text.StringBuilder! builder) -> bool
 virtual AgentCore.Application.Tools.Binding.ToolBinding.Invoke(System.Text.Json.Nodes.JsonObject! arguments, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<object?>
 ~override AgentCore.Application.Providers.VendorSeam.Equals(object obj) -> bool
 ~override AgentCore.Application.Providers.VendorSeam.ToString() -> string

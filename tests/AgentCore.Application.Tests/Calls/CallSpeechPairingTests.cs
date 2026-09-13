@@ -1,10 +1,10 @@
-using AgentCore.Application.Call;
+using AgentCore.Application.Calls;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Call;
+namespace AgentCore.Application.Tests.Calls;
 
 public sealed class CallSpeechPairingTests
 {

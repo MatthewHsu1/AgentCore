@@ -25,7 +25,7 @@ namespace AgentCore.Application.Ports;
 /// <para>
 /// So each role's <c>kind</c> is a <b>naming</b> field, not a selecting one: it answers "which
 /// vendor did the document mean", and nothing here turns that answer into a constructed adapter.
-/// <see cref="Call.CallSpeechPairing"/> is what reads the names today, and only to check them
+/// <see cref="Calls.CallSpeechPairing"/> is what reads the names today, and only to check them
 /// against <c>providers.call.kind</c> — because a transport whose frames already carry text, such as
 /// the relay this solution ships, is itself the recognizer and the synthesizer, so once the names
 /// agree there is nothing left to build. <see cref="ICallChannelFactory"/> stays the seam's
@@ -40,7 +40,7 @@ namespace AgentCore.Application.Ports;
 /// frames already carry text must further be named by <b>both</b> speech roles, because such a
 /// vendor performs recognition and synthesis itself and a document naming it for the pipe and
 /// something else for the ears or the mouth describes a deployment that cannot exist.
-/// <see cref="Call.CallSpeechPairing"/> is what enforces that, while the host starts and before any
+/// <see cref="Calls.CallSpeechPairing"/> is what enforces that, while the host starts and before any
 /// route is mapped, because the agreement is a fact about the document rather than about a route.
 /// </para>
 /// </remarks>

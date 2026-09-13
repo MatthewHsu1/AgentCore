@@ -21,6 +21,7 @@
   <ItemGroup>
     <PackageVersion Include="Microsoft.Agents.AI" Version="1.21.0" />
     <PackageVersion Include="Microsoft.Agents.AI.Workflows" Version="1.21.0" />
+    <PackageVersion Include="Microsoft.Agents.AI.Tools.Shell" Version="1.21.0-preview.260911.1" />
   </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="ModelContextProtocol.Core" Version="2.2.0" />

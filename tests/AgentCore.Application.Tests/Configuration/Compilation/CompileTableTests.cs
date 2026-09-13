@@ -6,7 +6,7 @@ using AgentCore.Application.Tests.Knowledge.Fakes;
 using Microsoft.Agents.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Compilation;
+namespace AgentCore.Application.Tests.Configuration.Compilation;
 
 /// <summary>
 /// The five rows of the section 8.2 compile table. The compiler is a table, not a heuristic.

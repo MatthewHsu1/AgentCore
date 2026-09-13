@@ -1,4 +1,4 @@
-namespace AgentCore.Application.Call;
+namespace AgentCore.Application.Calls;
 
 /// <summary>What one call needs to open its channel.</summary>
 /// <param name="CallId">The AgentCore call id, which the channel must not invent for itself.</param>

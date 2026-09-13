@@ -9,7 +9,7 @@ using AgentCore.TestSupport;
 using Microsoft.Agents.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Compilation;
+namespace AgentCore.Application.Tests.Configuration.Compilation;
 
 /// <summary>
 /// Where the document's <c>providers.knowledge</c> ambiguity wiring becomes part of the agent's own

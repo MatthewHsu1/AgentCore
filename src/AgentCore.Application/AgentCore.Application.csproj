@@ -4,6 +4,11 @@
     <IsPackable>true</IsPackable>
     <Description>Orchestration, configuration compilation, and every port interface.</Description>
     <PackageTags>agent;ai;voice;chat;orchestration</PackageTags>
+    <!-- Need to REMOVE when dependcies are not in preview.
+         Current List:
+            Microsoft.Agents.AI.Tools.Shell
+     -->
+    <NoWarn>$(NoWarn);NU5104</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,6 +21,7 @@
     <PackageReference Include="Microsoft.Extensions.VectorData.Abstractions" />
     <PackageReference Include="Microsoft.Agents.AI" />
     <PackageReference Include="Microsoft.Agents.AI.Workflows" />
+    <PackageReference Include="Microsoft.Agents.AI.Tools.Shell" />
     <PackageReference Include="Stateless" />
     <PackageReference Include="YamlDotNet" />
     <PackageReference Include="JsonSchema.Net" />

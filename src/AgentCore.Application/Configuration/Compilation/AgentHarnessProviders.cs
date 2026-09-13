@@ -1,13 +1,15 @@
+using System.Text.RegularExpressions;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Runtime;
 using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Tools.Shell;
 
 namespace AgentCore.Application.Configuration.Compilation;
 
 /// <summary>
 /// The context providers behind one agent's harness switches (<c>todos:</c>, <c>mode:</c>,
-/// <c>memory:</c>, <c>files:</c>), added into the provider list <see cref="AgentContextProviderCompiler"/> builds.
+/// <c>memory:</c>, <c>files:</c>, <c>shell:</c>), added into the provider list <see cref="AgentContextProviderCompiler"/> builds.
 /// </summary>
 internal static class AgentHarnessProviders
 {
@@ -85,6 +87,11 @@ internal static class AgentHarnessProviders
         if (item.Files is { Store: AgentFileStoreKind.Workspace } files)
         {
             providers.Add(BuildFilesProvider(item, files, context, pointer));
+        }
+
+        if (item.Shell is { } shell)
+        {
+            providers.Add(BuildShellProvider(item, shell, context, pointer));
         }
     }
 
@@ -172,6 +179,64 @@ internal static class AgentHarnessProviders
             });
     }
 #pragma warning restore MAAI001
+
+    private static CallShellProvider BuildShellProvider(
+        AgentConfiguration item, ShellConfiguration shell, AgentCompilationContext context, string pointer)
+    {
+        if (context.WorkspaceRoot is null)
+        {
+            throw ConfigurationCompiler.Fail(
+                ConfigurationError.AppendPointer(pointer, "shell"),
+                $"the agent '{item.Id}' declares a shell: block and this host bound no workspace "
+                + "root, so the shell has no working directory. Call options.UseWorkspace(...) with "
+                + "the folder, or remove the shell: block.");
+        }
+
+        var policy = shell.Policy is { } declared ? BuildPolicy(item, declared, pointer) : null;
+        var timeout = shell.TimeoutSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : (TimeSpan?)null;
+
+        return new CallShellProvider(new CallShellOptions(shell.Kind, policy, timeout));
+    }
+
+    private static ShellPolicy BuildPolicy(
+        AgentConfiguration item, ShellPolicyConfiguration policy, string pointer)
+    {
+        // ShellPolicy treats a supplied-but-empty allow list as deny-all (it denies any command that
+        // matches none of the allow patterns, and an empty list matches nothing), so an agent that
+        // declares no allow: must reach the executor with allowList: null, not an empty collection.
+        var allow = policy.Allow.Count == 0 ? null : policy.Allow;
+
+        try
+        {
+            return new ShellPolicy(denyList: policy.Deny, allowList: allow);
+        }
+        catch (ArgumentException exception)
+        {
+            // ShellPolicy compiles every pattern into a Regex eagerly in its own constructor, so a
+            // bad pattern in either list throws here, at compile time, rather than at the model's
+            // first command.
+            var bad = policy.Deny.Concat(allow ?? [])
+                .FirstOrDefault(pattern => !IsValidRegex(pattern));
+
+            throw ConfigurationCompiler.Fail(
+                ConfigurationError.AppendPointer(ConfigurationError.AppendPointer(pointer, "shell"), "policy"),
+                $"the agent '{item.Id}' declares a shell: policy whose pattern '{bad}' is not a "
+                + $"valid regex: {exception.Message}");
+        }
+    }
+
+    private static bool IsValidRegex(string pattern)
+    {
+        try
+        {
+            _ = new Regex(pattern);
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
 
     /// <summary>
     /// Builds the state a new <see cref="FileMemoryProvider"/> session starts with: its working

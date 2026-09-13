@@ -1,4 +1,4 @@
-namespace AgentCore.Application.Call;
+namespace AgentCore.Application.Calls;
 
 /// <summary>
 /// One thing the caller did, in the order it happened.

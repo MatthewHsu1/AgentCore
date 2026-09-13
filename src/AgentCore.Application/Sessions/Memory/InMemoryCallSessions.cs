@@ -85,7 +85,16 @@ public sealed class InMemoryCallSessions : ICallSessions
         // then flushed while this method still holds the only reference to it.
         if (_sessions.TryRemove(callId, out var entry))
         {
-            await entry.Session.FlushTranscriptAsync().ConfigureAwait(false);
+            // A store that throws on flush must not leave the session's shells running with
+            // nothing left to hold a reference to them.
+            try
+            {
+                await entry.Session.FlushTranscriptAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                await entry.Session.DisposeAsync().ConfigureAwait(false);
+            }
         }
     }
 

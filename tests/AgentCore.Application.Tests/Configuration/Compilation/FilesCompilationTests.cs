@@ -11,7 +11,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Compilation;
+namespace AgentCore.Application.Tests.Configuration.Compilation;
 
 /// <summary>
 /// The <c>files:</c> block reaching a compiled agent as a <see cref="FileAccessProvider"/>, the

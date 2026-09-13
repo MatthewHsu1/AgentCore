@@ -7,7 +7,7 @@ using AgentCore.TestSupport;
 using Microsoft.Agents.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Compilation;
+namespace AgentCore.Application.Tests.Configuration.Compilation;
 
 /// <summary>
 /// An agent that declares skills: must carry the provider even when it declares no knowledge:

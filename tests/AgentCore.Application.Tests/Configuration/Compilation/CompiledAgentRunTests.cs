@@ -4,7 +4,7 @@ using AgentCore.Application.Tests.Fakes;
 using Microsoft.Agents.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Compilation;
+namespace AgentCore.Application.Tests.Configuration.Compilation;
 
 /// <summary>
 /// Rule 13 of section 11. A one-agent configuration compiles to a <c>ChatClientAgent</c> and answers

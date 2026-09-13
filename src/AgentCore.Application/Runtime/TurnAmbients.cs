@@ -52,6 +52,9 @@ internal sealed record TurnAmbients
     /// <summary>Gets the folder this call owns on disk, or <see langword="null"/> when the host bound no workspace root.</summary>
     public string? Workspace { get; init; }
 
+    /// <summary>Gets this call's shell executors, or <see langword="null"/> when the call has no workspace.</summary>
+    public CallShells? Shells { get; init; }
+
     /// <summary>Opens what a turn owns, and carries every other ambient through unchanged.</summary>
     /// <param name="callId">The id of the call the turn belongs to.</param>
     /// <param name="state">The state document the call reads and writes.</param>
@@ -63,6 +66,7 @@ internal sealed record TurnAmbients
     /// <param name="knowledge">What this turn may see of the knowledge base, or <see langword="null"/> when the document composes none.</param>
     /// <param name="clarifications">The call's ambiguity holder.</param>
     /// <param name="workspace">The folder this call owns on disk, or <see langword="null"/> when the host bound no workspace root.</param>
+    /// <param name="shells">This call's shell executors, or <see langword="null"/> when the call has no workspace.</param>
     internal static IDisposable Enter(
         string callId,
         StateDocument state,
@@ -73,7 +77,8 @@ internal sealed record TurnAmbients
         TurnContext context,
         KnowledgeScope? knowledge,
         Clarifications clarifications,
-        string? workspace)
+        string? workspace,
+        CallShells? shells)
     {
         ArgumentNullException.ThrowIfNull(callId);
         ArgumentNullException.ThrowIfNull(state);
@@ -98,6 +103,7 @@ internal sealed record TurnAmbients
             Knowledge = knowledge ?? current.Knowledge,
             Clarifications = clarifications,
             Workspace = workspace,
+            Shells = shells,
         });
     }
 
