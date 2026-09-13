@@ -103,6 +103,10 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
 
     private readonly CallShells? _shells;
 
+    // The background release runs once per call: both DisposeAsync and the turn-end path below
+    // reach it, and a second release would re-cancel children that already went away.
+    private int _backgroundReleased;
+
     // Whether the running turn has already handed the host something to speak. One rule for both
     // run shapes: a run that has handed the host nothing cannot be the turn the caller was hearing,
     // so a barge-in in that window belongs to the turn that finished before it. A streaming turn
@@ -516,10 +520,32 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
     private ValueTask DisposeShellsAsync() => _shells?.DisposeAsync() ?? ValueTask.CompletedTask;
 
     /// <summary>
-    /// Disposes this call's shell executors. Idempotent: a session already disposed, or one that
-    /// never had a workspace, disposes nothing.
+    /// Disposes this call's background sessions and shell executors. Idempotent: a session already
+    /// disposed, or one that never had either, disposes nothing.
     /// </summary>
-    public ValueTask DisposeAsync() => DisposeShellsAsync();
+    public async ValueTask DisposeAsync()
+    {
+        await ReleaseBackgroundSessionsAsync().ConfigureAwait(false);
+        await DisposeShellsAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Cancels the background children still running on this call's session and releases it, once
+    /// per call. Skipped when the call never opened a session or the document names no background
+    /// children. Release precedes the shells: a child cancelled here may be inside a shell tool.
+    /// </summary>
+    private async ValueTask ReleaseBackgroundSessionsAsync()
+    {
+        if (Interlocked.Exchange(ref _backgroundReleased, 1) == 1
+            || _compiled.BackgroundProviders.Count == 0
+            || Session() is not { } session)
+        {
+            return;
+        }
+
+        await BackgroundSessionRelease.ReleaseAsync(
+            _compiled.BackgroundProviders, session, CallId, _logger, CancellationToken.None).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Brings the session's words back in line with store 1 before a turn after the first, when and
@@ -1337,6 +1363,10 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
 
         if (IsComplete || _events.HasEnded)
         {
+            // Children before shells: a cancelled child may be inside a shell tool the next line
+            // tears down.
+            await ReleaseBackgroundSessionsAsync().ConfigureAwait(false);
+
             // Shells first: a Docker executor's bind mount is this workspace, and it must not be
             // deleted out from under a still-live container.
             await DisposeShellsAsync().ConfigureAwait(false);

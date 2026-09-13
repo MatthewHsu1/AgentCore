@@ -18,6 +18,7 @@ public sealed class CompiledAgent
 
     private readonly Dictionary<string, AIAgent> _turnByAgentId;
 
+#pragma warning disable MAAI001 // BackgroundAgentsProvider is evaluation-only in Microsoft.Agents.AI 1.21.0.
     internal CompiledAgent(
         AgentCoreConfiguration configuration,
         CompileTableRow row,
@@ -28,6 +29,7 @@ public sealed class CompiledAgent
         IReadOnlySet<string>? spokenBy,
         AgentCoreChatHistoryProvider history,
         IReadOnlySet<string> harnessStateKeys,
+        IReadOnlyList<BackgroundAgentsProvider> backgroundProviders,
         Func<AIAgent, AIAgent> turnLayers)
     {
         Configuration = configuration;
@@ -38,7 +40,7 @@ public sealed class CompiledAgent
         SpokenBy = spokenBy;
         History = history;
         HarnessStateKeys = harnessStateKeys;
-
+        BackgroundProviders = backgroundProviders;
         _byAgentId = byAgentId;
         _agentIdByStage = agentIdByStage;
 
@@ -50,6 +52,7 @@ public sealed class CompiledAgent
             _turnByAgentId[id] = turnLayers(agent);
         }
     }
+#pragma warning restore MAAI001
 
     /// <summary>
     /// Gets whether the row answers its runs out of store 1 on its own session, rather than the
@@ -83,13 +86,20 @@ public sealed class CompiledAgent
 
     /// <summary>Gets the store this agent's calls and every word of them are kept in.</summary>
     internal ICallStore CallStore { get; }
-
     /// <summary>
     /// Gets the union of every harness provider's state keys, over every agent this document
     /// compiled — never the history provider's key. Empty when the document names no harness
     /// switch. This is what a call's <c>Providers</c> keeps beside its stage and its slots.
     /// </summary>
     internal IReadOnlySet<string> HarnessStateKeys { get; }
+
+#pragma warning disable MAAI001 // BackgroundAgentsProvider is evaluation-only in Microsoft.Agents.AI 1.21.0.
+    /// <summary>
+    /// Gets every background provider this document compiled, over every agent. The call releases
+    /// each one's session when it ends, so children still running cannot outlive it.
+    /// </summary>
+    internal IReadOnlyList<BackgroundAgentsProvider> BackgroundProviders { get; }
+#pragma warning restore MAAI001
 
     /// <summary>
     /// Gets the agent a turn runs, with the turn-disposition layers on it.

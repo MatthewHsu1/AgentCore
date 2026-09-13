@@ -141,7 +141,7 @@ public static class ConfigurationCompiler
 
         AgentCoreChatHistoryProvider history = new(calls);
 
-        var (agents, harnessStateKeys) = BuildAgents(configuration, context, row.SessionCarriesHistory ? history : null);
+        var (agents, harnessStateKeys, backgroundProviders) = BuildAgents(configuration, context, row.SessionCarriesHistory ? history : null);
 
         var (entry, stages) = row.BuildEntry(configuration, agents, context);
 
@@ -157,6 +157,7 @@ public static class ConfigurationCompiler
             spokenBy,
             history,
             harnessStateKeys,
+            backgroundProviders,
             inner => WithTurnDisposition(inner, configuration, context.Moderation, spokenBy));
     }
 
@@ -178,23 +179,23 @@ public static class ConfigurationCompiler
             ? layered
             : new ModerationAgent(layered, moderation, configuration.RefusalReply, ModerationAgent.DefaultTimeout);
     }
-
     /// <summary>Builds one <c>ChatClientAgent</c> for each <c>agents.items</c> entry.</summary>
     /// <param name="configuration">The loaded document.</param>
     /// <param name="context">The seams the document names.</param>
     /// <param name="history">Store 1, or <see langword="null"/> to leave the framework default in place.</param>
-    /// <returns>The agents, keyed by id, and the union of every harness provider's state keys.</returns>
-    private static (Dictionary<string, AIAgent> Agents, IReadOnlySet<string> HarnessStateKeys) BuildAgents(
+    /// <returns>The agents keyed by id, the union of every harness provider's state keys, and every background provider for the call-end release.</returns>
+#pragma warning disable MAAI001 // BackgroundAgentsProvider is evaluation-only in Microsoft.Agents.AI 1.21.0.
+    private static (Dictionary<string, AIAgent> Agents, IReadOnlySet<string> HarnessStateKeys, List<BackgroundAgentsProvider> BackgroundProviders) BuildAgents(
         AgentCoreConfiguration configuration,
         AgentCompilationContext context,
         AgentCoreChatHistoryProvider? history)
     {
         Dictionary<string, AIAgent> agents = new(StringComparer.Ordinal);
         HashSet<string> harnessStateKeys = new(StringComparer.Ordinal);
-
+        List<BackgroundAgentsProvider> backgroundProviders = [];
         if (configuration.Agents is not { } section)
         {
-            return (agents, harnessStateKeys);
+            return (agents, harnessStateKeys, backgroundProviders);
         }
 
         var clarification = ResolvedClarification.From(configuration);
@@ -227,7 +228,7 @@ public static class ConfigurationCompiler
             Resolve(item.Id);
         }
 
-        return (agents, harnessStateKeys);
+        return (agents, harnessStateKeys, backgroundProviders);
 
         AIAgent? Resolve(string id)
         {
@@ -267,7 +268,8 @@ public static class ConfigurationCompiler
                 pointer,
                 clarification,
                 configuration.Providers?.Knowledge?.Scope,
-                Resolve);
+                Resolve,
+                backgroundProviders);
             harnessStateKeys.UnionWith(AgentHarnessProviders.StateKeysOf(providers));
 
             var built = new ChatClientAgent(
@@ -289,10 +291,12 @@ public static class ConfigurationCompiler
                 .UseOpenTelemetry(configure: static agent => agent.EnableSensitiveData = false)
                 .Build();
 
-            agents[id] = instrumented;
-            return instrumented;
+            var looped = AgentHarnessProviders.ApplyLoop(instrumented, section.Defaults, item, pointer);
+            agents[id] = looped;
+            return looped;
         }
     }
+#pragma warning restore MAAI001
 
     /// <summary>Puts the auditing function-invocation loop into the pipeline of one agent.</summary>
     private static AuditingFunctionInvokingChatClient WithToolFailureAuditing(IChatClient model)

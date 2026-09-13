@@ -55,6 +55,7 @@ internal static class AgentHarnessProviders
         + "- To change part of a file, find the line numbers with `file_access_grep`, read the range around them\n"
         + "  with `file_access_read_lines`, then edit with `file_access_replace_lines`. Reading the whole file\n"
         + "  first is rarely necessary.";
+#pragma warning disable MAAI001 // BackgroundAgentsProvider is evaluation-only in Microsoft.Agents.AI 1.21.0.
     /// <summary>Adds this agent's harness providers, in declaration order: todos, mode, memory, files, shell, background.</summary>
     /// <param name="providers">The provider list under construction.</param>
     /// <param name="defaults">The <c>agents.defaults</c> section, or <see langword="null"/>.</param>
@@ -62,13 +63,15 @@ internal static class AgentHarnessProviders
     /// <param name="context">The compile-time seams, including the bound workspace root.</param>
     /// <param name="pointer">This agent's JSON pointer, for a <c>memory:</c>, <c>files:</c>, <c>shell:</c>, or <c>background:</c> failure.</param>
     /// <param name="resolve">Resolves an <c>agents.items</c> id to its compiled agent, or <see langword="null"/> when undeclared.</param>
+    /// <param name="background">Collects the built background providers, so the call can release their sessions when it ends.</param>
     public static void Add(
         List<AIContextProvider> providers,
         AgentDefaults? defaults,
         AgentConfiguration item,
         AgentCompilationContext context,
         string pointer,
-        Func<string, AIAgent?> resolve)
+        Func<string, AIAgent?> resolve,
+        ICollection<BackgroundAgentsProvider>? background = null)
     {
         var harness = AgentHarness.Compose(defaults, item);
 
@@ -99,9 +102,84 @@ internal static class AgentHarnessProviders
 
         if (item.Background.Count > 0)
         {
-            providers.Add(BuildBackgroundProvider(item, pointer, resolve));
+            var provider = BuildBackgroundProvider(item, pointer, resolve);
+            providers.Add(provider);
+            background?.Add(provider);
         }
     }
+#pragma warning restore MAAI001
+#pragma warning disable MAAI001 // The loop family is evaluation-only in Microsoft.Agents.AI 1.21.0.
+
+    /// <summary>
+    /// Wraps one compiled agent in its <c>loop:</c> block: a <see cref="LoopAgent"/> over the
+    /// <c>until:</c> evaluators in document order, capped at <c>maxRounds:</c>. No block, no wrap.
+    /// </summary>
+    /// <param name="agent">The compiled agent.</param>
+    /// <param name="defaults">The <c>agents.defaults</c> section, or <see langword="null"/>.</param>
+    /// <param name="item">The agent being compiled.</param>
+    /// <param name="pointer">This agent's JSON pointer, for a <c>loop:</c> failure.</param>
+    /// <returns>The loop-wrapped agent, or <paramref name="agent"/> unchanged.</returns>
+    public static AIAgent ApplyLoop(AIAgent agent, AgentDefaults? defaults, AgentConfiguration item, string pointer)
+    {
+        ArgumentNullException.ThrowIfNull(agent);
+        ArgumentNullException.ThrowIfNull(item);
+
+        if (item.Loop is not { } loop)
+        {
+            return agent;
+        }
+
+        if (loop.Until is not { Count: > 0 })
+        {
+            throw ConfigurationCompiler.Fail(
+                ConfigurationError.AppendPointer(pointer, "loop"),
+                $"the agent '{item.Id}' declares a loop: block with no until: entries, so the loop would "
+                + "run exactly once and maxRounds: would never apply. Name what ends the loop, or remove "
+                + "the loop: block.");
+        }
+
+        var harness = AgentHarness.Compose(defaults, item);
+        List<LoopEvaluator> evaluators = new(loop.Until.Count);
+
+        for (var index = 0; index < loop.Until.Count; index++)
+        {
+            var untilPointer = ConfigurationError.AppendPointer(
+                ConfigurationError.AppendPointer(ConfigurationError.AppendPointer(pointer, "loop"), "until"), index);
+            var until = loop.Until[index];
+
+            if (until.Todos is not null)
+            {
+                if (!harness.Todos)
+                {
+                    throw ConfigurationCompiler.Fail(
+                        untilPointer,
+                        $"the agent '{item.Id}' declares loop: until: todos: and no todos: switch, so the "
+                        + "evaluator would fault every turn resolving its provider. Set todos: true, or "
+                        + "remove the entry.");
+                }
+
+                evaluators.Add(new TodoCompletionLoopEvaluator(new TodoCompletionLoopEvaluatorOptions()));
+            }
+
+            if (until.Background is not null)
+            {
+                if (item.Background.Count == 0)
+                {
+                    throw ConfigurationCompiler.Fail(
+                        untilPointer,
+                        $"the agent '{item.Id}' declares loop: until: background: and no background: children, "
+                        + "so the evaluator would fault every turn resolving its provider. Name the children, "
+                        + "or remove the entry.");
+                }
+
+                evaluators.Add(new BackgroundTaskCompletionLoopEvaluator(new BackgroundTaskCompletionLoopEvaluatorOptions()));
+            }
+        }
+
+        // Every iteration's text reaches the stream; there are no per-iteration entries (decision 14).
+        return new LoopAgent(agent, evaluators, new LoopAgentOptions { MaxIterations = loop.MaxRounds });
+    }
+#pragma warning restore MAAI001
 
     /// <summary>
     /// The state keys of the harness providers among <paramref name="providers"/> — never the

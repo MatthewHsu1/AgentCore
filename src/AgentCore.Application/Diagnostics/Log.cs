@@ -269,4 +269,14 @@ internal static partial class Log
         Level = LogLevel.Warning,
         Message = "Could not dispose a shell: executor of the call at workspace '{Workspace}'.")]
     public static partial void ShellDisposeFailed(ILogger logger, string workspace, Exception exception);
+
+    /// <summary>A call's background agent sessions could not be released when the call ended.</summary>
+    /// <param name="logger">The logger of the session.</param>
+    /// <param name="callId">The id of the call whose children were being released.</param>
+    /// <param name="exception">The cause.</param>
+    [LoggerMessage(
+        EventId = 22,
+        Level = LogLevel.Warning,
+        Message = "Could not release the background agent sessions of the call '{CallId}'.")]
+    public static partial void BackgroundReleaseFailed(ILogger logger, string callId, Exception exception);
 }
