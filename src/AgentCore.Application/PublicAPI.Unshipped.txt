@@ -115,6 +115,8 @@ AgentCore.Application.Calls.CallSessionState.Stage.get -> string!
 AgentCore.Application.Calls.CallSessionState.Stage.init -> void
 AgentCore.Application.Calls.CallSessionState.Version.get -> int
 AgentCore.Application.Calls.CallSessionState.Version.init -> void
+AgentCore.Application.Calls.CallSessionState.WorkflowState.get -> System.Text.Json.JsonElement?
+AgentCore.Application.Calls.CallSessionState.WorkflowState.init -> void
 AgentCore.Application.Calls.CallStateJson
 AgentCore.Application.Calls.CallStatus
 AgentCore.Application.Calls.CallStatus.Archived = 1 -> AgentCore.Application.Calls.CallStatus

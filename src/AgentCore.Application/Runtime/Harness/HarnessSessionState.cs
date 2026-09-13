@@ -24,7 +24,8 @@ internal static class HarnessSessionState
     /// <returns>
     /// The kept keys, each value cloned off the bag's own serialization. Empty for a
     /// <see langword="null"/> session or an empty <paramref name="keys"/> — the bag is never
-    /// serialized in that case, because it also holds the transcript.
+    /// serialized in that case. The transcript lives outside the bag, so what is serialized
+    /// here is provider and approval state only.
     /// </returns>
     public static IReadOnlyDictionary<string, JsonElement> Capture(AgentSession? session, IReadOnlySet<string> keys)
     {

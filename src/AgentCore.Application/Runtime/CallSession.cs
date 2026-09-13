@@ -89,6 +89,19 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
 
     private AgentSession? _agentSession;
 
+    /// <summary>
+    /// The call's shared workflow session on a graph row whose document declares a harness
+    /// switch. MAF restores the participants' provider state from its checkpoints on every
+    /// turn; any other call runs every turn fresh and leaves this <see langword="null"/>.
+    /// </summary>
+    private AgentSession? _graphSession;
+
+    /// <summary>
+    /// The last serialization of <see cref="_graphSession"/>, read back at resume. Refreshed
+    /// at every turn end; a host snapshotting mid-turn gets the last turn boundary.
+    /// </summary>
+    private JsonElement? _graphBlob;
+
     private CancellationTokenSource? _runCancellation;
 
     private Interruption? _interruption;
@@ -734,6 +747,16 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
         else
         {
             session = new CallHistorySession();
+
+            // Rows 1 and 2 restore provider state onto their long-lived session above. A graph
+            // row instead keeps one workflow session for the whole call: MAF restores each
+            // participant's provider state from its checkpoints whenever a turn runs on it.
+            if (ReusesGraphSession)
+            {
+                _graphSession = stored is { Version: CallSessionState.CurrentVersion, WorkflowState: { } blob }
+                    ? await _compiled.TurnAgent.DeserializeSessionAsync(blob, cancellationToken: cancellationToken).ConfigureAwait(false)
+                    : await _compiled.TurnAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
+            }
         }
 
         IReadOnlyList<CallMessage> spoken = record.LastMessageAt is null
@@ -769,7 +792,8 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
     /// <summary>
     /// Reads the state this call would resume from, as it stands right now. The provider state is
     /// read off the live bag with no turn lock around it, so a host serializing mid-turn gets the
-    /// bag as it stands at that instant, not a turn-boundary snapshot.
+    /// bag as it stands at that instant, not a turn-boundary snapshot. A graph row that reuses
+    /// its session instead attaches that session's last turn-end serialization.
     /// </summary>
     internal CallSessionState Snapshot()
     {
@@ -799,6 +823,10 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
             Clarifications = _clarifications.Spent(),
 
             Providers = HarnessSessionState.Capture(_agentSession, _compiled.HarnessStateKeys),
+
+            // Turn-boundary workflow checkpoints on a graph row that reuses its session; every
+            // other call leaves this empty and keeps provider state in Providers above.
+            WorkflowState = _graphBlob,
         };
     }
 
@@ -913,15 +941,32 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
     }
 
     /// <summary>
+    /// Whether this call keeps one workflow session across turns: a graph row whose document
+    /// declares a harness switch. Everything else either carries history on a long-lived
+    /// session already (rows 1 and 2) or keeps no provider state at all.
+    /// </summary>
+    private bool ReusesGraphSession => !_sessionCarriesHistory && _compiled.HarnessStateKeys.Count > 0;
+
+    /// <summary>
     /// Reads the session one run is handed.
     /// </summary>
     /// <param name="turn">The turn about to run.</param>
     /// <param name="cancellationToken">Cancels the open.</param>
-    /// <returns>The call's session on rows 1 and 2, and a fresh workflow session on a graph row.</returns>
+    /// <returns>The call's session on rows 1 and 2, the call's shared workflow session on a graph row that reuses one, and a fresh workflow session on any other graph row.</returns>
     private async ValueTask<AgentSession> RunSessionAsync(Turn turn, CancellationToken cancellationToken)
-        => _sessionCarriesHistory
-            ? turn.Session
-            : await turn.Agent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
+    {
+        if (_sessionCarriesHistory)
+        {
+            return turn.Session;
+        }
+
+        if (ReusesGraphSession)
+        {
+            return _graphSession ??= await turn.Agent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return await turn.Agent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Opens the ambients this turn runs under.
@@ -1034,19 +1079,19 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
             _history.BeginTurn(session, State.TurnIndex);
 
             // Rows 1 and 2 read the call out of the session, so the run carries the new message alone
-            // and the provider prepends the rest. A workflow takes no provider, so its history rides
-            // the request, rendered into the one role a node still recognises. Neither shape puts the
-            // caller's message in store 1 yet: the turn writes what it said and what it heard together,
-            // when it commits, so the run that is about to read the history does not find its own
-            // prompt already in it.
-            List<ChatMessage> request = _sessionCarriesHistory
+            // and the provider prepends the rest. A graph row that reuses its session reads the same
+            // way: the resumed conversation already carries what came before. Any other graph row
+            // takes no provider, so its history rides the request, rendered into the one role a node
+            // still recognises. Neither shape puts the caller's message in store 1 yet: the turn
+            // writes what it said and what it heard together, when it commits, so the run that is
+            // about to read the history does not find its own prompt already in it.
+            List<ChatMessage> request = _sessionCarriesHistory || ReusesGraphSession
                 ? [spoken]
                 : TurnMessages.GraphHistory(_history.Read(session)) is { } rendered ? [rendered, spoken] : [spoken];
 
             // One turn is one span. The call id rides here, on a span attribute, because T61 refuses it
             // on a metric. The span is disposed in the finally of whichever run method opened the turn.
             activity = AgentCoreTelemetry.StartTurn(CallId, State.TurnIndex, State.Stage);
-
             var knowledge = StateKnowledgeScope.Compose(
                 State, _compiled.Configuration.Providers?.Knowledge?.Scope, KnowledgeScopeScope.Current);
 
@@ -1395,6 +1440,14 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
         {
             Approvals = approvals,
         };
+
+        // A graph row that reuses its session persists it here, before the commit below reads
+        // it into store 0: the next turn resumes from these checkpoints, and a resumed call
+        // rebuilds them. Rows 1 and 2 need nothing — their session outlives the call.
+        if (ReusesGraphSession && _graphSession is { } shared)
+        {
+            _graphBlob = await turn.Agent.SerializeSessionAsync(shared, cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
 
         // One lock, one moment. A late barge-in reads all four of these together, so a window in
         // which LastTurn already names this turn while the span or the ordinal still names the one

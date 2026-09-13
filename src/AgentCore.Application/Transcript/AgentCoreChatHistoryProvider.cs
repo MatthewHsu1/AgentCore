@@ -16,13 +16,11 @@ namespace AgentCore.Application.Transcript;
 internal delegate void TranscriptWriteDropped(int turnIndex, Exception exception);
 
 /// <summary>
-/// Store 1: the words of a call, held by the session and written through to a backing store.
+/// Store 1: the words of a call, held for the session by the provider and written through to a backing store.
 /// </summary>
 internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
 {
     private readonly ConditionalWeakTable<AgentSession, CallGate> _gates = [];
-
-    private readonly ProviderSessionState<CallTranscript> _state;
 
     private readonly ICallStore _store;
 
@@ -35,7 +33,6 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
 
         _logger = logger ?? NullLogger.Instance;
 
-        _state = new(static _ => new CallTranscript(), StateKeys[0], TranscriptJson.Options);
     }
 
     /// <summary>
@@ -353,10 +350,7 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
 
         lock (gate.Sync)
         {
-            var transcript = _state.GetOrInitializeState(session);
-            var result = work(transcript, gate);
-            _state.SaveState(session, transcript);
-            return result;
+            return work(gate.Transcript, gate);
         }
     }
 
@@ -365,11 +359,14 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
 
     private CallGate GateFor(AgentSession session) => _gates.GetValue(session, static _ => new CallGate());
 
-    /// <summary>What one call holds outside its state bag: its lock, and its queue of store writes.</summary>
+    /// <summary>What one call holds outside its state bag: its lock, its transcript, and its queue of store writes.</summary>
     private sealed class CallGate
     {
         /// <summary>Gets the lock every read and every change of this call's transcript takes.</summary>
         public Lock Sync { get; } = new();
+
+        /// <summary>Gets the call's live transcript. It never enters the state bag, so serializing the bag stays small.</summary>
+        public CallTranscript Transcript { get; } = new();
 
         /// <summary>Gets or sets the tail of this call's store writes. It never faults.</summary>
         public Task Writes { get; set; } = Task.CompletedTask;

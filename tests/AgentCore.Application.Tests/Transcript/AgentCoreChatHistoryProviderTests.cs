@@ -162,11 +162,12 @@ public sealed class AgentCoreChatHistoryProviderTests
 
     /// <summary>
     /// The framework validates this set at agent construction and again on every run, and refuses a
-    /// collision. The value is also the name a persisted session's state is filed under, so a change
-    /// here is a silent data loss rather than a rename.
+    /// collision. The value is MAF's default — the provider's own type name — and nothing files
+    /// under it anymore, but a change still renames what the collision checks compare, so it stays
+    /// pinned rather than inlined.
     /// </summary>
     [Fact]
-    public void StateKeys_IsTheSingleKeyTheTranscriptIsFiledUnder()
+    public void StateKeys_IsTheSingleProviderTypeNameKey()
     {
         // Arrange
         var provider = new AgentCoreChatHistoryProvider();
@@ -176,7 +177,7 @@ public sealed class AgentCoreChatHistoryProviderTests
     }
 
     [Fact]
-    public async Task AppendTurn_PutsTheTranscriptInTheSessionStateBagUnderTheProviderKey()
+    public async Task AppendTurn_LeavesTheSessionStateBagEmpty()
     {
         // Arrange
         var (provider, _, session) = await NewCall();
@@ -185,18 +186,16 @@ public sealed class AgentCoreChatHistoryProviderTests
         AppendTurn(provider, session, turnIndex: 0, "order 41?", "it ships Friday");
 
         // Assert
-        Assert.True(session.StateBag.TryGetValue<CallTranscript>(StateKey, out var transcript, StateOptions));
-        Assert.NotNull(transcript);
-        Assert.Equal(CallId, transcript.CallId);
-        Assert.Equal(["order 41?", "it ships Friday"], transcript.Read().Select(message => message.Text));
+        Assert.Equal(0, session.StateBag.Count);
+        Assert.Equal(["order 41?", "it ships Friday"], provider.Read(session).Select(message => message.Text));
     }
 
     /// <summary>
-    /// The provider is one object shared by every call, so the same key on two sessions must reach
-    /// two transcripts. A key resolved against the provider rather than the session would merge them.
+    /// The provider is one object shared by every call, so two sessions must still reach two
+    /// transcripts. State held against the provider rather than the session would merge them.
     /// </summary>
     [Fact]
-    public void AppendTurn_TwoSessions_EachHoldsItsOwnTranscriptUnderThatKey()
+    public void AppendTurn_TwoSessions_EachHoldsItsOwnTranscript()
     {
         // Arrange
         var provider = new AgentCoreChatHistoryProvider(new RecordingCallStore());
@@ -210,8 +209,8 @@ public sealed class AgentCoreChatHistoryProviderTests
         AppendTurn(provider, second, turnIndex: 0, "b said", "b heard");
 
         // Assert
-        Assert.Equal(["a said", "a heard"], TranscriptIn(first).Read().Select(message => message.Text));
-        Assert.Equal(["b said", "b heard"], TranscriptIn(second).Read().Select(message => message.Text));
+        Assert.Equal(["a said", "a heard"], provider.Read(first).Select(message => message.Text));
+        Assert.Equal(["b said", "b heard"], provider.Read(second).Select(message => message.Text));
     }
 
     [Fact]

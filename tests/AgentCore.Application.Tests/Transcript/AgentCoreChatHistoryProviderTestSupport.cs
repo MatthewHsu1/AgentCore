@@ -17,13 +17,11 @@ internal static class AgentCoreChatHistoryProviderTestSupport
     internal const string CallId = "call-1";
 
     /// <summary>
-    /// The key the call's transcript is filed under in <see cref="AgentSession.StateBag"/>. Changing
-    /// it orphans the state of any session already persisted under the old one.
+    /// The provider's MAF-default state key: its own type name. The transcript no longer files
+    /// under it — or anywhere in the bag — and a change still renames what the collision checks
+    /// compare, so it stays pinned here rather than inlined.
     /// </summary>
     internal const string StateKey = "AgentCoreChatHistoryProvider";
-
-    /// <summary>The converters the provider files the transcript with.</summary>
-    internal static JsonSerializerOptions StateOptions => AIJsonUtilities.DefaultOptions;
 
     /// <summary>
     /// Opens one call on a fresh session, the way <c>CallSession</c> does at call start: the row is
@@ -54,13 +52,6 @@ internal static class AgentCoreChatHistoryProviderTestSupport
             [new ChatMessage(ChatRole.User, said), new ChatMessage(ChatRole.Assistant, replied)]);
     }
 
-    /// <summary>Reads one session's transcript straight out of its state bag, past the provider.</summary>
-    internal static CallTranscript TranscriptIn(AgentSession session)
-    {
-        Assert.True(session.StateBag.TryGetValue<CallTranscript>(StateKey, out var transcript, StateOptions));
-        Assert.NotNull(transcript);
-        return transcript;
-    }
 
     internal static async Task<IReadOnlyList<ChatMessage>> ProvideAsync(
         AgentCoreChatHistoryProvider provider, AgentSession session)

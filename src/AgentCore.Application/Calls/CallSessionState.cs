@@ -49,4 +49,12 @@ public sealed record CallSessionState
     /// no harness switch holds none. Absent in an old blob, which restores its stage and slots as before.
     /// </summary>
     public IReadOnlyDictionary<string, JsonElement> Providers { get; init; } = NoProviders;
+
+    /// <summary>
+    /// Gets the opaque workflow session of a graph row's call, carrying the harness providers'
+    /// checkpointed state across turns. Only a graph row whose document declares a harness switch
+    /// writes one; rows 1 and 2 keep provider state in <see cref="Providers"/>, and any other call
+    /// keeps neither. Absent in an old blob, which resumes with a fresh session.
+    /// </summary>
+    public JsonElement? WorkflowState { get; init; }
 }
