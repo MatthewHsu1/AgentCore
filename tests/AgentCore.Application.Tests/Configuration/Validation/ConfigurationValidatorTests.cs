@@ -54,7 +54,7 @@ public sealed class ConfigurationValidatorTests
     [Fact]
     public void TheShippedExampleFile_PassesEveryCheck()
     {
-        var path = Path.Combine(RepositoryRoot(), "demo", "AgentCore.Demo", "config", "example.yaml");
+        var path = Path.Combine(RepositoryRoot(), "config", "example.yaml");
         Assert.True(File.Exists(path), $"The shipped example is missing at '{path}'.");
 
         var result = ConfigurationValidator.Evaluate(ConfigurationLoader.LoadFile(path));
