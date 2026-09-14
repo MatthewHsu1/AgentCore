@@ -100,4 +100,19 @@ public abstract class DelegatingCallStore(ICallStore inner) : ICallStore
     public virtual ValueTask DetachPrincipalAsync(
         string callId, string principalKey, CancellationToken cancellationToken = default)
         => Inner.DetachPrincipalAsync(callId, principalKey, cancellationToken);
+
+    /// <inheritdoc />
+    public virtual ValueTask SaveContinuationAsync(
+        string continuationId, JsonElement envelope, CancellationToken cancellationToken = default)
+        => Inner.SaveContinuationAsync(continuationId, envelope, cancellationToken);
+
+    /// <inheritdoc />
+    public virtual ValueTask<JsonElement?> GetContinuationAsync(
+        string continuationId, CancellationToken cancellationToken = default)
+        => Inner.GetContinuationAsync(continuationId, cancellationToken);
+
+    /// <inheritdoc />
+    public virtual ValueTask DeleteContinuationAsync(
+        string continuationId, CancellationToken cancellationToken = default)
+        => Inner.DeleteContinuationAsync(continuationId, cancellationToken);
 }

@@ -360,6 +360,18 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
     public ChatMessage? TryCreateApprovalAnswer(string requestId, bool approved)
         => Ledger.TryCreateApprovalAnswer(requestId, approved);
 
+    /// <summary>Builds the answer message for one queued approval request of a resumed call.</summary>
+    /// <param name="requestId">The id of the pending request this answers.</param>
+    /// <param name="approved">Whether the tool may run.</param>
+    /// <param name="cancellationToken">Cancels the resume.</param>
+    /// <returns>The user message carrying the approval response, or <see langword="null"/> when no queued request carries that id.</returns>
+    public async ValueTask<ChatMessage?> TryCreateApprovalAnswerAsync(
+        string requestId, bool approved, CancellationToken cancellationToken = default)
+    {
+        await Ledger.OpenSessionAsync(cancellationToken).ConfigureAwait(false);
+        return Ledger.TryCreateApprovalAnswer(requestId, approved);
+    }
+
     /// <summary>
     /// Runs one streaming turn that knows where it sits in the conversation the caller can see.
     /// </summary>

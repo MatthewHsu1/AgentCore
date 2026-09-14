@@ -1,4 +1,3 @@
-using AgentCore.Domain.Audit;
 using AgentCore.Infrastructure.Database.Postgres;
 
 namespace AgentCore.Infrastructure.Calls.Postgres;
@@ -9,6 +8,7 @@ internal static class PostgresCallStoreSql
     private const string Schema = PostgresSchema.SchemaName;
 
     internal const string Regular = "regular";
+
     internal const string Archived = "archived";
 
     /// <summary>The value a listing sorts and pages by.</summary>
@@ -119,6 +119,21 @@ internal static class PostgresCallStoreSql
         """;
 
     internal const string EraseSql = $"DELETE FROM {Schema}.call_message WHERE call_id = $1";
+
+    /// <summary>Files one session envelope under one continuation id, replacing any envelope already there.</summary>
+    internal const string SaveContinuationSql =
+        $"""
+        INSERT INTO {Schema}.response_continuation (store_id, envelope) VALUES ($1, $2)
+        ON CONFLICT (store_id) DO UPDATE SET envelope = EXCLUDED.envelope
+        """;
+
+    /// <summary>Reads the envelope one continuation id names.</summary>
+    internal const string GetContinuationSql =
+        $"SELECT envelope FROM {Schema}.response_continuation WHERE store_id = $1";
+
+    /// <summary>Withdraws whatever one continuation id names, if anything.</summary>
+    internal const string DeleteContinuationSql =
+        $"DELETE FROM {Schema}.response_continuation WHERE store_id = $1";
 
     /// <summary>
     /// Reads what store 1 holds for each spoken turn of one call, beside what store 3 proves.

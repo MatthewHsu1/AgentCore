@@ -365,7 +365,7 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    /// <exception cref="ArgumentNullException">The call id is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException">The continuation id is <see langword="null"/>.</exception>
     public async ValueTask<int> EraseAsync(string callId, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(callId);
@@ -375,6 +375,49 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
 
         return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    /// <inheritdoc />
+    public async ValueTask SaveContinuationAsync(string continuationId, JsonElement envelope, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(continuationId);
+
+        await using var command = _dataSource.CreateCommand(SaveContinuationSql);
+        command.Parameters.Add(new NpgsqlParameter { Value = continuationId });
+        command.Parameters.Add(new NpgsqlParameter
+        {
+            NpgsqlDbType = NpgsqlDbType.Jsonb,
+            Value = envelope.GetRawText(),
+        });
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async ValueTask<JsonElement?> GetContinuationAsync(string continuationId, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(continuationId);
+
+        await using var command = _dataSource.CreateCommand(GetContinuationSql);
+        command.Parameters.Add(new NpgsqlParameter { Value = continuationId });
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        return JsonDocument.Parse(reader.GetString(0)).RootElement.Clone();
+    }
+
+    /// <inheritdoc />
+    public async ValueTask DeleteContinuationAsync(string continuationId, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(continuationId);
+
+        await using var command = _dataSource.CreateCommand(DeleteContinuationSql);
+        command.Parameters.Add(new NpgsqlParameter { Value = continuationId });
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
 
     /// <summary>Reads one call's spoken turns beside the hashes the audit chain holds for them.</summary>
     /// <param name="callId">The call to check.</param>

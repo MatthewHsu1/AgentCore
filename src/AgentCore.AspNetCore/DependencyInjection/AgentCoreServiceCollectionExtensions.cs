@@ -5,6 +5,7 @@ using AgentCore.Application.Evaluation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions.Memory;
 using AgentCore.AspNetCore.Sessions;
+using Microsoft.Agents.AI.Hosting;
 using Microsoft.AspNetCore.WebSockets;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -50,13 +51,15 @@ public static class AgentCoreServiceCollectionExtensions
         services.AddSingleton(Boot(boot => boot.Agent));
         services.AddSingleton(Boot(boot => boot.AuditQueue));
 
-        // Through the concrete registration, so one factory builds the queue and both service types
-        // answer with the same instance.
+        services.TryAddSingleton(provider =>
+            new AgentCoreAgentSessionStore(provider.GetRequiredService<ICallStore>()));
+
+        services.TryAddSingleton<AgentSessionStore>(provider =>
+            provider.GetRequiredService<AgentCoreAgentSessionStore>());
+
         services.AddSingleton<IAuditSinkPort>(provider => provider.GetRequiredService<QueuedAuditSink>());
 
-        // Each of these is null when the host registered no vendor for it, and a factory that
-        // returns null makes GetService answer null — which is what a caller of an optional seam
-        // reads them with.
+
         services.AddSingleton(Boot(boot => boot.Telemetry!));
         services.AddSingleton(Boot(boot => boot.Knowledge!));
         services.AddSingleton(Boot(boot => boot.CallAdapters!));

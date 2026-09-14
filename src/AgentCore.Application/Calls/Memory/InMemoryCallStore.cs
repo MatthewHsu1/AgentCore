@@ -22,6 +22,9 @@ public sealed class InMemoryCallStore : ICallStore
 
     private readonly HashSet<(string CallId, string PrincipalKey)> _claims = [];
 
+    /// <summary>One serialized agent session per continuation id, beside the calls.</summary>
+    private readonly Dictionary<string, JsonElement> _continuations = [];
+
     private readonly TimeProvider _time;
 
     /// <summary>Creates the store.</summary>
@@ -345,6 +348,44 @@ public sealed class InMemoryCallStore : ICallStore
         {
             return ValueTask.FromResult(RemoveWords(callId));
         }
+    }
+
+    /// <inheritdoc />
+    public ValueTask SaveContinuationAsync(string continuationId, JsonElement envelope, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(continuationId);
+
+        lock (_lock)
+        {
+            _continuations[continuationId] = envelope.Clone();
+        }
+
+        return default;
+    }
+
+    /// <inheritdoc />
+    public ValueTask<JsonElement?> GetContinuationAsync(string continuationId, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(continuationId);
+
+        lock (_lock)
+        {
+            return ValueTask.FromResult<JsonElement?>(
+                _continuations.TryGetValue(continuationId, out var envelope) ? envelope : null);
+        }
+    }
+
+    /// <inheritdoc />
+    public ValueTask DeleteContinuationAsync(string continuationId, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(continuationId);
+
+        lock (_lock)
+        {
+            _continuations.Remove(continuationId);
+        }
+
+        return default;
     }
 
     private static DateTimeOffset SortValue(CallRecord call) => call.LastMessageAt ?? call.CreatedAt;

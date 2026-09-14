@@ -101,7 +101,9 @@ public interface ICallStore
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>The row as written: its ordinal, its turn index, and its id.</returns>
     async ValueTask<CallMessage> AppendMessageAsync(
-        string callId, ChatMessage message, CancellationToken cancellationToken = default)
+        string callId,
+        ChatMessage message,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(message);
 
@@ -121,14 +123,18 @@ public interface ICallStore
     /// <param name="content">What the caller actually heard.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     ValueTask RewriteAsync(
-        string callId, string messageId, ChatMessage content, CancellationToken cancellationToken = default);
+        string callId,
+        string messageId,
+        ChatMessage content,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Reads one whole call's words, oldest message first.</summary>
     /// <param name="callId">The call to read.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>Every message of the call, or an empty list when it holds none.</returns>
     ValueTask<IReadOnlyList<CallMessage>> ReadAsync(
-        string callId, CancellationToken cancellationToken = default);
+        string callId,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Withdraws the tail of a call's words, from one ordinal onward.</summary>
     /// <param name="callId">The call to cut.</param>
@@ -136,7 +142,9 @@ public interface ICallStore
     /// <param name="cancellationToken">Cancels the delete.</param>
     /// <returns>How many messages went.</returns>
     ValueTask<int> TruncateAsync(
-        string callId, int fromOrdinal, CancellationToken cancellationToken = default);
+        string callId,
+        int fromOrdinal,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Erases one call's words, and leaves its row in the listing.</summary>
     /// <param name="callId">The call to quieten.</param>
@@ -157,7 +165,9 @@ public interface ICallStore
     /// <param name="cancellationToken">Cancels the sweep between batches, and inside one.</param>
     /// <returns>How many calls went, over every batch.</returns>
     ValueTask<int> SweepAsync(
-        TimeSpan retention, int batchSize = 500, CancellationToken cancellationToken = default);
+        TimeSpan retention,
+        int batchSize = 500,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Gives a principal a claim on a call.</summary>
     /// <param name="callId">The call to claim.</param>
@@ -165,12 +175,45 @@ public interface ICallStore
     /// <param name="role">What the key is to this call. AgentCore assigns its values no meaning.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     ValueTask AttachPrincipalAsync(
-        string callId, string principalKey, string role, CancellationToken cancellationToken = default);
+        string callId,
+        string principalKey,
+        string role,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Takes a principal's claim off a call.</summary>
     /// <param name="callId">The call to unclaim.</param>
     /// <param name="principalKey">The key to remove.</param>
     /// <param name="cancellationToken">Cancels the delete.</param>
     ValueTask DetachPrincipalAsync(
-        string callId, string principalKey, CancellationToken cancellationToken = default);
+        string callId,
+        string principalKey,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Files one session envelope under one continuation id, replacing any envelope already there.</summary>
+    /// <param name="continuationId">The continuation id: a conversation id or a response id.</param>
+    /// <param name="envelope">The serialized session, as the agent wrote it.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <remarks>
+    /// The continuation names a call whose words live in store 1, so the map lives in this store:
+    /// a resume must never find the key without the words.
+    /// </remarks>
+    ValueTask SaveContinuationAsync(
+        string continuationId,
+        JsonElement envelope,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Reads the envelope one continuation id names.</summary>
+    /// <param name="continuationId">The continuation id to look up.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The envelope, or <see langword="null"/> when nothing is filed under that id.</returns>
+    ValueTask<JsonElement?> GetContinuationAsync(
+        string continuationId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Withdraws whatever one continuation id names, if anything.</summary>
+    /// <param name="continuationId">The continuation id to forget.</param>
+    /// <param name="cancellationToken">Cancels the delete.</param>
+    ValueTask DeleteContinuationAsync(
+        string continuationId,
+        CancellationToken cancellationToken = default);
 }

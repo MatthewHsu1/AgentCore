@@ -4,9 +4,7 @@ using System.Text.Json.Nodes;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tools;
-using AgentCore.Application.Transcript;
 using AgentCore.Domain;
-using AgentCore.Domain.Sources;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -321,58 +319,46 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
 
         await foreach (var update in session.RunTurnMessageStreamingAtOriginAsync(input, origin, cancellationToken).ConfigureAwait(false))
         {
-            foreach (var drawn in update.Contents.OfType<RenderContent>())
+            foreach (var part in TurnStreamParts.From(update, toolNames))
             {
-                await WriteEventAsync(
-                    http,
-                    Chunk(id, created, model, new ChatCompletionMessage(), finishReason: null, turn: null)
-                        with
-                    { AgentCoreData = new RenderedPayload { Name = drawn.Name, Data = drawn.Data } },
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            foreach (var cited in update.Contents.OfType<SourceContent>())
-            {
-                await WriteEventAsync(
-                    http,
-                    Chunk(id, created, model, new ChatCompletionMessage(), finishReason: null, turn: null)
-                        with
-                    { AgentCoreSource = SourcePayloadOf(cited) },
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            foreach (var tool in ToolPayloadsOf(update, toolNames))
-            {
-                await WriteEventAsync(
-                    http,
-                    Chunk(id, created, model, new ChatCompletionMessage(), finishReason: null, turn: null)
-                        with
-                    { AgentCoreTool = tool },
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            foreach (var asked in update.Contents.OfType<ToolApprovalRequestContent>())
-            {
-                // A request arrives with no text, so without this the update falls into the
-                // empty-text skip below and the caller never learns a tool waits on them.
-                if (asked.ToolCall is not FunctionCallContent call)
+                switch (part)
                 {
-                    continue;
-                }
+                    case TurnStreamRender render:
+                        await WriteEventAsync(
+                            http,
+                            Chunk(id, created, model, new ChatCompletionMessage(), finishReason: null, turn: null)
+                                with
+                            { AgentCoreData = render.Payload },
+                            cancellationToken).ConfigureAwait(false);
+                        break;
 
-                await WriteEventAsync(
-                    http,
-                    Chunk(id, created, model, new ChatCompletionMessage(), finishReason: null, turn: null)
-                        with
-                    {
-                        AgentCoreApproval = new ApprovalPayload
-                        {
-                            RequestId = asked.RequestId,
-                            Tool = call.Name,
-                            Arguments = ArgumentsOf(call),
-                        },
-                    },
-                    cancellationToken).ConfigureAwait(false);
+                    case TurnStreamSource source:
+                        await WriteEventAsync(
+                            http,
+                            Chunk(id, created, model, new ChatCompletionMessage(), finishReason: null, turn: null)
+                                with
+                            { AgentCoreSource = source.Payload },
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+
+                    case TurnStreamTool tool:
+                        await WriteEventAsync(
+                            http,
+                            Chunk(id, created, model, new ChatCompletionMessage(), finishReason: null, turn: null)
+                                with
+                            { AgentCoreTool = tool.Payload },
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+
+                    case TurnStreamApproval approval:
+                        await WriteEventAsync(
+                            http,
+                            Chunk(id, created, model, new ChatCompletionMessage(), finishReason: null, turn: null)
+                                with
+                            { AgentCoreApproval = approval.Payload },
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                }
             }
 
             if (update.Text is not { Length: > 0 } text)
@@ -398,78 +384,6 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
         await http.Response.Body.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Reads the tool facts one update carries, in the order they appear on it.</summary>
-    /// <param name="update">One update of the stream.</param>
-    /// <param name="toolNames">The pairing of call id to tool name for this turn, written and read here.</param>
-    /// <returns>One payload for each half of a tool call the update carries, possibly none.</returns>
-    private static IEnumerable<ToolPayload> ToolPayloadsOf(
-        ChatResponseUpdate update,
-        ToolCallNames toolNames)
-    {
-        foreach (var content in update.Contents)
-        {
-            switch (content)
-            {
-                case FunctionCallContent call:
-                    toolNames.Called(call);
-                    yield return new ToolPayload
-                    {
-                        CallId = call.CallId,
-                        Name = call.Name,
-                        Phase = "call",
-                        Arguments = ArgumentsOf(call),
-                    };
-                    break;
-
-                case FunctionResultContent result:
-                    // The answer has no declared shape, so it goes through the one reader that knows
-                    // every shape it arrives in. Reading it twice would let the two disagree.
-                    var answer = ToolResultJson.ToNode(result.Result);
-                    yield return new ToolPayload
-                    {
-                        CallId = result.CallId,
-                        // A result that arrives with no call before it should not be possible, and
-                        // naming it after its id beats naming it nothing if it ever is.
-                        Name = toolNames.Of(result) ?? result.CallId,
-                        Phase = "result",
-                        Result = ResultOf(result, answer),
-                        Failed = result.Exception is not null || ToolErrorResult.IsError(answer),
-                    };
-                    break;
-
-                default:
-                    break;
-            }
-        }
-    }
-
-    /// <summary>Reads one cited source into what the browser receives.</summary>
-    /// <param name="cited">The source the message carried.</param>
-    /// <returns>The payload.</returns>
-    private static SourcePayload SourcePayloadOf(SourceContent cited)
-        => new()
-        {
-            CallId = cited.CallId,
-            Id = cited.Source.SourceId,
-            SourceType = cited.Source.Kind == SourceKind.Url ? "url" : "document",
-            Title = cited.Source.Title,
-            Locator = cited.Source.Locator,
-            Url = cited.Source.Url,
-            MediaType = cited.Source.MediaType,
-            Origin = cited.Source.Origin,
-        };
-
-    /// <summary>Reads what the model passed to one tool, or <see langword="null"/> when it passed nothing.</summary>
-    private static JsonObject? ArgumentsOf(FunctionCallContent call)
-        => call.Arguments is { Count: > 0 } arguments ? ToolArgumentJson.ToJsonObject(arguments) : null;
-
-    /// <summary>Reads what one tool answered, as the browser receives it.</summary>
-    /// <param name="result">The result half of the call.</param>
-    /// <param name="answer">The same result read as JSON, or <see langword="null"/> when it answered nothing.</param>
-    private static JsonNode? ResultOf(FunctionResultContent result, JsonNode? answer)
-        => result.Exception is { } failure
-            ? JsonValue.Create(failure.GetType().Name + ": " + failure.Message)
-            : answer;
 
     /// <summary>Builds one chunk of a stream.</summary>
     /// <param name="id">The id every chunk of one reply shares.</param>

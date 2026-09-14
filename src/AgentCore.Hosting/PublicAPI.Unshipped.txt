@@ -7,4 +7,4 @@ const AgentCore.Hosting.AgentCoreHostBuilderExtensions.DefaultConfigurationPath 
 const AgentCore.Hosting.AgentCoreHostBuilderExtensions.McpHttpClientName = "agentcore.mcp" -> string!
 const AgentCore.Hosting.AgentCoreHostEndpointExtensions.HealthPattern = "/health" -> string!
 static AgentCore.Hosting.AgentCoreHostBuilderExtensions.AddAgentCoreHost(this Microsoft.AspNetCore.Builder.WebApplicationBuilder! builder, System.Action<AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!>? configure = null) -> Microsoft.AspNetCore.Builder.WebApplicationBuilder!
-static AgentCore.Hosting.AgentCoreHostEndpointExtensions.MapAgentCoreHost(this Microsoft.AspNetCore.Builder.WebApplication! app, string? chatCompletionsPattern = null) -> Microsoft.AspNetCore.Builder.WebApplication!
+static AgentCore.Hosting.AgentCoreHostEndpointExtensions.MapAgentCoreHost(this Microsoft.AspNetCore.Builder.WebApplication! app, string? chatCompletionsPattern = null, string? responsesPattern = null) -> Microsoft.AspNetCore.Builder.WebApplication!

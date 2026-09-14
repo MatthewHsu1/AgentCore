@@ -2,7 +2,8 @@
 --
 -- Order inside the file is the order the objects need: the role first, because every grant names it;
 -- the schema next, because every table below lives in it; call before call_message, because the
--- words are a child of the call they belong to; audit_event last, with the triggers that refuse to
+-- words are a child of the call they belong to; the continuation map beside them, because a resume
+-- must never find the key without the words; audit_event last, with the triggers that refuse to
 -- let it change.
 
 
@@ -135,12 +136,35 @@ CREATE INDEX call_message_updated_at_idx ON agentcore.call_message (updated_at);
 CREATE INDEX call_message_turn_idx       ON agentcore.call_message (call_id, turn_index);
 CREATE INDEX call_message_retention_idx  ON agentcore.call_message (call_id, updated_at DESC);
 
--- UPDATE amends a reply the caller cut short. DELETE erases one caller, and withdraws the tail of a
--- call an edit replaced. Neither is a hole: this table holds words, and words stay erasable.
 -- Retention deletes the call itself and reaches these rows through the cascade, so it needs no
 -- privilege of its own here.
 GRANT SELECT, INSERT, UPDATE, DELETE ON agentcore.call_message TO agentcore_writer;
 
+
+-- The Responses continuation map: one serialized agent session per opaque id.
+--
+-- A conversation id or a response id names no call and carries no state. This
+-- table is what it opens: the session envelope an AIAgent wrote, filed under
+-- the id the protocol handed out. It lives in this database beside the calls
+-- rather than anywhere else because the envelope names a call whose words live
+-- in call_message: splitting the key from the words across databases would let
+-- a resume find one without the other.
+--
+-- No foreign key to call. A continuation outlives the turns that filed it, and
+-- a swept call must not take the row that proves what its id once opened; an
+-- unknown id already fails closed at lookup, which is the only integrity this
+-- table needs.
+CREATE TABLE agentcore.response_continuation (
+    store_id    text        PRIMARY KEY,
+    envelope    jsonb       NOT NULL,
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+-- The writer files, reads, replaces, and forgets. Nothing here is append-only:
+-- a response id is filed once and a conversation id is replaced every turn.
+REVOKE ALL ON agentcore.response_continuation FROM PUBLIC;
+REVOKE ALL ON agentcore.response_continuation FROM agentcore_writer;
+GRANT SELECT, INSERT, UPDATE, DELETE ON agentcore.response_continuation TO agentcore_writer;
 
 -- Store 3 — the append-only record of what happened on a call.
 --
