@@ -20,6 +20,10 @@ internal sealed class TurnResults
 
     private readonly List<string> _order = [];
 
+    private readonly HashSet<string> _callIds = new(StringComparer.Ordinal);
+
+    private readonly List<Action<IReadOnlyList<string>>> _sweeps = [];
+
     /// <summary>The tools that answered something structured, in first-answer order.</summary>
     internal IReadOnlyList<string> Tools
     {
@@ -54,6 +58,51 @@ internal sealed class TurnResults
             }
 
             answers.Add(node);
+        }
+    }
+    
+    /// <summary>Keeps one tool call's id and its client's drain sweep, so turn end can sweep drain state for calls whose round never drained.</summary>
+    /// <param name="callId">The id the model gave this one call.</param>
+    /// <param name="sweep">Drops that client's entries for the turn's ids.</param>
+    internal void NoteCall(string callId, Action<IReadOnlyList<string>> sweep)
+    {
+        ArgumentNullException.ThrowIfNull(callId);
+        ArgumentNullException.ThrowIfNull(sweep);
+
+        lock (_gate)
+        {
+            _callIds.Add(callId);
+            _sweeps.Add(sweep);
+        }
+    }
+
+    /// <summary>Sweeps every recorded client's drain state for this turn's call ids.</summary>
+    internal void Sweep()
+    {
+        IReadOnlyList<string> callIds;
+        List<Action<IReadOnlyList<string>>> sweeps;
+
+        lock (_gate)
+        {
+            callIds = [.. _callIds];
+            sweeps = [.. _sweeps];
+        }
+
+        foreach (var sweep in sweeps)
+        {
+            sweep(callIds);
+        }
+    }
+
+    /// <summary>Every tool call id the turn recorded, in no particular order.</summary>
+    internal IReadOnlyList<string> CallIds
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return [.. _callIds];
+            }
         }
     }
 

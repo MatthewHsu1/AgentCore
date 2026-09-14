@@ -34,8 +34,7 @@ public sealed class KnowledgeProviderFactoryTests
         var port = new StubKnowledgePort([Card("a"), Card("b")]);
 
         var provider = Provider(port, Resolved(KnowledgeMode.Prefetch));
-        var context = await provider.InvokingAsync(
-            Invoking("the screen says e33"), TestContext.Current.CancellationToken);
+        var context = await InvokePrefetchAsync(provider, "the screen says e33", PrefetchTurn(), new StubSession());
 
         Assert.Null(context.Tools);
         Assert.Equal("the screen says e33", port.LastQuery);
@@ -50,7 +49,7 @@ public sealed class KnowledgeProviderFactoryTests
 
         var provider = Provider(port, Resolved(KnowledgeMode.Tool));
         var context = await provider.InvokingAsync(
-            Invoking("hello"), TestContext.Current.CancellationToken);
+            Invoking("hello", new StubSession()), TestContext.Current.CancellationToken);
 
         Assert.NotNull(context.Tools);
         Assert.Single(context.Tools);
@@ -67,8 +66,7 @@ public sealed class KnowledgeProviderFactoryTests
             new ThrowingKnowledgePort(new InvalidOperationException("qdrant is down")),
             Resolved(KnowledgeMode.Prefetch));
 
-        var context = await provider.InvokingAsync(
-            Invoking("the screen says e33"), TestContext.Current.CancellationToken);
+        var context = await InvokePrefetchAsync(provider, "the screen says e33", PrefetchTurn(), new StubSession());
 
         var text = Merged(context);
         Assert.Contains("knowledge base", text, StringComparison.OrdinalIgnoreCase);
@@ -93,8 +91,7 @@ public sealed class KnowledgeProviderFactoryTests
             new SourceLocatorCitationFormatter(),
             loggers);
 
-        var context = await provider.InvokingAsync(
-            Invoking("the screen says e33"), TestContext.Current.CancellationToken);
+        var context = await InvokePrefetchAsync(provider, "the screen says e33", PrefetchTurn(), new StubSession());
 
         var text = Merged(context);
         Assert.Contains("unreachable", text, StringComparison.OrdinalIgnoreCase);
@@ -126,10 +123,13 @@ public sealed class KnowledgeProviderFactoryTests
 
         caller.CancelAfter(TimeSpan.FromMilliseconds(20));
 
+        StubSession callerSession = new();
+        TurnRegistry.Set(callerSession, PrefetchTurn());
+
         // The framework swallows whatever escapes the delegate, so "propagated" is read off what did
         // NOT happen: no notice, and neither the success row nor the failure row. A delegate that
         // returned normally would have written row 11, and one that took the failure path row 12.
-        var context = await provider.InvokingAsync(Invoking("the screen says e33"), caller.Token);
+        var context = await provider.InvokingAsync(Invoking("the screen says e33", callerSession), caller.Token);
 
         Assert.DoesNotContain("unreachable", Merged(context), StringComparison.OrdinalIgnoreCase);
         Assert.Empty(loggers.Of(11));
@@ -144,8 +144,7 @@ public sealed class KnowledgeProviderFactoryTests
         var provider = Provider(
             new StubKnowledgePort([]), Resolved(KnowledgeMode.Prefetch));
 
-        var context = await provider.InvokingAsync(
-            Invoking("hello"), TestContext.Current.CancellationToken);
+        var context = await InvokePrefetchAsync(provider, "hello", PrefetchTurn(), new StubSession());
 
         Assert.Equal(["hello"], Texts(context));
     }
@@ -159,8 +158,7 @@ public sealed class KnowledgeProviderFactoryTests
 
         var provider = Provider(
             port, Resolved(KnowledgeMode.Prefetch, scoped: true));
-        var context = await provider.InvokingAsync(
-            Invoking("the screen says e33"), TestContext.Current.CancellationToken);
+        var context = await InvokePrefetchAsync(provider, "the screen says e33", PrefetchTurn(), new StubSession());
 
         Assert.Equal(0, port.Calls);
         Assert.DoesNotContain("card a", Merged(context), StringComparison.Ordinal);
@@ -173,12 +171,11 @@ public sealed class KnowledgeProviderFactoryTests
     {
         // An ambient with no facets filters nothing, so it is the absent ambient wearing a hat.
         var port = new StubKnowledgePort([Card("a"), Card("b")]);
-        using var open = KnowledgeScopeScope.Open(new KnowledgeScope { Facets = new Dictionary<string, string>() });
+        var scope = new KnowledgeScope { Facets = new Dictionary<string, string>() };
 
         var provider = Provider(
             port, Resolved(KnowledgeMode.Prefetch, scoped: true));
-        var context = await provider.InvokingAsync(
-            Invoking("the screen says e33"), TestContext.Current.CancellationToken);
+        var context = await InvokePrefetchAsync(provider, "the screen says e33", PrefetchTurn(scope), new StubSession());
 
         Assert.Equal(0, port.Calls);
         Assert.Contains("no scope is open", Merged(context), StringComparison.OrdinalIgnoreCase);
@@ -188,13 +185,11 @@ public sealed class KnowledgeProviderFactoryTests
     public async Task Create_ScopedAgentWithAScopeOpen_Searches()
     {
         var port = new StubKnowledgePort([Card("a")]);
-        using var open = KnowledgeScopeScope.Open(
-            new KnowledgeScope { Facets = new Dictionary<string, string> { ["model"] = "ct900" } });
+        var scope = new KnowledgeScope { Facets = new Dictionary<string, string> { ["model"] = "ct900" } };
 
         var provider = Provider(
             port, Resolved(KnowledgeMode.Prefetch, scoped: true));
-        var context = await provider.InvokingAsync(
-            Invoking("the screen says e33"), TestContext.Current.CancellationToken);
+        var context = await InvokePrefetchAsync(provider, "the screen says e33", PrefetchTurn(scope), new StubSession());
 
         Assert.Equal(1, port.Calls);
         Assert.Contains("card a", Merged(context), StringComparison.Ordinal);
@@ -209,8 +204,7 @@ public sealed class KnowledgeProviderFactoryTests
 
         var provider = Provider(
             port, Resolved(KnowledgeMode.Prefetch, scoped: false));
-        var context = await provider.InvokingAsync(
-            Invoking("the screen says e33"), TestContext.Current.CancellationToken);
+        var context = await InvokePrefetchAsync(provider, "the screen says e33", PrefetchTurn(), new StubSession());
 
         Assert.Equal(1, port.Calls);
         Assert.Contains("card a", Merged(context), StringComparison.Ordinal);
@@ -220,20 +214,18 @@ public sealed class KnowledgeProviderFactoryTests
     public async Task Create_UnscopedAgentUnderAScopedHostAmbient_StillSearchesTheWholeCorpus()
     {
         // Ruling 20, and the defect it resolves. example.yaml ships a mixed deployment: the resolver
-        // requires a scope, so the host opens ct900 for the whole call, and the analyst -- which the
+        // requires a scope, so the host sets ct900 for the whole call, and the analyst -- which the
         // same document says "searches every product on purpose" -- was silently filtered to ct900
-        // with it. The store folds whatever ambient it finds into the filter, so the ambient has to
-        // stop here.
+        // with it. The store folds whatever scope it is handed into the filter, so the turn's scope
+        // has to stop here for an unscoped agent.
         var port = new ScopeFilteringKnowledgePort(
             (Card("ct900"), Facets("ct900")),
             (Card("ent"), Facets("ct900ent")));
 
-        using var host = KnowledgeScopeScope.Open(
-            new KnowledgeScope { Facets = new Dictionary<string, string> { ["model"] = "ct900" } });
+        var scope = new KnowledgeScope { Facets = new Dictionary<string, string> { ["model"] = "ct900" } };
 
         var provider = Provider(port, Resolved(KnowledgeMode.Prefetch, scoped: false));
-        var context = await provider.InvokingAsync(
-            Invoking("the screen says e33"), TestContext.Current.CancellationToken);
+        var context = await InvokePrefetchAsync(provider, "the screen says e33", PrefetchTurn(scope), new StubSession());
 
         // The card OUTSIDE the host's facet is the whole point: an unscoped agent sees it.
         Assert.Contains("card ent", Merged(context), StringComparison.Ordinal);
@@ -246,12 +238,10 @@ public sealed class KnowledgeProviderFactoryTests
         // The mechanism behind the fact above, asserted where the store reads it. An empty facet map
         // adds no filter condition, so this is a whole-corpus read and not a differently-shaped one.
         var port = new StubKnowledgePort([Card("a")]);
-
-        using var host = KnowledgeScopeScope.Open(
-            new KnowledgeScope { Facets = new Dictionary<string, string> { ["model"] = "ct900" } });
+        var scope = new KnowledgeScope { Facets = new Dictionary<string, string> { ["model"] = "ct900" } };
 
         var provider = Provider(port, Resolved(KnowledgeMode.Prefetch, scoped: false));
-        await provider.InvokingAsync(Invoking("the screen says e33"), TestContext.Current.CancellationToken);
+        await InvokePrefetchAsync(provider, "the screen says e33", PrefetchTurn(scope), new StubSession());
 
         Assert.NotNull(port.ScopeAtTheStore);
         Assert.Empty(port.ScopeAtTheStore.Facets);
@@ -260,15 +250,13 @@ public sealed class KnowledgeProviderFactoryTests
     [Fact]
     public async Task Create_ScopedAgent_ReachesTheStoreUnderTheHostsOwnScope()
     {
-        // The counterpart. Taking the ambient away from the unscoped agent must not take it away from
-        // the scoped one, which is the agent the ambient exists for.
+        // The counterpart. Taking the scope away from the unscoped agent must not take it away from
+        // the scoped one, which is the agent the scope exists for.
         var port = new StubKnowledgePort([Card("a")]);
         var scope = new KnowledgeScope { Facets = new Dictionary<string, string> { ["model"] = "ct900" } };
 
-        using var host = KnowledgeScopeScope.Open(scope);
-
         var provider = Provider(port, Resolved(KnowledgeMode.Prefetch, scoped: true));
-        await provider.InvokingAsync(Invoking("the screen says e33"), TestContext.Current.CancellationToken);
+        await InvokePrefetchAsync(provider, "the screen says e33", PrefetchTurn(scope), new StubSession());
 
         Assert.Same(scope, port.ScopeAtTheStore);
     }
@@ -277,17 +265,19 @@ public sealed class KnowledgeProviderFactoryTests
     public async Task Create_UnscopedAgent_PutsTheHostsScopeBackAfterTheSearch()
     {
         // The empty scope covers one port call and nothing else. Leaking it would silently unscope the
-        // scoped agent that runs next on the same flow -- the very leak this whole design fails closed
-        // against, arriving from the inside.
+        // scoped agent that runs next -- the very leak this whole design fails closed against,
+        // arriving from the inside.
         var port = new StubKnowledgePort([Card("a")]);
         var scope = new KnowledgeScope { Facets = new Dictionary<string, string> { ["model"] = "ct900" } };
 
-        using var host = KnowledgeScopeScope.Open(scope);
-
         var provider = Provider(port, Resolved(KnowledgeMode.Prefetch, scoped: false));
-        await provider.InvokingAsync(Invoking("the screen says e33"), TestContext.Current.CancellationToken);
+        await InvokePrefetchAsync(provider, "the screen says e33", PrefetchTurn(), new StubSession());
 
-        Assert.Same(scope, KnowledgeScopeScope.Current);
+        // The empty scope covered that one search only: a scoped turn still resolves the host's scope.
+        var scoped = Provider(port, Resolved(KnowledgeMode.Prefetch, scoped: true));
+        await InvokePrefetchAsync(scoped, "the screen says e33", PrefetchTurn(scope), new StubSession());
+
+        Assert.Same(scope, port.ScopeAtTheStore);
     }
 
     [Fact]
@@ -300,7 +290,7 @@ public sealed class KnowledgeProviderFactoryTests
 
         var provider = KnowledgeProviderFactory.Create(
             port, Resolved(KnowledgeMode.Prefetch), "analyst", new SourceLocatorCitationFormatter(), loggers);
-        await provider.InvokingAsync(Invoking("the screen says e33"), TestContext.Current.CancellationToken);
+        await InvokePrefetchAsync(provider, "the screen says e33", PrefetchTurn(), new StubSession());
 
         var line = Assert.Single(loggers.Of(11));
         Assert.Equal("analyst", line.Field<string>("Agent"));
@@ -325,7 +315,7 @@ public sealed class KnowledgeProviderFactoryTests
 
         var provider = KnowledgeProviderFactory.Create(
             new ThrowingKnowledgePort(down), Resolved(KnowledgeMode.Prefetch), "resolver", new SourceLocatorCitationFormatter(), loggers);
-        await provider.InvokingAsync(Invoking("the screen says e33"), TestContext.Current.CancellationToken);
+        await InvokePrefetchAsync(provider, "the screen says e33", PrefetchTurn(), new StubSession());
 
         var line = Assert.Single(loggers.Of(12));
         Assert.Equal(LogLevel.Error, line.Level);
@@ -357,7 +347,7 @@ public sealed class KnowledgeProviderFactoryTests
 
         var answered = KnowledgeProviderFactory.Create(
             new StubKnowledgePort([Card("a")]), Resolved(KnowledgeMode.Prefetch), "analyst", new SourceLocatorCitationFormatter(), loggers);
-        await answered.InvokingAsync(Invoking(spoken), TestContext.Current.CancellationToken);
+        await InvokePrefetchAsync(answered, spoken, PrefetchTurn(), new StubSession());
 
         var threw = KnowledgeProviderFactory.Create(
             new ThrowingKnowledgePort(new InvalidOperationException("qdrant is down")),
@@ -365,7 +355,7 @@ public sealed class KnowledgeProviderFactoryTests
             "resolver",
             new SourceLocatorCitationFormatter(),
             loggers);
-        await threw.InvokingAsync(Invoking(spoken), TestContext.Current.CancellationToken);
+        await InvokePrefetchAsync(threw, spoken, PrefetchTurn(), new StubSession());
 
         // Both rows were written -- a test that logged nothing would pass the assertions below
         // vacuously, and this is exactly the fact that must not pass vacuously.
@@ -399,7 +389,7 @@ public sealed class KnowledgeProviderFactoryTests
 
         var provider = KnowledgeProviderFactory.Create(
             new StubKnowledgePort([Card("a")]), Resolved(KnowledgeMode.Prefetch), "analyst", new SourceLocatorCitationFormatter(), loggers);
-        await provider.InvokingAsync(Invoking(spoken), TestContext.Current.CancellationToken);
+        await InvokePrefetchAsync(provider, spoken, PrefetchTurn(), new StubSession());
 
         var view = Assert.Single(loggers.Of(11)).Field<KnowledgeAuditRecord.LogView>("Record");
         Assert.NotNull(view);
@@ -421,8 +411,8 @@ public sealed class KnowledgeProviderFactoryTests
 
         var provider = Provider(
             port, Resolved(KnowledgeMode.Prefetch, limit: limit));
-        var context = await provider.InvokingAsync(
-            Invoking("the screen says e33"), TestContext.Current.CancellationToken);
+        var context = await InvokePrefetchAsync(
+            provider, "the screen says e33", PrefetchTurn(), new StubSession());
 
         var text = Merged(context);
         Assert.Contains("card a", text, StringComparison.Ordinal);
@@ -442,8 +432,8 @@ public sealed class KnowledgeProviderFactoryTests
 
         var provider = Provider(
             port, Resolved(KnowledgeMode.Prefetch, limit: 2));
-        var context = await provider.InvokingAsync(
-            Invoking("the screen says e33"), TestContext.Current.CancellationToken);
+        var context = await InvokePrefetchAsync(
+            provider, "the screen says e33", PrefetchTurn(), new StubSession());
 
         var text = Merged(context);
         Assert.Contains("card a", text, StringComparison.Ordinal);
@@ -460,8 +450,8 @@ public sealed class KnowledgeProviderFactoryTests
         var provider = Provider(
             new StubKnowledgePort([Card("a")]), Resolved(KnowledgeMode.Prefetch, citations: false));
 
-        var context = await provider.InvokingAsync(
-            Invoking("the screen says e33"), TestContext.Current.CancellationToken);
+        var context = await InvokePrefetchAsync(
+            provider, "the screen says e33", PrefetchTurn(), new StubSession());
 
         var text = Merged(context);
         Assert.DoesNotContain("Include citations", text, StringComparison.Ordinal);
@@ -474,8 +464,8 @@ public sealed class KnowledgeProviderFactoryTests
         var provider = Provider(
             new StubKnowledgePort([Card("a")]), Resolved(KnowledgeMode.Prefetch, citations: true));
 
-        var context = await provider.InvokingAsync(
-            Invoking("the screen says e33"), TestContext.Current.CancellationToken);
+        var context = await InvokePrefetchAsync(
+            provider, "the screen says e33", PrefetchTurn(), new StubSession());
 
         var text = Merged(context);
         Assert.Contains("ct900-om, p.27", text, StringComparison.Ordinal);
@@ -486,7 +476,7 @@ public sealed class KnowledgeProviderFactoryTests
     [Fact]
     public async Task Create_CitationsOn_PublishesASourceForEachCardShown()
     {
-        // Task 5 fix round 1, Finding 1. Nothing in this suite drove CallSourceScope.Current to a
+        // Task 5 fix round 1, Finding 1. Nothing in this suite drove the sources port to a
         // non-null value for a citing search before this test, so the body of the publish loop had
         // never executed. A collector plus an outer call, both open around the same InvokingAsync
         // the other tests already drive, is what proves the wiring rather than just reading it.
@@ -495,11 +485,12 @@ public sealed class KnowledgeProviderFactoryTests
 
         TurnSources sources = new();
 
-        using (TurnAmbientsTestScope.WithSources(sources))
-        using (TurnAmbientsTestScope.WithOuterCall("call-1"))
+        StubSession session = new();
+        TurnRegistry.Set(session, PrefetchTurn(sources: sources));
+        using (sources.BeginOuterCall("call-1"))
         {
             await provider.InvokingAsync(
-                Invoking("the screen says e33"), TestContext.Current.CancellationToken);
+                Invoking("the screen says e33", session), TestContext.Current.CancellationToken);
         }
 
         var cited = sources.TakeFor("call-1");
@@ -521,11 +512,12 @@ public sealed class KnowledgeProviderFactoryTests
 
         TurnSources sources = new();
 
-        using (TurnAmbientsTestScope.WithSources(sources))
-        using (TurnAmbientsTestScope.WithOuterCall("call-1"))
+        StubSession session = new();
+        TurnRegistry.Set(session, PrefetchTurn(sources: sources));
+        using (sources.BeginOuterCall("call-1"))
         {
             await provider.InvokingAsync(
-                Invoking("the screen says e33"), TestContext.Current.CancellationToken);
+                Invoking("the screen says e33", session), TestContext.Current.CancellationToken);
         }
 
         Assert.Empty(sources.TakeFor("call-1"));
@@ -542,11 +534,12 @@ public sealed class KnowledgeProviderFactoryTests
 
         TurnSources sources = new();
 
-        using (TurnAmbientsTestScope.WithSources(sources))
-        using (TurnAmbientsTestScope.WithOuterCall("call-1"))
+        StubSession session = new();
+        TurnRegistry.Set(session, PrefetchTurn(sources: sources));
+        using (sources.BeginOuterCall("call-1"))
         {
             await provider.InvokingAsync(
-                Invoking("the screen says e33"), TestContext.Current.CancellationToken);
+                Invoking("the screen says e33", session), TestContext.Current.CancellationToken);
         }
 
         var cited = sources.TakeFor("call-1");
@@ -563,11 +556,13 @@ public sealed class KnowledgeProviderFactoryTests
         // a query, and a search over them retrieves the wrong cards.
         var port = new StubKnowledgePort([]);
         var provider = Provider(port, Resolved(KnowledgeMode.Prefetch));
+        StubSession session = new();
+        TurnRegistry.Set(session, PrefetchTurn());
 
 #pragma warning disable MAAI001 // The context constructors are the framework's own experimental surface.
         AIContextProvider.InvokingContext context = new(
             StubAgent.Instance,
-            session: null,
+            session,
             new AIContext
             {
                 Messages =
@@ -594,7 +589,7 @@ public sealed class KnowledgeProviderFactoryTests
         StubSession session = new();
 
         var provider = Provider(port, Resolved(KnowledgeMode.Prefetch));
-
+        TurnRegistry.Set(session, PrefetchTurn());
         await provider.InvokingAsync(
             Invoking("the screen says e33", session), TestContext.Current.CancellationToken);
         await provider.InvokedAsync(
@@ -610,10 +605,9 @@ public sealed class KnowledgeProviderFactoryTests
     public async Task Search_ToolModeWithNoResults_InjectsTheEmptyNotice()
     {
         var provider = Provider(new StubKnowledgePort([]), Resolved(KnowledgeMode.Tool, scoped: true));
-        using var open = KnowledgeScopeScope.Open(
-            new KnowledgeScope { Facets = new Dictionary<string, string> { ["model"] = "ct900" } });
+        var scope = new KnowledgeScope { Facets = new Dictionary<string, string> { ["model"] = "ct900" } };
 
-        var results = await InvokeSearchAsync(provider, "f63 error e03");
+        var results = await InvokeSearchAsync(provider, "f63 error e03", ToolTurn(scope));
 
         Assert.Contains(results, r => r.Text.Contains("holds nothing", StringComparison.Ordinal));
     }
@@ -623,9 +617,9 @@ public sealed class KnowledgeProviderFactoryTests
     {
         var provider = Provider(new StubKnowledgePort([]), Resolved(KnowledgeMode.Prefetch));
 
-        var results = await InvokeSearchAsync(provider, "hello");
+        var context = await InvokePrefetchAsync(provider, "hello", PrefetchTurn(), new StubSession());
 
-        Assert.Empty(results);
+        Assert.Equal(["hello"], Texts(context));
     }
 
     [Fact]
@@ -635,12 +629,11 @@ public sealed class KnowledgeProviderFactoryTests
         // clears the Facets.Count > 0 half, so only the KnowledgeMode.Tool clause keeps a prefetch
         // agent's empty search silent.
         var provider = Provider(new StubKnowledgePort([]), Resolved(KnowledgeMode.Prefetch, scoped: true));
-        using var open = KnowledgeScopeScope.Open(
-            new KnowledgeScope { Facets = new Dictionary<string, string> { ["model"] = "ct900" } });
+        var scope = new KnowledgeScope { Facets = new Dictionary<string, string> { ["model"] = "ct900" } };
 
-        var results = await InvokeSearchAsync(provider, "the screen says e33");
+        var context = await InvokePrefetchAsync(provider, "the screen says e33", PrefetchTurn(scope), new StubSession());
 
-        Assert.Empty(results);
+        Assert.Equal(["the screen says e33"], Texts(context));
     }
 
     [Fact]
@@ -650,7 +643,7 @@ public sealed class KnowledgeProviderFactoryTests
         // byte-identical to an unscoped one: an empty list, no notice.
         var provider = Provider(new StubKnowledgePort([]), Resolved(KnowledgeMode.Tool, scoped: false));
 
-        var results = await InvokeSearchAsync(provider, "f63 error e03");
+        var results = await InvokeSearchAsync(provider, "f63 error e03", ToolTurn());
 
         Assert.Empty(results);
     }
@@ -660,10 +653,9 @@ public sealed class KnowledgeProviderFactoryTests
     {
         // A notice must never be citable as a card, and the reserved source name is what stops it.
         var provider = Provider(new StubKnowledgePort([]), Resolved(KnowledgeMode.Tool, scoped: true));
-        using var open = KnowledgeScopeScope.Open(
-            new KnowledgeScope { Facets = new Dictionary<string, string> { ["model"] = "ct900" } });
+        var scope = new KnowledgeScope { Facets = new Dictionary<string, string> { ["model"] = "ct900" } };
 
-        var results = await InvokeSearchAsync(provider, "f63 error e03");
+        var results = await InvokeSearchAsync(provider, "f63 error e03", ToolTurn(scope));
 
         Assert.All(results, r => Assert.Equal("agentcore:notice", r.SourceName));
     }
@@ -674,7 +666,7 @@ public sealed class KnowledgeProviderFactoryTests
         var provider = Provider(
             new ThrowingKnowledgePort(new InvalidOperationException("boom")), Resolved(KnowledgeMode.Tool));
 
-        var results = await InvokeSearchAsync(provider, "f63");
+        var results = await InvokeSearchAsync(provider, "f63", ToolTurn());
 
         Assert.Contains(results, r => r.Text.Contains("unreachable", StringComparison.Ordinal));
     }
@@ -683,24 +675,63 @@ public sealed class KnowledgeProviderFactoryTests
     /// <param name="port">The store the provider searches.</param>
     /// <param name="knowledge">The agent's resolved <c>knowledge:</c> block.</param>
     /// <returns>The provider.</returns>
+    private static TurnInvocation PrefetchTurn(KnowledgeScope? scope = null, TurnSources? sources = null) => new()
+    {
+        CallId = "call",
+        TurnIndex = 0,
+        Stage = "",
+        Knowledge = scope,
+        Sources = sources,
+    };
+
+    private static TurnInvocation ToolTurn(
+        KnowledgeScope? scope = null, Clarifications? clarifications = null, TurnSources? sources = null) => new()
+    {
+        CallId = "call",
+        TurnIndex = 0,
+        Stage = "",
+        Knowledge = scope,
+        Clarifications = clarifications ?? new Clarifications(),
+        Sources = sources,
+    };
+
+    private static async Task<AIContext> InvokePrefetchAsync(
+        AIContextProvider provider, string text, TurnInvocation turn, AgentSession session)
+    {
+        TurnRegistry.Set(session, turn);
+        return await provider.InvokingAsync(
+            Invoking(text, session), TestContext.Current.CancellationToken).ConfigureAwait(false);
+    }
+
     private static AIContextProvider Provider(IKnowledgeRetrievalPort port, ResolvedKnowledge knowledge)
         => KnowledgeProviderFactory.Create(
             port, knowledge, "agent-under-test", new SourceLocatorCitationFormatter(), loggers: null);
 
     /// <summary>
-    /// Calls the factory's own search delegate directly, rather than through
-    /// <see cref="AIContextProvider.InvokingAsync"/>. The guard under test reads
-    /// <see cref="ResolvedKnowledge.Mode"/> itself, so it behaves identically whether the framework
-    /// would have called the delegate before the model (prefetch) or handed it to the model as a
-    /// tool -- <c>TextSearchProvider</c> only decides which of those two happens, and in tool mode
-    /// never calls the delegate on its own.
+    /// Invokes the search tool the provider offers, the way the model would: the turn rides along
+    /// as an argument, carrying the scope and the clarifications the search runs under.
     /// </summary>
     /// <param name="provider">The provider <see cref="Provider"/> built.</param>
     /// <param name="query">The search text.</param>
-    /// <returns>What the delegate returned.</returns>
-    private static Task<IReadOnlyList<TextSearchProvider.TextSearchResult>> InvokeSearchAsync(
-        AIContextProvider provider, string query)
-        => TextSearchProviderInternals.SearchAsync(provider, query, TestContext.Current.CancellationToken);
+    /// <param name="turn">The turn the search runs under.</param>
+    /// <returns>What the search returned.</returns>
+    private static async Task<IReadOnlyList<TextSearchProvider.TextSearchResult>> InvokeSearchAsync(
+        AIContextProvider provider, string query, TurnInvocation turn)
+    {
+        StubSession session = new();
+        var context = await provider.InvokingAsync(
+            Invoking("hello", session), TestContext.Current.CancellationToken).ConfigureAwait(false);
+        var search = Assert.Single(context.Tools!, tool => tool.Name == "Search");
+        var results = await ((AIFunction)search).InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["userQuestion"] = query,
+                [TurnInvocation.ArgumentsKey] = turn,
+            }),
+            TestContext.Current.CancellationToken).ConfigureAwait(false)
+            as IReadOnlyList<TextSearchProvider.TextSearchResult>;
+        return results!;
+    }
 
     /// <summary>Every message text of a returned context, in one string.</summary>
     private static string Merged(AIContext context)
@@ -734,7 +765,7 @@ public sealed class KnowledgeProviderFactoryTests
         => Card(id) with { Score = null, ViaLink = true };
 
     /// <summary>Runs the provider the way the framework runs it, over one caller message.</summary>
-    private static AIContextProvider.InvokingContext Invoking(string text, AgentSession? session = null)
+    private static AIContextProvider.InvokingContext Invoking(string text, AgentSession session)
     {
 #pragma warning disable MAAI001 // The context constructors are the framework's own experimental surface.
         return new(

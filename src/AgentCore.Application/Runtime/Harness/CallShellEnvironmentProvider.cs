@@ -26,7 +26,8 @@ internal sealed class CallShellEnvironmentProvider : AIContextProvider
     protected override async ValueTask<AIContext> ProvideAIContextAsync(
         InvokingContext context, CancellationToken cancellationToken = default)
     {
-        var shells = TurnAmbients.Current?.Shells ?? throw new InvalidOperationException(NoTurnMessage);
+        var shells = TurnRegistry.For(context.Session)?.Shells
+            ?? throw new InvalidOperationException(NoTurnMessage);
 
         var snapshot = await shells.GetEnvironmentAsync(_options, cancellationToken).ConfigureAwait(false);
 

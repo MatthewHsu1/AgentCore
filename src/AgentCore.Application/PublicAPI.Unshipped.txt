@@ -1127,6 +1127,8 @@ AgentCore.Application.Ports.IConversationPort.RunTurnAsync(string! userInput, Sy
 AgentCore.Application.Ports.IConversationPort.RunTurnMessageAsync(Microsoft.Extensions.AI.ChatMessage! userInput, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<AgentCore.Domain.TurnResult!>!
 AgentCore.Application.Ports.IConversationPort.RunTurnMessageStreamingAsync(Microsoft.Extensions.AI.ChatMessage! userInput, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
 AgentCore.Application.Ports.IConversationPort.RunTurnStreamingAsync(string! userInput, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
+AgentCore.Application.Ports.IConversationPort.Scope.get -> AgentCore.Domain.Knowledge.KnowledgeScope?
+AgentCore.Application.Ports.IConversationPort.Scope.set -> void
 AgentCore.Application.Ports.IConversationPort.Stage.get -> string!
 AgentCore.Application.Ports.IEmbeddingGeneratorAdapter
 AgentCore.Application.Ports.IEmbeddingGeneratorAdapter.CreateGeneratorAsync(AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.IEmbeddingGenerator<string!, Microsoft.Extensions.AI.Embedding<float>!>!>
@@ -1136,7 +1138,7 @@ AgentCore.Application.Ports.IKnowledgeFacetReadPort
 AgentCore.Application.Ports.IKnowledgeFacetReadPort.ReadByFacetAsync(string! path, string! value, int limit, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Domain.Knowledge.KnowledgeCard!>!>
 AgentCore.Application.Ports.IKnowledgeRetrievalPort
 AgentCore.Application.Ports.IKnowledgeRetrievalPort.GetService(System.Type! serviceType, object? serviceKey = null) -> object?
-AgentCore.Application.Ports.IKnowledgeRetrievalPort.SearchAsync(string! query, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Domain.Knowledge.KnowledgeCard!>!>
+AgentCore.Application.Ports.IKnowledgeRetrievalPort.SearchAsync(string! query, AgentCore.Domain.Knowledge.KnowledgeScope? scope = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Domain.Knowledge.KnowledgeCard!>!>
 AgentCore.Application.Ports.IKnowledgeStoreAdapter
 AgentCore.Application.Ports.IKnowledgeStoreAdapter.CanScope.get -> bool
 AgentCore.Application.Ports.IKnowledgeStoreAdapter.CanServeSearch.get -> bool
@@ -1211,7 +1213,6 @@ AgentCore.Application.Runtime.CallEventKind.TranscriptWriteFailed = 10 -> AgentC
 AgentCore.Application.Runtime.CallEventKind.TurnCompleted = 7 -> AgentCore.Application.Runtime.CallEventKind
 AgentCore.Application.Runtime.CallEventKind.TurnSuperseded = 12 -> AgentCore.Application.Runtime.CallEventKind
 AgentCore.Application.Runtime.CallObservers
-AgentCore.Application.Runtime.CallRenderScope
 AgentCore.Application.Runtime.CallSession
 AgentCore.Application.Runtime.CallSession.CallId.get -> string!
 AgentCore.Application.Runtime.CallSession.Compiled.get -> AgentCore.Application.Configuration.Compilation.CompiledAgent!
@@ -1230,6 +1231,8 @@ AgentCore.Application.Runtime.CallSession.RunTurnMessageStreamingAsync(Microsoft
 AgentCore.Application.Runtime.CallSession.RunTurnMessageStreamingAtOriginAsync(Microsoft.Extensions.AI.ChatMessage! userInput, AgentCore.Application.Runtime.CallTurnOrigin? origin, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
 AgentCore.Application.Runtime.CallSession.RunTurnStreamingAsync(string! userInput, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
 AgentCore.Application.Runtime.CallSession.RunTurnStreamingAtOriginAsync(string! userInput, AgentCore.Application.Runtime.CallTurnOrigin? origin, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
+AgentCore.Application.Runtime.CallSession.Scope.get -> AgentCore.Domain.Knowledge.KnowledgeScope?
+AgentCore.Application.Runtime.CallSession.Scope.set -> void
 AgentCore.Application.Runtime.CallSession.SetDelegatedTools(string! delegatingToolId, System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.AITool!>! tools) -> void
 AgentCore.Application.Runtime.CallSession.SetHasScreen(bool hasScreen) -> void
 AgentCore.Application.Runtime.CallSession.Stage.get -> string!
@@ -1240,7 +1243,6 @@ AgentCore.Application.Runtime.CallSession.Workspace.get -> string?
 AgentCore.Application.Runtime.CallSessionFactory
 AgentCore.Application.Runtime.CallSessionFactory.CallSessionFactory(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Configuration.Validation.IGuardEvaluator! guards, AgentCore.Application.State.StateExtractor? extractor = null, System.TimeProvider? timeProvider = null, Microsoft.Extensions.Logging.ILogger? logger = null, System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ICallObserver!>? observers = null, string? workspaceRoot = null) -> void
 AgentCore.Application.Runtime.CallSessionFactory.Create(string? callId = null, AgentCore.Application.Calls.CallSessionState? state = null) -> AgentCore.Application.Runtime.CallSession!
-AgentCore.Application.Runtime.CallSourceScope
 AgentCore.Application.Runtime.CallStateScope
 AgentCore.Application.Runtime.CallTurnOrigin
 AgentCore.Application.Runtime.CallTurnOrigin.<Clone>$() -> AgentCore.Application.Runtime.CallTurnOrigin!
@@ -1253,7 +1255,6 @@ AgentCore.Application.Runtime.CallTurnOrigin.NamesParent.get -> bool
 AgentCore.Application.Runtime.CallTurnOrigin.NamesParent.init -> void
 AgentCore.Application.Runtime.CallTurnOrigin.ParentMessageId.get -> string?
 AgentCore.Application.Runtime.CallTurnOrigin.ParentMessageId.init -> void
-AgentCore.Application.Runtime.KnowledgeScopeScope
 AgentCore.Application.Secrets.KnownSecrets
 AgentCore.Application.Secrets.ResolvedSecrets
 AgentCore.Application.Secrets.ResolvedSecrets.Contains(string! name) -> bool
@@ -1983,15 +1984,11 @@ static AgentCore.Application.Providers.VendorSeam.operator ==(AgentCore.Applicat
 static AgentCore.Application.Runtime.CallEvent.operator !=(AgentCore.Application.Runtime.CallEvent? left, AgentCore.Application.Runtime.CallEvent? right) -> bool
 static AgentCore.Application.Runtime.CallEvent.operator ==(AgentCore.Application.Runtime.CallEvent? left, AgentCore.Application.Runtime.CallEvent? right) -> bool
 static AgentCore.Application.Runtime.CallObservers.Standard(AgentCore.Application.Ports.IAuditSinkPort! auditSink, Microsoft.Extensions.Logging.ILogger? logger, System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ICallObserver!>? hostObservers = null) -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.ICallObserver!>!
-static AgentCore.Application.Runtime.CallRenderScope.Current.get -> AgentCore.Application.Ports.IRenderPort?
 static AgentCore.Application.Runtime.CallSessionFactory.CreateExtractor(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Ports.IChatClientFactory! chatClients) -> AgentCore.Application.State.StateExtractor?
-static AgentCore.Application.Runtime.CallSourceScope.Current.get -> AgentCore.Application.Ports.ISourcePort?
 static AgentCore.Application.Runtime.CallStateScope.Enter(AgentCore.Application.State.StateDocument! state) -> System.IDisposable!
 static AgentCore.Application.Runtime.CallStateScope.Snapshot() -> System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>!
 static AgentCore.Application.Runtime.CallTurnOrigin.operator !=(AgentCore.Application.Runtime.CallTurnOrigin? left, AgentCore.Application.Runtime.CallTurnOrigin? right) -> bool
 static AgentCore.Application.Runtime.CallTurnOrigin.operator ==(AgentCore.Application.Runtime.CallTurnOrigin? left, AgentCore.Application.Runtime.CallTurnOrigin? right) -> bool
-static AgentCore.Application.Runtime.KnowledgeScopeScope.Current.get -> AgentCore.Domain.Knowledge.KnowledgeScope?
-static AgentCore.Application.Runtime.KnowledgeScopeScope.Open(AgentCore.Domain.Knowledge.KnowledgeScope! scope) -> System.IDisposable!
 static AgentCore.Application.Secrets.ResolvedSecrets.Create(System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string!, string!>>! secrets) -> AgentCore.Application.Secrets.ResolvedSecrets!
 static AgentCore.Application.Secrets.ResolvedSecrets.Empty.get -> AgentCore.Application.Secrets.ResolvedSecrets!
 static AgentCore.Application.Secrets.ResolvedSecrets.ResolveAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort! resolver, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Secrets.ResolvedSecrets!>

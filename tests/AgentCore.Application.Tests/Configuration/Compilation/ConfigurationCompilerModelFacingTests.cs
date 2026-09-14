@@ -3,6 +3,7 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Fakes;
+using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Transcript;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
@@ -33,7 +34,8 @@ public sealed class ConfigurationCompilerModelFacingTests
     [Fact]
     public async Task TheSecondRoundOfACompiledAgent_NeverForwardsARenderContentTheFirstRoundsToolAttached()
     {
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Renders = new TurnRenders() });
+        TurnRenders renders = new();
+        var turn = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", Renders = renders };
 
         RequestCapturingChatClient recorder = new(new ToolCallingChatClient("done."));
         var document = ConfigurationLoader.LoadYaml(Yaml);
@@ -47,7 +49,12 @@ public sealed class ConfigurationCompilerModelFacingTests
                     TestContext.Current.CancellationToken),
             });
 
-        await compiled.Agent.RunAsync("draw me a card", cancellationToken: TestContext.Current.CancellationToken);
+        var session = await compiled.Agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        await compiled.Agent.RunAsync(
+            [new ChatMessage(ChatRole.User, "draw me a card")],
+            session,
+            turn.RunOptions(),
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(2, recorder.Requests.Count);
         Assert.DoesNotContain(
@@ -57,11 +64,15 @@ public sealed class ConfigurationCompilerModelFacingTests
 
     private static AIFunction DrawCard()
         => AIFunctionFactory.Create(
-            () =>
+            (TurnInvocation? turn) =>
             {
-                TurnAmbients.Current?.Renders?.Publish("card", "card-1", new { text = "hi" });
+                turn!.Renders!.Publish("card", "card-1", new { text = "hi" });
                 return "drawn.";
             },
-            "draw_card",
-            "Draw a card for the caller.");
+            new AIFunctionFactoryOptions
+            {
+                Name = "draw_card",
+                Description = "Draw a card for the caller.",
+                ConfigureParameterBinding = ToolParameterBindings.For,
+            });
 }

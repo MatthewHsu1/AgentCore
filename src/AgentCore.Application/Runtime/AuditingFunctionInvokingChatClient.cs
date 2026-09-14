@@ -1,11 +1,29 @@
 using System.Net.Sockets;
 using System.Security.Authentication;
-using AgentCore.Application.Runtime.Turn;
-using AgentCore.Application.Tools;
 using AgentCore.Domain.Audit;
+using AgentCore.Application.Tools;
 using Microsoft.Extensions.AI;
+using System.Collections.Concurrent;
+using AgentCore.Application.Runtime.Turn;
 
 namespace AgentCore.Application.Runtime;
+
+/// <summary>One tool call that did not run to completion, as the function-invocation loop saw it.</summary>
+internal sealed record ToolFailure
+{
+    /// <summary>Gets the name the MODEL called.</summary>
+
+    public required string ToolName { get; init; }
+
+    /// <summary>Gets the id the model gave this one call.</summary>
+    public required string ToolCallId { get; init; }
+
+    /// <summary>Gets which of the two ways a tool call fails this one was.</summary>
+    public required ToolFailureKind Kind { get; init; }
+
+    /// <summary>Gets what went wrong, in one sentence. It never holds a secret value.</summary>
+    public required string Message { get; init; }
+}
 
 /// <summary>
 /// The function-invocation loop of <c>Microsoft.Extensions.AI</c>, with every tool call that did not
@@ -14,11 +32,31 @@ namespace AgentCore.Application.Runtime;
 /// </summary>
 internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatClient
 {
+    // Drain state per open tool call, keyed by the model's own call id. The round that ends a
+    // turn never reaches CreateResponseMessages, so a final round's entries are swept at turn
+    // end through Release; every other entry is consumed where it drains.
+    private readonly ConcurrentDictionary<string, Drain> _drains = new(StringComparer.Ordinal);
+
+    private sealed record Drain(
+        TurnRenders? Renders, TurnSources? Sources, Action<ToolFailure>? OnToolFailure, bool Nested);
+
     /// <summary>Creates the client.</summary>
     /// <param name="innerClient">The model this loop sends its rounds to.</param>
     internal AuditingFunctionInvokingChatClient(IChatClient innerClient)
         : base(innerClient)
     {
+    }
+
+    /// <summary>Drops drain state for calls whose round never drained, at turn end.</summary>
+    /// <param name="callIds">Every tool call id the turn recorded.</param>
+    internal void Release(IReadOnlyList<string> callIds)
+    {
+        ArgumentNullException.ThrowIfNull(callIds);
+
+        foreach (var callId in callIds)
+        {
+            _drains.TryRemove(callId, out _);
+        }
     }
 
     /// <summary>
@@ -31,14 +69,38 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        using var outerCall = OuterToolCall.Enter(context.CallContent.CallId, out var nested);
+        var callId = context.CallContent.CallId;
 
-        // A delegated run must not touch the caller's Clarifications: it would burn the turn's probe
-        // and record a lastNamed from a note the caller never heard (K42). The knowledge search
-        // itself is a tool call, so the strip is conditional on being nested rather than unconditional
-        // — an unconditional strip would blind the caller's own search too.
-        using IDisposable? strippedClarifications = nested
-            ? TurnAmbients.Amend(ambients => ambients with { Clarifications = null })
+        // The turn arrives on the run's own options — filed there by the loop for the outer
+        // run and by the delegating bridge for a nested one, one value per run, so concurrent
+        // runs never share it. A call with no turn runs bare, exactly as the null branch did
+        // before. Nested runs arrive already stripped per K42 with the outermost call id kept,
+        // so nothing here recomputes either.
+        TurnInvocation? invocation = null;
+        bool nested = false;
+
+        if (context.Options?.AdditionalProperties?.TryGetValue(TurnInvocation.ArgumentsKey, out var top) == true
+            && top is TurnInvocation own)
+        {
+            invocation = own with { OuterCallId = own.OuterCallId ?? callId };
+            nested = own.Nested;
+        }
+
+        if (invocation is not null)
+        {
+            // Snapshot the turn once per tool call and file it in the call's arguments, so tools
+            // declare what they need as parameters.
+            context.Arguments[TurnInvocation.ArgumentsKey] = invocation;
+            _drains[callId] = new Drain(invocation.Renders, invocation.Sources, invocation.OnToolFailure, nested);
+            invocation.Results?.NoteCall(callId, Release);
+        }
+
+        using var outerCall = invocation?.Renders is { } renders && !nested
+            ? renders.BeginOuterCall(invocation.OuterCallId ?? callId)
+            : null;
+            
+        using var outerSources = invocation?.Sources is { } sources && !nested
+            ? sources.BeginOuterCall(invocation.OuterCallId ?? callId)
             : null;
 
         try
@@ -47,7 +109,7 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
 
             if (!nested)
             {
-                TurnAmbients.Current?.Results?.Record(context.Function.Name, result);
+                invocation?.Results?.Record(context.Function.Name, result);
             }
 
             return result;
@@ -59,7 +121,7 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
         }
         catch (Exception failure) when (!IsCallerCancellation(failure, cancellationToken))
         {
-            ToolFailureScope.Report(new ToolFailure
+            invocation?.OnToolFailure?.Invoke(new ToolFailure
             {
                 ToolName = context.CallContent.Name,
                 ToolCallId = context.CallContent.CallId,
@@ -68,6 +130,13 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
             });
 
             throw;
+        }
+        finally
+        {
+            // Filed for the tool alone: the workflow checkpoint persists arguments at turn end,
+            // and a live turn does not survive JSON. The tool already ran, and nothing downstream
+            // reads the key back.
+            context.Arguments.Remove(TurnInvocation.ArgumentsKey);
         }
     }
 
@@ -114,45 +183,7 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
     /// </summary>
     protected override IList<ChatMessage> CreateResponseMessages(ReadOnlySpan<FunctionInvocationResult> results)
     {
-        foreach (FunctionInvocationResult result in results)
-        {
-            // Only NotFound. An exception was already reported where it was thrown, and the round
-            // that ends the turn never reaches this method at all. See the remarks on this class.
-            if (result.Status != FunctionInvocationStatus.NotFound)
-            {
-                continue;
-            }
-
-            ToolFailureScope.Report(new ToolFailure
-            {
-                ToolName = result.CallContent.Name,
-                ToolCallId = result.CallContent.CallId,
-                Kind = ToolFailureKind.Undeclared,
-                Message = $"the model called '{result.CallContent.Name}', and no such tool is declared.",
-            });
-        }
-
         var messages = base.CreateResponseMessages(results);
-
-        // A nested loop's own InvokeFunctionAsync opens a no-op OuterToolCall scope (outermost
-        // wins), so the outer scope is still open for every round the nested loop runs, and only
-        // closes once the outer call that started it returns. A non-null Current here therefore
-        // means this round belongs to that nested loop, not to the call the caller's own transcript
-        // holds: draining here risks a nested tool call whose id happens to match the outer one,
-        // which would attach the drawing to a message that never reaches the caller. Only the round
-        // that runs with no OuterToolCall scope left open — the outermost loop's own — may drain.
-        if (OuterToolCall.Current is not null)
-        {
-            return messages;
-        }
-
-        var renders = TurnAmbients.Current?.Renders;
-        var sources = TurnAmbients.Current?.Sources;
-
-        if (renders is null && sources is null)
-        {
-            return messages;
-        }
 
         foreach (var message in messages)
         {
@@ -161,14 +192,21 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
             // anything has been appended, even where nothing further was left to enumerate.
             foreach (var callId in message.Contents.OfType<FunctionResultContent>().Select(r => r.CallId).ToList())
             {
-                foreach (var drawn in renders?.TakeFor(callId) ?? [])
+                // A nested loop's calls drain nothing: their ids were registered under the
+                // stripped copy, so removing the entry without draining keeps the outer drain
+                // from attaching a nested drawing to a message that never reaches the caller.
+                // Only the outermost loop's own calls attach what they drew or cited.
+                if (_drains.TryRemove(callId, out var drain) && !drain.Nested)
                 {
-                    message.Contents.Add(drawn);
-                }
+                    foreach (var drawn in drain.Renders?.TakeFor(callId) ?? [])
+                    {
+                        message.Contents.Add(drawn);
+                    }
 
-                foreach (var cited in sources?.TakeFor(callId) ?? [])
-                {
-                    message.Contents.Add(cited);
+                    foreach (var cited in drain.Sources?.TakeFor(callId) ?? [])
+                    {
+                        message.Contents.Add(cited);
+                    }
                 }
             }
         }

@@ -40,7 +40,7 @@ public sealed class GoldenSetEvalTests(DatasetFixture fixture) : IClassFixture<D
         // Arrange, Act
         // Ruling 14: this harness opens no KnowledgeScope. See DatasetHarness for why requireScope is
         // false and no per-row scope is meaningful here.
-        var hits = await harness.Search.SearchAsync(row.Query, TestContext.Current.CancellationToken);
+        var hits = await harness.Search.SearchAsync(row.Query, null, TestContext.Current.CancellationToken);
         var ids = hits.Select(card => card.CardId).Distinct(StringComparer.Ordinal).ToArray();
 
         await using ScenarioRun run = await harness.Reporting.CreateScenarioRunAsync(

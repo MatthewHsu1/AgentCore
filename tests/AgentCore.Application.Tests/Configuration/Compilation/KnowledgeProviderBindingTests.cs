@@ -1,8 +1,8 @@
-using AgentCore.TestSupport;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime.Turn;
+using AgentCore.Application.Knowledge;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Knowledge.Fakes;
 using AgentCore.Application.Tests.Runtime;
@@ -80,7 +80,7 @@ public sealed class KnowledgeProviderBindingTests
         var agent = CompileOne(KnowledgeYaml, new StubKnowledgePort([]));
 
         Assert.Contains(Providers(agent), provider => provider is TurnContextProvider);
-        Assert.Contains(Providers(agent), provider => provider is TextSearchProvider);
+        Assert.Contains(Providers(agent), provider => provider is KnowledgePrefetchProvider);
     }
 
     [Fact]
@@ -88,7 +88,7 @@ public sealed class KnowledgeProviderBindingTests
     {
         var agent = CompileOne(NoKnowledgeYaml, new StubKnowledgePort([]));
 
-        Assert.DoesNotContain(Providers(agent), provider => provider is TextSearchProvider);
+        Assert.DoesNotContain(Providers(agent), provider => provider is FacetFilterProvider or KnowledgePrefetchProvider);
     }
 
     [Fact]
@@ -103,8 +103,8 @@ public sealed class KnowledgeProviderBindingTests
                 Knowledge = new StubKnowledgePort([]),
             });
 
-        Assert.Contains(Providers(compiled.Agents["reader"]), provider => provider is TextSearchProvider);
-        Assert.DoesNotContain(Providers(compiled.Agents["quiet"]), provider => provider is TextSearchProvider);
+        Assert.Contains(Providers(compiled.Agents["reader"]), provider => provider is FacetFilterProvider);
+        Assert.DoesNotContain(Providers(compiled.Agents["quiet"]), provider => provider is FacetFilterProvider or KnowledgePrefetchProvider);
     }
 
     [Fact]
@@ -122,7 +122,7 @@ public sealed class KnowledgeProviderBindingTests
             });
 
         var reader = compiled.Agents["reader"];
-        var provider = Assert.Single(Providers(reader).OfType<TextSearchProvider>());
+        var provider = Assert.Single(Providers(reader).OfType<FacetFilterProvider>());
 
 #pragma warning disable MAAI001 // The context constructors are the framework's own experimental surface.
         AIContextProvider.InvokingContext context = new(reader, null, new AIContext());

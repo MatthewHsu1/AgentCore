@@ -1,6 +1,7 @@
 using AgentCore.Application.Configuration.Parsing;
 using System.Diagnostics;
 using System.Reflection;
+using System.Text.Json;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Knowledge;
@@ -22,12 +23,12 @@ namespace AgentCore.Application.Tests.Knowledge;
 /// one wildcard-filled facet, re-searching, and naming the values it finds.
 /// </summary>
 /// <remarks>
-/// Every test drives <c>KnowledgeProviderFactory</c>'s own search delegate directly, the same way
+/// Every test drives the search tool <c>KnowledgeProviderFactory</c> offers, the same way
 /// <c>KnowledgeProviderFactoryTests</c> does, rather than through <c>CallSession</c>: the probe reads
-/// only the ambient (<see cref="Clarifications"/>, <see cref="KnowledgeScopeScope"/>,
-/// <see cref="TurnContext"/>) and the resolved <c>knowledge:</c> block, so opening exactly those by
-/// hand proves the same mechanism a real call would exercise, at a fraction of the setup. The
-/// genuinely two-turn and delegation-shaped cases live in <c>CallSessionProbeTests</c>.
+/// only the turn (<see cref="Clarifications"/>, the knowledge scope, the history flag) and the
+/// resolved <c>knowledge:</c> block, so filing exactly those by hand proves the same mechanism a
+/// real call would exercise, at a fraction of the setup. The genuinely two-turn and
+/// delegation-shaped cases live in <c>CallSessionProbeTests</c>.
 /// </remarks>
 public sealed class KnowledgeProbeTests
 {
@@ -39,10 +40,9 @@ public sealed class KnowledgeProbeTests
     public async Task Step1_MainSearchReturnedCards_TheProbeNeverRuns()
     {
         var port = new ProbeFakePort((_, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>([Card("a")]));
-        using var clarifications = OpenClarifications();
-        using var scope = KnowledgeScopeScope.Open(FullScope("applies_to", "other"));
+        var turn = TurnOf(FullScope("applies_to", "other"), new Clarifications());
 
-        var results = await InvokeSearchAsync(Provider(port, Resolved(["applies_to"])), "e33");
+        var results = await InvokeSearchAsync(Provider(port, Resolved(["applies_to"])), "e33", turn);
 
         Assert.Contains(results, r => r.Text == "card a");
         Assert.Equal(1, port.Calls);
@@ -54,10 +54,10 @@ public sealed class KnowledgeProbeTests
         // Acceptance: "an unscoped agent's empty search returns an empty list." The probe and the
         // "holds nothing" notice are for a scoped agent only (K19).
         var port = new ProbeFakePort((_, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>([]));
-        using var clarifications = OpenClarifications();
+        var turn = TurnOf(null, new Clarifications());
 
         var results = await InvokeSearchAsync(
-            Provider(port, Resolved(["applies_to"], scoped: false)), "e33");
+            Provider(port, Resolved(["applies_to"], scoped: false)), "e33", turn);
 
         Assert.Empty(results);
         Assert.Equal(1, port.Calls);
@@ -69,11 +69,10 @@ public sealed class KnowledgeProbeTests
         // K19: with no ambiguity: (and so no wildcard, no template) configured, behaviour is
         // byte-identical to the wildcard plan's own "holds nothing" notice — no second search.
         var port = new ProbeFakePort((_, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>([]));
-        using var clarifications = OpenClarifications();
-        using var scope = KnowledgeScopeScope.Open(FullScope("applies_to", "other"));
+        var turn = TurnOf(FullScope("applies_to", "other"), new Clarifications());
 
         var plain = new ResolvedKnowledge(KnowledgeMode.Tool, 5, Citations: false, Scoped: true);
-        var results = await InvokeSearchAsync(Provider(port, plain), "e33");
+        var results = await InvokeSearchAsync(Provider(port, plain), "e33", turn);
 
         Assert.Contains(results, r => r.Text.Contains("holds nothing", StringComparison.Ordinal));
         Assert.Equal(1, port.Calls);
@@ -86,10 +85,9 @@ public sealed class KnowledgeProbeTests
     {
         // K33: dropping the scope's only facet would open it empty, which a scoped store refuses.
         var port = new ProbeFakePort((_, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>([]));
-        using var clarifications = OpenClarifications();
-        using var scope = KnowledgeScopeScope.Open(FullScope("applies_to"));
+        var turn = TurnOf(FullScope("applies_to"), new Clarifications());
 
-        var results = await InvokeSearchAsync(Provider(port, Resolved(["applies_to"])), "e33");
+        var results = await InvokeSearchAsync(Provider(port, Resolved(["applies_to"])), "e33", turn);
 
         Assert.Contains(results, r => r.Text.Contains("holds nothing", StringComparison.Ordinal));
         // Only the main search ran. The probe never opened a second, narrowed scope.
@@ -100,11 +98,10 @@ public sealed class KnowledgeProbeTests
     public async Task Step3_MaxAsksZero_DropsNoFacet_AndEmitsW11sNotice()
     {
         var port = new ProbeFakePort((_, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>([]));
-        using var clarifications = OpenClarifications();
-        using var scope = KnowledgeScopeScope.Open(FullScope("brand", "applies_to"));
+        var turn = TurnOf(FullScope("brand", "applies_to"), new Clarifications());
 
         var knowledge = Resolved(["brand", "applies_to"], ambiguity: new KnowledgeAmbiguityConfiguration { MaxAsks = 0 });
-        var results = await InvokeSearchAsync(Provider(port, knowledge), "e33");
+        var results = await InvokeSearchAsync(Provider(port, knowledge), "e33", turn);
 
         Assert.Single(results);
         Assert.Contains("holds nothing", results[0].Text, StringComparison.Ordinal);
@@ -119,11 +116,10 @@ public sealed class KnowledgeProbeTests
 
         var clarificationsObject = new Clarifications();
         clarificationsObject.Update("brand", s => s.ProbeAsks = 2);
-        using var clarifications = OpenClarifications(clarificationsObject);
-        using var scope = KnowledgeScopeScope.Open(FullScope("brand", "applies_to"));
+        var turn = TurnOf(FullScope("brand", "applies_to"), clarificationsObject);
 
         var knowledge = Resolved(["brand", "applies_to"]);
-        var results = await InvokeSearchAsync(Provider(port, knowledge), "e33");
+        var results = await InvokeSearchAsync(Provider(port, knowledge), "e33", turn);
 
         Assert.Contains(results, r => r.Text.Contains("ct900", StringComparison.Ordinal));
         // brand was skipped, not touched: it stays exactly where the test seeded it.
@@ -137,13 +133,12 @@ public sealed class KnowledgeProbeTests
         var port = new ProbeFakePort((facets, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>(
             facets.ContainsKey("applies_to") ? [] : [CardWithFacet("a", "applies_to", "ct900")]));
 
-        using var clarifications = OpenClarifications();
-        using var scope = KnowledgeScopeScope.Open(FullScope("applies_to", "brand"));
+        var turn = TurnOf(FullScope("applies_to", "brand"), new Clarifications());
 
         // fromState declares applies_to before brand, so applies_to is tried first even though both
         // are equally droppable.
         var knowledge = Resolved(["applies_to", "brand"]);
-        var results = await InvokeSearchAsync(Provider(port, knowledge), "e33");
+        var results = await InvokeSearchAsync(Provider(port, knowledge), "e33", turn);
 
         Assert.Contains(results, r => r.Text.Contains("ct900", StringComparison.Ordinal));
     }
@@ -159,12 +154,10 @@ public sealed class KnowledgeProbeTests
                 : [CardWithFacet("a", "applies_to", "ct900"), CardWithFacet("b", "applies_to", "ct900ent")]));
 
         var clarificationsObject = new Clarifications();
-        using var clarifications = OpenClarifications(clarificationsObject);
-        using var carries = TurnAmbientsTestScope.WithCarriesHistory(true);
-        using var scope = KnowledgeScopeScope.Open(FullScope("applies_to", "other"));
+        var turn = TurnOf(FullScope("applies_to", "other"), clarificationsObject, carriesHistory: true);
 
         var knowledge = Resolved(["applies_to"], slotDescriptions: Descriptions(("applies_to", Description)));
-        var results = await InvokeSearchAsync(Provider(port, knowledge), "e33");
+        var results = await InvokeSearchAsync(Provider(port, knowledge), "e33", turn);
 
         Assert.Equal(
             ClarificationText.Note(Description, ["ct900", "ct900ent"], KnowledgeAmbiguityConfiguration.DefaultMaxCandidates),
@@ -186,10 +179,9 @@ public sealed class KnowledgeProbeTests
                 ? []
                 : [CardWithFacetList("a", "applies_to", ["ct900", "ct900ent"])]));
 
-        using var clarifications = OpenClarifications();
-        using var scope = KnowledgeScopeScope.Open(FullScope("applies_to", "other"));
+        var turn = TurnOf(FullScope("applies_to", "other"), new Clarifications());
 
-        var results = await InvokeSearchAsync(Provider(port, Resolved(["applies_to"])), "e33");
+        var results = await InvokeSearchAsync(Provider(port, Resolved(["applies_to"])), "e33", turn);
 
         var text = Assert.Single(results).Text;
         Assert.Contains("ct900", text, StringComparison.Ordinal);
@@ -205,11 +197,10 @@ public sealed class KnowledgeProbeTests
                 ? []
                 : [CardWithFacet("a", "applies_to", "ct900", template)]));
 
-        using var clarifications = OpenClarifications();
-        using var scope = KnowledgeScopeScope.Open(FullScope("applies_to", "other"));
+        var turn = TurnOf(FullScope("applies_to", "other"), new Clarifications());
 
         var results = await InvokeSearchAsync(
-            Provider(port, Resolved(["applies_to"], template: template)), "e33");
+            Provider(port, Resolved(["applies_to"], template: template)), "e33", turn);
 
         Assert.Contains("ct900", Assert.Single(results).Text, StringComparison.Ordinal);
     }
@@ -222,10 +213,9 @@ public sealed class KnowledgeProbeTests
                 ? []
                 : [CardWithFacet("a", "applies_to", "*"), CardWithFacet("b", "applies_to", "ct900")]));
 
-        using var clarifications = OpenClarifications();
-        using var scope = KnowledgeScopeScope.Open(FullScope("applies_to", "other"));
+        var turn = TurnOf(FullScope("applies_to", "other"), new Clarifications());
 
-        var results = await InvokeSearchAsync(Provider(port, Resolved(["applies_to"])), "e33");
+        var results = await InvokeSearchAsync(Provider(port, Resolved(["applies_to"])), "e33", turn);
 
         var text = Assert.Single(results).Text;
         Assert.Contains("ct900", text, StringComparison.Ordinal);
@@ -240,12 +230,11 @@ public sealed class KnowledgeProbeTests
         var port = new ProbeFakePort((facets, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>(
             facets.ContainsKey("applies_to") ? [] : [CardWithFacet("a", "applies_to", "ct900")]));
 
-        using var clarifications = OpenClarifications();
-        using var scope = KnowledgeScopeScope.Open(FullScope("applies_to", "other"));
+        var turn = TurnOf(FullScope("applies_to", "other"), new Clarifications());
 
         var results = await InvokeSearchAsync(
             Provider(port, Resolved(["applies_to"], slotDescriptions: Descriptions(("applies_to", Description)))),
-            "e33");
+            "e33", turn);
 
         Assert.Equal(
             ClarificationText.Note(Description, ["ct900"], KnowledgeAmbiguityConfiguration.DefaultMaxCandidates),
@@ -263,12 +252,11 @@ public sealed class KnowledgeProbeTests
                 ? []
                 : [.. many.Select((value, i) => CardWithFacet($"c{i}", "applies_to", value))]));
 
-        using var clarifications = OpenClarifications();
-        using var scope = KnowledgeScopeScope.Open(FullScope("applies_to", "other"));
+        var turn = TurnOf(FullScope("applies_to", "other"), new Clarifications());
 
         var knowledge = Resolved(
             ["applies_to"], ambiguity: new KnowledgeAmbiguityConfiguration { MaxCandidates = 6 });
-        var results = await InvokeSearchAsync(Provider(port, knowledge), "e33");
+        var results = await InvokeSearchAsync(Provider(port, knowledge), "e33", turn);
 
         var text = Assert.Single(results).Text;
         Assert.DoesNotContain("holds nothing", text, StringComparison.Ordinal);
@@ -290,10 +278,9 @@ public sealed class KnowledgeProbeTests
         clarificationsObject.Update(
             "applies_to",
             s => s.LastNamed = Clarifications.LastNamed.Of(new HashSet<string>(["ct900", "ct900ent"], StringComparer.Ordinal)));
-        using var clarifications = OpenClarifications(clarificationsObject);
-        using var scope = KnowledgeScopeScope.Open(FullScope("applies_to", "other"));
+        var turn = TurnOf(FullScope("applies_to", "other"), clarificationsObject);
 
-        var results = await InvokeSearchAsync(Provider(port, Resolved(["applies_to"])), "e33");
+        var results = await InvokeSearchAsync(Provider(port, Resolved(["applies_to"])), "e33", turn);
 
         Assert.Contains("holds nothing", Assert.Single(results).Text, StringComparison.Ordinal);
 
@@ -306,10 +293,9 @@ public sealed class KnowledgeProbeTests
     {
         var port = new ProbeFakePort((_, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>([]));
 
-        using var clarifications = OpenClarifications();
-        using var scope = KnowledgeScopeScope.Open(FullScope("applies_to", "other"));
+        var turn = TurnOf(FullScope("applies_to", "other"), new Clarifications());
 
-        var results = await InvokeSearchAsync(Provider(port, Resolved(["applies_to"])), "e33");
+        var results = await InvokeSearchAsync(Provider(port, Resolved(["applies_to"])), "e33", turn);
 
         Assert.Contains("holds nothing", Assert.Single(results).Text, StringComparison.Ordinal);
     }
@@ -323,11 +309,9 @@ public sealed class KnowledgeProbeTests
             facets.ContainsKey("applies_to") ? [] : [CardWithFacet("a", "applies_to", "ct900")]));
 
         var clarificationsObject = new Clarifications();
-        using var clarifications = OpenClarifications(clarificationsObject);
-        using var carries = TurnAmbientsTestScope.WithCarriesHistory(false);
-        using var scope = KnowledgeScopeScope.Open(FullScope("applies_to", "other"));
+        var turn = TurnOf(FullScope("applies_to", "other"), clarificationsObject, carriesHistory: false);
 
-        var results = await InvokeSearchAsync(Provider(port, Resolved(["applies_to"])), "e33");
+        var results = await InvokeSearchAsync(Provider(port, Resolved(["applies_to"])), "e33", turn);
 
         Assert.Contains("ct900", Assert.Single(results).Text, StringComparison.Ordinal);
 
@@ -339,13 +323,13 @@ public sealed class KnowledgeProbeTests
     // K42: no holder, no probe -- but the notice is still owed to a scoped run.
 
     [Fact]
-    public async Task K42_NoHolderOnTheAmbient_TheProbeDoesNotSearch_ButStillEmitsTheNotice()
+    public async Task K42_NoHolderOnTheTurn_TheProbeDoesNotSearch_ButStillEmitsTheNotice()
     {
         var port = new ProbeFakePort((_, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>([]));
-        using var scope = KnowledgeScopeScope.Open(FullScope("applies_to", "other"));
+        var turn = TurnOf(FullScope("applies_to", "other"), null);
 
-        // No Clarifications opened on the ambient at all -- the K42 strip inside a nested tool call.
-        var results = await InvokeSearchAsync(Provider(port, Resolved(["applies_to"])), "e33");
+        // No Clarifications on the turn at all -- the K42 strip inside a nested tool call.
+        var results = await InvokeSearchAsync(Provider(port, Resolved(["applies_to"])), "e33", turn);
 
         Assert.Contains("holds nothing", Assert.Single(results).Text, StringComparison.Ordinal);
         Assert.Equal(1, port.Calls);
@@ -356,7 +340,7 @@ public sealed class KnowledgeProbeTests
     {
         // Acceptance: "a sub-agent that searches first writes no lastNamed, and the caller's own
         // search still counts." Simulates exactly what AuditingFunctionInvokingChatClient.
-        // InvokeFunctionAsync does for a NESTED tool call: it strips Clarifications from the ambient,
+        // InvokeFunctionAsync does for a NESTED tool call: it strips Clarifications from the turn,
         // leaving the outer call id in place.
         var port = new ProbeFakePort((facets, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>(
             facets.ContainsKey("applies_to") ? [] : [CardWithFacet("a", "applies_to", "ct900")]));
@@ -365,25 +349,18 @@ public sealed class KnowledgeProbeTests
         var knowledge = Resolved(["applies_to"]);
         var provider = Provider(port, knowledge);
 
-        using (OpenClarifications(clarificationsObject))
-        using (KnowledgeScopeScope.Open(FullScope("applies_to", "other")))
-        {
-            IReadOnlyList<TextSearchProvider.TextSearchResult> nested;
-            using (TurnAmbients.Amend(a => a with { Clarifications = null }))
-            {
-                nested = await InvokeSearchAsync(provider, "the sub-agent's own question");
-            }
+        var scope = FullScope("applies_to", "other");
+        var nested = await InvokeSearchAsync(provider, "the sub-agent's own question", TurnOf(scope, null));
 
-            Assert.Contains("holds nothing", Assert.Single(nested).Text, StringComparison.Ordinal);
-            Assert.Equal(0, clarificationsObject.Read("applies_to").ProbeAsks);
-            // Only the sub-agent's own main search ran; its own probe search never reached the port.
-            Assert.Equal(1, port.Calls);
+        Assert.Contains("holds nothing", Assert.Single(nested).Text, StringComparison.Ordinal);
+        Assert.Equal(0, clarificationsObject.Read("applies_to").ProbeAsks);
+        // Only the sub-agent's own main search ran; its own probe search never reached the port.
+        Assert.Equal(1, port.Calls);
 
-            var callers = await InvokeSearchAsync(provider, "the caller's own question");
+        var callers = await InvokeSearchAsync(provider, "the caller's own question", TurnOf(scope, clarificationsObject));
 
-            Assert.Contains("ct900", Assert.Single(callers).Text, StringComparison.Ordinal);
-            Assert.Equal(1, clarificationsObject.Read("applies_to").ProbeAsks);
-        }
+        Assert.Contains("ct900", Assert.Single(callers).Text, StringComparison.Ordinal);
+        Assert.Equal(1, clarificationsObject.Read("applies_to").ProbeAsks);
     }
 
     // K25: every notice this design emits carries the reserved source name, and none is citable.
@@ -392,21 +369,15 @@ public sealed class KnowledgeProbeTests
     public async Task EveryOutcome_CarriesTheReservedSourceName()
     {
         var holdsNothing = new ProbeFakePort((_, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>([]));
-        using (OpenClarifications())
-        using (KnowledgeScopeScope.Open(FullScope("applies_to", "other")))
-        {
-            var results = await InvokeSearchAsync(Provider(holdsNothing, Resolved(["applies_to"])), "e33");
-            Assert.All(results, r => Assert.Equal(KnowledgeNotices.SourceName, r.SourceName));
-        }
+        var turn = TurnOf(FullScope("applies_to", "other"), new Clarifications());
+        var results = await InvokeSearchAsync(Provider(holdsNothing, Resolved(["applies_to"])), "e33", turn);
+        Assert.All(results, r => Assert.Equal(KnowledgeNotices.SourceName, r.SourceName));
 
         var named = new ProbeFakePort((facets, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>(
             facets.ContainsKey("applies_to") ? [] : [CardWithFacet("a", "applies_to", "ct900")]));
-        using (OpenClarifications())
-        using (KnowledgeScopeScope.Open(FullScope("applies_to", "other")))
-        {
-            var results = await InvokeSearchAsync(Provider(named, Resolved(["applies_to"])), "e33");
-            Assert.All(results, r => Assert.Equal(KnowledgeNotices.SourceName, r.SourceName));
-        }
+        var secondTurn = TurnOf(FullScope("applies_to", "other"), new Clarifications());
+        var second = await InvokeSearchAsync(Provider(named, Resolved(["applies_to"])), "e33", secondTurn);
+        Assert.All(second, r => Assert.Equal(KnowledgeNotices.SourceName, r.SourceName));
     }
 
     [Fact]
@@ -422,12 +393,10 @@ public sealed class KnowledgeProbeTests
         var provider = Provider(port, Resolved(["applies_to"], citations: true));
         TurnSources sources = new();
 
-        using (OpenClarifications())
-        using (KnowledgeScopeScope.Open(FullScope("applies_to", "other")))
-        using (TurnAmbientsTestScope.WithSources(sources))
-        using (TurnAmbientsTestScope.WithOuterCall("call-1"))
+        var turn = TurnOf(FullScope("applies_to", "other"), new Clarifications(), sources: sources);
+        using (sources.BeginOuterCall("call-1"))
         {
-            await InvokeSearchAsync(provider, "e33");
+            await InvokeSearchAsync(provider, "e33", turn);
         }
 
         Assert.Empty(sources.TakeFor("call-1"));
@@ -445,12 +414,11 @@ public sealed class KnowledgeProbeTests
                 : throw boom);
 
         RecordingLoggerFactory loggers = new();
-        using var clarifications = OpenClarifications();
-        using var scope = KnowledgeScopeScope.Open(FullScope("applies_to", "other"));
+        var turn = TurnOf(FullScope("applies_to", "other"), new Clarifications());
 
         var provider = KnowledgeProviderFactory.Create(
             port, Resolved(["applies_to"]), "agent-under-test", new SourceLocatorCitationFormatter(), loggers);
-        var results = await InvokeSearchAsync(provider, "e33");
+        var results = await InvokeSearchAsync(provider, "e33", turn);
 
         Assert.Contains("holds nothing", Assert.Single(results).Text, StringComparison.Ordinal);
         Assert.DoesNotContain("unreachable", Assert.Single(results).Text, StringComparison.OrdinalIgnoreCase);
@@ -480,13 +448,12 @@ public sealed class KnowledgeProbeTests
         });
 
         var clarificationsObject = new Clarifications();
-        using var clarifications = OpenClarifications(clarificationsObject);
-        using var scope = KnowledgeScopeScope.Open(FullScope("applies_to", "other"));
+        var turn = TurnOf(FullScope("applies_to", "other"), clarificationsObject);
 
         var knowledge = Resolved(
             ["applies_to"],
             ambiguity: new KnowledgeAmbiguityConfiguration { ProbeDeadlineSeconds = 1, ProbeWaitMarginSeconds = 1 });
-        var results = await InvokeSearchAsync(Provider(port, knowledge), "e33");
+        var results = await InvokeSearchAsync(Provider(port, knowledge), "e33", turn);
 
         Assert.Contains("holds nothing", Assert.Single(results).Text, StringComparison.Ordinal);
 
@@ -506,16 +473,13 @@ public sealed class KnowledgeProbeTests
         var clarificationsObject = new Clarifications();
         var provider = Provider(port, Resolved(["applies_to"]));
 
-        using (OpenClarifications(clarificationsObject))
-        using (KnowledgeScopeScope.Open(FullScope("applies_to", "other")))
-        {
-            var first = await InvokeSearchAsync(provider, "e33");
-            var second = await InvokeSearchAsync(provider, "e33 again");
-            var third = await InvokeSearchAsync(provider, "e33 once more");
+        var turn = TurnOf(FullScope("applies_to", "other"), clarificationsObject);
+        var first = await InvokeSearchAsync(provider, "e33", turn);
+        var second = await InvokeSearchAsync(provider, "e33 again", turn);
+        var third = await InvokeSearchAsync(provider, "e33 once more", turn);
 
-            Assert.Same(first[0], second[0]);
-            Assert.Same(first[0], third[0]);
-        }
+        Assert.Same(first[0], second[0]);
+        Assert.Same(first[0], third[0]);
 
         // Every call's own main search runs (three), and only the winner's search reached the
         // narrowed scope (one): four port calls, one probe.
@@ -529,14 +493,12 @@ public sealed class KnowledgeProbeTests
         var port = new ProbeFakePort((_, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>([]));
         var provider = Provider(port, Resolved(["applies_to"]));
 
-        using var clarifications = OpenClarifications();
-        using var scope = KnowledgeScopeScope.Open(FullScope("applies_to", "other"));
+        var turn = TurnOf(FullScope("applies_to", "other"), new Clarifications());
+        var first = await InvokeSearchAsync(provider, "e33", turn);
+        var second = await InvokeSearchAsync(provider, "e33 again", turn);
 
-        var first = await InvokeSearchAsync(provider, "e33");
-        var second = await InvokeSearchAsync(provider, "e33 again");
-
-        // InvokeSearchAsync itself materialises a fresh list with ToList(), so the replay proof is on
-        // the element the two lists share, not on the wrapper InvokeSearchAsync just allocated.
+        // Each search returns the turn's own probe payload, so the replay proof is on the element
+        // the two lists share, not on the lists themselves.
         Assert.Same(first[0], second[0]);
     }
 
@@ -557,11 +519,9 @@ public sealed class KnowledgeProbeTests
 
         var provider = Provider(port, Resolved(["applies_to"]));
 
-        using var clarifications = OpenClarifications();
-        using var scope = KnowledgeScopeScope.Open(FullScope("applies_to", "other"));
-
-        var first = await InvokeSearchAsync(provider, "e33");
-        var second = await InvokeSearchAsync(provider, "e33 again");
+        var turn = TurnOf(FullScope("applies_to", "other"), new Clarifications());
+        var first = await InvokeSearchAsync(provider, "e33", turn);
+        var second = await InvokeSearchAsync(provider, "e33 again", turn);
 
         Assert.Equal(1, thrown);
         Assert.Same(first[0], second[0]);
@@ -589,10 +549,9 @@ public sealed class KnowledgeProbeTests
         var clarificationsObject = new Clarifications();
         var provider = Provider(port, Resolved(["applies_to"]));
 
-        using var clarifications = OpenClarifications(clarificationsObject);
-        using var scope = KnowledgeScopeScope.Open(FullScope("applies_to", "other"));
+        var turn = TurnOf(FullScope("applies_to", "other"), clarificationsObject);
 
-        var winner = InvokeSearchWithCallerTokenAsync(provider, "e33", caller.Token);
+        var winner = InvokeSearchWithCallerTokenAsync(provider, "e33", turn, caller.Token);
 
         await probeStarted.Task.WaitAsync(TestContext.Current.CancellationToken);
         await caller.CancelAsync();
@@ -650,17 +609,16 @@ public sealed class KnowledgeProbeTests
             ambiguity: new KnowledgeAmbiguityConfiguration { ProbeDeadlineSeconds = 1, ProbeWaitMarginSeconds = 1 });
         var provider = Provider(port, knowledge);
 
-        using var clarifications = OpenClarifications();
-        using var scope = KnowledgeScopeScope.Open(FullScope("applies_to", "other"));
+        var turn = TurnOf(FullScope("applies_to", "other"), new Clarifications());
 
-        var winner = InvokeSearchWithCallerTokenAsync(provider, "e33", caller.Token);
+        var winner = InvokeSearchWithCallerTokenAsync(provider, "e33", turn, caller.Token);
 
         // Only reached after the claim, the increment, and the narrowed scope's own search have
         // all already run, so the loser below is guaranteed to lose the race, not win it.
         await probeStarted.Task.WaitAsync(TestContext.Current.CancellationToken);
 
         var stopwatch = Stopwatch.StartNew();
-        var loser = InvokeSearchAsync(provider, "e33 from a second caller");
+        var loser = InvokeSearchAsync(provider, "e33 from a second caller", turn);
 
         await caller.CancelAsync();
 
@@ -701,21 +659,13 @@ public sealed class KnowledgeProbeTests
         var clarificationsObject = new Clarifications();
         var provider = Provider(port, Resolved(["applies_to"]));
 
-        using (OpenClarifications(clarificationsObject))
-        using (KnowledgeScopeScope.Open(FullScope("applies_to", "other")))
-        {
-            await InvokeSearchAsync(provider, "turn one");
-        }
+        await InvokeSearchAsync(provider, "turn one", TurnOf(FullScope("applies_to", "other"), clarificationsObject));
 
         Assert.Equal(1, clarificationsObject.Read("applies_to").ProbeAsks);
 
         clarificationsObject.BeginTurn();
 
-        using (OpenClarifications(clarificationsObject))
-        using (KnowledgeScopeScope.Open(FullScope("applies_to", "other")))
-        {
-            await InvokeSearchAsync(provider, "turn two");
-        }
+        await InvokeSearchAsync(provider, "turn two", TurnOf(FullScope("applies_to", "other"), clarificationsObject));
 
         Assert.Equal(2, clarificationsObject.Read("applies_to").ProbeAsks);
         Assert.Equal(2, attempts);
@@ -735,13 +685,12 @@ public sealed class KnowledgeProbeTests
         var clarificationsObject = new Clarifications();
         Assert.True(clarificationsObject.ClaimProbe().Won);
 
-        using var clarifications = OpenClarifications(clarificationsObject);
-        using var scope = KnowledgeScopeScope.Open(FullScope("applies_to", "other"));
+        var turn = TurnOf(FullScope("applies_to", "other"), clarificationsObject);
 
         var knowledge = Resolved(
             ["applies_to"],
             ambiguity: new KnowledgeAmbiguityConfiguration { ProbeDeadlineSeconds = 0, ProbeWaitMarginSeconds = 0 });
-        var results = await InvokeSearchAsync(Provider(port, knowledge), "e33");
+        var results = await InvokeSearchAsync(Provider(port, knowledge), "e33", turn);
 
         var text = Assert.Single(results).Text;
         Assert.Contains("holds nothing", text, StringComparison.Ordinal);
@@ -779,18 +728,17 @@ public sealed class KnowledgeProbeTests
     [Fact]
     public async Task Step3_HostPinnedTheWildcardValue_IsNotDropped()
     {
-        // A host that opens a facet on the wildcard literal is saying "every value of it", not "I did
+        // A host that pins a facet to the wildcard literal is saying "every value of it", not "I did
         // not know". Origins is where that difference is recorded, so the value alone cannot decide
         // droppability: widening here would overrule the host rather than recover a lost value.
         var port = new ProbeFakePort(facets => Task.FromResult<IReadOnlyList<KnowledgeCard>>(
             facets.ContainsKey("applies_to") ? [] : [CardWithFacet("a", "applies_to", "ct900")]));
 
-        using var clarifications = OpenClarifications();
-        using var scope = KnowledgeScopeScope.Open(ScopeWithOrigins(
+        var turn = TurnOf(ScopeWithOrigins(
             ("brand", "acme", KnowledgeFacetOrigin.Host),
-            ("applies_to", "*", KnowledgeFacetOrigin.Host)));
+            ("applies_to", "*", KnowledgeFacetOrigin.Host)), new Clarifications());
 
-        var results = await InvokeSearchAsync(Provider(port, Resolved(["applies_to"])), "e33");
+        var results = await InvokeSearchAsync(Provider(port, Resolved(["applies_to"])), "e33", turn);
 
         Assert.Single(results);
         Assert.Contains("holds nothing", results[0].Text, StringComparison.Ordinal);
@@ -805,12 +753,11 @@ public sealed class KnowledgeProbeTests
         var port = new ProbeFakePort(facets => Task.FromResult<IReadOnlyList<KnowledgeCard>>(
             facets.ContainsKey("applies_to") ? [] : [CardWithFacet("a", "applies_to", "ct900")]));
 
-        using var clarifications = OpenClarifications();
-        using var scope = KnowledgeScopeScope.Open(ScopeWithOrigins(
+        var turn = TurnOf(ScopeWithOrigins(
             ("brand", "acme", KnowledgeFacetOrigin.Host),
-            ("applies_to", "*", KnowledgeFacetOrigin.Wildcard)));
+            ("applies_to", "*", KnowledgeFacetOrigin.Wildcard)), new Clarifications());
 
-        var results = await InvokeSearchAsync(Provider(port, Resolved(["applies_to"])), "e33");
+        var results = await InvokeSearchAsync(Provider(port, Resolved(["applies_to"])), "e33", turn);
 
         Assert.Single(results);
         Assert.Contains("ct900", results[0].Text, StringComparison.Ordinal);
@@ -834,10 +781,9 @@ public sealed class KnowledgeProbeTests
             ["applies_to"] = "*",
         };
 
-        using var clarifications = OpenClarifications();
-        using var scope = KnowledgeScopeScope.Open(new KnowledgeScope { Facets = facets });
+        var turn = TurnOf(new KnowledgeScope { Facets = facets }, new Clarifications());
 
-        var results = await InvokeSearchAsync(Provider(port, Resolved(["applies_to"])), "e33");
+        var results = await InvokeSearchAsync(Provider(port, Resolved(["applies_to"])), "e33", turn);
 
         Assert.Single(results);
         Assert.Contains("ct900", results[0].Text, StringComparison.Ordinal);
@@ -875,14 +821,13 @@ public sealed class KnowledgeProbeTests
         });
 
         var clarificationsObject = new Clarifications();
-        using var clarifications = OpenClarifications(clarificationsObject);
-        using var scope = KnowledgeScopeScope.Open(FullScope("applies_to", "other"));
+        var turn = TurnOf(FullScope("applies_to", "other"), clarificationsObject);
 
         var knowledge = Resolved(
             ["applies_to"],
             ambiguity: new KnowledgeAmbiguityConfiguration { ProbeDeadlineSeconds = 1 });
 
-        var results = await InvokeSearchWithCallerTokenAsync(Provider(port, knowledge), "e33", caller.Token);
+        var results = await InvokeSearchWithCallerTokenAsync(Provider(port, knowledge), "e33", turn, caller.Token);
 
         Assert.Single(results);
         Assert.Contains("holds nothing", results[0].Text, StringComparison.Ordinal);
@@ -900,14 +845,13 @@ public sealed class KnowledgeProbeTests
             facets.ContainsKey("applies_to") ? [] : [CardWithFacet("a", "applies_to", "ct900")]));
 
         var clarificationsObject = new Clarifications();
-        using var clarifications = OpenClarifications(clarificationsObject);
-        using var scope = KnowledgeScopeScope.Open(FullScope("applies_to", "other"));
+        var turn = TurnOf(FullScope("applies_to", "other"), clarificationsObject);
 
         using ThrowingLoggerFactory loggers = new(ProbeRanEventId);
         var provider = KnowledgeProviderFactory.Create(
             port, Resolved(["applies_to"]), "agent-under-test", new SourceLocatorCitationFormatter(), loggers);
 
-        var results = await InvokeSearchAsync(provider, "e33");
+        var results = await InvokeSearchAsync(provider, "e33", turn);
 
         Assert.Single(results);
         Assert.Contains("unreachable", results[0].Text, StringComparison.Ordinal);
@@ -929,14 +873,13 @@ public sealed class KnowledgeProbeTests
         var port = new ProbeFakePort(facets => Task.FromResult<IReadOnlyList<KnowledgeCard>>(
             facets.ContainsKey("applies_to") ? [] : [CardWithFacet("a", "applies_to", "ct900")]));
 
-        using var clarifications = OpenClarifications();
-        using var scope = KnowledgeScopeScope.Open(FullScope("applies_to", "other"));
+        var turn = TurnOf(FullScope("applies_to", "other"), new Clarifications());
 
         using CountingLoggerFactory loggers = new(RetrievedEventId);
         var provider = KnowledgeProviderFactory.Create(
             port, Resolved(["applies_to"]), "agent-under-test", new SourceLocatorCitationFormatter(), loggers);
 
-        var results = await InvokeSearchAsync(provider, "e33");
+        var results = await InvokeSearchAsync(provider, "e33", turn);
 
         Assert.Contains("ct900", results[0].Text, StringComparison.Ordinal);
         Assert.Equal(port.Calls, loggers.Count);
@@ -1062,8 +1005,20 @@ public sealed class KnowledgeProbeTests
         => KnowledgeProviderFactory.Create(
             port, knowledge, "agent-under-test", new SourceLocatorCitationFormatter(), loggers: null);
 
-    private static IDisposable OpenClarifications(Clarifications? clarifications = null)
-        => TurnAmbientsTestScope.WithClarifications(clarifications ?? new Clarifications());
+    private static TurnInvocation TurnOf(
+        KnowledgeScope? scope,
+        Clarifications? clarifications = null,
+        bool carriesHistory = false,
+        TurnSources? sources = null) => new()
+    {
+        CallId = "call",
+        TurnIndex = 0,
+        Stage = "",
+        Knowledge = scope,
+        Clarifications = clarifications,
+        CarriesHistory = carriesHistory,
+        Sources = sources,
+    };
 
     private static ResolvedKnowledge Resolved(
         IReadOnlyList<string> fromState,
@@ -1145,30 +1100,89 @@ public sealed class KnowledgeProbeTests
     }
 
     /// <summary>
-    /// Calls the factory's own search delegate directly, exactly as <c>KnowledgeProviderFactoryTests</c>
-    /// does.
+    /// Invokes the search tool the provider offers, the way the model would: the turn rides along
+    /// as an argument, carrying the scope and the clarifications the search runs under.
     /// </summary>
     private static Task<IReadOnlyList<TextSearchProvider.TextSearchResult>> InvokeSearchAsync(
-        AIContextProvider provider, string query)
-        => RunSearchDelegateAsync(provider, query, TestContext.Current.CancellationToken);
+        AIContextProvider provider, string query, TurnInvocation turn)
+        => InvokeSearchWithCallerTokenAsync(provider, query, turn, TestContext.Current.CancellationToken);
 
     /// <summary>
-    /// The cancellation row's own entry point: <paramref name="cancellationToken"/> here is the
+    /// The cancellation row's own entry point: <paramref name="callerToken"/> here is the
     /// SIMULATED CALLER's own token (K43's cancellation row), never the test host's — see
     /// <see cref="K43_ACancelledProbe_RollsBackTheIncrement_FailsThePayload_AndKeepsTheLatch"/>, its
-    /// only caller. Named apart from <see cref="InvokeSearchAsync(AIContextProvider, string)"/> so a
-    /// deliberately non-<c>TestContext</c> token at this one call site does not read as a mistake.
+    /// only caller. Named apart from <see cref="InvokeSearchAsync(AIContextProvider, string, TurnInvocation)"/>
+    /// so a deliberately non-<c>TestContext</c> token at this one call site does not read as a mistake.
     /// </summary>
-    private static Task<IReadOnlyList<TextSearchProvider.TextSearchResult>> InvokeSearchWithCallerTokenAsync(
-        AIContextProvider provider, string query, CancellationToken callerToken)
-        => RunSearchDelegateAsync(provider, query, callerToken);
+    private static async Task<IReadOnlyList<TextSearchProvider.TextSearchResult>> InvokeSearchWithCallerTokenAsync(
+        AIContextProvider provider, string query, TurnInvocation turn, CancellationToken callerToken)
+    {
+        StubSession session = new();
+        var context = await provider.InvokingAsync(
+            Invoking("hello", session), TestContext.Current.CancellationToken).ConfigureAwait(false);
+        var search = Assert.Single(context.Tools!, tool => tool.Name == "Search");
+        var results = await ((AIFunction)search).InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["userQuestion"] = query,
+                [TurnInvocation.ArgumentsKey] = turn,
+            }),
+            callerToken).ConfigureAwait(false)
+            as IReadOnlyList<TextSearchProvider.TextSearchResult>;
+        return results!;
+    }
 
-    private static Task<IReadOnlyList<TextSearchProvider.TextSearchResult>> RunSearchDelegateAsync(
-        AIContextProvider provider, string query, CancellationToken cancellationToken)
-        => TextSearchProviderInternals.SearchAsync(provider, query, cancellationToken);
+    /// <summary>Runs the provider the way the framework runs it, over one caller message.</summary>
+    private static AIContextProvider.InvokingContext Invoking(string text, AgentSession session)
+    {
+#pragma warning disable MAAI001 // The context constructors are the framework's own experimental surface.
+        return new(
+            StubAgent.Instance,
+            session,
+            new AIContext { Messages = [new ChatMessage(ChatRole.User, text)] });
+#pragma warning restore MAAI001
+    }
+
+    private sealed class StubSession : AgentSession;
+
+    /// <summary>Stands in for the agent the framework names on a context. Nothing here runs it.</summary>
+    private sealed class StubAgent : AIAgent
+    {
+        public static StubAgent Instance { get; } = new();
+
+        protected override ValueTask<AgentSession> CreateSessionCoreAsync(
+            CancellationToken cancellationToken = default)
+            => new(new StubSession());
+
+        protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
+            AgentSession session,
+            JsonSerializerOptions? jsonSerializerOptions = null,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
+            JsonElement serializedState,
+            JsonSerializerOptions? jsonSerializerOptions = null,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        protected override Task<AgentResponse> RunCoreAsync(
+            IEnumerable<ChatMessage> messages,
+            AgentSession? session = null,
+            AgentRunOptions? options = null,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        protected override IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
+            IEnumerable<ChatMessage> messages,
+            AgentSession? session = null,
+            AgentRunOptions? options = null,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+    }
 
     /// <summary>
-    /// A knowledge store whose answer is a function of the live scope's facets, so one instance can
+    /// A knowledge store whose answer is a function of the passed scope's facets, so one instance can
     /// stand in for both the main search (full scope) and the probe's own second search (narrowed).
     /// </summary>
     private sealed class ProbeFakePort : IKnowledgeRetrievalPort
@@ -1187,10 +1201,10 @@ public sealed class KnowledgeProbeTests
         internal int Calls { get; private set; }
 
         public async ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
-            string query, CancellationToken cancellationToken = default)
+            string query, KnowledgeScope? scope = null, CancellationToken cancellationToken = default)
         {
             Calls++;
-            var facets = KnowledgeScopeScope.Current?.Facets ?? new Dictionary<string, string>(StringComparer.Ordinal);
+            var facets = scope?.Facets ?? new Dictionary<string, string>(StringComparer.Ordinal);
             return await _answer(facets, cancellationToken).ConfigureAwait(false);
         }
     }

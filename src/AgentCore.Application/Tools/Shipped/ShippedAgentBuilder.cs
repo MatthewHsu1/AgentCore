@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tools.Builtin;
 using AgentCore.Application.Tools.Registry;
 using Microsoft.Agents.AI;
@@ -61,7 +62,9 @@ internal static class ShippedAgentBuilder
                     Description = described.Description!,
                     ExcludeResultSchema = true,
                 }),
-                definition),
+                definition,
+                tool.Id,
+                agent),
             tool.Id,
             rounds);
     }
@@ -75,30 +78,44 @@ internal static class ShippedAgentBuilder
         private const string QueryParameter = "query";
 
         private readonly IShippedAgentDefinition _definition;
+        private readonly string _toolId;
+        private readonly AIAgent _inner;
 
-        internal ComposedRequest(AIFunction inner, IShippedAgentDefinition definition)
+        internal ComposedRequest(AIFunction inner, IShippedAgentDefinition definition, string toolId, AIAgent innerAgent)
             : base(inner)
         {
             _definition = definition;
+            _toolId = toolId ?? throw new ArgumentNullException(nameof(toolId));
+            _inner = innerAgent ?? throw new ArgumentNullException(nameof(innerAgent));
         }
 
         protected override ValueTask<object?> InvokeCoreAsync(
             AIFunctionArguments arguments,
             CancellationToken cancellationToken)
         {
-            if (arguments.TryGetValue(QueryParameter, out var value) && Text(value) is { } query)
+            if (!arguments.TryGetValue(QueryParameter, out var value) || Text(value) is not { } query)
             {
-                var composed = new AIFunctionArguments(new Dictionary<string, object?>(arguments, StringComparer.Ordinal))
-                {
-                    Services = arguments.Services,
-                    Context = arguments.Context,
-                };
-                composed[QueryParameter] = _definition.Compose(query);
-                return InnerFunction.InvokeAsync(composed, cancellationToken);
+                throw new InvalidOperationException(
+                    $"'{_toolId}' was called without a '{QueryParameter}' string, so there is no request to compose.");
             }
 
-            return InnerFunction.InvokeAsync(arguments, cancellationToken);
+            var parent = arguments.TryGetValue(TurnInvocation.ArgumentsKey, out var turn) && turn is TurnInvocation p
+                ? p
+                : null;
+
+            var composed = _definition.Compose(query, TurnResultsOf(arguments));
+            var nested = parent is not null
+                ? parent with { Clarifications = null, Nested = true }
+                : null;
+            var offered = parent?.ToolsFor == _toolId ? parent?.Tools : null;
+
+            return DelegatedAgentRun.RunAsync(_inner, composed, nested, offered, cancellationToken);
         }
+        /// <summary>Reads what this turn's tools answered out of one call's arguments.</summary>
+        private static TurnResults? TurnResultsOf(AIFunctionArguments arguments)
+            => arguments.TryGetValue(TurnInvocation.ArgumentsKey, out var filed)
+                ? (filed as TurnInvocation)?.Results
+                : null;
 
         private static string? Text(object? value)
             => value switch

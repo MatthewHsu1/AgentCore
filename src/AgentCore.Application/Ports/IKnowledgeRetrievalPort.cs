@@ -16,9 +16,11 @@ public interface IKnowledgeRetrievalPort
     /// <summary>Finds the cards that answer one query.</summary>
     /// <param name="query">What the caller asked, in their own words.</param>
     /// <param name="cancellationToken">Cancels the search.</param>
+    /// <param name="scope">What the caller may see, or <see langword="null"/> when the caller is unscoped.</param>
     /// <returns>The cards, best first. It is empty when nothing clears the score floor.</returns>
     ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
         string query,
+        KnowledgeScope? scope = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>Asks this store for a capability it may also serve.</summary>

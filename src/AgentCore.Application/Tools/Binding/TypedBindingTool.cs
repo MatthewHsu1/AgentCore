@@ -1,6 +1,5 @@
 using System.Text.Json;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Runtime;
 using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Tools.Binding;
@@ -18,9 +17,7 @@ internal sealed class TypedBindingTool : DeclaredTool
         {
             Name = tool.Id,
             Description = tool.Description,
-            ConfigureParameterBinding = parameter => parameter.ParameterType == typeof(ToolCallScope)
-                ? new() { ExcludeFromSchema = true, BindParameter = static (_, _) => ToolCallScopes.Current() }
-                : default,
+            ConfigureParameterBinding = ToolParameterBindings.For,
         });
 
     /// <summary>

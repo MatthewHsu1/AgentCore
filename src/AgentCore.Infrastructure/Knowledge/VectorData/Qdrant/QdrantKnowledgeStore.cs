@@ -2,7 +2,6 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Domain.Knowledge;
 using Google.Protobuf.Collections;
 using Microsoft.Extensions.AI;
@@ -75,24 +74,22 @@ internal sealed class QdrantKnowledgeStore
     /// </summary>
     public void Dispose() => (_channel as IDisposable)?.Dispose();
 
-    /// <inheritdoc />
     public async ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
-        string query, CancellationToken cancellationToken = default)
+        string query, KnowledgeScope? scope = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        var scope = KnowledgeScopeScope.Current;
         if (_options.Scoped)
         {
             // Two different host bugs, so two different messages. An empty facet map filters
-            // nothing, which is the same leak as no ambient at all: a host that reads a customer
+            // nothing, which is the same leak as no scope at all: a host that reads a customer
             // record with no product on it builds one without noticing.
             if (scope is null)
             {
                 throw new InvalidOperationException(
-                    "This deployment declares scoped: true and no KnowledgeScope is open on this turn. "
-                    + "An unscoped search serves every customer every card, so it fails instead. Open the "
-                    + "scope before the call, or set scoped: false on the agent.");
+                    "This deployment declares scoped: true and the search arrived without a KnowledgeScope. "
+                    + "An unscoped search serves every customer every card, so it fails instead. Pass the "
+                    + "scope to SearchAsync, or set scoped: false on the agent.");
             }
 
             if (scope.Facets.Count == 0)

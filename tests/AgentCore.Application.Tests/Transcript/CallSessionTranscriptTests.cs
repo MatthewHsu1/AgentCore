@@ -5,9 +5,9 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
-using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime;
+using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Transcript;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
@@ -157,9 +157,9 @@ public sealed class CallSessionTranscriptTests
     /// <summary>
     /// Drives a real turn end to end through <see cref="CallSession"/>, with a screen bound and a
     /// real tool that draws through it, and reads what store 1 actually kept. Every other render
-    /// test in this suite hand-rolls the ambient with <c>TurnAmbients.Amend</c>, so none of them
-    /// would notice a broken wire between <see cref="CallSession.EnterAmbients"/> and
-    /// <see cref="TurnAmbients.Renders"/> — this is the one test that goes through that wire itself.
+    /// test in this suite hand-rolls collectors, so none of them would notice a broken wire between
+    /// <see cref="CallSession.EnterAmbients"/> and the turn's renders — this is the one test that
+    /// goes through that wire itself.
     /// </summary>
     [Fact]
     public async Task ATurnThatDrawsWithAScreenBound_StoresTheRenderContentOnTheToolResultRow()
@@ -179,16 +179,20 @@ public sealed class CallSessionTranscriptTests
         Assert.Contains(rows.SelectMany(row => row.Content.Contents), content => content is RenderContent);
     }
 
-    /// <summary>Builds a real tool that draws through the ambient screen, for <see cref="ToolYaml"/>.</summary>
+    /// <summary>Builds a real tool that draws through the turn's screen, for <see cref="ToolYaml"/>.</summary>
     private static AITool? DrawingTool(ToolConfiguration tool)
         => AIFunctionFactory.Create(
-            () =>
+            (TurnInvocation? turn) =>
             {
-                CallRenderScope.Current!.Publish("generative-ui", "chart-1", new { title = "Q3 revenue" });
+                turn!.Screen!.Publish("generative-ui", "chart-1", new { title = "Q3 revenue" });
                 return "drew it.";
             },
-            tool.Id,
-            tool.Description ?? tool.Id);
+            new AIFunctionFactoryOptions
+            {
+                Name = tool.Id,
+                Description = tool.Description ?? tool.Id,
+                ConfigureParameterBinding = ToolParameterBindings.For,
+            });
 
     /// <summary>
     /// Step 1's second failure mode: a cut that reached back a turn would replace a sentence the

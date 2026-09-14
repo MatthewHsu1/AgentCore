@@ -28,6 +28,7 @@ public static class ConfigurationValidator
 
         var declaredToolIds = configuration.Tools.Select(static tool => tool.Id).ToHashSet(StringComparer.Ordinal);
         var toolErrors = new List<ConfigurationError>();
+
         CheckToolReferences(configuration, declaredToolIds, toolErrors);
 
         if (toolErrors.Count == 0)
@@ -218,6 +219,7 @@ public static class ConfigurationValidator
         for (var index = 0; index < items.Count; index++)
         {
             var agent = items[index];
+
             AddUnknownModel(
                 agent.Model,
                 ConfigurationError.AppendPointer(ConfigurationError.AppendPointer(Pointer.Agent(index), "model"), "ref"),
@@ -227,6 +229,7 @@ public static class ConfigurationValidator
             for (var child = 0; child < agent.Background.Count; child++)
             {
                 var childId = agent.Background[child];
+
                 if (!names.Agents.Contains(childId))
                 {
                     errors.Add(Reference(
@@ -247,6 +250,7 @@ public static class ConfigurationValidator
             for (var index = 0; index < policy.Stages.Count; index++)
             {
                 var stage = policy.Stages[index];
+
                 if (stage.Agent is { } agentId && !names.Agents.Contains(agentId))
                 {
                     errors.Add(Reference(
@@ -258,6 +262,7 @@ public static class ConfigurationValidator
                 {
                     var transition = stage.To[exit];
                     var pointer = Pointer.Transition(index, exit);
+
                     if (!names.Stages.Contains(transition.Stage))
                     {
                         errors.Add(Reference(
@@ -299,6 +304,7 @@ public static class ConfigurationValidator
         {
             var edge = graph.Edges[index];
             var pointer = Pointer.Edge(index);
+
             if (!names.Nodes.Contains(edge.From))
             {
                 errors.Add(Reference(
@@ -386,6 +392,7 @@ public static class ConfigurationValidator
         for (var index = 0; index < items.Count; index++)
         {
             var agent = items[index];
+
             for (var slot = 0; slot < agent.Skills.Count; slot++)
             {
                 if (servedSkillNames.Contains(agent.Skills[slot]))
@@ -535,7 +542,7 @@ public static class ConfigurationValidator
         }
 
         // A wildcard without fromState is a supported shape: the deployment resolves its own facets
-        // and opens them as the host ambient, which the store still widens. See
+        // and passes them as the call's scope, which the store still widens. See
         // StateKnowledgeScope.Compose and KnowledgeStartup's K19 branch. Only the reverse is refused.
         if (scope.FromState.Count == 0)
         {
@@ -879,10 +886,12 @@ public static class ConfigurationValidator
             {
                 var stage = policy.Stages[index];
                 var exits = new List<SiblingExit>(stage.To.Count);
+
                 for (var exit = 0; exit < stage.To.Count; exit++)
                 {
                     var transition = stage.To[exit];
                     var pointer = Pointer.Transition(index, exit);
+
                     exits.Add(new SiblingExit(
                         DescribeExit(transition.When, "exit", transition.Stage),
                         transition.When is null ? pointer : ConfigurationError.AppendPointer(pointer, "when"),
@@ -915,6 +924,7 @@ public static class ConfigurationValidator
         foreach (var group in graph.Edges.Select(static (edge, index) => (edge, index)).GroupBy(static pair => pair.edge.From, StringComparer.Ordinal))
         {
             var exits = new List<SiblingExit>();
+
             foreach (var pair in group)
             {
                 var pointer = Pointer.Edge(pair.index);
@@ -1024,6 +1034,7 @@ public static class ConfigurationValidator
 
         var outgoing = new HashSet<string>(StringComparer.Ordinal);
         var incoming = new HashSet<string>(StringComparer.Ordinal);
+
         foreach (var edge in graph.Edges)
         {
             outgoing.Add(edge.From);
@@ -1080,10 +1091,12 @@ public static class ConfigurationValidator
         // built-in and 'binds:' names a host delegate, so neither ever names an agent, and a tool id
         // that matches an agent id is a coincidence.
         var edges = new Dictionary<string, List<(string Target, int Agent, int Slot)>>(StringComparer.Ordinal);
+
         for (var index = 0; index < items.Count; index++)
         {
             var agent = items[index];
             var outgoing = new List<(string, int, int)>();
+            
             for (var slot = 0; slot < agent.Tools.Count; slot++)
             {
                 if (!tools.TryGetValue(agent.Tools[slot], out var tool))

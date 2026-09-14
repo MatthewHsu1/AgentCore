@@ -40,7 +40,7 @@ public sealed class StateKnowledgeScopeTests
     [Fact]
     public void Compose_NothingKnown_IsAllWildcard()
     {
-        var scope = StateKnowledgeScope.Compose(Document(), Configured, ambient: null);
+        var scope = StateKnowledgeScope.Compose(Document(), Configured, hostScope: null);
 
         Assert.Equal("*", scope!.Facets["brand"]);
         Assert.Equal("*", scope.Facets["applies_to"]);
@@ -52,7 +52,7 @@ public sealed class StateKnowledgeScopeTests
         var state = Document();
         state.TryWrite("brand", JsonValue.Create("sole"));
 
-        var scope = StateKnowledgeScope.Compose(state, Configured, ambient: null);
+        var scope = StateKnowledgeScope.Compose(state, Configured, hostScope: null);
 
         Assert.Equal("sole", scope!.Facets["brand"]);
         Assert.Equal("*", scope.Facets["applies_to"]);
@@ -63,35 +63,35 @@ public sealed class StateKnowledgeScopeTests
     {
         var state = Document();
         state.TryWrite("brand", JsonValue.Create("sole"));
-        KnowledgeScope ambient = new()
+        KnowledgeScope host = new()
         {
             Facets = new Dictionary<string, string>(StringComparer.Ordinal) { ["brand"] = "spirit" },
         };
 
-        var scope = StateKnowledgeScope.Compose(state, Configured, ambient);
+        var scope = StateKnowledgeScope.Compose(state, Configured, host);
 
         Assert.Equal("spirit", scope!.Facets["brand"]);
     }
 
     [Fact]
-    public void Compose_NoFromState_ReturnsTheAmbientInstance()
+    public void Compose_NoFromState_ReturnsTheHostInstance()
     {
-        KnowledgeScope ambient = new()
+        KnowledgeScope host = new()
         {
             Facets = new Dictionary<string, string>(StringComparer.Ordinal) { ["brand"] = "sole" },
         };
 
         var scope = StateKnowledgeScope.Compose(
-            Document(), Configured with { FromState = [] }, ambient);
+            Document(), Configured with { FromState = [] }, host);
 
-        Assert.Same(ambient, scope);
+        Assert.Same(host, scope);
     }
 
     [Fact]
-    public void Compose_NoWildcard_ReturnsTheAmbientInstance()
+    public void Compose_NoWildcard_ReturnsNull()
     {
         var scope = StateKnowledgeScope.Compose(
-            Document(), Configured with { Wildcard = null }, ambient: null);
+            Document(), Configured with { Wildcard = null }, hostScope: null);
 
         Assert.Null(scope);
     }

@@ -1,4 +1,5 @@
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tools.Builtin;
 using Microsoft.Extensions.AI;
 
@@ -32,6 +33,7 @@ internal interface IShippedAgentDefinition : IToolDefinition
 
     /// <summary>Builds the request this agent reads from what the outer agent wrote.</summary>
     /// <param name="query">The outer agent's one string.</param>
+    /// <param name="results">What this turn's tools answered, or <see langword="null"/> outside a turn.</param>
     /// <returns>The request. Most agents hand the string through unchanged.</returns>
-    string Compose(string query);
+    string Compose(string query, TurnResults? results);
 }

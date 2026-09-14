@@ -38,7 +38,7 @@ internal static class AgentHarnessProviders
     /// <summary>
     /// MAF's default <see cref="FileAccessProviderOptions.Instructions"/>, with its persistence claim
     /// replaced: the default tells the model these files "persist beyond the current session" and
-    /// "may be shared across sessions or agents", which is false here — <c>CallScopedAgentFileStore</c>
+    /// "may be shared across sessions or agents", which is false here — <c>CallFilesProvider</c>
     /// resolves to the call's workspace, deleted at <c>EndCall</c>. Every other sentence, including
     /// how to use the tools, is unchanged.
     /// </summary>
@@ -55,7 +55,9 @@ internal static class AgentHarnessProviders
         + "- To change part of a file, find the line numbers with `file_access_grep`, read the range around them\n"
         + "  with `file_access_read_lines`, then edit with `file_access_replace_lines`. Reading the whole file\n"
         + "  first is rarely necessary.";
+
 #pragma warning disable MAAI001 // BackgroundAgentsProvider is evaluation-only in Microsoft.Agents.AI 1.21.0.
+
     /// <summary>Adds this agent's harness providers, in declaration order: todos, mode, memory, files, shell, background.</summary>
     /// <param name="providers">The provider list under construction.</param>
     /// <param name="defaults">The <c>agents.defaults</c> section, or <see langword="null"/>.</param>
@@ -110,6 +112,7 @@ internal static class AgentHarnessProviders
         }
     }
 #pragma warning restore MAAI001
+
 #pragma warning disable MAAI001 // The loop family is evaluation-only in Microsoft.Agents.AI 1.21.0.
 
     /// <summary>
@@ -147,6 +150,7 @@ internal static class AgentHarnessProviders
         {
             var untilPointer = ConfigurationError.AppendPointer(
                 ConfigurationError.AppendPointer(ConfigurationError.AppendPointer(pointer, "loop"), "until"), index);
+
             var until = loop.Until[index];
 
             if (until.Todos is not null)
@@ -181,13 +185,15 @@ internal static class AgentHarnessProviders
         // Every iteration's text reaches the stream; there are no per-iteration entries (decision 14).
         return new LoopAgent(agent, evaluators, new LoopAgentOptions { MaxIterations = loop.MaxRounds });
     }
+
 #pragma warning restore MAAI001
+
+#pragma warning disable MAAI001 // File-store types are evaluation-only in Microsoft.Agents.AI 1.21.0.
 
     /// <summary>
     /// The state keys of the harness providers among <paramref name="providers"/> — never the
     /// history provider's key, which is the transcript and belongs to store 1.
     /// </summary>
-#pragma warning disable MAAI001 // File-store types are evaluation-only in Microsoft.Agents.AI 1.21.0.
     internal static IReadOnlySet<string> StateKeysOf(IEnumerable<AIContextProvider> providers)
     {
         HashSet<string> keys = new(StringComparer.Ordinal);
@@ -207,11 +213,15 @@ internal static class AgentHarnessProviders
 
         return keys;
     }
+
 #pragma warning restore MAAI001
 
 #pragma warning disable MAAI001 // BackgroundAgentsProvider is evaluation-only in Microsoft.Agents.AI 1.21.0.
+
     private static BackgroundAgentsProvider BuildBackgroundProvider(
-        AgentConfiguration item, string pointer, Func<string, AIAgent?> resolve)
+        AgentConfiguration item,
+        string pointer,
+        Func<string, AIAgent?> resolve)
     {
         if (item.Background.Contains(item.Id, StringComparer.Ordinal))
         {
@@ -226,6 +236,7 @@ internal static class AgentHarnessProviders
         {
             var childPointer = ConfigurationError.AppendPointer(
                 ConfigurationError.AppendPointer(pointer, "background"), index);
+
             var childId = item.Background[index];
 
             children.Add(resolve(childId)
@@ -250,6 +261,7 @@ internal static class AgentHarnessProviders
                 $"the agent '{item.Id}' declares background: children whose names collide: {exception.Message}");
         }
     }
+
 #pragma warning restore MAAI001
 
     private static FileMemoryProvider BuildMemoryProvider(
@@ -266,12 +278,14 @@ internal static class AgentHarnessProviders
 
         try
         {
+
 #pragma warning disable MAAI001 // File-store types are evaluation-only in Microsoft.Agents.AI 1.21.0.
             return new FileMemoryProvider(
                 new FileSystemAgentFileStore(root),
                 InitializeWorkingFolder,
                 new FileMemoryProviderOptions { Instructions = MemoryInstructions });
 #pragma warning restore MAAI001
+
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -287,8 +301,12 @@ internal static class AgentHarnessProviders
     }
 
 #pragma warning disable MAAI001 // File-store types are evaluation-only in Microsoft.Agents.AI 1.21.0.
-    private static FileAccessProvider BuildFilesProvider(
-        AgentConfiguration item, AgentFilesConfiguration files, AgentCompilationContext context, string pointer)
+
+    private static CallFilesProvider BuildFilesProvider(
+        AgentConfiguration item,
+        AgentFilesConfiguration files,
+        AgentCompilationContext context,
+        string pointer)
     {
         if (context.WorkspaceRoot is null)
         {
@@ -299,8 +317,8 @@ internal static class AgentHarnessProviders
                 + "the folder, or remove the files: block.");
         }
 
-        return new FileAccessProvider(
-            new CallScopedAgentFileStore(),
+        return new CallFilesProvider(
+            context.WorkspaceRoot,
             new FileAccessProviderOptions
             {
                 DisableWriteTools = !files.Write,
@@ -309,10 +327,13 @@ internal static class AgentHarnessProviders
                 Instructions = FilesInstructions,
             });
     }
+
 #pragma warning restore MAAI001
 
     private static CallShellOptions BuildShellOptions(
-        AgentConfiguration item, ShellConfiguration shell, AgentCompilationContext context, string pointer)
+        AgentConfiguration item,
+        ShellConfiguration shell,
+        AgentCompilationContext context, string pointer)
     {
         if (context.WorkspaceRoot is null)
         {
@@ -324,13 +345,16 @@ internal static class AgentHarnessProviders
         }
 
         var policy = shell.Policy is { } declared ? BuildPolicy(item, declared, pointer) : null;
+
         var timeout = shell.TimeoutSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : (TimeSpan?)null;
 
         return new CallShellOptions(shell.Kind, policy, timeout);
     }
 
     private static ShellPolicy BuildPolicy(
-        AgentConfiguration item, ShellPolicyConfiguration policy, string pointer)
+        AgentConfiguration item,
+        ShellPolicyConfiguration policy,
+        string pointer)
     {
         // ShellPolicy treats a supplied-but-empty allow list as deny-all (it denies any command that
         // matches none of the allow patterns, and an empty list matches nothing), so an agent that
@@ -369,23 +393,25 @@ internal static class AgentHarnessProviders
         }
     }
 
+#pragma warning disable MAAI001 // File-store types are evaluation-only in Microsoft.Agents.AI 1.21.0.
+
     /// <summary>
     /// Builds the state a new <see cref="FileMemoryProvider"/> session starts with: its working
     /// folder set to the id of the call running the turn, so it reads and writes under
     /// <c>&lt;root&gt;/&lt;callId&gt;/</c> — the folder the host creates and deletes with the call.
     /// </summary>
-#pragma warning disable MAAI001 // File-store types are evaluation-only in Microsoft.Agents.AI 1.21.0.
     private static FileMemoryState InitializeWorkingFolder(AgentSession? session)
     {
-        if (TurnAmbients.Current?.CallId is not { } callId)
+        if (TurnRegistry.For(session)?.CallId is not { } callId)
         {
             throw new InvalidOperationException(
                 "A memory: block's FileMemoryProvider needs the running call's id, and no turn is "
-                + "open on this flow of execution. The provider's working folder is bound only while "
+                + "filed for this session. The provider's working folder is bound only while "
                 + "a turn runs through a CallSession. Run the agent through a CallSession.");
         }
 
         return new FileMemoryState { WorkingFolder = callId };
     }
+
 #pragma warning restore MAAI001
 }

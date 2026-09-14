@@ -1385,7 +1385,7 @@ public sealed class AddAgentCoreTests
     private sealed class FacetCapablePort : IKnowledgeRetrievalPort, IKnowledgeFacetReadPort
     {
         public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
-            string query, CancellationToken cancellationToken = default)
+            string query, KnowledgeScope? scope = null, CancellationToken cancellationToken = default)
             => ValueTask.FromResult<IReadOnlyList<KnowledgeCard>>([]);
 
         public ValueTask<IReadOnlyList<KnowledgeCard>> ReadByFacetAsync(
@@ -1399,7 +1399,7 @@ public sealed class AddAgentCoreTests
         public bool Closed { get; private set; }
 
         public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
-            string query, CancellationToken cancellationToken = default)
+            string query, KnowledgeScope? scope = null, CancellationToken cancellationToken = default)
             => ValueTask.FromResult<IReadOnlyList<KnowledgeCard>>([]);
 
         public void Dispose() => Closed = true;

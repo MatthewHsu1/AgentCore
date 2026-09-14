@@ -3,6 +3,7 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Harness;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime;
 using AgentCore.Domain.Audit;
@@ -83,7 +84,7 @@ public sealed class FilesCompilationTests : IDisposable
     {
         using SequencedChatClient reply = new("hello there.");
         var agent = CompileOne(FilesYaml, reply, _root);
-        Assert.Contains(Providers(agent), provider => provider is FileAccessProvider);
+        Assert.Contains(Providers(agent), provider => provider is CallFilesProvider);
 
         var factory = BuildFactory(FilesYaml, _root, reply);
         var session = factory.Create("call-1");

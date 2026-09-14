@@ -53,7 +53,11 @@ public sealed class InnerAgentTranscriptTests
 
         await session.FlushTranscriptAsync();
 
-        Assert.Equal(2, model.Calls);
+        // Outer tool call, inner answer, outer reply. The old count was two: the inner run
+        // never reached its own model, so a kind: agent tool never heard its agent. Three is
+        // the delegation actually working — and the rows below still hold, so its working-out
+        // stays off store 1 all the same.
+        Assert.Equal(3, model.Calls);
         Assert.Equal(
             ["user", "assistant", "tool", "assistant"],
             store.Rows.Select(row => row.Content.Role.Value));

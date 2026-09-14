@@ -26,7 +26,7 @@ public sealed class DirectLinkLookupTests
         var store = Store(channel);
 
         var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await store.SearchAsync("anything", TestContext.Current.CancellationToken));
+            async () => await store.SearchAsync("anything", null, TestContext.Current.CancellationToken));
 
         Assert.Contains(linkedId, thrown.Message, StringComparison.Ordinal);
     }
@@ -38,7 +38,7 @@ public sealed class DirectLinkLookupTests
         var channel = new RecordingSearchChannel([Point("card-1", linkedId.ToString())]);
         var store = Store(channel);
 
-        await store.SearchAsync("anything", TestContext.Current.CancellationToken);
+        await store.SearchAsync("anything", null, TestContext.Current.CancellationToken);
 
         var retrieved = Assert.Single(channel.RetrievedIds);
         Assert.Equal(linkedId, Assert.Single(retrieved));

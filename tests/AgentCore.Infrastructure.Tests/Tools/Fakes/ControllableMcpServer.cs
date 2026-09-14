@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.IO.Pipelines;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
@@ -34,11 +36,19 @@ internal sealed class ControllableMcpServer : IAsyncDisposable
 
     /// <summary>Gets or sets how long a tool call takes before it answers.</summary>
     public TimeSpan CallDelay { get; set; }
-
     /// <summary>
     /// Gets or sets whether <c>tools/list</c> fails, so a connection opens and then goes no further.
     /// </summary>
     public bool RefuseToList { get; set; }
+
+    /// <summary>Gets the argument names the newest call carried, in order.</summary>
+    public IReadOnlyList<string> LastArgumentNames { get; private set; } = [];
+
+    /// <summary>
+    /// Gets or sets the one string property every offered tool declares, or <see langword="null"/>
+    /// for tools with no schema at all.
+    /// </summary>
+    public string? SchemaProperty { get; set; }
 
     /// <summary>Gets the description this server gives a tool of one name.</summary>
     /// <param name="toolName">The tool name.</param>
@@ -57,10 +67,15 @@ internal sealed class ControllableMcpServer : IAsyncDisposable
             ? throw new InvalidOperationException("this server will not say what it offers")
             : ValueTask.FromResult(new ListToolsResult
             {
-                Tools = [.. Offered().Select(name => new Tool
+                Tools = [.. Offered().Select(name =>
                 {
-                    Name = name,
-                    Description = DescriptionOf(name),
+                    var tool = new Tool { Name = name, Description = DescriptionOf(name) };
+                    if (SchemaProperty is not null)
+                    {
+                        tool.InputSchema = SchemaOf();
+                    }
+
+                    return tool;
                 })],
             });
 
@@ -69,6 +84,13 @@ internal sealed class ControllableMcpServer : IAsyncDisposable
             if (CallDelay > TimeSpan.Zero)
             {
                 await Task.Delay(CallDelay, ct);
+            }
+
+            lock (_sync)
+            {
+                LastArgumentNames = request.Params?.Arguments is { } supplied
+                    ? [.. supplied.Keys]
+                    : [];
             }
 
             return new CallToolResult { Content = [new TextContentBlock { Text = $"ran {request.Params?.Name}" }] };
@@ -89,6 +111,25 @@ internal sealed class ControllableMcpServer : IAsyncDisposable
         return new StreamClientTransport(clientToServer.Writer.AsStream(), serverToClient.Reader.AsStream());
     }
 
+    /// <summary>Builds the schema every offered tool lists, when one was asked for.</summary>
+    private JsonElement SchemaOf()
+    {
+        if (SchemaProperty is null)
+        {
+            return default;
+        }
+
+        JsonObject schema = new()
+        {
+            ["type"] = "object",
+            ["properties"] = new JsonObject
+            {
+                [SchemaProperty] = new JsonObject { ["type"] = "string" },
+            },
+        };
+
+        return JsonSerializer.SerializeToElement(schema);
+    }
     /// <summary>Stops offering one tool, without telling anybody.</summary>
     /// <param name="toolName">The tool to withdraw.</param>
     public void Withdraw(string toolName)

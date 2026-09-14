@@ -3,7 +3,6 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Runtime;
-using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Fakes;
 using Microsoft.Extensions.AI;
 using Xunit;
@@ -115,23 +114,6 @@ public sealed class DelegatedToolsTests
     }
 
     [Fact]
-    public void ARunUnderNoDelegation_IsOfferedNothing()
-    {
-        // This is the outer agent's own run, where FunctionInvokingChatClient.CurrentContext is null.
-        // The id gate shuts it out for nothing, so no session check is needed to keep the tool in.
-        using var scope = TurnContextScope.Enter(new TurnContext
-        {
-            Session = new StubSession(),
-            Tools = [DrawTool],
-            ToolsFor = "ask_specialist",
-        });
-
-        Assert.Null(TurnContextScope.ToolsFor(null));
-        Assert.Null(TurnContextScope.ToolsFor("something_else"));
-        Assert.Equal([DrawTool], TurnContextScope.ToolsFor("ask_specialist"));
-    }
-
-    [Fact]
     public void SetDelegatedTools_RefusesNulls()
     {
         var (session, _, _) = NewCall();
@@ -163,5 +145,4 @@ public sealed class DelegatedToolsTests
         return (session, greeter, specialist);
     }
 
-    private sealed class StubSession : Microsoft.Agents.AI.AgentSession;
 }

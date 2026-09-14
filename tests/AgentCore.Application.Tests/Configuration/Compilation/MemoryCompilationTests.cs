@@ -104,7 +104,7 @@ public sealed class MemoryCompilationTests : IDisposable
         var session = factory.Create("call-1");
 
         // A turn must be open for the FileMemoryProvider's state initializer to read the call id off
-        // TurnAmbients, so the tool list is read through a real call rather than agent.RunAsync
+        // the session, so the tool list is read through a real call rather than agent.RunAsync
         // directly, unlike the todos/mode providers in HarnessCompilationTests.
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 

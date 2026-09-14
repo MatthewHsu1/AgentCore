@@ -4,6 +4,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Scripting;
+using AgentCore.Application.Tools.Binding;
 using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Tools.Drawing;
@@ -33,26 +34,28 @@ internal static class PresentTool
 
         return AIFunctionFactory.Create(
             async ([Description("JavaScript: the body of a function that reads `data` and returns the tree to draw.")] string code,
+                   TurnInvocation? turn,
                    CancellationToken cancellationToken)
-                => await PublishAsync(toolId, scripts, code, cancellationToken).ConfigureAwait(false),
+                => await PublishAsync(toolId, scripts, code, turn, cancellationToken).ConfigureAwait(false),
             new AIFunctionFactoryOptions
             {
                 Name = Name,
                 Description = "Run code that builds one tree for the caller and draw it. Call this once.",
                 ExcludeResultSchema = true,
+                ConfigureParameterBinding = ToolParameterBindings.For,
             });
     }
 
     private static async ValueTask<JsonObject> PublishAsync(
-        string toolId, IScriptRunnerPort scripts, string code, CancellationToken cancellationToken)
+        string toolId, IScriptRunnerPort scripts, string code, TurnInvocation? turn, CancellationToken cancellationToken)
     {
-        if (CallRenderScope.Current is not { } screen)
+        if (turn?.Screen is not { } screen)
         {
             return ToolErrorResult.Create(
                 toolId, "this call has no screen, so nothing can be drawn on it. Say it in words instead.");
         }
 
-        var data = TurnAmbients.Current?.Results?.Data() ?? new JsonObject { [TurnResults.AllKey] = new JsonObject() };
+        var data = turn?.Results?.Data() ?? new JsonObject { [TurnResults.AllKey] = new JsonObject() };
         var run = await scripts.RunAsync(new ScriptRequest(code, data) { Emit = Name }, cancellationToken).ConfigureAwait(false);
 
         if (run.Error is { } error)
@@ -80,10 +83,10 @@ internal static class PresentTool
 
             // The outer tool call is stable across every retry the drawing agent's own tool loop
             // makes for this one call, so a rejected tree followed by an accepted one replaces the
-            // drawing rather than leaving both behind. The ?? toolId fallback only matters to a port
-            // with no rule against an absent outer call: the shipped TurnRenders discards a publish
-            // with none open regardless of the id, so in production this key is never read back.
-            screen.Publish(RendererName, OuterToolCall.Current ?? toolId, node);
+            // drawing rather than leaving both behind. The ?? toolId fallback only matters outside
+            // a turn: the shipped collectors discard a publish with none open regardless of the id,
+            // so in production this key is never read back.
+            screen.Publish(RendererName, turn?.OuterCallId ?? toolId, node);
 
             return new JsonObject { ["drew"] = receipt };
         }

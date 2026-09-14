@@ -1,6 +1,5 @@
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Knowledge;
-using AgentCore.Application.Runtime;
 using AgentCore.Domain.Knowledge;
 using AgentCore.Infrastructure.Knowledge.VectorData.Qdrant;
 using AgentCore.Infrastructure.Tests.Fakes;
@@ -68,9 +67,9 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
     {
         // Card 0 is in scope and links to card 29, which is not. So this also holds up the scope
         // re-check on see_also expansion: a key lookup carries no filter of its own.
-        using var _ = Ct900();
+        var scope = new KnowledgeScope { Facets = new Dictionary<string, string>(StringComparer.Ordinal) { ["model"] = "ct900" } };
 
-        var cards = await LinkedStore().SearchAsync(KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
+        var cards = await LinkedStore().SearchAsync(KbShapedCorpus.PlainQuery, scope, TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(cards);
         var models = await ModelsOf(cards);
@@ -84,7 +83,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
         // `scoped: false` is the design's own switch for a whole-corpus read. An empty facet map is
         // not that switch, and now fails closed like an absent ambient.
         var cards = await Store(scoped: false).SearchAsync(
-            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.PlainQuery, null, TestContext.Current.CancellationToken);
 
         Assert.True((await ModelsOf(cards)).Distinct(StringComparer.Ordinal).Count() > 1);
     }
@@ -94,9 +93,12 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
     {
         // A21, first door. An absent scope fails closed. It never searches every customer's cards.
         var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await Store().SearchAsync(KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken));
+            async () => await Store().SearchAsync(KbShapedCorpus.PlainQuery, null, TestContext.Current.CancellationToken));
 
-        Assert.Contains("no KnowledgeScope is open", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "This deployment declares scoped: true and the search arrived without a KnowledgeScope",
+            thrown.Message,
+            StringComparison.Ordinal);
     }
 
     [QdrantFact]
@@ -105,11 +107,10 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
         // A21, second door. A host that reads a customer record with no product on it builds this
         // scope without noticing, and an empty facet map filters nothing. Same leak as no ambient
         // at all, so the same refusal -- but a different message, because it is a different bug.
-        using var _ = KnowledgeScopeScope.Open(
-            new KnowledgeScope { Facets = new Dictionary<string, string>(StringComparer.Ordinal) });
+        var scope = new KnowledgeScope { Facets = new Dictionary<string, string>(StringComparer.Ordinal) };
 
         var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await Store().SearchAsync(KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken));
+            async () => await Store().SearchAsync(KbShapedCorpus.PlainQuery, scope, TestContext.Current.CancellationToken));
 
         Assert.Contains("names no facets", thrown.Message, StringComparison.Ordinal);
     }
@@ -138,8 +139,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
         // A22. Card 7 holds e33 and sits one dense rank BELOW card 6. Only the required
         // prefetch lifts it.
         var cards = await Store(scoped: false).SearchAsync(
-            KbShapedCorpus.LookalikeQuery, TestContext.Current.CancellationToken);
-
+            KbShapedCorpus.LookalikeQuery, null, TestContext.Current.CancellationToken);
         Assert.Equal(KbShapedCorpus.Id(7), cards[0].CardId);
     }
 
@@ -150,7 +150,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
         // Under `should` it would match both cards and reorder. `must` and `should` are the
         // SAME filter for one token, so no single-identifier test can tell them apart.
         var cards = await Store(scoped: false).SearchAsync(
-            KbShapedCorpus.TwoIdentifierQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.TwoIdentifierQuery, null, TestContext.Current.CancellationToken);
 
         Assert.Equal(KbShapedCorpus.Id(0), cards[0].CardId);
     }
@@ -162,7 +162,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
         // depth (10) and the depth a hardcoded constant would use (20), so either one caps the
         // result below what the caller asked for.
         var cards = await Store(limit: 25, scoped: false).SearchAsync(
-            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.PlainQuery, null, TestContext.Current.CancellationToken);
 
         Assert.True(
             cards.Count(card => !card.ViaLink) >= 25,
@@ -176,12 +176,12 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
         // from what the corpus scores: halfway between the second and third card, which leaves two
         // cards above it and the rest below, with no card sitting on the boundary itself.
         var all = await Store(floor: 0.0, limit: 20, scoped: false).SearchAsync(
-            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.PlainQuery, null, TestContext.Current.CancellationToken);
         Assert.True(all.Count >= 3);
         var floor = (all[1].Score!.Value + all[2].Score!.Value) / 2;
 
         var floored = await Store(floor: floor, limit: 20, scoped: false).SearchAsync(
-            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.PlainQuery, null, TestContext.Current.CancellationToken);
 
         Assert.Equal(2, floored.Count(card => !card.ViaLink));
         Assert.All(floored.Where(card => !card.ViaLink), card => Assert.True(card.Score > floor));
@@ -194,7 +194,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
         // on the page already. Nothing is scoped here, so `InScope` is vacuously true and the link
         // mechanism itself is what the assertion sees.
         var cards = await LinkedStore(limit: 3, scoped: false).SearchAsync(
-            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.PlainQuery, null, TestContext.Current.CancellationToken);
 
         var linked = Assert.Single(cards, card => card.ViaLink);
         Assert.Equal(KbShapedCorpus.Id(KbShapedCorpus.Count - 1), linked.CardId);
@@ -208,16 +208,16 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
         // and applies_to is a real array facet in the sibling knowledge-bank design, so a deployment
         // scoped on it would have dropped every linked card with no error. Every card carries
         // SharedAudience, so this scope holds for card 29 too and the link survives the re-check.
-        using var _ = KnowledgeScopeScope.Open(new KnowledgeScope
+        var scope = new KnowledgeScope
         {
             Facets = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["applies_to"] = KbShapedCorpus.SharedAudience,
             },
-        });
+        };
 
         var cards = await LinkedStore(limit: 3, floor: 0.0).SearchAsync(
-            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.PlainQuery, scope, TestContext.Current.CancellationToken);
 
         var linked = Assert.Single(cards, card => card.ViaLink);
         Assert.Equal(KbShapedCorpus.Id(KbShapedCorpus.Count - 1), linked.CardId);
@@ -229,13 +229,13 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
         // The other half of the same branch. Card 0 is ct900 and links to card 29, which is ct900ent,
         // so card 29's applies_to list does NOT hold this scope. Without this fact a list branch that
         // simply answered true would pass the test above.
-        using var _ = KnowledgeScopeScope.Open(new KnowledgeScope
+        var scope = new KnowledgeScope
         {
             Facets = new Dictionary<string, string>(StringComparer.Ordinal) { ["applies_to"] = "ct900" },
-        });
+        };
 
         var cards = await LinkedStore(limit: 3, floor: 0.0).SearchAsync(
-            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.PlainQuery, scope, TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(cards);
         Assert.DoesNotContain(cards, card => card.ViaLink);
@@ -244,9 +244,9 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
     [QdrantFact]
     public async Task SearchAsync_MapsTheNestedPayload()
     {
-        using var _ = Ct900();
+        var scope = new KnowledgeScope { Facets = new Dictionary<string, string>(StringComparer.Ordinal) { ["model"] = "ct900" } };
 
-        var card = (await Store().SearchAsync(KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken))[0];
+        var card = (await Store().SearchAsync(KbShapedCorpus.PlainQuery, scope, TestContext.Current.CancellationToken))[0];
 
         Assert.StartsWith("manifest-", card.SourceRef, StringComparison.Ordinal);
         Assert.Equal("p.1", card.SourceLocator);
@@ -273,7 +273,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
             });
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            async () => await store.SearchAsync("anything", TestContext.Current.CancellationToken));
+            async () => await store.SearchAsync("anything", null, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -299,11 +299,8 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
         using var caller = new CancellationTokenSource(TimeSpan.FromMilliseconds(20));
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            async () => await store.SearchAsync("anything", caller.Token));
+            async () => await store.SearchAsync("anything", null, caller.Token));
     }
-
-    private static IDisposable Ct900() => KnowledgeScopeScope.Open(
-        new KnowledgeScope { Facets = new Dictionary<string, string>(StringComparer.Ordinal) { ["model"] = "ct900" } });
 
     private QdrantKnowledgeStore Store(int limit = 10, double floor = 0.0, bool scoped = true)
         => new(
@@ -358,7 +355,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
         // body field at `text` proves the option is read without needing a second corpus. A store
         // that ignored Fields.Body would still return non-empty text and pass by accident, so the
         // assertion below is on a field the corpus gives a DIFFERENT value: the citation.
-        using var _ = Ct900();
+        var scope = new KnowledgeScope { Facets = new Dictionary<string, string>(StringComparer.Ordinal) { ["model"] = "ct900" } };
 
         var store = new QdrantKnowledgeStore(
             new QdrantSearchChannel(_corpus.Client),
@@ -375,7 +372,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
             });
 
         var card = (await store.SearchAsync(
-            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken))[0];
+            KbShapedCorpus.PlainQuery, scope, TestContext.Current.CancellationToken))[0];
 
         Assert.Equal(card.CardId, card.SourceRef);
         Assert.NotEmpty(card.SourceLocator);
@@ -402,7 +399,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
             });
 
         var card = (await store.SearchAsync(
-            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken))[0];
+            KbShapedCorpus.PlainQuery, null, TestContext.Current.CancellationToken))[0];
 
         Assert.True(Guid.TryParse(card.CardId, out _), $"'{card.CardId}' is not a point key");
         Assert.NotEmpty(card.Text);
@@ -428,7 +425,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
             });
 
         var cards = await store.SearchAsync(
-            KbShapedCorpus.TwoIdentifierQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.TwoIdentifierQuery, null, TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(cards);
     }
@@ -438,7 +435,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
     {
         // With no required-term leg the identifier card is no longer lifted, so this asserts only
         // that the single-leg path works at all -- not that ranking is unchanged.
-        using var _ = Ct900();
+        var scope = new KnowledgeScope { Facets = new Dictionary<string, string>(StringComparer.Ordinal) { ["model"] = "ct900" } };
 
         var store = new QdrantKnowledgeStore(
             new QdrantSearchChannel(_corpus.Client),
@@ -456,7 +453,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
             });
 
         var cards = await store.SearchAsync(
-            KbShapedCorpus.LookalikeQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.LookalikeQuery, scope, TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(cards);
     }
@@ -484,7 +481,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
             });
 
         var cards = await store.SearchAsync(
-            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.PlainQuery, null, TestContext.Current.CancellationToken);
 
         var linked = Assert.Single(cards, card => card.ViaLink);
         Assert.Equal(KbShapedCorpus.Id(KbShapedCorpus.Count - 1), linked.CardId);
@@ -496,7 +493,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
     {
         // The scope re-check must run on the scroll path too. Card 0 is ct900 and links to card 29,
         // which the interleaved corpus makes ct900ent -- so the link must NOT come back.
-        using var _ = Ct900();
+        var scope = new KnowledgeScope { Facets = new Dictionary<string, string>(StringComparer.Ordinal) { ["model"] = "ct900" } };
 
         var store = new QdrantKnowledgeStore(
             new QdrantSearchChannel(_corpus.Client),
@@ -514,7 +511,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
             });
 
         var cards = await store.SearchAsync(
-            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.PlainQuery, scope, TestContext.Current.CancellationToken);
 
         Assert.All(cards, card => Assert.False(card.ViaLink));
     }
@@ -524,7 +521,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
     {
         // Card 0's payload still says see_also: [syn-29]; with no links: block that is data, not behaviour.
         var cards = await Store(limit: 3, scoped: false).SearchAsync(
-            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.PlainQuery, null, TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(cards);
         Assert.All(cards, card => Assert.False(card.ViaLink));
@@ -549,7 +546,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
             });
 
         var cards = await store.SearchAsync(
-            KbShapedCorpus.PlainQuery, TestContext.Current.CancellationToken);
+            KbShapedCorpus.PlainQuery, null, TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(cards);
         Assert.All(cards, card => Assert.False(card.ViaLink));
@@ -591,7 +588,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
                 });
 
             using var _ = (IDisposable)store;
-            var card = Assert.Single(await store.SearchAsync("anonymous", TestContext.Current.CancellationToken));
+            var card = Assert.Single(await store.SearchAsync("anonymous", null, TestContext.Current.CancellationToken));
             Assert.Equal("anonymous vector card", card.Text);
         }
         finally

@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using AgentCore.Application.Runtime;
 using AgentCore.Domain.Sources;
 using AgentCore.AspNetCore.Tests.Fakes;
@@ -28,9 +27,6 @@ public sealed class SourceWireTests
             kind: binding
             binds: LookItUp
             description: Look something up for the caller.
-            parameters:
-              type: object
-              properties: { what: { type: string } }
         agents:
           defaults:
             model: { ref: reply }
@@ -57,9 +53,9 @@ public sealed class SourceWireTests
         await using var host = await ChatCompletionsHost.StartAsync(
             SourceYaml,
             new SourceCitingChatClient(),
-            configure: options => options.Bind("LookItUp", (_, _) =>
+            configure: options => options.Bind("LookItUp", (TurnInvocation? turn) =>
             {
-                CallSourceScope.Current?.Publish(new SourceReference
+                turn?.Sources?.Publish(new SourceReference
                 {
                     SourceId = "card-42",
                     Kind = SourceKind.Document,
@@ -127,10 +123,9 @@ public sealed class SourceWireTests
         await using var host = await ChatCompletionsHost.StartAsync(
             SourceYaml,
             new TwoParallelCallsChatClient(),
-            configure: options => options.Bind("LookItUp", (arguments, _) =>
+            configure: options => options.Bind("LookItUp", (string? what, TurnInvocation? turn) =>
             {
-                var what = arguments["what"]?.GetValue<string>();
-                CallSourceScope.Current?.Publish(new SourceReference
+                turn?.Sources?.Publish(new SourceReference
                 {
                     SourceId = what == "left" ? "card-left" : "card-right",
                     Kind = SourceKind.Document,

@@ -298,6 +298,32 @@ public sealed class McpServerSessionTests
     }
 
     // ---------------------------------------------------------------------------------------------
+    // Only what the server declared crosses the wire: the filed turn carries delegates.
+    // ---------------------------------------------------------------------------------------------
+    [Fact]
+    public async Task AnEntryTheServerNeverDeclared_NeverCrossesTheWire()
+    {
+        const string Declared = "message";
+        const string Residue = "urn:agentcore:residue";
+
+        // Arrange
+        await using ControllableMcpServer fake = new("echo") { SchemaProperty = Declared };
+        await using McpToolSource source = new(_ => fake.NewTransport(), null);
+
+        var registrations = await source.ProvideAsync(ContextFor(Jira()), Token);
+        var tool = (AIFunction)registrations.Single(r => r.Id == "jira.echo").Materialise();
+
+        // Act
+        var result = await tool.InvokeAsync(
+            new AIFunctionArguments { [Declared] = "hello", [Residue] = new Action(() => { }) },
+            Token);
+
+        // Assert
+        Assert.False(IsError(result), "the call failed instead of reaching the server.");
+        Assert.Equal([Declared], fake.LastArgumentNames);
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // Closing a session closes the connection under it, whatever the tools are still holding.
     // ---------------------------------------------------------------------------------------------
     [Fact]

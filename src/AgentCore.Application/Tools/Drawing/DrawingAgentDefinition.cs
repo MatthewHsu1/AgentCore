@@ -41,8 +41,8 @@ internal sealed class DrawingAgentDefinition : IShippedAgentDefinition
     /// The drawing model cannot see the conversation, and it must not see the rows either: they go
     /// to its script. What it gets is the request and, after it, the shape of each answer.
     /// </remarks>
-    public string Compose(string query)
-        => DrawingData.Describe(TurnAmbients.Current?.Results) is { } data
+    public string Compose(string query, TurnResults? results)
+        => DrawingData.Describe(results) is { } data
             ? query + "\n\n" + data
             : query;
 }

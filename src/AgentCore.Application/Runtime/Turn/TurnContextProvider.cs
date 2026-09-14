@@ -14,16 +14,13 @@ internal sealed class TurnContextProvider : AIContextProvider
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        var instructions = TurnContextScope.For(context.Session)?.Instructions;
-
-        var tools = TurnContextScope.ToolsFor(FunctionInvokingChatClient.CurrentContext?.Function.Name);
+        var instructions = TurnRegistry.For(context.Session)?.Instructions;
 
         return new(new AIContext
         {
             Messages = string.IsNullOrEmpty(instructions)
                 ? null
                 : [new ChatMessage(ChatRole.System, instructions)],
-            Tools = tools,
         });
     }
 }

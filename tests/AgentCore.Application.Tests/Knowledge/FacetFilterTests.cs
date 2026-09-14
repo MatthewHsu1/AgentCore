@@ -4,6 +4,7 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Knowledge.Fakes;
 using AgentCore.Domain.Knowledge;
 using AgentCore.TestSupport;
@@ -188,10 +189,10 @@ public sealed class FacetFilterTests
     [Fact]
     public async Task Filters_AreNamedInTheRecordAnOperatorDebugsFrom()
     {
-        // The record reads the LIVE scope ambient, so it has to be written while the search's own
-        // scope is still open. Built a line later, it names whatever the turn composed instead --
-        // and the one thing an operator opens this record to see, which facet narrowed the search
-        // that found nothing, is exactly the part that goes missing.
+        // The record is written while the search's own scope is still the composed one. Built a
+        // line later, it names whatever the turn composed instead -- and the one thing an operator
+        // opens this record to see, which facet narrowed the search that found nothing, is exactly
+        // the part that goes missing.
         RecordingLoggerFactory loggers = new();
 
         var tool = await SearchToolAsync(new StubKnowledgePort([Card("a")]), Declared, loggers: loggers);
@@ -221,7 +222,7 @@ public sealed class FacetFilterTests
         var context = await provider.InvokingAsync(
             new AIContextProvider.InvokingContext(
                 StubAgent.Instance,
-                null,
+                new StubSession(),
                 new AIContext { Messages = [new ChatMessage(ChatRole.User, "hello")] }),
             TestContext.Current.CancellationToken);
 #pragma warning restore MAAI001
@@ -241,12 +242,20 @@ public sealed class FacetFilterTests
                     ["key"] = filter.Key,
                     ["value"] = filter.Value,
                 })),
+            [TurnInvocation.ArgumentsKey] = new TurnInvocation
+            {
+                CallId = "call",
+                TurnIndex = 0,
+                Stage = "",
+                Knowledge = new KnowledgeScope { Facets = new Dictionary<string, string>(StringComparer.Ordinal) },
+            },
         };
 
-        var answer = await tool.InvokeAsync(
-            new AIFunctionArguments(arguments), TestContext.Current.CancellationToken);
+        var results = await tool.InvokeAsync(
+            new AIFunctionArguments(arguments), TestContext.Current.CancellationToken)
+            as IReadOnlyList<TextSearchProvider.TextSearchResult>;
 
-        return answer?.ToString() ?? string.Empty;
+        return results is null ? string.Empty : string.Join("\n", results.Select(result => result.Text));
     }
 
     private sealed class StubSession : AgentSession;

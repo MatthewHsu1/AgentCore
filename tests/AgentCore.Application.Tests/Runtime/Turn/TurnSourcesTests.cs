@@ -1,4 +1,3 @@
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Domain.Sources;
 using Xunit;
@@ -19,7 +18,7 @@ public sealed class TurnSourcesTests
     {
         TurnSources sources = new();
 
-        using (OpenCall("call-1"))
+        using (OpenCall(sources, "call-1"))
         {
             sources.Publish(Reference("card-1"));
         }
@@ -49,7 +48,7 @@ public sealed class TurnSourcesTests
         // are noise, and the second publish is the fresher one.
         TurnSources sources = new();
 
-        using (OpenCall("call-1"))
+        using (OpenCall(sources, "call-1"))
         {
             sources.Publish(Reference("card-1") with { Title = "first" });
             sources.Publish(Reference("card-1") with { Title = "second" });
@@ -64,7 +63,7 @@ public sealed class TurnSourcesTests
     {
         TurnSources sources = new();
 
-        using (OpenCall("call-1"))
+        using (OpenCall(sources, "call-1"))
         {
             sources.Publish(Reference("card-1"));
         }
@@ -81,12 +80,12 @@ public sealed class TurnSourcesTests
         // whichever call happens to be findable on that shared message afterward.
         TurnSources sources = new();
 
-        using (OpenCall("call-1"))
+        using (OpenCall(sources, "call-1"))
         {
             sources.Publish(Reference("card-1"));
         }
 
-        using (OpenCall("call-2"))
+        using (OpenCall(sources, "call-2"))
         {
             sources.Publish(Reference("card-2"));
         }
@@ -100,24 +99,7 @@ public sealed class TurnSourcesTests
         Assert.Equal("card-2", fromCallTwo.Source.SourceId);
     }
 
-    [Fact]
-    public void CallSourceScope_IsWhatAProducerPublishesThrough()
-    {
-        TurnSources sources = new();
-
-        Assert.Null(CallSourceScope.Current);
-
-        using (TurnAmbientsTestScope.WithSources(sources))
-        using (OpenCall("call-1"))
-        {
-            Assert.NotNull(CallSourceScope.Current);
-            CallSourceScope.Current!.Publish(Reference("card-1"));
-        }
-
-        Assert.Single(sources.TakeFor("call-1"));
-    }
-
-    private static IDisposable OpenCall(string callId) => TurnAmbientsTestScope.WithOuterCall(callId);
+    private static IDisposable OpenCall(TurnSources sources, string callId) => sources.BeginOuterCall(callId);
 
     private static SourceReference Reference(string id) => new()
     {

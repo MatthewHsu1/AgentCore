@@ -5,7 +5,6 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
-using AgentCore.Application.Runtime.Turn;
 using AgentCore.Domain.Knowledge;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging;
@@ -24,6 +23,8 @@ internal static class KnowledgeProbe
     /// <param name="scope">The live scope the main search just ran under.</param>
     /// <param name="agent">The id of the agent that asked, for the log line.</param>
     /// <param name="query">The search text the framework composed.</param>
+    /// <param name="clarifications">The call's ambiguity holder, or <see langword="null"/> inside a nested tool call.</param>
+    /// <param name="carriesHistory">Whether this row's session carries the caller's own history.</param>
     /// <param name="logger">Where the probe's own log events go.</param>
     /// <param name="cancellationToken">The caller's own token — cancelling this is the caller hanging up, not a timeout.</param>
     /// <returns>What the probe found: its note, or the "holds nothing" notice.</returns>
@@ -33,12 +34,15 @@ internal static class KnowledgeProbe
         KnowledgeScope scope,
         string agent,
         string query,
+        Clarifications? clarifications,
+        bool carriesHistory,
         ILogger logger,
         CancellationToken cancellationToken)
     {
-        // K42: a nested tool call strips the holder from the ambient, so a delegated run's own search
-        // cannot latch, count or record — but a scoped run still owes the caller the notice.
-        if (TurnAmbients.Current?.Clarifications is not { } clarifications)
+        // K42: a nested tool call runs with the holder stripped from its invocation, so a delegated
+        // run's own search cannot latch, count or record — but a scoped run still owes the caller
+        // the notice.
+        if (clarifications is null)
         {
             return [KnowledgeNotices.Of(KnowledgeNotices.Empty)];
         }
@@ -84,28 +88,26 @@ internal static class KnowledgeProbe
             // in the same turn would re-run the search and advance probeAsks a second time.
             clarifications.Update(facet, s => s.ProbeAsks++);
 
-            using CancellationTokenSource timeout =
-                new(TimeSpan.FromSeconds(ambiguity.ProbeDeadlineSeconds));
-            using var deadline =
-                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
+            using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(ambiguity.ProbeDeadlineSeconds));
+
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
 
             IReadOnlyList<KnowledgeCard> probeCards;
+
             try
             {
-                using var narrowed = KnowledgeScopeScope.Open(WithoutFacet(scope, facet));
-
+                var narrowedScope = WithoutFacet(scope, facet);
                 var started = Stopwatch.GetTimestamp();
-                probeCards = await port.SearchAsync(query, deadline.Token).ConfigureAwait(false);
+
+                probeCards = await port.SearchAsync(query, narrowedScope, deadline.Token).ConfigureAwait(false);
 
                 if (logger.IsEnabled(LogLevel.Debug))
                 {
-                    // Filed while the narrowed scope is still open, so the record names the scope this
-                    // second store call actually ran under. Without it an operator sizing store load
-                    // sees one record per turn for two calls.
                     var record = KnowledgeSearchRecord.Of(
                         agent,
                         knowledge,
                         query,
+                        narrowedScope,
                         probeCards,
                         Stopwatch.GetElapsedTime(started).TotalMilliseconds,
                         failure: null).ForLog();
@@ -132,7 +134,7 @@ internal static class KnowledgeProbe
                 return Publish(probe, KnowledgeNotices.Empty);
             }
 
-            return Name(probeCards, template, ambiguity, wiring, wildcardValue, facet, agent, logger, clarifications, probe);
+            return Name(probeCards, template, ambiguity, wiring, wildcardValue, facet, agent, logger, clarifications, carriesHistory, probe);
         }
         finally
         {
@@ -172,6 +174,7 @@ internal static class KnowledgeProbe
         string agent,
         ILogger logger,
         Clarifications clarifications,
+        bool carriesHistory,
         Clarifications.Probe probe)
     {
         // §8 step 5: the value at the facet's payload path is a string or a list of strings alike —
@@ -202,11 +205,12 @@ internal static class KnowledgeProbe
         // message.
         var wouldName = Clarifications.LastNamed.For(union, ambiguity.MaxCandidates);
         var candidates = union.ToList();
-
+        
         // K39, drawn for the record rather than for the message: on a graph row AgentCore cannot know
         // whether the participant's own tool result ever reached the caller, so the note still goes
-        // out, but the record of what was named — which arms K21's tie-break — does not.
-        var carriesHistory = TurnAmbients.Current?.Context?.CarriesHistory ?? false;
+        // out, but the record of what was named — which arms K21's tie-break — does not. The flag
+        // arrives as a parameter because the probe runs inside a search delegate that is never
+        // handed a session to compare.
 
         // Whether the note repeats what was last named, and the record that follows from it, are one
         // transition under one lock acquisition. Deciding from an earlier Read() and writing after

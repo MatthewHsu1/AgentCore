@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime;
@@ -85,13 +86,13 @@ public sealed class DrawingAgentTests
     public async Task ADrawingAgent_ThatCallsPresentWithAValidTree_PublishesToTheScreen()
     {
         RecordingRenderPort screen = new();
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen });
 
         var function = Build(new RecordingChatClientFactory(new PresentCallingChatClient(Card)));
 
-        var result = await function.InvokeAsync(
-            new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "draw a card" }),
-            TestContext.Current.CancellationToken);
+        var arguments = new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "draw a card" });
+        arguments[TurnInvocation.ArgumentsKey] = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", Screen = screen, };
+
+        var result = await function.InvokeAsync(arguments, TestContext.Current.CancellationToken);
 
         var published = Assert.Single(screen.Published);
         Assert.Equal(PresentTool.RendererName, published.Name);
@@ -105,11 +106,9 @@ public sealed class DrawingAgentTests
     public async Task ATreeTheValidatorRejects_ComesBackAsAnErrorAndTheAgentDrawsTheNextOne()
     {
         // The whole reason the hand-rolled retry loop could be deleted. Nothing in C# notices the
-        // bad tree: present answers a section 8.7 error, the agent reads it, and asks again.
         RecordingRenderPort screen = new();
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen });
 
-        var result = await Draw("""{ "$type": "Wombat" }""", Card);
+        var result = await Draw(screen, """{ "$type": "Wombat" }""", Card);
 
         var published = Assert.Single(screen.Published);
         Assert.Equal("Card", ((JsonObject)published.Data)["$type"]!.GetValue<string>());
@@ -127,12 +126,10 @@ public sealed class DrawingAgentTests
     public async Task TheDefaultRoundCap_AllowsThreeTriesAndNoFourth(int rejected, bool drawn)
     {
         RecordingRenderPort screen = new();
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen });
 
         string[] trees = [.. Enumerable.Repeat("""{ "$type": "Wombat" }""", rejected), Card];
 
-        await Draw(trees);
-
+        await Draw(screen, trees);
         Assert.Equal(drawn, screen.Published.Count == 1);
     }
 
@@ -143,9 +140,8 @@ public sealed class DrawingAgentTests
         // holds only the tool call it refused to invoke, so the text is "". Handed that, the calling
         // agent would tell the caller their drawing is on screen.
         RecordingRenderPort screen = new();
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen });
 
-        var result = await Draw("""{ "$type": "Wombat" }""", """{ "$type": "Wombat" }""", """{ "$type": "Wombat" }""", Card);
+        var result = await Draw(screen, """{ "$type": "Wombat" }""", """{ "$type": "Wombat" }""", """{ "$type": "Wombat" }""", Card);
 
         Assert.Empty(screen.Published);
 
@@ -205,13 +201,14 @@ public sealed class DrawingAgentTests
         RecordingRenderPort screen = new();
         TurnResults results = new();
         results.Record("lookup_orders", JsonNode.Parse("""[{"id":"SO-1","total":5},{"id":"SO-2","total":7}]""")!);
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen, Results = results });
         PresentCallingChatClient model = new(Card);
 
         var function = Build(new RecordingChatClientFactory(model));
-        await function.InvokeAsync(
-            new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "a table of the lookup_orders result" }),
-            TestContext.Current.CancellationToken);
+
+        var arguments = new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "a table of the lookup_orders result" });
+        arguments[TurnInvocation.ArgumentsKey] = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", Screen = screen, Results = results, };
+
+        await function.InvokeAsync(arguments, TestContext.Current.CancellationToken);
 
         var prompt = model.Prompts[0];
         Assert.StartsWith("a table of the lookup_orders result", prompt, StringComparison.Ordinal);
@@ -223,13 +220,14 @@ public sealed class DrawingAgentTests
     public async Task WithNothingAnswered_TheRequestGoesThroughUntouched()
     {
         RecordingRenderPort screen = new();
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen, Results = new TurnResults() });
         PresentCallingChatClient model = new(Card);
 
         var function = Build(new RecordingChatClientFactory(model));
-        await function.InvokeAsync(
-            new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "draw a card" }),
-            TestContext.Current.CancellationToken);
+
+        var arguments = new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "draw a card" });
+        arguments[TurnInvocation.ArgumentsKey] = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", Screen = screen, Results = new TurnResults(), };
+
+        await function.InvokeAsync(arguments, TestContext.Current.CancellationToken);
 
         Assert.Equal("draw a card", model.Prompts[0]);
     }
@@ -286,16 +284,17 @@ public sealed class DrawingAgentTests
     }
 
     /// <summary>Runs the drawing agent the document declares over one script of trees.</summary>
-    private static async Task<object?> Draw(params string[] trees)
+    private static async Task<object?> Draw(RecordingRenderPort screen, params string[] trees)
     {
         var registration = await Provide(
             Declaration, new RecordingChatClientFactory(new PresentCallingChatClient(trees)));
 
         var function = Assert.IsAssignableFrom<AIFunction>(registration.Materialise());
 
-        return await function.InvokeAsync(
-            new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "draw a card" }),
-            TestContext.Current.CancellationToken);
+        var arguments = new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "draw a card" });
+        arguments[TurnInvocation.ArgumentsKey] = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", Screen = screen, };
+
+        return await function.InvokeAsync(arguments, TestContext.Current.CancellationToken);
     }
 
     private static AIFunction Build(RecordingChatClientFactory factory)

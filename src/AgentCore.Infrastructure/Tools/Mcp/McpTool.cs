@@ -4,6 +4,11 @@ using AgentCore.Application.Tools;
 using Microsoft.Extensions.AI;
 using ModelContextProtocol.Protocol;
 
+// Only the server's declared properties cross the wire (see _declared). The invoking client files
+// the turn into every call's arguments and the turn carries delegates, which the MCP SDK's argument
+// serializer cannot hold — forwarding everything faulted every call. Revisit if the SDK ever lets a
+// call exclude entries, or if the turn stops riding along in tool arguments.
+
 namespace AgentCore.Infrastructure.Tools.Mcp;
 
 /// <summary>
@@ -16,6 +21,8 @@ internal sealed class McpTool : AIFunction
     private readonly McpToolDescriptor _descriptor;
 
     private readonly string _id;
+
+    private readonly HashSet<string>? _declared;
 
     /// <summary>Creates the tool.</summary>
     /// <param name="session">The server this tool is called on.</param>
@@ -30,6 +37,28 @@ internal sealed class McpTool : AIFunction
         _session = session;
         _descriptor = descriptor;
         _id = id;
+        _declared = DeclaredProperties(descriptor.JsonSchema);
+    }
+
+    /// <summary>Reads the property names one tool schema declares, if it declares any.</summary>
+    /// <param name="schema">The schema the server listed for this tool.</param>
+    /// <returns>The names, or <see langword="null"/> when the schema names none.</returns>
+    private static HashSet<string>? DeclaredProperties(JsonElement schema)
+    {
+        if (schema.ValueKind is not JsonValueKind.Object
+            || !schema.TryGetProperty("properties", out var properties)
+            || properties.ValueKind is not JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        HashSet<string> names = new(StringComparer.Ordinal);
+        foreach (var property in properties.EnumerateObject())
+        {
+            names.Add(property.Name);
+        }
+
+        return names;
     }
 
     /// <inheritdoc />
@@ -49,7 +78,23 @@ internal sealed class McpTool : AIFunction
 
         try
         {
-            var answer = await _session.CallAsync(_descriptor.Name, arguments, cancellationToken)
+            // The model is built against this schema, so anything outside it is harness
+            // residue rather than model intent: the filed turn carries delegates no JSON
+            // writer can hold. A schema that names no properties keeps the old passthrough.
+            var outgoing = arguments;
+            if (_declared is not null)
+            {
+                outgoing = new AIFunctionArguments();
+                foreach (var entry in arguments)
+                {
+                    if (_declared.Contains(entry.Key))
+                    {
+                        outgoing[entry.Key] = entry.Value;
+                    }
+                }
+            }
+
+            var answer = await _session.CallAsync(_descriptor.Name, outgoing, cancellationToken)
                 .ConfigureAwait(false);
 
             return Unwrap(answer);

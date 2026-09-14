@@ -2,7 +2,6 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
 using Microsoft.Extensions.AI;
-using AgentCore.Application.Secrets;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Tests.Fakes;
 using AgentCore.Domain.Knowledge;
@@ -167,7 +166,7 @@ public sealed class KnowledgeScopeArgumentOrderTests
     private sealed class SilentPort : IKnowledgeRetrievalPort
     {
         public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
-            string query, CancellationToken cancellationToken = default)
+            string query, KnowledgeScope? scope = null, CancellationToken cancellationToken = default)
             => ValueTask.FromResult<IReadOnlyList<KnowledgeCard>>([]);
     }
 }

@@ -2,6 +2,7 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Fakes;
+using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Tools.Builtin;
 using AgentCore.Application.Tools.Drawing;
 using AgentCore.Application.Tools.Shipped;
@@ -47,11 +48,15 @@ public sealed class AuditingFunctionInvokingChatClientRenderTests
     {
         var tool = DrawOnceTool();
         TurnRenders renders = new();
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = renders, Renders = renders });
+        var turn = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", Screen = renders, Renders = renders };
 
         ToolCallingChatClient inner = new("the loop continues.");
         using AuditingFunctionInvokingChatClient client = new(inner);
-        ChatOptions options = new() { Tools = [tool] };
+        ChatOptions options = new()
+        {
+            Tools = [tool],
+            AdditionalProperties = new AdditionalPropertiesDictionary { [TurnInvocation.ArgumentsKey] = turn },
+        };
 
         List<ChatResponseUpdate> updates = [];
         await foreach (var update in client.GetStreamingResponseAsync(
@@ -77,21 +82,29 @@ public sealed class AuditingFunctionInvokingChatClientRenderTests
     public async Task PublishingTheSameRenderIdTwice_ReplacesTheEarlierOneInPlace()
     {
         var tool = AIFunctionFactory.Create(
-            () =>
+            (TurnInvocation? turn) =>
             {
-                CallRenderScope.Current!.Publish("generative-ui", "chart-1", new { title = "loading" });
-                CallRenderScope.Current!.Publish("generative-ui", "chart-1", new { title = "final" });
+                turn!.Screen!.Publish("generative-ui", "chart-1", new { title = "loading" });
+                turn!.Screen!.Publish("generative-ui", "chart-1", new { title = "final" });
                 return "drew.";
             },
-            "build_chart",
-            "Draw a chart for the caller.");
+            new AIFunctionFactoryOptions
+            {
+                Name = "build_chart",
+                Description = "Draw a chart for the caller.",
+                ConfigureParameterBinding = ToolParameterBindings.For,
+            });
 
         TurnRenders renders = new();
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = renders, Renders = renders });
+        var turn = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", Screen = renders, Renders = renders };
 
         ToolCallingChatClient inner = new("the loop continues.");
         using AuditingFunctionInvokingChatClient client = new(inner);
-        ChatOptions options = new() { Tools = [tool] };
+        ChatOptions options = new()
+        {
+            Tools = [tool],
+            AdditionalProperties = new AdditionalPropertiesDictionary { [TurnInvocation.ArgumentsKey] = turn },
+        };
 
         var response = await client.GetResponseAsync(
             [new ChatMessage(ChatRole.User, "draw it")], options, TestContext.Current.CancellationToken);
@@ -114,20 +127,28 @@ public sealed class AuditingFunctionInvokingChatClientRenderTests
     public async Task ATransientPublish_LeavesNoRenderContentAnywhere()
     {
         var tool = AIFunctionFactory.Create(
-            () =>
+            (TurnInvocation? turn) =>
             {
-                CallRenderScope.Current!.Publish("generative-ui", "chart-1", new { title = "peek" }, transient: true);
+                turn!.Screen!.Publish("generative-ui", "chart-1", new { title = "peek" }, transient: true);
                 return "drew.";
             },
-            "build_chart",
-            "Draw a chart for the caller.");
+            new AIFunctionFactoryOptions
+            {
+                Name = "build_chart",
+                Description = "Draw a chart for the caller.",
+                ConfigureParameterBinding = ToolParameterBindings.For,
+            });
 
         TurnRenders renders = new();
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = renders, Renders = renders });
+        var turn = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", Screen = renders, Renders = renders };
 
         ToolCallingChatClient inner = new("the loop continues.");
         using AuditingFunctionInvokingChatClient client = new(inner);
-        ChatOptions options = new() { Tools = [tool] };
+        ChatOptions options = new()
+        {
+            Tools = [tool],
+            AdditionalProperties = new AdditionalPropertiesDictionary { [TurnInvocation.ArgumentsKey] = turn },
+        };
 
         var response = await client.GetResponseAsync(
             [new ChatMessage(ChatRole.User, "draw it")], options, TestContext.Current.CancellationToken);
@@ -140,7 +161,7 @@ public sealed class AuditingFunctionInvokingChatClientRenderTests
     // ---------------------------------------------------------------------------------------
     // The outer call id wins. A drawing made inside the nested drawing agent attaches to the
     // OUTER draw tool-result message, and not to the inner present call, which never reaches
-    // the caller's own transcript at all. This is the guard for OuterToolCall's outermost-wins
+    // the caller's own transcript at all. This is the guard for the outermost-wins
     // rule.
     // ---------------------------------------------------------------------------------------
     [Fact]
@@ -152,12 +173,16 @@ public sealed class AuditingFunctionInvokingChatClientRenderTests
             new BuiltinToolPorts(new RecordingChatClientFactory(new PresentCallingChatClient(Card)), new FakeScriptRunner()));
 
         TurnRenders renders = new();
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = renders, Renders = renders });
+        var turn = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", Screen = renders, Renders = renders };
 
         ToolCallingChatClient outer = new(
             "done.", new Dictionary<string, object?>(StringComparer.Ordinal) { ["query"] = "draw a card" });
         using AuditingFunctionInvokingChatClient client = new(outer);
-        ChatOptions options = new() { Tools = [drawTool] };
+        ChatOptions options = new()
+        {
+            Tools = [drawTool],
+            AdditionalProperties = new AdditionalPropertiesDictionary { [TurnInvocation.ArgumentsKey] = turn },
+        };
 
         var response = await client.GetResponseAsync(
             [new ChatMessage(ChatRole.User, "draw a card")], options, TestContext.Current.CancellationToken);
@@ -179,36 +204,55 @@ public sealed class AuditingFunctionInvokingChatClientRenderTests
     public async Task ANestedLoopWhoseOwnCallIdMatchesTheOuterOne_DoesNotStealTheDrawing()
     {
         var innerTool = AIFunctionFactory.Create(
-            () =>
+            (TurnInvocation? turn) =>
             {
-                CallRenderScope.Current!.Publish("generative-ui", "chart-1", new { title = "Q3 revenue" });
+                turn!.Screen!.Publish("generative-ui", "chart-1", new { title = "Q3 revenue" });
                 return "drew it.";
             },
-            "inner_tool",
-            "Draws for the caller.");
+            new AIFunctionFactoryOptions
+            {
+                Name = "inner_tool",
+                Description = "Draws for the caller.",
+                ConfigureParameterBinding = ToolParameterBindings.For,
+            });
 
         var outerTool = AIFunctionFactory.Create(
-            async () =>
+            async (TurnInvocation? turn) =>
             {
                 // ToolCallingChatClient always hands out the same fixed call id, so running one as
                 // the model behind a NESTED loop reproduces a vendor whose id scheme collides with
                 // the outer call's own id, without needing a bespoke fake to force it.
                 ToolCallingChatClient innerModel = new("nested done.");
                 using AuditingFunctionInvokingChatClient innerClient = new(innerModel);
-                ChatOptions innerOptions = new() { Tools = [innerTool] };
+                ChatOptions innerOptions = new()
+                {
+                    Tools = [innerTool],
+                    AdditionalProperties = new AdditionalPropertiesDictionary
+                    {
+                        [TurnInvocation.ArgumentsKey] = turn! with { Nested = true, Clarifications = null },
+                    },
+                };
                 await innerClient.GetResponseAsync(
                     [new ChatMessage(ChatRole.User, "draw")], innerOptions, TestContext.Current.CancellationToken);
                 return "outer done.";
             },
-            "outer_tool",
-            "Runs a nested loop.");
+            new AIFunctionFactoryOptions
+            {
+                Name = "outer_tool",
+                Description = "Runs a nested loop.",
+                ConfigureParameterBinding = ToolParameterBindings.For,
+            });
 
         TurnRenders renders = new();
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = renders, Renders = renders });
+        var turn = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", Screen = renders, Renders = renders };
 
         ToolCallingChatClient outerModel = new("done.");
         using AuditingFunctionInvokingChatClient outerClient = new(outerModel);
-        ChatOptions outerOptions = new() { Tools = [outerTool] };
+        ChatOptions outerOptions = new()
+        {
+            Tools = [outerTool],
+            AdditionalProperties = new AdditionalPropertiesDictionary { [TurnInvocation.ArgumentsKey] = turn },
+        };
 
         var response = await outerClient.GetResponseAsync(
             [new ChatMessage(ChatRole.User, "go")], outerOptions, TestContext.Current.CancellationToken);
@@ -228,23 +272,31 @@ public sealed class AuditingFunctionInvokingChatClientRenderTests
     public async Task PublishingUnderAnEarlierRenderId_KeepsItsOriginalPosition()
     {
         var tool = AIFunctionFactory.Create(
-            () =>
+            (TurnInvocation? turn) =>
             {
-                var screen = CallRenderScope.Current!;
+                var screen = turn!.Screen!;
                 screen.Publish("generative-ui", "a", new { title = "first" });
                 screen.Publish("generative-ui", "b", new { title = "second" });
                 screen.Publish("generative-ui", "a", new { title = "first-revised" });
                 return "drew.";
             },
-            "build_chart",
-            "Draw a chart for the caller.");
+            new AIFunctionFactoryOptions
+            {
+                Name = "build_chart",
+                Description = "Draw a chart for the caller.",
+                ConfigureParameterBinding = ToolParameterBindings.For,
+            });
 
         TurnRenders renders = new();
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = renders, Renders = renders });
+        var turn = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", Screen = renders, Renders = renders };
 
         ToolCallingChatClient inner = new("the loop continues.");
         using AuditingFunctionInvokingChatClient client = new(inner);
-        ChatOptions options = new() { Tools = [tool] };
+        ChatOptions options = new()
+        {
+            Tools = [tool],
+            AdditionalProperties = new AdditionalPropertiesDictionary { [TurnInvocation.ArgumentsKey] = turn },
+        };
 
         var response = await client.GetResponseAsync(
             [new ChatMessage(ChatRole.User, "draw it")], options, TestContext.Current.CancellationToken);
@@ -276,7 +328,7 @@ public sealed class AuditingFunctionInvokingChatClientRenderTests
     public void TakeFor_ReturnsDistinctRenderIds_InPublishOrder()
     {
         TurnRenders renders = new();
-        using var outer = OuterToolCall.Enter("call_1", out _);
+        using var outer = renders.BeginOuterCall("call_1");
 
         renders.Publish("generative-ui", "b", new { title = "second" });
         renders.Publish("generative-ui", "a", new { title = "first" });
@@ -292,11 +344,15 @@ public sealed class AuditingFunctionInvokingChatClientRenderTests
     /// <summary>A tool that draws once, unconditionally, and answers with words.</summary>
     private static AIFunction DrawOnceTool()
         => AIFunctionFactory.Create(
-            () =>
+            (TurnInvocation? turn) =>
             {
-                CallRenderScope.Current!.Publish("generative-ui", "chart-1", new { title = "Q3 revenue" });
+                turn!.Screen!.Publish("generative-ui", "chart-1", new { title = "Q3 revenue" });
                 return "drew a chart.";
             },
-            "build_chart",
-            "Draw a chart for the caller.");
+            new AIFunctionFactoryOptions
+            {
+                Name = "build_chart",
+                Description = "Draw a chart for the caller.",
+                ConfigureParameterBinding = ToolParameterBindings.For,
+            });
 }

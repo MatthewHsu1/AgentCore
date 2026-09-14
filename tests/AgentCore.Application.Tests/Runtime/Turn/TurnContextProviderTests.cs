@@ -20,9 +20,9 @@ namespace AgentCore.Application.Tests.Runtime.Turn;
 /// <remarks>
 /// <para>
 /// The compiled agent is a process singleton, so the provider bound to it is one too and may hold
-/// nothing per call. It finds the turn on the flow of execution instead, and it applies what it finds
-/// only to a run on the session that turn opened. That rule is what keeps a delegated run — which is
-/// call and return on a session of its own — out of the turn's context.
+/// nothing per call. It finds the turn in the session-keyed registry instead, and it applies what
+/// it finds only to a run on the session that turn filed. That rule is what keeps a delegated
+/// run — which is call and return on a session of its own — out of the turn's context.
 /// </para>
 /// <para>
 /// Every test here runs offline: no network call and no API key.
@@ -83,7 +83,7 @@ public sealed class TurnContextProviderTests
     public async Task TheProvider_HandsTheTurnsInstructionsToARunOnTheCallsSession()
     {
         StubSession session = new();
-        using var scope = TurnContextScope.Enter(new TurnContext { Session = session, Instructions = "ask for the model" });
+        TurnRegistry.Set(session, new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", Instructions = "ask for the model" });
 
         var context = await InvokeAsync(session);
 
@@ -101,7 +101,7 @@ public sealed class TurnContextProviderTests
     {
         StubSession call = new();
         StubSession delegated = new();
-        using var scope = TurnContextScope.Enter(new TurnContext { Session = call, Instructions = "ask for the model" });
+        TurnRegistry.Set(call, new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", Instructions = "ask for the model" });
 
         var context = await InvokeAsync(delegated);
 

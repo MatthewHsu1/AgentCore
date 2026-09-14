@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Runtime;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Tools.Builtin;
@@ -226,9 +227,9 @@ public sealed class ShippedAgentBuilderTests
     /// <summary>
     /// The other half of section 8.7. A fault naming a dependency that is not there must still
     /// propagate, so the outer agent's error budget counts it and the turn can end on the fallback
-    /// line. It must also be reported: a plain loop never calls
-    /// <see cref="ToolFailureScope.Report"/> at all, so before this an inner tool could take the
-    /// knowledge store down mid-call and the audit chain would hold nothing about it.
+    /// line. It must also be reported: a plain loop never invokes the turn's failure listener at
+    /// all, so before this an inner tool could take the knowledge store down mid-call and the
+    /// audit chain would hold nothing about it.
     /// </summary>
     [Fact]
     public async Task Build_AnInnerToolThrowsAFaultBeyondTheModel_ItIsReportedAndPropagates()
@@ -246,11 +247,15 @@ public sealed class ShippedAgentBuilderTests
             new BuiltinToolPorts(new RecordingChatClientFactory(new LoopingToolCallingChatClient())));
 
         List<ToolFailure> reported = [];
-        using var scope = ToolFailureScope.Enter(reported.Add);
+        var turn = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", OnToolFailure = reported.Add };
 
         await Assert.ThrowsAsync<HttpRequestException>(
             () => function.InvokeAsync(
-                new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "go" }),
+                new AIFunctionArguments(new Dictionary<string, object?>
+                {
+                    ["query"] = "go",
+                    [TurnInvocation.ArgumentsKey] = turn,
+                }),
                 TestContext.Current.CancellationToken).AsTask());
 
         Assert.Contains(reported, failure => failure.ToolName == "loop_tool");
@@ -285,6 +290,6 @@ public sealed class ShippedAgentBuilderTests
 
         public string? MissingPort(BuiltinToolPorts ports) => _missingPort;
 
-        public string Compose(string query) => query;
+        public string Compose(string query, TurnResults? results) => query;
     }
 }

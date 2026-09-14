@@ -4,6 +4,7 @@ using AgentCore.Application.Ports;
 using AgentCore.AspNetCore.Call;
 using AgentCore.AspNetCore.Tests.Fakes;
 using AgentCore.Domain;
+using AgentCore.Domain.Knowledge;
 using Microsoft.Extensions.AI;
 using Xunit;
 
@@ -203,6 +204,9 @@ internal sealed class ScriptedConversationPort : IConversationPort
 
     /// <inheritdoc />
     public TurnResult? LastTurn { get; set; }
+
+    /// <inheritdoc />
+    public KnowledgeScope? Scope { get; set; }
 
     /// <summary>Gets what the caller was told it heard, or null before a barge-in.</summary>
     public string? LastHeardText { get; private set; }

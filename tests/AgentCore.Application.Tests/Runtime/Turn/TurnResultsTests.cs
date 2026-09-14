@@ -98,10 +98,10 @@ public sealed class TurnResultsTests
     public async Task AnOutermostToolCall_IsRecordedUnderTheToolsName()
     {
         TurnResults results = new();
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Results = results });
+        var turn = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", Results = results };
         var tool = AIFunctionFactory.Create(() => Orders, "lookup_orders");
 
-        await Run(tool);
+        await Run(tool, turn);
 
         Assert.Equal(["lookup_orders"], results.Tools);
         Assert.Equal(Orders.ToJsonString(), results.Data()["lookup_orders"]!.ToJsonString());
@@ -112,29 +112,34 @@ public sealed class TurnResultsTests
     {
         // The outer model never saw a nested result, so it cannot ask to draw it.
         TurnResults results = new();
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Results = results });
+        var turn = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", Results = results };
         var inner = AIFunctionFactory.Create(() => Orders, "inner_lookup");
         var outer = AIFunctionFactory.Create(
             async () =>
             {
-                await Run(inner);
+                await Run(inner, turn with { Nested = true, Clarifications = null });
                 return JsonNode.Parse("""{"outer":true}""");
             },
             "delegate");
 
-        await Run(outer);
+        await Run(outer, turn);
 
         Assert.Equal(["delegate"], results.Tools);
     }
 
-    private static async Task Run(AIFunction tool)
+    private static async Task Run(AIFunction tool, TurnInvocation turn)
     {
         ToolCallingChatClient model = new("done.");
         using AuditingFunctionInvokingChatClient client = new(model);
+        var options = new ChatOptions
+        {
+            Tools = [tool],
+            AdditionalProperties = new AdditionalPropertiesDictionary { [TurnInvocation.ArgumentsKey] = turn },
+        };
 
         await client.GetResponseAsync(
             [new ChatMessage(ChatRole.User, "go")],
-            new ChatOptions { Tools = [tool] },
+            options,
             TestContext.Current.CancellationToken);
     }
 }

@@ -3,7 +3,6 @@ using System.Text.Json;
 using AgentCore.Application.Runtime;
 using Microsoft.Extensions.AI;
 using AgentCore.AspNetCore.Tests.Fakes;
-using AgentCore.TestSupport;
 using Xunit;
 
 namespace AgentCore.AspNetCore.Tests.Endpoints;
@@ -33,9 +32,6 @@ public sealed class DrawingWireTests
             kind: binding
             binds: DrawIt
             description: Draw something for the caller.
-            parameters:
-              type: object
-              properties: { what: { type: string } }
         agents:
           defaults:
             model: { ref: reply }
@@ -62,10 +58,10 @@ public sealed class DrawingWireTests
         await using var host = await ChatCompletionsHost.StartAsync(
             DrawingYaml,
             new DrawingChatClient(),
-            configure: options => options.Bind("DrawIt", (_, _) =>
+            configure: options => options.Bind("DrawIt", (TurnInvocation? turn) =>
             {
-                // Exactly what PresentTool does: find the call's screen and push to it.
-                CallRenderScope.Current?.Publish("generative-ui", "chart-1", new { title = "Q3 revenue" });
+                // Exactly what PresentTool does: find the call's screen and push to it. The loop files the turn in the call's arguments, and the binder hands it to this parameter.
+                turn?.Screen?.Publish("generative-ui", "chart-1", new { title = "Q3 revenue" });
                 return ValueTask.FromResult<object?>("drew a Card; buttons: none");
             }));
 
@@ -104,9 +100,9 @@ public sealed class DrawingWireTests
         await using var host = await ChatCompletionsHost.StartAsync(
             DrawingYaml,
             new DrawingChatClient(),
-            configure: options => options.Bind("DrawIt", (_, _) =>
+            configure: options => options.Bind("DrawIt", (TurnInvocation? turn) =>
             {
-                CallRenderScope.Current?.Publish("generative-ui", "chart-1", new { title = "dropped" });
+                turn?.Screen?.Publish("generative-ui", "chart-1", new { title = "dropped" });
                 return ValueTask.FromResult<object?>("drew a Card; buttons: none");
             }));
 
@@ -129,9 +125,9 @@ public sealed class DrawingWireTests
         await using var host = await ChatCompletionsHost.StartAsync(
             DrawingYaml,
             new DrawingChatClient(),
-            configure: options => options.Bind("DrawIt", (_, _) =>
+            configure: options => options.Bind("DrawIt", (TurnInvocation? turn) =>
             {
-                hadScreen = CallRenderScope.Current is not null;
+                hadScreen = turn?.Screen is not null;
                 return ValueTask.FromResult<object?>("drew a Card; buttons: none");
             }));
 

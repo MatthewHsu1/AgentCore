@@ -23,7 +23,7 @@ public sealed class ScoreFloorOnPrefetchTests
     {
         var channel = new CapturingSearchChannel(Points(RankScores));
 
-        await Store(channel, floor: 0.35).SearchAsync("belt", TestContext.Current.CancellationToken);
+        await Store(channel, floor: 0.35).SearchAsync("belt", null, TestContext.Current.CancellationToken);
 
         var leg = Assert.Single(channel.Query!.Prefetch);
         Assert.True(leg.HasScoreThreshold, "the dense prefetch carries no score_threshold");
@@ -35,7 +35,7 @@ public sealed class ScoreFloorOnPrefetchTests
     {
         var channel = new CapturingSearchChannel(Points(RankScores));
 
-        await Store(channel, floor: 0.0).SearchAsync("belt", TestContext.Current.CancellationToken);
+        await Store(channel, floor: 0.0).SearchAsync("belt", null, TestContext.Current.CancellationToken);
 
         var leg = Assert.Single(channel.Query!.Prefetch);
         Assert.False(leg.HasScoreThreshold, "a floor of 0 means no floor, so no score_threshold should ride the prefetch");
@@ -46,7 +46,7 @@ public sealed class ScoreFloorOnPrefetchTests
     {
         var channel = new CapturingSearchChannel(Points(RankScores));
 
-        var cards = await Store(channel, floor: 0.35).SearchAsync("belt", TestContext.Current.CancellationToken);
+        var cards = await Store(channel, floor: 0.35).SearchAsync("belt", null, TestContext.Current.CancellationToken);
 
         // Qdrant already applied the floor before these came back. Cutting again by a fused score
         // would keep one of five here, and three of five at 0.25.
@@ -58,7 +58,7 @@ public sealed class ScoreFloorOnPrefetchTests
     {
         var channel = new CapturingSearchChannel(Points(RankScores));
 
-        await Store(channel, floor: 0.35).SearchAsync("belt", TestContext.Current.CancellationToken);
+        await Store(channel, floor: 0.35).SearchAsync("belt", null, TestContext.Current.CancellationToken);
 
         // One leg has nothing to fuse. A nearest query over the prefetch re-scores the same vector,
         // so a card's score is its cosine similarity and the floor and the score share a scale.
@@ -70,7 +70,7 @@ public sealed class ScoreFloorOnPrefetchTests
     {
         var channel = new CapturingSearchChannel(Points(RankScores));
 
-        await Store(channel, floor: 0.35).SearchAsync("belt", TestContext.Current.CancellationToken);
+        await Store(channel, floor: 0.35).SearchAsync("belt", null, TestContext.Current.CancellationToken);
 
         Assert.Null(channel.Query!.Using);
         Assert.Equal(string.Empty, Assert.Single(channel.Query.Prefetch).Using);
@@ -81,7 +81,7 @@ public sealed class ScoreFloorOnPrefetchTests
     {
         var channel = new CapturingSearchChannel(Points(RankScores));
 
-        await Store(channel, floor: 0.35, vector: "dense").SearchAsync("belt", TestContext.Current.CancellationToken);
+        await Store(channel, floor: 0.35, vector: "dense").SearchAsync("belt", null, TestContext.Current.CancellationToken);
 
         Assert.Equal("dense", channel.Query!.Using);
         Assert.Equal("dense", Assert.Single(channel.Query.Prefetch).Using);
@@ -94,7 +94,7 @@ public sealed class ScoreFloorOnPrefetchTests
         // and a blank name is the same shape as no name at all.
         var channel = new CapturingSearchChannel(Points(RankScores));
 
-        await Store(channel, floor: 0.35, vector: string.Empty).SearchAsync("belt", TestContext.Current.CancellationToken);
+        await Store(channel, floor: 0.35, vector: string.Empty).SearchAsync("belt", null, TestContext.Current.CancellationToken);
 
         Assert.Null(channel.Query!.Using);
         Assert.Equal(string.Empty, Assert.Single(channel.Query.Prefetch).Using);

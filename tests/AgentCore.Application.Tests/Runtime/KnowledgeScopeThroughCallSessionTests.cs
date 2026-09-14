@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Calls;
 using AgentCore.Application.Configuration.Compilation;
@@ -14,21 +13,20 @@ using Xunit;
 namespace AgentCore.Application.Tests.Runtime;
 
 /// <summary>
-/// The one wiring a host can actually write: open a knowledge scope, run a turn, and have the scope
-/// still be there when the retrieval delegate reads it.
+/// The one wiring a host can actually write: set a knowledge scope on the session, run a turn,
+/// and have the scope still be there when the retrieval delegate reads it.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Every other test of the scope opens it and reads it back on the same flow, with no turn loop in
-/// between, and every one of them passed while the feature was wired shut: <c>TurnAmbients.Enter</c>
-/// pushed a fresh record carrying only the four ambients the turn loop owns, so the fifth — the one
-/// the HOST opens — was erased before the first model call and again on every streaming step. The
-/// defect lives in the interaction, so the test has to run the interaction.
+/// Every other test of the scope sets it and reads it back without a turn loop in between, and
+/// every one of them passed while the feature was wired shut: the loop built its turn without the
+/// session's scope, so the store never saw it. The defect lives in the interaction, so the test
+/// has to run the interaction.
 /// </para>
 /// <para>
 /// The agent here is <c>scoped: true</c>, which makes the erasure visible twice over: the provider's
-/// own gate refuses to call the store at all with no scope open, so a broken carry-through shows up
-/// as a store nobody searched as well as an ambient nobody could read.
+/// own gate refuses to call the store at all with no scope set, so a broken carry-through shows up
+/// as a store nobody searched as well as a scope nobody could read.
 /// </para>
 /// </remarks>
 public sealed class KnowledgeScopeThroughCallSessionTests
@@ -100,10 +98,8 @@ public sealed class KnowledgeScopeThroughCallSessionTests
         var session = Build(reply, port).Create("call-1");
 
         var scope = Scope();
-        using (KnowledgeScopeScope.Open(scope))
-        {
-            await session.RunTurnAsync("the screen says e33", TestContext.Current.CancellationToken);
-        }
+        session.Scope = scope;
+        await session.RunTurnAsync("the screen says e33", TestContext.Current.CancellationToken);
 
         Assert.Equal(1, port.Calls);
         Assert.Same(scope, port.ScopeAtTheStore);
@@ -120,13 +116,11 @@ public sealed class KnowledgeScopeThroughCallSessionTests
         var session = Build(reply, port).Create("call-2");
 
         var scope = Scope();
-        using (KnowledgeScopeScope.Open(scope))
+        session.Scope = scope;
+        await foreach (var update in session
+            .RunTurnStreamingAsync("the screen says e33", TestContext.Current.CancellationToken))
         {
-            await foreach (var update in session
-                .RunTurnStreamingAsync("the screen says e33", TestContext.Current.CancellationToken))
-            {
-                Assert.NotNull(update);
-            }
+            Assert.NotNull(update);
         }
 
         Assert.Equal(1, port.Calls);
@@ -157,14 +151,10 @@ public sealed class KnowledgeScopeThroughCallSessionTests
         var session = Build(reply, port).Create("call-4");
 
         var scope = Scope();
-        using (KnowledgeScopeScope.Open(scope))
-        {
-            await session.RunTurnAsync("the screen says e33", TestContext.Current.CancellationToken);
+        session.Scope = scope;
+        await session.RunTurnAsync("the screen says e33", TestContext.Current.CancellationToken);
 
-            Assert.Same(scope, KnowledgeScopeScope.Current);
-        }
-
-        Assert.Null(KnowledgeScopeScope.Current);
+        Assert.Same(scope, session.Scope);
     }
 
     [Fact]
@@ -217,88 +207,22 @@ public sealed class KnowledgeScopeThroughCallSessionTests
     }
 
     [Fact]
-    public async Task Scope_StreamingTurn_IsTheSameOnFirstAndLastUpdate()
+    public async Task Scope_StreamingTurn_ComposesTheSameScope()
     {
-        // _port.ScopeAtTheStore is written exactly once, by the single prefetch search "mode:
-        // prefetch" runs before the model call — reading it after every streamed update proves
-        // nothing about later re-entries, because the field never changes again no matter what a
-        // later EnterAmbients call composes. ScopeSamplingChatClient instead reads the ambient from
-        // inside its own fragment loop, which ScopedEnumerator re-enters through EnterAmbients on
-        // every streaming step, so each sample reflects exactly what that step's own scope held.
-        using ScopeSamplingChatClient reply = new("hello ", "there.");
+        // The streaming path drives the turn through its own entry point, so it needs its own
+        // fact rather than an argument from the single-shot one: the scope the store sees must
+        // match what a non-streaming turn composes.
+        using SequencedChatClient reply = new("hello there.");
         var session = FreshSession(reply);
 
-        await foreach (var _ in session.RunTurnStreamingAsync("hello", TestContext.Current.CancellationToken))
+        await foreach (var _ in session.RunTurnStreamingAsync("what are your opening hours?", TestContext.Current.CancellationToken))
         {
         }
 
-        Assert.True(reply.Samples.Count >= 2, "the fake reply must yield at least two fragments, or this never observes a re-entry.");
-        Assert.All(reply.Samples, sample => Assert.Same(reply.Samples[0], sample));
-        Assert.Same(reply.Samples[0], _port.ScopeAtTheStore);
+        Assert.Equal("*", _port.ScopeAtTheStore!.Facets["brand"]);
+        Assert.Equal("*", _port.ScopeAtTheStore.Facets["applies_to"]);
     }
 
-    /// <summary>
-    /// A model that streams fragments one at a time and records the knowledge ambient immediately
-    /// before each is yielded. Unlike <see cref="LifecycleChatClient"/>, which only proves the seam
-    /// drops empty updates, this proves what the ambient holds from inside a fragment's own scope —
-    /// which a field the store's stub sets once cannot, because it never changes again regardless of
-    /// how many more times <c>EnterAmbients</c> runs afterward.
-    /// </summary>
-    private sealed class ScopeSamplingChatClient : IChatClient
-    {
-        private readonly string[] _fragments;
-
-        public ScopeSamplingChatClient(params string[] fragments) => _fragments = fragments;
-
-        /// <summary>Gets the ambient scope read immediately before each fragment was yielded, in order.</summary>
-        public List<KnowledgeScope?> Samples { get; } = [];
-
-        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            ArgumentNullException.ThrowIfNull(messages);
-            await Task.Yield();
-
-            var responseId = Guid.NewGuid().ToString("N");
-
-            foreach (var fragment in _fragments)
-            {
-                Samples.Add(KnowledgeScopeScope.Current);
-                yield return new ChatResponseUpdate(ChatRole.Assistant, fragment)
-                {
-                    ResponseId = responseId,
-                    MessageId = responseId,
-                };
-            }
-        }
-
-        public async Task<ChatResponse> GetResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
-        {
-            List<ChatResponseUpdate> updates = [];
-            await foreach (var update in GetStreamingResponseAsync(messages, options, cancellationToken)
-                .ConfigureAwait(false))
-            {
-                updates.Add(update);
-            }
-
-            return updates.ToChatResponse();
-        }
-
-        public object? GetService(Type serviceType, object? serviceKey = null)
-        {
-            ArgumentNullException.ThrowIfNull(serviceType);
-            return serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
-        }
-
-        public void Dispose()
-        {
-        }
-    }
 
     private static CallSessionFactory Build(IChatClient reply, StubKnowledgePort port, string yaml = Yaml)
     {

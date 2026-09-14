@@ -10,14 +10,17 @@ namespace AgentCore.Application.Knowledge;
 /// </summary>
 internal sealed class FacetFilterProvider(
     AIContextProvider innerProvider,
-    IReadOnlyList<KnowledgeFilterableFacetConfiguration> facets)
+    IReadOnlyList<KnowledgeFilterableFacetConfiguration>? facets,
+    KnowledgeSearch.Core core)
     : AIContextProvider
 {
     private readonly AIContextProvider _inner = innerProvider
         ?? throw new ArgumentNullException(nameof(innerProvider));
 
-    private readonly IReadOnlyList<KnowledgeFilterableFacetConfiguration> _facets = facets
-        ?? throw new ArgumentNullException(nameof(facets));
+    private readonly IReadOnlyList<KnowledgeFilterableFacetConfiguration>? _facets = facets;
+
+    private readonly KnowledgeSearch.Core _core = core
+        ?? throw new ArgumentNullException(nameof(core));
 
     /// <inheritdoc />
     public override IReadOnlyList<string> StateKeys => _inner.StateKeys;
@@ -48,7 +51,7 @@ internal sealed class FacetFilterProvider(
         foreach (var tool in tools)
         {
             wrapped.Add(tool is AIFunction function
-                ? new FacetFilteredSearch(function, _facets)
+                ? new FacetFilteredSearch(function, _facets, _core)
                 : tool);
         }
 

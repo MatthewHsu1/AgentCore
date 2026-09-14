@@ -206,6 +206,38 @@ public sealed class TypedBindingToolTests
         Assert.Equal(ToolCallScopes.NoTurnMessage, thrown.Message);
     }
 
+    /// <summary>A tool call carrying the turn in its arguments binds the scope off no flow at all.</summary>
+    [Fact]
+    public async Task AToolCallScopeParameterWithTheTurnFiled_BindsWithoutAFlow()
+    {
+        ToolCallScope? captured = null;
+        var tool = await CreateAsync((string reason, ToolCallScope scope) =>
+        {
+            captured = scope;
+            return reason;
+        });
+
+        var result = await tool.InvokeAsync(
+            new AIFunctionArguments
+            {
+                ["reason"] = "the caller wants a person",
+                [TurnInvocation.ArgumentsKey] = new TurnInvocation
+                {
+                    CallId = "call-9",
+                    TurnIndex = 4,
+                    Stage = "handling",
+                    Workspace = "ws",
+                },
+            },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("the caller wants a person", $"{result}");
+        Assert.Equal("call-9", captured!.CallId);
+        Assert.Equal(4, captured.TurnIndex);
+        Assert.Equal("handling", captured.Stage);
+        Assert.Equal("ws", captured.Workspace);
+    }
+
     /// <summary>The error policy of section 8.7 keys off <see cref="DeclaredTool"/>, not off the delegate.</summary>
     [Fact]
     public async Task ATypedBinding_IsStillADeclaredTool()

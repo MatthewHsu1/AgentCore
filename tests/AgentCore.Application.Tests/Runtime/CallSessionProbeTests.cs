@@ -2,10 +2,8 @@ using System.Runtime.CompilerServices;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
-using AgentCore.Application.Tests.Fakes;
 using AgentCore.Domain.Knowledge;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
@@ -112,9 +110,9 @@ public sealed class CallSessionProbeTests
         internal ThrowingOnNarrowedScopePort(Action onNarrowedCall) => _onNarrowedCall = onNarrowedCall;
 
         public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
-            string query, CancellationToken cancellationToken = default)
+            string query, KnowledgeScope? scope = null, CancellationToken cancellationToken = default)
         {
-            if (KnowledgeScopeScope.Current?.Facets.Count == 2)
+            if (scope is { Facets.Count: 2 })
             {
                 return ValueTask.FromResult<IReadOnlyList<KnowledgeCard>>([]);
             }

@@ -1,13 +1,14 @@
+using System.Text.Json;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Compilation;
+using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime;
-using AgentCore.Application.Tests.Runtime.Turn;
 using AgentCore.Domain.Knowledge;
-using AgentCore.TestSupport;
 using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 using Xunit;
 
 namespace AgentCore.Application.Tests.Configuration.Compilation;
@@ -17,12 +18,6 @@ namespace AgentCore.Application.Tests.Configuration.Compilation;
 /// bound search. The wiring is document-level and the <c>knowledge:</c> block is per agent, so the
 /// compiler is the only place the two meet.
 /// </summary>
-/// <remarks>
-/// <c>KnowledgeProbeTests</c> hand-builds its <c>ResolvedKnowledge</c> and so proves only that the
-/// probe reads what it is given. These tests compile a real document, so a compiler that composed
-/// the block and then handed the probe an unwired one fails here — where it would otherwise ship
-/// green and degrade every deployment's probe to the "holds nothing" notice.
-/// </remarks>
 public sealed class ClarificationWiringBindingTests
 {
     private const string ModelDescription = "The model, as printed on the machine.";
@@ -69,10 +64,16 @@ public sealed class ClarificationWiringBindingTests
         // carries across: drop any of ambiguity, wildcard.value, wildcard.facets, scope.template or
         // fromState on the way, and this note collapses into the bare "holds nothing" notice.
         var port = new ScopedFakePort();
-        using var clarifications = TurnAmbientsTestScope.WithClarifications(new Clarifications());
-        using var scope = KnowledgeScopeScope.Open(Scope(model: "*", audience: "everyone"));
+        var turn = new TurnInvocation
+        {
+            CallId = "call",
+            TurnIndex = 0,
+            Stage = "",
+            Knowledge = Scope(model: "*", audience: "everyone"),
+            Clarifications = new Clarifications(),
+        };
 
-        var note = await SearchAsync(CompileTheSearchProvider(port), "belt slipping");
+        var note = await SearchAsync(CompileTheSearchProvider(port), "belt slipping", turn);
 
         Assert.Contains("It could be: e33, f63", note, StringComparison.Ordinal);
         Assert.Equal(2, port.Calls);
@@ -84,16 +85,22 @@ public sealed class ClarificationWiringBindingTests
         // The description lives under state:, not under providers.knowledge, so it reaches the probe
         // only because the compiler joined the two. Losing it degrades the ask to the bare slot name.
         var port = new ScopedFakePort();
-        using var clarifications = TurnAmbientsTestScope.WithClarifications(new Clarifications());
-        using var scope = KnowledgeScopeScope.Open(Scope(model: "*", audience: "everyone"));
+        var turn = new TurnInvocation
+        {
+            CallId = "call",
+            TurnIndex = 0,
+            Stage = "",
+            Knowledge = Scope(model: "*", audience: "everyone"),
+            Clarifications = new Clarifications(),
+        };
 
-        var note = await SearchAsync(CompileTheSearchProvider(port), "belt slipping");
+        var note = await SearchAsync(CompileTheSearchProvider(port), "belt slipping", turn);
 
         Assert.Contains(ModelDescription, note, StringComparison.Ordinal);
         Assert.DoesNotContain("known: model ", note, StringComparison.Ordinal);
     }
 
-    private static TextSearchProvider CompileTheSearchProvider(IKnowledgeRetrievalPort port)
+    private static FacetFilterProvider CompileTheSearchProvider(IKnowledgeRetrievalPort port)
     {
         using SequencedChatClient reply = new("hello there.");
 
@@ -101,7 +108,7 @@ public sealed class ClarificationWiringBindingTests
             ConfigurationLoader.LoadYaml(WiredYaml),
             new AgentCompilationContext(new FakeChatClientFactory(reply)) { Knowledge = port });
 
-        return Assert.Single(Providers(compiled.Agents["only"]).OfType<TextSearchProvider>());
+        return Assert.Single(Providers(compiled.Agents["only"]).OfType<FacetFilterProvider>());
     }
 
     private static IEnumerable<AIContextProvider> Providers(AIAgent agent)
@@ -123,10 +130,71 @@ public sealed class ClarificationWiringBindingTests
         };
 
     /// <summary>The one notice the bound search returned, as text.</summary>
-    private static async Task<string> SearchAsync(TextSearchProvider provider, string query)
-        => Assert.Single(
-            await TextSearchProviderInternals.SearchAsync(
-                provider, query, TestContext.Current.CancellationToken).ConfigureAwait(false)).Text;
+    private static async Task<string> SearchAsync(AIContextProvider provider, string query, TurnInvocation turn)
+    {
+        StubSession session = new();
+        var context = await provider.InvokingAsync(
+            Invoking("hello", session), TestContext.Current.CancellationToken).ConfigureAwait(false);
+        var search = Assert.Single(context.Tools!, tool => tool.Name == "Search");
+        var results = await ((AIFunction)search).InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["userQuestion"] = query,
+                [TurnInvocation.ArgumentsKey] = turn,
+            }),
+            TestContext.Current.CancellationToken).ConfigureAwait(false)
+            as IReadOnlyList<TextSearchProvider.TextSearchResult>;
+        return Assert.Single(results!).Text;
+    }
+
+    /// <summary>Runs the provider the way the framework runs it, over one caller message.</summary>
+    private static AIContextProvider.InvokingContext Invoking(string text, AgentSession session)
+    {
+#pragma warning disable MAAI001 // The context constructors are the framework's own experimental surface.
+        return new(
+            StubAgent.Instance,
+            session,
+            new AIContext { Messages = [new ChatMessage(ChatRole.User, text)] });
+#pragma warning restore MAAI001
+    }
+
+    private sealed class StubSession : AgentSession;
+
+    /// <summary>Stands in for the agent the framework names on a context. Nothing here runs it.</summary>
+    private sealed class StubAgent : AIAgent
+    {
+        public static StubAgent Instance { get; } = new();
+
+        protected override ValueTask<AgentSession> CreateSessionCoreAsync(
+            CancellationToken cancellationToken = default)
+            => new(new StubSession());
+
+        protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
+            AgentSession session,
+            JsonSerializerOptions? jsonSerializerOptions = null,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
+            JsonElement serializedState,
+            JsonSerializerOptions? jsonSerializerOptions = null,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        protected override Task<AgentResponse> RunCoreAsync(
+            IEnumerable<ChatMessage> messages,
+            AgentSession? session = null,
+            AgentRunOptions? options = null,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        protected override IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
+            IEnumerable<ChatMessage> messages,
+            AgentSession? session = null,
+            AgentRunOptions? options = null,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+    }
 
     /// <summary>
     /// A store that answers nothing while <c>model</c> is still in the scope, and names two models
@@ -137,11 +205,11 @@ public sealed class ClarificationWiringBindingTests
         internal int Calls { get; private set; }
 
         public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
-            string query, CancellationToken cancellationToken = default)
+            string query, KnowledgeScope? scope = null, CancellationToken cancellationToken = default)
         {
             Calls++;
 
-            var facets = KnowledgeScopeScope.Current?.Facets;
+            var facets = scope?.Facets;
             if (facets is null || facets.ContainsKey("model"))
             {
                 return new([]);

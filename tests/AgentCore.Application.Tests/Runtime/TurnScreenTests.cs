@@ -5,6 +5,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Fakes;
+using AgentCore.Application.Tools.Binding;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
@@ -12,22 +13,11 @@ using Xunit;
 namespace AgentCore.Application.Tests.Runtime;
 
 /// <summary>
-/// The screen of one call, found by a tool that was compiled once for the whole process.
+/// The turn reaches its tools: the screen the loop builds arriving at the tool that draws.
 /// </summary>
-/// <remarks>
-/// <para>
-/// A tool that draws cannot hold the screen it draws on: the compiled agent is a process singleton
-/// and the screen belongs to one call. It reads the ambient scope instead, exactly as a guarded
-/// graph edge reads <see cref="CallStateScope"/>.
-/// </para>
-/// <para>
-/// Every test here runs offline: no network call and no API key.
-/// </para>
-/// </remarks>
-public sealed class CallRenderScopeTests
+public sealed class TurnScreenTests
 {
-    private const string DelegationYaml =
-        """
+    private const string DelegationYaml = """
         apiVersion: agentcore/v1
         name: render-scope
         tools:
@@ -45,62 +35,17 @@ public sealed class CallRenderScopeTests
         """;
 
     [Fact]
-    public void WithNoScopeOpen_TheScreenIsNullRatherThanAThrow()
-    {
-        // Unlike CallStateScope, which throws. A guarded edge that quietly became unconditional is a
-        // silent failure; a call that genuinely has no screen — the telephone — is not.
-        Assert.Null(CallRenderScope.Current);
-    }
-
-    [Fact]
-    public void ClosingAScope_PutsBackTheOneThatWasOpenBefore()
-    {
-        RecordingRenderPort outer = new();
-        RecordingRenderPort inner = new();
-
-        using (TurnAmbients.Amend(ambients => ambients with { Screen = outer }))
-        {
-            Assert.Same(outer, CallRenderScope.Current);
-
-            using (TurnAmbients.Amend(ambients => ambients with { Screen = inner }))
-            {
-                Assert.Same(inner, CallRenderScope.Current);
-            }
-
-            Assert.Same(outer, CallRenderScope.Current);
-        }
-
-        Assert.Null(CallRenderScope.Current);
-    }
-
-    [Fact]
-    public void DisposingTwice_DoesNotPutAnOlderScreenOverANewerScope()
-    {
-        RecordingRenderPort first = new();
-        RecordingRenderPort second = new();
-
-        var scope = TurnAmbients.Amend(ambients => ambients with { Screen = first });
-        scope.Dispose();
-
-        using var later = TurnAmbients.Amend(ambients => ambients with { Screen = second });
-        scope.Dispose();
-
-        Assert.Same(second, CallRenderScope.Current);
-    }
-
-    [Fact]
     public async Task ATurnThatDoesNotStream_ShowsItsToolsTheScreen()
     {
         var (session, probe) = NewCall();
 
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
-        // The screen a tool finds must be the SAME recorder TurnAmbients.Renders holds, not merely
+        // The screen a tool finds must be the SAME recorder the turn draws into, not merely
         // some TurnRenders or other: a regression that handed the tool a different instance would
-        // still draw, and would still lose the drawing, since CreateResponseMessages drains Renders
-        // and not whatever the tool happened to see.
+        // still draw, and would still lose the drawing, since the drain reads the turn's own.
         Assert.IsType<TurnRenders>(probe.Seen);
-        Assert.Same(probe.AmbientRenders, probe.Seen);
+        Assert.Same(probe.TurnRenders, probe.Seen);
     }
 
     [Fact]
@@ -117,7 +62,7 @@ public sealed class CallRenderScopeTests
         }
 
         Assert.IsType<TurnRenders>(probe.Seen);
-        Assert.Same(probe.AmbientRenders, probe.Seen);
+        Assert.Same(probe.TurnRenders, probe.Seen);
     }
 
     [Fact]
@@ -177,20 +122,24 @@ public sealed class CallRenderScopeTests
         return (session, probe);
     }
 
-    /// <summary>A tool that reports the screen and the ambient recorder it found, from wherever it ran.</summary>
+    /// <summary>A tool that reports the screen and the recorder it found, from wherever it ran.</summary>
     private sealed class ScreenProbe
     {
         public ScreenProbe()
             => Tool = AIFunctionFactory.Create(
-                () =>
+                (TurnInvocation? turn) =>
                 {
                     Ran = true;
-                    Seen = CallRenderScope.Current;
-                    AmbientRenders = TurnAmbients.Current?.Renders;
+                    Seen = turn?.Screen;
+                    TurnRenders = turn?.Renders;
                     return "drawn.";
                 },
-                "build_ui",
-                "Draw something on the caller's screen.");
+                new AIFunctionFactoryOptions
+                {
+                    Name = "build_ui",
+                    Description = "Draw something on the caller's screen.",
+                    ConfigureParameterBinding = ToolParameterBindings.For,
+                });
 
         public AIFunction Tool { get; }
 
@@ -198,7 +147,7 @@ public sealed class CallRenderScopeTests
 
         public IRenderPort? Seen { get; private set; }
 
-        /// <summary>What <see cref="TurnAmbients.Renders"/> held at the same moment <see cref="Seen"/> was read.</summary>
-        public TurnRenders? AmbientRenders { get; private set; }
+        /// <summary>What the turn drew into at the same moment <see cref="Seen"/> was read.</summary>
+        public TurnRenders? TurnRenders { get; private set; }
     }
 }

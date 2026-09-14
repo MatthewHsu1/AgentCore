@@ -1,4 +1,5 @@
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Tests.Fakes;
@@ -41,7 +42,7 @@ public sealed class KnowledgeLoggingThroughBootTests
         await boot.BootAsync(TestContext.Current.CancellationToken);
 
         // Run the retrieval the way the framework runs it, on the agent the boot actually compiled.
-        var provider = Assert.Single(Providers(boot.Compiled.Agents["resolver"]).OfType<TextSearchProvider>());
+        var provider = Assert.Single(Providers(boot.Compiled.Agents["resolver"]).OfType<KnowledgePrefetchProvider>());
 
 #pragma warning disable MAAI001 // The context constructors are the framework's own experimental surface.
         AIContextProvider.InvokingContext context = new(
@@ -109,7 +110,7 @@ public sealed class KnowledgeLoggingThroughBootTests
     private sealed class ThrowingPort(Exception failure) : IKnowledgeRetrievalPort
     {
         public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
-            string query, CancellationToken cancellationToken = default)
+            string query, KnowledgeScope? scope = null, CancellationToken cancellationToken = default)
             => throw failure;
     }
 }

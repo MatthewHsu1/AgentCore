@@ -1,5 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using AgentCore.Application.Ports;
+using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime;
@@ -25,11 +27,10 @@ public sealed class PresentToolTests
     public async Task Present_AValidTree_PublishesItAndReturnsTheReceipt()
     {
         RecordingRenderPort screen = new();
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen });
 
         var result = await Invoke(Tool(), """
             { "$type": "Card", "children": [{ "$type": "Text", "children": ["hi"] }] }
-            """);
+            """, screen);
 
         Assert.Equal(PresentTool.RendererName, Assert.Single(screen.Published).Name);
         Assert.False(result.ContainsKey(ToolErrorResult.ErrorProperty));
@@ -39,9 +40,8 @@ public sealed class PresentToolTests
     public async Task Present_AnUnknownComponent_ReturnsAnErrorAndDrawsNothing()
     {
         RecordingRenderPort screen = new();
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen });
 
-        var result = await Invoke(Tool(), """{ "$type": "Wombat" }""");
+        var result = await Invoke(Tool(), """{ "$type": "Wombat" }""", screen);
 
         Assert.Empty(screen.Published);
         Assert.True(result[ToolErrorResult.ErrorProperty]!.GetValue<bool>());
@@ -51,7 +51,7 @@ public sealed class PresentToolTests
     [Fact]
     public async Task Present_NoScreen_ReturnsAnError()
     {
-        var result = await Invoke(Tool(), """{ "$type": "Card" }""");
+        var result = await Invoke(Tool(), """{ "$type": "Card" }""", null);
 
         Assert.True(result[ToolErrorResult.ErrorProperty]!.GetValue<bool>());
     }
@@ -60,9 +60,8 @@ public sealed class PresentToolTests
     public async Task Present_ATreeThatIsNotAnObject_ReturnsAnErrorAndDrawsNothing()
     {
         RecordingRenderPort screen = new();
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen });
 
-        var result = await Invoke(Tool(), "[1, 2, 3]");
+        var result = await Invoke(Tool(), "[1, 2, 3]", screen);
 
         Assert.Empty(screen.Published);
         Assert.True(result[ToolErrorResult.ErrorProperty]!.GetValue<bool>());
@@ -71,7 +70,7 @@ public sealed class PresentToolTests
     [Fact]
     public async Task Present_NamesTheDeclaredToolInTheErrorResult()
     {
-        var result = await Invoke(Tool(), """{ "$type": "Wombat" }""");
+        var result = await Invoke(Tool(), """{ "$type": "Wombat" }""", null);
 
         Assert.Equal("draw", result[ToolErrorResult.ToolProperty]!.GetValue<string>());
     }
@@ -80,9 +79,8 @@ public sealed class PresentToolTests
     public async Task Present_ANumericType_ReturnsAnActionableErrorAndDrawsNothing()
     {
         RecordingRenderPort screen = new();
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen });
 
-        var result = await Invoke(Tool(), """{ "$type": 123 }""");
+        var result = await Invoke(Tool(), """{ "$type": 123 }""", screen);
 
         Assert.Empty(screen.Published);
         Assert.True(result[ToolErrorResult.ErrorProperty]!.GetValue<bool>());
@@ -95,11 +93,10 @@ public sealed class PresentToolTests
     public async Task Present_ANonStringActionType_ReturnsAnActionableErrorAndDrawsNothing()
     {
         RecordingRenderPort screen = new();
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen });
 
         var result = await Invoke(
             Tool(),
-            """{ "$type": "Button", "label": "Yes", "$action": { "type": 42 } }""");
+            """{ "$type": "Button", "label": "Yes", "$action": { "type": 42 } }""", screen);
 
         Assert.Empty(screen.Published);
         Assert.True(result[ToolErrorResult.ErrorProperty]!.GetValue<bool>());
@@ -118,10 +115,9 @@ public sealed class PresentToolTests
     public async Task Present_ANonStringActionTypeUnderAReservedKey_FinishesWithoutThrowing()
     {
         RecordingRenderPort screen = new();
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen });
 
         var result = await Invoke(
-            Tool(), """{ "$type": "Card", "$key": { "$action": { "type": 42 } } }""");
+            Tool(), """{ "$type": "Card", "$key": { "$action": { "type": 42 } } }""", screen);
 
         // The validator accepts this tree, so the tool must finish it: one publish, one receipt, and
         // no button named off a type that is not a string. What must never happen again is the
@@ -135,9 +131,8 @@ public sealed class PresentToolTests
     public async Task Present_AScriptThatFails_ReturnsItsErrorAndAsksForAnotherTry()
     {
         RecordingRenderPort screen = new();
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen });
 
-        var result = await Invoke(Tool(), "throw: data.orders is undefined");
+        var result = await Invoke(Tool(), "throw: data.orders is undefined", screen);
 
         Assert.Empty(screen.Published);
         Assert.True(result[ToolErrorResult.ErrorProperty]!.GetValue<bool>());
@@ -150,9 +145,8 @@ public sealed class PresentToolTests
     public async Task Present_AScriptThatReturnsNothing_ReturnsAnErrorAndDrawsNothing()
     {
         RecordingRenderPort screen = new();
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen });
 
-        var result = await Invoke(Tool(), "null");
+        var result = await Invoke(Tool(), "null", screen);
 
         Assert.Empty(screen.Published);
         Assert.True(result[ToolErrorResult.ErrorProperty]!.GetValue<bool>());
@@ -165,10 +159,9 @@ public sealed class PresentToolTests
         RecordingRenderPort screen = new();
         TurnResults results = new();
         results.Record("lookup_orders", JsonNode.Parse("""[{"id":"SO-1"}]""")!);
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen, Results = results });
         FakeScriptRunner runner = new();
 
-        await Invoke(PresentTool.Create("draw", runner), """{ "$type": "Text", "value": "hi" }""");
+        await Invoke(PresentTool.Create("draw", runner), """{ "$type": "Text", "value": "hi" }""", screen, results);
 
         var request = Assert.Single(runner.Requests);
         Assert.Equal("""[{"id":"SO-1"}]""", request.Data["lookup_orders"]!.ToJsonString());
@@ -180,10 +173,9 @@ public sealed class PresentToolTests
     public async Task WithNoToolResultsThisTurn_TheScriptStillSeesAnEmptyData()
     {
         RecordingRenderPort screen = new();
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Screen = screen, Results = null });
         FakeScriptRunner runner = new();
 
-        await Invoke(PresentTool.Create("draw", runner), """{ "$type": "Text", "value": "hi" }""");
+        await Invoke(PresentTool.Create("draw", runner), """{ "$type": "Text", "value": "hi" }""", screen);
 
         var data = Assert.IsType<JsonObject>(Assert.Single(runner.Requests).Data);
         Assert.Empty(data[TurnResults.AllKey]!.AsObject());
@@ -201,11 +193,19 @@ public sealed class PresentToolTests
     private static AIFunction Tool() => PresentTool.Create("draw", new FakeScriptRunner());
 
     /// <summary>Calls the tool with one script and reads the result as a node tree.</summary>
-    private static async Task<JsonObject> Invoke(AIFunction tool, string code)
+    private static async Task<JsonObject> Invoke(AIFunction tool, string code, IRenderPort? screen, TurnResults? results = null)
     {
         var arguments = new AIFunctionArguments
         {
             ["code"] = code,
+            [TurnInvocation.ArgumentsKey] = new TurnInvocation
+            {
+                CallId = "call",
+                TurnIndex = 0,
+                Stage = "",
+                Screen = screen,
+                Results = results,
+            },
         };
 
         var result = await tool.InvokeAsync(arguments, TestContext.Current.CancellationToken);
