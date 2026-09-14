@@ -193,11 +193,12 @@ public static partial class ConfigurationSchemaValidator
                 ? $"this key is written exactly '{only[0]}', and nothing else"
                 : "the value is not the one this key holds",
 
-            "pattern" => Keyword(node, "pattern")?.GetValue<string>() is not { } pattern
-                ? "the value is not written in the form this key requires"
-                : pattern == @"\S"
-                    ? "the text holds no words, and this key needs some"
-                    : $"the text is not written in the form this key requires: {pattern}",
+            "pattern" => Keyword(node, "pattern")?.GetValue<string>() switch
+            {
+                null => "the value is not written in the form this key requires",
+                @"\S" => "the text holds no words, and this key needs some",
+                var form => $"the text is not written in the form this key requires: {form}",
+            },
 
             "minLength" or "maxLength" => Bound(message) is { } length
                 ? $"the text holds too {length.Way} characters, and this key takes at {length.Limit}"
@@ -342,9 +343,15 @@ public static partial class ConfigurationSchemaValidator
     /// <param name="message">The text the library wrote.</param>
     /// <returns>Which way the bound runs and what it is, or <see langword="null"/> when the message does not carry one.</returns>
     private static (string Way, string Limit)? Bound(string message)
-        => BoundPattern().Match(message) is { Success: true } bound
-            ? (bound.Groups[1].Value == "least" ? "few" : "many", $"{bound.Groups[1].Value} {bound.Groups[2].Value}")
-            : null;
+    {
+        if (BoundPattern().Match(message) is not { Success: true } bound)
+        {
+            return null;
+        }
+
+        var way = bound.Groups[1].Value == "least" ? "few" : "many";
+        return (way, $"{bound.Groups[1].Value} {bound.Groups[2].Value}");
+    }
 
     private static string ReadResource()
     {

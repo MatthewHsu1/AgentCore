@@ -98,7 +98,14 @@ public sealed class BuiltinToolSource : IToolSource
     /// <param name="tool">The declaration the document holds.</param>
     /// <returns>The key, or <see langword="null"/> when the declaration sets neither.</returns>
     private static string? UnreadDial(ToolConfiguration tool)
-        => tool.Model is not null ? "model:" : tool.MaxRounds is not null ? "maxRounds:" : null;
+    {
+        if (tool.Model is not null)
+        {
+            return "model:";
+        }
+
+        return tool.MaxRounds is not null ? "maxRounds:" : null;
+    }
 
     private static ConfigurationLoadException UnknownName(ToolConfiguration tool)
         => ToolSourceError.Fail(

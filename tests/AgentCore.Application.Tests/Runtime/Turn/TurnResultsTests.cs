@@ -86,13 +86,13 @@ public sealed class TurnResultsTests
         Assert.Null(results.Data()["tool"]);
     }
 
-    public static TheoryData<object?> UnstructuredResults => new()
-    {
+    public static TheoryData<object?> UnstructuredResults =>
+    [
         (object?)null,
         "Order SO-1 shipped on Tuesday.",
         42,
         ToolErrorResult.Create("tool", "it failed."),
-    };
+    ];
 
     [Fact]
     public async Task AnOutermostToolCall_IsRecordedUnderTheToolsName()

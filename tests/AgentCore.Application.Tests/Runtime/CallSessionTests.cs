@@ -987,7 +987,7 @@ public sealed class CallSessionTests
     {
         using SequencedChatClient reply = new("hello there.", "still here.");
         using SequencedChatClient fill = new(StayingNull);
-        var port = Assert.IsAssignableFrom<IConversationPort>(Build(PolicyYaml, reply, fill).Create("call-9"));
+        var port = Assert.IsType<IConversationPort>(Build(PolicyYaml, reply, fill).Create("call-9"), exactMatch: false);
 
         var turn = await port.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 

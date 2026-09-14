@@ -147,7 +147,7 @@ public sealed class McpServerSessionTests
         // The tool object was built while the first connection was alive, and is never rebuilt.
         await fake.KillNewestConnectionAsync();
 
-        var result = await tool.InvokeAsync(new AIFunctionArguments(), Token);
+        var result = await tool.InvokeAsync([], Token);
 
         Assert.Equal(2, fake.ConnectionsOpened);
         Assert.False(IsError(result), $"the call returned an error result: {result}");
@@ -170,11 +170,11 @@ public sealed class McpServerSessionTests
         await fake.AnnounceToolChangeAsync(Token);
         await WaitForAsync(async () =>
         {
-            var probe = await tool.InvokeAsync(new AIFunctionArguments(), Token);
+            var probe = await tool.InvokeAsync([], Token);
             return IsError(probe);
         });
 
-        var result = await tool.InvokeAsync(new AIFunctionArguments(), Token);
+        var result = await tool.InvokeAsync([], Token);
 
         var error = Assert.IsType<JsonObject>(result);
         Assert.True(ToolErrorResult.IsError(error));
@@ -256,7 +256,7 @@ public sealed class McpServerSessionTests
         object? result = null;
         await WaitForAsync(async () =>
         {
-            result = await tool.InvokeAsync(new AIFunctionArguments(), Token);
+            result = await tool.InvokeAsync([], Token);
             return IsError(result);
         });
 
@@ -268,7 +268,7 @@ public sealed class McpServerSessionTests
             StringComparison.Ordinal);
 
         // It stays gone: the guard is on the call, not on one unlucky moment.
-        Assert.True(IsError(await tool.InvokeAsync(new AIFunctionArguments(), Token)));
+        Assert.True(IsError(await tool.InvokeAsync([], Token)));
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -290,7 +290,7 @@ public sealed class McpServerSessionTests
 
         var watch = Stopwatch.StartNew();
         var result = await ((AIFunction)registry.Resolve("jira.create_issue"))
-            .InvokeAsync(new AIFunctionArguments(), Token);
+            .InvokeAsync([], Token);
         watch.Stop();
 
         Assert.True(ToolErrorResult.IsError(Assert.IsType<JsonObject>(result)));
@@ -337,7 +337,7 @@ public sealed class McpServerSessionTests
 
         await source.DisposeAsync();
 
-        var result = await tool.InvokeAsync(new AIFunctionArguments(), Token);
+        var result = await tool.InvokeAsync([], Token);
 
         Assert.True(ToolErrorResult.IsError(Assert.IsType<JsonObject>(result)));
     }

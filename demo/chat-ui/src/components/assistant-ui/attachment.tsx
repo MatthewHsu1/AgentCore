@@ -61,8 +61,7 @@ const useAttachmentSrc = () => {
     useShallow((s): { file?: File; src?: string } => {
       if (s.attachment.type !== "image") return {};
       if (s.attachment.file) return { file: s.attachment.file };
-      const src = s.attachment.content?.filter((c) => c.type === "image")[0]
-        ?.image;
+      const src = s.attachment.content?.find((c) => c.type === "image")?.image;
       if (!src) return {};
       return { src };
     }),
@@ -153,17 +152,25 @@ const AttachmentUI: FC = () => {
     }
   });
 
-  const uploadState = useAuiState((s) =>
-    s.attachment.status.type === "running"
-      ? "uploading"
-      : s.attachment.status.type === "incomplete" &&
-          s.attachment.status.reason === "error"
-        ? "error"
-        : undefined,
-  );
+  const uploadState = useAuiState((s) => {
+    if (s.attachment.status.type === "running") return "uploading";
+    if (
+      s.attachment.status.type === "incomplete" &&
+      s.attachment.status.reason === "error"
+    ) {
+      return "error";
+    }
+    return undefined;
+  });
   const isUploading = uploadState === "uploading";
   const isError = uploadState === "error";
 
+  let stateLabel = "";
+  if (isError) {
+    stateLabel = ", upload failed";
+  } else if (isUploading) {
+    stateLabel = ", uploading";
+  }
   const errorMessage = useAuiState((s) =>
     s.attachment.status.type === "incomplete" &&
     s.attachment.status.reason === "error"
@@ -205,9 +212,7 @@ const AttachmentUI: FC = () => {
                 onKeyUp={(e) => {
                   if (e.key === " ") e.currentTarget.click();
                 }}
-                aria-label={`${typeLabel} attachment${
-                  isError ? ", upload failed" : isUploading ? ", uploading" : ""
-                }`}
+                aria-label={`${typeLabel} attachment${stateLabel}`}
               >
                 <AttachmentThumb />
                 {isUploading && (

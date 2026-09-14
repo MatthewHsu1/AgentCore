@@ -86,6 +86,8 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
 
     private volatile CallSession? _session;
 
+    private const string BeforeSetupCallId = "(before setup)";
+
     // volatile for the same reason _session is: the read loop assigns it when the setup frame
     // arrives, and teardown reads it from another task to find the last turn.
     private volatile CallTurnArbiter? _arbiter;
@@ -128,7 +130,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
         // a function because the session only exists once the setup frame has arrived, which is
         // after this constructor and after some of the lines the observer logs.
         _observer = new ConnectionTaskObserver(
-            () => _session?.CallId ?? "(before setup)",
+            () => _session?.CallId ?? BeforeSetupCallId,
             (callId, taskName) => TelnyxRelayLog.TeardownTimedOut(_logger, callId, taskName),
             (kind, callId, fault) => LogFault(kind, callId, fault),
             ClassifyTelnyxFault);
@@ -147,9 +149,9 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
                 _options.IdleTimeout,
                 _options.CloseTimeout,
                 (status, message) => new RelayProtocolException(status, message),
-                frameType => TelnyxRelayLog.UnknownFrameType(_logger, frameType, _session?.CallId ?? "(before setup)"),
-                frameType => TelnyxRelayLog.FrameBodyRefused(_logger, frameType, _session?.CallId ?? "(before setup)"),
-                () => TelnyxRelayLog.IdleTimeoutReached(_logger, _session?.CallId ?? "(before setup)")),
+                frameType => TelnyxRelayLog.UnknownFrameType(_logger, frameType, _session?.CallId ?? BeforeSetupCallId),
+                frameType => TelnyxRelayLog.FrameBodyRefused(_logger, frameType, _session?.CallId ?? BeforeSetupCallId),
+                () => TelnyxRelayLog.IdleTimeoutReached(_logger, _session?.CallId ?? BeforeSetupCallId)),
             timeProvider,
             _connectionToken);
     }
@@ -197,13 +199,13 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
                 // otherwise strand this call in the store for the life of the process.
                 try
                 {
-                    _cancellation.Cancel();
+                    await _cancellation.CancelAsync().ConfigureAwait(false);
                 }
                 catch (Exception fault)
                 {
                     ConnectionTaskObserver.SafeLog(() => TelnyxRelayLog.CancellationFaulted(
                         _logger,
-                        _session?.CallId ?? "(before setup)",
+                        _session?.CallId ?? BeforeSetupCallId,
                         fault));
                 }
 
@@ -260,7 +262,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
                 {
                     ConnectionTaskObserver.SafeLog(() => TelnyxRelayLog.CloseFaulted(
                         _logger,
-                        _session?.CallId ?? "(before setup)",
+                        _session?.CallId ?? BeforeSetupCallId,
                         fault));
                 }
 
@@ -531,7 +533,6 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
                 TelnyxRelayLog.CallCloseFaulted(_logger, callId, fault);
                 break;
 
-            case ConnectionTaskKind.ReadLoop:
             default:
                 TelnyxRelayLog.ReadLoopFaulted(_logger, callId, fault);
                 break;
@@ -633,7 +634,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
 
             case RelayFrame.Error error:
                 // The vendor refused a frame this endpoint sent. That is our defect.
-                TelnyxRelayLog.FrameRefused(_logger, _session?.CallId ?? "(before setup)", error.Description);
+                TelnyxRelayLog.FrameRefused(_logger, _session?.CallId ?? BeforeSetupCallId, error.Description);
                 break;
         }
     }
@@ -826,6 +827,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
 
         while (_outbound.Reader.TryRead(out _))
         {
+            // Drained, never sent: the barge-in above already cut off everything still queued.
         }
 
         return ValueTask.CompletedTask;

@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using AgentCore.Application.Calls;
 using AgentCore.Application.Configuration.Compilation;
@@ -81,29 +80,6 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
 
     private readonly Lock _interruptLock = new();
 
-    private AgentSession? _agentSession;
-
-    /// <summary>
-    /// The call's shared workflow session on a graph row whose document declares a harness
-    /// switch. MAF restores the participants' provider state from its checkpoints on every
-    /// turn; any other call runs every turn fresh and leaves this <see langword="null"/>.
-    /// </summary>
-    private AgentSession? _graphSession;
-
-    /// <summary>
-    /// The last serialization of <see cref="_graphSession"/>, read back at resume. Refreshed
-    /// at every turn end; a host snapshotting mid-turn gets the last turn boundary.
-    /// </summary>
-    private JsonElement? _graphBlob;
-
-    private CancellationTokenSource? _runCancellation;
-
-    private CallInterruptionTracker.Interruption? _interruption;
-
-    private Guid? _amendableEventId;
-
-    private CallSessionState? _checkpoint;
-
     private readonly Clarifications _clarifications = new();
 
     private readonly CallWorkspace? _workspace;
@@ -137,20 +113,28 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
 
     internal CallWorkspace? WorkspaceRoot => _workspace;
 
-    internal AgentSession? AgentSession { get => _agentSession; set => _agentSession = value; }
+    internal AgentSession? AgentSession { get; set; }
 
-    internal AgentSession? GraphSession { get => _graphSession; set => _graphSession = value; }
+    /// <summary>
+    /// The call's shared workflow session on a graph row whose document declares a harness
+    /// switch. MAF restores the participants' provider state from its checkpoints on every
+    /// turn; any other call runs every turn fresh and leaves this <see langword="null"/>.
+    /// </summary>
+    internal AgentSession? GraphSession { get; set; }
 
-    internal JsonElement? GraphBlob { get => _graphBlob; set => _graphBlob = value; }
+    /// <summary>
+    /// The last serialization of <see cref="GraphSession"/>, read back at resume. Refreshed
+    /// at every turn end; a host snapshotting mid-turn gets the last turn boundary.
+    /// </summary>
+    internal JsonElement? GraphBlob { get; set; }
 
-    internal CancellationTokenSource? RunCancellation { get => _runCancellation; set => _runCancellation = value; }
+    internal CancellationTokenSource? RunCancellation { get; set; }
 
-    internal CallInterruptionTracker.Interruption? Interruption { get => _interruption; set => _interruption = value; }
+    internal CallInterruptionTracker.Interruption? Interruption { get; set; }
 
-    internal Guid? AmendableEventId { get => _amendableEventId; set => _amendableEventId = value; }
+    internal Guid? AmendableEventId { get; set; }
 
-    internal CallSessionState? Checkpoint { get => _checkpoint; set => _checkpoint = value; }
-
+    internal CallSessionState? Checkpoint { get; set; }
     internal Clarifications Clarifications => _clarifications;
 
     internal CallTurnRunner Runner { get; }
@@ -379,35 +363,29 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
     /// <summary>
     /// Runs one streaming turn that knows where it sits in the conversation the caller can see.
     /// </summary>
-    public async IAsyncEnumerable<ChatResponseUpdate> RunTurnStreamingAtOriginAsync(
+    public IAsyncEnumerable<ChatResponseUpdate> RunTurnStreamingAtOriginAsync(
         string userInput,
         CallTurnOrigin? origin,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(userInput);
 
-        await foreach (var update in Stream.RunTurnStreamingCoreAsync(
-            new ChatMessage(ChatRole.User, userInput), origin, cancellationToken).ConfigureAwait(false))
-        {
-            yield return update;
-        }
+        return Stream.RunTurnStreamingCoreAsync(
+            new ChatMessage(ChatRole.User, userInput), origin, cancellationToken);
     }
 
     /// <summary>
     /// Runs one streaming turn from a message the caller built, that knows where it sits in the
     /// conversation the caller can see.
     /// </summary>
-    public async IAsyncEnumerable<ChatResponseUpdate> RunTurnMessageStreamingAtOriginAsync(
+    public IAsyncEnumerable<ChatResponseUpdate> RunTurnMessageStreamingAtOriginAsync(
         ChatMessage userInput,
         CallTurnOrigin? origin,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(userInput);
 
-        await foreach (var update in Stream.RunTurnStreamingCoreAsync(userInput, origin, cancellationToken).ConfigureAwait(false))
-        {
-            yield return update;
-        }
+        return Stream.RunTurnStreamingCoreAsync(userInput, origin, cancellationToken);
     }
 
     /// <summary>

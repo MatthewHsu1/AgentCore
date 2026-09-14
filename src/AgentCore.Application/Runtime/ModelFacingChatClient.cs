@@ -8,19 +8,19 @@ namespace AgentCore.Application.Runtime;
 internal sealed class ModelFacingChatClient(IChatClient inner) : DelegatingChatClient(inner)
 {
     public override async Task<ChatResponse> GetResponseAsync(
-        IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken ct = default)
+        IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
         using var _ = KeyHider.Hide(options);
-        return await base.GetResponseAsync(Strip(messages), options, ct).ConfigureAwait(false);
+        return await base.GetResponseAsync(Strip(messages), options, cancellationToken).ConfigureAwait(false);
     }
 
     public override async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IEnumerable<ChatMessage> messages,
         ChatOptions? options = null,
-        [EnumeratorCancellation] CancellationToken ct = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         using var _ = KeyHider.Hide(options);
-        await foreach (var update in base.GetStreamingResponseAsync(Strip(messages), options, ct).ConfigureAwait(false))
+        await foreach (var update in base.GetStreamingResponseAsync(Strip(messages), options, cancellationToken).ConfigureAwait(false))
         {
             yield return update;
         }

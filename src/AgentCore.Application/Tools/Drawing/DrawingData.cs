@@ -80,21 +80,9 @@ internal static class DrawingData
         };
 
     private static string Fields(IEnumerable<JsonObject> items)
-    {
-        List<string> names = [];
-        foreach (var item in items)
-        {
-            foreach (var pair in item)
-            {
-                if (!names.Contains(pair.Key, StringComparer.Ordinal))
-                {
-                    names.Add(pair.Key);
-                }
-            }
-        }
-
-        return string.Join(", ", names);
-    }
+        => string.Join(", ", items
+            .SelectMany(static item => item.Select(static pair => pair.Key))
+            .Distinct(StringComparer.Ordinal));
 
     private static string Sample(JsonNode? node, int depth)
     {

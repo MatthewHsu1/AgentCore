@@ -54,12 +54,9 @@ internal static class DrawingReceipt
                     actions.Add(payload.Length == 0 ? type : $"{type} {payload}");
                 }
 
-                foreach (var pair in item)
+                foreach (var pair in item.Where(pair => !string.Equals(pair.Key, "$action", StringComparison.Ordinal)))
                 {
-                    if (!string.Equals(pair.Key, "$action", StringComparison.Ordinal))
-                    {
-                        Collect(pair.Value, actions);
-                    }
+                    Collect(pair.Value, actions);
                 }
 
                 return;

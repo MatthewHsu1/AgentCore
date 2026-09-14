@@ -227,7 +227,7 @@ public sealed class FacetFilterTests
             TestContext.Current.CancellationToken);
 #pragma warning restore MAAI001
 
-        return Assert.IsAssignableFrom<AIFunction>(Assert.Single(context.Tools!));
+        return Assert.IsType<AIFunction>(Assert.Single(context.Tools!), exactMatch: false);
     }
 
     private static async Task<string> CallAsync(

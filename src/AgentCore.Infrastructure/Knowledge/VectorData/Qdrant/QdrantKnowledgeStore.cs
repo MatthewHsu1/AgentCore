@@ -74,33 +74,43 @@ internal sealed class QdrantKnowledgeStore
     /// </summary>
     public void Dispose() => (_channel as IDisposable)?.Dispose();
 
+    /// <summary>Refuses an unscoped search when this deployment scopes every query.</summary>
+    /// <param name="scope">The scope the search arrived with, or <see langword="null"/> for none.</param>
+    /// <exception cref="InvalidOperationException">The search is unscoped, or its scope names no facets.</exception>
+    private void RequireScope(KnowledgeScope? scope)
+    {
+        if (!_options.Scoped)
+        {
+            return;
+        }
+
+        // Two different host bugs, so two different messages. An empty facet map filters
+        // nothing, which is the same leak as no scope at all: a host that reads a customer
+        // record with no product on it builds one without noticing.
+        if (scope is null)
+        {
+            throw new InvalidOperationException(
+                "This deployment declares scoped: true and the search arrived without a KnowledgeScope. "
+                + "An unscoped search serves every customer every card, so it fails instead. Pass the "
+                + "scope to SearchAsync, or set scoped: false on the agent.");
+        }
+
+        if (scope.Facets.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "This deployment declares scoped: true and the open KnowledgeScope names no facets. "
+                + "An empty facet map filters nothing, so the search would serve every customer every "
+                + "card, and it fails instead. Give the scope the facets the customer record names, "
+                + "or set scoped: false on the agent.");
+        }
+    }
+
     public async ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
         string query, KnowledgeScope? scope = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        if (_options.Scoped)
-        {
-            // Two different host bugs, so two different messages. An empty facet map filters
-            // nothing, which is the same leak as no scope at all: a host that reads a customer
-            // record with no product on it builds one without noticing.
-            if (scope is null)
-            {
-                throw new InvalidOperationException(
-                    "This deployment declares scoped: true and the search arrived without a KnowledgeScope. "
-                    + "An unscoped search serves every customer every card, so it fails instead. Pass the "
-                    + "scope to SearchAsync, or set scoped: false on the agent.");
-            }
-
-            if (scope.Facets.Count == 0)
-            {
-                throw new InvalidOperationException(
-                    "This deployment declares scoped: true and the open KnowledgeScope names no facets. "
-                    + "An empty facet map filters nothing, so the search would serve every customer every "
-                    + "card, and it fails instead. Give the scope the facets the customer record names, "
-                    + "or set scoped: false on the agent.");
-            }
-        }
+        RequireScope(scope);
 
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(_options.Deadline);

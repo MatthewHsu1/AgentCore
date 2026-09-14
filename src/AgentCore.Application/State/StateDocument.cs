@@ -135,15 +135,7 @@ public sealed class StateDocument
     {
         var written = value?.ToJsonString();
 
-        foreach (var member in members)
-        {
-            if (string.Equals(member.ToJsonString(), written, StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return members.Any(member => string.Equals(member.ToJsonString(), written, StringComparison.Ordinal));
     }
 
     /// <summary>Takes a snapshot the guards read. It holds every declared slot and the three reserved slots.</summary>

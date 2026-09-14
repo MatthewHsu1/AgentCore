@@ -100,7 +100,7 @@ public sealed class KnowledgeProviderFactoryTests
         var line = Assert.Single(loggers.Of(12));
         Assert.Equal(LogLevel.Error, line.Level);
         Assert.Equal("resolver", line.Field<string>("Agent"));
-        Assert.IsAssignableFrom<OperationCanceledException>(line.Exception);
+        Assert.IsType<OperationCanceledException>(line.Exception, exactMatch: false);
     }
 
     [Fact]

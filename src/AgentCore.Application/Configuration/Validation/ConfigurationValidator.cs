@@ -19,6 +19,9 @@ public static class ConfigurationValidator
     /// </summary>
     private const int MaxIntervalSeconds = int.MaxValue / 1000;
 
+    /// <summary>The <c>increment:</c> field of a counter slot. Named once, so the check below and the two maps under it cannot drift apart.</summary>
+    private const string IncrementField = "increment";
+
     /// <summary>Runs checks 2 to 8 and returns everything they find.</summary>
     /// <param name="configuration">The bound document.</param>
     /// <returns>Every error and every partial-coverage warning.</returns>
@@ -559,27 +562,21 @@ public static class ConfigurationValidator
         }
         else
         {
-            foreach (var facet in widened.Facets)
+            foreach (var facet in widened.Facets.Where(facet => !scope.FromState.Contains(facet, StringComparer.Ordinal)))
             {
-                if (!scope.FromState.Contains(facet, StringComparer.Ordinal))
-                {
-                    errors.Add(Reference(
-                        Pointer.WildcardFacets,
-                        $"wildcard.facets names '{facet}' and fromState does not. The scope filter only "
-                        + $"ever puts a condition on a fromState facet, so there is no condition on "
-                        + $"'{facet}' for the wildcard to widen."));
-                }
+                errors.Add(Reference(
+                    Pointer.WildcardFacets,
+                    $"wildcard.facets names '{facet}' and fromState does not. The scope filter only "
+                    + $"ever puts a condition on a fromState facet, so there is no condition on "
+                    + $"'{facet}' for the wildcard to widen."));
             }
 
-            foreach (var name in scope.FromState)
+            foreach (var name in scope.FromState.Where(name => !widened.Facets.Contains(name, StringComparer.Ordinal)))
             {
-                if (!widened.Facets.Contains(name, StringComparer.Ordinal))
-                {
-                    errors.Add(Reference(
-                        Pointer.WildcardFacets,
-                        $"fromState names '{name}' and wildcard.facets does not, so an unfilled '{name}' "
-                        + "would be searched for the literal wildcard rather than widened by it."));
-                }
+                errors.Add(Reference(
+                    Pointer.WildcardFacets,
+                    $"fromState names '{name}' and wildcard.facets does not, so an unfilled '{name}' "
+                    + "would be searched for the literal wildcard rather than widened by it."));
             }
         }
 
@@ -749,7 +746,7 @@ public static class ConfigurationValidator
                     $"the slot has zero writers: writer: {WriterName(slot.Writer)} fills the slot from '{owner}:', and the slot declares none"));
             }
 
-            foreach (var field in new[] { "from", "increment", "value" })
+            foreach (var field in new[] { "from", IncrementField, "value" })
             {
                 if (string.Equals(field, owner, StringComparison.Ordinal) || FieldValue(slot, field) is null)
                 {
@@ -767,7 +764,7 @@ public static class ConfigurationValidator
         => writer switch
         {
             StateWriter.Tool => "from",
-            StateWriter.Counter => "increment",
+            StateWriter.Counter => IncrementField,
             StateWriter.Const => "value",
             _ => null,
         };
@@ -785,7 +782,7 @@ public static class ConfigurationValidator
         => field switch
         {
             "from" => slot.From,
-            "increment" => slot.Increment,
+            IncrementField => slot.Increment,
             _ => slot.Value,
         };
 
@@ -803,7 +800,7 @@ public static class ConfigurationValidator
         {
             if (slot.Value.Increment is { } increment)
             {
-                CheckOneRule(configuration, increment, ConfigurationError.AppendPointer(Pointer.State(slot.Key), "increment"), errors);
+                CheckOneRule(configuration, increment, ConfigurationError.AppendPointer(Pointer.State(slot.Key), IncrementField), errors);
             }
         }
 
@@ -841,12 +838,9 @@ public static class ConfigurationValidator
         var facts = new GuardRuleFacts();
         facts.Collect(rule);
 
-        foreach (var name in facts.Operators)
+        foreach (var name in facts.Operators.Where(name => !GuardOperators.IsAllowed(name)))
         {
-            if (!GuardOperators.IsAllowed(name))
-            {
-                errors.Add(Operators(pointer, GuardOperators.DescribeRejection(name)));
-            }
+            errors.Add(Operators(pointer, GuardOperators.DescribeRejection(name)));
         }
 
         if (facts.HasDoubleNegationSugar)
@@ -854,12 +848,10 @@ public static class ConfigurationValidator
             errors.Add(Operators(pointer, GuardOperators.DoubleNegationSugarRejection));
         }
 
-        foreach (var slot in facts.Variables)
+        foreach (var slot in facts.Variables.Where(slot =>
+            !configuration.State.ContainsKey(slot) && !ReservedStateSlots.Contains(slot)))
         {
-            if (!configuration.State.ContainsKey(slot) && !ReservedStateSlots.Contains(slot))
-            {
-                errors.Add(Operators(pointer, $"the rule reads the slot '{slot}', and state: does not declare it"));
-            }
+            errors.Add(Operators(pointer, $"the rule reads the slot '{slot}', and state: does not declare it"));
         }
 
         foreach (var comparison in facts.NumericComparisons)

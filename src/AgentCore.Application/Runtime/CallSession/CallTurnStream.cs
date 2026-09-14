@@ -20,13 +20,22 @@ internal sealed class CallTurnStream
     /// <param name="origin">Where the turn hangs, or null for a caller that does not say.</param>
     /// <param name="cancellationToken">Cancels the model calls.</param>
     /// <returns>The reply, one update at a time.</returns>
-    internal async IAsyncEnumerable<ChatResponseUpdate> RunTurnStreamingCoreAsync(
+    internal IAsyncEnumerable<ChatResponseUpdate> RunTurnStreamingCoreAsync(
+        ChatMessage userInput,
+        CallTurnOrigin? origin,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(userInput);
+
+        return RunTurnStreamingIteratorAsync(userInput, origin, cancellationToken);
+    }
+
+    /// <summary>Streams one turn. The caller checks the arguments.</summary>
+    private async IAsyncEnumerable<ChatResponseUpdate> RunTurnStreamingIteratorAsync(
         ChatMessage userInput,
         CallTurnOrigin? origin,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(userInput);
-
         var session = await _session.Ledger.OpenSessionAsync(cancellationToken).ConfigureAwait(false);
 
         var turn = _session.Runner.BeginTurn(userInput, session, origin);

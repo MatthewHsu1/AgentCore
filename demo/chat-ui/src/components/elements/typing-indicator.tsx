@@ -28,9 +28,9 @@ export function TypingIndicator({
   if (variant === "bare") {
     return (
       <div
+        role="status"
         data-slot="typing-indicator"
         data-variant="bare"
-        role="status"
         aria-label="Assistant is typing"
         className={cn("flex gap-1", className)}
         {...props}

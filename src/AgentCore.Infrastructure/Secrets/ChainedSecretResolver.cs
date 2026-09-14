@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
 
@@ -29,6 +30,10 @@ public sealed class ChainedSecretResolver : ISecretResolverPort
 
     /// <summary>Creates the chain.</summary>
     /// <param name="links">The resolvers, in the order the chain asks them.</param>
+    [SuppressMessage(
+        "csharpsquid",
+        "S3236",
+        Justification = "The name identifies the validated constructor parameter, not the loop variable; it carries no caller information.")]
     public ChainedSecretResolver(IEnumerable<ISecretResolverPort> links)
     {
         ArgumentNullException.ThrowIfNull(links);

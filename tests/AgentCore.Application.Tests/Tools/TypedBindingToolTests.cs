@@ -244,7 +244,7 @@ public sealed class TypedBindingToolTests
     {
         var tool = await CreateAsync((string summary) => summary);
 
-        Assert.IsAssignableFrom<DeclaredTool>(tool);
+        Assert.IsType<DeclaredTool>(tool, exactMatch: false);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -293,6 +293,6 @@ public sealed class TypedBindingToolTests
         var registrations = await new BindingToolSource(bindings).ProvideAsync(
             ContextFor(OpenCase), TestContext.Current.CancellationToken);
 
-        return Assert.IsAssignableFrom<AIFunction>(Assert.Single(registrations).Materialise());
+        return Assert.IsType<AIFunction>(Assert.Single(registrations).Materialise(), exactMatch: false);
     }
 }

@@ -213,14 +213,23 @@ public sealed class AgentCoreAgent : AIAgent
     }
 
     /// <inheritdoc />
-    protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
+    protected override IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
         IEnumerable<ChatMessage> messages,
         AgentSession? session = null,
         AgentRunOptions? options = null,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(messages);
 
+        return RunCoreStreamingCoreAsync(messages, session, cancellationToken);
+    }
+
+    /// <summary>Streams one turn of the resolved call, wrapping each update with this agent's id.</summary>
+    private async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingCoreAsync(
+        IEnumerable<ChatMessage> messages,
+        AgentSession? session,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
         var call = Resolve(session);
 
         // The stream is already filtered: CallSession drops the lifecycle updates, so every update

@@ -36,6 +36,9 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
 
     private const string DoneEvent = "data: [DONE]\n\n";
 
+    /// <summary>The error type every failure of this endpoint reports.</summary>
+    private const string InvalidRequestError = "invalid_request_error";
+
     /// <summary>Maps the endpoint on <see cref="DefaultPattern"/>.</summary>
     /// <param name="endpoints">The route builder of the host.</param>
     /// <returns>The mapped endpoint, so a host adds its own conventions.</returns>
@@ -74,7 +77,7 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
                 http,
                 StatusCodes.Status400BadRequest,
                 "the request body is not well-formed JSON: " + exception.Message,
-                "invalid_request_error",
+                InvalidRequestError,
                 "malformed_body",
                 cancellationToken).ConfigureAwait(false);
             return;
@@ -96,7 +99,7 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
                     StatusCodes.Status400BadRequest,
                     "the request carries both a user message and an approval answer. One turn carries "
                     + "either words or an answer, never both.",
-                    "invalid_request_error",
+                    InvalidRequestError,
                     "mixed_turn",
                     cancellationToken).ConfigureAwait(false);
                 return;
@@ -108,7 +111,7 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
                     http,
                     StatusCodes.Status400BadRequest,
                     "the approval answer names no request.",
-                    "invalid_request_error",
+                    InvalidRequestError,
                     "missing_request_id",
                     cancellationToken).ConfigureAwait(false);
                 return;
@@ -121,7 +124,7 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
                     StatusCodes.Status400BadRequest,
                     "an approval answer names the call it resumes. Send it with the "
                     + SessionHeaderName + " header the request arrived with.",
-                    "invalid_request_error",
+                    InvalidRequestError,
                     "missing_session",
                     cancellationToken).ConfigureAwait(false);
                 return;
@@ -134,7 +137,7 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
                     StatusCodes.Status404NotFound,
                     $"no call named '{named}' is open on this host. Send the request with no "
                     + SessionHeaderName + " header to start one.",
-                    "invalid_request_error",
+                    InvalidRequestError,
                     "session_not_found",
                     cancellationToken).ConfigureAwait(false);
                 return;
@@ -148,7 +151,7 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
                     StatusCodes.Status409Conflict,
                     $"the call '{named}' queues no approval under id '{approval.RequestId}'. It was "
                     + "answered already, belongs to another call, or was never asked.",
-                    "invalid_request_error",
+                    InvalidRequestError,
                     "no_pending_approval",
                     cancellationToken).ConfigureAwait(false);
                 return;
@@ -164,7 +167,7 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
                     http,
                     StatusCodes.Status400BadRequest,
                     "the request carries no user message with text, so there is no turn to run.",
-                    "invalid_request_error",
+                    InvalidRequestError,
                     "no_user_message",
                     cancellationToken).ConfigureAwait(false);
                 return;
@@ -179,7 +182,7 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
                         StatusCodes.Status404NotFound,
                         $"no call named '{named}' is open on this host. Send the request with no "
                         + SessionHeaderName + " header to start one.",
-                        "invalid_request_error",
+                        InvalidRequestError,
                         "session_not_found",
                         cancellationToken).ConfigureAwait(false);
                     return;
@@ -198,8 +201,8 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
         var streaming = request?.Stream == true;
 
         // Only the stream has a chunk to carry a drawing, so only the stream gets a screen. Binding
-        // one on the whole-reply branch would let the tool report a picture the caller never sees;
-        // with none bound it answers that it cannot draw. Set per request, not once: the session
+        // one on the whole-reply branch would let the tool report a picture the caller never sees.
+        // With none bound it answers that it cannot draw. Set per request, not once: the session
         // outlives a request and the branch can differ per turn.
         session.SetHasScreen(streaming);
 
@@ -231,7 +234,7 @@ public static class ChatCompletionsEndpointRouteBuilderExtensions
                 http,
                 StatusCodes.Status409Conflict,
                 exception.Message,
-                "invalid_request_error",
+                InvalidRequestError,
                 "turn_refused",
                 cancellationToken).ConfigureAwait(false);
         }

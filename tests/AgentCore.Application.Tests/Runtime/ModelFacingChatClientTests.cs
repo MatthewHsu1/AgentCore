@@ -27,7 +27,7 @@ public sealed class ModelFacingChatClientTests
             new RenderContent { Name = "order-card", RenderId = "order-41", Data = Payload },
         ]);
 
-        await client.GetResponseAsync([drew], ct: TestContext.Current.CancellationToken);
+        await client.GetResponseAsync([drew], cancellationToken: TestContext.Current.CancellationToken);
 
         var forwarded = Assert.Single(inner.Requests);
         var message = Assert.Single(forwarded);
@@ -47,7 +47,7 @@ public sealed class ModelFacingChatClientTests
         ]);
 
         await foreach (var _ in client.GetStreamingResponseAsync(
-            [drew], ct: TestContext.Current.CancellationToken))
+            [drew], cancellationToken: TestContext.Current.CancellationToken))
         {
         }
 
@@ -63,7 +63,7 @@ public sealed class ModelFacingChatClientTests
         var client = new ModelFacingChatClient(inner);
         var plain = new ChatMessage(ChatRole.User, "hello");
 
-        await client.GetResponseAsync([plain], ct: TestContext.Current.CancellationToken);
+        await client.GetResponseAsync([plain], cancellationToken: TestContext.Current.CancellationToken);
 
         var forwarded = Assert.Single(inner.Requests);
         Assert.Same(plain, Assert.Single(forwarded));
@@ -77,7 +77,7 @@ public sealed class ModelFacingChatClientTests
         var plain = new ChatMessage(ChatRole.User, "hello");
 
         await foreach (var _ in client.GetStreamingResponseAsync(
-            [plain], ct: TestContext.Current.CancellationToken))
+            [plain], cancellationToken: TestContext.Current.CancellationToken))
         {
         }
 
@@ -101,7 +101,7 @@ public sealed class ModelFacingChatClientTests
             AdditionalProperties = new AdditionalPropertiesDictionary { ["k"] = "v" },
         };
 
-        await client.GetResponseAsync([drew], ct: TestContext.Current.CancellationToken);
+        await client.GetResponseAsync([drew], cancellationToken: TestContext.Current.CancellationToken);
 
         var forwarded = Assert.Single(Assert.Single(inner.Requests));
         Assert.Equal("msg-1", forwarded.MessageId);

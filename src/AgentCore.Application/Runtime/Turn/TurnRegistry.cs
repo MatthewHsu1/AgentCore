@@ -6,13 +6,13 @@ namespace AgentCore.Application.Runtime.Turn;
 // The turn running on one session, keyed by the session the framework hands providers —
 // the MAF AgentSession.StateBag shape, but live: the bag serializes and a turn holds
 // sessions and tools, so the table carries what the bag cannot. The loop files the turn
-// under the session the run actually gets (a graph row re-creates its own per turn);
-// providers read it back off the session their InvokingContext carries. Weak keys: an
+// under the session the run actually gets, since a graph row re-creates its own per turn.
+// Providers read it back off the session their InvokingContext carries. Weak keys: an
 // entry dies with its session, and each turn overwrites the last, so nothing here leaks
 // or crosses turns.
 internal static class TurnRegistry
 {
-    private static readonly ConditionalWeakTable<AgentSession, TurnInvocation> Turns = new();
+    private static readonly ConditionalWeakTable<AgentSession, TurnInvocation> Turns = [];
 
     /// <summary>Files the turn running on one session.</summary>
     /// <param name="session">The session the run actually gets.</param>

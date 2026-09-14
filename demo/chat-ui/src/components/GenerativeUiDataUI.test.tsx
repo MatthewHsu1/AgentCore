@@ -155,7 +155,7 @@ describe("the vocabulary the drawing model is taught", () => {
     const taught = [...vocabulary.matchAll(/^- `([A-Z][A-Za-z]*)`/gm)].map((match) => match[1]);
     const renderable = new Set(Object.keys(defaultGenerativeUILibrary));
 
-    expect(taught.length).toBe(27);
+    expect(taught).toHaveLength(27);
     expect(taught.filter((name) => !renderable.has(name))).toEqual([]);
     expect([...renderable].filter((name) => !taught.includes(name))).toEqual([]);
   });

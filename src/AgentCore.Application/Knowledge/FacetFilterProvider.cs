@@ -37,7 +37,7 @@ internal sealed class FacetFilterProvider(
 
     /// <inheritdoc />
     protected override async ValueTask<AIContext> InvokingCoreAsync(
-        InvokingContext context, CancellationToken cancellationToken)
+        InvokingContext context, CancellationToken cancellationToken = default)
     {
         var provided = await _inner.InvokingAsync(context, cancellationToken).ConfigureAwait(false);
 
@@ -62,6 +62,6 @@ internal sealed class FacetFilterProvider(
 
     /// <inheritdoc />
     protected override ValueTask InvokedCoreAsync(
-        InvokedContext context, CancellationToken cancellationToken)
+        InvokedContext context, CancellationToken cancellationToken = default)
         => _inner.InvokedAsync(context, cancellationToken);
 }

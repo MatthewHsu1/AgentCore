@@ -33,7 +33,7 @@ internal static class DelegatedAgentRun
 
         ChatOptions chat = new()
         {
-            AdditionalProperties = new AdditionalPropertiesDictionary(),
+            AdditionalProperties = [],
         };
 
         if (nested is not null)

@@ -164,9 +164,19 @@ internal sealed class CallTurnRunner
             // still recognises. Neither shape puts the caller's message in store 1 yet: the turn
             // writes what it said and what it heard together, when it commits, so the run that is
             // about to read the history does not find its own prompt already in it.
-            List<ChatMessage> request = _session.SessionCarriesHistory || _session.ReusesGraphSession
-                ? [spoken]
-                : TurnMessages.GraphHistory(_session.History.Read(session)) is { } rendered ? [rendered, spoken] : [spoken];
+            List<ChatMessage> request;
+            if (_session.SessionCarriesHistory || _session.ReusesGraphSession)
+            {
+                request = [spoken];
+            }
+            else if (TurnMessages.GraphHistory(_session.History.Read(session)) is { } rendered)
+            {
+                request = [rendered, spoken];
+            }
+            else
+            {
+                request = [spoken];
+            }
 
             // One turn is one span. The call id rides here, on a span attribute, because T61 refuses it
             // on a metric. The span is disposed in the finally of whichever run method opened the turn.

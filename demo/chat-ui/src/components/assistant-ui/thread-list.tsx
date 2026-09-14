@@ -158,7 +158,7 @@ const ThreadListItemGroups: FC<{ searchQuery?: string }> = ({
     const result: ThreadListGroup[] = [];
     for (const index of sorted) {
       const label = dateGroupLabel(dates[index], startOfToday);
-      const lastGroup = result[result.length - 1];
+      const lastGroup = result.at(-1);
       if (lastGroup?.label === label) {
         lastGroup.indices.push(index);
       } else {
@@ -249,9 +249,8 @@ const ThreadListSkeleton: FC = () => {
   return (
     <div className="flex flex-col gap-0.5">
       {Array.from({ length: 5 }, (_, i) => (
-        <div
+        <output
           key={i}
-          role="status"
           aria-label="Loading threads"
           data-slot="aui_thread-list-skeleton-wrapper"
           className="flex h-8 items-center px-2.5"
@@ -260,7 +259,7 @@ const ThreadListSkeleton: FC = () => {
             data-slot="aui_thread-list-skeleton"
             className="h-3.5 w-full"
           />
-        </div>
+        </output>
       ))}
     </div>
   );

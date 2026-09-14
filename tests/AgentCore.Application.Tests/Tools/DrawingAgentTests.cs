@@ -89,7 +89,7 @@ public sealed class DrawingAgentTests
 
         var function = Build(new RecordingChatClientFactory(new PresentCallingChatClient(Card)));
 
-        var arguments = new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "draw a card" });
+        var arguments = new AIFunctionArguments { ["query"] = "draw a card" };
         arguments[TurnInvocation.ArgumentsKey] = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", Screen = screen, };
 
         var result = await function.InvokeAsync(arguments, TestContext.Current.CancellationToken);
@@ -158,7 +158,7 @@ public sealed class DrawingAgentTests
 
         var registration = await Provide(Declaration with { Model = new ModelReference { Ref = "cheap" } }, factory);
 
-        Assert.IsAssignableFrom<AIFunction>(registration.Materialise());
+        Assert.IsType<AIFunction>(registration.Materialise(), exactMatch: false);
         Assert.Equal("cheap", factory.Asked!.Ref);
     }
 
@@ -166,7 +166,7 @@ public sealed class DrawingAgentTests
     public async Task TheSource_WithNoDeclaredDescription_TakesTheShippedDefaultOnBothSides()
     {
         var registration = await Provide(Declaration with { Description = null }, new RecordingChatClientFactory());
-        var function = Assert.IsAssignableFrom<AIFunction>(registration.Materialise());
+        var function = Assert.IsType<AIFunction>(registration.Materialise(), exactMatch: false);
 
         // One string, resolved once: what the boot validates and what the model reads cannot differ.
         Assert.Equal(new DrawingAgentDefinition().DefaultDescription, registration.Description);
@@ -205,7 +205,7 @@ public sealed class DrawingAgentTests
 
         var function = Build(new RecordingChatClientFactory(model));
 
-        var arguments = new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "a table of the lookup_orders result" });
+        var arguments = new AIFunctionArguments { ["query"] = "a table of the lookup_orders result" };
         arguments[TurnInvocation.ArgumentsKey] = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", Screen = screen, Results = results, };
 
         await function.InvokeAsync(arguments, TestContext.Current.CancellationToken);
@@ -224,7 +224,7 @@ public sealed class DrawingAgentTests
 
         var function = Build(new RecordingChatClientFactory(model));
 
-        var arguments = new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "draw a card" });
+        var arguments = new AIFunctionArguments { ["query"] = "draw a card" };
         arguments[TurnInvocation.ArgumentsKey] = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", Screen = screen, Results = new TurnResults(), };
 
         await function.InvokeAsync(arguments, TestContext.Current.CancellationToken);
@@ -289,9 +289,9 @@ public sealed class DrawingAgentTests
         var registration = await Provide(
             Declaration, new RecordingChatClientFactory(new PresentCallingChatClient(trees)));
 
-        var function = Assert.IsAssignableFrom<AIFunction>(registration.Materialise());
+        var function = Assert.IsType<AIFunction>(registration.Materialise(), exactMatch: false);
 
-        var arguments = new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "draw a card" });
+        var arguments = new AIFunctionArguments { ["query"] = "draw a card" };
         arguments[TurnInvocation.ArgumentsKey] = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", Screen = screen, };
 
         return await function.InvokeAsync(arguments, TestContext.Current.CancellationToken);

@@ -36,7 +36,7 @@ internal sealed class ModerationAgent : DelegatingAIAgent
     /// <inheritdoc />
     protected override async Task<AgentResponse> RunCoreAsync(
         IEnumerable<ChatMessage> messages,
-        AgentSession? session,
+        AgentSession? session = null,
         AgentRunOptions? options = null,
         CancellationToken cancellationToken = default)
     {
@@ -58,14 +58,24 @@ internal sealed class ModerationAgent : DelegatingAIAgent
     }
 
     /// <inheritdoc />
-    protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
+    protected override IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
         IEnumerable<ChatMessage> messages,
-        AgentSession? session,
+        AgentSession? session = null,
         AgentRunOptions? options = null,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(messages);
 
+        return RunCoreStreamingCoreAsync(messages, session, options, cancellationToken);
+    }
+
+    /// <summary>Streams the verdict marker and the run, or the refusal when the caller is flagged.</summary>
+    private async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingCoreAsync(
+        IEnumerable<ChatMessage> messages,
+        AgentSession? session,
+        AgentRunOptions? options,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
         var verdict = await JudgeAsync(messages, cancellationToken).ConfigureAwait(false);
         if (verdict.Moderation is ModerationOutcome.Flagged)
         {

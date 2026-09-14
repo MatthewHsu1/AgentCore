@@ -37,12 +37,9 @@ internal static class HarnessSessionState
         var serialized = session.StateBag.Serialize();
         Dictionary<string, JsonElement> providers = new(StringComparer.Ordinal);
 
-        foreach (var property in serialized.EnumerateObject())
+        foreach (var property in serialized.EnumerateObject().Where(property => keys.Contains(property.Name)))
         {
-            if (keys.Contains(property.Name))
-            {
-                providers[property.Name] = property.Value.Clone();
-            }
+            providers[property.Name] = property.Value.Clone();
         }
 
         return providers.Count == 0 ? Empty : providers;

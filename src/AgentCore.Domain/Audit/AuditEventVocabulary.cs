@@ -32,6 +32,40 @@ public static class AuditEventVocabulary
                 nameof(auditEvent));
         }
 
+        RequireReplyInterrupted(auditEvent);
+
+        if (auditEvent.Payload.TryGetValue(AuditPayloadKeys.ReplyTextSha256, out string? replyText))
+        {
+            // An empty value here is the one thing that cannot be true: every text hashes to 64
+            // characters, the empty string included, so an empty hash proves nothing and would leave
+            // the row unverifiable against store 1 forever.
+            RequireHash(auditEvent, AuditPayloadKeys.ReplyTextSha256, replyText);
+        }
+
+        RequirePromptFlagged(auditEvent);
+
+        RequireCallEnded(auditEvent);
+
+        foreach (KeyValuePair<string, string> entry in auditEvent.Payload)
+        {
+            if (string.IsNullOrEmpty(entry.Key))
+            {
+                throw new ArgumentException("An audit payload key is not empty.", nameof(auditEvent));
+            }
+
+            if (entry.Value is null)
+            {
+                throw new ArgumentException(
+                    $"The audit payload value of '{entry.Key}' is null. A missing fact is an absent key.",
+                    nameof(auditEvent));
+            }
+        }
+    }
+
+
+    /// <summary>Refuses a barge-in that names no turn, or proves no heard text.</summary>
+    private static void RequireReplyInterrupted(AuditEvent auditEvent)
+    {
         if (auditEvent.Kind == AuditEventKind.ReplyInterrupted)
         {
             // T23: the chain is append-only, so a barge-in is a second event that references the
@@ -54,59 +88,42 @@ public static class AuditEventVocabulary
 
             RequireHash(auditEvent, AuditPayloadKeys.UtteranceUntilInterruptSha256, utterance);
         }
+    }
 
-        if (auditEvent.Payload.TryGetValue(AuditPayloadKeys.ReplyTextSha256, out string? replyText))
+
+    /// <summary>Refuses a flag verdict that carries no categories.</summary>
+    private static void RequirePromptFlagged(AuditEvent auditEvent)
+    {
+        // §9 makes this chain the only long-term record. The kind alone says something flagged
+        // the caller, and the categories are the only other fact the event carries, so the fact
+        // goes in with the event or it is lost. This is the argument the chain already makes for
+        // utteranceUntilInterrupt above. No AmendsEventId rule stands here: the verdict is known
+        // BEFORE the model runs, so the event is written before the turn.completed event of the
+        // same turn and amends nothing. TurnIndex names the turn.
+        if (auditEvent.Kind == AuditEventKind.PromptFlagged
+            && (!auditEvent.Payload.TryGetValue(AuditPayloadKeys.ModerationCategories, out string? categories)
+                || !IsCommaSeparatedListWithNoEmptyMember(categories)))
         {
-            // An empty value here is the one thing that cannot be true: every text hashes to 64
-            // characters, the empty string included, so an empty hash proves nothing and would leave
-            // the row unverifiable against store 1 forever.
-            RequireHash(auditEvent, AuditPayloadKeys.ReplyTextSha256, replyText);
+            throw new ArgumentException(
+                $"A prompt.flagged event carries '{AuditPayloadKeys.ModerationCategories}', a comma-separated list with no empty member. See section 11, item 11.",
+                nameof(auditEvent));
         }
+    }
 
-        if (auditEvent.Kind == AuditEventKind.PromptFlagged)
+
+    /// <summary>Refuses a call end that carries no reason from the closed set.</summary>
+    private static void RequireCallEnded(AuditEvent auditEvent)
+    {
+        // The reason is countable, so the chain refuses free text here. §9 makes this table the
+        // only long-term record, and a report that counts the endings of one year reads the
+        // token. Detail belongs under another key. See CallEndReason.
+        if (auditEvent.Kind == AuditEventKind.CallEnded
+            && (!auditEvent.Payload.TryGetValue(AuditPayloadKeys.EndReason, out string? endReason)
+                || !CallEndReasons.TryParse(endReason, out _)))
         {
-            // §9 makes this chain the only long-term record. The kind alone says something flagged
-            // the caller, and the categories are the only other fact the event carries, so the fact
-            // goes in with the event or it is lost. This is the argument the chain already makes for
-            // utteranceUntilInterrupt above. No AmendsEventId rule stands here: the verdict is known
-            // BEFORE the model runs, so the event is written before the turn.completed event of the
-            // same turn and amends nothing. TurnIndex names the turn.
-            if (!auditEvent.Payload.TryGetValue(AuditPayloadKeys.ModerationCategories, out string? categories)
-                || !IsCommaSeparatedListWithNoEmptyMember(categories))
-            {
-                throw new ArgumentException(
-                    $"A prompt.flagged event carries '{AuditPayloadKeys.ModerationCategories}', a comma-separated list with no empty member. See section 11, item 11.",
-                    nameof(auditEvent));
-            }
-        }
-
-        if (auditEvent.Kind == AuditEventKind.CallEnded)
-        {
-            // The reason is countable, so the chain refuses free text here. §9 makes this table the
-            // only long-term record, and a report that counts the endings of one year reads the
-            // token. Detail belongs under another key. See CallEndReason.
-            if (!auditEvent.Payload.TryGetValue(AuditPayloadKeys.EndReason, out string? endReason)
-                || !CallEndReasons.TryParse(endReason, out _))
-            {
-                throw new ArgumentException(
-                    $"A call.ended event carries '{AuditPayloadKeys.EndReason}', and the value is one token of the closed set. See CallEndReason.",
-                    nameof(auditEvent));
-            }
-        }
-
-        foreach (KeyValuePair<string, string> entry in auditEvent.Payload)
-        {
-            if (string.IsNullOrEmpty(entry.Key))
-            {
-                throw new ArgumentException("An audit payload key is not empty.", nameof(auditEvent));
-            }
-
-            if (entry.Value is null)
-            {
-                throw new ArgumentException(
-                    $"The audit payload value of '{entry.Key}' is null. A missing fact is an absent key.",
-                    nameof(auditEvent));
-            }
+            throw new ArgumentException(
+                $"A call.ended event carries '{AuditPayloadKeys.EndReason}', and the value is one token of the closed set. See CallEndReason.",
+                nameof(auditEvent));
         }
     }
 

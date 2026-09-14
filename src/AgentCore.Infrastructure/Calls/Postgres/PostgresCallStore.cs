@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using AgentCore.Application.Calls;
 using AgentCore.Application.Ports;
@@ -227,6 +228,10 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
     }
 
     /// <inheritdoc />
+    [SuppressMessage(
+        "csharpsquid",
+        "S3265",
+        Justification = "Npgsql documents Array combined with an element type via bit OR, and the enum omits Flags only upstream.")]
     public async ValueTask<IReadOnlyList<CallMessage>> AppendAsync(
         string callId,
         IReadOnlyList<CallMessageDraft> messages,

@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
 using Microsoft.Extensions.AI;
@@ -30,20 +29,25 @@ public sealed class RecordingChatClientFactory : IChatClientFactory
 
     private sealed class StubChatClient : IChatClient
     {
-        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(messages);
-            await Task.Yield();
+            return StreamAsync();
 
-            var responseId = Guid.NewGuid().ToString("N");
-            yield return new ChatResponseUpdate(ChatRole.Assistant, "ok")
+            async IAsyncEnumerable<ChatResponseUpdate> StreamAsync()
             {
-                ResponseId = responseId,
-                MessageId = responseId,
-            };
+                await Task.Yield();
+
+                var responseId = Guid.NewGuid().ToString("N");
+                yield return new ChatResponseUpdate(ChatRole.Assistant, "ok")
+                {
+                    ResponseId = responseId,
+                    MessageId = responseId,
+                };
+            }
         }
 
         public async Task<ChatResponse> GetResponseAsync(

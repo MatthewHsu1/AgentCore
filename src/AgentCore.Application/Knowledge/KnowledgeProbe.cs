@@ -183,16 +183,9 @@ internal static class KnowledgeProbe
         var path = template.Resolve(facet);
         SortedSet<string> union = new(StringComparer.Ordinal);
 
-        foreach (var card in probeCards)
-        {
-            foreach (var value in FacetValues(card, path))
-            {
-                if (!string.Equals(value, wildcardValue, StringComparison.Ordinal))
-                {
-                    union.Add(value);
-                }
-            }
-        }
+        union.UnionWith(probeCards
+            .SelectMany(card => FacetValues(card, path))
+            .Where(value => !string.Equals(value, wildcardValue, StringComparison.Ordinal)));
 
         Log.KnowledgeProbeRan(logger, agent, facet, union.Count);
 

@@ -5,14 +5,13 @@ import { CircleAlertIcon, RefreshCwIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ShimmerLabel } from "./surfaces";
 
-export interface ErrorStateProps extends Omit<
-  ComponentProps<"div">,
-  "children" | "role"
+export interface ErrorStateProps extends Readonly<
+  Omit<ComponentProps<"div">, "children" | "role">
 > {
-  title: string;
-  detail: string;
-  retrying: boolean;
-  onRetry: () => void;
+  readonly title: string;
+  readonly detail: string;
+  readonly retrying: boolean;
+  readonly onRetry: () => void;
 }
 
 export function ErrorState({
@@ -26,9 +25,9 @@ export function ErrorState({
   if (retrying) {
     return (
       <div
+        role="status"
         data-slot="error-state"
         key="retrying"
-        role="status"
         className={cn(
           "fade-in animate-in flex w-full max-w-sm items-center gap-2.5 text-sm duration-300 motion-reduce:animate-none",
           className,

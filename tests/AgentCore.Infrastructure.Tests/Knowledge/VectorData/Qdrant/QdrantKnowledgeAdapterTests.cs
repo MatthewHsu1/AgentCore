@@ -69,7 +69,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
         var isDisposed = typeof(QdrantClient)
             .GetField("_isDisposed", BindingFlags.NonPublic | BindingFlags.Instance)!
             .GetValue(captured);
-        Assert.Equal(true, isDisposed);
+        Assert.True((bool)isDisposed!);
     }
 
     [QdrantFact]
@@ -109,14 +109,14 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
             var isDisposedBeforeCall = typeof(QdrantClient)
                 .GetField("_isDisposed", BindingFlags.NonPublic | BindingFlags.Instance)!
                 .GetValue(captured);
-            Assert.Equal(false, isDisposedBeforeCall);
+            Assert.False((bool)isDisposedBeforeCall!);
 
             ((IDisposable)port).Dispose();
 
             var isDisposedAfterCall = typeof(QdrantClient)
                 .GetField("_isDisposed", BindingFlags.NonPublic | BindingFlags.Instance)!
                 .GetValue(captured);
-            Assert.Equal(true, isDisposedAfterCall);
+            Assert.True((bool)isDisposedAfterCall!);
         }
         finally
         {

@@ -1,4 +1,4 @@
-export function GitHubIcon({ className }: { className?: string }) {
+export function GitHubIcon({ className }: { readonly className?: string }) {
   return (
     <svg
       aria-hidden="true"

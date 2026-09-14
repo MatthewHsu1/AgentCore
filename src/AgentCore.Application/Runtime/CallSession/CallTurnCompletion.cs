@@ -377,18 +377,16 @@ internal sealed class CallTurnCompletion
 
         foreach (var call in response.Messages
             .SelectMany(message => message.Contents)
-            .OfType<FunctionCallContent>())
+            .OfType<FunctionCallContent>()
+            .Where(call => !invoked.Contains(call.CallId)))
         {
-            if (!invoked.Contains(call.CallId))
+            _session.Events.RaiseToolFailure(turn.Index, new ToolFailure
             {
-                _session.Events.RaiseToolFailure(turn.Index, new ToolFailure
-                {
-                    ToolName = call.Name,
-                    ToolCallId = call.CallId,
-                    Kind = ToolFailureKind.Undeclared,
-                    Message = $"the model called '{call.Name}', and no such tool is declared.",
-                });
-            }
+                ToolName = call.Name,
+                ToolCallId = call.CallId,
+                Kind = ToolFailureKind.Undeclared,
+                Message = $"the model called '{call.Name}', and no such tool is declared.",
+            });
         }
     }
 }

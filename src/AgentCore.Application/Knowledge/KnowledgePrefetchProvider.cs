@@ -43,7 +43,7 @@ internal sealed class KnowledgePrefetchProvider(
 
     /// <inheritdoc />
     protected override async ValueTask<AIContext> InvokingCoreAsync(
-        InvokingContext context, CancellationToken cancellationToken)
+        InvokingContext context, CancellationToken cancellationToken = default)
     {
         var turn = TurnRegistry.For(context.Session);
 
@@ -58,6 +58,6 @@ internal sealed class KnowledgePrefetchProvider(
 
     /// <inheritdoc />
     protected override ValueTask InvokedCoreAsync(
-        InvokedContext context, CancellationToken cancellationToken)
+        InvokedContext context, CancellationToken cancellationToken = default)
         => _template.InvokedAsync(context, cancellationToken);
 }

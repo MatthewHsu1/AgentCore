@@ -45,7 +45,7 @@ internal sealed class CallFilesProvider : AIContextProvider, IDisposable
 
     /// <inheritdoc />
     protected override async ValueTask<AIContext> InvokingCoreAsync(
-        InvokingContext context, CancellationToken cancellationToken)
+        InvokingContext context, CancellationToken cancellationToken = default)
     {
         var workspace = TurnRegistry.For(context.Session)?.Workspace
             ?? throw new InvalidOperationException(NoTurnMessage);
@@ -60,7 +60,7 @@ internal sealed class CallFilesProvider : AIContextProvider, IDisposable
 
     /// <inheritdoc />
     protected override ValueTask InvokedCoreAsync(
-        InvokedContext context, CancellationToken cancellationToken)
+        InvokedContext context, CancellationToken cancellationToken = default)
         => _template.InvokedAsync(context, cancellationToken);
 
     /// <inheritdoc />

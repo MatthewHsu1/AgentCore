@@ -76,9 +76,9 @@ export function SwapLabel({
   children,
   className,
 }: {
-  active: 0 | 1;
-  children: [React.ReactNode, React.ReactNode];
-  className?: string;
+  readonly active: 0 | 1;
+  readonly children: [React.ReactNode, React.ReactNode];
+  readonly className?: string;
 }) {
   const layers = [useRef<HTMLSpanElement>(null), useRef<HTMLSpanElement>(null)];
   const [width, setWidth] = useState<number | null>(null);
@@ -104,7 +104,7 @@ export function SwapLabel({
     >
       {children.map((layer, index) => (
         <span
-          key={index}
+          key={index} // NOSONAR - children is a fixed 2-tuple whose order never changes
           ref={layers[index]}
           aria-hidden={active !== index}
           className={cn(

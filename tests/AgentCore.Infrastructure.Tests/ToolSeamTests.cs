@@ -106,7 +106,7 @@ public sealed class ToolSeamTests
         Assert.Equal(3, compiled.Agents.Count);
 
         // The HTTP tool now makes its call. Before this seam existed it could not.
-        var lookup = Assert.IsAssignableFrom<AIFunction>(registry.Resolve("lookup_order"));
+        var lookup = Assert.IsType<AIFunction>(registry.Resolve("lookup_order"), exactMatch: false);
 
         var result = await lookup.InvokeAsync(
             new AIFunctionArguments(new Dictionary<string, object?>(StringComparer.Ordinal) { ["orderId"] = "A-42" }),

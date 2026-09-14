@@ -19,10 +19,10 @@ export interface Source {
 }
 
 export interface SourcesProps {
-  sources: readonly Source[];
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  className?: string;
+  readonly sources: readonly Source[];
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  readonly className?: string;
 }
 
 export function Sources({

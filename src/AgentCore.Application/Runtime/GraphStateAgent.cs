@@ -26,7 +26,7 @@ internal sealed class GraphStateAgent : DelegatingAIAgent
     /// <inheritdoc />
     protected override Task<AgentResponse> RunCoreAsync(
         IEnumerable<ChatMessage> messages,
-        AgentSession? session,
+        AgentSession? session = null,
         AgentRunOptions? options = null,
         CancellationToken cancellationToken = default)
     {
@@ -36,7 +36,7 @@ internal sealed class GraphStateAgent : DelegatingAIAgent
     /// <inheritdoc />
     protected override IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
         IEnumerable<ChatMessage> messages,
-        AgentSession? session,
+        AgentSession? session = null,
         AgentRunOptions? options = null,
         CancellationToken cancellationToken = default)
     {

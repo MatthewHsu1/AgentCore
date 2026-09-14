@@ -52,23 +52,10 @@
 /*
  ---break---
  */
-.dark {
-  --sidebar: hsl(240 5.9% 10%);
-  --sidebar-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-primary: hsl(224.3 76.3% 48%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(240 3.7% 15.9%);
-  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-border: hsl(240 3.7% 15.9%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
-  --aui-success: oklch(0.72 0.17 149);
-  --aui-warning: oklch(0.8 0.17 75);
-}
 
 /*
  * The shadcn colour palette, "neutral", exactly as https://ui.shadcn.com/r/colors/neutral.json
- * publishes it for Tailwind v4. Generated rather than typed, and placed after the blocks the
- * shadcn CLI wrote above so that these oklch values win over the hsl sidebar defaults it emitted.
+ * publishes it for Tailwind v4. Generated rather than typed.
  *
  * It is here rather than produced by `shadcn init` because init cannot run non-interactively
  * against a components.json that already exists, and this project's components.json was written
@@ -185,6 +172,8 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --aui-success: oklch(0.72 0.17 149);
+  --aui-warning: oklch(0.8 0.17 75);
 }
 
 @theme inline {

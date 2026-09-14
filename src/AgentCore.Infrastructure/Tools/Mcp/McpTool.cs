@@ -82,15 +82,12 @@ internal sealed class McpTool : AIFunction
             // residue rather than model intent: the filed turn carries delegates no JSON
             // writer can hold. A schema that names no properties keeps the old passthrough.
             var outgoing = arguments;
-            if (_declared is not null)
+            if (_declared is { } declared)
             {
                 outgoing = new AIFunctionArguments();
-                foreach (var entry in arguments)
+                foreach (var entry in arguments.Where(candidate => declared.Contains(candidate.Key)))
                 {
-                    if (_declared.Contains(entry.Key))
-                    {
-                        outgoing[entry.Key] = entry.Value;
-                    }
+                    outgoing[entry.Key] = entry.Value;
                 }
             }
 

@@ -52,7 +52,7 @@ public sealed class HttpToolSourceTests
         using var handler = StubHttpMessageHandler.Answering(HttpStatusCode.OK, "{}");
         using HttpClient client = new(handler);
 
-        var function = Assert.IsAssignableFrom<AIFunction>(await CreateAsync(client, LookupOrder));
+        var function = Assert.IsType<AIFunction>(await CreateAsync(client, LookupOrder), exactMatch: false);
 
         Assert.Equal("lookup_order", function.Name);
         Assert.Equal("Read one order by its identifier.", function.Description);
@@ -113,7 +113,7 @@ public sealed class HttpToolSourceTests
 
         // The framework carries every tool result as a JSON node, so a text body arrives as a string
         // value rather than as an object the model would have to unwrap.
-        Assert.Equal("shipped", Assert.IsAssignableFrom<JsonNode>(result).GetValue<string>());
+        Assert.Equal("shipped", Assert.IsType<JsonNode>(result, exactMatch: false).GetValue<string>());
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -205,7 +205,7 @@ public sealed class HttpToolSourceTests
     {
         using var handler = StubHttpMessageHandler.Answering(HttpStatusCode.OK, "{}");
         using HttpClient client = new(handler);
-        var function = Assert.IsAssignableFrom<AIFunction>(await CreateAsync(client, LookupOrder));
+        var function = Assert.IsType<AIFunction>(await CreateAsync(client, LookupOrder), exactMatch: false);
 
         using CancellationTokenSource source = new();
         await source.CancelAsync();
@@ -290,7 +290,7 @@ public sealed class HttpToolSourceTests
 
     private static async Task<object?> CallAsync(AITool? tool, params (string Name, object? Value)[] arguments)
     {
-        var function = Assert.IsAssignableFrom<AIFunction>(tool);
+        var function = Assert.IsType<AIFunction>(tool, exactMatch: false);
         return await function.InvokeAsync(Arguments(arguments), Token);
     }
 

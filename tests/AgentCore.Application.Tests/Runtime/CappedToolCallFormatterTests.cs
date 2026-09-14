@@ -69,7 +69,7 @@ public sealed class CappedToolCallFormatterTests
     // through. Passing a null tokenizer is fine — AddGroup falls back to an estimate, and this
     // formatter never reads TokenCount.
     private static CompactionMessageGroup Group(CompactionGroupKind kind, IReadOnlyList<ChatMessage> messages) =>
-        new CompactionMessageIndex(new List<CompactionMessageGroup>(), null!).AddGroup(kind, messages, turnIndex: null);
+        new CompactionMessageIndex([], null!).AddGroup(kind, messages, turnIndex: null);
 
     private static CompactionMessageGroup Group(string tool, string result) => Group(
         CompactionGroupKind.ToolCall,

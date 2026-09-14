@@ -93,19 +93,15 @@ export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
  * `ToolFallback`.
  */
 export type ThreadComponents = {
-  AssistantMessage?: ComponentType | undefined;
-  Welcome?: ComponentType | undefined;
-  ToolFallback?: ToolCallMessagePartComponent | undefined;
-  ToolGroup?:
-  | ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>
-  | undefined;
-  ReasoningGroup?:
-  | ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>
-  | undefined;
+  AssistantMessage?: ComponentType;
+  Welcome?: ComponentType;
+  ToolFallback?: ToolCallMessagePartComponent;
+  ToolGroup?: ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>;
+  ReasoningGroup?: ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>;
 };
 
 export type ThreadProps = {
-  components?: ThreadComponents | undefined;
+  components?: ThreadComponents;
 };
 
 const EMPTY_COMPONENTS: ThreadComponents = {};
@@ -127,9 +123,8 @@ const isHistoryLoadingView = (s: AssistantState) =>
   !s.threads.isLoading;
 
 const ThreadHistorySkeleton: FC = () => (
-  <div
+  <output
     data-slot="aui_thread-history-skeleton"
-    role="status"
     className="animate-in fade-in fill-mode-both flex flex-col gap-y-6 [animation-delay:150ms] [animation-duration:200ms]"
   >
     <span className="sr-only">Loading conversation</span>
@@ -144,7 +139,7 @@ const ThreadHistorySkeleton: FC = () => (
       <Skeleton className="h-4 w-10/12 motion-reduce:animate-none" />
       <Skeleton className="h-4 w-2/3 motion-reduce:animate-none" />
     </div>
-  </div>
+  </output>
 );
 
 export const Thread: FC<ThreadProps> = ({ components = EMPTY_COMPONENTS }) => {
@@ -268,13 +263,12 @@ const ThreadMessage: FC = () => {
   const isEditing = useAuiState((s) => s.message.composer.isEditing);
   const dayBreak = useDayBreak();
 
-  const message = isEditing ? (
-    <EditComposer />
-  ) : role === "user" ? (
-    <UserMessage />
-  ) : (
-    <AssistantMessageComponent />
-  );
+  let message = <AssistantMessageComponent />;
+  if (isEditing) {
+    message = <EditComposer />;
+  } else if (role === "user") {
+    message = <UserMessage />;
+  }
 
   if (!dayBreak) return message;
 
@@ -445,7 +439,15 @@ function errorDetail(error: unknown): string {
   try {
     return JSON.stringify(error);
   } catch {
-    return String(error);
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "message" in error &&
+      typeof error.message === "string"
+    ) {
+      return error.message;
+    }
+    return "The run did not finish.";
   }
 }
 

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Ports;
@@ -106,6 +107,10 @@ internal sealed class PostgresAuditSink : IAuditSinkPort, IAsyncDisposable
     /// <returns>A task that completes when the pool is closed.</returns>
     public ValueTask DisposeAsync() => _dataSource.DisposeAsync();
 
+    [SuppressMessage(
+        "csharpsquid",
+        "S3265",
+        Justification = "Npgsql documents Array combined with an element type via bit OR, and the enum omits Flags only upstream.")]
     private static NpgsqlBatchCommand AppendCommand(string callId, IReadOnlyList<AuditEvent> run)
     {
         NpgsqlBatchCommand command = new(AppendSql);

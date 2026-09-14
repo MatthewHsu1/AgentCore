@@ -190,7 +190,7 @@ public sealed class AuditingFunctionInvokingChatClientErrorPolicyTests
         var registrations = await source.ProvideAsync(
             new ToolSourceContext(new AgentCoreConfiguration { ApiVersion = "agentcore/v1", Name = "test", Tools = [createCase] }),
             TestContext.Current.CancellationToken);
-        var tool = Assert.IsAssignableFrom<AIFunction>(Assert.Single(registrations).Materialise());
+        var tool = Assert.IsType<AIFunction>(Assert.Single(registrations).Materialise(), exactMatch: false);
 
         var result = await RunSingleRoundAsync(tool, TestContext.Current.CancellationToken);
 

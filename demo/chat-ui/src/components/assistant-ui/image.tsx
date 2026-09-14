@@ -45,19 +45,19 @@ const extensionForMimeType = (mimeType?: string): string => {
 const dataUriToBlob = (dataUri: string): Blob => {
   const [meta, data] = dataUri.split(",");
   const mime =
-    meta?.match(/data:([^;]+)/i)?.[1]?.toLowerCase() ??
+    /data:([^;]+)/i.exec(meta ?? "")?.[1]?.toLowerCase() ??
     "application/octet-stream";
   if (!/;base64/i.test(meta ?? "")) {
     return new Blob([decodeURIComponent(data ?? "")], { type: mime });
   }
   const bytes = atob(data ?? "");
   const arr = new Uint8Array(bytes.length);
-  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.codePointAt(i) ?? 0;
   return new Blob([arr], { type: mime });
 };
 
 const mimeFromImage = (image: string): string | undefined =>
-  image.match(/^data:([^;,]+)/i)?.[1]?.toLowerCase();
+  /^data:([^;,]+)/i.exec(image)?.[1]?.toLowerCase();
 
 const downloadImagePart = (
   part: Pick<ImageMessagePart, "image" | "filename">,
@@ -76,7 +76,7 @@ const downloadImagePart = (
   a.rel = "noopener";
   document.body.appendChild(a);
   a.click();
-  document.body.removeChild(a);
+  a.remove();
   if (objectUrl) setTimeout(() => URL.revokeObjectURL(objectUrl), 40_000);
 };
 
@@ -310,7 +310,7 @@ function ImageZoom({ src, alt = "Image preview", children }: ImageZoomProps) {
   );
 }
 
-function ImageGenerating({ className }: { className?: string }) {
+function ImageGenerating({ className }: { readonly className?: string }) {
   return (
     <div
       data-slot="image-generating"
@@ -329,8 +329,8 @@ function ImageContentFilterError({
   className,
   reason,
 }: {
-  className?: string;
-  reason?: string;
+  readonly className?: string;
+  readonly reason?: string;
 }) {
   return (
     <div
@@ -348,19 +348,19 @@ function ImageContentFilterError({
 }
 
 export type ImageActionsProps = {
-  part: ImageMessagePart;
+  readonly part: ImageMessagePart;
   /**
    * Wire to your own generation call to show a regenerate button. The button
    * renders only when this is set and the part carries a `prompt`.
    */
-  onRegenerate?: () => void | Promise<void>;
-  className?: string;
+  readonly onRegenerate?: () => void | Promise<void>;
+  readonly className?: string;
 };
 
 function RegenerateButton({
   onRegenerate,
 }: {
-  onRegenerate: () => void | Promise<void>;
+  readonly onRegenerate: () => void | Promise<void>;
 }) {
   const [isRegenerating, setIsRegenerating] = useState(false);
   return (
