@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useRef, useState } from "react";
+import { memo, useState } from "react";
 import {
   AlertCircleIcon,
   CheckIcon,
@@ -9,7 +9,6 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import {
-  useScrollLock,
   useToolCallElapsed,
   type ToolApprovalOption,
   type ToolCallMessagePart,
@@ -26,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ToolError } from "@/components/elements/tool-error";
 import { useActionBarReload } from "@assistant-ui/core/react";
+import { useControlledOpen } from "./use-collapsible-open";
 
 const ANIMATION_DURATION = 200;
 
@@ -48,23 +48,12 @@ function ToolFallbackRoot({
   children,
   ...props
 }: ToolFallbackRootProps) {
-  const collapsibleRef = useRef<HTMLDivElement>(null);
-  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
-  const lockScroll = useScrollLock(collapsibleRef, ANIMATION_DURATION);
-
-  const isControlled = controlledOpen !== undefined;
-  const isOpen = isControlled ? controlledOpen : uncontrolledOpen;
-
-  const handleOpenChange = useCallback(
-    (open: boolean) => {
-      lockScroll();
-      if (!isControlled) {
-        setUncontrolledOpen(open);
-      }
-      controlledOnOpenChange?.(open);
-    },
-    [lockScroll, isControlled, controlledOnOpenChange],
-  );
+  const { ref: collapsibleRef, isOpen, handleOpenChange } = useControlledOpen({
+    open: controlledOpen,
+    onOpenChange: controlledOnOpenChange,
+    defaultOpen,
+    lockDurationMs: ANIMATION_DURATION,
+  });
 
   return (
     <Collapsible
