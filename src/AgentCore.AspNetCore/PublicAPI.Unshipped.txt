@@ -46,7 +46,6 @@ AgentCore.AspNetCore.DependencyInjection.AgentCoreServiceCollectionExtensions
 AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup
 AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup.Configuration.get -> AgentCore.Application.Configuration.Schema.AgentCoreConfiguration!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup.Secrets.get -> AgentCore.Application.Secrets.ResolvedSecrets!
-AgentCore.AspNetCore.Endpoints.ChatCompletionsEndpointRouteBuilderExtensions
 AgentCore.AspNetCore.Endpoints.ResponsesEndpointRouteBuilderExtensions
 AgentCore.AspNetCore.Sessions.AgentCoreAgentSessionStore
 AgentCore.AspNetCore.Sessions.AgentCoreAgentSessionStore.AgentCoreAgentSessionStore(AgentCore.Application.Ports.ICallStore! calls) -> void
@@ -65,9 +64,6 @@ AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelaySpeechAdapter.TelnyxRelaySpe
 const AgentCore.AspNetCore.Call.CallEndpointRouteBuilderExtensions.DefaultPattern = "/v1/call" -> string!
 const AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.MaxAttempts = 3 -> int
 const AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.PipelineName = "agentcore-http" -> string!
-const AgentCore.AspNetCore.Endpoints.ChatCompletionsEndpointRouteBuilderExtensions.DefaultPattern = "/v1/chat/completions" -> string!
-const AgentCore.AspNetCore.Endpoints.ChatCompletionsEndpointRouteBuilderExtensions.SessionHeaderName = "X-AgentCore-Session" -> string!
-const AgentCore.AspNetCore.Endpoints.ChatCompletionsEndpointRouteBuilderExtensions.StageHeaderName = "X-AgentCore-Stage" -> string!
 const AgentCore.AspNetCore.Endpoints.ResponsesEndpointRouteBuilderExtensions.DefaultPattern = "/v1/responses" -> string!
 const AgentCore.AspNetCore.Endpoints.ResponsesEndpointRouteBuilderExtensions.StageHeaderName = "X-AgentCore-Stage" -> string!
 const AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayCallAdapter.TelnyxRelayKind = "telnyx-relay" -> string!
@@ -76,8 +72,6 @@ static AgentCore.AspNetCore.Call.CallEndpointRouteBuilderExtensions.MapCall(this
 static AgentCore.AspNetCore.Call.CallEndpointRouteBuilderExtensions.MapCall(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints, string! pattern) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
 static AgentCore.AspNetCore.DependencyInjection.AgentCoreServiceCollectionExtensions.AddAgentCore(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 static AgentCore.AspNetCore.DependencyInjection.AgentCoreServiceCollectionExtensions.AddAgentCoreWebSockets(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
-static AgentCore.AspNetCore.Endpoints.ChatCompletionsEndpointRouteBuilderExtensions.MapChatCompletions(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
-static AgentCore.AspNetCore.Endpoints.ChatCompletionsEndpointRouteBuilderExtensions.MapChatCompletions(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints, string! pattern) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
 static AgentCore.AspNetCore.Endpoints.ResponsesEndpointRouteBuilderExtensions.MapResponses(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
 static AgentCore.AspNetCore.Endpoints.ResponsesEndpointRouteBuilderExtensions.MapResponses(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints, string! pattern) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
 static readonly AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.ConnectionLifetime -> System.TimeSpan

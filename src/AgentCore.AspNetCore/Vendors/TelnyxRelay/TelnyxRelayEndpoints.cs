@@ -11,7 +11,7 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay;
 /// <remarks>
 /// <para>
 /// This is the second inbound adapter onto <see cref="Application.Ports.IConversationPort"/>, and
-/// the first one that carries a call. The <c>/v1/chat/completions</c> endpoint is the other. Both
+/// the first one that carries a call. The <c>/v1/responses</c> endpoint is the other. Both
 /// read the same contract, so D8 holds and the core never learns a vendor frame schema.
 /// </para>
 /// <para>

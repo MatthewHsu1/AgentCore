@@ -31,8 +31,8 @@ namespace AgentCore.Application.Runtime;
 /// <para>
 /// <b>The session owns the transcript, so a run takes one user message and not a history.</b> The
 /// run reads the text of the LAST user message and ignores everything in front of it, which is the
-/// same rule the <c>/v1/chat/completions</c> endpoint applies to its request body: an earlier message
-/// of the request is already in the call. A host must not replay history here — replaying it would
+/// same rule the <c>/v1/responses</c> endpoint applies to its <c>input</c>: an earlier message
+/// of the call is already in the session. A host must not replay history here — replaying it would
 /// put every turn in the transcript twice.
 /// </para>
 /// <para>
@@ -266,8 +266,8 @@ public sealed class AgentCoreAgent : AIAgent
     /// <param name="messages">The messages the caller passed to the run.</param>
     /// <returns>The last user message that carries words or an approval answer.</returns>
     /// <remarks>
-    /// The same rule the <c>/v1/chat/completions</c> endpoint applies: the session owns the
-    /// transcript, so an earlier message of the request is already in the call, and only the last
+    /// The same rule the <c>/v1/responses</c> endpoint applies: the session owns the
+    /// transcript, so an earlier message of the call is already in the session, and only the last
     /// user message is new. See the remarks on <see cref="AgentCoreAgent"/>.
     /// </remarks>
     /// <exception cref="ArgumentException">No user message carries words or an answer, so there is no turn to run.</exception>

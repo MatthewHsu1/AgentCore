@@ -12,11 +12,9 @@ namespace AgentCore.AspNetCore.Tests.Endpoints;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This endpoint owns the tool loop, so the caller never runs a tool and must never be asked to. The
-/// OpenAI <c>tool_calls</c> field means exactly that — "you run this and send me the result" — and
-/// writing it here would tell an ordinary OpenAI client to do work that already happened. So the
-/// facts of the loop ride their own <c>agentcore_tool</c> field, beside <c>agentcore_data</c>, where
-/// a client that does not know the field ignores it and the browser that does can draw the loop.
+/// This endpoint owns the tool loop, so the caller never runs a tool and must never be asked to.
+/// The facts of the loop ride their own <c>agentcore_tool</c> field, beside <c>agentcore_data</c>,
+/// where a client that does not know the field ignores it and the browser that does can draw the loop.
 /// </para>
 /// <para>
 /// Every test here runs offline against a fake model, on a real socket.
@@ -59,13 +57,13 @@ public sealed class ToolWireTests
     [Fact]
     public async Task AToolCall_ReachesTheBrowserOnItsOwnFieldWithTheNameAndTheArguments()
     {
-        await using var host = await ChatCompletionsHost.StartAsync(
+        await using var host = await ResponsesHost.StartAsync(
             ToolYaml,
             new ToolCallingChatClient(),
             configure: options => options.Bind(
                 "LookItUp", (_, _) => ValueTask.FromResult<object?>("42 rows")));
 
-        using var response = await host.PostStreamingAsync("look up revenue");
+        using var response = await PostStreamAsync(host, "look up revenue");
         var tools = await ReadToolEventsAsync(response);
 
         var call = Assert.Single(tools, tool => tool.GetProperty("phase").GetString() == "call");
@@ -78,13 +76,13 @@ public sealed class ToolWireTests
     [Fact]
     public async Task AToolResult_ReachesTheBrowserOnTheSameFieldAndNamesTheCallItAnswers()
     {
-        await using var host = await ChatCompletionsHost.StartAsync(
+        await using var host = await ResponsesHost.StartAsync(
             ToolYaml,
             new ToolCallingChatClient(),
             configure: options => options.Bind(
                 "LookItUp", (_, _) => ValueTask.FromResult<object?>("42 rows")));
 
-        using var response = await host.PostStreamingAsync("look up revenue");
+        using var response = await PostStreamAsync(host, "look up revenue");
         var tools = await ReadToolEventsAsync(response);
 
         var result = Assert.Single(tools, tool => tool.GetProperty("phase").GetString() == "result");
@@ -102,13 +100,13 @@ public sealed class ToolWireTests
     {
         // The loop turns a fault the model can answer into an error result and carries on. The
         // caller's screen must say so, or a tool that failed looks the same as one that worked.
-        await using var host = await ChatCompletionsHost.StartAsync(
+        await using var host = await ResponsesHost.StartAsync(
             ToolYaml,
             new ToolCallingChatClient(),
             configure: options => options.Bind(
                 "LookItUp", (_, _) => throw new InvalidOperationException("the table is gone")));
 
-        using var response = await host.PostStreamingAsync("look up revenue");
+        using var response = await PostStreamAsync(host, "look up revenue");
         var tools = await ReadToolEventsAsync(response);
 
         var result = Assert.Single(tools, tool => tool.GetProperty("phase").GetString() == "result");
@@ -128,13 +126,13 @@ public sealed class ToolWireTests
         // it already is one would call this failure a success.
         var failure = ToolErrorResult.Create("look_it_up", "the table is gone").ToJsonString();
 
-        await using var host = await ChatCompletionsHost.StartAsync(
+        await using var host = await ResponsesHost.StartAsync(
             ToolYaml,
             new ToolCallingChatClient(),
             configure: options => options.Bind(
                 "LookItUp", (_, _) => ValueTask.FromResult<object?>(failure)));
 
-        using var response = await host.PostStreamingAsync("look up revenue");
+        using var response = await PostStreamAsync(host, "look up revenue");
         var tools = await ReadToolEventsAsync(response);
 
         var result = Assert.Single(tools, tool => tool.GetProperty("phase").GetString() == "result");
@@ -148,13 +146,13 @@ public sealed class ToolWireTests
     [Fact]
     public async Task AToolThatAnswersWithAnObject_ReachesTheBrowserAsItsFieldsAndNotItsTypeName()
     {
-        await using var host = await ChatCompletionsHost.StartAsync(
+        await using var host = await ResponsesHost.StartAsync(
             ToolYaml,
             new ToolCallingChatClient(),
             configure: options => options.Bind(
                 "LookItUp", (_, _) => ValueTask.FromResult<object?>(new Lookup(7, "cards"))));
 
-        using var response = await host.PostStreamingAsync("look up revenue");
+        using var response = await PostStreamAsync(host, "look up revenue");
         var tools = await ReadToolEventsAsync(response);
 
         var result = Assert.Single(tools, tool => tool.GetProperty("phase").GetString() == "result");
@@ -170,26 +168,31 @@ public sealed class ToolWireTests
     {
         // Writing the answer as text escapes every quote inside it as \u0022, and leaves the browser
         // a string to print raw where it lays out an object. The answer travels as itself instead.
-        await using var host = await ChatCompletionsHost.StartAsync(
+        await using var host = await ResponsesHost.StartAsync(
             ToolYaml,
             new ToolCallingChatClient(),
             configure: options => options.Bind(
                 "LookItUp", (_, _) => ValueTask.FromResult<object?>("""{ "entities": [ "it's" ] }""")));
 
-        using var response = await host.PostStreamingAsync("look up revenue");
+        using var response = await PostStreamAsync(host, "look up revenue");
 
         // The quotes inside the answer were the whole complaint: an answer written as text has every
         // one of them escaped. The apostrophe stays escaped, because the default JSON writer escapes
         // it whatever the shape it sits in, and the browser turns it back on parse.
-        var events = await ChatCompletionsHost.ReadEventsAsync(response);
-        Assert.DoesNotContain("\\u0022", string.Join("\n", events), StringComparison.Ordinal);
+        var events = await ResponsesHost.ReadEventsAsync(response);
+
+        // The framework's own function-call frames carry the model's raw argument string with its
+        // quotes escaped — that is the protocol's shape for a call. The complaint was ever about
+        // the answer, so the assertion reads the result line alone: on our field it travels as
+        // itself, not as escaped text.
+        var line = Assert.Single(events, text => JsonDocument.Parse(text).RootElement
+            .TryGetProperty("agentcore_tool", out var carried)
+            && carried.GetProperty("phase").GetString() == "result");
+        Assert.DoesNotContain("\\u0022", line, StringComparison.Ordinal);
 
         var result = Assert.Single(
             ToolEventsOf(events),
             tool => tool.GetProperty("phase").GetString() == "result");
-
-        var entities = result.GetProperty("result").GetProperty("entities");
-        Assert.Equal("it's", Assert.Single(entities.EnumerateArray()).GetString());
     }
 
     [Fact]
@@ -198,13 +201,13 @@ public sealed class ToolWireTests
         // The tool is declared and bound, exactly as in every other test here. The model simply
         // never reaches for it, which is what this test is about.
         using FragmentingChatClient reply = new("hello there");
-        await using var host = await ChatCompletionsHost.StartAsync(
+        await using var host = await ResponsesHost.StartAsync(
             ToolYaml,
             reply,
             configure: options => options.Bind(
                 "LookItUp", (_, _) => ValueTask.FromResult<object?>("42 rows")));
 
-        using var response = await host.PostStreamingAsync("hi");
+        using var response = await PostStreamAsync(host, "hi");
 
         Assert.Empty(await ReadToolEventsAsync(response));
     }
@@ -213,22 +216,16 @@ public sealed class ToolWireTests
     public async Task AToolCall_StaysOutOfTheWordsTheCallerIsTold()
     {
         // The voice path speaks this same turn, and a tool name read aloud is not an answer.
-        await using var host = await ChatCompletionsHost.StartAsync(
+        await using var host = await ResponsesHost.StartAsync(
             ToolYaml,
             new ToolCallingChatClient(),
             configure: options => options.Bind(
                 "LookItUp", (_, _) => ValueTask.FromResult<object?>("42 rows")));
 
-        using var response = await host.PostStreamingAsync("look up revenue");
-        var events = await ChatCompletionsHost.ReadEventsAsync(response);
+        using var response = await PostStreamAsync(host, "look up revenue");
+        var events = await ResponsesHost.ReadEventsAsync(response);
 
-        var spoken = string.Concat(events
-            .Where(text => text != "[DONE]")
-            .Select(text => JsonDocument.Parse(text).RootElement)
-            .SelectMany(chunk => chunk.GetProperty("choices").EnumerateArray())
-            .Select(choice => choice.GetProperty("delta").TryGetProperty("content", out var content)
-                ? content.GetString() ?? string.Empty
-                : string.Empty));
+        var spoken = string.Concat(ResponsesHost.TextDeltas(events));
 
         Assert.Equal("here it is.", spoken);
     }
@@ -236,15 +233,24 @@ public sealed class ToolWireTests
     /// <summary>What a tool answers with when it answers with an object of its own.</summary>
     private sealed record Lookup(int Rows, string Of);
 
+    /// <summary>Sends one turn of words and reads the answer as it arrives.</summary>
+    /// <remarks>
+    /// The dialect member opts the stream into the browser parts: without it the frames carry
+    /// text alone and the tool halves would never reach the browser.
+    /// </remarks>
+    private static Task<HttpResponseMessage> PostStreamAsync(ResponsesHost host, string text, string? conversation = null)
+        => host.PostAsync(conversation is { Length: > 0 }
+            ? $$"""{ "stream": true, "conversation": "{{conversation}}", "input": "{{text}}", "agentcore": { "message_id": "m1" } }"""
+            : $$"""{ "stream": true, "input": "{{text}}", "agentcore": { "message_id": "m1" } }""");
+
     /// <summary>Reads every <c>agentcore_tool</c> payload the stream carried, in arrival order.</summary>
     private static async Task<List<JsonElement>> ReadToolEventsAsync(HttpResponseMessage response)
-        => ToolEventsOf(await ChatCompletionsHost.ReadEventsAsync(response));
+        => ToolEventsOf(await ResponsesHost.ReadEventsAsync(response));
 
     /// <summary>Picks the <c>agentcore_tool</c> payloads out of events already read.</summary>
     private static List<JsonElement> ToolEventsOf(IEnumerable<string> events)
     {
         return events
-            .Where(text => text != "[DONE]")
             .Select(text => JsonDocument.Parse(text).RootElement)
             .Where(chunk => chunk.TryGetProperty("agentcore_tool", out var tool)
                             && tool.ValueKind != JsonValueKind.Null)

@@ -348,10 +348,9 @@ public sealed class ResponsesTests
 
         using var response = await host.PostAsync(
             """{ "stream": true, "input": "show me revenue", "agentcore": { "message_id": "m1" } }""");
-        var events = await AgentCore.AspNetCore.Tests.Fakes.ChatCompletionsHost.ReadEventsAsync(response);
+        var events = await ResponsesHost.ReadEventsAsync(response);
 
         var chunks = events
-            .Where(text => text != "[DONE]")
             .Select(text => System.Text.Json.JsonDocument.Parse(text).RootElement)
             .ToList();
         var drawing = Assert.Single(chunks, static chunk => chunk.TryGetProperty("agentcore_data", out var data)
@@ -376,10 +375,9 @@ public sealed class ResponsesTests
 
         using var response = await host.PostAsync("""{ "stream": true, "input": "show me revenue" }""");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var events = await AgentCore.AspNetCore.Tests.Fakes.ChatCompletionsHost.ReadEventsAsync(response);
+        var events = await ResponsesHost.ReadEventsAsync(response);
 
         Assert.DoesNotContain(events
-            .Where(text => text != "[DONE]")
             .Select(text => System.Text.Json.JsonDocument.Parse(text).RootElement),
             static chunk => chunk.TryGetProperty("agentcore_data", out var data)
                 && data.ValueKind != System.Text.Json.JsonValueKind.Null);

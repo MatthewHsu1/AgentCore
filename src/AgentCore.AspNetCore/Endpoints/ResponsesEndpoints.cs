@@ -275,9 +275,9 @@ public static class ResponsesEndpointRouteBuilderExtensions
         // chain can start from any answer.
         var responseId = OpenAIResponses.CreateResponseId();
 
-        // Only the stream has a chunk to carry a drawing, for the same reason the chat
-        // endpoint binds its screen per branch: the session outlives a request and the
-        // branch can differ per turn.
+        // Only the stream has a frame to carry a drawing, so only the stream gets a screen. Binding
+        // one on the whole-reply branch would let the tool report a picture the caller never sees.
+        // Set per request, not once: the session outlives a request and the branch can differ per turn.
         call.SetHasScreen(streaming);
 
         try
@@ -363,8 +363,8 @@ public static class ResponsesEndpointRouteBuilderExtensions
     /// The session is filed after the enumeration ends, because the turn commits —
     /// and the session only holds the turn — once the last update has left it.
     /// The framework's frames carry text alone; when the request spoke the dialect,
-    /// each update's browser parts ride beside them as the same member shapes the chat
-    /// endpoint writes, so drawings, citations, tool halves, and approval asks stream.
+    /// each update's browser parts ride beside them as <c>agentcore_*</c> members, so drawings,
+    /// citations, tool halves, and approval asks stream.
     /// </remarks>
     private static async Task StreamTurnAsync(
         HttpContext http,
@@ -435,20 +435,20 @@ public static class ResponsesEndpointRouteBuilderExtensions
         }
     }
 
-    /// <summary>Writes one dialect event: the member shapes the chat endpoint writes, bare.</summary>
+    /// <summary>Writes one dialect event: one <c>agentcore_*</c> member, bare.</summary>
     private static async Task WritePartLineAsync(
         HttpContext http, TurnStreamPart part, CancellationToken cancellationToken)
     {
         JsonObject line = part switch
         {
             TurnStreamRender render
-                => new JsonObject { ["agentcore_data"] = JsonSerializer.SerializeToNode(render.Payload, ChatCompletionJson.Options) },
+                => new JsonObject { ["agentcore_data"] = JsonSerializer.SerializeToNode(render.Payload, ResponsesJson.Options) },
             TurnStreamSource source
-                => new JsonObject { ["agentcore_source"] = JsonSerializer.SerializeToNode(source.Payload, ChatCompletionJson.Options) },
+                => new JsonObject { ["agentcore_source"] = JsonSerializer.SerializeToNode(source.Payload, ResponsesJson.Options) },
             TurnStreamTool tool
-                => new JsonObject { ["agentcore_tool"] = JsonSerializer.SerializeToNode(tool.Payload, ChatCompletionJson.Options) },
+                => new JsonObject { ["agentcore_tool"] = JsonSerializer.SerializeToNode(tool.Payload, ResponsesJson.Options) },
             TurnStreamApproval approval
-                => new JsonObject { ["agentcore_approval"] = JsonSerializer.SerializeToNode(approval.Payload, ChatCompletionJson.Options) },
+                => new JsonObject { ["agentcore_approval"] = JsonSerializer.SerializeToNode(approval.Payload, ResponsesJson.Options) },
             _ => throw new InvalidOperationException($"Unknown stream part: {part.GetType()}."),
         };
 

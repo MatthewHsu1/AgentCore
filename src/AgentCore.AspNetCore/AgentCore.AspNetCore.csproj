@@ -2,8 +2,8 @@
 
   <PropertyGroup>
     <IsPackable>true</IsPackable>
-    <Description>Inbound adapters as Map* extensions: Conversation Relay, webhooks, chat completions.</Description>
-    <PackageTags>agent;ai;aspnetcore;chat-completions</PackageTags>
+    <Description>Inbound adapters as Map* extensions: Conversation Relay, webhooks, Responses.</Description>
+    <PackageTags>agent;ai;aspnetcore;openai-responses</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

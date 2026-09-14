@@ -54,7 +54,7 @@ app.MapAgentCoreHost();
 app.Run();
 ```
 
-`AddAgentCoreHost` loads the document (`config/example.yaml` unless `AgentCore__ConfigurationPath` names another) and binds every vendor seam. `MapAgentCoreHost` serves the health check, the OpenAI-compatible text endpoints, and the call socket.
+`AddAgentCoreHost` loads the document (`config/example.yaml` unless `AgentCore__ConfigurationPath` names another) and binds every vendor seam. `MapAgentCoreHost` serves the health check, the OpenAI-compatible Responses endpoint, and the call socket.
 A document it cannot find is a startup failure, never a silent default.
 
 ## Install
@@ -67,7 +67,7 @@ dotnet add package AgentCore.Hosting
 
 ## 3. Talk to it
 
-Over the OpenAI-compatible endpoint (`/v1/chat/completions`), the document above holds this conversation:
+Over the OpenAI-compatible endpoint (`/v1/responses`), the document above holds this conversation:
 
 ```
 User: Hello
@@ -82,7 +82,7 @@ Assistant: How can I help you today!
 | `AgentCore.Domain` | Pure domain records. Zero dependencies. |
 | `AgentCore.Application` | Orchestration, configuration compilation, and every port interface. |
 | `AgentCore.Infrastructure` | Outbound adapters: OpenAI, Zilliz, Telnyx call control, Postgres, B2, Git. |
-| `AgentCore.AspNetCore` | Inbound adapters as `Map*` extensions: Telnyx Conversation Relay, Telnyx webhooks, chat completions. |
+| `AgentCore.AspNetCore` | Inbound adapters as `Map*` extensions: Telnyx Conversation Relay, Telnyx webhooks, Responses. |
 | `AgentCore.Hosting` | The batteries-included host: every vendor seam bound and every route mapped, in two calls. |
 
 They share one version and ship as a set. Mixing versions across them is unsupported.

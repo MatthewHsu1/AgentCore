@@ -17,7 +17,7 @@ namespace AgentCore.AspNetCore.Tests.Endpoints;
 /// Like the tool loop facts, an approval is host business the caller must see: the model asked to
 /// run something it may not run alone, so the request rides its own <c>agentcore_approval</c>
 /// field, and the answer comes back on <c>agentcore.approval</c> naming the same request id on the
-/// same call. An ordinary OpenAI client ignores both fields.
+/// same conversation. A client that does not speak the dialect reads text frames alone.
 /// </para>
 /// <para>
 /// Every test here runs offline against a fake model, on a real socket.
@@ -47,20 +47,20 @@ public sealed class ApprovalWireTests
     public async Task AGatedToolCall_StreamsAnApprovalEventWithTheCallFacts()
     {
         int sent = 0;
-        await using var host = await ChatCompletionsHost.StartAsync(
+        await using var host = await ResponsesHost.StartAsync(
             ApprovalYaml,
             new GatedToolCallingChatClient(),
             configure: options => options.AddToolSource(_ => new GatedSource(() => GatedSendEmail(() => sent++))));
 
-        using var response = await host.PostStreamingAsync("send it");
-        var events = await ChatCompletionsHost.ReadEventsAsync(response);
+        using var response = await PostStreamAsync(host, "send it");
+        var events = await ResponsesHost.ReadEventsAsync(response);
 
         var approval = Assert.Single(ApprovalEventsOf(events));
         Assert.False(string.IsNullOrEmpty(approval.GetProperty("request_id").GetString()));
         Assert.Equal("send_email", approval.GetProperty("tool").GetString());
         Assert.Equal("a@b.com", approval.GetProperty("arguments").GetProperty("to").GetString());
 
-        Assert.Empty(ChatCompletionsHost.ContentDeltas(events));
+        Assert.Empty(ResponsesHost.TextDeltas(events));
         Assert.Equal(0, sent);
     }
 
@@ -68,17 +68,18 @@ public sealed class ApprovalWireTests
     public async Task AGatedToolCall_AnswersWholeWithTheRequestOnTheTurn()
     {
         int sent = 0;
-        await using var host = await ChatCompletionsHost.StartAsync(
+        await using var host = await ResponsesHost.StartAsync(
             ApprovalYaml,
             new GatedToolCallingChatClient(),
             configure: options => options.AddToolSource(_ => new GatedSource(() => GatedSendEmail(() => sent++))));
 
-        using var response = await host.PostAsync("send it");
-        var body = await ChatCompletionsHost.ReadJsonAsync(response);
+        using var response = await PostTextAsync(host, "send it");
+        var body = await ResponsesHost.ReadJsonAsync(response);
 
-        Assert.Equal(string.Empty, body["choices"]![0]!["message"]!["content"]!.GetValue<string>());
-        var approval = Assert.Single(body["agentcore"]!["approvals"]!.AsArray());
-        Assert.Equal("send_email", approval!["tool"]!.GetValue<string>());
+        Assert.Equal(string.Empty, body.OutputText());
+        var approvals = JsonDocument.Parse(body["metadata"]!["approvals"]!.GetValue<string>()).RootElement;
+        var approval = Assert.Single(approvals.EnumerateArray());
+        Assert.Equal("send_email", approval.GetProperty("tool").GetString());
         Assert.Equal(0, sent);
     }
 
@@ -86,39 +87,43 @@ public sealed class ApprovalWireTests
     public async Task AnApprovalAnswer_RunsTheToolAndReplies()
     {
         int sent = 0;
-        await using var host = await ChatCompletionsHost.StartAsync(
+        await using var host = await ResponsesHost.StartAsync(
             ApprovalYaml,
             new GatedToolCallingChatClient(),
             configure: options => options.AddToolSource(_ => new GatedSource(() => GatedSendEmail(() => sent++))));
 
-        using var first = await host.PostAsync("send it");
-        var asked = await ChatCompletionsHost.ReadJsonAsync(first);
-        var session = asked["agentcore"]!["session"]!.GetValue<string>();
-        var requestId = asked["agentcore"]!["approvals"]![0]!["request_id"]!.GetValue<string>();
+        using var first = await PostTextAsync(host, "send it");
+        var asked = await ResponsesHost.ReadJsonAsync(first);
+        var conversation = asked.ContinuationId();
+        var requestId = JsonDocument.Parse(
+            asked["metadata"]!["approvals"]!.GetValue<string>())
+            .RootElement[0].GetProperty("request_id").GetString() ?? string.Empty;
 
-        using var second = await host.PostApprovalAsync(session, requestId, approved: true, stream: false);
-        var replied = await ChatCompletionsHost.ReadJsonAsync(second);
+        using var second = await PostApprovalAsync(host, conversation, requestId, approved: true);
+        var replied = await ResponsesHost.ReadJsonAsync(second);
 
         Assert.Equal(HttpStatusCode.OK, second.StatusCode);
         Assert.Equal(1, sent);
-        Assert.Equal("done.", replied["choices"]![0]!["message"]!["content"]!.GetValue<string>());
+        Assert.Equal("done.", replied.OutputText());
     }
 
     [Fact]
     public async Task ARejection_LeavesTheToolUnrun()
     {
         int sent = 0;
-        await using var host = await ChatCompletionsHost.StartAsync(
+        await using var host = await ResponsesHost.StartAsync(
             ApprovalYaml,
             new GatedToolCallingChatClient(),
             configure: options => options.AddToolSource(_ => new GatedSource(() => GatedSendEmail(() => sent++))));
 
-        using var first = await host.PostAsync("send it");
-        var asked = await ChatCompletionsHost.ReadJsonAsync(first);
-        var session = asked["agentcore"]!["session"]!.GetValue<string>();
-        var requestId = asked["agentcore"]!["approvals"]![0]!["request_id"]!.GetValue<string>();
+        using var first = await PostTextAsync(host, "send it");
+        var asked = await ResponsesHost.ReadJsonAsync(first);
+        var conversation = asked.ContinuationId();
+        var requestId = JsonDocument.Parse(
+            asked["metadata"]!["approvals"]!.GetValue<string>())
+            .RootElement[0].GetProperty("request_id").GetString() ?? string.Empty;
 
-        using var second = await host.PostApprovalAsync(session, requestId, approved: false, stream: false);
+        using var second = await PostApprovalAsync(host, conversation, requestId, approved: false);
 
         Assert.Equal(HttpStatusCode.OK, second.StatusCode);
         Assert.Equal(0, sent);
@@ -127,12 +132,12 @@ public sealed class ApprovalWireTests
     [Fact]
     public async Task AnApprovalAnswerForAnUnknownCall_IsNotFound()
     {
-        await using var host = await ChatCompletionsHost.StartAsync(
+        await using var host = await ResponsesHost.StartAsync(
             ApprovalYaml,
             new GatedToolCallingChatClient(),
             configure: options => options.AddToolSource(_ => new GatedSource(() => GatedSendEmail(() => { }))));
 
-        using var response = await host.PostApprovalAsync("call-that-never-existed", "req-1", approved: true, stream: false);
+        using var response = await PostApprovalAsync(host, "conv-that-never-existed", "req-1", approved: true);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -140,12 +145,12 @@ public sealed class ApprovalWireTests
     [Fact]
     public async Task AnApprovalAnswerWithNoCall_IsBadRequest()
     {
-        await using var host = await ChatCompletionsHost.StartAsync(
+        await using var host = await ResponsesHost.StartAsync(
             ApprovalYaml,
             new GatedToolCallingChatClient(),
             configure: options => options.AddToolSource(_ => new GatedSource(() => GatedSendEmail(() => { }))));
 
-        using var response = await host.PostApprovalAsync(string.Empty, "req-1", approved: true, stream: false);
+        using var response = await PostApprovalAsync(host, null, "req-1", approved: true);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -153,18 +158,44 @@ public sealed class ApprovalWireTests
     [Fact]
     public async Task AnApprovalAnswerForARequestNothingAsked_IsConflict()
     {
-        await using var host = await ChatCompletionsHost.StartAsync(
+        await using var host = await ResponsesHost.StartAsync(
             ApprovalYaml,
             new GatedToolCallingChatClient(),
             configure: options => options.AddToolSource(_ => new GatedSource(() => GatedSendEmail(() => { }))));
 
-        using var first = await host.PostAsync("send it");
-        var asked = await ChatCompletionsHost.ReadJsonAsync(first);
-        var session = asked["agentcore"]!["session"]!.GetValue<string>();
+        using var first = await PostTextAsync(host, "send it");
+        var asked = await ResponsesHost.ReadJsonAsync(first);
+        var conversation = asked.ContinuationId();
 
-        using var second = await host.PostApprovalAsync(session, "req-nothing-asked", approved: true, stream: false);
+        using var second = await PostApprovalAsync(host, conversation, "req-nothing-asked", approved: true);
 
         Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+    }
+
+    /// <summary>Sends one turn of words.</summary>
+    private static Task<HttpResponseMessage> PostTextAsync(ResponsesHost host, string text, string? conversation = null)
+        => host.PostAsync(conversation is { Length: > 0 }
+            ? $$"""{ "stream": false, "conversation": "{{conversation}}", "input": "{{text}}" }"""
+            : $$"""{ "stream": false, "input": "{{text}}" }""");
+
+    /// <summary>Sends one turn of words and reads the answer as it arrives.</summary>
+    /// <remarks>
+    /// The dialect member opts the stream into the browser parts: without it the frames carry
+    /// text alone and an approval ask would suspend the turn in silence.
+    /// </remarks>
+    private static Task<HttpResponseMessage> PostStreamAsync(ResponsesHost host, string text, string? conversation = null)
+        => host.PostAsync(conversation is { Length: > 0 }
+            ? $$"""{ "stream": true, "conversation": "{{conversation}}", "input": "{{text}}", "agentcore": { "message_id": "m1" } }"""
+            : $$"""{ "stream": true, "input": "{{text}}", "agentcore": { "message_id": "m1" } }""");
+
+    /// <summary>Answers one pending approval.</summary>
+    private static Task<HttpResponseMessage> PostApprovalAsync(
+        ResponsesHost host, string? conversation, string requestId, bool approved)
+    {
+        var answer = $$"""{ "approval": { "request_id": "{{requestId}}", "approved": {{(approved ? "true" : "false")}} } }""";
+        return host.PostAsync(conversation is { Length: > 0 }
+            ? $$"""{ "stream": false, "conversation": "{{conversation}}", "input": [], "agentcore": {{answer}} }"""
+            : $$"""{ "stream": false, "input": [], "agentcore": {{answer}} }""");
     }
 
     private static ApprovalRequiredAIFunction GatedSendEmail(Action onSend) => new(AIFunctionFactory.Create(
@@ -180,7 +211,6 @@ public sealed class ApprovalWireTests
     private static List<JsonElement> ApprovalEventsOf(IEnumerable<string> events)
     {
         return events
-            .Where(text => text != "[DONE]")
             .Select(text => JsonDocument.Parse(text).RootElement)
             .Where(chunk => chunk.TryGetProperty("agentcore_approval", out var approval)
                             && approval.ValueKind != JsonValueKind.Null)

@@ -19,12 +19,13 @@ namespace AgentCore.AspNetCore.Tests.Fakes;
 /// One real host, on a real socket, over a fake model, answering the Responses path.
 /// </summary>
 /// <remarks>
-/// Mirrors <see cref="ChatCompletionsHost"/>: Kestrel takes port zero and reports the
-/// port it got, so many tests run at once. No test here reaches a network or needs
-/// an API key.
+/// Kestrel takes port zero and reports the port it got, so many tests run at once. The socket is real
+/// on purpose: a server-sent event is a wire behaviour, and an in-memory pipe would not prove that the
+/// endpoint writes one event for each update. No test here reaches a network or needs an API key.
 /// </remarks>
 internal sealed class ResponsesHost : IAsyncDisposable
 {
+    private const string DataPrefix = "data: ";
     private readonly WebApplication _app;
 
     private ResponsesHost(WebApplication app, HttpClient client)
@@ -78,6 +79,45 @@ internal sealed class ResponsesHost : IAsyncDisposable
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
         return await Client.PostAsync(
             ResponsesEndpointRouteBuilderExtensions.DefaultPattern, content, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>Reads every server-sent event of one answer.</summary>
+    /// <param name="response">The answer, with the body still open.</param>
+    /// <returns>The text after each <c>data:</c> prefix, in order.</returns>
+    public static async Task<List<string>> ReadEventsAsync(HttpResponseMessage response)
+    {
+        List<string> events = [];
+        await using var body = await response.Content.ReadAsStreamAsync(TestContext.Current.CancellationToken);
+        using StreamReader reader = new(body, Encoding.UTF8);
+
+        while (await reader.ReadLineAsync(TestContext.Current.CancellationToken) is { } line)
+        {
+            if (line.StartsWith(DataPrefix, StringComparison.Ordinal))
+            {
+                events.Add(line[DataPrefix.Length..]);
+            }
+        }
+
+        return events;
+    }
+
+    /// <summary>Reads the text of every text delta of one stream.</summary>
+    /// <param name="events">The events the stream carried.</param>
+    /// <returns>The pieces, in order.</returns>
+    public static List<string> TextDeltas(IEnumerable<string> events)
+    {
+        List<string> pieces = [];
+        foreach (var raw in events)
+        {
+            var frame = JsonNode.Parse(raw)!.AsObject();
+            if (string.Equals(frame["type"]?.GetValue<string>(), "response.output_text.delta", StringComparison.Ordinal)
+                && frame["delta"]?.GetValue<string>() is { Length: > 0 } text)
+            {
+                pieces.Add(text);
+            }
+        }
+
+        return pieces;
     }
 
     /// <summary>Reads one answer as a node tree.</summary>

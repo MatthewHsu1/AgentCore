@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using AgentCore.Application.Runtime;
 using AgentCore.Domain;
 
@@ -125,3 +127,90 @@ internal sealed record ResponsesRequestInfo(
 /// <param name="RequestId">The id of the pending request this answers.</param>
 /// <param name="Approved">Whether the tool may run.</param>
 internal sealed record ResponsesApprovalAnswer(string RequestId, bool Approved);
+
+/// <summary>
+/// The one serializer setting the dialect uses.
+/// </summary>
+internal static class ResponsesJson
+{
+    /// <summary>The one serializer setting both directions use.</summary>
+    public static JsonSerializerOptions Options { get; } = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
+}
+
+/// <summary>One half of one tool call, as the browser reads it.</summary>
+internal sealed record ToolPayload
+{
+    /// <summary>Gets the id both halves of one call share.</summary>
+    public required string CallId { get; init; }
+
+    /// <summary>Gets the name of the tool.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets which half this is: <c>call</c> or <c>result</c>.</summary>
+    public required string Phase { get; init; }
+
+    /// <summary>Gets what the model passed, on the <c>call</c> half only.</summary>
+    public JsonNode? Arguments { get; init; }
+
+    /// <summary>Gets what the tool answered, on the <c>result</c> half only.</summary>
+    public JsonNode? Result { get; init; }
+
+    /// <summary>Gets whether the tool failed, on the <c>result</c> half only.</summary>
+    public bool? Failed { get; init; }
+}
+
+/// <summary>One tool call waiting on the caller, as the browser reads it.</summary>
+internal sealed record ApprovalPayload
+{
+    /// <summary>Gets the id the approval answer carries back.</summary>
+    [JsonPropertyName("request_id")]
+    public required string RequestId { get; init; }
+
+    /// <summary>Gets the name of the tool the model asked to call.</summary>
+    public required string Tool { get; init; }
+
+    /// <summary>Gets what the model passed, or <see langword="null"/> when it passed nothing.</summary>
+    public JsonNode? Arguments { get; init; }
+}
+
+/// <summary>Where one answer came from, as the browser reads it.</summary>
+internal sealed record SourcePayload
+{
+    /// <summary>Gets the tool call this source was cited under.</summary>
+    public required string CallId { get; init; }
+
+    /// <summary>Gets the id of this source, unique within one turn.</summary>
+    public required string Id { get; init; }
+
+    /// <summary>Gets which shape it takes: <c>document</c> or <c>url</c>.</summary>
+    public required string SourceType { get; init; }
+
+    /// <summary>Gets what the source is called.</summary>
+    public required string Title { get; init; }
+
+    /// <summary>Gets where inside the source it sits, such as <c>p.27</c>. Empty when it has none.</summary>
+    public required string Locator { get; init; }
+
+    /// <summary>Gets the link to open, or <see langword="null"/> when there is nothing to open.</summary>
+    public string? Url { get; init; }
+
+    /// <summary>Gets the media type of the source.</summary>
+    public required string MediaType { get; init; }
+
+    /// <summary>Gets what produced this source, such as <c>knowledge</c>.</summary>
+    public required string Origin { get; init; }
+}
+
+/// <summary>One thing a stream asks the browser to draw.</summary>
+internal sealed record RenderedPayload
+{
+    /// <summary>Gets the renderer the browser looks up.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the payload that renderer reads.</summary>
+    public required JsonElement Data { get; init; }
+}

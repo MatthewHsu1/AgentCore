@@ -13,9 +13,8 @@ namespace AgentCore.AspNetCore.Tests.Endpoints;
 /// <remarks>
 /// <para>
 /// The drawing cannot ride the tool call itself. This endpoint owns the tool loop and the reply
-/// carries only text — there is no <c>tool_calls</c> field on the answer, and the loop is shared
-/// with the voice path, which has no browser. So a tool that draws publishes to the call's screen
-/// and the stream writes it as its own chunk.
+/// carries only text — the loop is shared with the voice path, which has no browser. So a tool
+/// that draws publishes to the call's screen and the stream writes it as its own event.
 /// </para>
 /// <para>
 /// Every test here runs offline against a fake model, on a real socket.
@@ -55,7 +54,7 @@ public sealed class DrawingWireTests
     [Fact]
     public async Task AToolThatDraws_ReachesTheBrowserOnItsOwnFieldAndNotInTheReply()
     {
-        await using var host = await ChatCompletionsHost.StartAsync(
+        await using var host = await ResponsesHost.StartAsync(
             DrawingYaml,
             new DrawingChatClient(),
             configure: options => options.Bind("DrawIt", (TurnInvocation? turn) =>
@@ -65,11 +64,10 @@ public sealed class DrawingWireTests
                 return ValueTask.FromResult<object?>("drew a Card; buttons: none");
             }));
 
-        using var response = await host.PostStreamingAsync("show me revenue");
-        var events = await ChatCompletionsHost.ReadEventsAsync(response);
+        using var response = await PostStreamAsync(host, "show me revenue");
+        var events = await ResponsesHost.ReadEventsAsync(response);
 
         var drawings = events
-            .Where(text => text != "[DONE]")
             .Select(text => JsonDocument.Parse(text).RootElement)
             .Where(chunk => chunk.TryGetProperty("agentcore_data", out var data) && data.ValueKind != JsonValueKind.Null)
             .ToList();
@@ -81,13 +79,7 @@ public sealed class DrawingWireTests
         Assert.Equal("Q3 revenue", payload.GetProperty("data").GetProperty("title").GetString());
 
         // And it is not in what the caller is told. The spoken reply is what the transcript keeps.
-        var spoken = string.Concat(events
-            .Where(text => text != "[DONE]")
-            .Select(text => JsonDocument.Parse(text).RootElement)
-            .SelectMany(chunk => chunk.GetProperty("choices").EnumerateArray())
-            .Select(choice => choice.GetProperty("delta").TryGetProperty("content", out var content)
-                ? content.GetString() ?? string.Empty
-                : string.Empty));
+        var spoken = string.Concat(ResponsesHost.TextDeltas(events));
 
         Assert.DoesNotContain("Q3 revenue", spoken, StringComparison.Ordinal);
     }
@@ -95,9 +87,9 @@ public sealed class DrawingWireTests
     [Fact]
     public async Task AnAnswerThatIsNotAStream_DropsTheDrawingRatherThanKeepingItForALaterTurn()
     {
-        // There is no chunk to carry it, and a drawing that surfaced part-way through the next turn
+        // There is no event to carry it, and a drawing that surfaced part-way through the next turn
         // would be worse than one that never arrived.
-        await using var host = await ChatCompletionsHost.StartAsync(
+        await using var host = await ResponsesHost.StartAsync(
             DrawingYaml,
             new DrawingChatClient(),
             configure: options => options.Bind("DrawIt", (TurnInvocation? turn) =>
@@ -106,11 +98,11 @@ public sealed class DrawingWireTests
                 return ValueTask.FromResult<object?>("drew a Card; buttons: none");
             }));
 
-        using var first = await host.PostAsync("show me revenue");
-        var session = first.Headers.GetValues("X-AgentCore-Session").Single();
+        using var first = await PostTextAsync(host, "show me revenue");
+        var conversation = (await ResponsesHost.ReadJsonAsync(first)).ContinuationId();
 
-        using var second = await host.PostStreamingAsync("and again", session);
-        var events = await ChatCompletionsHost.ReadEventsAsync(second);
+        using var second = await PostStreamAsync(host, "and again", conversation);
+        var events = await ResponsesHost.ReadEventsAsync(second);
 
         Assert.DoesNotContain(events, text => text.Contains("\"dropped\"", StringComparison.Ordinal));
     }
@@ -118,11 +110,11 @@ public sealed class DrawingWireTests
     [Fact]
     public async Task AnAnswerThatIsNotAStream_ShowsTheToolNoScreenRatherThanTakingWhatItWillDrop()
     {
-        // The whole-reply shape has no chunk to carry a drawing. Binding a screen it will then throw
+        // The whole-reply shape has no event to carry a drawing. Binding a screen it will then throw
         // away lets the tool report a picture to the model that the caller never sees.
         var hadScreen = true;
 
-        await using var host = await ChatCompletionsHost.StartAsync(
+        await using var host = await ResponsesHost.StartAsync(
             DrawingYaml,
             new DrawingChatClient(),
             configure: options => options.Bind("DrawIt", (TurnInvocation? turn) =>
@@ -131,10 +123,26 @@ public sealed class DrawingWireTests
                 return ValueTask.FromResult<object?>("drew a Card; buttons: none");
             }));
 
-        using var response = await host.PostAsync("show me revenue");
+        using var response = await PostTextAsync(host, "show me revenue");
 
         Assert.False(hadScreen);
     }
+
+    /// <summary>Sends one turn of words.</summary>
+    private static Task<HttpResponseMessage> PostTextAsync(ResponsesHost host, string text, string? conversation = null)
+        => host.PostAsync(conversation is { Length: > 0 }
+            ? $$"""{ "stream": false, "conversation": "{{conversation}}", "input": "{{text}}" }"""
+            : $$"""{ "stream": false, "input": "{{text}}" }""");
+
+    /// <summary>Sends one turn of words and reads the answer as it arrives.</summary>
+    /// <remarks>
+    /// The dialect member opts the stream into the browser parts: without it the frames carry
+    /// text alone and a drawing would never reach the browser.
+    /// </remarks>
+    private static Task<HttpResponseMessage> PostStreamAsync(ResponsesHost host, string text, string? conversation = null)
+        => host.PostAsync(conversation is { Length: > 0 }
+            ? $$"""{ "stream": true, "conversation": "{{conversation}}", "input": "{{text}}", "agentcore": { "message_id": "m1" } }"""
+            : $$"""{ "stream": true, "input": "{{text}}", "agentcore": { "message_id": "m1" } }""");
 
     /// <summary>Calls the first tool it is offered, once, then answers in words.</summary>
     private sealed class DrawingChatClient : IChatClient

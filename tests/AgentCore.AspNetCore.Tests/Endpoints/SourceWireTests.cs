@@ -50,7 +50,7 @@ public sealed class SourceWireTests
     [Fact]
     public async Task AToolThatCites_ReachesTheBrowserOnItsOwnFieldAndNotInTheReply()
     {
-        await using var host = await ChatCompletionsHost.StartAsync(
+        await using var host = await ResponsesHost.StartAsync(
             SourceYaml,
             new SourceCitingChatClient(),
             configure: options => options.Bind("LookItUp", (TurnInvocation? turn) =>
@@ -67,11 +67,10 @@ public sealed class SourceWireTests
                 return ValueTask.FromResult<object?>("E03 is an overcurrent trip.");
             }));
 
-        using var response = await host.PostStreamingAsync("what is E03");
-        var events = await ChatCompletionsHost.ReadEventsAsync(response);
+        using var response = await PostStreamAsync(host, "what is E03");
+        var events = await ResponsesHost.ReadEventsAsync(response);
 
         var cited = events
-            .Where(text => text != "[DONE]")
             .Select(text => JsonDocument.Parse(text).RootElement)
             .Where(chunk => chunk.TryGetProperty("agentcore_source", out var source)
                 && source.ValueKind != JsonValueKind.Null)
@@ -87,12 +86,7 @@ public sealed class SourceWireTests
         Assert.False(string.IsNullOrEmpty(chunk.GetProperty("call_id").GetString()));
 
         // And it is not in what the caller is told. The spoken reply is what the transcript keeps.
-        var spoken = string.Concat(events
-            .Where(text => text != "[DONE]")
-            .Select(text => JsonDocument.Parse(text).RootElement)
-            .Select(chunk => chunk.GetProperty("choices")[0]
-                .GetProperty("delta")
-                .TryGetProperty("content", out var content) ? content.GetString() ?? "" : ""));
+        var spoken = string.Concat(ResponsesHost.TextDeltas(events));
 
         Assert.DoesNotContain("card-42", spoken, StringComparison.Ordinal);
     }
@@ -100,14 +94,14 @@ public sealed class SourceWireTests
     [Fact]
     public async Task AToolThatCitesNothing_WritesNoSourceField()
     {
-        await using var host = await ChatCompletionsHost.StartAsync(
+        await using var host = await ResponsesHost.StartAsync(
             SourceYaml,
             new SourceCitingChatClient(),
             configure: options => options.Bind("LookItUp", (_, _) =>
                 ValueTask.FromResult<object?>("nothing to cite")));
 
-        using var response = await host.PostStreamingAsync("what is E03");
-        var events = await ChatCompletionsHost.ReadEventsAsync(response);
+        using var response = await PostStreamAsync(host, "what is E03");
+        var events = await ResponsesHost.ReadEventsAsync(response);
 
         Assert.DoesNotContain(events, text => text.Contains("agentcore_source", StringComparison.Ordinal));
     }
@@ -120,7 +114,7 @@ public sealed class SourceWireTests
         // call id off "the first FunctionResultContent on the update" rather than off the source
         // itself would silently stamp the second source with the first call's id. This is the
         // regression test for exactly that.
-        await using var host = await ChatCompletionsHost.StartAsync(
+        await using var host = await ResponsesHost.StartAsync(
             SourceYaml,
             new TwoParallelCallsChatClient(),
             configure: options => options.Bind("LookItUp", (string? what, TurnInvocation? turn) =>
@@ -136,11 +130,10 @@ public sealed class SourceWireTests
                 return ValueTask.FromResult<object?>("looked up " + what);
             }));
 
-        using var response = await host.PostStreamingAsync("what is E03");
-        var events = await ChatCompletionsHost.ReadEventsAsync(response);
+        using var response = await PostStreamAsync(host, "what is E03");
+        var events = await ResponsesHost.ReadEventsAsync(response);
 
         var cited = events
-            .Where(text => text != "[DONE]")
             .Select(text => JsonDocument.Parse(text).RootElement)
             .Where(chunk => chunk.TryGetProperty("agentcore_source", out var source)
                 && source.ValueKind != JsonValueKind.Null)
@@ -155,6 +148,16 @@ public sealed class SourceWireTests
         Assert.Equal("call_1", left.GetProperty("call_id").GetString());
         Assert.Equal("call_2", right.GetProperty("call_id").GetString());
     }
+
+    /// <summary>Sends one turn of words and reads the answer as it arrives.</summary>
+    /// <remarks>
+    /// The dialect member opts the stream into the browser parts: without it the frames carry
+    /// text alone and a citation would never reach the browser.
+    /// </remarks>
+    private static Task<HttpResponseMessage> PostStreamAsync(ResponsesHost host, string text, string? conversation = null)
+        => host.PostAsync(conversation is { Length: > 0 }
+            ? $$"""{ "stream": true, "conversation": "{{conversation}}", "input": "{{text}}", "agentcore": { "message_id": "m1" } }"""
+            : $$"""{ "stream": true, "input": "{{text}}", "agentcore": { "message_id": "m1" } }""");
 
     /// <summary>Calls the first tool it is offered, once, then answers in words.</summary>
     /// <remarks>
