@@ -73,7 +73,7 @@ public sealed class StagePolicy
     public PolicyConfiguration Configuration => _policy;
 
     /// <summary>Gets the id of the stage the machine holds.</summary>
-    public string Stage => _machine.State;
+    public string Stage => _stage;
 
     /// <summary>Gets the stage the machine holds.</summary>
     public StageConfiguration CurrentStage => _stages[_machine.State];

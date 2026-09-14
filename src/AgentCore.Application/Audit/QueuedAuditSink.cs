@@ -80,7 +80,7 @@ public sealed class QueuedAuditSink : IAuditSinkPort, IAsyncDisposable, IDisposa
             SingleWriter = false,
         });
 
-        _writer = Task.Run(WriteAsync);
+        _writer = Task.Run(WriteAsync, CancellationToken.None);
     }
 
     /// <inheritdoc />
@@ -153,7 +153,7 @@ public sealed class QueuedAuditSink : IAuditSinkPort, IAsyncDisposable, IDisposa
     {
         try
         {
-            await _writer.WaitAsync(DisposeTimeout).ConfigureAwait(false);
+            await _writer.WaitAsync(DisposeTimeout, CancellationToken.None).ConfigureAwait(false);
             return true;
         }
 #pragma warning disable CA1031 // A drain that failed has already reported itself, and disposal never throws.
@@ -171,7 +171,7 @@ public sealed class QueuedAuditSink : IAuditSinkPort, IAsyncDisposable, IDisposa
     {
         List<AuditEvent> batch = new(_batchSize);
 
-        while (await _queue.Reader.WaitToReadAsync().ConfigureAwait(false))
+        while (await _queue.Reader.WaitToReadAsync(CancellationToken.None).ConfigureAwait(false))
         {
             // Everything waiting goes in one batch, so the store pays one round trip for a burst
             // rather than one for each event of it.

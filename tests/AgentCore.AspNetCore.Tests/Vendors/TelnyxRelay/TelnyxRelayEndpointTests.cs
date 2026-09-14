@@ -131,6 +131,7 @@ public sealed class TelnyxRelayEndpointTests
         relay.Abort();
 
         await host.WaitForCallEndAsync("call-dropped");
+        Assert.Null(await host.FindSessionAsync("call-dropped"));
     }
 
     [Fact(Timeout = 30_000)]

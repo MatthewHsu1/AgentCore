@@ -67,6 +67,6 @@ public static class CallEndpointRouteBuilderExtensions
             Title = "This host routes no inbound call.",
             Detail = reason,
             Instance = pattern,
-        }).ConfigureAwait(false);
+        }, http.RequestAborted).ConfigureAwait(false);
     }
 }

@@ -126,12 +126,7 @@ internal static class AgentDelegationTool
                 return null;
             }
 
-            foreach (var property in properties.EnumerateObject())
-            {
-                return property.Name;
-            }
-
-            return null;
+            return properties.EnumerateObject().Select(property => property.Name).FirstOrDefault();
         }
 
     }

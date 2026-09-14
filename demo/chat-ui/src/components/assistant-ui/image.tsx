@@ -302,10 +302,6 @@ function ImageZoom({ src, alt = "Image preview", children }: ImageZoomProps) {
               src={src}
               alt={alt}
               className="aui-image-zoom-content fade-in zoom-in-95 animate-in max-h-[90vh] max-w-[90vw] cursor-zoom-out object-contain duration-200"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleClose();
-              }}
             />
           </div>,
           document.body,

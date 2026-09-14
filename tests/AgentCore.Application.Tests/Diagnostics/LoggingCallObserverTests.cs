@@ -174,11 +174,12 @@ public sealed class LoggingCallObserverTests
     public async Task NoLogger_IsStillAnObserver()
     {
         // The library never throws for want of one.
-        LoggingCallObserver observer = new();
-
-        await observer.OnCallEventAsync(
+        var pending = new LoggingCallObserver().OnCallEventAsync(
             Event(CallEventKind.EmptyReply, turnIndex: 0),
             TestContext.Current.CancellationToken);
+
+        await pending;
+        Assert.True(pending.IsCompletedSuccessfully);
     }
 
     [Fact]

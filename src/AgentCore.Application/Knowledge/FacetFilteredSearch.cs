@@ -85,12 +85,7 @@ internal sealed class FacetFilteredSearch : DelegatingAIFunction
             return null;
         }
 
-        foreach (var property in properties.EnumerateObject())
-        {
-            return property.Name;
-        }
-
-        return null;
+        return properties.EnumerateObject().Select(property => property.Name).FirstOrDefault();
     }
 
     private static string? QueryText(object? value)

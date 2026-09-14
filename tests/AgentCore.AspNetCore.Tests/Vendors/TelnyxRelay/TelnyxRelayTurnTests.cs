@@ -378,6 +378,7 @@ public sealed class TelnyxRelayTurnTests
         relay.Abort();
 
         await host.WaitForCallEndAsync("call-dropped");
+        Assert.Null(await host.FindSessionAsync("call-dropped"));
     }
 }
 
