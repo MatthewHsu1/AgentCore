@@ -73,8 +73,6 @@ public static class ResponsesEndpointRouteBuilderExtensions
     }
 
     /// <summary>Runs one turn of one call, and files the session under the ids the answer carries.</summary>
-    /// <param name="http">The request.</param>
-    /// <returns>A task that completes when the answer is written.</returns>
     private static async Task HandleAsync(HttpContext http)
     {
         var cancellationToken = http.RequestAborted;
@@ -101,8 +99,11 @@ public static class ResponsesEndpointRouteBuilderExtensions
         var agentcore = ResponsesAgentCore.ReadRequest(body);
 
         OpenAIResponsesRunRequest? runRequest;
+
         string? conversationId;
+
         IReadOnlyList<ChatMessage> messages;
+
         try
         {
             runRequest = OpenAIResponses.ToAgentRunRequest(body);
@@ -135,12 +136,32 @@ public static class ResponsesEndpointRouteBuilderExtensions
         var sessions = http.RequestServices.GetRequiredService<AgentCoreAgentSessionStore>();
 
         // The continuation this turn hangs off, or null for the first turn of a call.
+        // A conversation id names the call itself; a response id names one past turn of it.
         // The helper prefers the response chain over the conversation, exactly as the
         // protocol treats them as mutually exclusive; the refused-parse fallback reads
         // the same precedence off the body.
         var key = runRequest is not null
             ? OpenAIResponses.GetSessionStoreId(runRequest)
             : ReadContinuationId(body);
+
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            key = null;
+        }
+
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            conversationId = null;
+        }
+
+        var known = key is not null
+            && await sessions.ContainsAsync(key, cancellationToken).ConfigureAwait(false);
+
+        var namesNewCall = key is not null
+            && !known
+            && string.Equals(key, conversationId, StringComparison.Ordinal)
+            && conversationId is not null
+            && agentcore?.Approval is null;
 
         AgentSession session;
         if (key is null)
@@ -158,14 +179,25 @@ public static class ResponsesEndpointRouteBuilderExtensions
                 return;
             }
 
-            session = await agent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
+            conversationId = NewConversationId();
+            session = await agent.CreateSessionAsync(conversationId, cancellationToken).ConfigureAwait(false);
         }
-        else if (await sessions.ContainsAsync(key, cancellationToken).ConfigureAwait(false))
+        else if (namesNewCall)
+        {
+            // Unknown conversation with words: start the call under that id, so the conversation,
+            // the call, and the continuation key are one id. Unknown response ids stay 404 below:
+            // they name a turn, not a call.
+            session = await agent.CreateSessionAsync(key, cancellationToken).ConfigureAwait(false);
+        }
+        else if (known)
         {
             session = await sessions.GetSessionAsync(agent, key, cancellationToken).ConfigureAwait(false);
         }
         else
         {
+            // Either an unknown response id — a turn no answer ever carried — or an unknown
+            // conversation beside an approval-only body the parse refused. A conversation with words
+            // reaches the namesNewCall branch; an approval never starts a call.
             await WriteErrorAsync(
                 http,
                 StatusCodes.Status404NotFound,
@@ -174,6 +206,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
                 "invalid_request_error",
                 "continuation_not_found",
                 cancellationToken).ConfigureAwait(false);
+
             return;
         }
 
@@ -237,12 +270,10 @@ public static class ResponsesEndpointRouteBuilderExtensions
         var streaming = body.TryGetProperty("stream", out var streamFlag)
             && streamFlag.ValueKind == JsonValueKind.True;
 
-        // A conversation the request named stays the conversation; a first turn mints
-        // one so the answer carries something a later turn can hang off. A response id
-        // is minted every turn either way, so a chain can start from any answer.
+        // A conversation the request named stays the conversation; a keyless first turn minted
+        // one alongside the session above. A response id is minted every turn either way, so a
+        // chain can start from any answer.
         var responseId = OpenAIResponses.CreateResponseId();
-        conversationId = conversationId
-            ?? (key is null ? NewConversationId() : null);
 
         // Only the stream has a chunk to carry a drawing, for the same reason the chat
         // endpoint binds its screen per branch: the session outlives a request and the
@@ -306,10 +337,13 @@ public static class ResponsesEndpointRouteBuilderExtensions
         };
 
         var rendered = OpenAIResponses.WriteResponse(response, responseId, conversationId);
+
         // The render is a closed JsonElement, so the turn facts go on as JSON: the object
         // the framework wrote, with the metadata member replaced by ours beside its own.
+
         var node = JsonNode.Parse(rendered.GetRawText())!.AsObject();
         JsonObject metadata = node["metadata"]?.AsObject() ?? [];
+
         foreach (var (name, value) in ResponsesAgentCore.TurnMetadata(call, turn))
         {
             metadata[name] = value;
@@ -319,6 +353,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
 
         http.Response.StatusCode = StatusCodes.Status200OK;
         http.Response.Headers[StageHeaderName] = turn.StageAfter;
+        
         await http.Response
             .WriteAsJsonAsync(node, cancellationToken)
             .ConfigureAwait(false);

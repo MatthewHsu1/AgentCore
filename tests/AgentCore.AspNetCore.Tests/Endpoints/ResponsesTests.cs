@@ -119,13 +119,34 @@ public sealed class ResponsesTests
     }
 
     [Fact]
-    public async Task UnknownContinuation_ReturnsNotFound()
+    public async Task UnknownConversation_StartsTheCallUnderThatId()
+    {
+        using FragmentingChatClient reply = new("answer one", "answer two");
+        await using var host = await ResponsesHost.StartAsync(TwoStagesYaml, reply);
+
+        using var first = await host.PostAsync(
+            """{ "stream": false, "conversation": "thread-7", "input": "first question" }""");
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        var firstBody = await ResponsesHost.ReadJsonAsync(first);
+        Assert.Equal("thread-7", firstBody.ContinuationId());
+        Assert.Equal("thread-7", firstBody["metadata"]!["call_id"]!.GetValue<string>());
+
+        using var second = await host.PostAsync(
+            """{ "stream": false, "conversation": "thread-7", "input": "second question" }""");
+
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        Assert.Contains("answer two", (await ResponsesHost.ReadJsonAsync(second)).OutputText(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UnknownResponseId_ReturnsNotFound()
     {
         using FragmentingChatClient reply = new("answer one");
         await using var host = await ResponsesHost.StartAsync(TwoStagesYaml, reply);
 
         using var response = await host.PostAsync(
-            """{ "stream": false, "conversation": "conv_doesnotexist", "input": "hello" }""");
+            """{ "stream": false, "previous_response_id": "resp_doesnotexist", "input": "hello" }""");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }

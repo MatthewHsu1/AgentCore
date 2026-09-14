@@ -200,6 +200,24 @@ public sealed class PostgresCallStoreTests : PostgresDatabaseTest
     }
 
     [PostgresFact]
+    public async Task DeleteAsync_ACall_TakesItsSameIdContinuationWithIt()
+    {
+        // Arrange — one id plays three roles now, so the row delete takes the key with it. Per-turn
+        // response ids are gone with their own rows only through DeleteContinuationAsync; nothing
+        // here enumerates them.
+        PostgresCallStore store = new(DataSource);
+        await store.CreateAsync("c1", Token);
+        using var document = System.Text.Json.JsonDocument.Parse("""{ "callId": "c1" }""");
+        await store.SaveContinuationAsync("c1", document.RootElement, Token);
+
+        // Act
+        await store.DeleteAsync("c1", Token);
+
+        // Assert
+        Assert.Null(await store.GetContinuationAsync("c1", Token));
+    }
+
+    [PostgresFact]
     public async Task DeleteAsync_ACallThatWasNeverMade_IsNotAThrow()
     {
         // Arrange

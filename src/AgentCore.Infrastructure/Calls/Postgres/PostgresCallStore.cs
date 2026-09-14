@@ -107,6 +107,10 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
         await using var command = _dataSource.CreateCommand(DeleteSql);
         command.Parameters.Add(new NpgsqlParameter { Value = callId });
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var continuation = _dataSource.CreateCommand(DeleteContinuationSql);
+        continuation.Parameters.Add(new NpgsqlParameter { Value = callId });
+        await continuation.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -171,9 +175,19 @@ internal sealed class PostgresCallStore : ICallStore, IAsyncDisposable
 
         while (true)
         {
+            await using var continuations = _dataSource.CreateCommand(SweepContinuationsSql);
+
+            continuations.Parameters.Add(
+                new NpgsqlParameter { Value = retention, NpgsqlDbType = NpgsqlDbType.Interval });
+
+            continuations.Parameters.Add(new NpgsqlParameter { Value = batchSize });
+            await continuations.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
             await using var command = _dataSource.CreateCommand(SweepSql);
+
             command.Parameters.Add(
                 new NpgsqlParameter { Value = retention, NpgsqlDbType = NpgsqlDbType.Interval });
+                
             command.Parameters.Add(new NpgsqlParameter { Value = batchSize });
 
             var deleted = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);

@@ -61,7 +61,7 @@ public sealed class InMemoryCallStore : ICallStore
         lock (_lock)
         {
             var call = _calls.GetValueOrDefault(callId);
-            
+
             return ValueTask.FromResult(call is null
                 ? null
                 : call with
@@ -149,14 +149,17 @@ public sealed class InMemoryCallStore : ICallStore
     {
         ArgumentNullException.ThrowIfNull(callId);
 
-        lock (_lock)
-        {
-            _calls.Remove(callId);
-            _claims.RemoveWhere(claim => claim.CallId == callId);
-            _state.Remove(callId);
-            _nextOrdinal.Remove(callId);
-            RemoveWords(callId);
-        }
+        _calls.Remove(callId);
+
+        _claims.RemoveWhere(claim => claim.CallId == callId);
+
+        _state.Remove(callId);
+
+        _nextOrdinal.Remove(callId);
+
+        _continuations.Remove(callId);
+
+        RemoveWords(callId);
 
         return default;
     }
@@ -186,9 +189,15 @@ public sealed class InMemoryCallStore : ICallStore
             foreach (var callId in going)
             {
                 _calls.Remove(callId);
+
                 _claims.RemoveWhere(claim => claim.CallId == callId);
+
                 _state.Remove(callId);
+
                 _nextOrdinal.Remove(callId);
+
+                _continuations.Remove(callId);
+
                 RemoveWords(callId);
             }
 

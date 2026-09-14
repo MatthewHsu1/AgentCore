@@ -164,6 +164,20 @@ internal static class PostgresCallStoreSql
         """;
 
     /// <summary>Deletes one batch of calls that have aged out whole.</summary>
+    internal static readonly string SweepContinuationsSql =
+        $"""
+        DELETE FROM {Schema}.response_continuation
+        WHERE store_id IN (
+          SELECT call_id FROM (
+            SELECT c.call_id
+              FROM {Schema}.call c
+              {ActivityJoin}
+             WHERE {SortAt} < now() - $1
+             LIMIT $2
+          ) q)
+        """;
+
+    /// <summary>Deletes one batch of calls that have aged out whole.</summary>
     internal static readonly string SweepSql =
         $"""
         DELETE FROM {Schema}.call
