@@ -44,15 +44,22 @@ type Phase = "closed" | "teaser" | "open";
  * posts what it needs and `embed.js` applies it. Without this the frame would be stuck at whatever
  * size it was created with, and either clip the open panel or leave a 400px invisible rectangle
  * over the host page swallowing clicks while the bubble is closed.
+ *
+ * The message goes to the embedding page named by document.referrer. Hosts that suppress
+ * referrers get "*" instead; the payload is two numbers, and embed.js checks origin and shape.
  */
 function useFrameSize(phase: Phase) {
   useEffect(() => {
     const size = SIZE[phase];
-    // "*" rather than a fixed origin: the widget is embedded on sites it cannot know the names of,
-    // and the message carries no secret — only two numbers.
+    let target = "*";
+    try {
+      if (document.referrer) target = new URL(document.referrer).origin;
+    } catch {
+      target = "*";
+    }
     window.parent?.postMessage(
       { source: "agentcore-widget", type: "resize", ...size },
-      "*",
+      target,
     );
   }, [phase]);
 }

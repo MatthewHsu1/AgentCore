@@ -121,6 +121,10 @@ internal static class StateDomain
     /// <param name="domains">The slot domains.</param>
     /// <param name="count">How many points to take.</param>
     /// <returns>The sampled points. The seed is fixed, so a build repeats.</returns>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Security",
+        "S2245",
+        Justification = "Fixed-seed sampling of validation points. Repeatability is required; not a security use.")]
     public static IEnumerable<Dictionary<string, JsonNode?>> Sample(IReadOnlyList<SlotDomain> domains, int count)
     {
         ArgumentNullException.ThrowIfNull(domains);

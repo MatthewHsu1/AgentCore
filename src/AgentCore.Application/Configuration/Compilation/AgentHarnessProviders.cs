@@ -384,7 +384,7 @@ internal static class AgentHarnessProviders
     {
         try
         {
-            _ = new Regex(pattern);
+            _ = new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(1));
             return true;
         }
         catch (ArgumentException)

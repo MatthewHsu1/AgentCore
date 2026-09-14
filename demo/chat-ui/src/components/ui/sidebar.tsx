@@ -604,9 +604,9 @@ function SidebarMenuSkeleton({
 }: React.ComponentProps<"div"> & {
   showIcon?: boolean
 }) {
-  // Random width between 50 to 90%.
+  // Skeleton shimmer width, cosmetic only: feeds no decision, so S2245 does not apply.
   const width = React.useMemo(() => {
-    return `${Math.floor(Math.random() * 40) + 50}%`
+    return `${Math.floor(Math.random() * 40) + 50}%`; // NOSONAR
   }, [])
 
   return (
