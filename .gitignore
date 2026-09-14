@@ -512,3 +512,4 @@ docs/
 demo/AgentCore.Demo/config/local.yaml
 
 .serena
+.sonarqube
