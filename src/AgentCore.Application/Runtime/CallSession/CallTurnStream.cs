@@ -39,23 +39,18 @@ internal sealed class CallTurnStream
             List<AgentResponseUpdate> updates = [];
             string? toolFault = null;
 
-            // This scope covers opening the run's session and building the stream, and reaches no
-            // round: an async iterator restores its caller's execution context at every yield.
-            using var opening = _session.Runner.EnterAmbients(turn);
-
             var invocation = _session.Runner.TurnInvocationOf(turn);
             var runSession = await _session.Runner.RunSessionAsync(turn, cancellation.Token).ConfigureAwait(false);
+            
             TurnRegistry.Set(runSession, invocation);
 
-            var stream = ScopedEnumerator.Over(
-                turn.Agent
-                    .RunStreamingAsync(
-                        turn.Request,
-                        runSession,
-                        invocation.RunOptions(),
-                        cancellationToken: cancellation.Token)
-                    .GetAsyncEnumerator(cancellation.Token),
-                () => _session.Runner.EnterAmbients(turn));
+            var stream = turn.Agent
+                .RunStreamingAsync(
+                    turn.Request,
+                    runSession,
+                    invocation.RunOptions(),
+                    cancellationToken: cancellation.Token)
+                .GetAsyncEnumerator(cancellation.Token);
 
             try
             {

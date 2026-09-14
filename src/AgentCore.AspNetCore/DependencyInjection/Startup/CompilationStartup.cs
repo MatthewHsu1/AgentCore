@@ -5,7 +5,6 @@ using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Skills;
 using AgentCore.Application.Tools.Registry;
 using Microsoft.Extensions.Logging;
@@ -65,7 +64,6 @@ internal static class CompilationStartup
                 Guards = guards,
                 Moderation = PromptModerator.FromRegistry(evaluators),
                 CallStore = calls,
-                StateSnapshot = CallStateScope.Snapshot,
                 Knowledge = knowledge,
                 Skills = skills,
                 Citations = citations,

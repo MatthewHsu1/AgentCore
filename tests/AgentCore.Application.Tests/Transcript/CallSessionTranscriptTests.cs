@@ -158,8 +158,8 @@ public sealed class CallSessionTranscriptTests
     /// Drives a real turn end to end through <see cref="CallSession"/>, with a screen bound and a
     /// real tool that draws through it, and reads what store 1 actually kept. Every other render
     /// test in this suite hand-rolls collectors, so none of them would notice a broken wire between
-    /// <see cref="CallSession.EnterAmbients"/> and the turn's renders — this is the one test that
-    /// goes through that wire itself.
+    /// the turn's invocation and its renders — this is the one test that goes through that wire
+    /// itself.
     /// </summary>
     [Fact]
     public async Task ATurnThatDrawsWithAScreenBound_StoresTheRenderContentOnTheToolResultRow()

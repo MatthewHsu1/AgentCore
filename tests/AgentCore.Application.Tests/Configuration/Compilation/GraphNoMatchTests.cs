@@ -6,6 +6,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.State;
 using AgentCore.Application.Tests.Fakes;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
 
@@ -67,10 +68,10 @@ public sealed class GraphNoMatchTests
     public async Task Row4_AGraphWhereNoEdgeGuardIsTrue_ThrowsInsteadOfAnsweringNothing()
     {
         using Harness harness = new();
-        using var scope = CallStateScope.Enter(harness.NewState(escalate: false));
 
         var failure = await Record.ExceptionAsync(() => harness.Compiled.Agent.RunAsync(
-            "hello", cancellationToken: TestContext.Current.CancellationToken));
+            "hello", null, harness.StateOptions(escalate: false),
+            cancellationToken: TestContext.Current.CancellationToken));
 
         Assert.IsType<InvalidOperationException>(failure);
         Assert.Contains("no-match-graph", failure.Message, StringComparison.Ordinal);
@@ -81,14 +82,14 @@ public sealed class GraphNoMatchTests
     public async Task Row4_AGraphWhereNoEdgeGuardIsTrue_ThrowsWhileStreamingToo()
     {
         using Harness harness = new();
-        using var scope = CallStateScope.Enter(harness.NewState(escalate: false));
 
         // The streaming path hands the updates over one at a time, so the check reads them as they
         // pass and throws after the last one. A caller that enumerates to the end sees the fault.
         var failure = await Record.ExceptionAsync(async () =>
         {
             await foreach (var update in harness.Compiled.Agent.RunStreamingAsync(
-                "hello", cancellationToken: TestContext.Current.CancellationToken))
+                "hello", null, harness.StateOptions(escalate: false),
+                cancellationToken: TestContext.Current.CancellationToken))
             {
                 _ = update;
             }
@@ -102,10 +103,10 @@ public sealed class GraphNoMatchTests
     public async Task Row4_AGraphWhereAnEdgeGuardIsTrue_StillAnswers()
     {
         using Harness harness = new();
-        using var scope = CallStateScope.Enter(harness.NewState(escalate: true));
 
         var reply = await harness.Compiled.Agent.RunAsync(
-            "hello", cancellationToken: TestContext.Current.CancellationToken);
+            "hello", null, harness.StateOptions(escalate: true),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // The check sits in front of nothing. A run that produced text is the run it always was.
         Assert.Contains(EscalatedReply, reply.Text, StringComparison.Ordinal);
@@ -115,11 +116,11 @@ public sealed class GraphNoMatchTests
     public async Task Row4_AGraphWhereAnEdgeGuardIsTrue_StillStreams()
     {
         using Harness harness = new();
-        using var scope = CallStateScope.Enter(harness.NewState(escalate: true));
 
         List<string> text = [];
         await foreach (var update in harness.Compiled.Agent.RunStreamingAsync(
-            "hello", cancellationToken: TestContext.Current.CancellationToken))
+            "hello", null, harness.StateOptions(escalate: true),
+            cancellationToken: TestContext.Current.CancellationToken))
         {
             text.Add(update.Text);
         }
@@ -191,7 +192,6 @@ public sealed class GraphNoMatchTests
                 new AgentCompilationContext(models)
                 {
                     Guards = guards,
-                    StateSnapshot = CallStateScope.Snapshot,
                 });
 
             _sessions = new CallSessionFactory(Compiled, guards);
@@ -208,6 +208,28 @@ public sealed class GraphNoMatchTests
             StateDocument state = new(_document);
             state.TryWrite("escalate", escalate);
             return state;
+        }
+
+        /// <summary>Files one call's state on a bare run's options, the way the turn loop files it.</summary>
+        /// <param name="escalate">What the guard <c>wants_human</c> reads.</param>
+        /// <returns>Run options carrying the turn the graph-state wrapper reads.</returns>
+        public ChatClientAgentRunOptions StateOptions(bool escalate)
+        {
+            TurnInvocation invocation = new()
+            {
+                CallId = "test-call",
+                TurnIndex = 0,
+                Stage = string.Empty,
+                State = NewState(escalate),
+            };
+
+            return new ChatClientAgentRunOptions(new ChatOptions
+            {
+                AdditionalProperties = new AdditionalPropertiesDictionary
+                {
+                    [TurnInvocation.ArgumentsKey] = invocation,
+                },
+            });
         }
 
         /// <summary>Builds the session of one more call.</summary>

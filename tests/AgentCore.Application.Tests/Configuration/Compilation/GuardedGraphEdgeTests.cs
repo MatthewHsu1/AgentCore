@@ -17,8 +17,9 @@ namespace AgentCore.Application.Tests.Configuration.Compilation;
 /// <para>
 /// Two rules pull apart here. T44 makes the compiled agent a process singleton, so one graph serves
 /// every call and no code path compiles one for each call. A guarded edge reads the state of one
-/// call, and each call owns its own state document. <see cref="CallStateScope"/> is the seam that
-/// holds both: the predicate captures nothing and asks the flow of execution instead.
+/// call, and each call owns its own state document. The graph-state wrapper files the turn's
+/// snapshot on the run and a gate executor reads it back, so the compiled graph captures nothing
+/// per call and concurrent calls never share it.
 /// </para>
 /// <para>
 /// Every test here runs offline. There is no network call and no API key in this file.
@@ -123,8 +124,8 @@ public sealed class GuardedGraphEdgeTests
             text.Add(update.Text);
         }
 
-        // An async iterator restores the execution context of its caller at every yield. The turn
-        // loop therefore opens the scope once for each round, and this asserts that it does.
+        // The turn's snapshot rides the run's own messages, so the streaming path needs no
+        // per-step scope to route: the gate reads what the entry filed before the first model call.
         Assert.Contains(EscalatedReply, string.Concat(text), StringComparison.Ordinal);
         Assert.DoesNotContain(HandledReply, string.Concat(text), StringComparison.Ordinal);
     }
@@ -165,18 +166,18 @@ public sealed class GuardedGraphEdgeTests
     }
 
     [Fact]
-    public async Task AGuardedEdgeWithNoAmbientState_FailsLoudlyAndNeverAnswersFalse()
+    public async Task AGuardedEdgeWithNoFiledState_FailsLoudlyAndNeverAnswersFalse()
     {
         using Harness harness = new();
 
-        // The run goes straight at the shared graph, with no call scope anywhere. A guarded edge that
-        // quietly became unconditional is the silent graph failure section 8.2 refuses to ship, so
-        // the predicate throws instead.
+        // The run goes straight at the shared graph, with no turn filed on it anywhere. A guarded
+        // edge that quietly became unconditional is the silent graph failure section 8.2 refuses
+        // to ship, so the wrapper throws instead.
         var failure = await Record.ExceptionAsync(() => harness.Compiled.Agent.RunAsync(
             "hello", cancellationToken: TestContext.Current.CancellationToken));
 
         Assert.NotNull(failure);
-        Assert.Contains(CallStateScope.NoScopeMessage, Flatten(failure), StringComparison.Ordinal);
+        Assert.Contains(GraphGuardGate.NoStateMessage, Flatten(failure), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -226,31 +227,11 @@ public sealed class GuardedGraphEdgeTests
     }
 
     [Fact]
-    public void AGuardedEdgeWithNoStateSource_IsALoadTimeErrorThatNamesTheMissingSeam()
-    {
-        var document = ConfigurationLoader.LoadYaml(GuardedGraphYaml);
-        using ScriptedChatClient client = new("ok");
-        AgentCompilationContext context = new(new FakeChatClientFactory(client))
-        {
-            Guards = new GuardEvaluator(document.Guards),
-        };
-
-        var failure = Assert.Throws<ConfigurationLoadException>(
-            () => ConfigurationCompiler.Compile(document, context));
-
-        Assert.Equal("/graph/edges/0/when", failure.Pointer);
-        Assert.Contains("binds no state source", failure.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void AGuardedEdgeWithNoEvaluator_IsALoadTimeErrorThatNamesTheMissingSeam()
     {
         var document = ConfigurationLoader.LoadYaml(GuardedGraphYaml);
         using ScriptedChatClient client = new("ok");
-        AgentCompilationContext context = new(new FakeChatClientFactory(client))
-        {
-            StateSnapshot = CallStateScope.Snapshot,
-        };
+        AgentCompilationContext context = new(new FakeChatClientFactory(client));
 
         var failure = Assert.Throws<ConfigurationLoadException>(
             () => ConfigurationCompiler.Compile(document, context));
@@ -281,8 +262,8 @@ public sealed class GuardedGraphEdgeTests
     /// One compiled graph, wired the way the composition root wires it.
     /// </summary>
     /// <remarks>
-    /// The seams are the two <c>AddAgentCore</c> binds: the shared guard evaluator, and
-    /// <see cref="CallStateScope.Snapshot"/> as the state source. Nothing per call is captured.
+    /// The seam is the one <c>AddAgentCore</c> bind: the shared guard evaluator. Nothing per call
+    /// is captured: the turn's snapshot rides each run.
     /// </remarks>
     private sealed class Harness : IDisposable
     {
@@ -317,7 +298,6 @@ public sealed class GuardedGraphEdgeTests
                 new AgentCompilationContext(models)
                 {
                     Guards = guards,
-                    StateSnapshot = CallStateScope.Snapshot,
                 });
 
             _sessions = new CallSessionFactory(Compiled, guards);

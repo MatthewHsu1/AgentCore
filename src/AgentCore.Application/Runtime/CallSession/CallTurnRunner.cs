@@ -63,12 +63,10 @@ internal sealed class CallTurnRunner
 
         try
         {
-            using var ambients = EnterAmbients(turn);
-            // The turn travels on the run's own options from here to the invoking client, one
-            // value per turn, and in the session-keyed registry from here to the providers —
-            // keyed by the session the run actually gets, which a graph row re-creates per turn.
             var invocation = TurnInvocationOf(turn);
+
             var runSession = await RunSessionAsync(turn, cancellation.Token).ConfigureAwait(false);
+            
             TurnRegistry.Set(runSession, invocation);
 
             AgentResponse response;
@@ -137,9 +135,9 @@ internal sealed class CallTurnRunner
         try
         {
             // After both guards: a turn refused as terminal or already-running must not drop the
-            // probe latch out from under the turn actually in flight. Runs exactly once here, and
-            // never in EnterAmbients, which reopens per streaming step and would drop the latch
-            // several times inside one streaming turn.
+            // probe latch out from under the turn actually in flight. Runs exactly once here, in
+            // BeginTurn, and never per streaming step, which would drop the latch several times
+            // inside one streaming turn.
             _session.Clarifications.BeginTurn();
 
             // Behind both guards, because the withdrawal deletes: a turn refused for a terminal call or
@@ -280,13 +278,6 @@ internal sealed class CallTurnRunner
         return await turn.Agent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// Opens the state scope this turn runs under, so guarded graph edges read this call.
-    /// </summary>
-    /// <param name="turn">The turn about to run.</param>
-    /// <returns>The scope. Disposing it closes the state scope.</returns>
-    internal IDisposable EnterAmbients(CallTurn turn) => CallStateScope.Enter(_session.State);
-
     /// <summary>Builds the invocation one turn hands its tools.</summary>
     /// <param name="turn">The turn about to run.</param>
     /// <returns>Everything a tool of this turn may need, as one explicit value.</returns>
@@ -309,5 +300,6 @@ internal sealed class CallTurnRunner
             OnToolFailure = failure => _session.Events.RaiseToolFailure(turn.Index, failure),
             Tools = _delegatedTools?.Tools,
             ToolsFor = _delegatedTools?.ToolId,
+            State = _session.State,
         };
 }

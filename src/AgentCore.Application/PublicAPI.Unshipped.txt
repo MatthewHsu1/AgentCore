@@ -163,8 +163,6 @@ AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Moderati
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Moderation.init -> void
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Skills.get -> AgentCore.Application.Skills.SkillCatalog?
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Skills.init -> void
-AgentCore.Application.Configuration.Compilation.AgentCompilationContext.StateSnapshot.get -> System.Func<System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>!>?
-AgentCore.Application.Configuration.Compilation.AgentCompilationContext.StateSnapshot.init -> void
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Tools.get -> AgentCore.Application.Tools.Registry.ToolRegistry?
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Tools.init -> void
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.WorkspaceRoot.get -> string?
@@ -1243,7 +1241,6 @@ AgentCore.Application.Runtime.CallSession.Workspace.get -> string?
 AgentCore.Application.Runtime.CallSessionFactory
 AgentCore.Application.Runtime.CallSessionFactory.CallSessionFactory(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Configuration.Validation.IGuardEvaluator! guards, AgentCore.Application.State.StateExtractor? extractor = null, System.TimeProvider? timeProvider = null, Microsoft.Extensions.Logging.ILogger? logger = null, System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ICallObserver!>? observers = null, string? workspaceRoot = null) -> void
 AgentCore.Application.Runtime.CallSessionFactory.Create(string? callId = null, AgentCore.Application.Calls.CallSessionState? state = null) -> AgentCore.Application.Runtime.CallSession!
-AgentCore.Application.Runtime.CallStateScope
 AgentCore.Application.Runtime.CallTurnOrigin
 AgentCore.Application.Runtime.CallTurnOrigin.<Clone>$() -> AgentCore.Application.Runtime.CallTurnOrigin!
 AgentCore.Application.Runtime.CallTurnOrigin.CallTurnOrigin(string? MessageId, string? ParentMessageId) -> void
@@ -1985,8 +1982,6 @@ static AgentCore.Application.Runtime.CallEvent.operator !=(AgentCore.Application
 static AgentCore.Application.Runtime.CallEvent.operator ==(AgentCore.Application.Runtime.CallEvent? left, AgentCore.Application.Runtime.CallEvent? right) -> bool
 static AgentCore.Application.Runtime.CallObservers.Standard(AgentCore.Application.Ports.IAuditSinkPort! auditSink, Microsoft.Extensions.Logging.ILogger? logger, System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ICallObserver!>? hostObservers = null) -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.ICallObserver!>!
 static AgentCore.Application.Runtime.CallSessionFactory.CreateExtractor(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Ports.IChatClientFactory! chatClients) -> AgentCore.Application.State.StateExtractor?
-static AgentCore.Application.Runtime.CallStateScope.Enter(AgentCore.Application.State.StateDocument! state) -> System.IDisposable!
-static AgentCore.Application.Runtime.CallStateScope.Snapshot() -> System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>!
 static AgentCore.Application.Runtime.CallTurnOrigin.operator !=(AgentCore.Application.Runtime.CallTurnOrigin? left, AgentCore.Application.Runtime.CallTurnOrigin? right) -> bool
 static AgentCore.Application.Runtime.CallTurnOrigin.operator ==(AgentCore.Application.Runtime.CallTurnOrigin? left, AgentCore.Application.Runtime.CallTurnOrigin? right) -> bool
 static AgentCore.Application.Secrets.ResolvedSecrets.Create(System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string!, string!>>! secrets) -> AgentCore.Application.Secrets.ResolvedSecrets!

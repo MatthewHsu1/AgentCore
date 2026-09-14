@@ -108,8 +108,7 @@ public sealed class KnowledgeScopeThroughCallSessionTests
     [Fact]
     public async Task RunTurnStreamingAsync_UnderAHostScope_TheStoreStillSeesThatScope()
     {
-        // The streaming path enters the ambients a second time, once per step, through
-        // ScopedEnumerator. That re-entry drops whatever the first entry dropped, so it needs its own
+        // The streaming path runs the same turn through a second enumeration, so it needs its own
         // fact rather than an argument from the non-streaming one.
         using SequencedChatClient reply = new("hello there.");
         var port = new StubKnowledgePort([Card("a")]);

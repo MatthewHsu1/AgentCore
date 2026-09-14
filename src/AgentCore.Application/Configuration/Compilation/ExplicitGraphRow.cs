@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Runtime;
@@ -70,8 +69,12 @@ internal sealed class ExplicitGraphRow : CompileTableRow
                 $"the graph declares {starts.Count} start nodes. Check 7 of section 8.5 needs exactly one.");
         }
 
-        WorkflowBuilder builder = new(nodes[starts[0].Id]);
-        Func<IReadOnlyDictionary<string, JsonNode?>>? guardedState = null;
+        var entry = ExecutorBindingExtensions.BindExecutor(new GraphStateEntry());
+
+        WorkflowBuilder builder = new(entry);
+        builder = builder.AddEdge(entry, nodes[starts[0].Id]);
+        
+        var guarded = false;
 
         for (var index = 0; index < graph.Edges.Count; index++)
         {
@@ -98,24 +101,32 @@ internal sealed class ExplicitGraphRow : CompileTableRow
                 continue;
             }
 
-            if (context.Guards is not { } evaluator || context.StateSnapshot is not { } snapshot)
+            if (context.Guards is not { } evaluator)
             {
                 throw ConfigurationCompiler.Fail(
                     ConfigurationError.AppendPointer(pointer, "when"),
-                    $"the edge carries a guard, and the compilation context binds {Missing(context)}. Bind "
-                    + "both: AgentCompilationContext.Guards runs the rule, and "
-                    + "AgentCompilationContext.StateSnapshot reads the state of the call that runs now. "
-                    + "AddAgentCore binds them to GuardEvaluator and to CallStateScope.Snapshot. A guarded "
-                    + "edge that silently became unconditional is exactly the silent graph failure "
-                    + "section 8.2 refuses to ship.");
+                    "the edge carries a guard, and the compilation context binds no guard evaluator. Bind "
+                    + "AgentCompilationContext.Guards, which runs the rule. AddAgentCore binds it to "
+                    + "GuardEvaluator. A guarded edge that silently became unconditional is exactly "
+                    + "the silent graph failure section 8.2 refuses to ship.");
             }
+            // One gate per guarded edge, holding the run until its guard is true. The gate is a
+            // workflow executor rather than an edge predicate because the predicate only ever sees
+            // the edge message: per-call state reaches the gate through the run, filed by the
+            // graph-state entry. object, not List<ChatMessage>: the guard reads state, so every
+            // message on the edge takes the same answer and the turn token is not filtered out.
+            var gate = new FunctionExecutor<object>(
+                $"agentcore-gate-{index}",
+                (message, gateContext, gateToken) => GraphGuardGate.RouteAsync(
+                    message, gateContext, guard, evaluator, gateToken),
+                null,
+                [typeof(object)],
+                null,
+                true);
 
-            // The predicate captures no state of its own. The compiled graph is a process singleton
-            // under T44, so it asks the context for the state of the call that runs now. object, not
-            // List<ChatMessage>: the guard reads state, so every message on the edge takes the same
-            // answer and the turn token is not filtered out.
-            builder = builder.AddEdge<object>(from, to, _ => evaluator.Evaluate(guard, snapshot()));
-            guardedState = snapshot;
+            builder = builder.AddEdge(from, gate);
+            builder = builder.AddEdge(gate, to);
+            guarded = true;
         }
 
         if (outputs.Count > 0)
@@ -128,8 +139,9 @@ internal sealed class ExplicitGraphRow : CompileTableRow
                               .AsAIAgent(name: configuration.Name);
 
         AIAgent withOutputCheck = new RequireOutputAgent(compiled, configuration.Name);
+
         return (
-            guardedState is null ? withOutputCheck : new RequireStateAgent(withOutputCheck, guardedState),
+            guarded ? new GraphStateAgent(withOutputCheck, configuration.Name) : withOutputCheck,
             NoStages());
     }
 
@@ -147,14 +159,4 @@ internal sealed class ExplicitGraphRow : CompileTableRow
 
         return outputs.Count == 0 ? null : outputs;
     }
-
-    /// <summary>Names the seams a guarded edge needs and the context left unbound.</summary>
-    /// <param name="context">The seams the document names.</param>
-    /// <returns>The phrase the failure message carries.</returns>
-    private static string Missing(AgentCompilationContext context) => (context.Guards, context.StateSnapshot) switch
-    {
-        (null, null) => "no guard evaluator and no state source",
-        (null, _) => "no guard evaluator",
-        _ => "no state source",
-    };
 }

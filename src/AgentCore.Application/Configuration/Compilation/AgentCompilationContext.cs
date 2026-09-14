@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Knowledge;
@@ -48,11 +47,6 @@ public sealed class AgentCompilationContext
     /// Gets or sets the backing store of store 1, or <see langword="null"/> for memory.
     /// </summary>
     public ICallStore? CallStore { get; init; }
-
-    /// <summary>
-    /// Gets or sets the source of the state a guarded graph edge reads.
-    /// </summary>
-    public Func<IReadOnlyDictionary<string, JsonNode?>>? StateSnapshot { get; init; }
 
     /// <summary>
     /// Gets or sets the store every agent's <c>knowledge:</c> block reads through.

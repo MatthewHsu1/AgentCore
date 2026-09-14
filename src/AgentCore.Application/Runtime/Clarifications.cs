@@ -91,8 +91,7 @@ internal sealed class Clarifications
     /// probe rather than the turn before it.
     /// </summary>
     /// <remarks>
-    /// Must run exactly once per turn, from <c>CallSession.BeginTurn</c> and nowhere else.
-    /// <c>CallSession.EnterAmbients</c> reopens its state scope once per streaming step.
+    /// Must run exactly once per turn, from <c>CallTurnRunner.BeginTurn</c> and nowhere else.
     /// </remarks>
     internal void BeginTurn()
     {

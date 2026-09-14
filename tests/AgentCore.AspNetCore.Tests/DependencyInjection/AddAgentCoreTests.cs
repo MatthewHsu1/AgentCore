@@ -775,7 +775,7 @@ public sealed class AddAgentCoreTests
         var compiled = provider.GetRequiredService<CompiledAgent>();
 
         // The document passes all eight checks and now compiles too. AddAgentCore binds the guard
-        // evaluator and CallStateScope, so a guarded edge is reachable from here.
+        // evaluator, so a guarded edge is reachable from here.
         Assert.Equal(CompiledAgentShape.ExplicitGraph, compiled.Shape);
         Assert.Equal("guarded-composed", compiled.Name);
     }

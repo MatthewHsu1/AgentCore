@@ -1,6 +1,7 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime.Harness;
 using AgentCore.Application.Runtime.Turn;
+using AgentCore.Application.State;
 using AgentCore.Domain.Knowledge;
 using Microsoft.Extensions.AI;
 using Microsoft.Agents.AI;
@@ -71,6 +72,14 @@ internal sealed record TurnInvocation
 
     /// <summary>Gets whether this turn runs nested inside another tool call. A nested turn neither latches the holder nor records.</summary>
     public bool Nested { get; init; }
+
+    /// <summary>
+    /// Gets the live state document of the call running this turn, or <see langword="null"/>
+    /// outside a turn. The graph-state wrapper snapshots it into the run just before the run starts;
+    /// nothing writes the document mid-run (writers and the extractor commit after), so the snapshot
+    /// reads what the old ambient read at edge time.
+    /// </summary>
+    public StateDocument? State { get; init; }
 
     /// <summary>Builds the per-run options carrying this turn to the invoking client.</summary>
     internal ChatClientAgentRunOptions RunOptions()
