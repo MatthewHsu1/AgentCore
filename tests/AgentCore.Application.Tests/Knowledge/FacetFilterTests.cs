@@ -205,6 +205,42 @@ public sealed class FacetFilterTests
         Assert.Equal("model=lcr-2023 (Tool)", record!.Scope);
     }
 
+    [Fact]
+    public async Task Invoking_ToolFromEarlierProvider_LeavesItUnwrapped()
+    {
+        // Arrange
+        var skillTool = AIFunctionFactory.Create(
+            (string skillName) => "skill-body:" + skillName,
+            "load_skill",
+            "Loads the full content of a skill.");
+        var provider = KnowledgeProviderFactory.Create(
+            new StubKnowledgePort([Card("a")]),
+            new ResolvedKnowledge(KnowledgeMode.Tool, Limit: 5, Citations: false, Scoped: false),
+            "agent-under-test",
+            new SourceLocatorCitationFormatter(),
+            null,
+            Declared);
+
+#pragma warning disable MAAI001 // The context constructors are the framework's own experimental surface.
+        var context = new AIContextProvider.InvokingContext(
+            StubAgent.Instance,
+            new StubSession(),
+            new AIContext
+            {
+                Messages = [new ChatMessage(ChatRole.User, "hello")],
+                Tools = [skillTool],
+            });
+#pragma warning restore MAAI001
+
+        // Act
+        var provided = await provider.InvokingAsync(context, TestContext.Current.CancellationToken);
+
+        // Assert
+        var tools = Assert.IsType<List<AITool>>(provided.Tools);
+        Assert.Same(skillTool, tools[0]);
+        Assert.IsType<FacetFilteredSearch>(tools[1], exactMatch: false);
+    }
+
     private static async Task<AIFunction> SearchToolAsync(
         IKnowledgeRetrievalPort port,
         KnowledgeScopeConfiguration? scope,

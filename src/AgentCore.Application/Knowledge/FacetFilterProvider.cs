@@ -39,6 +39,10 @@ internal sealed class FacetFilterProvider(
     protected override async ValueTask<AIContext> InvokingCoreAsync(
         InvokingContext context, CancellationToken cancellationToken = default)
     {
+        HashSet<AITool>? existing = context.AIContext.Tools is { } input
+            ? [.. input]
+            : null;
+
         var provided = await _inner.InvokingAsync(context, cancellationToken).ConfigureAwait(false);
 
         if (provided.Tools is not { } tools)
@@ -50,7 +54,7 @@ internal sealed class FacetFilterProvider(
 
         foreach (var tool in tools)
         {
-            wrapped.Add(tool is AIFunction function
+            wrapped.Add(tool is AIFunction function && existing?.Contains(tool) is not true
                 ? new FacetFilteredSearch(function, _facets, _core)
                 : tool);
         }
