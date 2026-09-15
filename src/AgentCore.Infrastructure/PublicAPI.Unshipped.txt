@@ -87,6 +87,3 @@ static AgentCore.Infrastructure.Secrets.EnvironmentSecretResolver.ToVariableName
 static readonly AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator.ApiEndpoint -> System.Uri!
 static readonly AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator.Categories -> System.Collections.Generic.IReadOnlyList<string!>!
 static readonly AgentCore.Infrastructure.Evaluation.OpenAiModeration.OpenAiModerationEvaluator.ModerationDeadline -> System.TimeSpan
-AgentCore.Infrastructure.Scripting.Jint.JintScriptRunner
-AgentCore.Infrastructure.Scripting.Jint.JintScriptRunner.JintScriptRunner() -> void
-AgentCore.Infrastructure.Scripting.Jint.JintScriptRunner.RunAsync(AgentCore.Application.Scripting.ScriptRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Scripting.ScriptResult!>

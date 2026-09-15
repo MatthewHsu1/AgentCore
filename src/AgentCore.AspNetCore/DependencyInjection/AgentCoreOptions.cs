@@ -39,9 +39,6 @@ public sealed class AgentCoreOptions
     /// <summary>Gets the seam that resolves a model reference, or <see langword="null"/>.</summary>
     internal Func<AgentCoreStartup, CancellationToken, ValueTask<IChatClientFactory>>? ChatClients { get; private set; }
 
-    /// <summary>Gets what runs a script a model wrote, or <see langword="null"/>.</summary>
-    internal IScriptRunnerPort? Scripts { get; private set; }
-
     /// <summary>Gets the embedding vendors the host registered, or <see langword="null"/>.</summary>
     internal IReadOnlyList<IEmbeddingGeneratorAdapter>? Embeddings { get; private set; }
 
@@ -120,16 +117,6 @@ public sealed class AgentCoreOptions
     {
         ArgumentNullException.ThrowIfNull(chatClients);
         ChatClients = chatClients;
-        return this;
-    }
-
-    /// <summary>Binds what runs a script a model wrote. <c>ui.draw</c> reads it.</summary>
-    /// <param name="scripts">The runner.</param>
-    /// <returns>These options, so a host chains its calls.</returns>
-    public AgentCoreOptions UseScripts(IScriptRunnerPort scripts)
-    {
-        ArgumentNullException.ThrowIfNull(scripts);
-        Scripts = scripts;
         return this;
     }
 

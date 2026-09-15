@@ -684,7 +684,7 @@ public sealed class AddAgentCoreTests
     public async Task AToolSource_SeesTheChatClientFactoryAlreadyBuilt()
     {
         // The seam that builds the factory only runs once, so a null capture here means the tools
-        // were built before it ran — exactly the ordering ui.draw depends on.
+        // were built before it ran — exactly the ordering builtin tools depend on.
         IChatClientFactory? builtFactory = null;
         IChatClientFactory? seenWhenToolsWereBuilt = null;
 

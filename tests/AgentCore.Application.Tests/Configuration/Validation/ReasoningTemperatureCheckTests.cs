@@ -78,7 +78,7 @@ public sealed class ReasoningTemperatureCheckTests
             apiVersion: agentcore/v1
             name: every-holder
             tools:
-              - { id: draw, kind: builtin, uses: ui.draw, model: { ref: reply, temperature: 0.2 } }
+              - { id: search, kind: builtin, uses: web.search, model: { ref: reply, temperature: 0.2 } }
             agents:
               defaults:
                 model: { ref: reply, temperature: 0.2 }

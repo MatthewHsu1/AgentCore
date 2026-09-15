@@ -88,7 +88,6 @@ internal static class ExampleDocument
                       - { ">=": [ { var: failedResolveTurns }, 3 ] }
 
         tools:
-          - { id: draw,          kind: builtin, uses: ui.draw, model: { ref: cheap } }
           - id: lookup_order
             kind: http
             description: Read one order by its identifier.
@@ -157,7 +156,7 @@ internal static class ExampleDocument
             - { kind: openai, model: gpt-4.1-mini, as: reply }      # the voice path, chosen on latency
             - { kind: openai, model: gpt-5.4-nano, as: fill }       # the extractor, chosen on null discipline
             - { kind: openai, model: gpt-4.1,      as: judge }      # evaluation only, chosen on judgement
-            - { kind: openai, model: gpt-4.1-nano, as: cheap, webSearch: false }      # ui.draw only, chosen on price
+            - { kind: openai, model: gpt-4.1-nano, as: cheap, webSearch: false }
           call:      { kind: telnyx-relay }        # the pipe: who carries the call and owns /v1/call
           speech:                                  # the ears and the mouth, named one role at a time
             stt: { kind: telnyx-relay }            # recognition. Bundled here, so it matches call
@@ -367,14 +366,6 @@ internal static class ExampleDocument
             }
           },
           "tools": [
-            {
-              "id": "draw",
-              "kind": "builtin",
-              "uses": "ui.draw",
-              "model": {
-                "ref": "cheap"
-              }
-            },
             {
               "id": "lookup_order",
               "kind": "http",

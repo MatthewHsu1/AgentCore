@@ -124,17 +124,17 @@ public sealed class CallSessionTranscriptTests
     }
 
     /// <summary>
-    /// A barge-in rewrites the assistant reply in place, but a drawing rides the tool-result
+    /// A barge-in rewrites the assistant reply in place, but a render rides the tool-result
     /// message from earlier in the same turn — a different row entirely. Correcting the reply must
     /// leave that row, and what it carries, alone.
     /// </summary>
     [Fact]
-    public async Task InterruptAfterTheTurnEnded_ToolTurnThatDrew_LeavesTheRenderContentOnTheToolResultRow()
+    public async Task InterruptAfterTheTurnEnded_ToolTurnThatRendered_LeavesTheRenderContentOnTheToolResultRow()
     {
         // Arrange
         RecordingCallStore store = new();
         using ProseThenReplyChatClient reply = new("the price is fifty");
-        var session = CreateSession(ToolYaml, reply, store, DrawingTool);
+        var session = CreateSession(ToolYaml, reply, store, RenderTool);
         session.SetHasScreen(true);
         await DrainAsync(session.RunTurnStreamingAsync("how much?", TestContext.Current.CancellationToken));
 
@@ -156,18 +156,18 @@ public sealed class CallSessionTranscriptTests
 
     /// <summary>
     /// Drives a real turn end to end through <see cref="CallSession"/>, with a screen bound and a
-    /// real tool that draws through it, and reads what store 1 actually kept. Every other render
+    /// real tool that publishes through it, and reads what store 1 actually kept. Every other render
     /// test in this suite hand-rolls collectors, so none of them would notice a broken wire between
     /// the turn's invocation and its renders — this is the one test that goes through that wire
     /// itself.
     /// </summary>
     [Fact]
-    public async Task ATurnThatDrawsWithAScreenBound_StoresTheRenderContentOnTheToolResultRow()
+    public async Task ATurnThatRendersWithAScreenBound_StoresTheRenderContentOnTheToolResultRow()
     {
         // Arrange
         RecordingCallStore store = new();
         ToolCallingChatClient reply = new("drew it.");
-        var session = CreateSession(ToolYaml, reply, store, DrawingTool);
+        var session = CreateSession(ToolYaml, reply, store, RenderTool);
         session.SetHasScreen(true);
 
         // Act
@@ -179,8 +179,8 @@ public sealed class CallSessionTranscriptTests
         Assert.Contains(rows.SelectMany(row => row.Content.Contents), content => content is RenderContent);
     }
 
-    /// <summary>Builds a real tool that draws through the turn's screen, for <see cref="ToolYaml"/>.</summary>
-    private static AITool? DrawingTool(ToolConfiguration tool)
+    /// <summary>Builds a real tool that publishes through the turn's screen, for <see cref="ToolYaml"/>.</summary>
+    private static AITool? RenderTool(ToolConfiguration tool)
         => AIFunctionFactory.Create(
             (TurnInvocation? turn) =>
             {

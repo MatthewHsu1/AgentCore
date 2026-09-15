@@ -70,25 +70,22 @@ public sealed class ConfigurationLoaderTests
     [Fact]
     public void Example_BindsEveryToolKind()
     {
-        Assert.Equal(4, Example.Tools.Count);
+        Assert.Equal(3, Example.Tools.Count);
 
-        Assert.Equal(ToolKind.Builtin, Example.Tools[0].Kind);
-        Assert.Equal("ui.draw", Example.Tools[0].Uses);
-
-        var binding = Example.Tools[2];
+        var binding = Example.Tools[1];
         Assert.Equal(ToolKind.Binding, binding.Kind);
         Assert.Equal("CreateCase", binding.Binds);
         Assert.NotNull(binding.Parameters);
         Assert.Equal("object", binding.Parameters!["type"]!.GetValue<string>());
 
-        Assert.Equal(ToolKind.Builtin, Example.Tools[3].Kind);
-        Assert.Equal("web.search", Example.Tools[3].Uses);
+        Assert.Equal(ToolKind.Builtin, Example.Tools[2].Kind);
+        Assert.Equal("web.search", Example.Tools[2].Uses);
     }
 
     [Fact]
     public void Example_ReadsTheSecretReferenceAndResolvesNothing()
     {
-        var http = Example.Tools[1];
+        var http = Example.Tools[0];
 
         Assert.Equal(ToolKind.Http, http.Kind);
         Assert.NotNull(http.Request);
@@ -578,7 +575,7 @@ public sealed class ConfigurationLoaderTests
             apiVersion: agentcore/v1
             name: plain
             tools:
-              - { id: draw, kind: builtin, uses: ui.draw, description: d, model: { ref: cheap } }
+              - { id: search, kind: builtin, uses: web.search, description: d, model: { ref: cheap } }
             """;
 
         var configuration = ConfigurationLoader.LoadYaml(document);
@@ -593,7 +590,7 @@ public sealed class ConfigurationLoaderTests
             apiVersion: agentcore/v1
             name: plain
             tools:
-              - { id: draw, kind: builtin, uses: ui.draw, description: d, maxRounds: 4 }
+              - { id: search, kind: builtin, uses: web.search, description: d, maxRounds: 4 }
             """;
 
         var configuration = ConfigurationLoader.LoadYaml(document);

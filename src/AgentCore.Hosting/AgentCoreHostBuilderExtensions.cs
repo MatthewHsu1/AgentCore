@@ -8,7 +8,6 @@ using AgentCore.Infrastructure.Embeddings.OpenAI;
 using AgentCore.Infrastructure.Evaluation.OpenAiModeration;
 using AgentCore.Infrastructure.Knowledge.VectorData.Qdrant;
 using AgentCore.Infrastructure.Llm.OpenAI;
-using AgentCore.Infrastructure.Scripting.Jint;
 using AgentCore.Infrastructure.Secrets;
 using AgentCore.Infrastructure.Telemetry.Grafana;
 using AgentCore.Infrastructure.Tools;
@@ -100,9 +99,6 @@ public static class AgentCoreHostBuilderExtensions
 
         // providers.llm[].kind picks the adapter for each entry.
         options.UseChatClients(new OpenAiChatClientAdapter());
-
-        // ui.draw runs the drawing model's script in it.
-        options.UseScripts(new JintScriptRunner());
 
         // providers.embeddings.kind picks the adapter.
         options.UseEmbeddings(new OpenAiEmbeddingGeneratorAdapter());

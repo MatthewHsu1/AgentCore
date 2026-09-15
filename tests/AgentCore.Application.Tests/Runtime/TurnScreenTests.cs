@@ -13,7 +13,7 @@ using Xunit;
 namespace AgentCore.Application.Tests.Runtime;
 
 /// <summary>
-/// The turn reaches its tools: the screen the loop builds arriving at the tool that draws.
+/// The turn reaches its tools: the screen the loop builds arriving at the tool that publishes.
 /// </summary>
 public sealed class TurnScreenTests
 {
@@ -41,9 +41,9 @@ public sealed class TurnScreenTests
 
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
-        // The screen a tool finds must be the SAME recorder the turn draws into, not merely
+        // The screen a tool finds must be the SAME recorder the turn publishes into, not merely
         // some TurnRenders or other: a regression that handed the tool a different instance would
-        // still draw, and would still lose the drawing, since the drain reads the turn's own.
+        // still publish, and would still lose the render, since the drain reads the turn's own.
         Assert.IsType<TurnRenders>(probe.Seen);
         Assert.Same(probe.TurnRenders, probe.Seen);
     }
@@ -68,8 +68,8 @@ public sealed class TurnScreenTests
     [Fact]
     public async Task ACallThatWasGivenNoScreen_ShowsItsToolsNone()
     {
-        // The voice path. The tool reads the null and tells the model it cannot draw, rather than
-        // claiming a picture a telephone caller will never see.
+        // The voice path. The tool reads the null and tells the model it cannot show anything,
+        // rather than claiming a picture a telephone caller will never see.
         var (session, probe) = NewCall(withScreen: false);
 
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
@@ -132,12 +132,12 @@ public sealed class TurnScreenTests
                     Ran = true;
                     Seen = turn?.Screen;
                     TurnRenders = turn?.Renders;
-                    return "drawn.";
+                    return "shown.";
                 },
                 new AIFunctionFactoryOptions
                 {
                     Name = "build_ui",
-                    Description = "Draw something on the caller's screen.",
+                    Description = "Show something on the caller's screen.",
                     ConfigureParameterBinding = ToolParameterBindings.For,
                 });
 

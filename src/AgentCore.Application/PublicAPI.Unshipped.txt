@@ -1349,12 +1349,10 @@ AgentCore.Application.Tools.Binding.ToolBindingRegistry.TryGetMethod(string! nam
 AgentCore.Application.Tools.Builtin.BuiltinToolNames
 AgentCore.Application.Tools.Builtin.BuiltinToolPorts
 AgentCore.Application.Tools.Builtin.BuiltinToolPorts.<Clone>$() -> AgentCore.Application.Tools.Builtin.BuiltinToolPorts!
-AgentCore.Application.Tools.Builtin.BuiltinToolPorts.BuiltinToolPorts(AgentCore.Application.Ports.IChatClientFactory? ChatClients, AgentCore.Application.Ports.IScriptRunnerPort? Scripts = null) -> void
+AgentCore.Application.Tools.Builtin.BuiltinToolPorts.BuiltinToolPorts(AgentCore.Application.Ports.IChatClientFactory? ChatClients) -> void
 AgentCore.Application.Tools.Builtin.BuiltinToolPorts.ChatClients.get -> AgentCore.Application.Ports.IChatClientFactory?
 AgentCore.Application.Tools.Builtin.BuiltinToolPorts.ChatClients.init -> void
-AgentCore.Application.Tools.Builtin.BuiltinToolPorts.Deconstruct(out AgentCore.Application.Ports.IChatClientFactory? ChatClients, out AgentCore.Application.Ports.IScriptRunnerPort? Scripts) -> void
-AgentCore.Application.Tools.Builtin.BuiltinToolPorts.Scripts.get -> AgentCore.Application.Ports.IScriptRunnerPort?
-AgentCore.Application.Tools.Builtin.BuiltinToolPorts.Scripts.init -> void
+AgentCore.Application.Tools.Builtin.BuiltinToolPorts.Deconstruct(out AgentCore.Application.Ports.IChatClientFactory? ChatClients) -> void
 AgentCore.Application.Tools.Builtin.BuiltinToolPorts.Equals(AgentCore.Application.Tools.Builtin.BuiltinToolPorts? other) -> bool
 AgentCore.Application.Tools.Builtin.BuiltinToolSource
 AgentCore.Application.Tools.Builtin.BuiltinToolSource.BuiltinToolSource(AgentCore.Application.Tools.Builtin.BuiltinToolPorts! ports) -> void
@@ -1522,7 +1520,6 @@ const AgentCore.Application.Secrets.KnownSecrets.QdrantApiKeyVariable = "QDRANT_
 const AgentCore.Application.State.StateExtractor.SchemaName = "agentcore_state" -> string!
 const AgentCore.Application.State.UnfilledSlotReminder.CloseTag = "</system-reminder>" -> string!
 const AgentCore.Application.State.UnfilledSlotReminder.OpenTag = "<system-reminder>" -> string!
-const AgentCore.Application.Tools.Builtin.BuiltinToolNames.Draw = "ui.draw" -> string!
 const AgentCore.Application.Tools.Builtin.BuiltinToolNames.WebSearch = "web.search" -> string!
 const AgentCore.Application.Tools.ToolErrorResult.ErrorProperty = "error" -> string!
 const AgentCore.Application.Tools.ToolErrorResult.MessageProperty = "message" -> string!
@@ -2046,8 +2043,6 @@ virtual AgentCore.Application.Calls.CallInput.PrintMembers(System.Text.StringBui
 virtual AgentCore.Application.Tools.Binding.ToolBinding.Invoke(System.Text.Json.Nodes.JsonObject! arguments, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<object?>
 ~override AgentCore.Application.Providers.VendorSeam.Equals(object obj) -> bool
 ~override AgentCore.Application.Providers.VendorSeam.ToString() -> string
-AgentCore.Application.Ports.IScriptRunnerPort
-AgentCore.Application.Ports.IScriptRunnerPort.RunAsync(AgentCore.Application.Scripting.ScriptRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Scripting.ScriptResult!>
 AgentCore.Application.Scripting.ScriptRequest
 AgentCore.Application.Scripting.ScriptRequest.<Clone>$() -> AgentCore.Application.Scripting.ScriptRequest!
 AgentCore.Application.Scripting.ScriptRequest.Code.get -> string!

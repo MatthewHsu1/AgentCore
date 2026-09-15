@@ -77,4 +77,3 @@ static AgentCore.AspNetCore.Endpoints.ResponsesEndpointRouteBuilderExtensions.Ma
 static readonly AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.ConnectionLifetime -> System.TimeSpan
 static readonly AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.FirstRetryDelay -> System.TimeSpan
 static readonly AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.RequestDeadline -> System.TimeSpan
-AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseScripts(AgentCore.Application.Ports.IScriptRunnerPort! scripts) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!

@@ -535,7 +535,7 @@ public sealed class ConfigurationSchemaValidatorTests
             apiVersion: agentcore/v1
             name: broken
             tools:
-              - { id: draw, kind: builtin, uses: ui.draw, maxRounds: 0 }
+              - { id: search, kind: builtin, uses: web.search, maxRounds: 0 }
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
@@ -552,7 +552,7 @@ public sealed class ConfigurationSchemaValidatorTests
     [Theory]
     [InlineData("model: { ref: cheap }", "model")]
     [InlineData("maxRounds: 4", "maxRounds")]
-    public void AShippedAgentDialOnAKindThatNeverReadsIt_FailsWithThePointerOfTheKey(string key, string name)
+    public void ABuiltinDialOnAKindThatNeverReadsIt_FailsWithThePointerOfTheKey(string key, string name)
     {
         var document = $$"""
             apiVersion: agentcore/v1

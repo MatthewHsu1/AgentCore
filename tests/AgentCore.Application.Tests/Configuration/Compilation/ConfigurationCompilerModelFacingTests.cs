@@ -12,9 +12,8 @@ using Xunit;
 namespace AgentCore.Application.Tests.Configuration.Compilation;
 
 /// <summary>
-/// <c>ConfigurationCompiler.WithToolFailureAuditing</c> is one of the two sites, besides
-/// <c>ShippedAgentBuilder</c>, that puts <see cref="ModelFacingChatClient"/> into a real pipeline
-/// rather than a hand-built one. Deleting its <c>.Use(...)</c> line changes no test in
+/// <c>ConfigurationCompiler.WithToolFailureAuditing</c> puts <see cref="ModelFacingChatClient"/>
+/// into a real pipeline rather than a hand-built one. Deleting its <c>.Use(...)</c> line changes no test in
 /// <c>ModelFacingChatClientTests</c> at all, because none of them compile a document. This proves the
 /// COMPILED agent, not the client on its own.
 /// </summary>

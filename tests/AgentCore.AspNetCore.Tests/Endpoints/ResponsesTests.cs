@@ -335,11 +335,11 @@ public sealed class ResponsesTests
     }
 
     [Fact]
-    public async Task DialectStream_WritesDrawingsAsTheirOwnEvents()
+    public async Task DialectStream_WritesRendersAsTheirOwnEvents()
     {
         await using var host = await ResponsesHost.StartAsync(
-            DrawingYaml,
-            new DrawingChatClient(),
+            RenderYaml,
+            new RenderChatClient(),
             configure: options => options.Bind("DrawIt", (AgentCore.Application.Runtime.TurnInvocation? turn) =>
             {
                 turn?.Screen?.Publish("generative-ui", "chart-1", new { title = "Q3 revenue" });
@@ -365,8 +365,8 @@ public sealed class ResponsesTests
     public async Task PureStream_WritesNoDialectEvents()
     {
         await using var host = await ResponsesHost.StartAsync(
-            DrawingYaml,
-            new DrawingChatClient(),
+            RenderYaml,
+            new RenderChatClient(),
             configure: options => options.Bind("DrawIt", (AgentCore.Application.Runtime.TurnInvocation? turn) =>
             {
                 turn?.Screen?.Publish("generative-ui", "chart-1", new { title = "Q3 revenue" });
@@ -422,10 +422,10 @@ public sealed class ResponsesTests
             - { kind: openai, model: gpt-4.1-mini, as: reply }
         """;
 
-    private const string DrawingYaml =
+    private const string RenderYaml =
         """
         apiVersion: agentcore/v1
-        name: responses-drawing
+        name: responses-render
         tools:
           - id: draw_it
             kind: binding
@@ -521,7 +521,7 @@ public sealed class ResponsesTests
     }
 
     /// <summary>Calls the first tool it is offered, once, then answers in words.</summary>
-    private sealed class DrawingChatClient : Microsoft.Extensions.AI.IChatClient
+    private sealed class RenderChatClient : Microsoft.Extensions.AI.IChatClient
     {
         public async IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate> GetStreamingResponseAsync(
             IEnumerable<Microsoft.Extensions.AI.ChatMessage> messages,

@@ -161,7 +161,7 @@ public sealed class SourceWireTests
 
     /// <summary>Calls the first tool it is offered, once, then answers in words.</summary>
     /// <remarks>
-    /// Copied from <c>DrawingWireTests.DrawingChatClient</c> — that class is private to its own file,
+    /// Copied from the render chat client in ResponsesTests — that class is private to its own file,
     /// so this test needs its own copy of the same shape rather than sharing the type.
     /// </remarks>
     private sealed class SourceCitingChatClient : IChatClient
