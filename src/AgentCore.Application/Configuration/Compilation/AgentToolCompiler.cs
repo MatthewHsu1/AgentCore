@@ -69,9 +69,9 @@ internal static class AgentToolCompiler
         return tools.Count == 0 ? null : tools;
     }
 
-    /// <summary>Adds one tool, unless it is a hosted search this agent's model cannot run.</summary>
+    /// <summary>Adds one tool, unless it is a hosted marker its agent's model cannot run.</summary>
     /// <remarks>
-    /// Tested by type and not by the builtin name, so a hosted search tool a host supplies through
+    /// Tested by type and not by the builtin name, so a hosted marker a host supplies through
     /// its own <c>IToolSource</c> is covered by the same rule.
     /// </remarks>
     private static void Add(
@@ -82,11 +82,19 @@ internal static class AgentToolCompiler
         ModelReference? model,
         AgentCompilationContext context)
     {
-        if (tool is HostedWebSearchTool && !context.ChatClients.SupportsHostedWebSearch(model))
+        if (tool is HostedWebSearchTool or HostedCodeInterpreterTool)
         {
-            var logger = context.Loggers?.CreateLogger(typeof(AgentToolCompiler)) ?? NullLogger.Instance;
-            var modelDescription = model is { Ref.Length: > 0 } ? $"the model '{model.Ref}'" : "this agent's default model";
-            Log.HostedWebSearchDropped(logger, agentId, toolId, modelDescription);
+            if (context.ChatClients.ResolveHostedTool(tool, model) is not { } resolved)
+            {
+                var logger = context.Loggers?.CreateLogger(typeof(AgentToolCompiler)) ?? NullLogger.Instance;
+                var modelDescription = model is { Ref.Length: > 0 } ? $"the model '{model.Ref}'" : "this agent's default model";
+
+                Log.HostedToolDropped(logger, agentId, toolId, tool.GetType().Name, modelDescription);
+                
+                return;
+            }
+
+            tools.Add(resolved);
             return;
         }
 

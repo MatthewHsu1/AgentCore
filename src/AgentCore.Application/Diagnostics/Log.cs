@@ -219,10 +219,11 @@ internal static partial class Log
             + "knowledge base holds nothing and the call continues.")]
     public static partial void KnowledgeProbeFailed(ILogger logger, string agent, string facet, Exception exception);
 
-    /// <summary>An agent declared a hosted-search tool, and its model reports no hosted web search.</summary>
+    /// <summary>An agent declared a hosted tool, and its model reports it cannot run it.</summary>
     /// <param name="logger">The logger of the compiler.</param>
     /// <param name="agentId">The id of the agent that declared the tool.</param>
     /// <param name="toolId">The id of the tool that was dropped.</param>
+    /// <param name="marker">The marker type, such as <c>HostedWebSearchTool</c>, so the reader knows which hosted capability was missing.</param>
     /// <param name="model">
     /// A phrase naming the model, such as <c>"the model 'reply'"</c> or <c>"this agent's default
     /// model"</c> when the agent names none. Built at the call site so this message never renders an
@@ -231,11 +232,11 @@ internal static partial class Log
     [LoggerMessage(
         EventId = 18,
         Level = LogLevel.Warning,
-        Message = "The agent '{AgentId}' declares the tool '{ToolId}', which asks the model provider "
-            + "to run a web search, and {Model} reports no hosted web search, so the tool was not "
-            + "added. Point this agent at a model whose vendor runs a hosted web search, or remove "
+        Message = "The agent '{AgentId}' declares the tool '{ToolId}' of type '{Marker}', which asks the model provider "
+            + "to run it hosted, and {Model} reports it cannot, so the tool was not "
+            + "added. Point this agent at a model whose vendor runs it hosted, or remove "
             + "the tool from this agent.")]
-    public static partial void HostedWebSearchDropped(ILogger logger, string agentId, string toolId, string model);
+    public static partial void HostedToolDropped(ILogger logger, string agentId, string toolId, string marker, string model);
 
     /// <summary>Store 1 could not be read as a turn opened, so the turn ran on the words already held.</summary>
     /// <param name="logger">The logger of the session.</param>

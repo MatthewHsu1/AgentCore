@@ -12,11 +12,12 @@ using Xunit;
 namespace AgentCore.Application.Tests.Configuration.Compilation;
 
 /// <summary>
-/// The hosted web-search marker reaching, or not reaching, one compiled agent.
+/// The hosted markers reaching, or not reaching, one compiled agent.
 /// </summary>
 public sealed class HostedWebSearchDropTests
 {
     private const string SearchToolId = BuiltinToolNames.WebSearch;
+    private const string CodeToolId = BuiltinToolNames.CodeExecute;
 
     [Fact]
     public void Compile_CapableModel_KeepsTheTool()
@@ -24,6 +25,39 @@ public sealed class HostedWebSearchDropTests
         var tools = Tools(agent: "reply", capable: true);
 
         Assert.Single(tools.OfType<HostedWebSearchTool>());
+    }
+
+    [Fact]
+    public void Compile_CodeExecuteOnCapableVendor_KeepsTheTool()
+    {
+        var tools = BuildAgentTools(
+            "reply",
+            model: null,
+            CodeTool(),
+            new ScreeningChatClientFactory(new HostedCodeInterpreterTool()));
+
+        Assert.Single(tools.OfType<HostedCodeInterpreterTool>());
+    }
+
+    [Fact]
+    public void Compile_CodeExecuteOnIncapableVendor_DropsTheTool()
+    {
+        var tools = BuildAgentTools(
+            "reply",
+            model: null,
+            CodeTool(),
+            new ScreeningChatClientFactory(new HostedWebSearchTool()));
+
+        Assert.Empty(tools.OfType<HostedCodeInterpreterTool>());
+    }
+
+    [Fact]
+    public void Compile_TunedMarker_ReachesTheModel()
+    {
+        HostedWebSearchTool tuned = new(new Dictionary<string, object?> { ["memory_limit"] = "4g" });
+        var tools = BuildAgentTools("reply", model: null, new ScreeningChatClientFactory(tuned));
+
+        Assert.Same(tuned, Assert.Single(tools.OfType<HostedWebSearchTool>()));
     }
 
     [Fact]
@@ -122,13 +156,18 @@ public sealed class HostedWebSearchDropTests
     private static ToolConfiguration SearchTool()
         => new() { Id = SearchToolId, Kind = ToolKind.Builtin, Uses = BuiltinToolNames.WebSearch };
 
+    private static ToolConfiguration CodeTool()
+        => new() { Id = CodeToolId, Kind = ToolKind.Builtin, Uses = BuiltinToolNames.CodeExecute };
+
     private static List<AITool> Tools(string agent, bool capable)
-        => BuildAgentTools(agent, model: null, new CapabilityChatClientFactory(capable));
+        => BuildAgentTools(agent, model: null, SearchTool(), new ScreeningChatClientFactory(Marker(capable)));
+
+    private static HostedWebSearchTool? Marker(bool capable) => capable ? new HostedWebSearchTool() : null;
 
     private static (List<AITool> Tools, List<string> Logs) ToolsAndLogs(string agent, bool capable)
     {
         RecordingLoggerFactory loggers = new();
-        var tools = BuildAgentTools(agent, model: null, new CapabilityChatClientFactory(capable), loggers);
+        var tools = BuildAgentTools(agent, model: null, SearchTool(), new ScreeningChatClientFactory(Marker(capable)), loggers);
         return (tools, [.. loggers.Of(18).Select(line => line.Message)]);
     }
 
@@ -152,22 +191,33 @@ public sealed class HostedWebSearchDropTests
         Dictionary<string, ToolConfiguration> declared = new(StringComparer.Ordinal);
         var registry = BuildRegistry([new HostSearchToolSource(hostToolId)], []);
 
-        AgentCompilationContext context = new(new CapabilityChatClientFactory(capable)) { Tools = registry };
+        AgentCompilationContext context = new(new ScreeningChatClientFactory(Marker(capable))) { Tools = registry };
 
         return AgentToolCompiler.Build(item, model: null, declared, context, "/agents/items/0", static _ => null) ?? [];
     }
 
+
     private static List<AITool> BuildAgentTools(
-        string agentId, ModelReference? model, IChatClientFactory chatClients, RecordingLoggerFactory? loggers = null)
+        string agentId,
+        ModelReference? model,
+        IChatClientFactory chatClients,
+        RecordingLoggerFactory? loggers = null)
+        => BuildAgentTools(agentId, model, SearchTool(), chatClients, loggers);
+
+    private static List<AITool> BuildAgentTools(
+        string agentId,
+        ModelReference? model,
+        ToolConfiguration declared,
+        IChatClientFactory chatClients,
+        RecordingLoggerFactory? loggers = null)
     {
-        var search = SearchTool();
-        AgentConfiguration item = new() { Id = agentId, Tools = [SearchToolId] };
-        Dictionary<string, ToolConfiguration> declared = new(StringComparer.Ordinal) { [SearchToolId] = search };
-        var registry = BuildRegistry([new BuiltinToolSource(new BuiltinToolPorts(null))], [search]);
+        AgentConfiguration item = new() { Id = agentId, Tools = [declared.Id] };
+        Dictionary<string, ToolConfiguration> declaredById = new(StringComparer.Ordinal) { [declared.Id] = declared };
+        var registry = BuildRegistry([new BuiltinToolSource(new BuiltinToolPorts(null))], [declared]);
 
         AgentCompilationContext context = new(chatClients) { Tools = registry, Loggers = loggers };
 
-        return AgentToolCompiler.Build(item, model, declared, context, "/agents/items/0", static _ => null) ?? [];
+        return AgentToolCompiler.Build(item, model, declaredById, context, "/agents/items/0", static _ => null) ?? [];
     }
 
     private static ToolRegistry BuildRegistry(IEnumerable<IToolSource> sources, IReadOnlyList<ToolConfiguration> declared)
@@ -190,18 +240,19 @@ public sealed class HostedWebSearchDropTests
                 [new ToolRegistration(id, "A vendor's own hosted search.", () => new HostedWebSearchTool())]);
     }
 
-    private sealed class CapabilityChatClientFactory(bool capable) : IChatClientFactory
-    {
-        public IChatClient GetChatClient(ModelReference? model) => throw new NotSupportedException();
-
-        public bool SupportsHostedWebSearch(ModelReference? model) => capable;
-    }
-
     private sealed class RoutingCapabilityChatClientFactory(string capableRef, IChatClient? client = null) : IChatClientFactory
     {
         public IChatClient GetChatClient(ModelReference? model) => client ?? throw new NotSupportedException();
 
-        public bool SupportsHostedWebSearch(ModelReference? model)
-            => string.Equals(model?.Ref, capableRef, StringComparison.Ordinal);
+        public AITool? ResolveHostedTool(AITool marker, ModelReference? model) =>
+            string.Equals(model?.Ref, capableRef, StringComparison.Ordinal) ? marker : null;
+    }
+
+    private sealed class ScreeningChatClientFactory(AITool? marker) : IChatClientFactory
+    {
+        public IChatClient GetChatClient(ModelReference? model) => throw new NotSupportedException();
+
+        public AITool? ResolveHostedTool(AITool asked, ModelReference? model) =>
+            marker is not null && asked.GetType() == marker.GetType() ? marker : null;
     }
 }

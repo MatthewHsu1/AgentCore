@@ -36,7 +36,7 @@ AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter
 AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.CreateClientAsync(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.IChatClient!>
 AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.Kind.get -> string!
 AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.OpenAiChatClientAdapter() -> void
-AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.SupportsHostedWebSearch(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration! entry) -> bool
+AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.ResolveHostedTool(Microsoft.Extensions.AI.AITool! marker, AgentCore.Application.Configuration.Schema.LlmProviderConfiguration! entry) -> Microsoft.Extensions.AI.AITool?
 AgentCore.Infrastructure.Secrets.ChainedSecretResolver
 AgentCore.Infrastructure.Secrets.ChainedSecretResolver.ChainedSecretResolver(System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ISecretResolverPort!>! links) -> void
 AgentCore.Infrastructure.Secrets.ChainedSecretResolver.Count.get -> int

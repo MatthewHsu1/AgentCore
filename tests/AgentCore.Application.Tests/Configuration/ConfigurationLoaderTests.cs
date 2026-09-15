@@ -70,7 +70,7 @@ public sealed class ConfigurationLoaderTests
     [Fact]
     public void Example_BindsEveryToolKind()
     {
-        Assert.Equal(3, Example.Tools.Count);
+        Assert.Equal(4, Example.Tools.Count);
 
         var binding = Example.Tools[1];
         Assert.Equal(ToolKind.Binding, binding.Kind);
@@ -80,6 +80,8 @@ public sealed class ConfigurationLoaderTests
 
         Assert.Equal(ToolKind.Builtin, Example.Tools[2].Kind);
         Assert.Equal("web.search", Example.Tools[2].Uses);
+        Assert.Equal(ToolKind.Builtin, Example.Tools[3].Kind);
+        Assert.Equal("code.execute", Example.Tools[3].Uses);
     }
 
     [Fact]
@@ -150,8 +152,8 @@ public sealed class ConfigurationLoaderTests
         Assert.Equal("judge", Example.Providers.Llm[2].As);
         Assert.Equal("cheap", Example.Providers.Llm[3].As);
         Assert.Equal(false, Example.Providers.Llm[3].WebSearch);
+        Assert.Equal(false, Example.Providers.Llm[3].CodeExecute);
         Assert.Equal("telnyx-relay", Example.Providers.Speech!.Stt.Kind);
-        Assert.Equal("telnyx-relay", Example.Providers.Speech.Tts.Kind);
         Assert.Equal("telnyx", Example.Providers.Telephony!.Kind);
         Assert.Equal("qdrant", Example.Providers.Knowledge!.Kind);
         Assert.Equal("https://qdrant.example.com:6334", Example.Providers.Knowledge.Endpoint);

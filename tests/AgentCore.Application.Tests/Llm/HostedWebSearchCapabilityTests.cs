@@ -1,32 +1,33 @@
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
+using Microsoft.Extensions.AI;
 using Xunit;
 
 namespace AgentCore.Application.Tests.Llm;
 
 /// <summary>
-/// Which vendors can run a hosted web search, and the operator's per-entry veto.
+/// Which vendors resolve a hosted marker, and the operator's per-entry veto.
 /// </summary>
 public sealed class HostedWebSearchCapabilityTests
 {
     [Fact]
-    public void Adapter_DefaultMember_SaysNo()
+    public void Adapter_DefaultMember_AnswersNull()
     {
         // A host that wrote an adapter before this member existed keeps compiling, and keeps
-        // answering no, so its models never meet a tool they cannot call.
+        // answering null, so its models never meet a tool they cannot call.
         IChatClientAdapter adapter = new SilentAdapter();
 
-        Assert.False(adapter.SupportsHostedWebSearch(Entry(webSearch: null)));
+        Assert.Null(adapter.ResolveHostedTool(new HostedWebSearchTool(), Entry(webSearch: null)));
     }
 
     [Fact]
-    public void Factory_UnknownReference_SaysNo()
+    public void Factory_UnknownReference_AnswersNull()
     {
         // A reference the document does not declare must not throw here. The compiler asks this
         // question while deciding whether to add a tool, and a missing model is reported elsewhere.
         IChatClientFactory factory = new SilentFactory();
 
-        Assert.False(factory.SupportsHostedWebSearch(new ModelReference { Ref = "absent" }));
+        Assert.Null(factory.ResolveHostedTool(new HostedWebSearchTool(), new ModelReference { Ref = "absent" }));
     }
 
     private static LlmProviderConfiguration Entry(bool? webSearch) => new()
@@ -41,7 +42,7 @@ public sealed class HostedWebSearchCapabilityTests
     {
         public string Kind => "silent";
 
-        public ValueTask<Microsoft.Extensions.AI.IChatClient> CreateClientAsync(
+        public ValueTask<IChatClient> CreateClientAsync(
             LlmProviderConfiguration entry,
             ISecretResolverPort? secrets,
             CancellationToken cancellationToken = default)
@@ -50,7 +51,7 @@ public sealed class HostedWebSearchCapabilityTests
 
     private sealed class SilentFactory : IChatClientFactory
     {
-        public Microsoft.Extensions.AI.IChatClient GetChatClient(ModelReference? model)
+        public IChatClient GetChatClient(ModelReference? model)
             => throw new NotSupportedException();
     }
 }

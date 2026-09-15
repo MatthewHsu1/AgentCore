@@ -691,6 +691,8 @@ AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.Model.get ->
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.Model.init -> void
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.ReasoningEffort.get -> string?
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.ReasoningEffort.init -> void
+AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.CodeExecute.get -> bool?
+AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.CodeExecute.init -> void
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.WebSearch.get -> bool?
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.WebSearch.init -> void
 AgentCore.Application.Configuration.Schema.LoopConditionOptions
@@ -1055,7 +1057,7 @@ AgentCore.Application.Knowledge.SourceLocatorCitationFormatter.SourceLocatorCita
 AgentCore.Application.Llm.CompositeChatClientFactory
 AgentCore.Application.Llm.CompositeChatClientFactory.Dispose() -> void
 AgentCore.Application.Llm.CompositeChatClientFactory.GetChatClient(AgentCore.Application.Configuration.Schema.ModelReference? model) -> Microsoft.Extensions.AI.IChatClient!
-AgentCore.Application.Llm.CompositeChatClientFactory.SupportsHostedWebSearch(AgentCore.Application.Configuration.Schema.ModelReference? model) -> bool
+AgentCore.Application.Llm.CompositeChatClientFactory.ResolveHostedTool(Microsoft.Extensions.AI.AITool! marker, AgentCore.Application.Configuration.Schema.ModelReference? model) -> Microsoft.Extensions.AI.AITool?
 AgentCore.Application.Policy.StagePolicy
 AgentCore.Application.Policy.StagePolicy.Advance(System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>! state) -> string!
 AgentCore.Application.Policy.StagePolicy.Configuration.get -> AgentCore.Application.Configuration.Schema.PolicyConfiguration!
@@ -1118,10 +1120,10 @@ AgentCore.Application.Ports.ICallTitler.GenerateAsync(string! callId, System.Thr
 AgentCore.Application.Ports.ICallTitler.GenerateFromAsync(string! callId, System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatMessage!>! messages, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<string!>!
 AgentCore.Application.Ports.IChatClientAdapter
 AgentCore.Application.Ports.IChatClientAdapter.CreateClientAsync(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.IChatClient!>
-AgentCore.Application.Ports.IChatClientAdapter.SupportsHostedWebSearch(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration! entry) -> bool
+AgentCore.Application.Ports.IChatClientAdapter.ResolveHostedTool(Microsoft.Extensions.AI.AITool! marker, AgentCore.Application.Configuration.Schema.LlmProviderConfiguration! entry) -> Microsoft.Extensions.AI.AITool?
 AgentCore.Application.Ports.IChatClientFactory
 AgentCore.Application.Ports.IChatClientFactory.GetChatClient(AgentCore.Application.Configuration.Schema.ModelReference? model) -> Microsoft.Extensions.AI.IChatClient!
-AgentCore.Application.Ports.IChatClientFactory.SupportsHostedWebSearch(AgentCore.Application.Configuration.Schema.ModelReference? model) -> bool
+AgentCore.Application.Ports.IChatClientFactory.ResolveHostedTool(Microsoft.Extensions.AI.AITool! marker, AgentCore.Application.Configuration.Schema.ModelReference? model) -> Microsoft.Extensions.AI.AITool?
 AgentCore.Application.Ports.IConversationPort
 AgentCore.Application.Ports.IConversationPort.CallId.get -> string!
 AgentCore.Application.Ports.IConversationPort.Interrupt(string! utteranceUntilInterrupt, System.TimeSpan durationUntilInterrupt, bool cutsRunningTurn = true) -> bool
@@ -1520,6 +1522,7 @@ const AgentCore.Application.Secrets.KnownSecrets.QdrantApiKeyVariable = "QDRANT_
 const AgentCore.Application.State.StateExtractor.SchemaName = "agentcore_state" -> string!
 const AgentCore.Application.State.UnfilledSlotReminder.CloseTag = "</system-reminder>" -> string!
 const AgentCore.Application.State.UnfilledSlotReminder.OpenTag = "<system-reminder>" -> string!
+const AgentCore.Application.Tools.Builtin.BuiltinToolNames.CodeExecute = "code.execute" -> string!
 const AgentCore.Application.Tools.Builtin.BuiltinToolNames.WebSearch = "web.search" -> string!
 const AgentCore.Application.Tools.ToolErrorResult.ErrorProperty = "error" -> string!
 const AgentCore.Application.Tools.ToolErrorResult.MessageProperty = "message" -> string!

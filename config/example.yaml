@@ -165,11 +165,12 @@ tools:
       properties: { summary: { type: string } }
       required: [ summary ]
 
-  # A marker, not code: it tells the model provider it may run a hosted web search, and only a
-  # provider that runs one acts on it. AgentToolCompiler drops this tool, per agent, for a model
-  # providers.llm[] never named webSearch: false for but whose adapter reports it cannot search —
-  # a warning at compile time, never a boot failure.
+  # Markers, not code: each tells the model provider it may run something hosted, and only a
+  # provider that runs it acts on it. AgentToolCompiler drops a hosted marker, per agent, for a
+  # model providers.llm[] vetoed with webSearch: false or codeExecute: false, or whose adapter
+  # resolves no marker — a warning at compile time, never a boot failure.
   - { id: search, kind: builtin, uses: web.search }
+  - { id: python, kind: builtin, uses: code.execute }
 
   # options.Bind("CloseCase", (string caseId, string reason) => ...) registers a typed method
   # instead. Its parameters are the arguments, and their schema, so this declaration writes no
@@ -248,7 +249,7 @@ agents:
     - { id: closer,     instructions: "<stage delta>", tools: [] }
 
     # internal — everything on, and it searches every product on purpose
-    - { id: analyst, instructions: "<stage delta>", tools: [ lookup_order, create_case, search ],
+    - { id: analyst, instructions: "<stage delta>", tools: [ lookup_order, create_case, search, python ],
         knowledge: { mode: tool, limit: 8, citations: true, scoped: false } }
 
     # customer facing — tools yes, citations no. It sets two keys and inherits limit: 5.
@@ -302,10 +303,10 @@ providers:
     - { kind: openai, model: gpt-4.1-mini, as: reply }      # the voice path, chosen on latency
     - { kind: openai, model: gpt-5.4-nano, as: fill }       # the extractor, chosen on null discipline
     - { kind: openai, model: gpt-4.1,      as: judge }      # evaluation only, chosen on judgement
-    - { kind: openai, model: gpt-4.1-nano, as: cheap, webSearch: false }
-  # webSearch: false above is a veto, not a default: omitted or true both leave the choice to the
-  # vendor's adapter. cheap is the least capable model, so vetoing it here costs nothing and stops
-  # a future search tool from ever running on it by accident.
+    - { kind: openai, model: gpt-4.1-nano, as: cheap, webSearch: false, codeExecute: false }
+  # webSearch: false and codeExecute: false above are vetoes, not defaults: omitted or true both
+  # leave the choice to the vendor's adapter. cheap is the least capable model, so vetoing both here
+  # costs nothing and stops a future hosted tool from ever running on it by accident.
   # Three planes, and they are not duplicates. call is the media pipe and owns the inbound route.
   # speech is recognition and synthesis. telephony is call control, which must outlive any one
   # media leg because a warm transfer creates a second one.

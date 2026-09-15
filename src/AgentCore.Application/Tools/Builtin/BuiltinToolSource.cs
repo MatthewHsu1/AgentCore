@@ -14,6 +14,7 @@ public sealed class BuiltinToolSource : IToolSource
         new IBuiltinToolDefinition[]
         {
             new WebSearchToolDefinition(),
+            new CodeExecuteToolDefinition(),
         }.ToDictionary(definition => definition.Name, StringComparer.Ordinal);
 
     private readonly BuiltinToolPorts _ports;

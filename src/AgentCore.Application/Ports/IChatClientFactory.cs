@@ -16,8 +16,9 @@ public interface IChatClientFactory
     /// <returns>The chat client. The compiler never disposes it.</returns>
     IChatClient GetChatClient(ModelReference? model);
 
-    /// <summary>Whether the vendor behind one model reference runs a hosted web search.</summary>
+    /// <summary>Resolves a hosted tool marker for one model reference.</summary>
+    /// <param name="marker">The marker the document declared.</param>
     /// <param name="model">The reference, or <see langword="null"/> for the factory's default entry.</param>
-    /// <returns><see langword="true"/> when the vendor runs the search itself.</returns>
-    bool SupportsHostedWebSearch(ModelReference? model) => false;
+    /// <returns>The tool to hand the model, or <see langword="null"/> when the vendor behind it does not run it.</returns>
+    AITool? ResolveHostedTool(AITool marker, ModelReference? model) => null;
 }

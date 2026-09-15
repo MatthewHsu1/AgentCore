@@ -25,4 +25,10 @@ public sealed record LlmProviderConfiguration
     /// vendor's adapter decide.
     /// </summary>
     public bool? WebSearch { get; init; }
+
+    /// <summary>
+    /// Gets whether this entry may run hosted code execution, or <see langword="null"/> to let the
+    /// vendor's adapter decide.
+    /// </summary>
+    public bool? CodeExecute { get; init; }
 }

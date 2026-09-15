@@ -68,11 +68,17 @@ public sealed class OpenAiChatClientAdapter : IChatClientAdapter
     }
 
     /// <inheritdoc />
-    public bool SupportsHostedWebSearch(LlmProviderConfiguration entry)
+    public AITool? ResolveHostedTool(AITool marker, LlmProviderConfiguration entry)
     {
+        ArgumentNullException.ThrowIfNull(marker);
         ArgumentNullException.ThrowIfNull(entry);
 
-        return entry.WebSearch != false;
+        return marker switch
+        {
+            HostedWebSearchTool when entry.WebSearch != false => marker,
+            HostedCodeInterpreterTool when entry.CodeExecute != false => marker,
+            _ => null,
+        };
     }
 
     /// <summary>Puts <c>store</c> and <c>reasoning_effort</c> on every request this client sends.</summary>

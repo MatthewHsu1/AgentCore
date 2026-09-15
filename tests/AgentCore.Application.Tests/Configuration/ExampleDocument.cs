@@ -108,7 +108,7 @@ internal static class ExampleDocument
               properties: { summary: { type: string } }
               required: [ summary ]
           - { id: search, kind: builtin, uses: web.search }
-
+          - { id: python, kind: builtin, uses: code.execute }
         agents:
           defaults:
             model: { ref: reply, temperature: 0.3 }
@@ -122,7 +122,7 @@ internal static class ExampleDocument
             - { id: resolver,   instructions: "<stage delta>", tools: [] }
             - { id: escalator,  instructions: "<stage delta>", tools: [ create_case ] }
             - { id: closer,     instructions: "<stage delta>", tools: [] }
-            - { id: analyst, instructions: "<stage delta>", tools: [ lookup_order, create_case, search ],
+            - { id: analyst, instructions: "<stage delta>", tools: [ lookup_order, create_case, search, python ],
                 knowledge: { mode: tool, limit: 8, citations: true, scoped: false } }
             - { id: webchat, instructions: "<stage delta>", tools: [ lookup_order ],
                 knowledge: { mode: tool, citations: false } }
@@ -156,7 +156,7 @@ internal static class ExampleDocument
             - { kind: openai, model: gpt-4.1-mini, as: reply }      # the voice path, chosen on latency
             - { kind: openai, model: gpt-5.4-nano, as: fill }       # the extractor, chosen on null discipline
             - { kind: openai, model: gpt-4.1,      as: judge }      # evaluation only, chosen on judgement
-            - { kind: openai, model: gpt-4.1-nano, as: cheap, webSearch: false }
+            - { kind: openai, model: gpt-4.1-nano, as: cheap, webSearch: false, codeExecute: false }
           call:      { kind: telnyx-relay }        # the pipe: who carries the call and owns /v1/call
           speech:                                  # the ears and the mouth, named one role at a time
             stt: { kind: telnyx-relay }            # recognition. Bundled here, so it matches call
@@ -410,6 +410,11 @@ internal static class ExampleDocument
               "id": "search",
               "kind": "builtin",
               "uses": "web.search"
+            },
+            {
+              "id": "python",
+              "kind": "builtin",
+              "uses": "code.execute"
             }
           ],
           "agents": {
@@ -469,7 +474,8 @@ internal static class ExampleDocument
                 "tools": [
                   "lookup_order",
                   "create_case",
-                  "search"
+                  "search",
+                  "python"
                 ],
                 "knowledge": {
                   "mode": "tool",
@@ -572,7 +578,8 @@ internal static class ExampleDocument
                 "kind": "openai",
                 "model": "gpt-4.1-nano",
                 "as": "cheap",
-                "webSearch": false
+                "webSearch": false,
+                "codeExecute": false
               }
             ],
             "call": {
