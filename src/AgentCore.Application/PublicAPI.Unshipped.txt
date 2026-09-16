@@ -2102,3 +2102,75 @@ virtual AgentCore.Application.Calls.CallInput.PrintMembers(System.Text.StringBui
 virtual AgentCore.Application.Tools.Binding.ToolBinding.Invoke(System.Text.Json.Nodes.JsonObject! arguments, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<object?>
 ~override AgentCore.Application.Providers.VendorSeam.Equals(object obj) -> bool
 ~override AgentCore.Application.Providers.VendorSeam.ToString() -> string
+AgentCore.Application.Blobs.BlobName
+AgentCore.Application.Blobs.BlobPolicy
+AgentCore.Application.Blobs.BlobPolicy.AllowedExtensions.get -> System.Collections.Generic.IReadOnlySet<string!>!
+AgentCore.Application.Blobs.BlobPolicy.BlobPolicy(long maxBytes, System.Collections.Generic.IEnumerable<string!>! allowedExtensions) -> void
+AgentCore.Application.Blobs.BlobPolicy.MaxBytes.get -> long
+AgentCore.Application.Blobs.BlobPolicy.WhyRefused(string! name, long length) -> string?
+AgentCore.Application.Blobs.BlobRead
+AgentCore.Application.Blobs.BlobRead.<Clone>$() -> AgentCore.Application.Blobs.BlobRead!
+AgentCore.Application.Blobs.BlobRead.BlobRead(string! MediaType, long Length, System.IO.Stream! Content) -> void
+AgentCore.Application.Blobs.BlobRead.Content.get -> System.IO.Stream!
+AgentCore.Application.Blobs.BlobRead.Content.init -> void
+AgentCore.Application.Blobs.BlobRead.Deconstruct(out string! MediaType, out long Length, out System.IO.Stream! Content) -> void
+AgentCore.Application.Blobs.BlobRead.DisposeAsync() -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Blobs.BlobRead.Equals(AgentCore.Application.Blobs.BlobRead? other) -> bool
+AgentCore.Application.Blobs.BlobRead.Length.get -> long
+AgentCore.Application.Blobs.BlobRead.Length.init -> void
+AgentCore.Application.Blobs.BlobRead.MediaType.get -> string!
+AgentCore.Application.Blobs.BlobRead.MediaType.init -> void
+AgentCore.Application.Blobs.BlobRef
+AgentCore.Application.Blobs.BlobRef.<Clone>$() -> AgentCore.Application.Blobs.BlobRef!
+AgentCore.Application.Blobs.BlobRef.BlobRef(string! OwnerId, string! Name, string! MediaType, long Length) -> void
+AgentCore.Application.Blobs.BlobRef.Deconstruct(out string! OwnerId, out string! Name, out string! MediaType, out long Length) -> void
+AgentCore.Application.Blobs.BlobRef.Equals(AgentCore.Application.Blobs.BlobRef? other) -> bool
+AgentCore.Application.Blobs.BlobRef.Length.get -> long
+AgentCore.Application.Blobs.BlobRef.Length.init -> void
+AgentCore.Application.Blobs.BlobRef.MediaType.get -> string!
+AgentCore.Application.Blobs.BlobRef.MediaType.init -> void
+AgentCore.Application.Blobs.BlobRef.Name.get -> string!
+AgentCore.Application.Blobs.BlobRef.Name.init -> void
+AgentCore.Application.Blobs.BlobRef.OwnerId.get -> string!
+AgentCore.Application.Blobs.BlobRef.OwnerId.init -> void
+AgentCore.Application.Blobs.BlobWrite
+AgentCore.Application.Blobs.BlobWrite.<Clone>$() -> AgentCore.Application.Blobs.BlobWrite!
+AgentCore.Application.Blobs.BlobWrite.BlobWrite(string! OwnerId, string! Name, string! MediaType, System.IO.Stream! Content, long Length) -> void
+AgentCore.Application.Blobs.BlobWrite.Content.get -> System.IO.Stream!
+AgentCore.Application.Blobs.BlobWrite.Content.init -> void
+AgentCore.Application.Blobs.BlobWrite.Deconstruct(out string! OwnerId, out string! Name, out string! MediaType, out System.IO.Stream! Content, out long Length) -> void
+AgentCore.Application.Blobs.BlobWrite.Equals(AgentCore.Application.Blobs.BlobWrite? other) -> bool
+AgentCore.Application.Blobs.BlobWrite.Length.get -> long
+AgentCore.Application.Blobs.BlobWrite.Length.init -> void
+AgentCore.Application.Blobs.BlobWrite.MediaType.get -> string!
+AgentCore.Application.Blobs.BlobWrite.MediaType.init -> void
+AgentCore.Application.Blobs.BlobWrite.Name.get -> string!
+AgentCore.Application.Blobs.BlobWrite.Name.init -> void
+AgentCore.Application.Blobs.BlobWrite.OwnerId.get -> string!
+AgentCore.Application.Blobs.BlobWrite.OwnerId.init -> void
+AgentCore.Application.Ports.IBlobStore
+AgentCore.Application.Ports.IBlobStoreAdapter
+AgentCore.Application.Ports.IBlobStoreAdapter.OpenAsync(AgentCore.Application.Configuration.Schema.VendorProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IBlobStore!>
+AgentCore.Application.Ports.IBlobStore.DeleteByOwnerAsync(string! ownerId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Ports.IBlobStore.OpenReadAsync(string! ownerId, string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Blobs.BlobRead?>
+AgentCore.Application.Ports.IBlobStore.PutAsync(AgentCore.Application.Blobs.BlobWrite! write, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Blobs.BlobRef!>
+const AgentCore.Application.Blobs.BlobName.MaxBytes = 255 -> int
+const AgentCore.Application.Blobs.BlobPolicy.DefaultMaxBytes = 10485760 -> long
+override AgentCore.Application.Blobs.BlobRead.Equals(object? obj) -> bool
+override AgentCore.Application.Blobs.BlobRead.GetHashCode() -> int
+override AgentCore.Application.Blobs.BlobRead.ToString() -> string!
+override AgentCore.Application.Blobs.BlobRef.Equals(object? obj) -> bool
+override AgentCore.Application.Blobs.BlobRef.GetHashCode() -> int
+override AgentCore.Application.Blobs.BlobRef.ToString() -> string!
+override AgentCore.Application.Blobs.BlobWrite.Equals(object? obj) -> bool
+override AgentCore.Application.Blobs.BlobWrite.GetHashCode() -> int
+override AgentCore.Application.Blobs.BlobWrite.ToString() -> string!
+static AgentCore.Application.Blobs.BlobPolicy.Default.get -> AgentCore.Application.Blobs.BlobPolicy!
+static AgentCore.Application.Blobs.BlobRead.operator ==(AgentCore.Application.Blobs.BlobRead? left, AgentCore.Application.Blobs.BlobRead? right) -> bool
+static AgentCore.Application.Blobs.BlobRead.operator !=(AgentCore.Application.Blobs.BlobRead? left, AgentCore.Application.Blobs.BlobRead? right) -> bool
+static AgentCore.Application.Blobs.BlobRef.operator ==(AgentCore.Application.Blobs.BlobRef? left, AgentCore.Application.Blobs.BlobRef? right) -> bool
+static AgentCore.Application.Blobs.BlobRef.operator !=(AgentCore.Application.Blobs.BlobRef? left, AgentCore.Application.Blobs.BlobRef? right) -> bool
+static AgentCore.Application.Blobs.BlobWrite.operator ==(AgentCore.Application.Blobs.BlobWrite? left, AgentCore.Application.Blobs.BlobWrite? right) -> bool
+static AgentCore.Application.Blobs.BlobWrite.operator !=(AgentCore.Application.Blobs.BlobWrite? left, AgentCore.Application.Blobs.BlobWrite? right) -> bool
+static readonly AgentCore.Application.Blobs.BlobPolicy.DefaultExtensions -> System.Collections.Generic.IReadOnlySet<string!>!
+static AgentCore.Application.Blobs.BlobName.IsSafe(string? name) -> bool
