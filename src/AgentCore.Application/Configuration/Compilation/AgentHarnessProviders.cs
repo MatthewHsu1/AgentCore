@@ -5,6 +5,7 @@ using AgentCore.Application.Runtime.Harness;
 using AgentCore.Application.Runtime.Turn;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Tools.Shell;
+using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Configuration.Compilation;
 
@@ -66,6 +67,7 @@ internal static class AgentHarnessProviders
     /// <param name="pointer">This agent's JSON pointer, for a <c>memory:</c>, <c>files:</c>, <c>shell:</c>, or <c>background:</c> failure.</param>
     /// <param name="resolve">Resolves an <c>agents.items</c> id to its compiled agent, or <see langword="null"/> when undeclared.</param>
     /// <param name="background">Collects the built background providers, so the call can release their sessions when it ends.</param>
+    /// <param name="tools">This agent's compiled tools, or <see langword="null"/> when it advertises none.</param>
     public static void Add(
         List<AIContextProvider> providers,
         AgentDefaults? defaults,
@@ -73,7 +75,8 @@ internal static class AgentHarnessProviders
         AgentCompilationContext context,
         string pointer,
         Func<string, AIAgent?> resolve,
-        ICollection<BackgroundAgentsProvider>? background = null)
+        ICollection<BackgroundAgentsProvider>? background = null,
+        IReadOnlyList<AITool>? tools = null)
     {
         var harness = AgentHarness.Compose(defaults, item);
 
@@ -106,9 +109,14 @@ internal static class AgentHarnessProviders
 
         if (item.Background.Count > 0)
         {
-            var provider = BuildBackgroundProvider(item, pointer, resolve);
+            var provider = AgentBackgroundCompiler.Build(item, pointer, resolve);
             providers.Add(provider);
             background?.Add(provider);
+        }
+
+        if (AgentCaptureCompiler.Build(defaults, item, context, tools) is { } capture)
+        {
+            providers.Add(capture);
         }
     }
 #pragma warning restore MAAI001
@@ -212,54 +220,6 @@ internal static class AgentHarnessProviders
         }
 
         return keys;
-    }
-
-#pragma warning restore MAAI001
-
-#pragma warning disable MAAI001 // BackgroundAgentsProvider is evaluation-only in Microsoft.Agents.AI 1.21.0.
-
-    private static BackgroundAgentsProvider BuildBackgroundProvider(
-        AgentConfiguration item,
-        string pointer,
-        Func<string, AIAgent?> resolve)
-    {
-        if (item.Background.Contains(item.Id, StringComparer.Ordinal))
-        {
-            throw ConfigurationCompiler.Fail(
-                ConfigurationError.AppendPointer(pointer, "background"),
-                $"the agent '{item.Id}' names itself in background:, so it would start itself as its own child. "
-                + "Remove it from the list, or point at another agent.");
-        }
-
-        List<AIAgent> children = new(item.Background.Count);
-        for (var index = 0; index < item.Background.Count; index++)
-        {
-            var childPointer = ConfigurationError.AppendPointer(
-                ConfigurationError.AppendPointer(pointer, "background"), index);
-
-            var childId = item.Background[index];
-
-            children.Add(resolve(childId)
-                ?? throw ConfigurationCompiler.Fail(
-                    childPointer,
-                    $"the agent '{childId}' is not declared in agents.items"));
-        }
-
-        try
-        {
-            // Children run with their own compiled tools, which carry no approval-required tool
-            // today — every harness tool runs with approval off — so a child never stalls waiting
-            // for an approval the parent would only see as a completed task with empty output.
-            return new BackgroundAgentsProvider(children);
-        }
-        catch (ArgumentException exception)
-        {
-            // The provider keys children by name case-insensitively, so two ids that differ only
-            // by case collide here rather than at either declaration.
-            throw ConfigurationCompiler.Fail(
-                ConfigurationError.AppendPointer(pointer, "background"),
-                $"the agent '{item.Id}' declares background: children whose names collide: {exception.Message}");
-        }
     }
 
 #pragma warning restore MAAI001

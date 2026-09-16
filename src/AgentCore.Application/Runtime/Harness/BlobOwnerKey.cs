@@ -1,0 +1,17 @@
+namespace AgentCore.Application.Runtime.Harness;
+
+/// <summary>
+/// The <see cref="Microsoft.Agents.AI.AgentSession.StateBag"/> key under which a background child's
+/// session carries the id of the call that started it.
+/// </summary>
+/// <remarks>
+/// A parent run has a turn filed in <c>TurnRegistry</c>, so its providers read the call id there.
+/// A child session has no turn: the framework starts it with fresh, empty state and null run
+/// options. <see cref="BackgroundChildAgent"/> stamps this key when the session is created, and
+/// <see cref="HostedFileCaptureProvider"/> reads it back when the turn lookup finds nothing.
+/// </remarks>
+internal static class BlobOwnerKey
+{
+    /// <summary>The key. The value is the call id, a string.</summary>
+    public const string Value = "urn:agentcore:blob-owner";
+}

@@ -280,4 +280,36 @@ internal static partial class Log
         Level = LogLevel.Warning,
         Message = "Could not release the background agent sessions of the call '{CallId}'.")]
     public static partial void BackgroundReleaseFailed(ILogger logger, string callId, Exception exception);
+
+    /// <summary>A sandbox file could not be kept: the run had no call to own it.</summary>
+    /// <param name="logger">The logger of the provider.</param>
+    /// <param name="agent">The agent whose run produced the file.</param>
+    [LoggerMessage(
+        EventId = 23,
+        Level = LogLevel.Warning,
+        Message = "A sandbox file of the agent '{Agent}' was not kept: the run has no call id. "
+            + "Files are kept only for a run through a CallSession, or a background child of one.")]
+    public static partial void SandboxFileHasNoOwner(ILogger logger, string agent);
+
+    /// <summary>A sandbox file was refused by name or by policy, and the reply went out without it.</summary>
+    /// <param name="logger">The logger of the provider.</param>
+    /// <param name="callId">The call that would have owned the file.</param>
+    /// <param name="name">The name the sandbox gave the file.</param>
+    /// <param name="reason">Why it was refused.</param>
+    [LoggerMessage(
+        EventId = 24,
+        Level = LogLevel.Warning,
+        Message = "The sandbox file '{Name}' of call {CallId} was not kept: {Reason}.")]
+    public static partial void SandboxFileRefused(ILogger logger, string callId, string name, string reason);
+
+    /// <summary>A sandbox file could not be downloaded or stored, and the reply went out without it.</summary>
+    /// <param name="logger">The logger of the provider.</param>
+    /// <param name="callId">The call that would have owned the file.</param>
+    /// <param name="name">The name the sandbox gave the file.</param>
+    /// <param name="exception">The cause.</param>
+    [LoggerMessage(
+        EventId = 25,
+        Level = LogLevel.Warning,
+        Message = "The sandbox file '{Name}' of call {CallId} could not be kept.")]
+    public static partial void SandboxFileCaptureFailed(ILogger logger, string callId, string name, Exception exception);
 }

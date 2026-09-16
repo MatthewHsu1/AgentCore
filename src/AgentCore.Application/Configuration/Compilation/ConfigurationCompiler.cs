@@ -294,7 +294,8 @@ public static class ConfigurationCompiler
                 clarification,
                 configuration.Providers?.Knowledge?.Scope,
                 Resolve,
-                backgroundProviders);
+                backgroundProviders,
+                compiledTools);
             harnessStateKeys.UnionWith(AgentHarnessProviders.StateKeysOf(providers));
             harnessStateKeys.UnionWith(AgentApproval.StateKeysFor(section.Defaults, item, compiledTools));
 

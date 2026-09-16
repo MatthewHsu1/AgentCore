@@ -7,6 +7,7 @@ using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Skills;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Compaction;
+using Microsoft.Extensions.AI;
 namespace AgentCore.Application.Configuration.Compilation;
 
 internal static class AgentContextProviderCompiler
@@ -31,7 +32,8 @@ internal static class AgentContextProviderCompiler
         ResolvedClarification clarification,
         KnowledgeScopeConfiguration? scope,
         Func<string, AIAgent?> resolve,
-        ICollection<BackgroundAgentsProvider>? background = null)
+        ICollection<BackgroundAgentsProvider>? background = null,
+        IReadOnlyList<AITool>? tools = null)
     {
         List<AIContextProvider> providers = [new TurnContextProvider()];
 
@@ -71,7 +73,8 @@ internal static class AgentContextProviderCompiler
                 loggerFactory: context.Loggers));
 #pragma warning restore MAAI001
         }
-        AgentHarnessProviders.Add(providers, defaults, item, context, pointer, resolve, background);
+        
+        AgentHarnessProviders.Add(providers, defaults, item, context, pointer, resolve, background, tools);
 
         if (AgentKnowledge.Compose(defaults, item) is not { } composed)
         {

@@ -82,6 +82,13 @@ internal sealed record TurnInvocation
     public StateDocument? State { get; init; }
 
     /// <summary>Builds the per-run options carrying this turn to the invoking client.</summary>
+    /// <summary>Reads the turn filed on a run's options by <see cref="RunOptions"/>, or null when there is none.</summary>
+    internal static TurnInvocation? From(AgentRunOptions? options)
+        => options is ChatClientAgentRunOptions run
+            && run.ChatOptions?.AdditionalProperties?.TryGetValue(ArgumentsKey, out var filed) == true
+            ? filed as TurnInvocation
+            : null;
+
     internal ChatClientAgentRunOptions RunOptions()
     {
         ChatOptions chat = new()
