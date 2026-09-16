@@ -30,6 +30,9 @@
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
     <Deterministic>true</Deterministic>
+    <!-- NU5104: a stable package with a prerelease dependency. Remove once these ship stable:
+         Microsoft.Agents.AI.Hosting, Microsoft.Agents.AI.Hosting.OpenAI, Microsoft.Agents.AI.Tools.Shell -->
+    <NoWarn>$(NoWarn);NU5104</NoWarn>
   </PropertyGroup>
   <PropertyGroup>
     <MinVerTagPrefix>v</MinVerTagPrefix>
