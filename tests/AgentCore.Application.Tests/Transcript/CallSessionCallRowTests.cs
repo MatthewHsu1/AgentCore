@@ -18,10 +18,12 @@ public sealed class CallSessionCallRowTests
 {
     private const string OneAgentYaml = """
         apiVersion: agentcore/v1
-        name: call-row-check
         agents:
           items:
-            - { id: only, instructions: "greet the caller" }
+            - { id: only, instructions: "ok" }
+        entries:
+          main:
+            agent: only
         """;
 
     /// <summary>A store 0 that is down: it takes no row, so no word may follow.</summary>
@@ -71,13 +73,13 @@ public sealed class CallSessionCallRowTests
     {
         var document = ConfigurationLoader.LoadYaml(yaml);
         var chatClients = new FakeChatClientFactory(reply);
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             document,
             new AgentCompilationContext(chatClients)
             {
                 CallStore = store,
                 Tools = TestToolRegistry.From(document, null, TestContext.Current.CancellationToken),
-            });
+            })["main"];
 
         var factory = new CallSessionFactory(
             compiled,

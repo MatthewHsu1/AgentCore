@@ -195,125 +195,126 @@ internal static class GoldenSet
     /// </summary>
     public const string Yaml =
         """
-        apiVersion: agentcore/v1
-        name: call-policy-golden
+          apiVersion: agentcore/v1
 
-        state:
-          model:               { type: string,  writer: extractor, description: the machine model }
-          serial:              { type: string,  writer: extractor, description: the serial number }
-          faultCode:           { type: string,  writer: extractor, description: the fault code on the console }
-          problemDescribed:    { type: boolean, default: false, writer: extractor }
-          resolved:            { type: boolean, default: false, writer: extractor }
-          callerAskedForHuman: { type: boolean, default: false, writer: extractor }
-          callerSaidGoodbye:   { type: boolean, default: false, writer: extractor }
-          failedResolveTurns:
-            type: integer
-            default: 0
-            writer: counter
-            increment:
+          state:
+            model:               { type: string,  writer: extractor, description: the machine model }
+            serial:              { type: string,  writer: extractor, description: the serial number }
+            faultCode:           { type: string,  writer: extractor, description: the fault code on the console }
+            problemDescribed:    { type: boolean, default: false, writer: extractor }
+            resolved:            { type: boolean, default: false, writer: extractor }
+            callerAskedForHuman: { type: boolean, default: false, writer: extractor }
+            callerSaidGoodbye:   { type: boolean, default: false, writer: extractor }
+            failedResolveTurns:
+              type: integer
+              default: 0
+              writer: counter
+              increment:
+                and:
+                  - { "===": [ { var: stage }, "resolve" ] }
+                  - { "!": { var: resolved } }
+
+          extractor:
+            model: { ref: fill }
+            when: after_reply
+
+          guards:
+            saidGoodbye:
+              { var: callerSaidGoodbye }
+
+            wantsHuman:
               and:
-                - { "===": [ { var: stage }, "resolve" ] }
-                - { "!": { var: resolved } }
+                - { "!": { var: callerSaidGoodbye } }
+                - { var: callerAskedForHuman }
 
-        extractor:
-          model: { ref: fill }
-          when: after_reply
+            machineIdentified:
+              and:
+                - { "!": { var: callerSaidGoodbye } }
+                - { "!": { var: callerAskedForHuman } }
+                - { "!!": [ { var: model } ] }
+                - { "!!": [ { var: serial } ] }
 
-        guards:
-          saidGoodbye:
-            { var: callerSaidGoodbye }
+            problemKnown:
+              and:
+                - { "!": { var: callerSaidGoodbye } }
+                - { "!": { var: callerAskedForHuman } }
+                - or:
+                    - { "!!": [ { var: faultCode } ] }
+                    - { var: problemDescribed }
 
-          wantsHuman:
-            and:
-              - { "!": { var: callerSaidGoodbye } }
-              - { var: callerAskedForHuman }
+            goodbyeOrFixed:
+              or:
+                - { var: callerSaidGoodbye }
+                - and:
+                    - { "!": { var: callerAskedForHuman } }
+                    - { var: resolved }
 
-          machineIdentified:
-            and:
-              - { "!": { var: callerSaidGoodbye } }
-              - { "!": { var: callerAskedForHuman } }
-              - { "!!": [ { var: model } ] }
-              - { "!!": [ { var: serial } ] }
+            humanOrExhausted:
+              and:
+                - { "!": { var: callerSaidGoodbye } }
+                - or:
+                    - { var: callerAskedForHuman }
+                    - and:
+                        - { "!": { var: resolved } }
+                        - { ">=": [ { var: failedResolveTurns }, 3 ] }
 
-          problemKnown:
-            and:
-              - { "!": { var: callerSaidGoodbye } }
-              - { "!": { var: callerAskedForHuman } }
-              - or:
-                  - { "!!": [ { var: faultCode } ] }
-                  - { var: problemDescribed }
+          agents:
+            defaults:
+              model: { ref: reply, temperature: 0.3 }
+              instructions: |
+                <the stable cached prefix>
+            items:
+              - { id: greeter,    instructions: "<greeting delta>" }
+              - { id: identifier, instructions: "<identify delta>" }
+              - { id: classifier, instructions: "<classify delta>" }
+              - { id: resolver,   instructions: "<resolve delta>" }
+              - { id: escalator,  instructions: "<escalate delta>" }
+              - { id: closer,     instructions: "<close delta>" }
 
-          goodbyeOrFixed:
-            or:
-              - { var: callerSaidGoodbye }
-              - and:
-                  - { "!": { var: callerAskedForHuman } }
-                  - { var: resolved }
+          entries:
+            main:
+              policy:
+                initial: greeting
+                stages:
+                  - id: greeting
+                    agent: greeter
+                    to: [ { stage: identify } ]
 
-          humanOrExhausted:
-            and:
-              - { "!": { var: callerSaidGoodbye } }
-              - or:
-                  - { var: callerAskedForHuman }
-                  - and:
-                      - { "!": { var: resolved } }
-                      - { ">=": [ { var: failedResolveTurns }, 3 ] }
+                  - id: identify
+                    agent: identifier
+                    to:
+                      - { stage: close,    when: saidGoodbye }
+                      - { stage: escalate, when: wantsHuman }
+                      - { stage: classify, when: machineIdentified }
 
-        agents:
-          defaults:
-            model: { ref: reply, temperature: 0.3 }
-            instructions: |
-              <the stable cached prefix>
-          items:
-            - { id: greeter,    instructions: "<greeting delta>" }
-            - { id: identifier, instructions: "<identify delta>" }
-            - { id: classifier, instructions: "<classify delta>" }
-            - { id: resolver,   instructions: "<resolve delta>" }
-            - { id: escalator,  instructions: "<escalate delta>" }
-            - { id: closer,     instructions: "<close delta>" }
+                  - id: classify
+                    agent: classifier
+                    to:
+                      - { stage: close,    when: saidGoodbye }
+                      - { stage: escalate, when: wantsHuman }
+                      - { stage: resolve,  when: problemKnown }
 
-        policy:
-          initial: greeting
-          stages:
-            - id: greeting
-              agent: greeter
-              to: [ { stage: identify } ]
+                  - id: resolve
+                    agent: resolver
+                    to:
+                      - { stage: close,    when: goodbyeOrFixed }
+                      - { stage: escalate, when: humanOrExhausted }
 
-            - id: identify
-              agent: identifier
-              to:
-                - { stage: close,    when: saidGoodbye }
-                - { stage: escalate, when: wantsHuman }
-                - { stage: classify, when: machineIdentified }
+                  - id: escalate
+                    agent: escalator
+                    to: [ { stage: close } ]
 
-            - id: classify
-              agent: classifier
-              to:
-                - { stage: close,    when: saidGoodbye }
-                - { stage: escalate, when: wantsHuman }
-                - { stage: resolve,  when: problemKnown }
+                  - id: close
+                    agent: closer
+                    terminal: true
 
-            - id: resolve
-              agent: resolver
-              to:
-                - { stage: close,    when: goodbyeOrFixed }
-                - { stage: escalate, when: humanOrExhausted }
-
-            - id: escalate
-              agent: escalator
-              to: [ { stage: close } ]
-
-            - id: close
-              agent: closer
-              terminal: true
-
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
-            - { kind: openai, model: gpt-5.4-nano, as: fill }
-        """;
-}
+          providers:
+            call:   { kind: telnyx-relay }
+            speech:
+              stt: { kind: telnyx-relay }
+              tts: { kind: telnyx-relay }
+            llm:
+              - { kind: openai, model: gpt-4.1-mini, as: reply }
+              - { kind: openai, model: gpt-5.4-nano, as: fill }
+          """;
+  }

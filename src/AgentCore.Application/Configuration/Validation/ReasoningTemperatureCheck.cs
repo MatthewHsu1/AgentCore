@@ -24,6 +24,9 @@ internal static class ReasoningTemperatureCheck
 {
     /// <summary>The one temperature a reasoning entry accepts.</summary>
     private const double ReasoningTemperature = 1;
+    
+    /// <summary>The tolerance around <see cref="ReasoningTemperature"/> that still counts as equal.</summary>
+    private const double TemperatureTolerance = 1e-9;
 
     /// <summary>The one <c>reasoningEffort</c> value that leaves temperature free.</summary>
     private const string NoReasoning = "none";
@@ -42,9 +45,9 @@ internal static class ReasoningTemperatureCheck
         Check(configuration.Extractor?.Model, "/extractor/model", reasoning, errors);
         Check(configuration.Evaluation?.Judge, "/evaluation/judge", reasoning, errors);
         Check(configuration.Titler?.Model, "/titler/model", reasoning, errors);
-        Check(configuration.Agents?.Defaults?.Model, "/agents/defaults/model", reasoning, errors);
+        Check(configuration.Agents.Defaults?.Model, "/agents/defaults/model", reasoning, errors);
 
-        var agents = configuration.Agents?.Items ?? [];
+        var agents = configuration.Agents.Items;
         for (var index = 0; index < agents.Count; index++)
         {
             Check(agents[index].Model, Reference("/agents/items", index), reasoning, errors);
@@ -86,7 +89,7 @@ internal static class ReasoningTemperatureCheck
         List<ConfigurationError> errors)
     {
         if (model?.Temperature is not { } temperature
-            || temperature == ReasoningTemperature
+            || Math.Abs(temperature - ReasoningTemperature) < TemperatureTolerance
             || !reasoning.TryGetValue(model.Ref, out var effort))
         {
             return;

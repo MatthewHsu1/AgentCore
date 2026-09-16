@@ -48,7 +48,7 @@ public sealed class ConfigurationRoundTripTests
     {
         var fromYaml = ConfigurationLoader.LoadYaml(ExampleDocument.Yaml);
         var changed = ConfigurationLoader.LoadJson(
-            ExampleDocument.Json.Replace("\"service-voice\"", "\"other-voice\"", StringComparison.Ordinal));
+            ExampleDocument.Json.Replace("Please say it again.", "Please try once more.", StringComparison.Ordinal));
 
         Assert.NotEqual(Content(fromYaml), Content(changed));
     }
@@ -68,17 +68,23 @@ public sealed class ConfigurationRoundTripTests
     {
         var fromYaml = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
-            name: tuned
             fallbackReply: "One moment please. I will try that again."
             evaluation:
               sampleRate: 0.25
+            agents:
+              items:
+                - { id: only }
+            entries:
+              main:
+                agent: only
             """);
         var fromJson = ConfigurationLoader.LoadJson("""
             {
               "apiVersion": "agentcore/v1",
-              "name": "tuned",
               "fallbackReply": "One moment please. I will try that again.",
-              "evaluation": { "sampleRate": 0.25 }
+              "evaluation": { "sampleRate": 0.25 },
+              "agents": { "items": [{ "id": "only" }] },
+              "entries": { "main": { "agent": "only" } }
             }
             """);
 
@@ -110,16 +116,22 @@ public sealed class ConfigurationRoundTripTests
     {
         var fromYaml = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
-            name: tuned
             fallbackReply: "One moment please. I will try that again."
             refusalReply: "I am not able to answer that."
+            agents:
+              items:
+                - { id: only }
+            entries:
+              main:
+                agent: only
             """);
         var fromJson = ConfigurationLoader.LoadJson("""
             {
               "apiVersion": "agentcore/v1",
-              "name": "tuned",
               "fallbackReply": "One moment please. I will try that again.",
-              "refusalReply": "I am not able to answer that."
+              "refusalReply": "I am not able to answer that.",
+              "agents": { "items": [{ "id": "only" }] },
+              "entries": { "main": { "agent": "only" } }
             }
             """);
 
@@ -203,5 +215,75 @@ public sealed class ConfigurationRoundTripTests
         var document = ConfigurationLoader.ReadDocument("value: 0.3", ConfigurationFormat.Yaml);
 
         Assert.Equal(0.3, document["value"]!.GetValue<double>());
+    }
+
+    [Fact]
+    public void TheAgenticKeys_ReadTheSameFromYamlAndFromJson()
+    {
+        const string yaml = """
+            apiVersion: agentcore/v1
+            agents:
+              defaults:
+                todos: true
+                mode: true
+                approval: { auto: [get_time] }
+              items:
+                - id: coder
+                  todos: true
+                  mode: true
+                  memory: { store: workspace }
+                  files: { store: workspace, write: false }
+                  shell:
+                    kind: local
+                    policy: { deny: ["^rm "] }
+                    timeoutSeconds: 30
+                  approval: { auto: [get_time, "file_access_read*"] }
+                  background: [searcher]
+                  loop:
+                    maxRounds: 5
+                    until:
+                      - todos: {}
+                      - background: {}
+            entries:
+              main:
+                agent: coder
+            """;
+        const string json = $$"""
+            {
+              "apiVersion": "agentcore/v1",
+              "agents": {
+                "defaults": {
+                  "todos": true,
+                  "mode": true,
+                  "approval": { "auto": ["get_time"] }
+                },
+                "items": [
+                  {
+                    "id": "coder",
+                    "todos": true,
+                    "mode": true,
+                    "memory": { "store": "workspace" },
+                    "files": { "store": "workspace", "write": false },
+                    "shell": {
+                      "kind": "local",
+                      "policy": { "deny": ["^rm "] },
+                      "timeoutSeconds": 30
+                    },
+                    "approval": { "auto": ["get_time", "file_access_read*"] },
+                    "background": ["searcher"],
+                    "loop": {
+                      "maxRounds": 5,
+                      "until": [ { "todos": {} }, { "background": {} } ]
+                    }
+                  }
+                ]
+              },
+              "entries": { "main": { "agent": "coder" } }
+            }
+            """;
+
+        var fromYaml = ConfigurationLoader.LoadYaml(yaml);
+
+        Assert.Equal(Content(fromYaml), Content(ConfigurationLoader.LoadJson(json)));
     }
 }

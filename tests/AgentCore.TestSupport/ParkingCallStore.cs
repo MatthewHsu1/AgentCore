@@ -29,16 +29,15 @@ public sealed class ParkingCallStore() : DelegatingCallStore(new InMemoryCallSto
     public void Release() => _release.TrySetResult();
 
     /// <inheritdoc />
-    public override async ValueTask AppendAsync(
-        IReadOnlyList<CallMessage> messages,
+    public override async ValueTask<IReadOnlyList<CallMessage>> AppendAsync(
+        string callId,
+        IReadOnlyList<CallMessageDraft> messages,
         CallSessionState? state = null,
         CancellationToken cancellationToken = default)
     {
         _entered.TrySetResult();
         await _release.Task.WaitAsync(cancellationToken);
         _landed = true;
+        return await base.AppendAsync(callId, messages, state, cancellationToken);
     }
-
-
-
 }

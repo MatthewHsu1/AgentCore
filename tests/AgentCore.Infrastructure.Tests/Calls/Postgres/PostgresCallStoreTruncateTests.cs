@@ -29,11 +29,12 @@ public sealed class PostgresCallStoreTruncateTests : PostgresDatabaseTest
     {
         var store = await OpenAsync();
         await store.AppendAsync(
+            "C1",
             [
-                new CallMessage("C1", 0, 0, new ChatMessage(ChatRole.User, "q1"), "m0"),
-                new CallMessage("C1", 1, 0, new ChatMessage(ChatRole.Assistant, "a1"), "m1"),
-                new CallMessage("C1", 2, 1, new ChatMessage(ChatRole.User, "q2"), "m2"),
-                new CallMessage("C1", 3, 1, new ChatMessage(ChatRole.Assistant, "a2"), "m3"),
+                new CallMessageDraft(0, new ChatMessage(ChatRole.User, "q1"), "m0"),
+                new CallMessageDraft(0, new ChatMessage(ChatRole.Assistant, "a1"), "m1"),
+                new CallMessageDraft(1, new ChatMessage(ChatRole.User, "q2"), "m2"),
+                new CallMessageDraft(1, new ChatMessage(ChatRole.Assistant, "a2"), "m3"),
             ],
             state: null,
             Token);
@@ -53,17 +54,19 @@ public sealed class PostgresCallStoreTruncateTests : PostgresDatabaseTest
         // the gap, and reissuing a number would put two turns in one place in the chain.
         var store = await OpenAsync();
         await store.AppendAsync(
+            "C1",
             [
-                new CallMessage("C1", 0, 0, new ChatMessage(ChatRole.User, "q1"), "m0"),
-                new CallMessage("C1", 1, 0, new ChatMessage(ChatRole.Assistant, "a1"), "m1"),
-                new CallMessage("C1", 2, 1, new ChatMessage(ChatRole.User, "q2"), "m2"),
+                new CallMessageDraft(0, new ChatMessage(ChatRole.User, "q1"), "m0"),
+                new CallMessageDraft(0, new ChatMessage(ChatRole.Assistant, "a1"), "m1"),
+                new CallMessageDraft(1, new ChatMessage(ChatRole.User, "q2"), "m2"),
             ],
             state: null,
             Token);
         await store.TruncateAsync("C1", 2, Token);
 
         await store.AppendAsync(
-            [new CallMessage("C1", 3, 2, new ChatMessage(ChatRole.User, "q2 again"), "m3")],
+            "C1",
+            [new CallMessageDraft(2, new ChatMessage(ChatRole.User, "q2 again"), "m3")],
             state: null,
             Token);
 
@@ -77,7 +80,8 @@ public sealed class PostgresCallStoreTruncateTests : PostgresDatabaseTest
     {
         var store = await OpenAsync();
         await store.AppendAsync(
-            [new CallMessage("C1", 0, 0, new ChatMessage(ChatRole.User, "q1"), "m0")],
+            "C1",
+            [new CallMessageDraft(0, new ChatMessage(ChatRole.User, "q1"), "m0")],
             state: null,
             Token);
 
@@ -85,7 +89,8 @@ public sealed class PostgresCallStoreTruncateTests : PostgresDatabaseTest
 
         var clash = await Record.ExceptionAsync(
             () => store.AppendAsync(
-                [new CallMessage("C1", 1, 0, new ChatMessage(ChatRole.User, "q2"), "m0")],
+                "C1",
+                [new CallMessageDraft(0, new ChatMessage(ChatRole.User, "q2"), "m0")],
                 state: null,
                 Token).AsTask());
 
@@ -99,15 +104,16 @@ public sealed class PostgresCallStoreTruncateTests : PostgresDatabaseTest
         // state are what stop the next turn standing where a deleted row stood.
         var store = await OpenAsync();
         await store.AppendAsync(
-            [new CallMessage("C1", 0, 0, new ChatMessage(ChatRole.User, "q1"), "m0")],
-            new CallSessionState { Stage = "collecting", NextOrdinal = 1, NextTurnIndex = 1 },
+            "C1",
+            [new CallMessageDraft(0, new ChatMessage(ChatRole.User, "q1"), "m0")],
+            new CallSessionState { Stage = "collecting", NextTurnIndex = 1 },
             Token);
 
         await store.TruncateAsync("C1", 0, Token);
 
         var record = await store.GetAsync("C1", Token);
         Assert.Equal("collecting", record?.State?.Stage);
-        Assert.Equal(1, record?.State?.NextOrdinal);
+        Assert.Equal(1, record?.NextOrdinal);
         Assert.Equal(1, record?.State?.NextTurnIndex);
         Assert.Empty(await store.ReadAsync("C1", Token));
     }

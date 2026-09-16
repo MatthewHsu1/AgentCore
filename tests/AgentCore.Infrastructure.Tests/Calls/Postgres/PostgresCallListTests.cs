@@ -161,7 +161,7 @@ public sealed class PostgresCallListTests : PostgresDatabaseTest
             await Claim(store, $"c{i}", "person-a");
         }
 
-        await ExecuteAsync("UPDATE call SET created_at = timestamptz '2026-01-01 00:00:00+00'");
+        await ExecuteAsync("UPDATE agentcore.call SET created_at = timestamptz '2026-01-01 00:00:00+00'");
 
         // Act
         List<string> seen = [];
@@ -220,7 +220,7 @@ public sealed class PostgresCallListTests : PostgresDatabaseTest
     private Task Spoke(string callId, string ago) =>
         ExecuteAsync(
             $$"""
-              INSERT INTO call_message (call_id, ordinal, turn_index, role, content, message_id, created_at, updated_at)
+              INSERT INTO agentcore.call_message (call_id, ordinal, turn_index, role, content, message_id, created_at, updated_at)
               VALUES ('{{callId}}', 1, 0, 'user', '{}'::jsonb, 'm1', now(), now() + interval '{{ago}}')
               """);
 }

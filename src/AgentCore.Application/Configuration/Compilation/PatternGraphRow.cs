@@ -6,8 +6,9 @@ using Microsoft.Agents.AI.Workflows;
 namespace AgentCore.Application.Configuration.Compilation;
 
 /// <summary>
-/// Row 3: <c>graph:</c> with <c>pattern:</c>. It builds <c>AgentWorkflowBuilder.BuildSequential</c>,
-/// <c>BuildConcurrent</c>, <c>CreateHandoffBuilderWith</c>, or <c>CreateGroupChatBuilderWith</c>.
+/// Row 3: the entry holds <c>graph:</c> with <c>pattern:</c>. It builds
+/// <c>AgentWorkflowBuilder.BuildSequential</c>, <c>BuildConcurrent</c>,
+/// <c>CreateHandoffBuilderWith</c>, or <c>CreateGroupChatBuilderWith</c>.
 /// </summary>
 internal sealed class PatternGraphRow : CompileTableRow
 {
@@ -17,10 +18,15 @@ internal sealed class PatternGraphRow : CompileTableRow
 
     internal override (AIAgent Entry, Dictionary<string, string> Stages) BuildEntry(
         AgentCoreConfiguration configuration,
+        string entryName,
+        EntryConfiguration entry,
+        string entryPointer,
         Dictionary<string, AIAgent> agents,
         AgentCompilationContext context)
     {
-        var graph = configuration.Graph!;
+        var graph = entry.Graph!;
+        var graphPointer = ConfigurationError.AppendPointer(entryPointer, "graph");
+        var agentsPointer = ConfigurationError.AppendPointer(graphPointer, "agents");
         List<AIAgent> participants = [];
 
         for (var index = 0; index < graph.Agents.Count; index++)
@@ -29,7 +35,7 @@ internal sealed class PatternGraphRow : CompileTableRow
             if (!agents.TryGetValue(id, out var agent))
             {
                 throw ConfigurationCompiler.Fail(
-                    ConfigurationError.AppendPointer("/graph/agents", index),
+                    ConfigurationError.AppendPointer(agentsPointer, index),
                     $"the graph names the agent '{id}', which agents.items does not declare.");
             }
 
@@ -38,18 +44,18 @@ internal sealed class PatternGraphRow : CompileTableRow
 
         if (participants.Count == 0)
         {
-            throw ConfigurationCompiler.Fail("/graph/agents", "a pattern graph names no agent.");
+            throw ConfigurationCompiler.Fail(agentsPointer, "a pattern graph names no agent.");
         }
 
         var workflow = graph.Pattern switch
         {
-            GraphPattern.Sequential => AgentWorkflowBuilder.BuildSequential(configuration.Name, participants),
-            GraphPattern.Concurrent => AgentWorkflowBuilder.BuildConcurrent(configuration.Name, participants, aggregator: null),
-            GraphPattern.Handoff => BuildHandoff(configuration.Name, participants),
-            _ => BuildGroupChat(configuration.Name, participants),
+            GraphPattern.Sequential => AgentWorkflowBuilder.BuildSequential(entryName, participants),
+            GraphPattern.Concurrent => AgentWorkflowBuilder.BuildConcurrent(entryName, participants, aggregator: null),
+            GraphPattern.Handoff => BuildHandoff(entryName, participants),
+            _ => BuildGroupChat(entryName, participants),
         };
 
-        return (workflow.AsAIAgent(name: configuration.Name), NoStages());
+        return (workflow.AsAIAgent(name: entryName), NoStages());
     }
 
     /// <remarks>
@@ -57,8 +63,8 @@ internal sealed class PatternGraphRow : CompileTableRow
     /// participant, and handoff and group chat both end wherever the conversation took them, so on
     /// those patterns any participant may legitimately speak last and no filter applies.
     /// </remarks>
-    internal override HashSet<string>? SpokenAuthors(AgentCoreConfiguration configuration)
-        => configuration.Graph is { Pattern: GraphPattern.Sequential, Agents.Count: > 0 } graph
+    internal override HashSet<string>? SpokenAuthors(AgentCoreConfiguration configuration, EntryConfiguration entry)
+        => entry.Graph is { Pattern: GraphPattern.Sequential, Agents.Count: > 0 } graph
             ? new HashSet<string>(StringComparer.Ordinal) { graph.Agents[^1] }
             : null;
 

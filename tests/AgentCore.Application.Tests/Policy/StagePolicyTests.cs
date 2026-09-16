@@ -15,7 +15,6 @@ public sealed class StagePolicyTests
     private const string StayDocument =
         """
         apiVersion: agentcore/v1
-        name: stay
         state:
           ready: { type: boolean, default: false, writer: extractor }
         guards:
@@ -24,21 +23,22 @@ public sealed class StagePolicyTests
           items:
             - { id: first }
             - { id: second }
-        policy:
-          initial: one
-          stages:
-            - id: one
-              agent: first
-              to: [ { stage: two, when: isReady } ]
-            - id: two
-              agent: second
-              terminal: true
+        entries:
+          main:
+            policy:
+              initial: one
+              stages:
+                - id: one
+                  agent: first
+                  to: [ { stage: two, when: isReady } ]
+                - id: two
+                  agent: second
+                  terminal: true
         """;
 
     private const string ErrorDocument =
         """
         apiVersion: agentcore/v1
-        name: reject
         state:
           ready: { type: boolean, default: false, writer: extractor }
         guards:
@@ -47,22 +47,23 @@ public sealed class StagePolicyTests
           items:
             - { id: first }
             - { id: second }
-        policy:
-          initial: one
-          stages:
-            - id: one
-              agent: first
-              onNoMatch: error
-              to: [ { stage: two, when: isReady } ]
-            - id: two
-              agent: second
-              terminal: true
+        entries:
+          main:
+            policy:
+              initial: one
+              stages:
+                - id: one
+                  agent: first
+                  onNoMatch: error
+                  to: [ { stage: two, when: isReady } ]
+                - id: two
+                  agent: second
+                  terminal: true
         """;
 
     private const string OverlapDocument =
         """
         apiVersion: agentcore/v1
-        name: overlap
         state:
           ready: { type: boolean, default: false, writer: extractor }
         guards:
@@ -73,20 +74,22 @@ public sealed class StagePolicyTests
             - { id: first }
             - { id: left }
             - { id: right }
-        policy:
-          initial: one
-          stages:
-            - id: one
-              agent: first
-              to:
-                - { stage: two,   when: isReady }
-                - { stage: three, when: alsoReady }
-            - id: two
-              agent: left
-              terminal: true
-            - id: three
-              agent: right
-              terminal: true
+        entries:
+          main:
+            policy:
+              initial: one
+              stages:
+                - id: one
+                  agent: first
+                  to:
+                    - { stage: two,   when: isReady }
+                    - { stage: three, when: alsoReady }
+                - id: two
+                  agent: left
+                  terminal: true
+                - id: three
+                  agent: right
+                  terminal: true
         """;
 
     [Fact]
@@ -143,7 +146,6 @@ public sealed class StagePolicyTests
         var (policy, guards) = Build(
             """
             apiVersion: agentcore/v1
-            name: throwing
             state:
               count: { type: integer, default: 0, writer: counter, increment: { var: count } }
             guards:
@@ -152,15 +154,17 @@ public sealed class StagePolicyTests
               items:
                 - { id: first }
                 - { id: second }
-            policy:
-              initial: one
-              stages:
-                - id: one
-                  agent: first
-                  to: [ { stage: two, when: broken } ]
-                - id: two
-                  agent: second
-                  terminal: true
+            entries:
+              main:
+                policy:
+                  initial: one
+                  stages:
+                    - id: one
+                      agent: first
+                      to: [ { stage: two, when: broken } ]
+                    - id: two
+                      agent: second
+                      terminal: true
             """);
 
         var snapshot = new Dictionary<string, JsonNode?>(StringComparer.Ordinal)
@@ -178,7 +182,7 @@ public sealed class StagePolicyTests
     public void AnUndeclaredInitialStage_Throws()
     {
         AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(StayDocument);
-        PolicyConfiguration broken = document.Policy! with { Initial = "nowhere" };
+        PolicyConfiguration broken = document.Entries["main"].Policy! with { Initial = "nowhere" };
 
         Assert.Throws<ArgumentException>(() => new StagePolicy(broken, new TestGuardEvaluator(document)));
     }
@@ -187,7 +191,7 @@ public sealed class StagePolicyTests
     {
         var document = ConfigurationLoader.LoadYaml(yaml);
         TestGuardEvaluator guards = new(document);
-        return (new StagePolicy(document.Policy!, guards), guards);
+        return (new StagePolicy(document.Entries["main"].Policy!, guards), guards);
     }
 
     private static Dictionary<string, JsonNode?> Snapshot(bool ready)

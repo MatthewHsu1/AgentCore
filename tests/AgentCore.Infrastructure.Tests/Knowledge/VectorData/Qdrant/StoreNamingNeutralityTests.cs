@@ -1,6 +1,5 @@
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Knowledge;
-using AgentCore.Application.Runtime;
 using AgentCore.Domain.Knowledge;
 using AgentCore.Infrastructure.Knowledge.VectorData.Qdrant;
 using AgentCore.Infrastructure.Tests.Fakes;
@@ -43,7 +42,7 @@ public sealed class StoreNamingNeutralityTests
     {
         var channel = new CapturingSearchChannel([Point()]);
 
-        var card = Assert.Single(await Store(channel).SearchAsync("anything", TestContext.Current.CancellationToken));
+        var card = Assert.Single(await Store(channel).SearchAsync("anything", null, TestContext.Current.CancellationToken));
 
         Assert.Equal("DOC-01", card.CardId);
         Assert.Equal("the body text", card.Text);
@@ -59,11 +58,8 @@ public sealed class StoreNamingNeutralityTests
         // and a store that picked one would silently match nothing against the other.
         var channel = new CapturingSearchChannel([Point()]);
 
-        using (KnowledgeScopeScope.Open(Scope("region", "emea")))
-        {
-            await Store(channel, template: "{key}", scoped: true)
-                .SearchAsync("anything", TestContext.Current.CancellationToken);
-        }
+        await Store(channel, template: "{key}", scoped: true)
+            .SearchAsync("anything", Scope("region", "emea"), TestContext.Current.CancellationToken);
 
         Assert.Equal("emea", channel.DenseFilterKeywords["region"]);
     }
@@ -72,12 +68,8 @@ public sealed class StoreNamingNeutralityTests
     public async Task Search_ANestedTemplate_BecomesADottedPath()
     {
         var channel = new CapturingSearchChannel([Point()]);
-
-        using (KnowledgeScopeScope.Open(Scope("region", "emea")))
-        {
-            await Store(channel, template: "attributes.{key}", scoped: true)
-                .SearchAsync("anything", TestContext.Current.CancellationToken);
-        }
+        await Store(channel, template: "attributes.{key}", scoped: true)
+            .SearchAsync("anything", Scope("region", "emea"), TestContext.Current.CancellationToken);
 
         Assert.Equal("emea", channel.DenseFilterKeywords["attributes.region"]);
         Assert.False(channel.DenseFilterKeywords.ContainsKey("facets.region"));
@@ -89,7 +81,7 @@ public sealed class StoreNamingNeutralityTests
         var channel = new CapturingSearchChannel([Point()]);
 
         await Store(channel, analyzer: new FixedTermAnalyzer())
-            .SearchAsync("the screen says e33", TestContext.Current.CancellationToken);
+            .SearchAsync("the screen says e33", null, TestContext.Current.CancellationToken);
 
         Assert.Equal("content", Assert.Single(channel.LexicalKeys));
     }
@@ -100,9 +92,8 @@ public sealed class StoreNamingNeutralityTests
         // Unmapped means absent, not "fall back to a field called text". A store that guessed would
         // filter on a key this collection has no index for and drop every row.
         var channel = new CapturingSearchChannel([Point()]);
-
         await Store(channel, fields: Foreign with { Lexical = null }, analyzer: new FixedTermAnalyzer())
-            .SearchAsync("the screen says e33", TestContext.Current.CancellationToken);
+            .SearchAsync("the screen says e33", null, TestContext.Current.CancellationToken);
 
         Assert.Empty(channel.LexicalKeys);
         Assert.Single(channel.Query!.Prefetch);
@@ -115,7 +106,7 @@ public sealed class StoreNamingNeutralityTests
         var channel = new CapturingSearchChannel([Point(key)]);
 
         var card = Assert.Single(await Store(channel, fields: Foreign with { Id = null })
-            .SearchAsync("anything", TestContext.Current.CancellationToken));
+            .SearchAsync("anything", null, TestContext.Current.CancellationToken));
 
         Assert.Equal(key.ToString(), card.CardId);
     }
@@ -126,7 +117,7 @@ public sealed class StoreNamingNeutralityTests
         var channel = new CapturingSearchChannel([Point()]);
 
         var card = Assert.Single(await Store(channel, fields: Foreign with { Source = null, Locator = null })
-            .SearchAsync("anything", TestContext.Current.CancellationToken));
+            .SearchAsync("anything", null, TestContext.Current.CancellationToken));
 
         Assert.Equal(string.Empty, card.SourceRef);
         Assert.Equal(string.Empty, card.SourceLocator);
@@ -141,7 +132,7 @@ public sealed class StoreNamingNeutralityTests
         {
             Field = "related",
             Lookup = KnowledgeLinkLookup.Filter,
-        }).SearchAsync("anything", TestContext.Current.CancellationToken);
+        }).SearchAsync("anything", null, TestContext.Current.CancellationToken);
 
         var condition = Assert.Single(channel.ScrollFilter!.Must);
         Assert.Equal("doc_id", condition.Field.Key);
@@ -167,7 +158,7 @@ public sealed class StoreNamingNeutralityTests
                 Prefix = "doc:",
             },
             linkNamespace: Uuid5PointId.Namespace("dns"))
-            .SearchAsync("anything", TestContext.Current.CancellationToken);
+            .SearchAsync("anything", null, TestContext.Current.CancellationToken);
 
         Assert.Equal(
             [Uuid5PointId.For("DOC-99", Uuid5PointId.Namespace("dns"), "doc:")],

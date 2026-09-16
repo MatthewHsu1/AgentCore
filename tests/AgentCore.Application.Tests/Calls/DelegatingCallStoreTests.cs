@@ -17,13 +17,14 @@ public sealed class DelegatingCallStoreTests
     {
         public int Appends { get; private set; }
 
-        public override ValueTask AppendAsync(
-            IReadOnlyList<CallMessage> messages,
+        public override ValueTask<IReadOnlyList<CallMessage>> AppendAsync(
+            string callId,
+            IReadOnlyList<CallMessageDraft> messages,
             CallSessionState? state = null,
             CancellationToken cancellationToken = default)
         {
             Appends++;
-            return base.AppendAsync(messages, state, cancellationToken);
+            return base.AppendAsync(callId, messages, state, cancellationToken);
         }
     }
 
@@ -32,10 +33,11 @@ public sealed class DelegatingCallStoreTests
     {
         // Arrange
         CountingAppends store = new(new InMemoryCallStore());
+        await store.CreateAsync("c1", Token);
 
         // Act
         await store.AppendAsync(
-            [new CallMessage("c1", 0, 0, new ChatMessage(ChatRole.User, "hi"), "m0")], cancellationToken: Token);
+            "c1", [new CallMessageDraft(0, new ChatMessage(ChatRole.User, "hi"), "m0")], cancellationToken: Token);
 
         // Assert
         Assert.Equal(1, store.Appends);

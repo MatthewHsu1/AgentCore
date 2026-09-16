@@ -6,13 +6,14 @@ using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Secrets;
 using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Tools.Registry;
+using AgentCore.AspNetCore.Call;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
-using AgentCore.AspNetCore.Sessions;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -25,6 +26,8 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
 
     private readonly ILoggerFactory _loggers;
 
+    private readonly IServiceProvider? _services;
+
     private readonly List<object> _opened = [];
 
     private readonly Lock _gate = new();
@@ -32,17 +35,19 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
     private BootState? _state;
 
     private int _closed;
-
+    
     /// <summary>Takes the options a host filled and the loggers the container holds.</summary>
     /// <param name="options">The options every <c>Use*</c> seam wrote into.</param>
     /// <param name="loggers">The container's factory, used unless the options name another.</param>
-    public AgentCoreBoot(IOptions<AgentCoreOptions> options, ILoggerFactory loggers)
+    /// <param name="services">The container, read for the mapped routes the startup check walks.</param>
+    public AgentCoreBoot(IOptions<AgentCoreOptions> options, ILoggerFactory loggers, IServiceProvider? services = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(loggers);
 
         _options = options.Value;
         _loggers = _options.LoggerFactory ?? loggers;
+        _services = services;
     }
 
     /// <summary>Gets the loaded document.</summary>
@@ -57,8 +62,8 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
     /// <summary>Gets the registry that compiled the document, and would compile it again.</summary>
     internal CompiledAgentRegistry CompiledRegistry => Started.Graph.Registry;
 
-    /// <summary>Gets the one graph every call shares.</summary>
-    internal CompiledAgent Compiled => Started.Graph.Compiled;
+    /// <summary>Gets the compiled entries, keyed by entry name. Every call shares them.</summary>
+    internal IReadOnlyDictionary<string, CompiledAgent> CompiledEntries => Started.Graph.Entries;
 
     /// <summary>Gets the factory the compile table asks for every agent and for the extractor.</summary>
     internal IChatClientFactory ChatClients => Started.Graph.ChatClients;
@@ -78,14 +83,20 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
     /// <summary>Gets the queue that answers the audit port, not the store behind it.</summary>
     internal QueuedAuditSink AuditQueue => Started.AuditQueue;
 
-    /// <summary>Gets the factory that builds one session per call.</summary>
-    internal ICallSessionFactory Sessions => Started.Sessions;
+    /// <summary>Gets one factory, one agent, and one session store per entry.</summary>
+    internal EntryRegistry Entries => Started.Entries;
+
+    /// <summary>Gets the container, read for host-registered seams the boot honors.</summary>
+    internal IServiceProvider? Services => _services;
 
     /// <summary>Gets the knowledge base, or <see langword="null"/> when no agent reads one.</summary>
     internal IKnowledgeRetrievalPort? Knowledge => Started.Knowledge;
 
-    /// <summary>Gets the same turn loop, behind the framework's own agent seam.</summary>
-    internal AgentCoreAgent Agent => Started.Agent;
+    /// <summary>Gets what each entry's call route runs, keyed by entry name, or <see langword="null"/> when no call routes here.</summary>
+    internal IReadOnlyDictionary<string, RequestDelegate>? CallHandlers => Started.CallHandlers;
+
+    /// <summary>Gets why no call routes here, or <see langword="null"/> when calls route.</summary>
+    internal string? CallUnroutable => Started.CallUnroutable;
 
     /// <summary>Gets the call transports the host registered, or <see langword="null"/> if it registered none.</summary>
     internal IReadOnlyList<ICallAdapter>? CallAdapters => Started.CallAdapters;
@@ -95,12 +106,6 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
 
     /// <summary>Gets the telemetry export, or <see langword="null"/> when the host registered no vendor.</summary>
     internal ITelemetrySession? Telemetry => Started.Telemetry;
-
-    /// <summary>Gets what the call route runs, or <see langword="null"/> when no call routes here.</summary>
-    internal RequestDelegate? CallHandler => Started.CallHandler;
-
-    /// <summary>Gets why no call routes here, or <see langword="null"/> when one does.</summary>
-    internal string? CallUnroutable => Started.CallUnroutable;
 
     private BootState Started => _state ?? throw NotStarted();
 
@@ -146,7 +151,7 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
     /// </exception>
     /// <exception cref="ConfigurationLoadException">
     /// The document fails one of the eight checks, names a <c>kind</c> no registered adapter serves,
-    /// or does not compile.
+    /// does not compile, or a mapped route names an entry it does not declare.
     /// </exception>
     /// <exception cref="SecretResolutionException">One <c>${secret:name}</c> reference resolves to nothing.</exception>
     internal async ValueTask BootAsync(CancellationToken cancellationToken)
@@ -169,7 +174,7 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
 
         AgentCoreStartup startup = new(configuration, secrets);
 
-        var agents = configuration.Agents ?? new AgentsConfiguration { Items = [] };
+        var agents = configuration.Agents;
 
         var embeddings = Track(await EmbeddingStartup
             .OpenAsync(configuration, _options, cancellationToken)
@@ -226,7 +231,8 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
                 knowledge,
                 skills,
                 KnowledgeCitationFormatterFactory.Resolve(configuration, _options.KnowledgeCitations),
-                _loggers)
+                _loggers,
+                _options.WorkspaceRoot)
             .ConfigureAwait(false);
 
         var seams = CallSeamStartup.Build(configuration, _options);
@@ -243,14 +249,53 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
             calls,
             evaluators,
             graph,
-            call.Sessions,
-            call.Agent,
+            call.Entries,
             call.Queue,
             knowledge,
             seams.Call,
             seams.Speech,
-            seams.Handler,
+            seams.Handlers,
             seams.Unroutable);
+
+        ValidateMappedEntries(configuration);
+    }
+
+    /// <summary>Refuses a mapped route that names an entry the document does not declare.</summary>
+    /// <param name="configuration">The loaded document. It carries the declared entries.</param>
+    /// <exception cref="ConfigurationLoadException">A route names an unknown entry.</exception>
+    private void ValidateMappedEntries(AgentCoreConfiguration configuration)
+    {
+        var sources = _services?.GetService<IEnumerable<EndpointDataSource>>();
+        if (sources is null)
+        {
+            return;
+        }
+
+        List<ConfigurationError> failures = [];
+        foreach (var endpoint in sources.SelectMany(source => source.Endpoints))
+        {
+            if (endpoint.Metadata.GetMetadata<AgentCoreEntryMetadata>() is not { } mapped)
+            {
+                continue;
+            }
+
+            if (!configuration.Entries.ContainsKey(mapped.Entry))
+            {
+                failures.Add(new ConfigurationError
+                {
+                    Pointer = "/entries",
+                    Message =
+                        $"Map{mapped.Surface} names an unknown entry. "
+                        + EntryRegistry.UnknownEntryMessage(mapped.Entry, configuration.Entries.Keys),
+                    Check = ConfigurationCheck.ReferenceResolution,
+                });
+            }
+        }
+
+        if (failures.Count > 0)
+        {
+            throw new ConfigurationLoadException(failures);
+        }
     }
 
     /// <inheritdoc/>
@@ -313,13 +358,12 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
         ICallStore Calls,
         EvaluatorRegistry Evaluators,
         CompiledGraph Graph,
-        ICallSessionFactory Sessions,
-        AgentCoreAgent Agent,
+        EntryRegistry Entries,
         QueuedAuditSink AuditQueue,
         IKnowledgeRetrievalPort? Knowledge,
         IReadOnlyList<ICallAdapter>? CallAdapters,
         IReadOnlyList<ISpeechAdapter>? SpeechAdapters,
-        RequestDelegate? CallHandler,
+        IReadOnlyDictionary<string, RequestDelegate>? CallHandlers,
         string? CallUnroutable);
 }
 

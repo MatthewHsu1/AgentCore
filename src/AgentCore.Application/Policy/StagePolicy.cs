@@ -24,8 +24,8 @@ public sealed class StagePolicy
 
     private string _stage;
 
-    /// <summary>Builds the machine one configuration declares.</summary>
-    /// <param name="policy">The <c>policy:</c> section.</param>
+    /// <summary>Builds the machine one entry's <c>policy:</c> block declares.</summary>
+    /// <param name="policy">The entry's <c>policy:</c> block.</param>
     /// <param name="guards">The evaluator that runs each exit guard.</param>
     /// <exception cref="ArgumentException">The initial stage is not declared.</exception>
     public StagePolicy(PolicyConfiguration policy, IGuardEvaluator guards)
@@ -69,11 +69,11 @@ public sealed class StagePolicy
         }
     }
 
-    /// <summary>Gets the <c>policy:</c> section this machine was built from.</summary>
+    /// <summary>Gets the entry's <c>policy:</c> block this machine was built from.</summary>
     public PolicyConfiguration Configuration => _policy;
 
     /// <summary>Gets the id of the stage the machine holds.</summary>
-    public string Stage => _machine.State;
+    public string Stage => _stage;
 
     /// <summary>Gets the stage the machine holds.</summary>
     public StageConfiguration CurrentStage => _stages[_machine.State];

@@ -1,0 +1,547 @@
+# AgentCore configuration, the worked example of section 8.1.
+#
+# One document carries the whole schema. This file parses, and it passes check 1 of section 8.5.
+# The real config.yaml belongs to the consuming project and is not committed here.
+#
+# The same document loads identically as YAML and as JSON. See rule 17 of section 11.
+
+# The document version. agentcore/v1 is the only value this release accepts.
+apiVersion: agentcore/v1
+
+# The entry key names each agent: one deployment serves one brand per entry.
+# There is no root name:. Section E8 gives the name to the entries: key.
+
+# The line the caller hears when a turn fails. Section 8.7 names the two failures that reach it: a
+# run that returns no text after 40 tool rounds, and a tool that fails four times in a row. The key
+# sits at the root because every entry speaks it, and each entry may override it with its own
+# fallbackReply:. The key is optional. The default is:
+#   "I am sorry. I could not finish that. Please say it again."
+# An empty line is silence on a voice call, so a blank value is a load error.
+fallbackReply: "I am sorry. I could not finish that. Please say it again."
+
+# The line the caller hears when the agent refuses. Content moderation reads the caller's spoken
+# input before the model runs, and the agent refuses the turn when the endpoint flags it. The key
+# is optional. The default is:
+#   "I am sorry. I cannot help with that request."
+# fallbackReply cannot serve here. Its default asks the caller to say it again, and after a refusal
+# that invites the harmful request a second time. Section 8.7 also gives fallbackReply to a turn
+# that FAILED, and a refusal is not a failure: the model was never asked.
+# An empty line is silence on a voice call, so a blank value is a load error.
+refusalReply: "I am sorry. I cannot help with that request."
+
+# ---------------------------------------------------------------------------------------------
+# state: the slots the guards read.
+#
+# Every slot has exactly one writer, and section 8.3 lists the four writers. Three slots are
+# reserved, always present, and read-only: stage, turnIndex, and callDurationSeconds. A document
+# may read them in a rule and may not declare them here.
+# ---------------------------------------------------------------------------------------------
+state:
+  # writer: extractor. A model call fills these from the finished turn. Every extractor slot is
+  # nullable on the wire, and a null leaves the slot at its previous value.
+  callerAskedForHuman: { type: boolean, default: false, writer: extractor }
+  callerSaidGoodbye:   { type: boolean, default: false, writer: extractor }
+  machineIdentified:   { type: boolean, default: false, writer: extractor }
+  resolved:            { type: boolean, default: false, writer: extractor }
+
+  # writer: tool. The value comes from a named field of a named tool result. A tool result has no
+  # declared shape, so check 2 verifies only that the tool id exists. The declared type wins:
+  # AgentCore coerces the value, and leaves the slot at its default when coercion fails.
+  orderStatus:         { type: string,  writer: tool, from: lookup_order.status }
+
+  # writer: extractor, and also named in providers.knowledge.scope.fromState below, which is what
+  # turns these two into the turn's knowledge facets. A fromState slot has to be this exact shape —
+  # writer: extractor, type: string, an enum:, and no default — and the boot check says which of the
+  # four is missing rather than failing the load with no pointer. enum: is enforced on every write,
+  # not merely requested of the model: a value outside it is refused and the slot keeps its previous
+  # value, so a resumed call whose stored blob carries a value the corpus was never tagged with comes
+  # back with that slot unfilled rather than scoped to a typo.
+  #
+  # applies_to breaks this file's camelCase slot naming on purpose. A fromState slot name IS the
+  # facet key, and scope.template turns it straight into the payload path, so these two names have to
+  # be spelled the way the collection spells them rather than the way the schema spells its own keys.
+  brand:      { type: string, writer: extractor, description: "The brand of the caller's machine.", enum: [sole, spirit] }
+  applies_to: { type: string, writer: extractor, description: "The model, as printed on the machine.", enum: [f63, f65, f80] }
+
+  # writer: counter. The slot increments whenever the increment rule is true.
+  failedResolveTurns:
+    type: integer
+    default: 0
+    writer: counter
+    increment:
+      and:
+        - { "===": [ { var: stage }, "resolve" ] }
+        - { "!": { var: resolved } }
+
+# ---------------------------------------------------------------------------------------------
+# extractor: the bridge from prose to typed state.
+#
+# AgentCore builds one JSON Schema from every writer: extractor slot, all nullable, and asks the
+# model to fill what the turn shows. The extractor never speaks, holds no tools, and decides
+# nothing. The guards decide.
+# ---------------------------------------------------------------------------------------------
+extractor:
+  # The model this calls. The name points at providers.llm[].as.
+  model: { ref: fill }
+
+  # after_reply is the only value agentcore/v1 defines. The reply streams first, the turn ends,
+  # and the extractor runs while the caller speaks. This is D21.
+  when: after_reply
+
+# ---------------------------------------------------------------------------------------------
+# guards: a name mapped to a JSONLogic rule.
+#
+# A name renders in the live Stateless mermaid diagram; an inline rule renders as a blob. Section
+# 8.4 holds the operator allow-list, and check 4 enforces it. Use ===, never ==.
+# ---------------------------------------------------------------------------------------------
+guards:
+  saidGoodbye:
+    { var: callerSaidGoodbye }
+
+  wantsHuman:
+    and:
+      - { "!": { var: callerSaidGoodbye } }
+      - { var: callerAskedForHuman }
+
+  identified:
+    and:
+      - { "!": { var: callerSaidGoodbye } }
+      - { "!": { var: callerAskedForHuman } }
+      - { var: machineIdentified }
+
+  goodbyeOrFixed:
+    or:
+      - { var: callerSaidGoodbye }
+      - and:
+          - { "!": { var: callerAskedForHuman } }
+          - { var: resolved }
+
+  humanOrExhausted:
+    and:
+      - { "!": { var: callerSaidGoodbye } }
+      - or:
+          - { var: callerAskedForHuman }
+          - and:
+              - { "!": { var: resolved } }
+              - { ">=": [ { var: failedResolveTurns }, 3 ] }
+
+# ---------------------------------------------------------------------------------------------
+# tools: the four kinds.
+#
+#   builtin  a tool AgentCore ships. uses: names it.
+#   http     one HTTP call. request: describes it.
+#   binding  a host delegate. binds: names it.
+#   agent    another declared agent. agent: names it.
+#
+# A builtin tool returns an error result and does not throw. See section 8.7.
+# ---------------------------------------------------------------------------------------------
+tools:
+  - id: lookup_order
+    kind: http
+    description: Read one order by its identifier.
+    # The raw JSON Schema of the arguments. AgentCore passes it to the model unchanged.
+    parameters:
+      type: object
+      properties: { orderId: { type: string } }
+      required: [ orderId ]
+    request:
+      method: GET
+      # A {name} placeholder takes its value from the tool arguments.
+      url: "https://api.example.com/orders/{orderId}"
+      # ${secret:name} is a reference and never a value. The parser reads it, and
+      # ISecretResolverPort resolves it at startup through the four-step chain in D22.
+      headers: { Authorization: "Bearer ${secret:orders-api-key}" }
+
+  # A binds: name is registered one of two ways, and the way decides who writes the schema.
+  #
+  # options.Bind("CreateCase", (json, ct) => ...) reads the arguments as one JSON object, so the
+  # declaration writes parameters: below and the host digs the values out by hand.
+  - id: create_case
+    kind: binding
+    binds: CreateCase
+    description: Open a service case for a human agent.
+    parameters:
+      type: object
+      properties: { summary: { type: string } }
+      required: [ summary ]
+
+  # Markers, not code: each tells the model provider it may run something hosted, and only a
+  # provider that runs it acts on it. AgentToolCompiler drops a hosted marker, per agent, for a
+  # model providers.llm[] vetoed with webSearch: false or codeExecute: false, or whose adapter
+  # resolves no marker — a warning at compile time, never a boot failure.
+  - { id: search, kind: builtin, uses: web.search }
+  - { id: python, kind: builtin, uses: code.execute }
+
+  # options.Bind("CloseCase", (string caseId, string reason) => ...) registers a typed method
+  # instead. Its parameters are the arguments, and their schema, so this declaration writes no
+  # parameters: at all. Writing one anyway is a boot failure: the two would drift apart.
+  # A [Description] attribute on a parameter is what the model reads about it.
+  #
+  # - id: close_case
+  #   kind: binding
+  #   binds: CloseCase
+  #   description: Close a service case once the customer is happy.
+
+  # kind: agent is agent-as-tool, and it is not handoff. The outer agent calls the inner agent,
+  # reads the reply, and keeps control. graph: with pattern: handoff transfers control instead,
+  # so the two do not overlap. The compiler wraps the inner agent with AsAIFunction(), and the
+  # inner agent is the same process singleton every other caller shares. See T44.
+  #
+  # description: and parameters: both matter here, because the calling model reads both to decide
+  # when to delegate. AgentCore hands the filled arguments to the inner agent as one JSON object.
+  # Check 8 of section 8.5 walks the agent: field and rejects a delegation cycle at load.
+  #
+  # - id: ask_specialist
+  #   kind: agent
+  #   agent: resolver
+  #   description: Ask the resolution specialist to answer one product question.
+  #   parameters:
+  #     type: object
+  #     properties: { question: { type: string } }
+  #     required: [ question ]
+
+# ---------------------------------------------------------------------------------------------
+# agents: one stable prefix, and one delta for each stage.
+#
+# defaults.instructions is the cached prefix. Anything that changes per turn must sit below it, or
+# it defeats the cache for every later turn. A cache miss is a billing bug and never a capacity
+# one, because a cached prompt still counts in full against the rate limit.
+# ---------------------------------------------------------------------------------------------
+agents:
+  defaults:
+    model: { ref: reply, temperature: 0.3 }
+    instructions: |
+      <the stable cached prefix: persona, safety, transfer rules, and tool etiquette>
+    # citations defaults to false and scoped defaults to true. A forgotten flag is then silent
+    # and safe, and the dangerous direction is the one you type on purpose.
+    #
+    # scoped: true is what makes providers.knowledge.scope.template required above: a scoped turn
+    # filters on facets, and only this document knows where this collection keeps them. It also
+    # means the HOST must open a KnowledgeScope for the turn -- AgentCore opens none for you, and a
+    # scoped agent with no scope open says it cannot look the answer up rather than searching
+    # everything. Set scoped: false on an agent that is meant to read the whole corpus.
+    knowledge: { mode: prefetch, limit: 5, citations: false }
+
+    # Every strategy here is deterministic: the same messages give the same result, from empty
+    # state. Summarization is not offered on purpose — a resumed call rebuilds a new session and
+    # re-derives from the replayed words, so a strategy that called a model would give one call two
+    # different histories. tool_result folds old tool-call groups into one short line each; the
+    # other three are truncate, sliding_window and context_window. trigger: names exactly one of
+    # tokens, messages, turns or groups — naming zero or two is a load error. keep: is how many
+    # newest groups the strategy never touches; foldResultChars: is how much of a tool result
+    # tool_result carries forward per fold. There is no per-agent opt-out: an omitted block inherits
+    # this one, so give compaction to some agents and not others by declaring the block on those
+    # agents instead of here.
+    #
+    # context_window here, not tool_result: tool_result folds only function tool calls, and the
+    # analyst agent below carries search, a hosted tool whose results are no such thing — tool_result
+    # would leave them growing the conversation forever. context_window folds tool_result's own work
+    # first and then truncates, and truncate drops whole groups regardless of what is inside them, so
+    # it still bounds a conversation a hosted tool is filling.
+    compaction: { strategy: context_window, trigger: { messages: 40 }, keep: 6, foldResultChars: 300 }
+  items:
+    # voice, scripted — one model round trip, no source labels spoken aloud. Inherits mode:
+    # prefetch, limit: 5, citations: false from defaults above.
+    - { id: greeter,    instructions: "<stage delta>", tools: [] }
+    - { id: identifier, instructions: "<stage delta>", tools: [ lookup_order ] }
+    - { id: resolver,   instructions: "<stage delta>", tools: [] }
+    - { id: escalator,  instructions: "<stage delta>", tools: [ create_case ] }
+    - { id: closer,     instructions: "<stage delta>", tools: [] }
+
+    # internal — everything on, and it searches every product on purpose
+    - { id: analyst, instructions: "<stage delta>", tools: [ lookup_order, create_case, search, python ],
+        knowledge: { mode: tool, limit: 8, citations: true, scoped: false } }
+
+    # customer facing — tools yes, citations no. It sets two keys and inherits limit: 5.
+    - { id: webchat, instructions: "<stage delta>", tools: [ lookup_order ],
+        knowledge: { mode: tool, citations: false } }
+
+# ---------------------------------------------------------------------------------------------
+# entries: the agents this document serves, keyed by entry name.
+#
+# Each entry holds exactly one shape — agent:, policy:, or graph: — plus optional spoken-line
+# overrides. The phone entry below runs the stage machine over string stages, run by Stateless.
+# The machine picks a stage each turn, and the stage names one agent. Check 5 evaluates the exits
+# of one stage as siblings: two true at the same time is a startup error. Zero true is normal and
+# means the stage stays where it is; a stage may set onNoMatch: error to reject that.
+#
+# The chat entry names one agents.items id and runs it directly.
+# ---------------------------------------------------------------------------------------------
+entries:
+  phone:
+    # The voice line for this entry. Overrides the root fallbackReply above.
+    fallbackReply: "Sorry — say it again."
+    policy:
+      initial: greeting
+      stages:
+        - id: greeting
+          agent: greeter
+          to: [ { stage: identify } ]
+
+        - id: identify
+          agent: identifier
+          to:
+            - { stage: close,    when: saidGoodbye }
+            - { stage: escalate, when: wantsHuman }
+            - { stage: resolve,  when: identified }
+
+        - id: resolve
+          agent: resolver
+          to:
+            - { stage: close,    when: goodbyeOrFixed }
+            - { stage: escalate, when: humanOrExhausted }
+
+        - id: escalate
+          agent: escalator
+          to: [ { stage: close } ]
+
+        - id: close
+          agent: closer
+          terminal: true
+
+  chat:
+    # One agents.items id, run directly with no stage machine.
+    agent: webchat
+    # The refusal line for this entry. Overrides the root refusalReply above.
+    refusalReply: "Sorry — I can't help with that here."
+
+# ---------------------------------------------------------------------------------------------
+# providers: the seam where the ports of section 7 bind.
+#
+# This section configures adapters and never changes agent shape.
+# ---------------------------------------------------------------------------------------------
+providers:
+  llm:
+    - { kind: openai, model: gpt-4.1-mini, as: reply }      # the voice path, chosen on latency
+    - { kind: openai, model: gpt-5.4-nano, as: fill }       # the extractor, chosen on null discipline
+    - { kind: openai, model: gpt-4.1,      as: judge }      # evaluation only, chosen on judgement
+    - { kind: openai, model: gpt-4.1-nano, as: cheap, webSearch: false, codeExecute: false }
+  # webSearch: false and codeExecute: false above are vetoes, not defaults: omitted or true both
+  # leave the choice to the vendor's adapter. cheap is the least capable model, so vetoing both here
+  # costs nothing and stops a future hosted tool from ever running on it by accident.
+  # Three planes, and they are not duplicates. call is the media pipe and owns the inbound route.
+  # speech is recognition and synthesis. telephony is call control, which must outlive any one
+  # media leg because a warm transfer creates a second one.
+  call:      { kind: telnyx-relay }        # the pipe: who carries the call and owns /v1/call
+  speech:                                  # the ears and the mouth, named one role at a time
+    stt: { kind: telnyx-relay }            # recognition. Bundled here, so it matches call
+    tts: { kind: telnyx-relay }            # synthesis. Bundled here, so it matches call
+  telephony: { kind: telnyx }              # dial, transfer, hang up. Not the pipe — that is call
+  moderation: { kind: openai }             # reads what the CALLER said, before the model runs
+  # a flagged turn never reaches the model and speaks refusalReply instead. It needs the
+  # openai-api-key secret, the same one the llm entries above read. Remove this line to moderate
+  # nothing: the adapter is then never asked to build, and no key is read for it.
+  embeddings: { kind: openai, model: text-embedding-3-small }
+  # the model that turns a query into a vector. It must be the model the collection was BUILT with,
+  # or the startup width check refuses to open the store. It reads the same openai-api-key secret
+  # the llm entries read. dimensions: is optional; write it only if your ingester asked the vendor
+  # for a narrower vector than the model's own width.
+  # -------------------------------------------------------------------------------------------
+  # knowledge: the collection this deployment reads, and the ONLY description of it that exists.
+  #
+  # AgentCore ships no payload field names. Not one. It does not know that a card id is usually
+  # called card_id, or that a body is usually called body, because "usually" is a fact about one
+  # ingester and this framework serves any of them. Every name below is here because THIS
+  # collection is shaped this way; a collection built by another tool writes a different block,
+  # and neither shape is privileged.
+  #
+  # The cost of that is a longer block. The benefit is that getting it wrong is LOUD. At startup
+  # the adapter scrolls one point and proves every role this block maps is really carried, with
+  # the right type, and refuses to open the store if it is not. Before that check existed, a
+  # mismapped source: produced a blank citation on every card, on every turn, for the life of the
+  # deployment, and logged nothing.
+  #
+  # A role this collection does not carry is declared with an explicit null, never left out and
+  # hoped about: `source: null` means "no citation label", and the startup proof then skips it.
+  # -------------------------------------------------------------------------------------------
+  knowledge:
+    kind: qdrant
+    endpoint: https://qdrant.example.com:6334
+    collection: kb
+    # collection is whatever this deployment's ingester writes. Point it at an alias if the
+    # ingester swaps collections on a rebuild, and this document then never changes.
+    #
+    # AgentCore never CREATES a collection. A missing name fails the start rather than standing up
+    # an empty one where the ingester's alias belongs.
+
+    vector: dense
+    # The named vector every query searches. OMIT it for a collection with one anonymous vector,
+    # which is the shape most Qdrant tooling creates. Naming a vector the collection does not have
+    # would miss every point on search with no error, so the start checks this too.
+
+    fields:
+      id: card_id              # unmapped, the point's own key stands in for the card id
+      body: body               # the one role the built-in mapping cannot do without
+      lexical: text            # the full-text field the required-term leg matches on
+      source: source.ref       # a dotted name walks into a nested struct
+      locator: source.locator
+      authority: authority     # an INTEGER role; the startup proof knows not to demand a string
+
+    scope:
+      template: "facets.{key}"
+      # How one facet key becomes a payload path. There is no default, because a template is a claim
+      # about where one collection keeps its facets. Flat facets are "{key}"; facets nested under one
+      # struct are "facets.{key}". Required as soon as ANY agent declares scoped: true — which is the
+      # default, so most documents need it.
+
+      wildcard:
+        value: "*"
+        facets: [brand, applies_to]
+      # How a card opts out of exact-match scoping, one facet at a time — never the whole scope. A
+      # card tagged facets.brand: "*" is reachable from a scope open on any brand, which is where
+      # opening hours, returns and warranty terms belong: they are true of no single machine. Name
+      # only the REACH facets here, and never an isolation facet such as a customer id — a wildcard
+      # on that would serve one mis-tagged card to every caller on every call, silently. The block is
+      # opt-in: leave it out and the emitted filter is byte-identical to a document that has never
+      # heard of it.
+      #
+      # Configure the wildcard first, and tag the corpus after. Re-tagging a company-wide card to
+      # facets.brand: "*" while this block is still absent means exact match keeps refusing it for
+      # the whole re-tag window; flipped first, the same tag starts working the moment it lands, and
+      # an untagged corpus answers exactly as it did before the block existed.
+
+      fromState: [brand, applies_to]
+      # The state slots the turn's scope is built from, on top of whatever the host itself opens.
+      # Each name must point at a slot declared under state: above with writer: extractor,
+      # type: string, an enum:, and no default. A slot nothing has filled yet still appears in the
+      # scope, holding the wildcard, rather than being left out — leaving it out would put no
+      # condition on that facet at all, and every value of it would be in reach before the caller has
+      # said anything.
+
+      filterable:
+        - key: applies_to
+          description: "The machine the question is about, as one tag, such as ct900 or f63-2019."
+      # The facets a mode: tool agent may narrow its own search by. Each entry becomes one choice in
+      # the search tool's filters argument, and the description is the only thing the model reads
+      # before it picks a value — so write it for the model, not for the deployer. Adding a facet
+      # here is the whole job: no host writes code for one.
+      #
+      # A filter can only ever narrow. A facet the host opened or the extractor filled is left
+      # exactly as it was, because those two are who is asking and what they said; only a facet
+      # holding the wildcard, or one the scope does not carry at all, is open for the model to write.
+      # So this is safe to name a reach facet in, and still never a way out of an isolation facet.
+      #
+      # A filter that clears no card at all is dropped and the search runs once more without it. The
+      # model's filter is its guess at the subject, and a wrong guess must not become "nothing is
+      # documented". That costs one extra search only on a filtered search that found nothing.
+      #
+      # A key whose name matches a vocabulary: slot is matched through that slot's fold, so a mention
+      # written "the 2023 LCR" reaches the stored lcr-2023 rather than filtering on a string no card
+      # carries, and a value the collection has never held is dropped rather than searched for. A key
+      # with no such slot is matched exactly as the model wrote it.
+      #
+      # Prefer a key that HAS such a slot. Without one nothing checks what the model invents, so it
+      # filters on values no card carries and the retry pays for a second search most times out.
+      # A facet worth filtering by is usually worth a vocabulary: slot of its own.
+      #
+      # When the vocabulary is too big for a slot or a prompt — thousands of machine tags — give the
+      # facet a resolve: block instead. It names a lookup the MODEL runs before it filters: one
+      # search narrowed to the index cards under another facet, then the value copied off the card
+      # it finds. The host prints the recipe on the search tool and runs nothing itself.
+      #
+      #   - key: lookup
+      #     description: "The only value is model-numbers. It returns the model cards and nothing else."
+      #   - key: model
+      #     description: "One machine and the year it was built, as one tag, such as lcr-2023."
+      #     resolve:
+      #       via: { key: lookup, value: model-numbers }
+      #       query: "<product> model number"
+      #       read: the Tag column of the row for the person's year
+      #
+      # via must name another filterable facet, and that one may not resolve in turn: one hop only.
+      # The start refuses a resolve that points at itself, at a key not listed here, or at a facet
+      # that has a resolve of its own.
+      #
+      # Prefetch agents ignore this block: they advertise no function, so there is no argument to fill.
+
+    links:
+      field: see_also
+      lookup: uuid5            # uuid5 | direct | filter
+      namespace: url           # url | dns | oid | x500 | <guid>. RFC 4122's own names.
+      prefix: "kb:"            # what the ingester hashed in front of the id. Defaults to EMPTY.
+    # Omit the whole block to turn link expansion off. `filter` works on any collection and matches
+    # on fields.id; `uuid5` and `direct` derive the point key from the id instead, and the start
+    # proves the derivation really lands on the point that holds it. Every mode reads fields.id, so
+    # a links: block without one is refused.
+
+    analyzer: none
+    # Picks the terms a result MUST contain, on top of vector similarity. `none` is the only
+    # analyzer AgentCore ships, and it is what this line names: require nothing, rank by vector
+    # alone.
+    #
+    # Anything cleverer is a claim about ONE corpus's vocabulary — that a short letter run followed
+    # by a short digit run is a fault code, say. That is true of some collections and false of
+    # others, and a term wrongly made mandatory drops good answers with no error and no log line.
+    # So the framework holds no such rule, for the same reason it holds no field names. Write your
+    # own IKnowledgeQueryAnalyzer, register it with options.UseKnowledgeQueryAnalyzers, and name it
+    # here.
+
+    citation: source-locator
+    # How each card's source label is worded, for agents that declare citations: true. The shipped
+    # wording joins the two roles above with a comma. Register your own with
+    # options.UseKnowledgeCitationFormatters and name it here; it can read anything the mapper put
+    # on the card, including fields no role above names. Registering under this same name replaces
+    # the shipped wording for every agent without touching this document.
+
+    scoreFloor: 0.35
+    # The cosine similarity a card must score strictly above, 0 to 1. Qdrant applies it on the
+    # dense prefetch, so a question the corpus does not answer returns nothing instead of its three
+    # nearest cards. On text-embedding-3-small, 0.25 was too low to tell the two apart; 0.35 was not.
+    # 0 disables the floor.
+
+    # mapper: my-mapper
+    # An IKnowledgePointMapper registered with options.UseKnowledgePointMappers. Named, it owns the
+    # payload shape and replaces the fields: block entirely — for a collection whose card cannot be
+    # expressed as field paths at all. The built-in mapping is public (FieldsPointMapper), so a
+    # mapper that wants the paths plus one thing of its own composes it rather than reimplementing
+    # the dotted-path walk.
+
+  # telemetry is absent here on purpose, and this host therefore exports nothing. Spans and
+  # measurements are still written, where they cost almost nothing with nobody listening, and log
+  # lines go to the console alone. Uncomment to send all three signals to Grafana Cloud (D26):
+  #
+  # telemetry:
+  #   kind: grafana
+  #   endpoint: https://otlp-gateway-prod-us-east-0.grafana.net/otlp
+  #   serviceName: service-voice
+  #   exportIntervalMs: 60000    # T61 floor. A smaller number is raised to 60000, never refused.
+  #   sources: [Microsoft.AspNetCore, System.Net.Http]
+  #   meters:  [Microsoft.AspNetCore.Hosting, Microsoft.AspNetCore.Server.Kestrel, System.Net.Http]
+  #
+  # That one endpoint is the OTLP gateway, and it is why there is ONE credential here rather than
+  # three. Grafana Cloud's native path gives Loki, Tempo and Mimir an endpoint and a numeric user id
+  # each; the gateway takes all three signals at one URL under one basic credential and fans them
+  # out on its side. It speaks HTTP with protobuf bodies and does not answer gRPC, which the adapter
+  # sets for you because the OpenTelemetry .NET default on net10.0 is gRPC.
+  #
+  # It reads two secrets, and both are optional together. grafana-cloud-instance-id is the switch:
+  # naming one makes grafana-cloud-api-token required, and a missing token then stops the host at
+  # startup rather than sending telemetry Grafana answers 401 to. Naming neither exports with no
+  # credential at all, which is what a collector running beside this process wants.
+  #
+  # sources and meters are the built-in .NET names, so no instrumentation package is involved. An
+  # EMPTY list is not an absent one: [] listens to AgentCore alone, which is how a deployment buys
+  # back the ~1,750 active series a normal replica spends against the 10,000 ceiling of item 12.
+
+# ---------------------------------------------------------------------------------------------
+# evaluation: the share of finished turns a judge scores.
+#
+# Triage row T18 says the sample rate comes from configuration. A judge never blocks a turn, which
+# is D9, so the rate selects a turn that already ended.
+# ---------------------------------------------------------------------------------------------
+evaluation:
+  # The share of finished turns to evaluate, from 0 through 1. The key is optional and the default
+  # is 0, which evaluates no turn. A value outside 0 through 1 is a load error.
+  sampleRate: 0
+
+  # The model that scores a turn. It points at an `as` name of providers.llm, exactly as every other
+  # model reference does, so the judge reads the same vendor adapter and the same secret. The key is
+  # optional: a document that omits it still runs every evaluator that calls no model, and an
+  # evaluator that needs a judge returns no value instead of a score.
+  #
+  # The offline golden set of tests/AgentCore.Evals reads this same key, so one document tunes the
+  # online path and the offline gate together.
+  #
+  # temperature: 0 is the setting a judge needs. A score that moves for the same input cannot gate a
+  # merge.
+  judge: { ref: judge, temperature: 0 }

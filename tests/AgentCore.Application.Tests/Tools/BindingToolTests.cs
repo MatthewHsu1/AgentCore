@@ -143,7 +143,7 @@ public sealed class BindingToolTests
         ToolBindingRegistry registry = new();
         registry.Register("CreateCase", (arguments, cancellationToken) => ValueTask.FromResult<object?>(null));
 
-        var function = Assert.IsAssignableFrom<AIFunction>(await CreateAsync(registry, CreateCase));
+        var function = Assert.IsType<AIFunction>(await CreateAsync(registry, CreateCase), exactMatch: false);
 
         Assert.Equal("create_case", function.Name);
         Assert.Equal("Open a service case for a human agent.", function.Description);
@@ -205,7 +205,7 @@ public sealed class BindingToolTests
 
     private static async Task<object?> CallAsync(AITool? tool, params (string Name, object? Value)[] arguments)
     {
-        var function = Assert.IsAssignableFrom<AIFunction>(tool);
+        var function = Assert.IsType<AIFunction>(tool, exactMatch: false);
 
         Dictionary<string, object?> values = new(StringComparer.Ordinal);
         foreach (var argument in arguments)
@@ -222,7 +222,7 @@ public sealed class BindingToolTests
         var context = new ToolSourceContext(new AgentCoreConfiguration
         {
             ApiVersion = "agentcore/v1",
-            Name = "test",
+            Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(),
             Tools = [tool],
         });
 
@@ -238,7 +238,7 @@ public sealed class BindingToolTests
         var context = new ToolSourceContext(new AgentCoreConfiguration
         {
             ApiVersion = "agentcore/v1",
-            Name = "test",
+            Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(),
             Tools = [new ToolConfiguration { Id = "open_case", Kind = ToolKind.Binding, Binds = "CreateCase" }],
         });
 
@@ -257,7 +257,7 @@ public sealed class BindingToolTests
         var context = new ToolSourceContext(new AgentCoreConfiguration
         {
             ApiVersion = "agentcore/v1",
-            Name = "test",
+            Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(),
             Tools =
             [
                 new ToolConfiguration

@@ -7,15 +7,6 @@ namespace AgentCore.Application.Runtime;
 /// One call's memory of what the knowledge probe has asked and named, and the per-turn latch that
 /// lets several search-tool calls in one turn share a single probe (K36, K43).
 /// </summary>
-/// <remarks>
-/// Constructed once by <see cref="CallSession"/> and put on <see cref="TurnAmbients"/> as the same
-/// instance every turn, so a value the extractor path writes is read back by the factory's probe and
-/// vice versa. A <c>graph: pattern: concurrent</c> row runs several participants against this same
-/// instance at once, so every read and every write takes <see cref="_gate"/> — there is no member on
-/// this type that touches a field without it. Reads go through <see cref="Read"/> and writes through
-/// <see cref="Update"/>, each taking the lock once for the whole snapshot or transition, so a
-/// concurrent participant can never observe a slot half way through §8's compound updates.
-/// </remarks>
 internal sealed class Clarifications
 {
     private readonly Lock _gate = new();
@@ -100,8 +91,7 @@ internal sealed class Clarifications
     /// probe rather than the turn before it.
     /// </summary>
     /// <remarks>
-    /// Must run exactly once per turn, from <c>CallSession.BeginTurn</c> and nowhere else.
-    /// <c>CallSession.EnterAmbients</c> reopens its ambient scope once per streaming step.
+    /// Must run exactly once per turn, from <c>CallTurnRunner.BeginTurn</c> and nowhere else.
     /// </remarks>
     internal void BeginTurn()
     {

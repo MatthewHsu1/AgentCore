@@ -21,10 +21,15 @@ public sealed class ConfigurationSchemaValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             tools:
               - { id: search_chunks, kind: builtin, uses: knowledge.search }
               - { id: lookup_order,  kind: ftp }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
@@ -39,13 +44,16 @@ public sealed class ConfigurationSchemaValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
+            entries:
+              main:
+                agent: only
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
 
         Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
         Assert.Equal(ConfigurationError.RootPointer, failure.Pointer);
-        Assert.Contains("name", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("agents", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -53,7 +61,7 @@ public sealed class ConfigurationSchemaValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v2
-            name: broken
+
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
@@ -66,10 +74,15 @@ public sealed class ConfigurationSchemaValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             extractor:
               model: { ref: fill }
               when: in_reply
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
@@ -82,7 +95,6 @@ public sealed class ConfigurationSchemaValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             titler: {}
             """;
 
@@ -96,10 +108,15 @@ public sealed class ConfigurationSchemaValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             titler:
               model: { ref: fill }
               when: after_reply
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
@@ -112,9 +129,14 @@ public sealed class ConfigurationSchemaValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             state:
               orderStatus: { type: string, writer: tool }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
@@ -129,7 +151,7 @@ public sealed class ConfigurationSchemaValidatorTests
     {
         // Section 8.7 asks for a spoken fallback, and a line with no words is silence on a call.
         var failure = Assert.Throws<ConfigurationLoadException>(
-            () => ConfigurationLoader.LoadYaml($"apiVersion: agentcore/v1\nname: broken\nfallbackReply: {written}\n"));
+            () => ConfigurationLoader.LoadYaml($"apiVersion: agentcore/v1\nfallbackReply: {written}\n"));
 
         Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
         Assert.Contains(failure.Errors, error => error.Pointer == "/fallbackReply");
@@ -142,7 +164,7 @@ public sealed class ConfigurationSchemaValidatorTests
     {
         // The refusal is spoken too, and a line with no words is silence on a call.
         var failure = Assert.Throws<ConfigurationLoadException>(
-            () => ConfigurationLoader.LoadYaml($"apiVersion: agentcore/v1\nname: broken\nrefusalReply: {written}\n"));
+            () => ConfigurationLoader.LoadYaml($"apiVersion: agentcore/v1\nrefusalReply: {written}\n"));
 
         Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
         Assert.Contains(failure.Errors, error => error.Pointer == "/refusalReply");
@@ -153,8 +175,13 @@ public sealed class ConfigurationSchemaValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             refusalReply: 7
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
@@ -171,7 +198,7 @@ public sealed class ConfigurationSchemaValidatorTests
     {
         var failure = Assert.Throws<ConfigurationLoadException>(
             () => ConfigurationLoader.LoadYaml(
-                $"apiVersion: agentcore/v1\nname: broken\nevaluation:\n  sampleRate: {written}\n"));
+                $"apiVersion: agentcore/v1\nevaluation:\n  sampleRate: {written}\n"));
 
         Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
         Assert.Contains(failure.Errors, error => error.Pointer == "/evaluation/sampleRate");
@@ -183,7 +210,6 @@ public sealed class ConfigurationSchemaValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             evaluation:
               sampleRate: "half"
             """;
@@ -198,9 +224,14 @@ public sealed class ConfigurationSchemaValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             evaluation:
               sampleRatio: 0.5
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
@@ -213,7 +244,6 @@ public sealed class ConfigurationSchemaValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             providers:
               call:   { kind: telnyx-relay }
               speech:
@@ -235,13 +265,18 @@ public sealed class ConfigurationSchemaValidatorTests
         // The store field went away. Each knowledge port now names its own adapter.
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             providers:
               call:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
               knowledge: { store: zilliz, root: ./kb }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
@@ -255,13 +290,18 @@ public sealed class ConfigurationSchemaValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: plain
             providers:
               call:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
               knowledge: { kind: qdrant, collection: manuals }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var parsed = ConfigurationLoader.ReadDocument(document, ConfigurationFormat.Yaml);
@@ -274,8 +314,13 @@ public sealed class ConfigurationSchemaValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             stage: greeting
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
@@ -288,17 +333,16 @@ public sealed class ConfigurationSchemaValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             agents:
               items:
-                - { id: greeter }
-            policy:
-              initial: greeting
-              stages:
-                - { id: greeting, agent: greeter, terminal: true }
-            graph:
-              pattern: sequential
-              agents: [ greeter ]
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
+                policy:
+                  initial: greeting
+                  stages:
+                    - { id: greeting, agent: only, terminal: true }
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
@@ -306,76 +350,86 @@ public sealed class ConfigurationSchemaValidatorTests
         Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
     }
 
-    [Fact]
-    public void AGraphWithNodesAndEdges_Loads()
-    {
-        const string document = """
+      [Fact]
+      public void AGraphWithNodesAndEdges_Loads()
+      {
+          const string document = """
+              apiVersion: agentcore/v1
+              agents:
+                items:
+                  - { id: writer }
+                  - { id: reviewer }
+              entries:
+                main:
+                  graph:
+                    nodes:
+                      - { id: draft,  agent: writer,   start: true }
+                      - { id: review, agent: reviewer, output: true }
+                    edges:
+                      - { from: draft, to: review, when: { var: resolved } }
+              """;
+
+          var configuration = ConfigurationLoader.LoadYaml(document);
+
+          var graph = configuration.Entries["main"].Graph;
+          Assert.NotNull(graph);
+          Assert.Null(graph!.Pattern);
+          Assert.Equal(2, graph.Nodes.Count);
+          Assert.True(graph.Nodes[0].Start);
+          Assert.True(graph.Nodes[1].Output);
+
+          var edge = Assert.Single(graph.Edges);
+          Assert.Equal("draft", edge.From);
+          Assert.False(edge.When!.IsNamed);
+          Assert.Equal("""{"var":"resolved"}""", edge.When!.Rule!.ToJsonString());
+      }
+
+      [Fact]
+      public void AGraphWithAPattern_Loads()
+      {
+          const string document = """
+              apiVersion: agentcore/v1
+              agents:
+                items:
+                  - { id: writer }
+                  - { id: reviewer }
+              entries:
+                main:
+                  graph:
+                    pattern: group_chat
+                    agents: [ writer, reviewer ]
+              """;
+
+          var configuration = ConfigurationLoader.LoadYaml(document);
+
+          Assert.Equal(AgentCore.Application.Configuration.Schema.GraphPattern.GroupChat, configuration.Entries["main"].Graph!.Pattern);
+          Assert.Equal(["writer", "reviewer"], configuration.Entries["main"].Graph!.Agents);
+          Assert.Empty(configuration.Entries["main"].Graph!.Nodes);
+      }
+
+      [Fact]
+      public void MalformedYaml_FailsBeforeCheckOne()
+      {
+          var failure = Assert.Throws<ConfigurationLoadException>(
+              () => ConfigurationLoader.LoadYaml("apiVersion: [agentcore/v1"));
+
+          Assert.Equal(ConfigurationCheck.Syntax, failure.Check);
+      }
+
+      [Fact]
+      public void ADuplicateKey_FailsBeforeCheckOne()
+      {
+          const string document = """
             apiVersion: agentcore/v1
-            name: reviewed
             agents:
               items:
-                - { id: writer }
-                - { id: reviewer }
-            graph:
-              nodes:
-                - { id: draft,  agent: writer,   start: true }
-                - { id: review, agent: reviewer, output: true }
-              edges:
-                - { from: draft, to: review, when: { var: resolved } }
-            """;
-
-        var configuration = ConfigurationLoader.LoadYaml(document);
-
-        Assert.NotNull(configuration.Graph);
-        Assert.Null(configuration.Graph!.Pattern);
-        Assert.Equal(2, configuration.Graph.Nodes.Count);
-        Assert.True(configuration.Graph.Nodes[0].Start);
-        Assert.True(configuration.Graph.Nodes[1].Output);
-
-        var edge = Assert.Single(configuration.Graph.Edges);
-        Assert.Equal("draft", edge.From);
-        Assert.False(edge.When!.IsNamed);
-        Assert.Equal("""{"var":"resolved"}""", edge.When!.Rule!.ToJsonString());
-    }
-
-    [Fact]
-    public void AGraphWithAPattern_Loads()
-    {
-        const string document = """
-            apiVersion: agentcore/v1
-            name: pipeline
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             agents:
               items:
-                - { id: writer }
-                - { id: reviewer }
-            graph:
-              pattern: group_chat
-              agents: [ writer, reviewer ]
-            """;
-
-        var configuration = ConfigurationLoader.LoadYaml(document);
-
-        Assert.Equal(AgentCore.Application.Configuration.Schema.GraphPattern.GroupChat, configuration.Graph!.Pattern);
-        Assert.Equal(["writer", "reviewer"], configuration.Graph.Agents);
-        Assert.Empty(configuration.Graph.Nodes);
-    }
-
-    [Fact]
-    public void MalformedYaml_FailsBeforeCheckOne()
-    {
-        var failure = Assert.Throws<ConfigurationLoadException>(
-            () => ConfigurationLoader.LoadYaml("apiVersion: [agentcore/v1\nname: broken"));
-
-        Assert.Equal(ConfigurationCheck.Syntax, failure.Check);
-    }
-
-    [Fact]
-    public void ADuplicateKey_FailsBeforeCheckOne()
-    {
-        const string document = """
-            apiVersion: agentcore/v1
-            name: first
-            name: second
+                - { id: only, instructions: "ok" }
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
@@ -396,7 +450,7 @@ public sealed class ConfigurationSchemaValidatorTests
     public void AnUnknownKey_SaysTheSchemaDoesNotKnowIt()
     {
         var failure = Assert.Throws<ConfigurationLoadException>(
-            () => ConfigurationLoader.LoadYaml("apiVersion: agentcore/v1\nname: broken\nsampleRatio: 0.5\n"));
+            () => ConfigurationLoader.LoadYaml("apiVersion: agentcore/v1\nsampleRatio: 0.5\n"));
 
         Assert.DoesNotContain("false schema", failure.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(failure.Errors, error => error.Message.Contains("sampleRatio", StringComparison.Ordinal));
@@ -410,9 +464,14 @@ public sealed class ConfigurationSchemaValidatorTests
         // should have been `counter`, and then `const`, which is the opposite of the fix.
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             state:
               orderStatus: { type: string, writer: tool }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
@@ -429,9 +488,14 @@ public sealed class ConfigurationSchemaValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             tools:
               - { id: lookup_order, kind: ftp }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
@@ -448,55 +512,62 @@ public sealed class ConfigurationSchemaValidatorTests
         // writes it out in prose and check 1 reads that back.
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             agents:
               items:
-                - { id: greeter }
-            policy:
-              initial: greeting
-              stages:
-                - { id: greeting, agent: greeter, terminal: true }
-            graph:
-              pattern: sequential
-              agents: [ greeter ]
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
+                graph:
+                  pattern: sequential
+                  agents: [ only ]
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
 
         var error = Assert.Single(failure.Errors);
-        Assert.Contains("policy and graph", error.Message, StringComparison.Ordinal);
-    }
+        Assert.Contains("one of", error.Message, StringComparison.Ordinal);
+      }
 
-    [Fact]
-    public void AGraphThatIsBothShapes_NamesTheShapesItCouldHaveBeen()
-    {
-        const string document = """
+      [Fact]
+      public void AGraphThatIsBothShapes_NamesTheShapesItCouldHaveBeen()
+      {
+          const string document = """
+              apiVersion: agentcore/v1
+              agents:
+                items:
+                  - { id: writer }
+              entries:
+                main:
+                  graph:
+                    pattern: sequential
+                    agents: [ writer ]
+                    nodes: [ { id: draft } ]
+                    edges: []
+              """;
+
+          var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+          Assert.Contains(
+              failure.Errors,
+              error => error.Pointer == "/entries/main/graph"
+                       && error.Message.Contains("a pattern graph", StringComparison.Ordinal)
+                       && error.Message.Contains("nodes and edges", StringComparison.Ordinal));
+      }
+
+      [Fact]
+      public void AnIdentifierThatIsNotOne_ShowsTheFormTheKeyTakes()
+      {
+          const string document = """
             apiVersion: agentcore/v1
-            name: broken
-            graph:
-              pattern: sequential
-              agents: [ writer ]
-              nodes: [ { id: draft } ]
-              edges: []
-            """;
-
-        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
-
-        Assert.Contains(
-            failure.Errors,
-            error => error.Pointer == "/graph"
-                     && error.Message.Contains("a pattern graph", StringComparison.Ordinal)
-                     && error.Message.Contains("nodes and edges", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public void AnIdentifierThatIsNotOne_ShowsTheFormTheKeyTakes()
-    {
-        const string document = """
-            apiVersion: agentcore/v1
-            name: broken
             tools:
               - { id: "9lives", kind: builtin, uses: knowledge.search }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
@@ -517,9 +588,11 @@ public sealed class ConfigurationSchemaValidatorTests
         // that overrides the schema makes the model fill boxes the C# never reads.
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             tools:
               - { id: search_chunks, kind: builtin, uses: knowledge.search, parameters: { type: object } }
+            entries:
+              main:
+                agent: search_chunks
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
@@ -533,9 +606,14 @@ public sealed class ConfigurationSchemaValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             tools:
-              - { id: draw, kind: builtin, uses: ui.draw, maxRounds: 0 }
+              - { id: search, kind: builtin, uses: web.search, maxRounds: 0 }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
@@ -552,13 +630,15 @@ public sealed class ConfigurationSchemaValidatorTests
     [Theory]
     [InlineData("model: { ref: cheap }", "model")]
     [InlineData("maxRounds: 4", "maxRounds")]
-    public void AShippedAgentDialOnAKindThatNeverReadsIt_FailsWithThePointerOfTheKey(string key, string name)
+    public void ABuiltinDialOnAKindThatNeverReadsIt_FailsWithThePointerOfTheKey(string key, string name)
     {
         var document = $$"""
             apiVersion: agentcore/v1
-            name: broken
             tools:
               - { id: lookup, kind: http, request: { method: GET, url: "https://example.test" }, {{key}} }
+            entries:
+              main:
+                agent: lookup
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
@@ -572,9 +652,14 @@ public sealed class ConfigurationSchemaValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: fine
             tools:
               - { id: search_chunks, kind: builtin, uses: knowledge.search }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var parsed = ConfigurationLoader.ReadDocument(document, ConfigurationFormat.Yaml);
@@ -589,7 +674,12 @@ public sealed class ConfigurationSchemaValidatorTests
     public void ANonBuiltinToolWithParameters_PassesCheckOne(string kind, string discriminatorField)
     {
         var document = "apiVersion: agentcore/v1\n"
-            + "name: fine\n"
+            + "agents:\n"
+            + "  items:\n"
+            + "    - { id: reviewer, instructions: \"ok\" }\n"
+            + "entries:\n"
+            + "  main:\n"
+            + "    agent: reviewer\n"
             + "tools:\n"
             + "  - id: delegated\n"
             + "    kind: " + kind + "\n"
@@ -608,7 +698,6 @@ public sealed class ConfigurationSchemaValidatorTests
     {
         var document = $$"""
             apiVersion: agentcore/v1
-            name: broken
             agents:
               defaults:
                 compaction:
@@ -620,5 +709,125 @@ public sealed class ConfigurationSchemaValidatorTests
 
         Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
         Assert.Contains(failure.Errors, error => error.Pointer == "/agents/defaults/compaction/trigger");
+    }
+
+    [Fact]
+    public void AFullAgenticAgent_PassesCheckOne()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            agents:
+              defaults:
+                todos: false
+                mode: true
+                approval: { auto: [get_time] }
+              items:
+                - id: searcher
+                  instructions: Answer only the task you were given.
+                - id: coder
+                  todos: true
+                  mode: true
+                  memory: { store: workspace }
+                  files: { store: workspace, write: false }
+                  shell:
+                    kind: docker
+                    policy: { deny: ["^rm "], allow: ["^echo "] }
+                    timeoutSeconds: 30
+                  approval: { auto: [get_time, "file_access_read*"] }
+                  background: [searcher]
+                  loop:
+                    maxRounds: 5
+                    until:
+                      - todos: {}
+                      - background: {}
+            entries:
+              main:
+                agent: coder
+            """;
+
+        var parsed = ConfigurationLoader.ReadDocument(document, ConfigurationFormat.Yaml);
+
+        Assert.Empty(ConfigurationSchemaValidator.Evaluate(parsed));
+        Assert.NotNull(ConfigurationLoader.LoadYaml(document).Agents!.Items[1].Shell);
+    }
+
+    [Fact]
+    public void AnUnknownShellKind_FailsWithThePointerOfThatKind()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            agents:
+              items:
+                - id: coder
+                  shell: { kind: k8s }
+            entries:
+              main:
+                agent: coder
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+        Assert.Contains(failure.Errors, error => error.Pointer == "/agents/items/0/shell/kind");
+    }
+
+    [Fact]
+    public void AMemoryBlockWithoutAStore_FailsWithThePointerOfTheBlock()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            agents:
+              items:
+                - id: coder
+                  memory: {}
+            entries:
+              main:
+                agent: coder
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Contains(failure.Errors, error => error.Pointer == "/agents/items/0/memory");
+    }
+
+    [Fact]
+    public void ATwoConditionUntilEntry_FailsWithThePointerOfThatEntry()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            agents:
+              items:
+                - id: coder
+                  loop:
+                    until:
+                      - todos: {}
+                        background: {}
+            entries:
+              main:
+                agent: coder
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Contains(failure.Errors, error => error.Pointer == "/agents/items/0/loop/until/0");
+    }
+
+    [Fact]
+    public void ADuplicateBackgroundChild_FailsWithThePointerOfTheList()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            agents:
+              items:
+                - id: coder
+                  background: [searcher, searcher]
+            entries:
+              main:
+                agent: coder
+            """;
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Contains(failure.Errors, error => error.Pointer == "/agents/items/0/background");
     }
 }

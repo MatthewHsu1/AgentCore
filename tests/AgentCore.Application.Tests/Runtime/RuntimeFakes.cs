@@ -625,94 +625,11 @@ internal sealed class RecordingRenderPort : IRenderPort
 }
 
 /// <summary>
-/// A drawing model: it answers each request with one call to <c>present</c> carrying the next
-/// scripted tree, and answers with plain text once the script runs out.
-/// </summary>
-/// <remarks>
-/// Enough to drive a real <c>ChatClientAgent</c> end to end, including recovery: a tree the
-/// validator rejects comes back to the agent as <c>present</c>'s error result, the agent asks again,
-/// and this client hands it the next tree. The text answer is what ends the run.
-/// </remarks>
-internal sealed class PresentCallingChatClient : IChatClient
-{
-    private readonly string[] _trees;
-    private int _calls;
-
-    public PresentCallingChatClient(params string[] trees) => _trees = trees;
-
-    /// <summary>Gets how many requests this client answered.</summary>
-    public int Calls => Volatile.Read(ref _calls);
-
-    public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-        IEnumerable<ChatMessage> messages,
-        ChatOptions? options = null,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(messages);
-
-        var index = Interlocked.Increment(ref _calls) - 1;
-        await Task.Yield();
-
-        var responseId = Guid.NewGuid().ToString("N");
-
-        if (index >= _trees.Length)
-        {
-            yield return new ChatResponseUpdate(ChatRole.Assistant, "drawn.")
-            {
-                ResponseId = responseId,
-                MessageId = responseId,
-            };
-            yield break;
-        }
-
-        yield return new ChatResponseUpdate(
-            ChatRole.Assistant,
-            [new FunctionCallContent(
-                $"call_{index}",
-                "present",
-                new Dictionary<string, object?>(StringComparer.Ordinal)
-                {
-                    ["tree"] = JsonSerializer.Deserialize<JsonElement>(_trees[index]),
-                })])
-        {
-            ResponseId = responseId,
-            MessageId = responseId,
-        };
-    }
-
-    public async Task<ChatResponse> GetResponseAsync(
-        IEnumerable<ChatMessage> messages,
-        ChatOptions? options = null,
-        CancellationToken cancellationToken = default)
-    {
-        List<ChatResponseUpdate> updates = [];
-        await foreach (var update in GetStreamingResponseAsync(messages, options, cancellationToken)
-            .ConfigureAwait(false))
-        {
-            updates.Add(update);
-        }
-
-        return updates.ToChatResponse();
-    }
-
-    public object? GetService(Type serviceType, object? serviceKey = null)
-    {
-        ArgumentNullException.ThrowIfNull(serviceType);
-        return serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
-    }
-
-    public void Dispose()
-    {
-    }
-}
-
-/// <summary>
 /// A model that calls a scripted list of tools by name, one per request, then answers in words.
 /// </summary>
 /// <remarks>
-/// <see cref="LoopingToolCallingChatClient"/> always calls the first tool it is offered and
-/// <see cref="PresentCallingChatClient"/> is wired to <c>present</c>, so neither can drive an agent
-/// whose behaviour IS which tool it picks next. This one names the tool and its arguments, which is
+/// <see cref="LoopingToolCallingChatClient"/> always calls the first tool it is offered, so it
+/// cannot drive an agent whose behaviour IS which tool it picks next. This one names the tool and its arguments, which is
 /// what makes a multi-hop test assert on the hops rather than on the count.
 /// </remarks>
 internal sealed class ScriptedToolCallingChatClient : IChatClient

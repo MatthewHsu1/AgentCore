@@ -3,7 +3,6 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
 using Microsoft.Extensions.AI;
 using AgentCore.AspNetCore.DependencyInjection;
-using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.Application.Secrets;
 using AgentCore.Domain.Knowledge;
 using Xunit;
@@ -147,7 +146,8 @@ public sealed class KnowledgeStartupTests
         => new()
         {
             ApiVersion = "agentcore/v1",
-            Name = "test",
+            Agents = new AgentsConfiguration { Items = [] },
+            Entries = new Dictionary<string, EntryConfiguration>(),
             Providers = new ProvidersConfiguration { Knowledge = knowledge },
         };
 
@@ -181,7 +181,7 @@ public sealed class KnowledgeStartupTests
     private sealed class FakePort : IKnowledgeRetrievalPort
     {
         public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
-            string query, CancellationToken cancellationToken = default)
+            string query, KnowledgeScope? scope = null, CancellationToken cancellationToken = default)
             => ValueTask.FromResult<IReadOnlyList<KnowledgeCard>>([]);
     }
 }

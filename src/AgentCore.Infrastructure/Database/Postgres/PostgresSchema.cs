@@ -9,6 +9,9 @@ public static class PostgresSchema
 {
     private const string ResourcePrefix = "AgentCore.Infrastructure.Database.Postgres.Migrations.";
 
+    /// <summary>The schema every AgentCore table lives in.</summary>
+    internal const string SchemaName = "agentcore";
+
     /// <summary>Guards two processes migrating one database at the same moment.</summary>
     /// <remarks>
     /// The value is arbitrary. It only has to be the same in every process that migrates, so it is a
@@ -16,10 +19,10 @@ public static class PostgresSchema
     /// </remarks>
     private const long ApplyLockKey = 0x41C05CE700000001;
 
-    private const string LedgerName = "agentcore_schema_migration";
+    private const string LedgerName = $"{SchemaName}.schema_migration";
 
-    private const string LedgerDdl = """
-        CREATE TABLE agentcore_schema_migration (
+    private const string LedgerDdl = $"""
+        CREATE TABLE {LedgerName} (
             version    text        NOT NULL PRIMARY KEY,
             applied_at timestamptz NOT NULL DEFAULT now()
         )
@@ -44,7 +47,7 @@ public static class PostgresSchema
     }
 
     /// <summary>Applies every migration the database has not seen yet.</summary>
-    /// <param name="dataSource">A data source whose role may create tables in its search path.</param>
+    /// <param name="dataSource">A data source whose role may create the <c>agentcore</c> schema and tables in it.</param>
     /// <param name="cancellationToken">Cancels the work.</param>
     /// <returns>The versions this call applied, oldest first. Empty when the schema was current.</returns>
     /// <remarks>
@@ -66,6 +69,14 @@ public static class PostgresSchema
         {
             serialise.Parameters.Add(new NpgsqlParameter { Value = ApplyLockKey });
             await serialise.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        var schemaExists = await ScalarAsync<bool>(
+            connection, transaction, $"SELECT to_regnamespace('{SchemaName}') IS NOT NULL", cancellationToken).ConfigureAwait(false);
+
+        if (!schemaExists)
+        {
+            await ExecuteAsync(connection, transaction, $"CREATE SCHEMA {SchemaName}", cancellationToken).ConfigureAwait(false);
         }
 
         // Ask whether the ledger is there rather than issuing CREATE TABLE IF NOT EXISTS. The running
@@ -93,7 +104,7 @@ public static class PostgresSchema
             await ExecuteAsync(connection, transaction, Read(version), cancellationToken).ConfigureAwait(false);
 
             await using var record = new NpgsqlCommand(
-                "INSERT INTO agentcore_schema_migration (version) VALUES ($1)", connection, transaction);
+                $"INSERT INTO {LedgerName} (version) VALUES ($1)", connection, transaction);
             record.Parameters.AddWithValue(version);
             await record.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
@@ -111,7 +122,7 @@ public static class PostgresSchema
     {
         HashSet<string> applied = new(StringComparer.Ordinal);
 
-        await using var command = new NpgsqlCommand("SELECT version FROM agentcore_schema_migration", connection, transaction);
+        await using var command = new NpgsqlCommand($"SELECT version FROM {LedgerName}", connection, transaction);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))

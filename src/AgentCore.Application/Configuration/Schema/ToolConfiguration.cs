@@ -21,9 +21,9 @@ public enum ToolKind
     /// </summary>
     /// <remarks>
     /// This is agent-as-tool, and it is not handoff. The outer agent sees one function, calls it,
-    /// and keeps control. The inner agent runs its own tool-calling loop and returns text. Handoff
-    /// transfers control instead, and <c>graph:</c> with <c>pattern: handoff</c> already carries it,
-    /// so the two do not overlap. Check 8 of section 8.5 walks the edges this kind declares.
+    /// and keeps control. Handoff transfers control instead, and an entry's <c>graph:</c> with
+    /// <c>pattern: handoff</c> already carries it, so the two do not overlap. Check 8 of section 8.5
+    /// walks the edges this kind declares.
     /// </remarks>
     Agent,
 }
@@ -78,18 +78,9 @@ public sealed record ToolConfiguration
     /// <summary>Gets the HTTP call. It is set when the kind is <see cref="ToolKind.Http"/>.</summary>
     public HttpRequestConfiguration? Request { get; init; }
 
-    /// <summary>Gets the model this tool runs on, or <see langword="null"/> to use the host default.</summary>
-    /// <remarks>
-    /// Only a <c>uses:</c> naming a shipped agent reads this. Drawing on the primary reply model is
-    /// wasted money, so a document points the inner call at a cheaper entry of
-    /// <c>providers.llm[].as</c>. A kind with no model of its own ignores it.
-    /// </remarks>
+    /// <summary>Reserved. No <c>kind: builtin</c> tool reads it; setting it fails the load.</summary>
     public ModelReference? Model { get; init; }
 
-    /// <summary>Gets the round cap of a shipped agent, or <see langword="null"/> to use its own default.</summary>
-    /// <remarks>
-    /// It counts model round trips inside the tool, and it is not the section 8.7 budget of the
-    /// calling agent, which is 40 and counts this whole tool as one round.
-    /// </remarks>
+    /// <summary>Reserved. No <c>kind: builtin</c> tool reads it; setting it fails the load.</summary>
     public int? MaxRounds { get; init; }
 }

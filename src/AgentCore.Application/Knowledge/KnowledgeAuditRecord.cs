@@ -65,7 +65,7 @@ internal sealed record KnowledgeAuditRecord
             Scope = scope?.Facets ?? EmptyScope,
             ScopeOrigins = scope?.Origins ?? EmptyOrigins,
             LatencyMs = latencyMs,
-            Cards = [.. cards.Select(CardEntry.For)],
+            Cards = [.. cards.Select(CardEntry.From)],
             Failure = failure?.ToString(),
         };
     }
@@ -149,7 +149,7 @@ internal sealed record KnowledgeAuditRecord
         /// <summary>Reads one card into its audit entry.</summary>
         /// <param name="card">The card to record.</param>
         /// <returns>The entry.</returns>
-        internal static CardEntry For(KnowledgeCard card) => new()
+        internal static CardEntry From(KnowledgeCard card) => new()
         {
             CardId = card.CardId,
             Score = card.Score,

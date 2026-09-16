@@ -208,15 +208,17 @@ public sealed class AgentCoreHostTests
     /// </remarks>
     private const string McpDocument = """
         apiVersion: agentcore/v1
-        name: hosting-tests-mcp
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything" }
+        entries:
+          main:
+            agent: only
         mcp:
           - id: no-such-server
             transport: stdio
             command: ["/definitely-not-a-real-binary-agentcore-test"]
             allow: ["*"]
-        agents:
-          items:
-            - { id: only, instructions: "I answer everything" }
         providers:
           call:   { kind: telnyx-relay }
           speech:
@@ -337,24 +339,24 @@ public sealed class AgentCoreHostTests
     }
 
     [Fact]
-    public async Task ChatCompletionsAnswersOnTheDefaultRoute()
+    public async Task ResponsesAnswersOnTheDefaultRoute()
     {
         await using var app = await StartMappedAsync();
         using HttpClient client = new() { BaseAddress = Address(app) };
 
         // No user message is a caller mistake this endpoint names, and naming it proves the route
         // reached the endpoint rather than the 404 handler.
-        var response = await PostEmptyAsync(client, ChatCompletionsEndpointRouteBuilderExtensions.DefaultPattern);
+        var response = await PostEmptyAsync(client, ResponsesEndpointRouteBuilderExtensions.DefaultPattern);
 
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
-    public async Task ChatCompletionsMovesWhenTheHostNamesAnotherRoute()
+    public async Task ResponsesMovesWhenTheHostNamesAnotherRoute()
     {
-        // A host that mounts a second OpenAI-compatible surface of its own needs this one out of the
+        // A host that mounts a second Responses surface of its own needs this one out of the
         // way, and it must actually leave the default route behind when it moves.
-        const string Moved = "/agentcore/v1/chat/completions";
+        const string Moved = "/agentcore/v1/responses";
         await using var app = await StartMappedAsync(Moved);
         using HttpClient client = new() { BaseAddress = Address(app) };
 
@@ -363,7 +365,7 @@ public sealed class AgentCoreHostTests
             (await PostEmptyAsync(client, Moved)).StatusCode);
         Assert.Equal(
             System.Net.HttpStatusCode.NotFound,
-            (await PostEmptyAsync(client, ChatCompletionsEndpointRouteBuilderExtensions.DefaultPattern)).StatusCode);
+            (await PostEmptyAsync(client, ResponsesEndpointRouteBuilderExtensions.DefaultPattern)).StatusCode);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -379,10 +381,12 @@ public sealed class AgentCoreHostTests
     /// </remarks>
     private const string Document = """
         apiVersion: agentcore/v1
-        name: hosting-tests
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
+        entries:
+          main:
+            agent: only
         providers:
           call:   { kind: telnyx-relay }
           speech:
@@ -562,12 +566,12 @@ public sealed class AgentCoreHostTests
     }
 
     /// <summary>Builds a host, maps every route, and puts it on a real socket.</summary>
-    /// <param name="chatCompletionsPattern">The route the text endpoint answers on, or null for the default.</param>
+    /// <param name="responsesPattern">The route the Responses endpoint answers on, or null for the default.</param>
     /// <returns>The started host.</returns>
-    private static async Task<WebApplication> StartMappedAsync(string? chatCompletionsPattern = null)
+    private static async Task<WebApplication> StartMappedAsync(string? responsesPattern = null)
     {
         var app = await BuildAsync();
-        app.MapAgentCoreHost(chatCompletionsPattern);
+        app.MapAgentCoreHost(responsesPattern);
         await app.StartAsync(TestContext.Current.CancellationToken);
         return app;
     }
@@ -590,7 +594,7 @@ public sealed class AgentCoreHostTests
     private static Task<HttpResponseMessage> PostEmptyAsync(HttpClient client, string route)
         => client.PostAsync(
             route,
-            new StringContent("{\"messages\":[]}", System.Text.Encoding.UTF8, "application/json"),
+            new StringContent("{\"input\":[]}", System.Text.Encoding.UTF8, "application/json"),
             TestContext.Current.CancellationToken);
 
     // ---------------------------------------------------------------------------------------------

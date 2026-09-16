@@ -22,130 +22,136 @@ public sealed class CallSessionTests
 {
     private const string PolicyYaml =
         """
-        apiVersion: agentcore/v1
-        name: turn-loop
-        state:
-          callerSaidGoodbye:
-            type: boolean
-            default: false
-            writer: extractor
-            description: whether the caller said goodbye
-          brand: { type: string, writer: const, value: sole }
-          greetingTurns:
-            type: integer
-            default: 0
-            writer: counter
-            increment: { "===": [ { var: stage }, "greeting" ] }
-        guards:
-          saidGoodbye: { var: callerSaidGoodbye }
-        extractor:
-          model: { ref: fill }
-          when: after_reply
-        agents:
-          defaults:
-            model: { ref: reply }
-          items:
-            - { id: greeter, instructions: "greet the caller" }
-            - { id: closer,  instructions: "close the call" }
-        policy:
-          initial: greeting
-          stages:
-            - id: greeting
-              agent: greeter
-              to: [ { stage: close, when: saidGoodbye } ]
-            - id: close
-              agent: closer
-              terminal: true
-        """;
+          apiVersion: agentcore/v1
+          state:
+            callerSaidGoodbye:
+              type: boolean
+              default: false
+              writer: extractor
+              description: whether the caller said goodbye
+            brand: { type: string, writer: const, value: sole }
+            greetingTurns:
+              type: integer
+              default: 0
+              writer: counter
+              increment: { "===": [ { var: stage }, "greeting" ] }
+          guards:
+            saidGoodbye: { var: callerSaidGoodbye }
+          extractor:
+            model: { ref: fill }
+            when: after_reply
+          agents:
+            defaults:
+              model: { ref: reply }
+            items:
+              - { id: greeter, instructions: "greet the caller" }
+              - { id: closer,  instructions: "close the call" }
+          entries:
+            main:
+              policy:
+                initial: greeting
+                stages:
+                  - id: greeting
+                    agent: greeter
+                    to: [ { stage: close, when: saidGoodbye } ]
+                  - id: close
+                    agent: closer
+                    terminal: true
+          """;
 
-    private const string ReminderYaml =
-        """
-        apiVersion: agentcore/v1
-        name: reminder-loop
-        state:
-          machineModel: { type: string, writer: extractor, description: the machine model }
-          serialNumber: { type: string, writer: extractor, description: the serial number }
-        guards:
-          identified:
-            and:
-              - { "!!": [ { var: machineModel } ] }
-              - { "!!": [ { var: serialNumber } ] }
-        extractor:
-          model: { ref: fill }
-          when: after_reply
-        agents:
-          defaults:
-            model: { ref: reply }
-          items:
-            - { id: greeter, instructions: "greet the caller" }
-            - { id: closer,  instructions: "close the call" }
-        policy:
-          initial: greeting
-          stages:
-            - id: greeting
-              agent: greeter
-              to: [ { stage: close, when: identified } ]
-            - id: close
-              agent: closer
-              terminal: true
-        """;
+      private const string ReminderYaml =
+          """
+          apiVersion: agentcore/v1
+          state:
+            machineModel: { type: string, writer: extractor, description: the machine model }
+            serialNumber: { type: string, writer: extractor, description: the serial number }
+          guards:
+            identified:
+              and:
+                - { "!!": [ { var: machineModel } ] }
+                - { "!!": [ { var: serialNumber } ] }
+          extractor:
+            model: { ref: fill }
+            when: after_reply
+          agents:
+            defaults:
+              model: { ref: reply }
+            items:
+              - { id: greeter, instructions: "greet the caller" }
+              - { id: closer,  instructions: "close the call" }
+          entries:
+            main:
+              policy:
+                initial: greeting
+                stages:
+                  - id: greeting
+                    agent: greeter
+                    to: [ { stage: close, when: identified } ]
+                  - id: close
+                    agent: closer
+                    terminal: true
+          """;
 
-    private const string TwoStagesYaml =
-        """
-        apiVersion: agentcore/v1
-        name: two-stages
-        agents:
-          defaults:
-            model: { ref: reply }
-          items:
-            - { id: greeter, instructions: "I am the greeter" }
-            - { id: closer,  instructions: "I am the closer" }
-        policy:
-          initial: greeting
-          stages:
-            - { id: greeting, agent: greeter, to: [ { stage: close } ] }
-            - { id: close,    agent: closer,  to: [ { stage: greeting } ] }
-        """;
+      private const string TwoStagesYaml =
+          """
+          apiVersion: agentcore/v1
+          agents:
+            defaults:
+              model: { ref: reply }
+            items:
+              - { id: greeter, instructions: "I am the greeter" }
+              - { id: closer,  instructions: "I am the closer" }
+          entries:
+            main:
+              policy:
+                initial: greeting
+                stages:
+                  - { id: greeting, agent: greeter, to: [ { stage: close } ] }
+                  - { id: close,    agent: closer,  to: [ { stage: greeting } ] }
+          """;
 
-    private const string ToolYaml =
-        """
-        apiVersion: agentcore/v1
-        name: tool-turn
-        state:
-          orderStatus:       { type: string,  writer: tool, from: lookup_order.status }
-          callerSaidGoodbye: { type: boolean, default: false, writer: extractor }
-          shippedTurns:
-            type: integer
-            default: 0
-            writer: counter
-            increment: { "===": [ { var: orderStatus }, "shipped" ] }
-        guards:
-          saidGoodbye: { var: callerSaidGoodbye }
-        extractor:
-          model: { ref: fill }
-          when: after_reply
-        tools:
-          - { id: lookup_order, kind: builtin, uses: orders.read, description: "Look up an order by its id." }
-        agents:
-          defaults:
-            model: { ref: reply }
-          items:
-            - { id: greeter, instructions: "greet the caller", tools: [ lookup_order ] }
-            - { id: closer,  instructions: "close the call" }
-        policy:
-          initial: greeting
-          stages:
-            - { id: greeting, agent: greeter, to: [ { stage: close, when: saidGoodbye } ] }
-            - { id: close,    agent: closer,  terminal: true }
-        """;
+      private const string ToolYaml =
+          """
+          apiVersion: agentcore/v1
+          state:
+            orderStatus:       { type: string,  writer: tool, from: lookup_order.status }
+            callerSaidGoodbye: { type: boolean, default: false, writer: extractor }
+            shippedTurns:
+              type: integer
+              default: 0
+              writer: counter
+              increment: { "===": [ { var: orderStatus }, "shipped" ] }
+          guards:
+            saidGoodbye: { var: callerSaidGoodbye }
+          extractor:
+            model: { ref: fill }
+            when: after_reply
+          tools:
+            - { id: lookup_order, kind: builtin, uses: orders.read, description: "Look up an order by its id." }
+          agents:
+            defaults:
+              model: { ref: reply }
+            items:
+              - { id: greeter, instructions: "greet the caller", tools: [ lookup_order ] }
+              - { id: closer,  instructions: "close the call" }
+          entries:
+            main:
+              policy:
+                initial: greeting
+                stages:
+                  - { id: greeting, agent: greeter, to: [ { stage: close, when: saidGoodbye } ] }
+                  - { id: close,    agent: closer,  terminal: true }
+          """;
 
-    private const string OneAgentYaml =
-        """
+      private const string OneAgentYaml =
+          """
         apiVersion: agentcore/v1
-        name: one-agent
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string StayingNull = """{ "callerSaidGoodbye": null }""";
@@ -987,7 +993,7 @@ public sealed class CallSessionTests
     {
         using SequencedChatClient reply = new("hello there.", "still here.");
         using SequencedChatClient fill = new(StayingNull);
-        var port = Assert.IsAssignableFrom<IConversationPort>(Build(PolicyYaml, reply, fill).Create("call-9"));
+        var port = Assert.IsType<IConversationPort>(Build(PolicyYaml, reply, fill).Create("call-9"), exactMatch: false);
 
         var turn = await port.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
@@ -1111,11 +1117,11 @@ public sealed class CallSessionTests
             chatClients.Route("fill", fill);
         }
 
-        return ConfigurationCompiler.Compile(
+        return ConfigurationCompiler.CompileAll(
             document,
             new AgentCompilationContext(chatClients)
             {
                 Tools = TestToolRegistry.From(document, tools, TestContext.Current.CancellationToken),
-            });
+            })["main"];
     }
 }

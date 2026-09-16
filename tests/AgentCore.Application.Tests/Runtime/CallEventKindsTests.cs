@@ -32,6 +32,7 @@ public sealed class CallEventKindsTests
             { CallEventKind.ExtractionFailed, "extraction.failed" },
             { CallEventKind.TranscriptWriteFailed, "transcript.write.failed" },
             { CallEventKind.StateRestorePartial, "state.restore.partial" },
+        { CallEventKind.TranscriptResyncFailed, "transcript.resync.failed" },
         };
 
     [Theory]
@@ -62,7 +63,7 @@ public sealed class CallEventKindsTests
         var stored = Enum.GetValues<CallEventKind>()
             .Count(kind => CallEventKinds.TryGetAuditKind(kind, out _));
 
-        Assert.Equal(13, Enum.GetValues<CallEventKind>().Length);
+        Assert.Equal(14, Enum.GetValues<CallEventKind>().Length);
         Assert.Equal(7, stored);
     }
 

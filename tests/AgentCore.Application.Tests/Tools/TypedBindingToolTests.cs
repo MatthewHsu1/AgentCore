@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Runtime;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Tools.Registry;
@@ -106,6 +107,18 @@ public sealed class TypedBindingToolTests
         Assert.Equal("Open a service case for a human agent.", tool.Description);
     }
 
+    /// <summary>The model never sees the scope parameter: it names the running call, not an argument the model fills.</summary>
+    [Fact]
+    public async Task AToolCallScopeParameter_IsLeftOutOfTheSchema()
+    {
+        var tool = await CreateAsync((string reason, ToolCallScope scope, CancellationToken ct) => reason);
+
+        var properties = tool.JsonSchema.GetProperty("properties");
+        Assert.True(properties.TryGetProperty("reason", out _));
+        Assert.False(properties.TryGetProperty("scope", out _));
+        Assert.DoesNotContain("CallId", tool.JsonSchema.GetRawText(), StringComparison.Ordinal);
+    }
+
     // ---------------------------------------------------------------------------------------------
     // Calling.
     // ---------------------------------------------------------------------------------------------
@@ -175,13 +188,63 @@ public sealed class TypedBindingToolTests
             await tool.InvokeAsync(new AIFunctionArguments { ["summary"] = "anything" }, cancelled.Token));
     }
 
+    /// <summary>
+    /// A binding declares a <see cref="ToolCallScope"/> parameter to read the call it runs in, but a
+    /// call to the tool with no turn open on this flow has no call to report.
+    /// </summary>
+    [Fact]
+    public async Task AToolCallScopeParameterWithNoTurnOpen_Throws()
+    {
+        var tool = await CreateAsync((string reason, ToolCallScope scope) => reason);
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await tool.InvokeAsync(
+                new AIFunctionArguments { ["reason"] = "the caller wants a person" },
+                TestContext.Current.CancellationToken));
+
+        Assert.Contains("ToolCallScope", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal(ToolCallScopes.NoTurnMessage, thrown.Message);
+    }
+
+    /// <summary>A tool call carrying the turn in its arguments binds the scope off no flow at all.</summary>
+    [Fact]
+    public async Task AToolCallScopeParameterWithTheTurnFiled_BindsWithoutAFlow()
+    {
+        ToolCallScope? captured = null;
+        var tool = await CreateAsync((string reason, ToolCallScope scope) =>
+        {
+            captured = scope;
+            return reason;
+        });
+
+        var result = await tool.InvokeAsync(
+            new AIFunctionArguments
+            {
+                ["reason"] = "the caller wants a person",
+                [TurnInvocation.ArgumentsKey] = new TurnInvocation
+                {
+                    CallId = "call-9",
+                    TurnIndex = 4,
+                    Stage = "handling",
+                    Workspace = "ws",
+                },
+            },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("the caller wants a person", $"{result}");
+        Assert.Equal("call-9", captured!.CallId);
+        Assert.Equal(4, captured.TurnIndex);
+        Assert.Equal("handling", captured.Stage);
+        Assert.Equal("ws", captured.Workspace);
+    }
+
     /// <summary>The error policy of section 8.7 keys off <see cref="DeclaredTool"/>, not off the delegate.</summary>
     [Fact]
     public async Task ATypedBinding_IsStillADeclaredTool()
     {
         var tool = await CreateAsync((string summary) => summary);
 
-        Assert.IsAssignableFrom<DeclaredTool>(tool);
+        Assert.IsType<DeclaredTool>(tool, exactMatch: false);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -219,7 +282,7 @@ public sealed class TypedBindingToolTests
     }
 
     private static ToolSourceContext ContextFor(ToolConfiguration tool)
-        => new(new AgentCoreConfiguration { ApiVersion = "agentcore/v1", Name = "test", Tools = [tool] });
+        => new(new AgentCoreConfiguration { ApiVersion = "agentcore/v1", Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(), Tools = [tool] });
 
     /// <summary>Builds the tool the way the boot does: through the source, off the document.</summary>
     private static async Task<AIFunction> CreateAsync(Delegate method)
@@ -230,6 +293,6 @@ public sealed class TypedBindingToolTests
         var registrations = await new BindingToolSource(bindings).ProvideAsync(
             ContextFor(OpenCase), TestContext.Current.CancellationToken);
 
-        return Assert.IsAssignableFrom<AIFunction>(Assert.Single(registrations).Materialise());
+        return Assert.IsType<AIFunction>(Assert.Single(registrations).Materialise(), exactMatch: false);
     }
 }

@@ -137,10 +137,6 @@ public sealed class CallRegistrationTests
     private static string Document(string callKind, string speechKind)
         => $$"""
            apiVersion: agentcore/v1
-           name: call-registration
-           agents:
-             items:
-               - { id: only, instructions: "I answer everything" }
            providers:
              call:   { kind: {{callKind}} }
              speech:
@@ -148,6 +144,12 @@ public sealed class CallRegistrationTests
                tts: { kind: {{speechKind}} }
              llm:
                - { kind: openai, model: gpt-4.1-mini, as: reply }
+           agents:
+             items:
+               - { id: dummy, instructions: "I answer everything" }
+           entries:
+             main:
+               agent: dummy
            """;
 
     /// <summary>Builds a configuration the way a host that loads no document does.</summary>
@@ -157,10 +159,13 @@ public sealed class CallRegistrationTests
         => new()
         {
             ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
-            Name = "built-in-code",
             Agents = new AgentsConfiguration
             {
                 Items = [new AgentConfiguration { Id = "only", Instructions = "I answer everything" }],
+            },
+            Entries = new Dictionary<string, EntryConfiguration>
+            {
+                ["main"] = new EntryConfiguration { Agent = "only" },
             },
             Providers = providers,
         };

@@ -43,6 +43,10 @@ internal static class Uuid5PointId
         "Security",
         "CA5350:Do Not Use Weak Cryptographic Algorithms",
         Justification = "RFC 4122 version 5 specifies SHA-1. This is an identifier, not a security boundary.")]
+    [SuppressMessage(
+        "Security",
+        "S4790",
+        Justification = "RFC 4122 version 5 specifies SHA-1, pinned by Uuid5PointIdTests. Identifier, not a security boundary.")]
     public static Guid For(string cardId, Guid @namespace, string prefix)
     {
         ArgumentNullException.ThrowIfNull(cardId);

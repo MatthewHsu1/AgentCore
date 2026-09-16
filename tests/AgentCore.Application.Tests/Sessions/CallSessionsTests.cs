@@ -136,10 +136,12 @@ public sealed class CallSessionsTests
 
     private const string Document = """
         apiVersion: agentcore/v1
-        name: call-sessions-tests
         agents:
           items:
-            - { id: only, instructions: "I answer everything" }
+            - { id: only, instructions: "ok" }
+        entries:
+          main:
+            agent: only
         """;
 
     private static CallSessionFactory Factory(
@@ -150,9 +152,9 @@ public sealed class CallSessionsTests
     {
         var document = ConfigurationLoader.LoadYaml(yaml ?? Document);
         RoutingChatClientFactory chatClients = new(reply ?? new StubChatClient());
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             document,
-            new AgentCompilationContext(chatClients) { CallStore = transcript });
+            new AgentCompilationContext(chatClients) { CallStore = transcript })["main"];
 
         return new CallSessionFactory(
             compiled,

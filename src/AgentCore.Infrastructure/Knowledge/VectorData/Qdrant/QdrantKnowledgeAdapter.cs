@@ -465,15 +465,20 @@ public sealed class QdrantKnowledgeAdapter : IKnowledgeStoreAdapter
     /// <summary>Picks the mapper the document named, or <see langword="null"/> for the built-in <c>fields:</c> mapping.</summary>
     /// <exception cref="ConfigurationLoadException">No registered mapper answers to that name.</exception>
     private IKnowledgePointMapper? ResolveMapper(string? name)
-        => name is not { Length: > 0 }
-            ? null
-            : _mappers.FirstOrDefault(mapper => string.Equals(mapper.Name, name, StringComparison.Ordinal))
-                ?? throw Fail(
-                    "/providers/knowledge/mapper",
-                    $"providers.knowledge.mapper is '{name}', and no registered IKnowledgePointMapper "
-                    + $"answers to it. This host registers "
-                    + $"{(_mappers.Length == 0 ? "none" : string.Join(", ", _mappers.Select(m => $"'{m.Name}'")))}. "
-                    + "Register one with QdrantKnowledgeAdapter.UseMappers, or drop the setting.");
+    {
+        if (name is not { Length: > 0 })
+        {
+            return null;
+        }
+
+        return _mappers.FirstOrDefault(mapper => string.Equals(mapper.Name, name, StringComparison.Ordinal))
+            ?? throw Fail(
+                "/providers/knowledge/mapper",
+                $"providers.knowledge.mapper is '{name}', and no registered IKnowledgePointMapper "
+                + $"answers to it. This host registers "
+                + $"{(_mappers.Length == 0 ? "none" : string.Join(", ", _mappers.Select(m => $"'{m.Name}'")))}. "
+                + "Register one with QdrantKnowledgeAdapter.UseMappers, or drop the setting.");
+    }
 
     /// <summary>Parses the endpoint and resolves the API key, then builds the production client.</summary>
     private static async ValueTask<QdrantClient> BuildClientAsync(

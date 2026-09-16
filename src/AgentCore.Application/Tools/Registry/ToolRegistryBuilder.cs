@@ -32,7 +32,10 @@ public static class ToolRegistryBuilder
 
         foreach (var source in sources)
         {
-            ArgumentNullException.ThrowIfNull(source, nameof(sources));
+            if (source is null)
+            {
+                throw new ArgumentNullException(nameof(sources));
+            }
 
             var registrations = await source.ProvideAsync(context, cancellationToken).ConfigureAwait(false);
             foreach (var registration in registrations)

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Tools.Registry;
 using Microsoft.Extensions.AI;
@@ -24,7 +25,7 @@ public sealed class TimeLimitedToolTests
     {
         TimeLimitedTool tool = new(Answering("done"), TimeSpan.FromSeconds(30));
 
-        var result = await tool.InvokeAsync(new AIFunctionArguments(), Token);
+        var result = await tool.InvokeAsync([], Token);
 
         Assert.Equal("done", Assert.IsType<JsonElement>(result).GetString());
     }
@@ -34,7 +35,7 @@ public sealed class TimeLimitedToolTests
     {
         TimeLimitedTool tool = new(Hanging(), TimeSpan.FromMilliseconds(50));
 
-        var result = await tool.InvokeAsync(new AIFunctionArguments(), Token);
+        var result = await tool.InvokeAsync([], Token);
 
         // Section 8.7: the model reads the result and decides what to say next. An exception would
         // end the turn while a caller is on the line.
@@ -56,7 +57,7 @@ public sealed class TimeLimitedToolTests
         await turn.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            async () => await tool.InvokeAsync(new AIFunctionArguments(), turn.Token));
+            async () => await tool.InvokeAsync([], turn.Token));
     }
 
     [Fact]
@@ -86,7 +87,7 @@ public sealed class TimeLimitedToolTests
             new ToolSourceContext(Documents.Empty),
             Token);
 
-        var result = await ((AIFunction)registry.Resolve("slow")).InvokeAsync(new AIFunctionArguments(), Token);
+        var result = await ((AIFunction)registry.Resolve("slow")).InvokeAsync([], Token);
 
         Assert.True(ToolErrorResult.IsError(Assert.IsType<JsonObject>(result)));
     }
@@ -130,6 +131,6 @@ public sealed class TimeLimitedToolTests
     private static class Documents
     {
         public static Application.Configuration.Schema.AgentCoreConfiguration Empty { get; }
-            = new() { ApiVersion = "agentcore/v1", Name = "tools" };
+            = new() { ApiVersion = "agentcore/v1", Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>() };
     }
 }

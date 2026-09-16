@@ -34,10 +34,10 @@ public sealed class QdrantPointConverterTests
         Assert.Equal("text", point.Payload["s"]);
         Assert.Equal(3L, point.Payload["i"]);
         Assert.Equal(0.5, point.Payload["d"]);
-        Assert.Equal(true, point.Payload["b"]);
-        var nested = Assert.IsAssignableFrom<IReadOnlyDictionary<string, object?>>(point.Payload["nested"]);
+        Assert.True((bool)point.Payload["b"]!);
+        var nested = Assert.IsType<IReadOnlyDictionary<string, object?>>(point.Payload["nested"], exactMatch: false);
         Assert.Equal("deep", nested["inner"]);
-        var list = Assert.IsAssignableFrom<IReadOnlyList<object?>>(point.Payload["list"]);
+        var list = Assert.IsType<IReadOnlyList<object?>>(point.Payload["list"], exactMatch: false);
         Assert.Equal(["a", 2L], list);
     }
 

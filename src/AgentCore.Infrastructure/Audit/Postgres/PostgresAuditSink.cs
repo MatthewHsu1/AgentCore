@@ -1,7 +1,9 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Audit;
+using AgentCore.Infrastructure.Database.Postgres;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -12,46 +14,18 @@ namespace AgentCore.Infrastructure.Audit.Postgres;
 /// </summary>
 internal sealed class PostgresAuditSink : IAuditSinkPort, IAsyncDisposable
 {
+    private const string Schema = PostgresSchema.SchemaName;
+
     /// <summary>Serialises the writers of one call so two of them cannot pick the same sequence.</summary>
-    /// <remarks>
-    /// <para>
-    /// A transaction-scoped lock, so it is released on commit and on rollback with nothing to
-    /// remember. hashtext collides across call ids now and then. A collision never costs correctness
-    /// — two unrelated calls simply take one lock, and one batch waits — but it does weaken the
-    /// deadlock argument in <see cref="AppendManyAsync"/>: that argument orders the locks by
-    /// <c>call_id</c>, and ordering ids gives a consistent order on LOCKS only while the hash is
-    /// injective over the ids in play. Two batches whose calls hash into inverted pairs can still
-    /// take two locks in opposite orders and wait on each other.
-    /// </para>
-    /// <para>
-    /// Accepted rather than fixed, with the price named. Reaching it needs two 32-bit collisions
-    /// among the ids live at that moment, in two concurrent multi-call batches, positioned the wrong
-    /// way round; the consequence is that PostgreSQL's deadlock detector aborts one of the two
-    /// batches, which <c>QueuedAuditSink</c> already logs and drops off the turn. Ordering by the
-    /// hash itself is what would make it airtight, and rewriting the mechanism the whole chain rests
-    /// on is worth more than this hazard costs.
-    /// </para>
-    /// </remarks>
     internal const string LockSql = "SELECT pg_advisory_xact_lock(hashtext($1))";
 
     /// <summary>Appends one call's run, numbering only the rows that will actually survive.</summary>
-    /// <remarks>
-    /// row_number() runs over the rows unnest produces, so a row it would have discarded on the
-    /// ON CONFLICT arbiter must never reach the window function — otherwise a partially-replayed
-    /// batch reserves a number for a row that never lands, and the chain gaps. The NOT EXISTS filter
-    /// removes those rows before row_number() ever sees them. It is trustworthy only because the
-    /// advisory lock is held for the whole transaction: no concurrent inserter for this call can land
-    /// a row between the NOT EXISTS check and this INSERT's commit, so what NOT EXISTS sees here is
-    /// exactly what ON CONFLICT would have refused anyway. ON CONFLICT stays as the belt: it is what
-    /// makes a duplicate EventId inside this same batch (which NOT EXISTS cannot see, since those
-    /// rows are not in the table yet) merely redundant instead of a broken constraint.
-    /// </remarks>
-    internal const string AppendSql = """
-        INSERT INTO audit_event (
+    internal const string AppendSql = $"""
+        INSERT INTO {Schema}.audit_event (
             call_id, event_id, sequence, kind, occurred_at, turn_index, amends_event_id, payload)
         SELECT $1,
                d.event_id,
-               coalesce((SELECT max(sequence) FROM audit_event WHERE call_id = $1), -1)
+               coalesce((SELECT max(sequence) FROM {Schema}.audit_event WHERE call_id = $1), -1)
                    + row_number() OVER (ORDER BY d.position),
                d.kind, d.occurred_at, d.turn_index, d.amends_event_id, d.payload
           FROM unnest($2::uuid[], $3::text[], $4::timestamptz[],
@@ -59,7 +33,7 @@ internal sealed class PostgresAuditSink : IAuditSinkPort, IAsyncDisposable
                WITH ORDINALITY
                AS d(event_id, kind, occurred_at, turn_index, amends_event_id, payload, position)
          WHERE NOT EXISTS (
-             SELECT 1 FROM audit_event e WHERE e.call_id = $1 AND e.event_id = d.event_id)
+             SELECT 1 FROM {Schema}.audit_event e WHERE e.call_id = $1 AND e.event_id = d.event_id)
         ON CONFLICT (call_id, event_id) DO NOTHING
         """;
 
@@ -133,6 +107,10 @@ internal sealed class PostgresAuditSink : IAuditSinkPort, IAsyncDisposable
     /// <returns>A task that completes when the pool is closed.</returns>
     public ValueTask DisposeAsync() => _dataSource.DisposeAsync();
 
+    [SuppressMessage(
+        "csharpsquid",
+        "S3265",
+        Justification = "Npgsql documents Array combined with an element type via bit OR, and the enum omits Flags only upstream.")]
     private static NpgsqlBatchCommand AppendCommand(string callId, IReadOnlyList<AuditEvent> run)
     {
         NpgsqlBatchCommand command = new(AppendSql);

@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Call;
+using AgentCore.Application.Calls;
 
 namespace AgentCore.AspNetCore.Tests.Fakes;
 

@@ -1,5 +1,5 @@
 using AgentCore.Application.Ports;
-using AgentCore.Application.Call;
+using AgentCore.Application.Calls;
 using AgentCore.AspNetCore.Tests.Fakes;
 using Xunit;
 

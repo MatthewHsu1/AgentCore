@@ -65,7 +65,7 @@ internal sealed class FallbackAgent : DelegatingAIAgent
     /// <inheritdoc />
     protected override async Task<AgentResponse> RunCoreAsync(
         IEnumerable<ChatMessage> messages,
-        AgentSession? session,
+        AgentSession? session = null,
         AgentRunOptions? options = null,
         CancellationToken cancellationToken = default)
     {
@@ -85,7 +85,7 @@ internal sealed class FallbackAgent : DelegatingAIAgent
             return spoken;
         }
 
-        if (!string.IsNullOrWhiteSpace(SpokenText(response)))
+        if (!string.IsNullOrWhiteSpace(SpokenText(response)) || HasApprovalRequest(response.Messages))
         {
             return response;
         }
@@ -103,7 +103,7 @@ internal sealed class FallbackAgent : DelegatingAIAgent
     /// </remarks>
     protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
         IEnumerable<ChatMessage> messages,
-        AgentSession? session,
+        AgentSession? session = null,
         AgentRunOptions? options = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
@@ -139,7 +139,7 @@ internal sealed class FallbackAgent : DelegatingAIAgent
                     break;
                 }
 
-                spokeText = spokeText || (Speaks(current.AuthorName) && !string.IsNullOrWhiteSpace(current.Text));
+                spokeText = spokeText || HasApprovalRequest(current) || (Speaks(current.AuthorName) && !string.IsNullOrWhiteSpace(current.Text));
                 yield return current;
             }
         }
@@ -161,6 +161,26 @@ internal sealed class FallbackAgent : DelegatingAIAgent
             yield return spoken;
         }
     }
+
+    /// <summary>Reads whether the run asks the caller to approve a tool call.</summary>
+    /// <param name="messages">What the inner agent answered.</param>
+    /// <returns>Whether any message carries an approval request.</returns>
+    /// <remarks>
+    /// A request-only reply carries no text, so without this the run reads as silence and takes
+    /// the fallback. An approval the caller never hears is a tool that never runs, so a request
+    /// counts as spoken whoever authored it.
+    /// </remarks>
+    private static bool HasApprovalRequest(IEnumerable<ChatMessage> messages)
+        => messages.Any(message => HasApprovalRequest(message.Contents));
+
+    /// <summary>Reads whether one update asks the caller to approve a tool call.</summary>
+    /// <param name="update">One update of the run.</param>
+    /// <returns>Whether the update carries an approval request.</returns>
+    private static bool HasApprovalRequest(AgentResponseUpdate update)
+        => HasApprovalRequest(update.Contents);
+
+    private static bool HasApprovalRequest(IEnumerable<AIContent> contents)
+        => contents.OfType<ToolApprovalRequestContent>().Any();
 
     /// <summary>Reads the words this run would put in the caller's ear.</summary>
     /// <param name="response">What the inner agent answered.</param>

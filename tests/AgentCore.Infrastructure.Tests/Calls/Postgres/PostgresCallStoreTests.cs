@@ -26,7 +26,7 @@ public sealed class PostgresCallStoreTests : PostgresDatabaseTest
         Assert.Equal("c1", call.CallId);
         Assert.Null(call.Title);
         Assert.Equal(CallStatus.Regular, call.Status);
-        Assert.Equal(1, await ScalarAsync<long>("SELECT count(*) FROM call"));
+        Assert.Equal(1, await ScalarAsync<long>("SELECT count(*) FROM agentcore.call"));
     }
 
     [PostgresFact]
@@ -43,7 +43,7 @@ public sealed class PostgresCallStoreTests : PostgresDatabaseTest
         // Assert
         Assert.Equal(first.CreatedAt, second.CreatedAt);
         Assert.Equal("kept", second.Title);
-        Assert.Equal(1, await ScalarAsync<long>("SELECT count(*) FROM call"));
+        Assert.Equal(1, await ScalarAsync<long>("SELECT count(*) FROM agentcore.call"));
     }
 
     [PostgresFact]
@@ -81,7 +81,7 @@ public sealed class PostgresCallStoreTests : PostgresDatabaseTest
         await store.CreateAsync("c1", Token);
         await ExecuteAsync(
             """
-            INSERT INTO call_message (call_id, ordinal, turn_index, role, content, message_id, created_at, updated_at)
+            INSERT INTO agentcore.call_message (call_id, ordinal, turn_index, role, content, message_id, created_at, updated_at)
             VALUES ('c1', 1, 0, 'user', '{}'::jsonb, 'm1', now(), now() + interval '1 hour')
             """);
 
@@ -195,8 +195,26 @@ public sealed class PostgresCallStoreTests : PostgresDatabaseTest
         await store.DeleteAsync("c1", Token);
 
         // Assert
-        Assert.Equal(0, await ScalarAsync<long>("SELECT count(*) FROM call"));
-        Assert.Equal(0, await ScalarAsync<long>("SELECT count(*) FROM call_principal"));
+        Assert.Equal(0, await ScalarAsync<long>("SELECT count(*) FROM agentcore.call"));
+        Assert.Equal(0, await ScalarAsync<long>("SELECT count(*) FROM agentcore.call_principal"));
+    }
+
+    [PostgresFact]
+    public async Task DeleteAsync_ACall_TakesItsSameIdContinuationWithIt()
+    {
+        // Arrange — one id plays three roles now, so the row delete takes the key with it. Per-turn
+        // response ids are gone with their own rows only through DeleteContinuationAsync; nothing
+        // here enumerates them.
+        PostgresCallStore store = new(DataSource);
+        await store.CreateAsync("c1", Token);
+        using var document = System.Text.Json.JsonDocument.Parse("""{ "callId": "c1" }""");
+        await store.SaveContinuationAsync("c1", document.RootElement, Token);
+
+        // Act
+        await store.DeleteAsync("c1", Token);
+
+        // Assert
+        Assert.Null(await store.GetContinuationAsync("c1", Token));
     }
 
     [PostgresFact]

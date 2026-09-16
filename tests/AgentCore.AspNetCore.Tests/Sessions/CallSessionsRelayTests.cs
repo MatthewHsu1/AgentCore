@@ -37,11 +37,7 @@ public sealed class CallSessionsRelayTests
         await using var harness = await RelayConnectionHarness.StartAsync(
             TelnyxRelayTurnTests.PolicyYaml,
             reply,
-            services: collection =>
-            {
-                collection.AddSingleton<ICallSessions>(sessions);
-                collection.AddSingleton<ICallSessionFactory>(factory);
-            });
+            configure: options => options.UseCallSessions((_, _) => sessions));
 
         harness.Socket.Queue(RelayFrames.Setup(callSessionId: "call-live"));
         harness.Socket.Queue(RelayFrames.Prompt("when does my order ship?", last: true));
@@ -58,7 +54,7 @@ public sealed class CallSessionsRelayTests
     {
         var document = ConfigurationLoader.LoadYaml(yaml);
         RoutingChatClientFactory chatClients = new(reply);
-        var compiled = ConfigurationCompiler.Compile(document, new AgentCompilationContext(chatClients));
+        var compiled = ConfigurationCompiler.CompileAll(document, new AgentCompilationContext(chatClients))["main"];
 
         return new CallSessionFactory(
             compiled,

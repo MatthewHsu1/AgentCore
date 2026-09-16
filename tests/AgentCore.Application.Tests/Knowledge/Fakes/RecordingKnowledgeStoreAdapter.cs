@@ -66,6 +66,7 @@ internal sealed class FakeKnowledgeStore : IKnowledgeRetrievalPort
 {
     public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
         string query,
+        KnowledgeScope? scope = null,
         CancellationToken cancellationToken = default)
         => ValueTask.FromResult<IReadOnlyList<KnowledgeCard>>([]);
 }

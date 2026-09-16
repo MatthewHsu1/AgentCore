@@ -10,14 +10,17 @@ namespace AgentCore.Application.Knowledge;
 /// </summary>
 internal sealed class FacetFilterProvider(
     AIContextProvider innerProvider,
-    IReadOnlyList<KnowledgeFilterableFacetConfiguration> facets)
+    IReadOnlyList<KnowledgeFilterableFacetConfiguration>? facets,
+    KnowledgeSearch.Core core)
     : AIContextProvider
 {
     private readonly AIContextProvider _inner = innerProvider
         ?? throw new ArgumentNullException(nameof(innerProvider));
 
-    private readonly IReadOnlyList<KnowledgeFilterableFacetConfiguration> _facets = facets
-        ?? throw new ArgumentNullException(nameof(facets));
+    private readonly IReadOnlyList<KnowledgeFilterableFacetConfiguration>? _facets = facets;
+
+    private readonly KnowledgeSearch.Core _core = core
+        ?? throw new ArgumentNullException(nameof(core));
 
     /// <inheritdoc />
     public override IReadOnlyList<string> StateKeys => _inner.StateKeys;
@@ -34,8 +37,12 @@ internal sealed class FacetFilterProvider(
 
     /// <inheritdoc />
     protected override async ValueTask<AIContext> InvokingCoreAsync(
-        InvokingContext context, CancellationToken cancellationToken)
+        InvokingContext context, CancellationToken cancellationToken = default)
     {
+        HashSet<AITool>? existing = context.AIContext.Tools is { } input
+            ? [.. input]
+            : null;
+
         var provided = await _inner.InvokingAsync(context, cancellationToken).ConfigureAwait(false);
 
         if (provided.Tools is not { } tools)
@@ -47,8 +54,8 @@ internal sealed class FacetFilterProvider(
 
         foreach (var tool in tools)
         {
-            wrapped.Add(tool is AIFunction function
-                ? new FacetFilteredSearch(function, _facets)
+            wrapped.Add(tool is AIFunction function && existing?.Contains(tool) is not true
+                ? new FacetFilteredSearch(function, _facets, _core)
                 : tool);
         }
 
@@ -59,6 +66,6 @@ internal sealed class FacetFilterProvider(
 
     /// <inheritdoc />
     protected override ValueTask InvokedCoreAsync(
-        InvokedContext context, CancellationToken cancellationToken)
+        InvokedContext context, CancellationToken cancellationToken = default)
         => _inner.InvokedAsync(context, cancellationToken);
 }

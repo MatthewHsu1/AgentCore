@@ -61,7 +61,7 @@ public sealed class DeclaredToolTests
     {
         var thrown = await Assert.ThrowsAnyAsync<Exception>(
             async () => await new ThrowingTool(failure).InvokeAsync(
-                new AIFunctionArguments(),
+                [],
                 TestContext.Current.CancellationToken));
 
         // The very exception, and not a copy: InvokeCoreAsync no longer catches, so this is a plain
@@ -79,7 +79,7 @@ public sealed class DeclaredToolTests
         // Nobody reads this result, and swallowing it would keep a dead call running.
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             async () => await new ThrowingTool(new OperationCanceledException()).InvokeAsync(
-                new AIFunctionArguments(),
+                [],
                 source.Token));
     }
 
@@ -94,7 +94,7 @@ public sealed class DeclaredToolTests
 
         var thrown = await Assert.ThrowsAnyAsync<Exception>(
             async () => await new ThrowingTool(timeout).InvokeAsync(
-                new AIFunctionArguments(),
+                [],
                 TestContext.Current.CancellationToken));
 
         Assert.Same(timeout, thrown);
@@ -106,7 +106,7 @@ public sealed class DeclaredToolTests
         // The one half of the old rule that still lives here: a tool body may choose to answer a
         // fault itself, without throwing at all, exactly as a builtin tool definition does today.
         var result = await new SelfAnsweringTool().InvokeAsync(
-            new AIFunctionArguments(),
+            [],
             TestContext.Current.CancellationToken);
 
         Assert.True(ToolErrorResult.IsError(result as System.Text.Json.Nodes.JsonNode));

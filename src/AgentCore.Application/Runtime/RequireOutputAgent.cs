@@ -34,7 +34,7 @@ internal sealed class RequireOutputAgent : DelegatingAIAgent
     /// <inheritdoc />
     protected override async Task<AgentResponse> RunCoreAsync(
         IEnumerable<ChatMessage> messages,
-        AgentSession? session,
+        AgentSession? session = null,
         AgentRunOptions? options = null,
         CancellationToken cancellationToken = default)
     {
@@ -47,7 +47,7 @@ internal sealed class RequireOutputAgent : DelegatingAIAgent
     /// <inheritdoc />
     protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
         IEnumerable<ChatMessage> messages,
-        AgentSession? session,
+        AgentSession? session = null,
         AgentRunOptions? options = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {

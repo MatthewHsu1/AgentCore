@@ -12,52 +12,25 @@ AgentCore.Application.Audit.QueuedAuditSink.DisposeAsync() -> System.Threading.T
 AgentCore.Application.Audit.QueuedAuditSink.FlushAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Audit.QueuedAuditSink.QueuedAuditSink(AgentCore.Application.Ports.IAuditSinkPort! inner, Microsoft.Extensions.Logging.ILogger? logger = null, int capacity = 10000, int batchSize = 100) -> void
 AgentCore.Application.Audit.QueuedAuditSink.Store.get -> AgentCore.Application.Ports.IAuditSinkPort!
-AgentCore.Application.Call.CallChannel
-AgentCore.Application.Call.CallChannel.<Clone>$() -> AgentCore.Application.Call.CallChannel!
-AgentCore.Application.Call.CallChannel.CallChannel(AgentCore.Application.Ports.ICallInputPort! Input, AgentCore.Application.Ports.ICallOutputPort! Output) -> void
-AgentCore.Application.Call.CallChannel.Deconstruct(out AgentCore.Application.Ports.ICallInputPort! Input, out AgentCore.Application.Ports.ICallOutputPort! Output) -> void
-AgentCore.Application.Call.CallChannel.DisposeAsync() -> System.Threading.Tasks.ValueTask
-AgentCore.Application.Call.CallChannel.Equals(AgentCore.Application.Call.CallChannel? other) -> bool
-AgentCore.Application.Call.CallChannel.Input.get -> AgentCore.Application.Ports.ICallInputPort!
-AgentCore.Application.Call.CallChannel.Input.init -> void
-AgentCore.Application.Call.CallChannel.Output.get -> AgentCore.Application.Ports.ICallOutputPort!
-AgentCore.Application.Call.CallChannel.Output.init -> void
-AgentCore.Application.Call.CallChannelContext
-AgentCore.Application.Call.CallChannelContext.<Clone>$() -> AgentCore.Application.Call.CallChannelContext!
-AgentCore.Application.Call.CallChannelContext.CallChannelContext(string! CallId, System.Collections.Generic.IReadOnlyDictionary<string!, string!>? CustomParameters) -> void
-AgentCore.Application.Call.CallChannelContext.CallId.get -> string!
-AgentCore.Application.Call.CallChannelContext.CallId.init -> void
-AgentCore.Application.Call.CallChannelContext.CustomParameters.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>?
-AgentCore.Application.Call.CallChannelContext.CustomParameters.init -> void
-AgentCore.Application.Call.CallChannelContext.Deconstruct(out string! CallId, out System.Collections.Generic.IReadOnlyDictionary<string!, string!>? CustomParameters) -> void
-AgentCore.Application.Call.CallChannelContext.Equals(AgentCore.Application.Call.CallChannelContext? other) -> bool
-AgentCore.Application.Call.CallInput
-AgentCore.Application.Call.CallInput.Barge
-AgentCore.Application.Call.CallInput.Barge.Barge(string! HeardText, System.TimeSpan PlayedDuration) -> void
-AgentCore.Application.Call.CallInput.Barge.Deconstruct(out string! HeardText, out System.TimeSpan PlayedDuration) -> void
-AgentCore.Application.Call.CallInput.Barge.Equals(AgentCore.Application.Call.CallInput.Barge? other) -> bool
-AgentCore.Application.Call.CallInput.Barge.HeardText.get -> string!
-AgentCore.Application.Call.CallInput.Barge.HeardText.init -> void
-AgentCore.Application.Call.CallInput.Barge.PlayedDuration.get -> System.TimeSpan
-AgentCore.Application.Call.CallInput.Barge.PlayedDuration.init -> void
-AgentCore.Application.Call.CallInput.CallInput(AgentCore.Application.Call.CallInput! original) -> void
-AgentCore.Application.Call.CallInput.Keypress
-AgentCore.Application.Call.CallInput.Keypress.Deconstruct(out string! Key) -> void
-AgentCore.Application.Call.CallInput.Keypress.Equals(AgentCore.Application.Call.CallInput.Keypress? other) -> bool
-AgentCore.Application.Call.CallInput.Keypress.Key.get -> string!
-AgentCore.Application.Call.CallInput.Keypress.Key.init -> void
-AgentCore.Application.Call.CallInput.Keypress.Keypress(string! Key) -> void
-AgentCore.Application.Call.CallInput.Utterance
-AgentCore.Application.Call.CallInput.Utterance.Deconstruct(out string! Text, out string! Language, out bool IsFinal) -> void
-AgentCore.Application.Call.CallInput.Utterance.Equals(AgentCore.Application.Call.CallInput.Utterance? other) -> bool
-AgentCore.Application.Call.CallInput.Utterance.IsFinal.get -> bool
-AgentCore.Application.Call.CallInput.Utterance.IsFinal.init -> void
-AgentCore.Application.Call.CallInput.Utterance.Language.get -> string!
-AgentCore.Application.Call.CallInput.Utterance.Language.init -> void
-AgentCore.Application.Call.CallInput.Utterance.Text.get -> string!
-AgentCore.Application.Call.CallInput.Utterance.Text.init -> void
-AgentCore.Application.Call.CallInput.Utterance.Utterance(string! Text, string! Language, bool IsFinal) -> void
-AgentCore.Application.Call.CallSpeechPairing
+AgentCore.Application.Calls.CallChannel
+AgentCore.Application.Calls.CallChannel.<Clone>$() -> AgentCore.Application.Calls.CallChannel!
+AgentCore.Application.Calls.CallChannel.CallChannel(AgentCore.Application.Ports.ICallInputPort! Input, AgentCore.Application.Ports.ICallOutputPort! Output) -> void
+AgentCore.Application.Calls.CallChannel.Deconstruct(out AgentCore.Application.Ports.ICallInputPort! Input, out AgentCore.Application.Ports.ICallOutputPort! Output) -> void
+AgentCore.Application.Calls.CallChannel.DisposeAsync() -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Calls.CallChannel.Equals(AgentCore.Application.Calls.CallChannel? other) -> bool
+AgentCore.Application.Calls.CallChannel.Input.get -> AgentCore.Application.Ports.ICallInputPort!
+AgentCore.Application.Calls.CallChannel.Input.init -> void
+AgentCore.Application.Calls.CallChannel.Output.get -> AgentCore.Application.Ports.ICallOutputPort!
+AgentCore.Application.Calls.CallChannel.Output.init -> void
+AgentCore.Application.Calls.CallChannelContext
+AgentCore.Application.Calls.CallChannelContext.<Clone>$() -> AgentCore.Application.Calls.CallChannelContext!
+AgentCore.Application.Calls.CallChannelContext.CallChannelContext(string! CallId, System.Collections.Generic.IReadOnlyDictionary<string!, string!>? CustomParameters) -> void
+AgentCore.Application.Calls.CallChannelContext.CallId.get -> string!
+AgentCore.Application.Calls.CallChannelContext.CallId.init -> void
+AgentCore.Application.Calls.CallChannelContext.CustomParameters.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>?
+AgentCore.Application.Calls.CallChannelContext.CustomParameters.init -> void
+AgentCore.Application.Calls.CallChannelContext.Deconstruct(out string! CallId, out System.Collections.Generic.IReadOnlyDictionary<string!, string!>? CustomParameters) -> void
+AgentCore.Application.Calls.CallChannelContext.Equals(AgentCore.Application.Calls.CallChannelContext? other) -> bool
 AgentCore.Application.Calls.CallClarificationState
 AgentCore.Application.Calls.CallClarificationState.<Clone>$() -> AgentCore.Application.Calls.CallClarificationState!
 AgentCore.Application.Calls.CallClarificationState.CallClarificationState() -> void
@@ -65,6 +38,32 @@ AgentCore.Application.Calls.CallClarificationState.Equals(AgentCore.Application.
 AgentCore.Application.Calls.CallClarificationState.ProbeAsks.get -> int
 AgentCore.Application.Calls.CallClarificationState.ProbeAsks.init -> void
 AgentCore.Application.Calls.CallCursor
+AgentCore.Application.Calls.CallInput
+AgentCore.Application.Calls.CallInput.Barge
+AgentCore.Application.Calls.CallInput.Barge.Barge(string! HeardText, System.TimeSpan PlayedDuration) -> void
+AgentCore.Application.Calls.CallInput.Barge.Deconstruct(out string! HeardText, out System.TimeSpan PlayedDuration) -> void
+AgentCore.Application.Calls.CallInput.Barge.Equals(AgentCore.Application.Calls.CallInput.Barge? other) -> bool
+AgentCore.Application.Calls.CallInput.Barge.HeardText.get -> string!
+AgentCore.Application.Calls.CallInput.Barge.HeardText.init -> void
+AgentCore.Application.Calls.CallInput.Barge.PlayedDuration.get -> System.TimeSpan
+AgentCore.Application.Calls.CallInput.Barge.PlayedDuration.init -> void
+AgentCore.Application.Calls.CallInput.CallInput(AgentCore.Application.Calls.CallInput! original) -> void
+AgentCore.Application.Calls.CallInput.Keypress
+AgentCore.Application.Calls.CallInput.Keypress.Deconstruct(out string! Key) -> void
+AgentCore.Application.Calls.CallInput.Keypress.Equals(AgentCore.Application.Calls.CallInput.Keypress? other) -> bool
+AgentCore.Application.Calls.CallInput.Keypress.Key.get -> string!
+AgentCore.Application.Calls.CallInput.Keypress.Key.init -> void
+AgentCore.Application.Calls.CallInput.Keypress.Keypress(string! Key) -> void
+AgentCore.Application.Calls.CallInput.Utterance
+AgentCore.Application.Calls.CallInput.Utterance.Deconstruct(out string! Text, out string! Language, out bool IsFinal) -> void
+AgentCore.Application.Calls.CallInput.Utterance.Equals(AgentCore.Application.Calls.CallInput.Utterance? other) -> bool
+AgentCore.Application.Calls.CallInput.Utterance.IsFinal.get -> bool
+AgentCore.Application.Calls.CallInput.Utterance.IsFinal.init -> void
+AgentCore.Application.Calls.CallInput.Utterance.Language.get -> string!
+AgentCore.Application.Calls.CallInput.Utterance.Language.init -> void
+AgentCore.Application.Calls.CallInput.Utterance.Text.get -> string!
+AgentCore.Application.Calls.CallInput.Utterance.Text.init -> void
+AgentCore.Application.Calls.CallInput.Utterance.Utterance(string! Text, string! Language, bool IsFinal) -> void
 AgentCore.Application.Calls.CallPage
 AgentCore.Application.Calls.CallPage.<Clone>$() -> AgentCore.Application.Calls.CallPage!
 AgentCore.Application.Calls.CallPage.CallPage(System.Collections.Generic.IReadOnlyList<AgentCore.Application.Calls.CallRecord!>! Calls, string? NextCursor) -> void
@@ -78,17 +77,19 @@ AgentCore.Application.Calls.CallRecord
 AgentCore.Application.Calls.CallRecord.<Clone>$() -> AgentCore.Application.Calls.CallRecord!
 AgentCore.Application.Calls.CallRecord.CallId.get -> string!
 AgentCore.Application.Calls.CallRecord.CallId.init -> void
-AgentCore.Application.Calls.CallRecord.CallRecord(string! CallId, string? Title, AgentCore.Application.Calls.CallStatus Status, string? ExternalId, System.Text.Json.JsonElement? Custom, System.DateTimeOffset CreatedAt, System.DateTimeOffset? LastMessageAt, AgentCore.Application.Calls.CallSessionState? State = null) -> void
+AgentCore.Application.Calls.CallRecord.CallRecord(string! CallId, string? Title, AgentCore.Application.Calls.CallStatus Status, string? ExternalId, System.Text.Json.JsonElement? Custom, System.DateTimeOffset CreatedAt, System.DateTimeOffset? LastMessageAt, AgentCore.Application.Calls.CallSessionState? State = null, int NextOrdinal = 0) -> void
 AgentCore.Application.Calls.CallRecord.CreatedAt.get -> System.DateTimeOffset
 AgentCore.Application.Calls.CallRecord.CreatedAt.init -> void
 AgentCore.Application.Calls.CallRecord.Custom.get -> System.Text.Json.JsonElement?
 AgentCore.Application.Calls.CallRecord.Custom.init -> void
-AgentCore.Application.Calls.CallRecord.Deconstruct(out string! CallId, out string? Title, out AgentCore.Application.Calls.CallStatus Status, out string? ExternalId, out System.Text.Json.JsonElement? Custom, out System.DateTimeOffset CreatedAt, out System.DateTimeOffset? LastMessageAt, out AgentCore.Application.Calls.CallSessionState? State) -> void
+AgentCore.Application.Calls.CallRecord.Deconstruct(out string! CallId, out string? Title, out AgentCore.Application.Calls.CallStatus Status, out string? ExternalId, out System.Text.Json.JsonElement? Custom, out System.DateTimeOffset CreatedAt, out System.DateTimeOffset? LastMessageAt, out AgentCore.Application.Calls.CallSessionState? State, out int NextOrdinal) -> void
 AgentCore.Application.Calls.CallRecord.Equals(AgentCore.Application.Calls.CallRecord? other) -> bool
 AgentCore.Application.Calls.CallRecord.ExternalId.get -> string?
 AgentCore.Application.Calls.CallRecord.ExternalId.init -> void
 AgentCore.Application.Calls.CallRecord.LastMessageAt.get -> System.DateTimeOffset?
 AgentCore.Application.Calls.CallRecord.LastMessageAt.init -> void
+AgentCore.Application.Calls.CallRecord.NextOrdinal.get -> int
+AgentCore.Application.Calls.CallRecord.NextOrdinal.init -> void
 AgentCore.Application.Calls.CallRecord.State.get -> AgentCore.Application.Calls.CallSessionState?
 AgentCore.Application.Calls.CallRecord.State.init -> void
 AgentCore.Application.Calls.CallRecord.Status.get -> AgentCore.Application.Calls.CallStatus
@@ -103,16 +104,19 @@ AgentCore.Application.Calls.CallSessionState.Clarifications.init -> void
 AgentCore.Application.Calls.CallSessionState.Equals(AgentCore.Application.Calls.CallSessionState? other) -> bool
 AgentCore.Application.Calls.CallSessionState.IsComplete.get -> bool
 AgentCore.Application.Calls.CallSessionState.IsComplete.init -> void
-AgentCore.Application.Calls.CallSessionState.NextOrdinal.get -> int
-AgentCore.Application.Calls.CallSessionState.NextOrdinal.init -> void
 AgentCore.Application.Calls.CallSessionState.NextTurnIndex.get -> int
 AgentCore.Application.Calls.CallSessionState.NextTurnIndex.init -> void
+AgentCore.Application.Calls.CallSessionState.Providers.get -> System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.JsonElement>!
+AgentCore.Application.Calls.CallSessionState.Providers.init -> void
 AgentCore.Application.Calls.CallSessionState.Slots.get -> System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>!
 AgentCore.Application.Calls.CallSessionState.Slots.init -> void
 AgentCore.Application.Calls.CallSessionState.Stage.get -> string!
 AgentCore.Application.Calls.CallSessionState.Stage.init -> void
 AgentCore.Application.Calls.CallSessionState.Version.get -> int
 AgentCore.Application.Calls.CallSessionState.Version.init -> void
+AgentCore.Application.Calls.CallSessionState.WorkflowState.get -> System.Text.Json.JsonElement?
+AgentCore.Application.Calls.CallSessionState.WorkflowState.init -> void
+AgentCore.Application.Calls.CallSpeechPairing
 AgentCore.Application.Calls.CallStateJson
 AgentCore.Application.Calls.CallStatus
 AgentCore.Application.Calls.CallStatus.Archived = 1 -> AgentCore.Application.Calls.CallStatus
@@ -123,18 +127,21 @@ AgentCore.Application.Calls.ChatCallTitler.ChatCallTitler(AgentCore.Application.
 AgentCore.Application.Calls.ChatCallTitler.GenerateAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<string!>!
 AgentCore.Application.Calls.ChatCallTitler.GenerateFromAsync(string! callId, System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatMessage!>! messages, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<string!>!
 AgentCore.Application.Calls.Memory.InMemoryCallStore
-AgentCore.Application.Calls.Memory.InMemoryCallStore.AppendAsync(System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.CallMessage!>! messages, AgentCore.Application.Calls.CallSessionState? state = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Calls.Memory.InMemoryCallStore.AppendAsync(string! callId, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.CallMessageDraft!>! messages, AgentCore.Application.Calls.CallSessionState? state = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.CallMessage!>!>
 AgentCore.Application.Calls.Memory.InMemoryCallStore.AttachPrincipalAsync(string! callId, string! principalKey, string! role, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Calls.Memory.InMemoryCallStore.CreateAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Calls.CallRecord!>
 AgentCore.Application.Calls.Memory.InMemoryCallStore.DeleteAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Calls.Memory.InMemoryCallStore.DeleteContinuationAsync(string! continuationId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Calls.Memory.InMemoryCallStore.DetachPrincipalAsync(string! callId, string! principalKey, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Calls.Memory.InMemoryCallStore.EraseAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<int>
 AgentCore.Application.Calls.Memory.InMemoryCallStore.GetAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Calls.CallRecord?>
+AgentCore.Application.Calls.Memory.InMemoryCallStore.GetContinuationAsync(string! continuationId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Text.Json.JsonElement?>
 AgentCore.Application.Calls.Memory.InMemoryCallStore.InMemoryCallStore(System.TimeProvider? timeProvider = null) -> void
 AgentCore.Application.Calls.Memory.InMemoryCallStore.ListAsync(string! principalKey, string? after, int limit, AgentCore.Application.Calls.CallStatus? status = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Calls.CallPage!>
 AgentCore.Application.Calls.Memory.InMemoryCallStore.ReadAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.CallMessage!>!>
 AgentCore.Application.Calls.Memory.InMemoryCallStore.RenameAsync(string! callId, string! title, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
-AgentCore.Application.Calls.Memory.InMemoryCallStore.RewriteAsync(string! callId, int ordinal, Microsoft.Extensions.AI.ChatMessage! content, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Calls.Memory.InMemoryCallStore.RewriteAsync(string! callId, string! messageId, Microsoft.Extensions.AI.ChatMessage! content, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Calls.Memory.InMemoryCallStore.SaveContinuationAsync(string! continuationId, System.Text.Json.JsonElement envelope, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Calls.Memory.InMemoryCallStore.SetCustomAsync(string! callId, System.Text.Json.JsonElement? custom, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Calls.Memory.InMemoryCallStore.SetExternalIdAsync(string! callId, string? externalId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Calls.Memory.InMemoryCallStore.SetStatusAsync(string! callId, AgentCore.Application.Calls.CallStatus status, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
@@ -158,10 +165,11 @@ AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Moderati
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Moderation.init -> void
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Skills.get -> AgentCore.Application.Skills.SkillCatalog?
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Skills.init -> void
-AgentCore.Application.Configuration.Compilation.AgentCompilationContext.StateSnapshot.get -> System.Func<System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>!>?
-AgentCore.Application.Configuration.Compilation.AgentCompilationContext.StateSnapshot.init -> void
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Tools.get -> AgentCore.Application.Tools.Registry.ToolRegistry?
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Tools.init -> void
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.WorkspaceRoot.get -> string?
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.WorkspaceRoot.init -> void
+AgentCore.Application.Configuration.Compilation.AgentHarness
 AgentCore.Application.Configuration.Compilation.AgentInstructions
 AgentCore.Application.Configuration.Compilation.AgentKnowledge
 AgentCore.Application.Configuration.Compilation.CompiledAgent
@@ -169,13 +177,18 @@ AgentCore.Application.Configuration.Compilation.CompiledAgent.Agent.get -> Micro
 AgentCore.Application.Configuration.Compilation.CompiledAgent.Agents.get -> System.Collections.Generic.IReadOnlyDictionary<string!, Microsoft.Agents.AI.AIAgent!>!
 AgentCore.Application.Configuration.Compilation.CompiledAgent.Configuration.get -> AgentCore.Application.Configuration.Schema.AgentCoreConfiguration!
 AgentCore.Application.Configuration.Compilation.CompiledAgent.CreatePolicy(AgentCore.Application.Configuration.Validation.IGuardEvaluator! guards) -> AgentCore.Application.Policy.StagePolicy!
+AgentCore.Application.Configuration.Compilation.CompiledAgent.EntryName.get -> string!
+AgentCore.Application.Configuration.Compilation.CompiledAgent.FallbackReply.get -> string!
 AgentCore.Application.Configuration.Compilation.CompiledAgent.ForStage(string! stageId) -> Microsoft.Agents.AI.AIAgent?
 AgentCore.Application.Configuration.Compilation.CompiledAgent.Name.get -> string!
+AgentCore.Application.Configuration.Compilation.CompiledAgent.Policy.get -> AgentCore.Application.Configuration.Schema.PolicyConfiguration?
+AgentCore.Application.Configuration.Compilation.CompiledAgent.RefusalReply.get -> string!
 AgentCore.Application.Configuration.Compilation.CompiledAgent.Shape.get -> AgentCore.Application.Configuration.Compilation.CompiledAgentShape
 AgentCore.Application.Configuration.Compilation.CompiledAgentRegistry
 AgentCore.Application.Configuration.Compilation.CompiledAgentRegistry.CompileCount.get -> int
 AgentCore.Application.Configuration.Compilation.CompiledAgentRegistry.CompiledAgentRegistry() -> void
-AgentCore.Application.Configuration.Compilation.CompiledAgentRegistry.GetOrCompile(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Configuration.Compilation.AgentCompilationContext! context) -> AgentCore.Application.Configuration.Compilation.CompiledAgent!
+AgentCore.Application.Configuration.Compilation.CompiledAgentRegistry.EnsureAll(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Configuration.Compilation.AgentCompilationContext! context) -> System.Collections.Generic.IReadOnlyDictionary<string!, AgentCore.Application.Configuration.Compilation.CompiledAgent!>!
+AgentCore.Application.Configuration.Compilation.CompiledAgentRegistry.GetOrCompile(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, string! entryName, AgentCore.Application.Configuration.Compilation.AgentCompilationContext! context) -> AgentCore.Application.Configuration.Compilation.CompiledAgent!
 AgentCore.Application.Configuration.Compilation.CompiledAgentShape
 AgentCore.Application.Configuration.Compilation.CompiledAgentShape.ExplicitGraph = 3 -> AgentCore.Application.Configuration.Compilation.CompiledAgentShape
 AgentCore.Application.Configuration.Compilation.CompiledAgentShape.PatternGraph = 2 -> AgentCore.Application.Configuration.Compilation.CompiledAgentShape
@@ -211,6 +224,15 @@ AgentCore.Application.Configuration.Compilation.ResolvedCompaction.Strategy.get 
 AgentCore.Application.Configuration.Compilation.ResolvedCompaction.Strategy.init -> void
 AgentCore.Application.Configuration.Compilation.ResolvedCompaction.Trigger.get -> AgentCore.Application.Configuration.Schema.CompactionTriggerConfiguration!
 AgentCore.Application.Configuration.Compilation.ResolvedCompaction.Trigger.init -> void
+AgentCore.Application.Configuration.Compilation.ResolvedHarness
+AgentCore.Application.Configuration.Compilation.ResolvedHarness.<Clone>$() -> AgentCore.Application.Configuration.Compilation.ResolvedHarness!
+AgentCore.Application.Configuration.Compilation.ResolvedHarness.Deconstruct(out bool Todos, out bool Mode) -> void
+AgentCore.Application.Configuration.Compilation.ResolvedHarness.Equals(AgentCore.Application.Configuration.Compilation.ResolvedHarness? other) -> bool
+AgentCore.Application.Configuration.Compilation.ResolvedHarness.Mode.get -> bool
+AgentCore.Application.Configuration.Compilation.ResolvedHarness.Mode.init -> void
+AgentCore.Application.Configuration.Compilation.ResolvedHarness.ResolvedHarness(bool Todos, bool Mode) -> void
+AgentCore.Application.Configuration.Compilation.ResolvedHarness.Todos.get -> bool
+AgentCore.Application.Configuration.Compilation.ResolvedHarness.Todos.init -> void
 AgentCore.Application.Configuration.Compilation.ResolvedKnowledge
 AgentCore.Application.Configuration.Compilation.ResolvedKnowledge.<Clone>$() -> AgentCore.Application.Configuration.Compilation.ResolvedKnowledge!
 AgentCore.Application.Configuration.Compilation.ResolvedKnowledge.Citations.get -> bool
@@ -290,28 +312,48 @@ AgentCore.Application.Configuration.Parsing.YamlToJson
 AgentCore.Application.Configuration.Schema.AgentConfiguration
 AgentCore.Application.Configuration.Schema.AgentConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.AgentConfiguration!
 AgentCore.Application.Configuration.Schema.AgentConfiguration.AgentConfiguration() -> void
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Approval.get -> AgentCore.Application.Configuration.Schema.ApprovalConfiguration?
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Approval.init -> void
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Background.get -> System.Collections.Generic.IReadOnlyList<string!>!
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Background.init -> void
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Compaction.get -> AgentCore.Application.Configuration.Schema.CompactionConfiguration?
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Compaction.init -> void
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Equals(AgentCore.Application.Configuration.Schema.AgentConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Files.get -> AgentCore.Application.Configuration.Schema.AgentFilesConfiguration?
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Files.init -> void
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Id.get -> string!
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Id.init -> void
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Description.get -> string?
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Description.init -> void
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Instructions.get -> string?
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Instructions.init -> void
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Knowledge.get -> AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration?
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Knowledge.init -> void
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Loop.get -> AgentCore.Application.Configuration.Schema.LoopConfiguration?
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Loop.init -> void
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Memory.get -> AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration?
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Memory.init -> void
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Mode.get -> bool?
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Mode.init -> void
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Model.get -> AgentCore.Application.Configuration.Schema.ModelReference?
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Model.init -> void
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Shell.get -> AgentCore.Application.Configuration.Schema.ShellConfiguration?
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Shell.init -> void
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Skills.get -> System.Collections.Generic.IReadOnlyList<string!>!
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Skills.init -> void
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Todos.get -> bool?
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Todos.init -> void
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Tools.get -> System.Collections.Generic.IReadOnlyList<string!>!
 AgentCore.Application.Configuration.Schema.AgentConfiguration.Tools.init -> void
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.AgentCoreConfiguration!
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.AgentCoreConfiguration() -> void
-AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Agents.get -> AgentCore.Application.Configuration.Schema.AgentsConfiguration?
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Agents.get -> AgentCore.Application.Configuration.Schema.AgentsConfiguration!
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Agents.init -> void
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.ApiVersion.get -> string!
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.ApiVersion.init -> void
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Entries.get -> System.Collections.Generic.IReadOnlyDictionary<string!, AgentCore.Application.Configuration.Schema.EntryConfiguration!>!
+AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Entries.init -> void
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Equals(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration? other) -> bool
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Evaluation.get -> AgentCore.Application.Configuration.Schema.EvaluationConfiguration?
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Evaluation.init -> void
@@ -319,16 +361,10 @@ AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Extractor.get 
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Extractor.init -> void
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.FallbackReply.get -> string!
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.FallbackReply.init -> void
-AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Graph.get -> AgentCore.Application.Configuration.Schema.GraphConfiguration?
-AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Graph.init -> void
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Guards.get -> System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode!>!
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Guards.init -> void
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Mcp.get -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Configuration.Schema.McpServerConfiguration!>!
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Mcp.init -> void
-AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Name.get -> string!
-AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Name.init -> void
-AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Policy.get -> AgentCore.Application.Configuration.Schema.PolicyConfiguration?
-AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Policy.init -> void
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Providers.get -> AgentCore.Application.Configuration.Schema.ProvidersConfiguration?
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Providers.init -> void
 AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.RefusalReply.get -> string!
@@ -342,6 +378,8 @@ AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.Tools.init -> 
 AgentCore.Application.Configuration.Schema.AgentDefaults
 AgentCore.Application.Configuration.Schema.AgentDefaults.<Clone>$() -> AgentCore.Application.Configuration.Schema.AgentDefaults!
 AgentCore.Application.Configuration.Schema.AgentDefaults.AgentDefaults() -> void
+AgentCore.Application.Configuration.Schema.AgentDefaults.Approval.get -> AgentCore.Application.Configuration.Schema.ApprovalConfiguration?
+AgentCore.Application.Configuration.Schema.AgentDefaults.Approval.init -> void
 AgentCore.Application.Configuration.Schema.AgentDefaults.Compaction.get -> AgentCore.Application.Configuration.Schema.CompactionConfiguration?
 AgentCore.Application.Configuration.Schema.AgentDefaults.Compaction.init -> void
 AgentCore.Application.Configuration.Schema.AgentDefaults.Equals(AgentCore.Application.Configuration.Schema.AgentDefaults? other) -> bool
@@ -349,8 +387,22 @@ AgentCore.Application.Configuration.Schema.AgentDefaults.Instructions.get -> str
 AgentCore.Application.Configuration.Schema.AgentDefaults.Instructions.init -> void
 AgentCore.Application.Configuration.Schema.AgentDefaults.Knowledge.get -> AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration?
 AgentCore.Application.Configuration.Schema.AgentDefaults.Knowledge.init -> void
+AgentCore.Application.Configuration.Schema.AgentDefaults.Mode.get -> bool?
+AgentCore.Application.Configuration.Schema.AgentDefaults.Mode.init -> void
 AgentCore.Application.Configuration.Schema.AgentDefaults.Model.get -> AgentCore.Application.Configuration.Schema.ModelReference?
 AgentCore.Application.Configuration.Schema.AgentDefaults.Model.init -> void
+AgentCore.Application.Configuration.Schema.AgentDefaults.Todos.get -> bool?
+AgentCore.Application.Configuration.Schema.AgentDefaults.Todos.init -> void
+AgentCore.Application.Configuration.Schema.AgentFileStoreKind
+AgentCore.Application.Configuration.Schema.AgentFileStoreKind.Workspace = 0 -> AgentCore.Application.Configuration.Schema.AgentFileStoreKind
+AgentCore.Application.Configuration.Schema.AgentFilesConfiguration
+AgentCore.Application.Configuration.Schema.AgentFilesConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.AgentFilesConfiguration!
+AgentCore.Application.Configuration.Schema.AgentFilesConfiguration.AgentFilesConfiguration() -> void
+AgentCore.Application.Configuration.Schema.AgentFilesConfiguration.Equals(AgentCore.Application.Configuration.Schema.AgentFilesConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.AgentFilesConfiguration.Store.get -> AgentCore.Application.Configuration.Schema.AgentFileStoreKind
+AgentCore.Application.Configuration.Schema.AgentFilesConfiguration.Store.init -> void
+AgentCore.Application.Configuration.Schema.AgentFilesConfiguration.Write.get -> bool
+AgentCore.Application.Configuration.Schema.AgentFilesConfiguration.Write.init -> void
 AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration
 AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration!
 AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.AgentKnowledgeConfiguration() -> void
@@ -363,6 +415,12 @@ AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.Mode.get 
 AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.Mode.init -> void
 AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.Scoped.get -> bool?
 AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.Scoped.init -> void
+AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration
+AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration!
+AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration.AgentMemoryConfiguration() -> void
+AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration.Equals(AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration.Store.get -> AgentCore.Application.Configuration.Schema.AgentFileStoreKind
+AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration.Store.init -> void
 AgentCore.Application.Configuration.Schema.AgentsConfiguration
 AgentCore.Application.Configuration.Schema.AgentsConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.AgentsConfiguration!
 AgentCore.Application.Configuration.Schema.AgentsConfiguration.AgentsConfiguration() -> void
@@ -371,6 +429,12 @@ AgentCore.Application.Configuration.Schema.AgentsConfiguration.Defaults.init -> 
 AgentCore.Application.Configuration.Schema.AgentsConfiguration.Equals(AgentCore.Application.Configuration.Schema.AgentsConfiguration? other) -> bool
 AgentCore.Application.Configuration.Schema.AgentsConfiguration.Items.get -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Configuration.Schema.AgentConfiguration!>!
 AgentCore.Application.Configuration.Schema.AgentsConfiguration.Items.init -> void
+AgentCore.Application.Configuration.Schema.ApprovalConfiguration
+AgentCore.Application.Configuration.Schema.ApprovalConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.ApprovalConfiguration!
+AgentCore.Application.Configuration.Schema.ApprovalConfiguration.ApprovalConfiguration() -> void
+AgentCore.Application.Configuration.Schema.ApprovalConfiguration.Auto.get -> System.Collections.Generic.IReadOnlyList<string!>!
+AgentCore.Application.Configuration.Schema.ApprovalConfiguration.Auto.init -> void
+AgentCore.Application.Configuration.Schema.ApprovalConfiguration.Equals(AgentCore.Application.Configuration.Schema.ApprovalConfiguration? other) -> bool
 AgentCore.Application.Configuration.Schema.CallProviderConfiguration
 AgentCore.Application.Configuration.Schema.CallProviderConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.CallProviderConfiguration!
 AgentCore.Application.Configuration.Schema.CallProviderConfiguration.CallProviderConfiguration() -> void
@@ -422,6 +486,20 @@ AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration.Kind.g
 AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration.Kind.init -> void
 AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration.Model.get -> string!
 AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration.Model.init -> void
+AgentCore.Application.Configuration.Schema.EntryConfiguration
+AgentCore.Application.Configuration.Schema.EntryConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.EntryConfiguration!
+AgentCore.Application.Configuration.Schema.EntryConfiguration.Agent.get -> string?
+AgentCore.Application.Configuration.Schema.EntryConfiguration.Agent.init -> void
+AgentCore.Application.Configuration.Schema.EntryConfiguration.EntryConfiguration() -> void
+AgentCore.Application.Configuration.Schema.EntryConfiguration.Equals(AgentCore.Application.Configuration.Schema.EntryConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.EntryConfiguration.FallbackReply.get -> string?
+AgentCore.Application.Configuration.Schema.EntryConfiguration.FallbackReply.init -> void
+AgentCore.Application.Configuration.Schema.EntryConfiguration.Graph.get -> AgentCore.Application.Configuration.Schema.GraphConfiguration?
+AgentCore.Application.Configuration.Schema.EntryConfiguration.Graph.init -> void
+AgentCore.Application.Configuration.Schema.EntryConfiguration.Policy.get -> AgentCore.Application.Configuration.Schema.PolicyConfiguration?
+AgentCore.Application.Configuration.Schema.EntryConfiguration.Policy.init -> void
+AgentCore.Application.Configuration.Schema.EntryConfiguration.RefusalReply.get -> string?
+AgentCore.Application.Configuration.Schema.EntryConfiguration.RefusalReply.init -> void
 AgentCore.Application.Configuration.Schema.EvaluationConfiguration
 AgentCore.Application.Configuration.Schema.EvaluationConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.EvaluationConfiguration!
 AgentCore.Application.Configuration.Schema.EvaluationConfiguration.Equals(AgentCore.Application.Configuration.Schema.EvaluationConfiguration? other) -> bool
@@ -622,6 +700,8 @@ AgentCore.Application.Configuration.Schema.LlmProviderConfiguration
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.LlmProviderConfiguration!
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.As.get -> string!
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.As.init -> void
+AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.CodeExecute.get -> bool?
+AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.CodeExecute.init -> void
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.Equals(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? other) -> bool
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.Kind.get -> string!
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.Kind.init -> void
@@ -632,6 +712,26 @@ AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.ReasoningEff
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.ReasoningEffort.init -> void
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.WebSearch.get -> bool?
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.WebSearch.init -> void
+AgentCore.Application.Configuration.Schema.LoopConditionOptions
+AgentCore.Application.Configuration.Schema.LoopConditionOptions.<Clone>$() -> AgentCore.Application.Configuration.Schema.LoopConditionOptions!
+AgentCore.Application.Configuration.Schema.LoopConditionOptions.Equals(AgentCore.Application.Configuration.Schema.LoopConditionOptions? other) -> bool
+AgentCore.Application.Configuration.Schema.LoopConditionOptions.LoopConditionOptions() -> void
+AgentCore.Application.Configuration.Schema.LoopConfiguration
+AgentCore.Application.Configuration.Schema.LoopConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.LoopConfiguration!
+AgentCore.Application.Configuration.Schema.LoopConfiguration.Equals(AgentCore.Application.Configuration.Schema.LoopConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.LoopConfiguration.LoopConfiguration() -> void
+AgentCore.Application.Configuration.Schema.LoopConfiguration.MaxRounds.get -> int?
+AgentCore.Application.Configuration.Schema.LoopConfiguration.MaxRounds.init -> void
+AgentCore.Application.Configuration.Schema.LoopConfiguration.Until.get -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Configuration.Schema.LoopUntilConfiguration!>?
+AgentCore.Application.Configuration.Schema.LoopConfiguration.Until.init -> void
+AgentCore.Application.Configuration.Schema.LoopUntilConfiguration
+AgentCore.Application.Configuration.Schema.LoopUntilConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.LoopUntilConfiguration!
+AgentCore.Application.Configuration.Schema.LoopUntilConfiguration.Background.get -> AgentCore.Application.Configuration.Schema.LoopConditionOptions?
+AgentCore.Application.Configuration.Schema.LoopUntilConfiguration.Background.init -> void
+AgentCore.Application.Configuration.Schema.LoopUntilConfiguration.Equals(AgentCore.Application.Configuration.Schema.LoopUntilConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.LoopUntilConfiguration.LoopUntilConfiguration() -> void
+AgentCore.Application.Configuration.Schema.LoopUntilConfiguration.Todos.get -> AgentCore.Application.Configuration.Schema.LoopConditionOptions?
+AgentCore.Application.Configuration.Schema.LoopUntilConfiguration.Todos.init -> void
 AgentCore.Application.Configuration.Schema.McpAllowEntry
 AgentCore.Application.Configuration.Schema.McpAllowEntry.<Clone>$() -> AgentCore.Application.Configuration.Schema.McpAllowEntry!
 AgentCore.Application.Configuration.Schema.McpAllowEntry.As.get -> string?
@@ -718,6 +818,27 @@ AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Telemetry.init
 AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Telephony.get -> AgentCore.Application.Configuration.Schema.VendorProviderConfiguration?
 AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Telephony.init -> void
 AgentCore.Application.Configuration.Schema.ReservedStateSlots
+AgentCore.Application.Configuration.Schema.ShellConfiguration
+AgentCore.Application.Configuration.Schema.ShellConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.ShellConfiguration!
+AgentCore.Application.Configuration.Schema.ShellConfiguration.Equals(AgentCore.Application.Configuration.Schema.ShellConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.ShellConfiguration.Kind.get -> AgentCore.Application.Configuration.Schema.ShellKind
+AgentCore.Application.Configuration.Schema.ShellConfiguration.Kind.init -> void
+AgentCore.Application.Configuration.Schema.ShellConfiguration.Policy.get -> AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration?
+AgentCore.Application.Configuration.Schema.ShellConfiguration.Policy.init -> void
+AgentCore.Application.Configuration.Schema.ShellConfiguration.ShellConfiguration() -> void
+AgentCore.Application.Configuration.Schema.ShellConfiguration.TimeoutSeconds.get -> int?
+AgentCore.Application.Configuration.Schema.ShellConfiguration.TimeoutSeconds.init -> void
+AgentCore.Application.Configuration.Schema.ShellKind
+AgentCore.Application.Configuration.Schema.ShellKind.Docker = 0 -> AgentCore.Application.Configuration.Schema.ShellKind
+AgentCore.Application.Configuration.Schema.ShellKind.Local = 1 -> AgentCore.Application.Configuration.Schema.ShellKind
+AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration
+AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration!
+AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration.Allow.get -> System.Collections.Generic.IReadOnlyList<string!>!
+AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration.Allow.init -> void
+AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration.Deny.get -> System.Collections.Generic.IReadOnlyList<string!>!
+AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration.Deny.init -> void
+AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration.Equals(AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration.ShellPolicyConfiguration() -> void
 AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration
 AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration!
 AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.Equals(AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration? other) -> bool
@@ -942,6 +1063,7 @@ AgentCore.Application.Knowledge.KnowledgePoint.PointId.get -> string!
 AgentCore.Application.Knowledge.KnowledgePoint.PointId.init -> void
 AgentCore.Application.Knowledge.KnowledgePoint.Score.get -> double?
 AgentCore.Application.Knowledge.KnowledgePoint.Score.init -> void
+AgentCore.Application.Knowledge.KnowledgeRetrievalPortExtensions
 AgentCore.Application.Knowledge.NoQueryAnalyzer
 AgentCore.Application.Knowledge.NoQueryAnalyzer.Name.get -> string!
 AgentCore.Application.Knowledge.NoQueryAnalyzer.NoQueryAnalyzer() -> void
@@ -953,7 +1075,7 @@ AgentCore.Application.Knowledge.SourceLocatorCitationFormatter.SourceLocatorCita
 AgentCore.Application.Llm.CompositeChatClientFactory
 AgentCore.Application.Llm.CompositeChatClientFactory.Dispose() -> void
 AgentCore.Application.Llm.CompositeChatClientFactory.GetChatClient(AgentCore.Application.Configuration.Schema.ModelReference? model) -> Microsoft.Extensions.AI.IChatClient!
-AgentCore.Application.Llm.CompositeChatClientFactory.SupportsHostedWebSearch(AgentCore.Application.Configuration.Schema.ModelReference? model) -> bool
+AgentCore.Application.Llm.CompositeChatClientFactory.ResolveHostedTool(Microsoft.Extensions.AI.AITool! marker, AgentCore.Application.Configuration.Schema.ModelReference? model) -> Microsoft.Extensions.AI.AITool?
 AgentCore.Application.Policy.StagePolicy
 AgentCore.Application.Policy.StagePolicy.Advance(System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>! state) -> string!
 AgentCore.Application.Policy.StagePolicy.Configuration.get -> AgentCore.Application.Configuration.Schema.PolicyConfiguration!
@@ -973,9 +1095,9 @@ AgentCore.Application.Ports.IAuditSinkPort.AppendManyAsync(System.Collections.Ge
 AgentCore.Application.Ports.ICallAdapter
 AgentCore.Application.Ports.ICallAdapter.CarriesText.get -> bool
 AgentCore.Application.Ports.ICallChannelFactory
-AgentCore.Application.Ports.ICallChannelFactory.OpenAsync(AgentCore.Application.Call.CallChannelContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Call.CallChannel!>
+AgentCore.Application.Ports.ICallChannelFactory.OpenAsync(AgentCore.Application.Calls.CallChannelContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Calls.CallChannel!>
 AgentCore.Application.Ports.ICallInputPort
-AgentCore.Application.Ports.ICallInputPort.ListenAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<AgentCore.Application.Call.CallInput!>!
+AgentCore.Application.Ports.ICallInputPort.ListenAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<AgentCore.Application.Calls.CallInput!>!
 AgentCore.Application.Ports.ICallObserver
 AgentCore.Application.Ports.ICallObserver.OnCallEventAsync(AgentCore.Application.Runtime.CallEvent! callEvent, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Ports.ICallOutputPort
@@ -984,22 +1106,29 @@ AgentCore.Application.Ports.ICallOutputPort.SpeakAsync(string! fragment, System.
 AgentCore.Application.Ports.ICallOutputPort.StopAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Ports.ICallSessionFactory
 AgentCore.Application.Ports.ICallSessionFactory.Create(string? callId = null, AgentCore.Application.Calls.CallSessionState? state = null) -> AgentCore.Application.Runtime.CallSession!
+AgentCore.Application.Ports.ICallSessionRegistry
+AgentCore.Application.Ports.ICallSessionRegistry.Entries.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
+AgentCore.Application.Ports.ICallSessionRegistry.ForSessions(string! entry) -> AgentCore.Application.Ports.ICallSessions!
 AgentCore.Application.Ports.ICallSessions
 AgentCore.Application.Ports.ICallSessions.CloseAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Ports.ICallSessions.OpenAsync(string? callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Runtime.CallSession!>
 AgentCore.Application.Ports.ICallSessions.TryGetAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Runtime.CallSession?>
 AgentCore.Application.Ports.ICallStore
-AgentCore.Application.Ports.ICallStore.AppendAsync(System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.CallMessage!>! messages, AgentCore.Application.Calls.CallSessionState? state = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Ports.ICallStore.AppendAsync(string! callId, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.CallMessageDraft!>! messages, AgentCore.Application.Calls.CallSessionState? state = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.CallMessage!>!>
+AgentCore.Application.Ports.ICallStore.AppendMessageAsync(string! callId, Microsoft.Extensions.AI.ChatMessage! message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Transcript.CallMessage!>
 AgentCore.Application.Ports.ICallStore.AttachPrincipalAsync(string! callId, string! principalKey, string! role, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Ports.ICallStore.CreateAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Calls.CallRecord!>
 AgentCore.Application.Ports.ICallStore.DeleteAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Ports.ICallStore.DeleteContinuationAsync(string! continuationId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Ports.ICallStore.DetachPrincipalAsync(string! callId, string! principalKey, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Ports.ICallStore.EraseAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<int>
 AgentCore.Application.Ports.ICallStore.GetAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Calls.CallRecord?>
+AgentCore.Application.Ports.ICallStore.GetContinuationAsync(string! continuationId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Text.Json.JsonElement?>
 AgentCore.Application.Ports.ICallStore.ListAsync(string! principalKey, string? after, int limit, AgentCore.Application.Calls.CallStatus? status = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Calls.CallPage!>
 AgentCore.Application.Ports.ICallStore.ReadAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.CallMessage!>!>
 AgentCore.Application.Ports.ICallStore.RenameAsync(string! callId, string! title, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
-AgentCore.Application.Ports.ICallStore.RewriteAsync(string! callId, int ordinal, Microsoft.Extensions.AI.ChatMessage! content, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Ports.ICallStore.RewriteAsync(string! callId, string! messageId, Microsoft.Extensions.AI.ChatMessage! content, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Ports.ICallStore.SaveContinuationAsync(string! continuationId, System.Text.Json.JsonElement envelope, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Ports.ICallStore.SetCustomAsync(string! callId, System.Text.Json.JsonElement? custom, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Ports.ICallStore.SetExternalIdAsync(string! callId, string? externalId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Ports.ICallStore.SetStatusAsync(string! callId, AgentCore.Application.Calls.CallStatus status, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
@@ -1012,17 +1141,21 @@ AgentCore.Application.Ports.ICallTitler.GenerateAsync(string! callId, System.Thr
 AgentCore.Application.Ports.ICallTitler.GenerateFromAsync(string! callId, System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatMessage!>! messages, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<string!>!
 AgentCore.Application.Ports.IChatClientAdapter
 AgentCore.Application.Ports.IChatClientAdapter.CreateClientAsync(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.IChatClient!>
-AgentCore.Application.Ports.IChatClientAdapter.SupportsHostedWebSearch(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration! entry) -> bool
+AgentCore.Application.Ports.IChatClientAdapter.ResolveHostedTool(Microsoft.Extensions.AI.AITool! marker, AgentCore.Application.Configuration.Schema.LlmProviderConfiguration! entry) -> Microsoft.Extensions.AI.AITool?
 AgentCore.Application.Ports.IChatClientFactory
 AgentCore.Application.Ports.IChatClientFactory.GetChatClient(AgentCore.Application.Configuration.Schema.ModelReference? model) -> Microsoft.Extensions.AI.IChatClient!
-AgentCore.Application.Ports.IChatClientFactory.SupportsHostedWebSearch(AgentCore.Application.Configuration.Schema.ModelReference? model) -> bool
+AgentCore.Application.Ports.IChatClientFactory.ResolveHostedTool(Microsoft.Extensions.AI.AITool! marker, AgentCore.Application.Configuration.Schema.ModelReference? model) -> Microsoft.Extensions.AI.AITool?
 AgentCore.Application.Ports.IConversationPort
 AgentCore.Application.Ports.IConversationPort.CallId.get -> string!
 AgentCore.Application.Ports.IConversationPort.Interrupt(string! utteranceUntilInterrupt, System.TimeSpan durationUntilInterrupt, bool cutsRunningTurn = true) -> bool
 AgentCore.Application.Ports.IConversationPort.IsComplete.get -> bool
 AgentCore.Application.Ports.IConversationPort.LastTurn.get -> AgentCore.Domain.TurnResult?
 AgentCore.Application.Ports.IConversationPort.RunTurnAsync(string! userInput, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<AgentCore.Domain.TurnResult!>!
+AgentCore.Application.Ports.IConversationPort.RunTurnMessageAsync(Microsoft.Extensions.AI.ChatMessage! userInput, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<AgentCore.Domain.TurnResult!>!
+AgentCore.Application.Ports.IConversationPort.RunTurnMessageStreamingAsync(Microsoft.Extensions.AI.ChatMessage! userInput, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
 AgentCore.Application.Ports.IConversationPort.RunTurnStreamingAsync(string! userInput, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
+AgentCore.Application.Ports.IConversationPort.Scope.get -> AgentCore.Domain.Knowledge.KnowledgeScope?
+AgentCore.Application.Ports.IConversationPort.Scope.set -> void
 AgentCore.Application.Ports.IConversationPort.Stage.get -> string!
 AgentCore.Application.Ports.IEmbeddingGeneratorAdapter
 AgentCore.Application.Ports.IEmbeddingGeneratorAdapter.CreateGeneratorAsync(AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.IEmbeddingGenerator<string!, Microsoft.Extensions.AI.Embedding<float>!>!>
@@ -1032,7 +1165,7 @@ AgentCore.Application.Ports.IKnowledgeFacetReadPort
 AgentCore.Application.Ports.IKnowledgeFacetReadPort.ReadByFacetAsync(string! path, string! value, int limit, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Domain.Knowledge.KnowledgeCard!>!>
 AgentCore.Application.Ports.IKnowledgeRetrievalPort
 AgentCore.Application.Ports.IKnowledgeRetrievalPort.GetService(System.Type! serviceType, object? serviceKey = null) -> object?
-AgentCore.Application.Ports.IKnowledgeRetrievalPort.SearchAsync(string! query, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Domain.Knowledge.KnowledgeCard!>!>
+AgentCore.Application.Ports.IKnowledgeRetrievalPort.SearchAsync(string! query, AgentCore.Domain.Knowledge.KnowledgeScope? scope = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Domain.Knowledge.KnowledgeCard!>!>
 AgentCore.Application.Ports.IKnowledgeStoreAdapter
 AgentCore.Application.Ports.IKnowledgeStoreAdapter.CanScope.get -> bool
 AgentCore.Application.Ports.IKnowledgeStoreAdapter.CanServeSearch.get -> bool
@@ -1054,7 +1187,6 @@ AgentCore.Application.Ports.IToolSource
 AgentCore.Application.Ports.IToolSource.ProvideAsync(AgentCore.Application.Tools.Registry.ToolSourceContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Application.Tools.Registry.ToolRegistration!>!>
 AgentCore.Application.Ports.IVendorAdapter
 AgentCore.Application.Ports.IVendorAdapter.Kind.get -> string!
-AgentCore.Application.Ports.KnowledgeRetrievalPortExtensions
 AgentCore.Application.Providers.VendorAdapterSelector
 AgentCore.Application.Providers.VendorSeam
 AgentCore.Application.Providers.VendorSeam.Deconstruct(out string! DocumentPath, out string! Pointer, out string! RegistrationHint, out string! Plural) -> void
@@ -1071,8 +1203,9 @@ AgentCore.Application.Providers.VendorSeam.VendorSeam() -> void
 AgentCore.Application.Providers.VendorSeam.VendorSeam(string! DocumentPath, string! Pointer, string! RegistrationHint, string! Plural) -> void
 AgentCore.Application.Providers.VendorSeam.VendorSeam(string! documentPath, string! pointer, string! registrationHint) -> void
 AgentCore.Application.Runtime.AgentCoreAgent
-AgentCore.Application.Runtime.AgentCoreAgent.AgentCoreAgent(AgentCore.Application.Ports.ICallSessionFactory! sessions, string? name = null, string? description = null) -> void
+AgentCore.Application.Runtime.AgentCoreAgent.AgentCoreAgent(AgentCore.Application.Ports.ICallSessionFactory! sessions, string! entryName, string? description = null) -> void
 AgentCore.Application.Runtime.AgentCoreAgent.CreateSessionAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Agents.AI.AgentSession!>
+AgentCore.Application.Runtime.AgentCoreAgent.EntryName.get -> string!
 AgentCore.Application.Runtime.CallEvent
 AgentCore.Application.Runtime.CallEvent.<Clone>$() -> AgentCore.Application.Runtime.CallEvent!
 AgentCore.Application.Runtime.CallEvent.AmendsEventId.get -> System.Guid?
@@ -1102,14 +1235,15 @@ AgentCore.Application.Runtime.CallEventKind.PromptFlagged = 1 -> AgentCore.Appli
 AgentCore.Application.Runtime.CallEventKind.ReplyInterrupted = 8 -> AgentCore.Application.Runtime.CallEventKind
 AgentCore.Application.Runtime.CallEventKind.StateRestorePartial = 11 -> AgentCore.Application.Runtime.CallEventKind
 AgentCore.Application.Runtime.CallEventKind.ToolFailed = 4 -> AgentCore.Application.Runtime.CallEventKind
+AgentCore.Application.Runtime.CallEventKind.TranscriptResyncFailed = 13 -> AgentCore.Application.Runtime.CallEventKind
 AgentCore.Application.Runtime.CallEventKind.TranscriptWriteFailed = 10 -> AgentCore.Application.Runtime.CallEventKind
 AgentCore.Application.Runtime.CallEventKind.TurnCompleted = 7 -> AgentCore.Application.Runtime.CallEventKind
 AgentCore.Application.Runtime.CallEventKind.TurnSuperseded = 12 -> AgentCore.Application.Runtime.CallEventKind
 AgentCore.Application.Runtime.CallObservers
-AgentCore.Application.Runtime.CallRenderScope
 AgentCore.Application.Runtime.CallSession
 AgentCore.Application.Runtime.CallSession.CallId.get -> string!
 AgentCore.Application.Runtime.CallSession.Compiled.get -> AgentCore.Application.Configuration.Compilation.CompiledAgent!
+AgentCore.Application.Runtime.CallSession.DisposeAsync() -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Runtime.CallSession.EndCall(AgentCore.Domain.Audit.CallEndReason reason) -> bool
 AgentCore.Application.Runtime.CallSession.FlushTranscriptAsync() -> System.Threading.Tasks.Task!
 AgentCore.Application.Runtime.CallSession.Interrupt(string! utteranceUntilInterrupt, System.TimeSpan durationUntilInterrupt, bool cutsRunningTurn = true) -> bool
@@ -1118,18 +1252,25 @@ AgentCore.Application.Runtime.CallSession.LastReplyMessageId.get -> string?
 AgentCore.Application.Runtime.CallSession.LastTurn.get -> AgentCore.Domain.TurnResult?
 AgentCore.Application.Runtime.CallSession.RunTurnAsync(string! userInput, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<AgentCore.Domain.TurnResult!>!
 AgentCore.Application.Runtime.CallSession.RunTurnAtOriginAsync(string! userInput, AgentCore.Application.Runtime.CallTurnOrigin? origin, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<AgentCore.Domain.TurnResult!>!
+AgentCore.Application.Runtime.CallSession.RunTurnMessageAsync(Microsoft.Extensions.AI.ChatMessage! userInput, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<AgentCore.Domain.TurnResult!>!
+AgentCore.Application.Runtime.CallSession.RunTurnMessageAtOriginAsync(Microsoft.Extensions.AI.ChatMessage! userInput, AgentCore.Application.Runtime.CallTurnOrigin? origin, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<AgentCore.Domain.TurnResult!>!
+AgentCore.Application.Runtime.CallSession.RunTurnMessageStreamingAsync(Microsoft.Extensions.AI.ChatMessage! userInput, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
+AgentCore.Application.Runtime.CallSession.RunTurnMessageStreamingAtOriginAsync(Microsoft.Extensions.AI.ChatMessage! userInput, AgentCore.Application.Runtime.CallTurnOrigin? origin, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
 AgentCore.Application.Runtime.CallSession.RunTurnStreamingAsync(string! userInput, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
 AgentCore.Application.Runtime.CallSession.RunTurnStreamingAtOriginAsync(string! userInput, AgentCore.Application.Runtime.CallTurnOrigin? origin, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
+AgentCore.Application.Runtime.CallSession.Scope.get -> AgentCore.Domain.Knowledge.KnowledgeScope?
+AgentCore.Application.Runtime.CallSession.Scope.set -> void
 AgentCore.Application.Runtime.CallSession.SetDelegatedTools(string! delegatingToolId, System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.AITool!>! tools) -> void
 AgentCore.Application.Runtime.CallSession.SetHasScreen(bool hasScreen) -> void
 AgentCore.Application.Runtime.CallSession.Stage.get -> string!
 AgentCore.Application.Runtime.CallSession.State.get -> AgentCore.Application.State.StateDocument!
 AgentCore.Application.Runtime.CallSession.Transcript.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatMessage!>!
+AgentCore.Application.Runtime.CallSession.TryCreateApprovalAnswer(string! requestId, bool approved) -> Microsoft.Extensions.AI.ChatMessage?
+AgentCore.Application.Runtime.CallSession.TryCreateApprovalAnswerAsync(string! requestId, bool approved, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.ChatMessage?>
+AgentCore.Application.Runtime.CallSession.Workspace.get -> string?
 AgentCore.Application.Runtime.CallSessionFactory
-AgentCore.Application.Runtime.CallSessionFactory.CallSessionFactory(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Configuration.Validation.IGuardEvaluator! guards, AgentCore.Application.State.StateExtractor? extractor = null, System.TimeProvider? timeProvider = null, Microsoft.Extensions.Logging.ILogger? logger = null, System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ICallObserver!>? observers = null) -> void
+AgentCore.Application.Runtime.CallSessionFactory.CallSessionFactory(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Configuration.Validation.IGuardEvaluator! guards, AgentCore.Application.State.StateExtractor? extractor = null, System.TimeProvider? timeProvider = null, Microsoft.Extensions.Logging.ILogger? logger = null, System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ICallObserver!>? observers = null, string? workspaceRoot = null) -> void
 AgentCore.Application.Runtime.CallSessionFactory.Create(string? callId = null, AgentCore.Application.Calls.CallSessionState? state = null) -> AgentCore.Application.Runtime.CallSession!
-AgentCore.Application.Runtime.CallSourceScope
-AgentCore.Application.Runtime.CallStateScope
 AgentCore.Application.Runtime.CallTurnOrigin
 AgentCore.Application.Runtime.CallTurnOrigin.<Clone>$() -> AgentCore.Application.Runtime.CallTurnOrigin!
 AgentCore.Application.Runtime.CallTurnOrigin.CallTurnOrigin(string? MessageId, string? ParentMessageId) -> void
@@ -1141,7 +1282,25 @@ AgentCore.Application.Runtime.CallTurnOrigin.NamesParent.get -> bool
 AgentCore.Application.Runtime.CallTurnOrigin.NamesParent.init -> void
 AgentCore.Application.Runtime.CallTurnOrigin.ParentMessageId.get -> string?
 AgentCore.Application.Runtime.CallTurnOrigin.ParentMessageId.init -> void
-AgentCore.Application.Runtime.KnowledgeScopeScope
+AgentCore.Application.Scripting.ScriptRequest
+AgentCore.Application.Scripting.ScriptRequest.<Clone>$() -> AgentCore.Application.Scripting.ScriptRequest!
+AgentCore.Application.Scripting.ScriptRequest.Code.get -> string!
+AgentCore.Application.Scripting.ScriptRequest.Code.init -> void
+AgentCore.Application.Scripting.ScriptRequest.Data.get -> System.Text.Json.Nodes.JsonNode!
+AgentCore.Application.Scripting.ScriptRequest.Data.init -> void
+AgentCore.Application.Scripting.ScriptRequest.Deconstruct(out string! Code, out System.Text.Json.Nodes.JsonNode! Data) -> void
+AgentCore.Application.Scripting.ScriptRequest.Emit.get -> string?
+AgentCore.Application.Scripting.ScriptRequest.Emit.init -> void
+AgentCore.Application.Scripting.ScriptRequest.Equals(AgentCore.Application.Scripting.ScriptRequest? other) -> bool
+AgentCore.Application.Scripting.ScriptRequest.ScriptRequest(string! Code, System.Text.Json.Nodes.JsonNode! Data) -> void
+AgentCore.Application.Scripting.ScriptResult
+AgentCore.Application.Scripting.ScriptResult.<Clone>$() -> AgentCore.Application.Scripting.ScriptResult!
+AgentCore.Application.Scripting.ScriptResult.Equals(AgentCore.Application.Scripting.ScriptResult? other) -> bool
+AgentCore.Application.Scripting.ScriptResult.Error.get -> string?
+AgentCore.Application.Scripting.ScriptResult.Error.init -> void
+AgentCore.Application.Scripting.ScriptResult.ScriptResult() -> void
+AgentCore.Application.Scripting.ScriptResult.Value.get -> System.Text.Json.Nodes.JsonNode?
+AgentCore.Application.Scripting.ScriptResult.Value.init -> void
 AgentCore.Application.Secrets.KnownSecrets
 AgentCore.Application.Secrets.ResolvedSecrets
 AgentCore.Application.Secrets.ResolvedSecrets.Contains(string! name) -> bool
@@ -1278,6 +1437,19 @@ AgentCore.Application.Tools.ToolCallNames
 AgentCore.Application.Tools.ToolCallNames.Called(Microsoft.Extensions.AI.FunctionCallContent! call) -> void
 AgentCore.Application.Tools.ToolCallNames.Of(Microsoft.Extensions.AI.FunctionResultContent! result) -> string?
 AgentCore.Application.Tools.ToolCallNames.ToolCallNames() -> void
+AgentCore.Application.Tools.ToolCallScope
+AgentCore.Application.Tools.ToolCallScope.<Clone>$() -> AgentCore.Application.Tools.ToolCallScope!
+AgentCore.Application.Tools.ToolCallScope.CallId.get -> string!
+AgentCore.Application.Tools.ToolCallScope.CallId.init -> void
+AgentCore.Application.Tools.ToolCallScope.Deconstruct(out string! CallId, out int TurnIndex, out string! Stage, out string? Workspace) -> void
+AgentCore.Application.Tools.ToolCallScope.Equals(AgentCore.Application.Tools.ToolCallScope? other) -> bool
+AgentCore.Application.Tools.ToolCallScope.Stage.get -> string!
+AgentCore.Application.Tools.ToolCallScope.Stage.init -> void
+AgentCore.Application.Tools.ToolCallScope.ToolCallScope(string! CallId, int TurnIndex, string! Stage, string? Workspace = null) -> void
+AgentCore.Application.Tools.ToolCallScope.TurnIndex.get -> int
+AgentCore.Application.Tools.ToolCallScope.TurnIndex.init -> void
+AgentCore.Application.Tools.ToolCallScope.Workspace.get -> string?
+AgentCore.Application.Tools.ToolCallScope.Workspace.init -> void
 AgentCore.Application.Tools.ToolErrorResult
 AgentCore.Application.Tools.ToolResultJson
 AgentCore.Application.Transcript.CallMessage
@@ -1295,6 +1467,18 @@ AgentCore.Application.Transcript.CallMessage.Ordinal.get -> int
 AgentCore.Application.Transcript.CallMessage.Ordinal.init -> void
 AgentCore.Application.Transcript.CallMessage.TurnIndex.get -> int
 AgentCore.Application.Transcript.CallMessage.TurnIndex.init -> void
+AgentCore.Application.Transcript.CallMessageDraft
+AgentCore.Application.Transcript.CallMessageDraft.<Clone>$() -> AgentCore.Application.Transcript.CallMessageDraft!
+AgentCore.Application.Transcript.CallMessageDraft.CallMessageDraft(int? TurnIndex, Microsoft.Extensions.AI.ChatMessage! Content, string! MessageId) -> void
+AgentCore.Application.Transcript.CallMessageDraft.Content.get -> Microsoft.Extensions.AI.ChatMessage!
+AgentCore.Application.Transcript.CallMessageDraft.Content.init -> void
+AgentCore.Application.Transcript.CallMessageDraft.Deconstruct(out int? TurnIndex, out Microsoft.Extensions.AI.ChatMessage! Content, out string! MessageId) -> void
+AgentCore.Application.Transcript.CallMessageDraft.Equals(AgentCore.Application.Transcript.CallMessageDraft? other) -> bool
+AgentCore.Application.Transcript.CallMessageDraft.MessageId.get -> string!
+AgentCore.Application.Transcript.CallMessageDraft.MessageId.init -> void
+AgentCore.Application.Transcript.CallMessageDraft.TurnIndex.get -> int?
+AgentCore.Application.Transcript.CallMessageDraft.TurnIndex.init -> void
+AgentCore.Application.Transcript.CallMessageIds
 AgentCore.Application.Transcript.RenderContent
 AgentCore.Application.Transcript.RenderContent.Data.get -> System.Text.Json.JsonElement
 AgentCore.Application.Transcript.RenderContent.Data.set -> void
@@ -1310,7 +1494,7 @@ AgentCore.Application.Transcript.SourceContent.Source.get -> AgentCore.Domain.So
 AgentCore.Application.Transcript.SourceContent.Source.set -> void
 AgentCore.Application.Transcript.SourceContent.SourceContent() -> void
 AgentCore.Application.Transcript.TranscriptJson
-abstract AgentCore.Application.Call.CallInput.<Clone>$() -> AgentCore.Application.Call.CallInput!
+abstract AgentCore.Application.Calls.CallInput.<Clone>$() -> AgentCore.Application.Calls.CallInput!
 abstract AgentCore.Application.Tools.DeclaredTool.CallAsync(Microsoft.Extensions.AI.AIFunctionArguments! arguments, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<object?>
 const AgentCore.Application.Audit.AuditSinkFactory.MemoryKind = "memory" -> string!
 const AgentCore.Application.Audit.QueuedAuditSink.DefaultBatchSize = 100 -> int
@@ -1378,35 +1562,35 @@ const AgentCore.Application.Secrets.KnownSecrets.QdrantApiKeyVariable = "QDRANT_
 const AgentCore.Application.State.StateExtractor.SchemaName = "agentcore_state" -> string!
 const AgentCore.Application.State.UnfilledSlotReminder.CloseTag = "</system-reminder>" -> string!
 const AgentCore.Application.State.UnfilledSlotReminder.OpenTag = "<system-reminder>" -> string!
-const AgentCore.Application.Tools.Builtin.BuiltinToolNames.Draw = "ui.draw" -> string!
+const AgentCore.Application.Tools.Builtin.BuiltinToolNames.CodeExecute = "code.execute" -> string!
 const AgentCore.Application.Tools.Builtin.BuiltinToolNames.WebSearch = "web.search" -> string!
 const AgentCore.Application.Tools.ToolErrorResult.ErrorProperty = "error" -> string!
 const AgentCore.Application.Tools.ToolErrorResult.MessageProperty = "message" -> string!
 const AgentCore.Application.Tools.ToolErrorResult.ToolProperty = "tool" -> string!
-override AgentCore.Application.Call.CallChannel.Equals(object? obj) -> bool
-override AgentCore.Application.Call.CallChannel.GetHashCode() -> int
-override AgentCore.Application.Call.CallChannel.ToString() -> string!
-override AgentCore.Application.Call.CallChannelContext.Equals(object? obj) -> bool
-override AgentCore.Application.Call.CallChannelContext.GetHashCode() -> int
-override AgentCore.Application.Call.CallChannelContext.ToString() -> string!
-override AgentCore.Application.Call.CallInput.Barge.<Clone>$() -> AgentCore.Application.Call.CallInput.Barge!
-override AgentCore.Application.Call.CallInput.Barge.Equals(object? obj) -> bool
-override AgentCore.Application.Call.CallInput.Barge.GetHashCode() -> int
-override AgentCore.Application.Call.CallInput.Barge.ToString() -> string!
-override AgentCore.Application.Call.CallInput.Equals(object? obj) -> bool
-override AgentCore.Application.Call.CallInput.GetHashCode() -> int
-override AgentCore.Application.Call.CallInput.Keypress.<Clone>$() -> AgentCore.Application.Call.CallInput.Keypress!
-override AgentCore.Application.Call.CallInput.Keypress.Equals(object? obj) -> bool
-override AgentCore.Application.Call.CallInput.Keypress.GetHashCode() -> int
-override AgentCore.Application.Call.CallInput.Keypress.ToString() -> string!
-override AgentCore.Application.Call.CallInput.ToString() -> string!
-override AgentCore.Application.Call.CallInput.Utterance.<Clone>$() -> AgentCore.Application.Call.CallInput.Utterance!
-override AgentCore.Application.Call.CallInput.Utterance.Equals(object? obj) -> bool
-override AgentCore.Application.Call.CallInput.Utterance.GetHashCode() -> int
-override AgentCore.Application.Call.CallInput.Utterance.ToString() -> string!
+override AgentCore.Application.Calls.CallChannel.Equals(object? obj) -> bool
+override AgentCore.Application.Calls.CallChannel.GetHashCode() -> int
+override AgentCore.Application.Calls.CallChannel.ToString() -> string!
+override AgentCore.Application.Calls.CallChannelContext.Equals(object? obj) -> bool
+override AgentCore.Application.Calls.CallChannelContext.GetHashCode() -> int
+override AgentCore.Application.Calls.CallChannelContext.ToString() -> string!
 override AgentCore.Application.Calls.CallClarificationState.Equals(object? obj) -> bool
 override AgentCore.Application.Calls.CallClarificationState.GetHashCode() -> int
 override AgentCore.Application.Calls.CallClarificationState.ToString() -> string!
+override AgentCore.Application.Calls.CallInput.Barge.<Clone>$() -> AgentCore.Application.Calls.CallInput.Barge!
+override AgentCore.Application.Calls.CallInput.Barge.Equals(object? obj) -> bool
+override AgentCore.Application.Calls.CallInput.Barge.GetHashCode() -> int
+override AgentCore.Application.Calls.CallInput.Barge.ToString() -> string!
+override AgentCore.Application.Calls.CallInput.Equals(object? obj) -> bool
+override AgentCore.Application.Calls.CallInput.GetHashCode() -> int
+override AgentCore.Application.Calls.CallInput.Keypress.<Clone>$() -> AgentCore.Application.Calls.CallInput.Keypress!
+override AgentCore.Application.Calls.CallInput.Keypress.Equals(object? obj) -> bool
+override AgentCore.Application.Calls.CallInput.Keypress.GetHashCode() -> int
+override AgentCore.Application.Calls.CallInput.Keypress.ToString() -> string!
+override AgentCore.Application.Calls.CallInput.ToString() -> string!
+override AgentCore.Application.Calls.CallInput.Utterance.<Clone>$() -> AgentCore.Application.Calls.CallInput.Utterance!
+override AgentCore.Application.Calls.CallInput.Utterance.Equals(object? obj) -> bool
+override AgentCore.Application.Calls.CallInput.Utterance.GetHashCode() -> int
+override AgentCore.Application.Calls.CallInput.Utterance.ToString() -> string!
 override AgentCore.Application.Calls.CallPage.Equals(object? obj) -> bool
 override AgentCore.Application.Calls.CallPage.GetHashCode() -> int
 override AgentCore.Application.Calls.CallPage.ToString() -> string!
@@ -1422,6 +1606,9 @@ override AgentCore.Application.Configuration.Compilation.ResolvedClarification.T
 override AgentCore.Application.Configuration.Compilation.ResolvedCompaction.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Compilation.ResolvedCompaction.GetHashCode() -> int
 override AgentCore.Application.Configuration.Compilation.ResolvedCompaction.ToString() -> string!
+override AgentCore.Application.Configuration.Compilation.ResolvedHarness.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Compilation.ResolvedHarness.GetHashCode() -> int
+override AgentCore.Application.Configuration.Compilation.ResolvedHarness.ToString() -> string!
 override AgentCore.Application.Configuration.Compilation.ResolvedKnowledge.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Compilation.ResolvedKnowledge.GetHashCode() -> int
 override AgentCore.Application.Configuration.Compilation.ResolvedKnowledge.ToString() -> string!
@@ -1446,12 +1633,21 @@ override AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.ToStr
 override AgentCore.Application.Configuration.Schema.AgentDefaults.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.AgentDefaults.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.AgentDefaults.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.AgentFilesConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.AgentFilesConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.AgentFilesConfiguration.ToString() -> string!
 override AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration.ToString() -> string!
 override AgentCore.Application.Configuration.Schema.AgentsConfiguration.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.AgentsConfiguration.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.AgentsConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.ApprovalConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.ApprovalConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.ApprovalConfiguration.ToString() -> string!
 override AgentCore.Application.Configuration.Schema.CallProviderConfiguration.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.CallProviderConfiguration.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.CallProviderConfiguration.ToString() -> string!
@@ -1464,6 +1660,9 @@ override AgentCore.Application.Configuration.Schema.CompactionTriggerConfigurati
 override AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.EntryConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.EntryConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.EntryConfiguration.ToString() -> string!
 override AgentCore.Application.Configuration.Schema.EvaluationConfiguration.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.EvaluationConfiguration.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.EvaluationConfiguration.ToString() -> string!
@@ -1515,6 +1714,15 @@ override AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfigurati
 override AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.LoopConditionOptions.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.LoopConditionOptions.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.LoopConditionOptions.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.LoopConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.LoopConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.LoopConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.LoopUntilConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.LoopUntilConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.LoopUntilConfiguration.ToString() -> string!
 override AgentCore.Application.Configuration.Schema.McpAllowEntry.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.McpAllowEntry.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.McpAllowEntry.ToString() -> string!
@@ -1533,6 +1741,12 @@ override AgentCore.Application.Configuration.Schema.PolicyConfiguration.ToString
 override AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.ProvidersConfiguration.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.ProvidersConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.ShellConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.ShellConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.ShellConfiguration.ToString() -> string!
+override AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration.ToString() -> string!
 override AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.Equals(object? obj) -> bool
 override AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.GetHashCode() -> int
 override AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.ToString() -> string!
@@ -1578,6 +1792,12 @@ override AgentCore.Application.Runtime.CallEvent.ToString() -> string!
 override AgentCore.Application.Runtime.CallTurnOrigin.Equals(object? obj) -> bool
 override AgentCore.Application.Runtime.CallTurnOrigin.GetHashCode() -> int
 override AgentCore.Application.Runtime.CallTurnOrigin.ToString() -> string!
+override AgentCore.Application.Scripting.ScriptRequest.Equals(object? obj) -> bool
+override AgentCore.Application.Scripting.ScriptRequest.GetHashCode() -> int
+override AgentCore.Application.Scripting.ScriptRequest.ToString() -> string!
+override AgentCore.Application.Scripting.ScriptResult.Equals(object? obj) -> bool
+override AgentCore.Application.Scripting.ScriptResult.GetHashCode() -> int
+override AgentCore.Application.Scripting.ScriptResult.ToString() -> string!
 override AgentCore.Application.Secrets.ResolvedSecrets.ToString() -> string!
 override AgentCore.Application.Secrets.SecretName.Equals(object? obj) -> bool
 override AgentCore.Application.Secrets.SecretName.GetHashCode() -> int
@@ -1597,52 +1817,60 @@ override AgentCore.Application.Tools.Registry.ToolRegistration.ToString() -> str
 override AgentCore.Application.Tools.Registry.ToolSourceContext.Equals(object? obj) -> bool
 override AgentCore.Application.Tools.Registry.ToolSourceContext.GetHashCode() -> int
 override AgentCore.Application.Tools.Registry.ToolSourceContext.ToString() -> string!
+override AgentCore.Application.Tools.ToolCallScope.Equals(object? obj) -> bool
+override AgentCore.Application.Tools.ToolCallScope.GetHashCode() -> int
+override AgentCore.Application.Tools.ToolCallScope.ToString() -> string!
 override AgentCore.Application.Transcript.CallMessage.Equals(object? obj) -> bool
 override AgentCore.Application.Transcript.CallMessage.GetHashCode() -> int
 override AgentCore.Application.Transcript.CallMessage.ToString() -> string!
-override sealed AgentCore.Application.Call.CallInput.Barge.Equals(AgentCore.Application.Call.CallInput? other) -> bool
-override sealed AgentCore.Application.Call.CallInput.Keypress.Equals(AgentCore.Application.Call.CallInput? other) -> bool
-override sealed AgentCore.Application.Call.CallInput.Utterance.Equals(AgentCore.Application.Call.CallInput? other) -> bool
+override AgentCore.Application.Transcript.CallMessageDraft.Equals(object? obj) -> bool
+override AgentCore.Application.Transcript.CallMessageDraft.GetHashCode() -> int
+override AgentCore.Application.Transcript.CallMessageDraft.ToString() -> string!
+override sealed AgentCore.Application.Calls.CallInput.Barge.Equals(AgentCore.Application.Calls.CallInput? other) -> bool
+override sealed AgentCore.Application.Calls.CallInput.Keypress.Equals(AgentCore.Application.Calls.CallInput? other) -> bool
+override sealed AgentCore.Application.Calls.CallInput.Utterance.Equals(AgentCore.Application.Calls.CallInput? other) -> bool
 override sealed AgentCore.Application.Tools.DeclaredTool.InvokeCoreAsync(Microsoft.Extensions.AI.AIFunctionArguments! arguments, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<object?>
 static AgentCore.Application.Audit.AuditSinkFactory.OpenAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.IAuditSinkAdapter!>! adapters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IAuditSinkPort!>
-static AgentCore.Application.Call.CallChannel.operator !=(AgentCore.Application.Call.CallChannel? left, AgentCore.Application.Call.CallChannel? right) -> bool
-static AgentCore.Application.Call.CallChannel.operator ==(AgentCore.Application.Call.CallChannel? left, AgentCore.Application.Call.CallChannel? right) -> bool
-static AgentCore.Application.Call.CallChannelContext.operator !=(AgentCore.Application.Call.CallChannelContext? left, AgentCore.Application.Call.CallChannelContext? right) -> bool
-static AgentCore.Application.Call.CallChannelContext.operator ==(AgentCore.Application.Call.CallChannelContext? left, AgentCore.Application.Call.CallChannelContext? right) -> bool
-static AgentCore.Application.Call.CallInput.Barge.operator !=(AgentCore.Application.Call.CallInput.Barge? left, AgentCore.Application.Call.CallInput.Barge? right) -> bool
-static AgentCore.Application.Call.CallInput.Barge.operator ==(AgentCore.Application.Call.CallInput.Barge? left, AgentCore.Application.Call.CallInput.Barge? right) -> bool
-static AgentCore.Application.Call.CallInput.Keypress.operator !=(AgentCore.Application.Call.CallInput.Keypress? left, AgentCore.Application.Call.CallInput.Keypress? right) -> bool
-static AgentCore.Application.Call.CallInput.Keypress.operator ==(AgentCore.Application.Call.CallInput.Keypress? left, AgentCore.Application.Call.CallInput.Keypress? right) -> bool
-static AgentCore.Application.Call.CallInput.Utterance.operator !=(AgentCore.Application.Call.CallInput.Utterance? left, AgentCore.Application.Call.CallInput.Utterance? right) -> bool
-static AgentCore.Application.Call.CallInput.Utterance.operator ==(AgentCore.Application.Call.CallInput.Utterance? left, AgentCore.Application.Call.CallInput.Utterance? right) -> bool
-static AgentCore.Application.Call.CallInput.operator !=(AgentCore.Application.Call.CallInput? left, AgentCore.Application.Call.CallInput? right) -> bool
-static AgentCore.Application.Call.CallInput.operator ==(AgentCore.Application.Call.CallInput? left, AgentCore.Application.Call.CallInput? right) -> bool
-static AgentCore.Application.Call.CallSpeechPairing.Validate(AgentCore.Application.Configuration.Schema.CallProviderConfiguration! call, AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration! speech, AgentCore.Application.Ports.ICallAdapter! selectedCall) -> void
+static AgentCore.Application.Calls.CallChannel.operator !=(AgentCore.Application.Calls.CallChannel? left, AgentCore.Application.Calls.CallChannel? right) -> bool
+static AgentCore.Application.Calls.CallChannel.operator ==(AgentCore.Application.Calls.CallChannel? left, AgentCore.Application.Calls.CallChannel? right) -> bool
+static AgentCore.Application.Calls.CallChannelContext.operator !=(AgentCore.Application.Calls.CallChannelContext? left, AgentCore.Application.Calls.CallChannelContext? right) -> bool
+static AgentCore.Application.Calls.CallChannelContext.operator ==(AgentCore.Application.Calls.CallChannelContext? left, AgentCore.Application.Calls.CallChannelContext? right) -> bool
 static AgentCore.Application.Calls.CallClarificationState.operator !=(AgentCore.Application.Calls.CallClarificationState? left, AgentCore.Application.Calls.CallClarificationState? right) -> bool
 static AgentCore.Application.Calls.CallClarificationState.operator ==(AgentCore.Application.Calls.CallClarificationState? left, AgentCore.Application.Calls.CallClarificationState? right) -> bool
 static AgentCore.Application.Calls.CallCursor.Encode(System.DateTimeOffset sortAt, string! callId) -> string!
 static AgentCore.Application.Calls.CallCursor.TryDecode(string? cursor, out System.DateTimeOffset sortAt, out string! callId) -> bool
+static AgentCore.Application.Calls.CallInput.Barge.operator !=(AgentCore.Application.Calls.CallInput.Barge? left, AgentCore.Application.Calls.CallInput.Barge? right) -> bool
+static AgentCore.Application.Calls.CallInput.Barge.operator ==(AgentCore.Application.Calls.CallInput.Barge? left, AgentCore.Application.Calls.CallInput.Barge? right) -> bool
+static AgentCore.Application.Calls.CallInput.Keypress.operator !=(AgentCore.Application.Calls.CallInput.Keypress? left, AgentCore.Application.Calls.CallInput.Keypress? right) -> bool
+static AgentCore.Application.Calls.CallInput.Keypress.operator ==(AgentCore.Application.Calls.CallInput.Keypress? left, AgentCore.Application.Calls.CallInput.Keypress? right) -> bool
+static AgentCore.Application.Calls.CallInput.Utterance.operator !=(AgentCore.Application.Calls.CallInput.Utterance? left, AgentCore.Application.Calls.CallInput.Utterance? right) -> bool
+static AgentCore.Application.Calls.CallInput.Utterance.operator ==(AgentCore.Application.Calls.CallInput.Utterance? left, AgentCore.Application.Calls.CallInput.Utterance? right) -> bool
+static AgentCore.Application.Calls.CallInput.operator !=(AgentCore.Application.Calls.CallInput? left, AgentCore.Application.Calls.CallInput? right) -> bool
+static AgentCore.Application.Calls.CallInput.operator ==(AgentCore.Application.Calls.CallInput? left, AgentCore.Application.Calls.CallInput? right) -> bool
 static AgentCore.Application.Calls.CallPage.operator !=(AgentCore.Application.Calls.CallPage? left, AgentCore.Application.Calls.CallPage? right) -> bool
 static AgentCore.Application.Calls.CallPage.operator ==(AgentCore.Application.Calls.CallPage? left, AgentCore.Application.Calls.CallPage? right) -> bool
 static AgentCore.Application.Calls.CallRecord.operator !=(AgentCore.Application.Calls.CallRecord? left, AgentCore.Application.Calls.CallRecord? right) -> bool
 static AgentCore.Application.Calls.CallRecord.operator ==(AgentCore.Application.Calls.CallRecord? left, AgentCore.Application.Calls.CallRecord? right) -> bool
 static AgentCore.Application.Calls.CallSessionState.operator !=(AgentCore.Application.Calls.CallSessionState? left, AgentCore.Application.Calls.CallSessionState? right) -> bool
 static AgentCore.Application.Calls.CallSessionState.operator ==(AgentCore.Application.Calls.CallSessionState? left, AgentCore.Application.Calls.CallSessionState? right) -> bool
+static AgentCore.Application.Calls.CallSpeechPairing.Validate(AgentCore.Application.Configuration.Schema.CallProviderConfiguration! call, AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration! speech, AgentCore.Application.Ports.ICallAdapter! selectedCall) -> void
 static AgentCore.Application.Calls.CallStateJson.Options.get -> System.Text.Json.JsonSerializerOptions!
 static AgentCore.Application.Calls.CallStoreFactory.OpenAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.ICallStoreAdapter!>! adapters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.ICallStore!>
 static AgentCore.Application.Configuration.Compilation.AgentCompaction.Compose(AgentCore.Application.Configuration.Schema.AgentDefaults? defaults, AgentCore.Application.Configuration.Schema.AgentConfiguration! agent) -> AgentCore.Application.Configuration.Compilation.ResolvedCompaction?
+static AgentCore.Application.Configuration.Compilation.AgentHarness.Compose(AgentCore.Application.Configuration.Schema.AgentDefaults? defaults, AgentCore.Application.Configuration.Schema.AgentConfiguration! agent) -> AgentCore.Application.Configuration.Compilation.ResolvedHarness!
 static AgentCore.Application.Configuration.Compilation.AgentInstructions.Compose(AgentCore.Application.Configuration.Schema.AgentDefaults? defaults, AgentCore.Application.Configuration.Schema.AgentConfiguration! agent) -> string?
 static AgentCore.Application.Configuration.Compilation.AgentKnowledge.AllScoped(AgentCore.Application.Configuration.Schema.AgentsConfiguration! agents) -> bool
 static AgentCore.Application.Configuration.Compilation.AgentKnowledge.AnyDeclared(AgentCore.Application.Configuration.Schema.AgentsConfiguration! agents) -> bool
 static AgentCore.Application.Configuration.Compilation.AgentKnowledge.AnyScoped(AgentCore.Application.Configuration.Schema.AgentsConfiguration! agents) -> bool
 static AgentCore.Application.Configuration.Compilation.AgentKnowledge.Compose(AgentCore.Application.Configuration.Schema.AgentDefaults? defaults, AgentCore.Application.Configuration.Schema.AgentConfiguration! agent) -> AgentCore.Application.Configuration.Compilation.ResolvedKnowledge?
-static AgentCore.Application.Configuration.Compilation.ConfigurationCompiler.Compile(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Configuration.Compilation.AgentCompilationContext! context) -> AgentCore.Application.Configuration.Compilation.CompiledAgent!
-static AgentCore.Application.Configuration.Compilation.ConfigurationCompiler.SelectShape(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration) -> AgentCore.Application.Configuration.Compilation.CompiledAgentShape
+static AgentCore.Application.Configuration.Compilation.ConfigurationCompiler.CompileAll(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Configuration.Compilation.AgentCompilationContext! context) -> System.Collections.Generic.IReadOnlyDictionary<string!, AgentCore.Application.Configuration.Compilation.CompiledAgent!>!
 static AgentCore.Application.Configuration.Compilation.ResolvedClarification.From(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration) -> AgentCore.Application.Configuration.Compilation.ResolvedClarification!
 static AgentCore.Application.Configuration.Compilation.ResolvedClarification.operator !=(AgentCore.Application.Configuration.Compilation.ResolvedClarification? left, AgentCore.Application.Configuration.Compilation.ResolvedClarification? right) -> bool
 static AgentCore.Application.Configuration.Compilation.ResolvedClarification.operator ==(AgentCore.Application.Configuration.Compilation.ResolvedClarification? left, AgentCore.Application.Configuration.Compilation.ResolvedClarification? right) -> bool
 static AgentCore.Application.Configuration.Compilation.ResolvedCompaction.operator !=(AgentCore.Application.Configuration.Compilation.ResolvedCompaction? left, AgentCore.Application.Configuration.Compilation.ResolvedCompaction? right) -> bool
 static AgentCore.Application.Configuration.Compilation.ResolvedCompaction.operator ==(AgentCore.Application.Configuration.Compilation.ResolvedCompaction? left, AgentCore.Application.Configuration.Compilation.ResolvedCompaction? right) -> bool
+static AgentCore.Application.Configuration.Compilation.ResolvedHarness.operator !=(AgentCore.Application.Configuration.Compilation.ResolvedHarness? left, AgentCore.Application.Configuration.Compilation.ResolvedHarness? right) -> bool
+static AgentCore.Application.Configuration.Compilation.ResolvedHarness.operator ==(AgentCore.Application.Configuration.Compilation.ResolvedHarness? left, AgentCore.Application.Configuration.Compilation.ResolvedHarness? right) -> bool
 static AgentCore.Application.Configuration.Compilation.ResolvedKnowledge.operator !=(AgentCore.Application.Configuration.Compilation.ResolvedKnowledge? left, AgentCore.Application.Configuration.Compilation.ResolvedKnowledge? right) -> bool
 static AgentCore.Application.Configuration.Compilation.ResolvedKnowledge.operator ==(AgentCore.Application.Configuration.Compilation.ResolvedKnowledge? left, AgentCore.Application.Configuration.Compilation.ResolvedKnowledge? right) -> bool
 static AgentCore.Application.Configuration.Parsing.ConfigurationError.AppendPointer(string! pointer, int index) -> string!
@@ -1673,10 +1901,16 @@ static AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.operato
 static AgentCore.Application.Configuration.Schema.AgentCoreConfiguration.operator ==(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration? left, AgentCore.Application.Configuration.Schema.AgentCoreConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.AgentDefaults.operator !=(AgentCore.Application.Configuration.Schema.AgentDefaults? left, AgentCore.Application.Configuration.Schema.AgentDefaults? right) -> bool
 static AgentCore.Application.Configuration.Schema.AgentDefaults.operator ==(AgentCore.Application.Configuration.Schema.AgentDefaults? left, AgentCore.Application.Configuration.Schema.AgentDefaults? right) -> bool
+static AgentCore.Application.Configuration.Schema.AgentFilesConfiguration.operator !=(AgentCore.Application.Configuration.Schema.AgentFilesConfiguration? left, AgentCore.Application.Configuration.Schema.AgentFilesConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.AgentFilesConfiguration.operator ==(AgentCore.Application.Configuration.Schema.AgentFilesConfiguration? left, AgentCore.Application.Configuration.Schema.AgentFilesConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.operator !=(AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration? left, AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration.operator ==(AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration? left, AgentCore.Application.Configuration.Schema.AgentKnowledgeConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration.operator !=(AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration? left, AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration.operator ==(AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration? left, AgentCore.Application.Configuration.Schema.AgentMemoryConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.AgentsConfiguration.operator !=(AgentCore.Application.Configuration.Schema.AgentsConfiguration? left, AgentCore.Application.Configuration.Schema.AgentsConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.AgentsConfiguration.operator ==(AgentCore.Application.Configuration.Schema.AgentsConfiguration? left, AgentCore.Application.Configuration.Schema.AgentsConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.ApprovalConfiguration.operator !=(AgentCore.Application.Configuration.Schema.ApprovalConfiguration? left, AgentCore.Application.Configuration.Schema.ApprovalConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.ApprovalConfiguration.operator ==(AgentCore.Application.Configuration.Schema.ApprovalConfiguration? left, AgentCore.Application.Configuration.Schema.ApprovalConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.CallProviderConfiguration.operator !=(AgentCore.Application.Configuration.Schema.CallProviderConfiguration? left, AgentCore.Application.Configuration.Schema.CallProviderConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.CallProviderConfiguration.operator ==(AgentCore.Application.Configuration.Schema.CallProviderConfiguration? left, AgentCore.Application.Configuration.Schema.CallProviderConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.CompactionConfiguration.operator !=(AgentCore.Application.Configuration.Schema.CompactionConfiguration? left, AgentCore.Application.Configuration.Schema.CompactionConfiguration? right) -> bool
@@ -1685,6 +1919,8 @@ static AgentCore.Application.Configuration.Schema.CompactionTriggerConfiguration
 static AgentCore.Application.Configuration.Schema.CompactionTriggerConfiguration.operator ==(AgentCore.Application.Configuration.Schema.CompactionTriggerConfiguration? left, AgentCore.Application.Configuration.Schema.CompactionTriggerConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration.operator !=(AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration? left, AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration.operator ==(AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration? left, AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.EntryConfiguration.operator !=(AgentCore.Application.Configuration.Schema.EntryConfiguration? left, AgentCore.Application.Configuration.Schema.EntryConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.EntryConfiguration.operator ==(AgentCore.Application.Configuration.Schema.EntryConfiguration? left, AgentCore.Application.Configuration.Schema.EntryConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.EvaluationConfiguration.operator !=(AgentCore.Application.Configuration.Schema.EvaluationConfiguration? left, AgentCore.Application.Configuration.Schema.EvaluationConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.EvaluationConfiguration.operator ==(AgentCore.Application.Configuration.Schema.EvaluationConfiguration? left, AgentCore.Application.Configuration.Schema.EvaluationConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.ExtractorConfiguration.operator !=(AgentCore.Application.Configuration.Schema.ExtractorConfiguration? left, AgentCore.Application.Configuration.Schema.ExtractorConfiguration? right) -> bool
@@ -1721,6 +1957,12 @@ static AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration
 static AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration.operator ==(AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration? left, AgentCore.Application.Configuration.Schema.KnowledgeWildcardConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.operator !=(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? left, AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.operator ==(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? left, AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.LoopConditionOptions.operator !=(AgentCore.Application.Configuration.Schema.LoopConditionOptions? left, AgentCore.Application.Configuration.Schema.LoopConditionOptions? right) -> bool
+static AgentCore.Application.Configuration.Schema.LoopConditionOptions.operator ==(AgentCore.Application.Configuration.Schema.LoopConditionOptions? left, AgentCore.Application.Configuration.Schema.LoopConditionOptions? right) -> bool
+static AgentCore.Application.Configuration.Schema.LoopConfiguration.operator !=(AgentCore.Application.Configuration.Schema.LoopConfiguration? left, AgentCore.Application.Configuration.Schema.LoopConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.LoopConfiguration.operator ==(AgentCore.Application.Configuration.Schema.LoopConfiguration? left, AgentCore.Application.Configuration.Schema.LoopConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.LoopUntilConfiguration.operator !=(AgentCore.Application.Configuration.Schema.LoopUntilConfiguration? left, AgentCore.Application.Configuration.Schema.LoopUntilConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.LoopUntilConfiguration.operator ==(AgentCore.Application.Configuration.Schema.LoopUntilConfiguration? left, AgentCore.Application.Configuration.Schema.LoopUntilConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.McpAllowEntry.operator !=(AgentCore.Application.Configuration.Schema.McpAllowEntry? left, AgentCore.Application.Configuration.Schema.McpAllowEntry? right) -> bool
 static AgentCore.Application.Configuration.Schema.McpAllowEntry.operator ==(AgentCore.Application.Configuration.Schema.McpAllowEntry? left, AgentCore.Application.Configuration.Schema.McpAllowEntry? right) -> bool
 static AgentCore.Application.Configuration.Schema.McpRetryConfiguration.operator !=(AgentCore.Application.Configuration.Schema.McpRetryConfiguration? left, AgentCore.Application.Configuration.Schema.McpRetryConfiguration? right) -> bool
@@ -1735,6 +1977,10 @@ static AgentCore.Application.Configuration.Schema.ProvidersConfiguration.operato
 static AgentCore.Application.Configuration.Schema.ProvidersConfiguration.operator ==(AgentCore.Application.Configuration.Schema.ProvidersConfiguration? left, AgentCore.Application.Configuration.Schema.ProvidersConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.ReservedStateSlots.All.get -> System.Collections.Generic.IReadOnlyList<string!>!
 static AgentCore.Application.Configuration.Schema.ReservedStateSlots.Contains(string! name) -> bool
+static AgentCore.Application.Configuration.Schema.ShellConfiguration.operator !=(AgentCore.Application.Configuration.Schema.ShellConfiguration? left, AgentCore.Application.Configuration.Schema.ShellConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.ShellConfiguration.operator ==(AgentCore.Application.Configuration.Schema.ShellConfiguration? left, AgentCore.Application.Configuration.Schema.ShellConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration.operator !=(AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration? left, AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration.operator ==(AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration? left, AgentCore.Application.Configuration.Schema.ShellPolicyConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.operator !=(AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration? left, AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration.operator ==(AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration? left, AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration? right) -> bool
 static AgentCore.Application.Configuration.Schema.StageConfiguration.operator !=(AgentCore.Application.Configuration.Schema.StageConfiguration? left, AgentCore.Application.Configuration.Schema.StageConfiguration? right) -> bool
@@ -1784,23 +2030,23 @@ static AgentCore.Application.Knowledge.CompositeKnowledgeStoreFactory.CreateAsyn
 static AgentCore.Application.Knowledge.KnowledgeCitationFormatterFactory.Resolve(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Knowledge.IKnowledgeCitationFormatter!>? registered) -> AgentCore.Application.Knowledge.IKnowledgeCitationFormatter!
 static AgentCore.Application.Knowledge.KnowledgePoint.operator !=(AgentCore.Application.Knowledge.KnowledgePoint? left, AgentCore.Application.Knowledge.KnowledgePoint? right) -> bool
 static AgentCore.Application.Knowledge.KnowledgePoint.operator ==(AgentCore.Application.Knowledge.KnowledgePoint? left, AgentCore.Application.Knowledge.KnowledgePoint? right) -> bool
+static AgentCore.Application.Knowledge.KnowledgeRetrievalPortExtensions.GetService<TService>(this AgentCore.Application.Ports.IKnowledgeRetrievalPort! port, object? serviceKey = null) -> TService?
 static AgentCore.Application.Llm.CompositeChatClientFactory.CreateAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.IChatClientAdapter!>! adapters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Llm.CompositeChatClientFactory!>
-static AgentCore.Application.Ports.KnowledgeRetrievalPortExtensions.GetService<TService>(this AgentCore.Application.Ports.IKnowledgeRetrievalPort! port, object? serviceKey = null) -> TService?
 static AgentCore.Application.Providers.VendorAdapterSelector.Select<TAdapter>(string! kind, System.Collections.Generic.IReadOnlyList<TAdapter>! adapters, AgentCore.Application.Providers.VendorSeam seam) -> TAdapter
 static AgentCore.Application.Providers.VendorSeam.operator !=(AgentCore.Application.Providers.VendorSeam left, AgentCore.Application.Providers.VendorSeam right) -> bool
 static AgentCore.Application.Providers.VendorSeam.operator ==(AgentCore.Application.Providers.VendorSeam left, AgentCore.Application.Providers.VendorSeam right) -> bool
 static AgentCore.Application.Runtime.CallEvent.operator !=(AgentCore.Application.Runtime.CallEvent? left, AgentCore.Application.Runtime.CallEvent? right) -> bool
 static AgentCore.Application.Runtime.CallEvent.operator ==(AgentCore.Application.Runtime.CallEvent? left, AgentCore.Application.Runtime.CallEvent? right) -> bool
 static AgentCore.Application.Runtime.CallObservers.Standard(AgentCore.Application.Ports.IAuditSinkPort! auditSink, Microsoft.Extensions.Logging.ILogger? logger, System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.ICallObserver!>? hostObservers = null) -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.ICallObserver!>!
-static AgentCore.Application.Runtime.CallRenderScope.Current.get -> AgentCore.Application.Ports.IRenderPort?
 static AgentCore.Application.Runtime.CallSessionFactory.CreateExtractor(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Ports.IChatClientFactory! chatClients) -> AgentCore.Application.State.StateExtractor?
-static AgentCore.Application.Runtime.CallSourceScope.Current.get -> AgentCore.Application.Ports.ISourcePort?
-static AgentCore.Application.Runtime.CallStateScope.Enter(AgentCore.Application.State.StateDocument! state) -> System.IDisposable!
-static AgentCore.Application.Runtime.CallStateScope.Snapshot() -> System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>!
 static AgentCore.Application.Runtime.CallTurnOrigin.operator !=(AgentCore.Application.Runtime.CallTurnOrigin? left, AgentCore.Application.Runtime.CallTurnOrigin? right) -> bool
 static AgentCore.Application.Runtime.CallTurnOrigin.operator ==(AgentCore.Application.Runtime.CallTurnOrigin? left, AgentCore.Application.Runtime.CallTurnOrigin? right) -> bool
-static AgentCore.Application.Runtime.KnowledgeScopeScope.Current.get -> AgentCore.Domain.Knowledge.KnowledgeScope?
-static AgentCore.Application.Runtime.KnowledgeScopeScope.Open(AgentCore.Domain.Knowledge.KnowledgeScope! scope) -> System.IDisposable!
+static AgentCore.Application.Scripting.ScriptRequest.operator !=(AgentCore.Application.Scripting.ScriptRequest? left, AgentCore.Application.Scripting.ScriptRequest? right) -> bool
+static AgentCore.Application.Scripting.ScriptRequest.operator ==(AgentCore.Application.Scripting.ScriptRequest? left, AgentCore.Application.Scripting.ScriptRequest? right) -> bool
+static AgentCore.Application.Scripting.ScriptResult.Failed(string! error) -> AgentCore.Application.Scripting.ScriptResult!
+static AgentCore.Application.Scripting.ScriptResult.Returned(System.Text.Json.Nodes.JsonNode? value) -> AgentCore.Application.Scripting.ScriptResult!
+static AgentCore.Application.Scripting.ScriptResult.operator !=(AgentCore.Application.Scripting.ScriptResult? left, AgentCore.Application.Scripting.ScriptResult? right) -> bool
+static AgentCore.Application.Scripting.ScriptResult.operator ==(AgentCore.Application.Scripting.ScriptResult? left, AgentCore.Application.Scripting.ScriptResult? right) -> bool
 static AgentCore.Application.Secrets.ResolvedSecrets.Create(System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string!, string!>>! secrets) -> AgentCore.Application.Secrets.ResolvedSecrets!
 static AgentCore.Application.Secrets.ResolvedSecrets.Empty.get -> AgentCore.Application.Secrets.ResolvedSecrets!
 static AgentCore.Application.Secrets.ResolvedSecrets.ResolveAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort! resolver, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Secrets.ResolvedSecrets!>
@@ -1830,11 +2076,16 @@ static AgentCore.Application.Tools.Registry.ToolSourceContext.operator !=(AgentC
 static AgentCore.Application.Tools.Registry.ToolSourceContext.operator ==(AgentCore.Application.Tools.Registry.ToolSourceContext? left, AgentCore.Application.Tools.Registry.ToolSourceContext? right) -> bool
 static AgentCore.Application.Tools.Registry.ToolSourceError.Fail(string! message) -> AgentCore.Application.Configuration.Parsing.ConfigurationLoadException!
 static AgentCore.Application.Tools.ToolArgumentJson.ToJsonObject(System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string!, object?>>! arguments) -> System.Text.Json.Nodes.JsonObject!
+static AgentCore.Application.Tools.ToolCallScope.operator !=(AgentCore.Application.Tools.ToolCallScope? left, AgentCore.Application.Tools.ToolCallScope? right) -> bool
+static AgentCore.Application.Tools.ToolCallScope.operator ==(AgentCore.Application.Tools.ToolCallScope? left, AgentCore.Application.Tools.ToolCallScope? right) -> bool
 static AgentCore.Application.Tools.ToolErrorResult.Create(string! tool, string! message) -> System.Text.Json.Nodes.JsonObject!
 static AgentCore.Application.Tools.ToolErrorResult.IsError(System.Text.Json.Nodes.JsonNode? result) -> bool
 static AgentCore.Application.Tools.ToolResultJson.ToNode(object? value) -> System.Text.Json.Nodes.JsonNode?
 static AgentCore.Application.Transcript.CallMessage.operator !=(AgentCore.Application.Transcript.CallMessage? left, AgentCore.Application.Transcript.CallMessage? right) -> bool
 static AgentCore.Application.Transcript.CallMessage.operator ==(AgentCore.Application.Transcript.CallMessage? left, AgentCore.Application.Transcript.CallMessage? right) -> bool
+static AgentCore.Application.Transcript.CallMessageDraft.operator !=(AgentCore.Application.Transcript.CallMessageDraft? left, AgentCore.Application.Transcript.CallMessageDraft? right) -> bool
+static AgentCore.Application.Transcript.CallMessageDraft.operator ==(AgentCore.Application.Transcript.CallMessageDraft? left, AgentCore.Application.Transcript.CallMessageDraft? right) -> bool
+static AgentCore.Application.Transcript.CallMessageIds.New() -> string!
 static AgentCore.Application.Transcript.TranscriptJson.Options.get -> System.Text.Json.JsonSerializerOptions!
 static readonly AgentCore.Application.Configuration.Compilation.ResolvedClarification.None -> AgentCore.Application.Configuration.Compilation.ResolvedClarification!
 static readonly AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration.DefaultMeters -> System.Collections.Generic.IReadOnlyList<string!>!
@@ -1845,9 +2096,9 @@ static readonly AgentCore.Application.Secrets.KnownSecrets.OpenAi -> AgentCore.A
 static readonly AgentCore.Application.Secrets.KnownSecrets.PostgresConnectionString -> AgentCore.Application.Secrets.SecretName!
 static readonly AgentCore.Application.Secrets.KnownSecrets.Qdrant -> AgentCore.Application.Secrets.SecretName!
 static readonly AgentCore.Application.Sessions.Memory.InMemoryCallSessions.DefaultIdleTimeout -> System.TimeSpan
-virtual AgentCore.Application.Call.CallInput.EqualityContract.get -> System.Type!
-virtual AgentCore.Application.Call.CallInput.Equals(AgentCore.Application.Call.CallInput? other) -> bool
-virtual AgentCore.Application.Call.CallInput.PrintMembers(System.Text.StringBuilder! builder) -> bool
+virtual AgentCore.Application.Calls.CallInput.EqualityContract.get -> System.Type!
+virtual AgentCore.Application.Calls.CallInput.Equals(AgentCore.Application.Calls.CallInput? other) -> bool
+virtual AgentCore.Application.Calls.CallInput.PrintMembers(System.Text.StringBuilder! builder) -> bool
 virtual AgentCore.Application.Tools.Binding.ToolBinding.Invoke(System.Text.Json.Nodes.JsonObject! arguments, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<object?>
 ~override AgentCore.Application.Providers.VendorSeam.Equals(object obj) -> bool
 ~override AgentCore.Application.Providers.VendorSeam.ToString() -> string

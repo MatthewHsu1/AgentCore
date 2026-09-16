@@ -35,7 +35,6 @@ internal static class ExampleDocument
     public const string Yaml =
         """
         apiVersion: agentcore/v1
-        name: service-voice
         fallbackReply: "I am sorry. I could not finish that. Please say it again."
         refusalReply: "I am sorry. I cannot help with that request."
 
@@ -88,7 +87,6 @@ internal static class ExampleDocument
                       - { ">=": [ { var: failedResolveTurns }, 3 ] }
 
         tools:
-          - { id: draw,          kind: builtin, uses: ui.draw, model: { ref: cheap } }
           - id: lookup_order
             kind: http
             description: Read one order by its identifier.
@@ -109,7 +107,7 @@ internal static class ExampleDocument
               properties: { summary: { type: string } }
               required: [ summary ]
           - { id: search, kind: builtin, uses: web.search }
-
+          - { id: python, kind: builtin, uses: code.execute }
         agents:
           defaults:
             model: { ref: reply, temperature: 0.3 }
@@ -123,41 +121,47 @@ internal static class ExampleDocument
             - { id: resolver,   instructions: "<stage delta>", tools: [] }
             - { id: escalator,  instructions: "<stage delta>", tools: [ create_case ] }
             - { id: closer,     instructions: "<stage delta>", tools: [] }
-            - { id: analyst, instructions: "<stage delta>", tools: [ lookup_order, create_case, search ],
+            - { id: analyst, instructions: "<stage delta>", tools: [ lookup_order, create_case, search, python ],
                 knowledge: { mode: tool, limit: 8, citations: true, scoped: false } }
             - { id: webchat, instructions: "<stage delta>", tools: [ lookup_order ],
                 knowledge: { mode: tool, citations: false } }
 
-        policy:
-          initial: greeting
-          stages:
-            - id: greeting
-              agent: greeter
-              to: [ { stage: identify } ]
-            - id: identify
-              agent: identifier
-              to:
-                - { stage: close,    when: saidGoodbye }
-                - { stage: escalate, when: wantsHuman }
-                - { stage: resolve,  when: identified }
-            - id: resolve
-              agent: resolver
-              to:
-                - { stage: close,    when: goodbyeOrFixed }
-                - { stage: escalate, when: humanOrExhausted }
-            - id: escalate
-              agent: escalator
-              to: [ { stage: close } ]
-            - id: close
-              agent: closer
-              terminal: true
+        entries:
+          phone:
+            fallbackReply: "Sorry — say it again."
+            policy:
+              initial: greeting
+              stages:
+                - id: greeting
+                  agent: greeter
+                  to: [ { stage: identify } ]
+                - id: identify
+                  agent: identifier
+                  to:
+                    - { stage: close,    when: saidGoodbye }
+                    - { stage: escalate, when: wantsHuman }
+                    - { stage: resolve,  when: identified }
+                - id: resolve
+                  agent: resolver
+                  to:
+                    - { stage: close,    when: goodbyeOrFixed }
+                    - { stage: escalate, when: humanOrExhausted }
+                - id: escalate
+                  agent: escalator
+                  to: [ { stage: close } ]
+                - id: close
+                  agent: closer
+                  terminal: true
+          chat:
+            agent: webchat
+            refusalReply: "Sorry — I can't help with that here."
 
         providers:
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }      # the voice path, chosen on latency
             - { kind: openai, model: gpt-5.4-nano, as: fill }       # the extractor, chosen on null discipline
             - { kind: openai, model: gpt-4.1,      as: judge }      # evaluation only, chosen on judgement
-            - { kind: openai, model: gpt-4.1-nano, as: cheap, webSearch: false }      # ui.draw only, chosen on price
+            - { kind: openai, model: gpt-4.1-nano, as: cheap, webSearch: false, codeExecute: false }
           call:      { kind: telnyx-relay }        # the pipe: who carries the call and owns /v1/call
           speech:                                  # the ears and the mouth, named one role at a time
             stt: { kind: telnyx-relay }            # recognition. Bundled here, so it matches call
@@ -203,7 +207,6 @@ internal static class ExampleDocument
         """
         {
           "apiVersion": "agentcore/v1",
-          "name": "service-voice",
           "fallbackReply": "I am sorry. I could not finish that. Please say it again.",
           "refusalReply": "I am sorry. I cannot help with that request.",
           "state": {
@@ -368,14 +371,6 @@ internal static class ExampleDocument
           },
           "tools": [
             {
-              "id": "draw",
-              "kind": "builtin",
-              "uses": "ui.draw",
-              "model": {
-                "ref": "cheap"
-              }
-            },
-            {
               "id": "lookup_order",
               "kind": "http",
               "description": "Read one order by its identifier.",
@@ -419,6 +414,11 @@ internal static class ExampleDocument
               "id": "search",
               "kind": "builtin",
               "uses": "web.search"
+            },
+            {
+              "id": "python",
+              "kind": "builtin",
+              "uses": "code.execute"
             }
           ],
           "agents": {
@@ -478,7 +478,8 @@ internal static class ExampleDocument
                 "tools": [
                   "lookup_order",
                   "create_case",
-                  "search"
+                  "search",
+                  "python"
                 ],
                 "knowledge": {
                   "mode": "tool",
@@ -500,65 +501,74 @@ internal static class ExampleDocument
               }
             ]
           },
-          "policy": {
-            "initial": "greeting",
-            "stages": [
-              {
-                "id": "greeting",
-                "agent": "greeter",
-                "to": [
+          "entries": {
+            "phone": {
+              "fallbackReply": "Sorry — say it again.",
+              "policy": {
+                "initial": "greeting",
+                "stages": [
                   {
-                    "stage": "identify"
-                  }
-                ]
-              },
-              {
-                "id": "identify",
-                "agent": "identifier",
-                "to": [
-                  {
-                    "stage": "close",
-                    "when": "saidGoodbye"
+                    "id": "greeting",
+                    "agent": "greeter",
+                    "to": [
+                      {
+                        "stage": "identify"
+                      }
+                    ]
                   },
                   {
-                    "stage": "escalate",
-                    "when": "wantsHuman"
+                    "id": "identify",
+                    "agent": "identifier",
+                    "to": [
+                      {
+                        "stage": "close",
+                        "when": "saidGoodbye"
+                      },
+                      {
+                        "stage": "escalate",
+                        "when": "wantsHuman"
+                      },
+                      {
+                        "stage": "resolve",
+                        "when": "identified"
+                      }
+                    ]
                   },
                   {
-                    "stage": "resolve",
-                    "when": "identified"
-                  }
-                ]
-              },
-              {
-                "id": "resolve",
-                "agent": "resolver",
-                "to": [
-                  {
-                    "stage": "close",
-                    "when": "goodbyeOrFixed"
+                    "id": "resolve",
+                    "agent": "resolver",
+                    "to": [
+                      {
+                        "stage": "close",
+                        "when": "goodbyeOrFixed"
+                      },
+                      {
+                        "stage": "escalate",
+                        "when": "humanOrExhausted"
+                      }
+                    ]
                   },
                   {
-                    "stage": "escalate",
-                    "when": "humanOrExhausted"
-                  }
-                ]
-              },
-              {
-                "id": "escalate",
-                "agent": "escalator",
-                "to": [
+                    "id": "escalate",
+                    "agent": "escalator",
+                    "to": [
+                      {
+                        "stage": "close"
+                      }
+                    ]
+                  },
                   {
-                    "stage": "close"
+                    "id": "close",
+                    "agent": "closer",
+                    "terminal": true
                   }
                 ]
-              },
-              {
-                "id": "close",
-                "agent": "closer",
-                "terminal": true
               }
-            ]
+            },
+            "chat": {
+              "agent": "webchat",
+              "refusalReply": "Sorry — I can't help with that here."
+            }
           },
           "providers": {
             "llm": [
@@ -581,7 +591,8 @@ internal static class ExampleDocument
                 "kind": "openai",
                 "model": "gpt-4.1-nano",
                 "as": "cheap",
-                "webSearch": false
+                "webSearch": false,
+                "codeExecute": false
               }
             ],
             "call": {

@@ -25,7 +25,7 @@ public sealed class CallThreadSchemaTests : PostgresDatabaseTest
         var tables = await ScalarAsync<long>(
             """
             SELECT count(*) FROM information_schema.tables
-             WHERE table_schema = current_schema() AND table_name IN ('call', 'call_principal')
+             WHERE table_schema = 'agentcore' AND table_name IN ('call', 'call_principal')
             """);
 
         // Assert
@@ -37,7 +37,7 @@ public sealed class CallThreadSchemaTests : PostgresDatabaseTest
     {
         // Act
         var refusal = await Record.ExceptionAsync(
-            () => ExecuteAsync("INSERT INTO call (call_id, status) VALUES ('c1', 'nonsense')"));
+            () => ExecuteAsync("INSERT INTO agentcore.call (call_id, status) VALUES ('c1', 'nonsense')"));
 
         // Assert
         Assert.Equal("23514", Assert.IsType<PostgresException>(refusal).SqlState);
@@ -47,26 +47,26 @@ public sealed class CallThreadSchemaTests : PostgresDatabaseTest
     public async Task CallPrincipal_ItsCallDeleted_GoesWithIt()
     {
         // Arrange
-        await ExecuteAsync("INSERT INTO call (call_id) VALUES ('c1')");
-        await ExecuteAsync("INSERT INTO call_principal (call_id, principal_key, role) VALUES ('c1', 'p1', 'caller')");
+        await ExecuteAsync("INSERT INTO agentcore.call (call_id) VALUES ('c1')");
+        await ExecuteAsync("INSERT INTO agentcore.call_principal (call_id, principal_key, role) VALUES ('c1', 'p1', 'caller')");
 
         // Act
-        await ExecuteAsync("DELETE FROM call WHERE call_id = 'c1'");
+        await ExecuteAsync("DELETE FROM agentcore.call WHERE call_id = 'c1'");
 
         // Assert
-        Assert.Equal(0, await ScalarAsync<long>("SELECT count(*) FROM call_principal"));
+        Assert.Equal(0, await ScalarAsync<long>("SELECT count(*) FROM agentcore.call_principal"));
     }
 
     [PostgresFact]
     public async Task CallPrincipal_TheSamePairTwice_IsRefusedByThePrimaryKey()
     {
         // Arrange
-        await ExecuteAsync("INSERT INTO call (call_id) VALUES ('c1')");
-        await ExecuteAsync("INSERT INTO call_principal (call_id, principal_key, role) VALUES ('c1', 'p1', 'caller')");
+        await ExecuteAsync("INSERT INTO agentcore.call (call_id) VALUES ('c1')");
+        await ExecuteAsync("INSERT INTO agentcore.call_principal (call_id, principal_key, role) VALUES ('c1', 'p1', 'caller')");
 
         // Act
         var refusal = await Record.ExceptionAsync(
-            () => ExecuteAsync("INSERT INTO call_principal (call_id, principal_key, role) VALUES ('c1', 'p1', 'agent')"));
+            () => ExecuteAsync("INSERT INTO agentcore.call_principal (call_id, principal_key, role) VALUES ('c1', 'p1', 'agent')"));
 
         // Assert
         Assert.Equal("23505", Assert.IsType<PostgresException>(refusal).SqlState);
@@ -82,7 +82,7 @@ public sealed class CallThreadSchemaTests : PostgresDatabaseTest
               FROM pg_index i
               JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord) ON true
               JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
-             WHERE i.indrelid = 'call_principal'::regclass AND i.indisprimary
+             WHERE i.indrelid = 'agentcore.call_principal'::regclass AND i.indisprimary
             """);
 
         // Assert
@@ -96,7 +96,7 @@ public sealed class CallThreadSchemaTests : PostgresDatabaseTest
         var indexes = await ScalarAsync<long>(
             """
             SELECT count(*) FROM pg_indexes
-             WHERE schemaname = current_schema()
+             WHERE schemaname = 'agentcore'
                AND tablename = 'call_principal'
                AND indexname = 'call_principal_call_idx'
             """);
@@ -106,14 +106,14 @@ public sealed class CallThreadSchemaTests : PostgresDatabaseTest
     }
 
     [PostgresTheory]
-    [InlineData("call", "SELECT")]
-    [InlineData("call", "INSERT")]
-    [InlineData("call", "UPDATE")]
-    [InlineData("call", "DELETE")]
-    [InlineData("call_principal", "SELECT")]
-    [InlineData("call_principal", "INSERT")]
-    [InlineData("call_principal", "UPDATE")]
-    [InlineData("call_principal", "DELETE")]
+    [InlineData("agentcore.call", "SELECT")]
+    [InlineData("agentcore.call", "INSERT")]
+    [InlineData("agentcore.call", "UPDATE")]
+    [InlineData("agentcore.call", "DELETE")]
+    [InlineData("agentcore.call_principal", "SELECT")]
+    [InlineData("agentcore.call_principal", "INSERT")]
+    [InlineData("agentcore.call_principal", "UPDATE")]
+    [InlineData("agentcore.call_principal", "DELETE")]
     public async Task Writer_EachStoreZeroPrivilege_IsGranted(string table, string privilege)
     {
         // Act

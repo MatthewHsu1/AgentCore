@@ -19,7 +19,7 @@ public sealed class ReasoningTemperatureCheckTests
     {
         var error = Assert.Single(Evaluate(Document("low", "temperature: 0.2")));
 
-        Assert.Equal("/agents/items/0/model/temperature", error.Pointer);
+        Assert.Equal("/agents/items/1/model/temperature", error.Pointer);
         Assert.Contains("temperature 0.2", error.Message, StringComparison.Ordinal);
         Assert.Contains("reasoningEffort 'low'", error.Message, StringComparison.Ordinal);
         Assert.Contains("'reply'", error.Message, StringComparison.Ordinal);
@@ -54,10 +54,12 @@ public sealed class ReasoningTemperatureCheckTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: two-entries
             agents:
               items:
-                - { id: greeter, model: { ref: fill, temperature: 0.2 } }
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             providers:
               call:   { kind: telnyx-relay }
               speech:
@@ -76,9 +78,8 @@ public sealed class ReasoningTemperatureCheckTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: every-holder
             tools:
-              - { id: draw, kind: builtin, uses: ui.draw, model: { ref: reply, temperature: 0.2 } }
+              - { id: search, kind: builtin, uses: web.search, model: { ref: reply, temperature: 0.2 } }
             agents:
               defaults:
                 model: { ref: reply, temperature: 0.2 }
@@ -93,6 +94,9 @@ public sealed class ReasoningTemperatureCheckTests
                 tts: { kind: telnyx-relay }
               llm:
                 - { kind: openai, model: gpt-5.6-luna, as: reply, reasoningEffort: low }
+            entries:
+              main:
+                agent: greeter
             """;
 
         Assert.Equal(
@@ -118,13 +122,16 @@ public sealed class ReasoningTemperatureCheckTests
     private static string Document(string? effort, string? temperature)
         => $$"""
             apiVersion: agentcore/v1
-            name: reasoning
             agents:
               items:
+                - { id: only, instructions: "ok" }
                 - id: greeter
                   model:
                     ref: reply
                     {{temperature ?? ""}}
+            entries:
+              main:
+                agent: greeter
             providers:
               call:   { kind: telnyx-relay }
               speech:

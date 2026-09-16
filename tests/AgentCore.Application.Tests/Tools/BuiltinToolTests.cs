@@ -1,6 +1,7 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Tests.Configuration;
+using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tools.Registry;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Tools.Builtin;
@@ -14,13 +15,11 @@ namespace AgentCore.Application.Tests.Tools;
 /// The first tool kind of section 8.1: <c>kind: builtin</c>, which AgentCore ships.
 /// </summary>
 /// <remarks>
-/// The shipped example holds two built-ins: <c>ui.draw</c>, a shipped agent built through
-/// <see cref="ShippedAgentBuilder"/> and tested in <c>ShippedAgentBuilderTests</c>; and
-/// <c>web.search</c>, a plain function that builds one <c>HostedWebSearchTool</c> marker and runs
-/// no code of its own — see <c>HostedWebSearchDropTests</c> for what reaches a compiled agent.
-/// Neither calls anything, so the call path, the section 8.7 error-result shape, description
-/// resolution, and cancellation that a plain built-in which actually runs would exercise stay
-/// untested until one ships.
+/// The shipped example holds two built-ins: <c>web.search</c> and <c>code.execute</c>, markers
+/// that build one <c>HostedWebSearchTool</c> and one <c>HostedCodeInterpreterTool</c> and run no
+/// code of their own — see <c>HostedWebSearchDropTests</c> for what reaches a compiled agent. They
+/// call nothing, so the call path, the section 8.7 error-result shape, description resolution, and
+/// cancellation that a plain built-in which actually runs would exercise stay untested until one ships.
 /// </remarks>
 public sealed class BuiltinToolTests
 {
@@ -64,7 +63,7 @@ public sealed class BuiltinToolTests
         var context = new ToolSourceContext(new AgentCoreConfiguration
         {
             ApiVersion = "agentcore/v1",
-            Name = "test",
+            Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(),
             Tools = [new ToolConfiguration { Id = "x", Kind = ToolKind.Builtin, Uses = "knowledge.invent" }],
         });
 
@@ -82,8 +81,6 @@ public sealed class BuiltinToolTests
     /// <summary>Builds one declared tool through <see cref="BuiltinToolSource"/>, synchronously.</summary>
     private sealed class BuiltinFactory
     {
-        // The chat client factory is always bound: ui.draw is a shipped agent, and one declared in
-        // a document with no factory behind it fails the boot rather than building.
         private readonly BuiltinToolSource _source =
             new(new BuiltinToolPorts(new RecordingChatClientFactory()));
 
@@ -97,7 +94,7 @@ public sealed class BuiltinToolTests
             var context = new ToolSourceContext(new AgentCoreConfiguration
             {
                 ApiVersion = "agentcore/v1",
-                Name = "test",
+                Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(),
                 Tools = [tool],
             });
 

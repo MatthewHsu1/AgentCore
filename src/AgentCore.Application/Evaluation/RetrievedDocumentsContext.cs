@@ -1,4 +1,5 @@
 using Microsoft.Extensions.AI.Evaluation;
+using System.Runtime.CompilerServices;
 
 namespace AgentCore.Application.Evaluation;
 
@@ -15,7 +16,7 @@ public sealed class RetrievedDocumentsContext : EvaluationContext
     /// <param name="retrieved">The document ids the search returned, best first.</param>
     /// <exception cref="ArgumentNullException">Either list is <see langword="null"/>.</exception>
     public RetrievedDocumentsContext(IEnumerable<string> expected, IEnumerable<string> retrieved)
-        : this(Materialize(expected, nameof(expected)), Materialize(retrieved, nameof(retrieved)))
+        : this(Materialize(expected), Materialize(retrieved))
     {
     }
 
@@ -37,9 +38,15 @@ public sealed class RetrievedDocumentsContext : EvaluationContext
 
     private static string Join(string[] ids) => ids.Length == 0 ? "none" : string.Join(", ", ids);
 
-    private static string[] Materialize(IEnumerable<string> ids, string parameterName)
+    private static string[] Materialize(
+        IEnumerable<string> ids,
+        [CallerArgumentExpression(nameof(ids))] string parameterName = "")
     {
-        ArgumentNullException.ThrowIfNull(ids, parameterName);
+        if (ids is null)
+        {
+            throw new ArgumentNullException(parameterName);
+        }
+
         return [.. ids];
     }
 }

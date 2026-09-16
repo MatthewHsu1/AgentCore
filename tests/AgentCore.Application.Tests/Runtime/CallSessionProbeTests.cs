@@ -2,10 +2,8 @@ using System.Runtime.CompilerServices;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
-using AgentCore.Application.Tests.Fakes;
 using AgentCore.Domain.Knowledge;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
@@ -25,7 +23,6 @@ public sealed class CallSessionProbeTests
     private const string ProbeYaml =
         """
         apiVersion: agentcore/v1
-        name: probe-two-turn
         state:
           applies_to:
             type: string
@@ -60,6 +57,9 @@ public sealed class CallSessionProbeTests
           items:
             - id: only
               knowledge: { mode: tool, scoped: true }
+        entries:
+          main:
+            agent: only
         """;
 
     [Fact]
@@ -84,9 +84,9 @@ public sealed class CallSessionProbeTests
         chatClients.Route("reply", reply);
         chatClients.Route("fill", extractor);
 
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             ConfigurationLoader.LoadYaml(ProbeYaml),
-            new AgentCompilationContext(chatClients) { Knowledge = port });
+            new AgentCompilationContext(chatClients) { Knowledge = port })["main"];
         var stateExtractor = CallSessionFactory.CreateExtractor(compiled, chatClients);
 
         var session = new CallSessionFactory(
@@ -112,9 +112,9 @@ public sealed class CallSessionProbeTests
         internal ThrowingOnNarrowedScopePort(Action onNarrowedCall) => _onNarrowedCall = onNarrowedCall;
 
         public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
-            string query, CancellationToken cancellationToken = default)
+            string query, KnowledgeScope? scope = null, CancellationToken cancellationToken = default)
         {
-            if (KnowledgeScopeScope.Current?.Facets.Count == 2)
+            if (scope is { Facets.Count: 2 })
             {
                 return ValueTask.FromResult<IReadOnlyList<KnowledgeCard>>([]);
             }

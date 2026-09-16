@@ -38,22 +38,22 @@ public sealed class CallSessionGraphReplyTests
     /// <summary>Two nodes, run in order. Both speak, and only the second one is an answer.</summary>
     private const string GraphYaml =
         """
-        apiVersion: agentcore/v1
-        name: two-node-graph
-        agents:
-          items:
-            - { id: researcher, model: { ref: researcher }, instructions: "look things up" }
-            - { id: responder,  model: { ref: responder },  instructions: "answer the caller" }
-        graph:
-          pattern: sequential
-          agents: [ researcher, responder ]
-        """;
+          apiVersion: agentcore/v1
+          agents:
+            items:
+              - { id: researcher, model: { ref: researcher }, instructions: "look things up" }
+              - { id: responder,  model: { ref: responder },  instructions: "answer the caller" }
+          entries:
+            main:
+              graph:
+                pattern: sequential
+                agents: [ researcher, responder ]
+          """;
 
-    /// <summary>One agent with one tool. A tool-calling turn returns three messages, not one.</summary>
-    private const string ToolYaml =
-        """
+      /// <summary>One agent with one tool. A tool-calling turn returns three messages, not one.</summary>
+      private const string ToolYaml =
+          """
         apiVersion: agentcore/v1
-        name: tool-turn
         tools:
           - { id: lookup_order, kind: builtin, uses: orders.read, description: "Look up an order by its id." }
         agents:
@@ -61,6 +61,9 @@ public sealed class CallSessionGraphReplyTests
             model: { ref: reply }
           items:
             - { id: only, instructions: "I answer everything", tools: [ lookup_order ] }
+        entries:
+          main:
+            agent: only
         """;
 
     [Fact]
@@ -201,12 +204,12 @@ public sealed class CallSessionGraphReplyTests
             chatClients.Route("responder", responder);
         }
 
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             document,
             new AgentCompilationContext(chatClients)
             {
                 Tools = TestToolRegistry.From(document, tools, TestContext.Current.CancellationToken),
-            });
+            })["main"];
 
         return new CallSessionFactory(
             compiled,

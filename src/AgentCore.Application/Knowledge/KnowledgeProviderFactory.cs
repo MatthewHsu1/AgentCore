@@ -1,11 +1,6 @@
-using System.Diagnostics;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
-using AgentCore.Application.State;
-using AgentCore.Domain.Knowledge;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -17,11 +12,6 @@ namespace AgentCore.Application.Knowledge;
 /// </summary>
 internal static class KnowledgeProviderFactory
 {
-    /// <summary>
-    /// The scope an agent that declares <c>scoped: false</c> searches under.
-    /// </summary>
-    private static readonly KnowledgeScope WholeCorpus =
-        new() { Facets = new Dictionary<string, string>(StringComparer.Ordinal) };
 
     /// <summary>Builds the provider one agent binds.</summary>
     /// <param name="port">The store every agent shares.</param>
@@ -31,8 +21,8 @@ internal static class KnowledgeProviderFactory
     /// <param name="loggers">
     /// Where the retrieval record and the framework's own provider log go, or <see langword="null"/>
     /// when the host wired none. Ruling 21: this is the one reachable observability seam — the audit
-    /// sink is not, because <c>AuditEvent</c> requires a call id and a sequence number that no
-    /// ambient carries down here.
+    /// sink is not, because <c>AuditEvent</c> requires a call id and a sequence number that this
+    /// seam doesn't carry down here.
     /// </param>
     /// <param name="scope">The document's <c>providers.knowledge.scope</c> block, or <see langword="null"/>.</param>
     /// <returns>The provider to hang on that agent.</returns>
@@ -65,156 +55,24 @@ internal static class KnowledgeProviderFactory
             RecentMessageMemoryLimit = 4,
         };
 
-        AIContextProvider provider = new TextSearchProvider(SearchAsync, options, loggers);
+        KnowledgeSearch.Core core = KnowledgeSearch.Bind(port, knowledge, agent, citations, logger);
 
-        return knowledge.Mode == KnowledgeMode.Tool && scope?.Filterable is { Count: > 0 } filterable
-            ? new FacetFilterProvider(provider, filterable)
-            : provider;
+        // The template's own delegate never runs: tool-mode searches go through the
+        // invocation-bound wrapper, prefetch through per-invocation providers. It fails
+        // loudly if either path ever leaks through.
+        AIContextProvider template = new TextSearchProvider(UnreachableSearch, options, loggers);
 
-        async Task<IEnumerable<TextSearchProvider.TextSearchResult>> SearchAsync(
-            string query, CancellationToken cancellationToken)
+        if (knowledge.Mode != KnowledgeMode.Tool)
         {
-            // An ambient with no facets filters nothing, so it is the absent ambient in disguise.
-            // The shared store can only fail closed when EVERY agent is scoped, so in a mixed
-            // deployment this is the only check standing between a scoped agent and every
-            // customer's cards.
-            if (knowledge.Scoped && KnowledgeScopeScope.Current is not { Facets.Count: > 0 })
-            {
-                return [KnowledgeNotices.Of(KnowledgeNotices.NoScope)];
-            }
-
-            var composed = knowledge.Scoped ? KnowledgeScopeScope.Current! : WholeCorpus;
-
-            var (narrowed, byTool) = ToolFacetOverlay.Apply(composed, ToolFacetScope.Current);
-
-            var started = Stopwatch.GetTimestamp();
-
-            double? searched = null;
-
-            try
-            {
-                var under = narrowed;
-                var (cards, latency) = await Under(narrowed).ConfigureAwait(false);
-                searched = latency;
-
-                if (cards.Count == 0 && byTool)
-                {
-                    under = composed;
-                    (cards, _) = await Under(composed).ConfigureAwait(false);
-                }
-
-                using var tail = KnowledgeScopeScope.Open(under);
-
-                if (cards.Count == 0
-                    && knowledge.Mode == KnowledgeMode.Tool
-                    && under.Facets.Count > 0)
-                {
-                    return await KnowledgeProbe
-                        .RunAsync(port, knowledge, under, agent, query, logger, cancellationToken)
-                        .ConfigureAwait(false);
-                }
-
-                var shown = Kept(cards, knowledge);
-                Cite(shown, knowledge, citations);
-
-                return Map(shown, knowledge, citations);
-            }
-            catch (Exception failure) when (!KnowledgeCancellation.ByCaller(failure, cancellationToken))
-            {
-                var latency = searched ?? Stopwatch.GetElapsedTime(started).TotalMilliseconds;
-                var record = KnowledgeSearchRecord
-                    .Of(agent, knowledge, query, [], latency, failure)
-                    .ForLog();
-
-                Log.KnowledgeRetrievalFailed(logger, agent, record, failure);
-
-                return [KnowledgeNotices.Of(KnowledgeNotices.Unreachable)];
-            }
-
-            async Task<(IReadOnlyList<KnowledgeCard> Cards, double LatencyMs)> Under(KnowledgeScope open)
-            {
-                using var held = KnowledgeScopeScope.Open(open);
-
-                var cards = await port.SearchAsync(query, cancellationToken).ConfigureAwait(false);
-
-                var latency = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
-
-                if (logger.IsEnabled(LogLevel.Debug))
-                {
-                    var record = KnowledgeSearchRecord
-                        .Of(agent, knowledge, query, cards, latency, failure: null)
-                        .ForLog();
-
-                    Log.KnowledgeRetrieved(logger, agent, cards.Count, record);
-                }
-
-                return (cards, latency);
-            }
+            return new KnowledgePrefetchProvider(template, options, loggers, core);
         }
+
+        return new FacetFilterProvider(template, scope?.Filterable, core);
     }
 
-    /// <summary>Cites what this search read, for the caller's screen.</summary>
-    /// <param name="cards">The cards the agent is actually shown, after <see cref="Kept"/> cuts the search down to the agent's <c>limit:</c> — not everything the store returned.</param>
-    /// <param name="knowledge">The agent's resolved <c>knowledge:</c> block.</param>
-    /// <param name="citations">The wording <c>providers.knowledge.citation</c> named.</param>
-    private static void Cite(
-        IReadOnlyList<KnowledgeCard> cards,
-        ResolvedKnowledge knowledge,
-        IKnowledgeCitationFormatter citations)
-    {
-        if (!knowledge.Citations || CallSourceScope.Current is not { } port)
-        {
-            return;
-        }
-
-        foreach (var card in cards)
-        {
-            if (KnowledgeSourceMapper.ToSource(card, citations) is { } source)
-            {
-                port.Publish(source);
-            }
-        }
-    }
-
-    /// <summary>Cuts one search down to the agent's <c>limit:</c>.</summary>
-    /// <param name="cards">What the store returned, best first, links last.</param>
-    /// <param name="knowledge">The agent's resolved <c>knowledge:</c> block.</param>
-    /// <returns>The cards this agent is shown.</returns>
-    private static List<KnowledgeCard> Kept(IReadOnlyList<KnowledgeCard> cards, ResolvedKnowledge knowledge)
-    {
-        List<KnowledgeCard> kept = [];
-        var ranked = 0;
-
-        foreach (var card in cards)
-        {
-            if (!card.ViaLink && ranked++ >= knowledge.Limit)
-            {
-                continue;
-            }
-
-            kept.Add(card);
-        }
-
-        return kept;
-    }
-
-    /// <summary>Maps the cards this agent is shown into what the framework injects.</summary>
-    /// <param name="cards">The cards <see cref="Kept"/> already cut down to the agent's <c>limit:</c>.</param>
-    /// <param name="knowledge">The agent's resolved <c>knowledge:</c> block.</param>
-    /// <param name="citations">The wording each card's source label is written in.</param>
-    /// <returns>The results the framework injects.</returns>
-    private static List<TextSearchProvider.TextSearchResult> Map(
-        IReadOnlyList<KnowledgeCard> cards,
-        ResolvedKnowledge knowledge,
-        IKnowledgeCitationFormatter citations)
-    {
-        List<TextSearchProvider.TextSearchResult> mapped = [];
-
-        foreach (var card in cards)
-        {
-            mapped.Add(KnowledgeCardMapper.ToResult(card, knowledge.Citations, citations));
-        }
-
-        return mapped;
-    }
+    private static Task<IEnumerable<TextSearchProvider.TextSearchResult>> UnreachableSearch(
+        string query, CancellationToken cancellationToken)
+        => Task.FromException<IEnumerable<TextSearchProvider.TextSearchResult>>(
+            new InvalidOperationException(
+                "A knowledge search ran outside its turn. Searches run through the turn's own provider or tool."));
 }

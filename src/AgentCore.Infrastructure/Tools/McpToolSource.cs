@@ -134,6 +134,7 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
             }
             catch
             {
+                // One server's failure to close must not abandon the rest.
             }
         }
 

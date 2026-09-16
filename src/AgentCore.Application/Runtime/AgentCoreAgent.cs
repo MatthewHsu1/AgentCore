@@ -31,8 +31,8 @@ namespace AgentCore.Application.Runtime;
 /// <para>
 /// <b>The session owns the transcript, so a run takes one user message and not a history.</b> The
 /// run reads the text of the LAST user message and ignores everything in front of it, which is the
-/// same rule the <c>/v1/chat/completions</c> endpoint applies to its request body: an earlier message
-/// of the request is already in the call. A host must not replay history here — replaying it would
+/// same rule the <c>/v1/responses</c> endpoint applies to its <c>input</c>: an earlier message
+/// of the call is already in the session. A host must not replay history here — replaying it would
 /// put every turn in the transcript twice.
 /// </para>
 /// <para>
@@ -50,26 +50,29 @@ public sealed class AgentCoreAgent : AIAgent
 {
     private readonly ICallSessionFactory _sessions;
 
-    private readonly string? _name;
-    
     private readonly string? _description;
 
-    /// <summary>Creates the shim over one compiled document's turn loop.</summary>
+    /// <summary>Creates the shim over one compiled entry's turn loop.</summary>
     /// <param name="sessions">The factory that starts one <see cref="CallSession"/> for each call.</param>
-    /// <param name="name">The name the agent reports, usually the document name, or <see langword="null"/>.</param>
+    /// <param name="entryName">The entry this agent serves. Reported as <see cref="Name"/>.</param>
     /// <param name="description">The description the agent reports, or <see langword="null"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="sessions"/> is <see langword="null"/>.</exception>
-    public AgentCoreAgent(ICallSessionFactory sessions, string? name = null, string? description = null)
+    /// <exception cref="ArgumentException"><paramref name="entryName"/> is null or empty.</exception>
+    public AgentCoreAgent(ICallSessionFactory sessions, string entryName, string? description = null)
     {
         ArgumentNullException.ThrowIfNull(sessions);
+        ArgumentException.ThrowIfNullOrEmpty(entryName);
 
         _sessions = sessions;
-        _name = name;
+        EntryName = entryName;
         _description = description;
     }
 
+    /// <summary>Gets the entry this agent serves.</summary>
+    public string EntryName { get; }
+
     /// <inheritdoc />
-    public override string? Name => _name;
+    public override string? Name => EntryName;
 
     /// <inheritdoc />
     public override string? Description => _description;
@@ -131,11 +134,10 @@ public sealed class AgentCoreAgent : AIAgent
         // learn it points at nothing. The parameter is not nullable, so this only catches a caller
         // that went around the type.
         ArgumentNullException.ThrowIfNull(session);
-
         var call = Resolve(session);
 
         return new(JsonSerializer.SerializeToElement(
-            new SerializedSession(call.CallId, call.Snapshot()),
+            new SerializedSession(call.CallId, call.Snapshot(), EntryName),
             jsonSerializerOptions ?? CallStateJson.Options));
     }
 
@@ -189,6 +191,12 @@ public sealed class AgentCoreAgent : AIAgent
                 nameof(serializedState));
         }
 
+        if (stored.Entry is { Length: > 0 } entry && !string.Equals(entry, EntryName, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"The session names entry '{stored.Entry}' and this agent serves entry '{EntryName}'.");
+        }
+
         return new(new AgentCoreAgentSession(_sessions.Create(stored.CallId, stored.State)));
     }
 
@@ -202,7 +210,7 @@ public sealed class AgentCoreAgent : AIAgent
         ArgumentNullException.ThrowIfNull(messages);
 
         var call = Resolve(session);
-        var turn = await call.RunTurnAsync(UserText(messages), cancellationToken).ConfigureAwait(false);
+        var turn = await call.RunTurnMessageAsync(UserMessage(messages), cancellationToken).ConfigureAwait(false);
 
         return new AgentResponse(new ChatMessage(ChatRole.Assistant, turn.ReplyText))
         {
@@ -213,19 +221,28 @@ public sealed class AgentCoreAgent : AIAgent
     }
 
     /// <inheritdoc />
-    protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
+    protected override IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
         IEnumerable<ChatMessage> messages,
         AgentSession? session = null,
         AgentRunOptions? options = null,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(messages);
 
+        return RunCoreStreamingCoreAsync(messages, session, cancellationToken);
+    }
+
+    /// <summary>Streams one turn of the resolved call, wrapping each update with this agent's id.</summary>
+    private async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingCoreAsync(
+        IEnumerable<ChatMessage> messages,
+        AgentSession? session,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
         var call = Resolve(session);
 
         // The stream is already filtered: CallSession drops the lifecycle updates, so every update
         // here carries content. The wrap changes the type and nothing else.
-        await foreach (var update in call.RunTurnStreamingAsync(UserText(messages), cancellationToken)
+        await foreach (var update in call.RunTurnMessageStreamingAsync(UserMessage(messages), cancellationToken)
             .ConfigureAwait(false))
         {
             yield return new AgentResponseUpdate(update) { AgentId = Id };
@@ -253,42 +270,45 @@ public sealed class AgentCoreAgent : AIAgent
             nameof(session)),
     };
 
-    /// <summary>Reads what the caller said out of the run's messages.</summary>
+    /// <summary>Reads what the caller said or answered out of the run's messages.</summary>
     /// <param name="messages">The messages the caller passed to the run.</param>
-    /// <returns>The text of the last user message.</returns>
+    /// <returns>The last user message that carries words or an approval answer.</returns>
     /// <remarks>
-    /// The same rule the <c>/v1/chat/completions</c> endpoint applies: the session owns the
-    /// transcript, so an earlier message of the request is already in the call, and only the last
+    /// The same rule the <c>/v1/responses</c> endpoint applies: the session owns the
+    /// transcript, so an earlier message of the call is already in the session, and only the last
     /// user message is new. See the remarks on <see cref="AgentCoreAgent"/>.
     /// </remarks>
-    /// <exception cref="ArgumentException">No user message carries text, so there is no turn to run.</exception>
-    private static string UserText(IEnumerable<ChatMessage> messages)
+    /// <exception cref="ArgumentException">No user message carries words or an answer, so there is no turn to run.</exception>
+    private static ChatMessage UserMessage(IEnumerable<ChatMessage> messages)
     {
-        string? text = null;
+        ChatMessage? picked = null;
         foreach (var message in messages)
         {
-            if (message.Role == ChatRole.User && message.Text is { Length: > 0 } spoken)
+            if (message.Role == ChatRole.User
+                && (message.Text is { Length: > 0 }
+                    || message.Contents.OfType<ToolApprovalResponseContent>().Any()))
             {
-                text = spoken;
+                picked = message;
             }
         }
 
-        return text ?? throw new ArgumentException(
-            "The run carries no user message with text, so there is no turn to run. The session owns "
-            + "the transcript: pass what the caller just said, not a history.",
+        return picked ?? throw new ArgumentException(
+            "The run carries no user message with words or an approval answer, so there is no turn "
+            + "to run. The session owns the transcript: pass what the caller just said, not a history.",
             nameof(messages));
     }
 
-    /// <summary>One serialized session: the call it is, and the state it held.</summary>
+    /// <summary>One serialized session: the call it is, the entry it belongs to, and the state it held.</summary>
     /// <param name="CallId">The id of the call. Store 1 is keyed by it, so it is the half that finds the words.</param>
     /// <param name="State">What the session alone held, or <see langword="null"/> when the blob named none.</param>
+    /// <param name="Entry">The entry that wrote the blob. A key minted by one entry never reads on another.</param>
     /// <remarks>
     /// A separate shape from <see cref="CallSessionState"/> on purpose. That one is the value store 0
     /// writes under a <c>call_id</c> column, so putting the id inside it would give one fact two
     /// homes; here there is no column, so the envelope carries the key beside the value instead.
     /// Internal because it is a wire shape and not a promise: D15 makes every public type permanent.
     /// </remarks>
-    internal sealed record SerializedSession(string? CallId, CallSessionState? State);
+    internal sealed record SerializedSession(string? CallId, CallSessionState? State, string? Entry);
 
     /// <summary>One call, as the framework sees it.</summary>
     /// <remarks>

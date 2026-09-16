@@ -95,7 +95,7 @@ public sealed class KnowledgeAuditRecordTests
     {
         var card = new KnowledgeCard { CardId = "plain-01", Text = "a card", ViaLink = false };
 
-        var entry = KnowledgeAuditRecord.CardEntry.For(card);
+        var entry = KnowledgeAuditRecord.CardEntry.From(card);
 
         Assert.Equal("plain-01", entry.CardId);
         Assert.Null(entry.Authority);

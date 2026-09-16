@@ -61,10 +61,8 @@ jobs:
       - name: Restore
         run: dotnet restore
 
-      # SkipClientAppBuild keeps the demo's npm target from running. It would build a browser
-      # bundle that no package contains, and it is the only reason this job would need Node.
       - name: Build
-        run: dotnet build --no-restore -c Release -p:SkipClientAppBuild=true
+        run: dotnet build --no-restore -c Release
 
       - name: Unit tests
         run: dotnet test --no-build -c Release
@@ -76,7 +74,7 @@ jobs:
         run: dotnet pack --no-build -c Release -o artifacts
 
       # IsPackable decides what becomes a package; this asserts that decision rather than trusting
-      # it. Five, not six, is what proves nothing under demo/ leaked into a release.
+      # it. Five packages ship as a set.
       - name: Exactly five packages
         run: |
           count=$(ls artifacts/*.nupkg | wc -l)

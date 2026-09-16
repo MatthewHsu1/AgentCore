@@ -271,7 +271,8 @@ public sealed class McpToolSourceTests
         => new(new AgentCoreConfiguration
         {
             ApiVersion = "agentcore/v1",
-            Name = "test",
+            Agents = new AgentsConfiguration { Items = [] },
+            Entries = new Dictionary<string, EntryConfiguration>(),
             Mcp = servers,
         });
 

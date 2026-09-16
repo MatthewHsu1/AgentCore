@@ -7,27 +7,6 @@ namespace AgentCore.Application.State;
 /// <summary>
 /// The declared state of one call, plus the three reserved slots.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Section 8.3: every slot has exactly one writer, and guards read only declared state. One document
-/// belongs to one call, and the turn loop is its only WRITER, so nothing here serialises writes
-/// against each other.
-/// </para>
-/// <para>
-/// It is not, however, touched by one thread alone. <c>CallSession.Snapshot</c> reads the document
-/// off the turn, and <c>AgentCoreAgent.SerializeSessionCoreAsync</c> is a framework seam any host
-/// thread may call while a turn is running. That is why <see cref="_written"/> is concurrent: a
-/// reader mid-<see cref="TryWrite"/> must get a torn answer and never an
-/// <see cref="InvalidOperationException"/> out of the framework's own serialization API. A torn read
-/// is acceptable where a throw is not, because the snapshot is best effort by design — D5 says the
-/// next turn's own write corrects it, and the blob holds no counter that could collide.
-/// </para>
-/// <para>
-/// A slot the writers have not filled is <em>unfilled</em>, and it reads as its declared default.
-/// Unfilled and filled-false are therefore different states, which is what the nullable extractor
-/// schema exists to preserve. <see cref="IsUnfilled(string)"/> reports the difference.
-/// </para>
-/// </remarks>
 public sealed class StateDocument
 {
     private readonly ConcurrentDictionary<string, JsonNode?> _written = new(StringComparer.Ordinal);
@@ -40,7 +19,7 @@ public sealed class StateDocument
         ArgumentNullException.ThrowIfNull(configuration);
 
         Configuration = configuration;
-        Stage = stage ?? configuration.Policy?.Initial ?? string.Empty;
+        Stage = stage ?? string.Empty;
     }
 
     /// <summary>Gets the document this state was declared by.</summary>
@@ -135,15 +114,7 @@ public sealed class StateDocument
     {
         var written = value?.ToJsonString();
 
-        foreach (var member in members)
-        {
-            if (string.Equals(member.ToJsonString(), written, StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return members.Any(member => string.Equals(member.ToJsonString(), written, StringComparison.Ordinal));
     }
 
     /// <summary>Takes a snapshot the guards read. It holds every declared slot and the three reserved slots.</summary>

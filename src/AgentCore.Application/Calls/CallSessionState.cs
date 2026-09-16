@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace AgentCore.Application.Calls;
@@ -14,14 +15,15 @@ public sealed record CallSessionState
     private static readonly IReadOnlyDictionary<string, CallClarificationState> NoClarifications =
         ReadOnlyDictionary<string, CallClarificationState>.Empty;
 
+    /// <summary>The providers of a call whose document declares no harness switch.</summary>
+    private static readonly IReadOnlyDictionary<string, JsonElement> NoProviders =
+        ReadOnlyDictionary<string, JsonElement>.Empty;
+
     /// <summary>The shape this version of the library writes.</summary>
     public const int CurrentVersion = 1;
 
     /// <summary>Gets the shape this blob was written in.</summary>
     public int Version { get; init; } = CurrentVersion;
-
-    /// <summary>Gets the next free ordinal of the call.</summary>
-    public int NextOrdinal { get; init; }
 
     /// <summary>Gets the index the call's next turn takes.</summary>
     public int NextTurnIndex { get; init; }
@@ -40,4 +42,19 @@ public sealed record CallSessionState
     /// nothing has asked about is absent.
     /// </summary>
     public IReadOnlyDictionary<string, CallClarificationState> Clarifications { get; init; } = NoClarifications;
+
+    /// <summary>
+    /// Gets the MAF provider state a harness switch (<c>todos:</c>, <c>mode:</c>, <c>memory:</c>,
+    /// <c>files:</c>, <c>background:</c>) held, keyed by that provider's state key. A document with
+    /// no harness switch holds none. Absent in an old blob, which restores its stage and slots as before.
+    /// </summary>
+    public IReadOnlyDictionary<string, JsonElement> Providers { get; init; } = NoProviders;
+
+    /// <summary>
+    /// Gets the opaque workflow session of a graph row's call, carrying the harness providers'
+    /// checkpointed state across turns. Only a graph row whose document declares a harness switch
+    /// writes one; rows 1 and 2 keep provider state in <see cref="Providers"/>, and any other call
+    /// keeps neither. Absent in an old blob, which resumes with a fresh session.
+    /// </summary>
+    public JsonElement? WorkflowState { get; init; }
 }

@@ -2,8 +2,8 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Compaction;
+using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Skills;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Compaction;
@@ -22,13 +22,16 @@ internal static class AgentContextProviderCompiler
     /// ambiguity wiring (§8), the same for every agent — built once by the caller rather than
     /// re-derived per agent.
     /// </summary>
+#pragma warning disable MAAI001 // BackgroundAgentsProvider is evaluation-only in Microsoft.Agents.AI 1.21.0.
     public static List<AIContextProvider> Build(
         AgentDefaults? defaults,
         AgentConfiguration item,
         AgentCompilationContext context,
         string pointer,
         ResolvedClarification clarification,
-        KnowledgeScopeConfiguration? scope)
+        KnowledgeScopeConfiguration? scope,
+        Func<string, AIAgent?> resolve,
+        ICollection<BackgroundAgentsProvider>? background = null)
     {
         List<AIContextProvider> providers = [new TurnContextProvider()];
 
@@ -68,6 +71,7 @@ internal static class AgentContextProviderCompiler
                 loggerFactory: context.Loggers));
 #pragma warning restore MAAI001
         }
+        AgentHarnessProviders.Add(providers, defaults, item, context, pointer, resolve, background);
 
         if (AgentKnowledge.Compose(defaults, item) is not { } composed)
         {
@@ -98,4 +102,5 @@ internal static class AgentContextProviderCompiler
 
         return providers;
     }
+#pragma warning restore MAAI001
 }

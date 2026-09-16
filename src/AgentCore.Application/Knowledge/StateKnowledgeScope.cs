@@ -10,13 +10,13 @@ namespace AgentCore.Application.Knowledge;
 /// </summary>
 internal static class StateKnowledgeScope
 {
-    /// <summary>Composes the turn's scope from the host's ambient and the call's state.</summary>
+    /// <summary>Composes the turn's scope from the host's scope and the call's state.</summary>
     /// <param name="state">The state of the call, as it stands at the start of this turn.</param>
     /// <param name="scope">The document's <c>providers.knowledge.scope</c> block, or null.</param>
-    /// <param name="ambient">What the host opened for this turn, or null when it opened nothing.</param>
-    /// <returns>The scope, or <paramref name="ambient"/> unchanged when this document composes none.</returns>
+    /// <param name="hostScope">What the host set for this call, or null when it set nothing.</param>
+    /// <returns>The scope, or <paramref name="hostScope"/> unchanged when this document composes none.</returns>
     internal static KnowledgeScope? Compose(
-        StateDocument state, KnowledgeScopeConfiguration? scope, KnowledgeScope? ambient)
+        StateDocument state, KnowledgeScopeConfiguration? scope, KnowledgeScope? hostScope)
     {
         ArgumentNullException.ThrowIfNull(state);
 
@@ -26,15 +26,15 @@ internal static class StateKnowledgeScope
         // scope — including its absence, which still fails closed — is what the turn sees.
         if (scope?.Wildcard is not { } wildcard || scope.FromState.Count == 0)
         {
-            return ambient;
+            return hostScope;
         }
 
         Dictionary<string, string> facets = new(StringComparer.Ordinal);
         Dictionary<string, KnowledgeFacetOrigin> origins = new(StringComparer.Ordinal);
 
-        if (ambient is not null)
+        if (hostScope is not null)
         {
-            foreach (var (key, value) in ambient.Facets)
+            foreach (var (key, value) in hostScope.Facets)
             {
                 facets[key] = value;
                 origins[key] = KnowledgeFacetOrigin.Host;

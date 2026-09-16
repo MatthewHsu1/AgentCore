@@ -25,14 +25,20 @@ public sealed class CallSessionFactory : ICallSessionFactory
 
     private readonly ILogger? _logger;
 
-    /// <summary>Creates the factory.</summary>
+    private readonly string? _workspaceRoot;
+
+    /// <summary>
+    /// Creates the factory. When <paramref name="workspaceRoot"/> is bound, every call this factory
+    /// builds gets its own folder under it; unbound, a session it builds has no workspace.
+    /// </summary>
     public CallSessionFactory(
         CompiledAgent compiled,
         IGuardEvaluator guards,
         StateExtractor? extractor = null,
         TimeProvider? timeProvider = null,
         ILogger? logger = null,
-        IEnumerable<ICallObserver>? observers = null)
+        IEnumerable<ICallObserver>? observers = null,
+        string? workspaceRoot = null)
     {
         ArgumentNullException.ThrowIfNull(compiled);
         ArgumentNullException.ThrowIfNull(guards);
@@ -42,6 +48,7 @@ public sealed class CallSessionFactory : ICallSessionFactory
         _extractor = extractor;
         _time = timeProvider ?? TimeProvider.System;
         _logger = logger;
+        _workspaceRoot = workspaceRoot;
 
         // Copied, not held: the list is the caller's, and a caller that keeps adding to it after this
         // must not change what a session already built. The order is the caller's too — see
@@ -72,14 +79,19 @@ public sealed class CallSessionFactory : ICallSessionFactory
     /// <inheritdoc />
     public CallSession Create(string? callId = null, CallSessionState? state = null)
     {
+        var resolvedCallId = string.IsNullOrWhiteSpace(callId) ? Guid.NewGuid().ToString("N") : callId;
+
+        var workspace = _workspaceRoot is null ? null : CallWorkspace.Create(_workspaceRoot, resolvedCallId);
+
         CallSession session = new(
-            string.IsNullOrWhiteSpace(callId) ? Guid.NewGuid().ToString("N") : callId,
+            resolvedCallId,
             _compiled,
             _guards,
             _extractor,
             _time,
             new CallObserverDispatcher(_observers, _logger),
-            _logger);
+            _logger,
+            workspace);
 
         // Named, not applied. The session resumes on its first turn, where store 0's own copy
         // outranks this one — see the remarks on CallSession.Resume.

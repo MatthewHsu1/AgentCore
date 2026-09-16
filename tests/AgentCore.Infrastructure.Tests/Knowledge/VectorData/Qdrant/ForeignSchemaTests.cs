@@ -1,6 +1,5 @@
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Knowledge;
-using AgentCore.Application.Runtime;
 using AgentCore.Domain.Knowledge;
 using AgentCore.Infrastructure.Knowledge.VectorData.Qdrant;
 using AgentCore.Infrastructure.Tests.Fakes;
@@ -69,7 +68,7 @@ public sealed class ForeignSchemaTests : IClassFixture<ForeignCorpusFixture>
     public async Task Search_MapsEveryRenamedField()
     {
         var card = (await Store().SearchAsync(
-            "warranty returns", TestContext.Current.CancellationToken))[0];
+            "warranty returns", null, TestContext.Current.CancellationToken))[0];
 
         Assert.StartsWith("DOC-", card.CardId, StringComparison.Ordinal);
         Assert.Contains("warranty", card.Text, StringComparison.Ordinal);
@@ -82,7 +81,7 @@ public sealed class ForeignSchemaTests : IClassFixture<ForeignCorpusFixture>
     public async Task Search_FollowsLinksByFilterAcrossRandomPointKeys()
     {
         var cards = await Store().SearchAsync(
-            "warranty returns", TestContext.Current.CancellationToken);
+            "warranty returns", null, TestContext.Current.CancellationToken);
 
         var linked = Assert.Single(cards, card => card.ViaLink);
         Assert.Equal(ForeignCorpus.Id(ForeignCorpus.Count - 1), linked.CardId);
@@ -93,13 +92,13 @@ public sealed class ForeignSchemaTests : IClassFixture<ForeignCorpusFixture>
     {
         // Document 0 is emea and links to the last document, which is amer. The scope must keep the
         // ranked emea documents and drop the linked amer one.
-        using var _ = KnowledgeScopeScope.Open(new KnowledgeScope
+        var scope = new KnowledgeScope
         {
             Facets = new Dictionary<string, string>(StringComparer.Ordinal) { ["region"] = "emea" },
-        });
+        };
 
         var cards = await Store(scoped: true).SearchAsync(
-            "warranty returns", TestContext.Current.CancellationToken);
+            "warranty returns", scope, TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(cards);
         Assert.All(cards, card => Assert.False(card.ViaLink));
@@ -112,7 +111,7 @@ public sealed class ForeignSchemaTests : IClassFixture<ForeignCorpusFixture>
         // claim about the store, and the store reads its keys off this document. Proving them only
         // against the kb-shaped corpus leaves the naming and the ranking entangled.
         var cards = await Store(limit: 2).SearchAsync(
-            "warranty returns", TestContext.Current.CancellationToken);
+            "warranty returns", null, TestContext.Current.CancellationToken);
 
         Assert.Equal(2, cards.Count(card => !card.ViaLink));
     }
@@ -121,9 +120,9 @@ public sealed class ForeignSchemaTests : IClassFixture<ForeignCorpusFixture>
     public async Task Search_ScoreFloor_DropsEverythingBelowIt()
     {
         var all = await Store(limit: 10, floor: 0.0).SearchAsync(
-            "warranty returns", TestContext.Current.CancellationToken);
+            "warranty returns", null, TestContext.Current.CancellationToken);
         var floored = await Store(limit: 10, floor: 0.25).SearchAsync(
-            "warranty returns", TestContext.Current.CancellationToken);
+            "warranty returns", null, TestContext.Current.CancellationToken);
 
         Assert.All(floored.Where(card => card.Score is not null), card => Assert.True(card.Score >= 0.25));
         Assert.True(floored.Count <= all.Count);
@@ -133,7 +132,7 @@ public sealed class ForeignSchemaTests : IClassFixture<ForeignCorpusFixture>
     public async Task Search_NoLinksBlock_NeverExpands()
     {
         var cards = await Store(links: false).SearchAsync(
-            "warranty returns", TestContext.Current.CancellationToken);
+            "warranty returns", null, TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(cards);
         Assert.All(cards, card => Assert.False(card.ViaLink));
@@ -150,7 +149,7 @@ public sealed class ForeignSchemaTests : IClassFixture<ForeignCorpusFixture>
         var entry = Entry() with { Fields = BaseEntry().Fields! with { Id = null }, Links = null };
 
         var card = (await StoreFrom(entry).SearchAsync(
-            "warranty returns", TestContext.Current.CancellationToken))[0];
+            "warranty returns", null, TestContext.Current.CancellationToken))[0];
 
         Assert.True(Guid.TryParse(card.CardId, out _));
     }
@@ -161,7 +160,7 @@ public sealed class ForeignSchemaTests : IClassFixture<ForeignCorpusFixture>
         var entry = Entry() with { Fields = BaseEntry().Fields! with { Lexical = null } };
 
         var cards = await StoreFrom(entry).SearchAsync(
-            "warranty returns", TestContext.Current.CancellationToken);
+            "warranty returns", null, TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(cards);
     }
@@ -175,7 +174,7 @@ public sealed class ForeignSchemaTests : IClassFixture<ForeignCorpusFixture>
         };
 
         var card = (await StoreFrom(entry).SearchAsync(
-            "warranty returns", TestContext.Current.CancellationToken))[0];
+            "warranty returns", null, TestContext.Current.CancellationToken))[0];
 
         Assert.Equal(string.Empty, card.SourceRef);
         Assert.Equal(string.Empty, card.SourceLocator);
@@ -198,7 +197,7 @@ public sealed class ForeignSchemaTests : IClassFixture<ForeignCorpusFixture>
         var store = Store(scoped: true);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await store.SearchAsync("warranty returns", TestContext.Current.CancellationToken));
+            async () => await store.SearchAsync("warranty returns", null, TestContext.Current.CancellationToken));
     }
 
     private static KnowledgeProviderConfiguration BaseEntry() => new()

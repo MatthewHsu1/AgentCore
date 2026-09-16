@@ -168,7 +168,7 @@ internal sealed class JsonWebSocketPump(
                 // now instead of leaving one pending per message for as long as a busy call keeps
                 // sending faster than IdleTimeout — CancelAfter is never involved, so this touches
                 // nothing outside this one local source.
-                idleCancel.Cancel();
+                await idleCancel.CancelAsync().ConfigureAwait(false);
                 result = await receiving.ConfigureAwait(false);
 
                 // The rest of one message, however many more fragments the vendor chose. A loop
@@ -305,7 +305,7 @@ internal sealed class JsonWebSocketPump(
             // The caller writes; this loop flushes. A Utf8JsonWriter holds the tail of a value in
             // its own buffer until something asks for it, so the send below would otherwise get a
             // truncated frame rather than a whole one.
-            writer.Flush();
+            await writer.FlushAsync().ConfigureAwait(false);
 
             await socket
                 .SendAsync(buffer.WrittenMemory, WebSocketMessageType.Text, endOfMessage: true, connectionToken)

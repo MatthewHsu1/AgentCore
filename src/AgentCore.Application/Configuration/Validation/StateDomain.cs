@@ -86,6 +86,12 @@ internal static class StateDomain
     {
         ArgumentNullException.ThrowIfNull(domains);
 
+        return EnumerateCore(domains);
+    }
+
+    /// <summary>Walks every point of the product. The caller checks the arguments.</summary>
+    private static IEnumerable<Dictionary<string, JsonNode?>> EnumerateCore(IReadOnlyList<SlotDomain> domains)
+    {
         if (domains.Count == 0)
         {
             yield return new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
@@ -125,8 +131,19 @@ internal static class StateDomain
     {
         ArgumentNullException.ThrowIfNull(domains);
 
+        return SampleCore(domains, count);
+    }
+
+    /// <summary>Samples the product with the fixed seed. The caller checks the arguments.</summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Security",
+        "S2245",
+        Justification = "Fixed-seed sampling of validation points. Repeatability is required; not a security use.")]
+    private static IEnumerable<Dictionary<string, JsonNode?>> SampleCore(IReadOnlyList<SlotDomain> domains, int count)
+    {
         // The seed is fixed so that a failing build fails the same way twice.
         var random = new Random(SampleSeed);
+
         var cursor = new int[domains.Count];
 
         for (var taken = 0; taken < count; taken++)

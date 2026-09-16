@@ -18,8 +18,9 @@ public interface IChatClientAdapter : IVendorAdapter
         ISecretResolverPort? secrets,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Whether this vendor runs a hosted web search for one entry.</summary>
+    /// <summary>Resolves a hosted tool marker for one entry, tuning it for this vendor.</summary>
+    /// <param name="marker">The marker the document declared, such as a hosted search or code execution tool.</param>
     /// <param name="entry">The <c>providers.llm[]</c> entry this adapter serves.</param>
-    /// <returns><see langword="true"/> when the vendor runs the search itself.</returns>
-    bool SupportsHostedWebSearch(LlmProviderConfiguration entry) => false;
+    /// <returns>The tool to hand the model, or <see langword="null"/> when this vendor does not run it.</returns>
+    AITool? ResolveHostedTool(AITool marker, LlmProviderConfiguration entry) => null;
 }

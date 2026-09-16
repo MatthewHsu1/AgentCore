@@ -16,8 +16,8 @@ public sealed class PostgresCallStoreSweepTests : PostgresDatabaseTest
     /// <inheritdoc />
     protected override bool Migrated => true;
 
-    private static CallMessage Word(string callId) =>
-        new(callId, 0, 0, new ChatMessage(ChatRole.User, "hello"), "m0");
+    private static CallMessageDraft Word() =>
+        new(0, new ChatMessage(ChatRole.User, "hello"), "m0");
 
     [PostgresFact]
     public async Task SweepAsync_ACallWhoseLastMessageIsOld_TakesTheCallAndItsWords()
@@ -25,16 +25,16 @@ public sealed class PostgresCallStoreSweepTests : PostgresDatabaseTest
         // Arrange
         PostgresCallStore store = new(DataSource);
         await store.CreateAsync("old", Token);
-        await store.AppendAsync([Word("old")], cancellationToken: Token);
-        await ExecuteAsync("UPDATE call_message SET updated_at = now() - interval '90 days'");
+        await store.AppendAsync("old", [Word()], cancellationToken: Token);
+        await ExecuteAsync("UPDATE agentcore.call_message SET updated_at = now() - interval '90 days'");
 
         // Act
         var swept = await store.SweepAsync(Window, cancellationToken: Token);
 
         // Assert
         Assert.Equal(1, swept);
-        Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM call"));
-        Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM call_message"));
+        Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM agentcore.call"));
+        Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM agentcore.call_message"));
     }
 
     [PostgresFact]
@@ -43,14 +43,14 @@ public sealed class PostgresCallStoreSweepTests : PostgresDatabaseTest
         // Arrange
         PostgresCallStore store = new(DataSource);
         await store.CreateAsync("empty", Token);
-        await ExecuteAsync("UPDATE call SET created_at = now() - interval '90 days'");
+        await ExecuteAsync("UPDATE agentcore.call SET created_at = now() - interval '90 days'");
 
         // Act
         var swept = await store.SweepAsync(Window, cancellationToken: Token);
 
         // Assert
         Assert.Equal(1, swept);
-        Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM call"));
+        Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM agentcore.call"));
     }
 
     /// <summary>
@@ -63,15 +63,15 @@ public sealed class PostgresCallStoreSweepTests : PostgresDatabaseTest
         // Arrange
         PostgresCallStore store = new(DataSource);
         await store.CreateAsync("fresh", Token);
-        await store.AppendAsync([Word("fresh")], cancellationToken: Token);
-        await ExecuteAsync("UPDATE call SET created_at = now() - interval '90 days'");
+        await store.AppendAsync("fresh", [Word()], cancellationToken: Token);
+        await ExecuteAsync("UPDATE agentcore.call SET created_at = now() - interval '90 days'");
 
         // Act
         var swept = await store.SweepAsync(Window, cancellationToken: Token);
 
         // Assert
         Assert.Equal(0, swept);
-        Assert.Equal(1L, await ScalarAsync<long>("SELECT count(*) FROM call"));
+        Assert.Equal(1L, await ScalarAsync<long>("SELECT count(*) FROM agentcore.call"));
     }
 
     [PostgresFact]
@@ -80,10 +80,10 @@ public sealed class PostgresCallStoreSweepTests : PostgresDatabaseTest
         // Arrange
         PostgresCallStore store = new(DataSource);
         await store.CreateAsync("old", Token);
-        await ExecuteAsync("UPDATE call SET created_at = now() - interval '90 days'");
+        await ExecuteAsync("UPDATE agentcore.call SET created_at = now() - interval '90 days'");
         await ExecuteAsync(
             """
-            INSERT INTO audit_event (call_id, event_id, sequence, kind, occurred_at)
+            INSERT INTO agentcore.audit_event (call_id, event_id, sequence, kind, occurred_at)
             VALUES ('old', gen_random_uuid(), 0, 'call.started', now())
             """);
 
@@ -91,7 +91,7 @@ public sealed class PostgresCallStoreSweepTests : PostgresDatabaseTest
         await store.SweepAsync(Window, cancellationToken: Token);
 
         // Assert
-        Assert.Equal(1L, await ScalarAsync<long>("SELECT count(*) FROM audit_event"));
+        Assert.Equal(1L, await ScalarAsync<long>("SELECT count(*) FROM agentcore.audit_event"));
     }
 
     [PostgresFact]
@@ -104,14 +104,14 @@ public sealed class PostgresCallStoreSweepTests : PostgresDatabaseTest
             await store.CreateAsync($"c{i}", Token);
         }
 
-        await ExecuteAsync("UPDATE call SET created_at = now() - interval '90 days'");
+        await ExecuteAsync("UPDATE agentcore.call SET created_at = now() - interval '90 days'");
 
         // Act
         var swept = await store.SweepAsync(Window, batchSize: 2, cancellationToken: Token);
 
         // Assert
         Assert.Equal(5, swept);
-        Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM call"));
+        Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM agentcore.call"));
     }
 
     [PostgresFact]
@@ -120,14 +120,14 @@ public sealed class PostgresCallStoreSweepTests : PostgresDatabaseTest
         // Arrange
         PostgresCallStore store = new(DataSource);
         await store.CreateAsync("c1", Token);
-        await store.AppendAsync([Word("c1")], cancellationToken: Token);
+        await store.AppendAsync("c1", [Word()], cancellationToken: Token);
 
         // Act
         var erased = await store.EraseAsync("c1", Token);
 
         // Assert — erase empties a thread that stays; delete takes the thread and the words with it.
         Assert.Equal(1, erased);
-        Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM call_message"));
+        Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM agentcore.call_message"));
         Assert.NotNull(await store.GetAsync("c1", Token));
     }
 }

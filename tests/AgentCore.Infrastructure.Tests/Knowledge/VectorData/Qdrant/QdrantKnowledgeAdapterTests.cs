@@ -3,7 +3,6 @@ using System.Reflection;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Knowledge;
-using AgentCore.Application.Ports;
 using AgentCore.Domain.Knowledge;
 using AgentCore.Infrastructure.Knowledge.VectorData.Qdrant;
 using AgentCore.Infrastructure.Tests.Fakes;
@@ -70,7 +69,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
         var isDisposed = typeof(QdrantClient)
             .GetField("_isDisposed", BindingFlags.NonPublic | BindingFlags.Instance)!
             .GetValue(captured);
-        Assert.Equal(true, isDisposed);
+        Assert.True((bool)isDisposed!);
     }
 
     [QdrantFact]
@@ -110,14 +109,14 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
             var isDisposedBeforeCall = typeof(QdrantClient)
                 .GetField("_isDisposed", BindingFlags.NonPublic | BindingFlags.Instance)!
                 .GetValue(captured);
-            Assert.Equal(false, isDisposedBeforeCall);
+            Assert.False((bool)isDisposedBeforeCall!);
 
             ((IDisposable)port).Dispose();
 
             var isDisposedAfterCall = typeof(QdrantClient)
                 .GetField("_isDisposed", BindingFlags.NonPublic | BindingFlags.Instance)!
                 .GetValue(captured);
-            Assert.Equal(true, isDisposedAfterCall);
+            Assert.True((bool)isDisposedAfterCall!);
         }
         finally
         {
@@ -782,7 +781,7 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
                 entry, secrets: null, Embedder(), requireScope: false,
                 TestContext.Current.CancellationToken);
 
-        var cards = await port.SearchAsync("deck", TestContext.Current.CancellationToken);
+        var cards = await port.SearchAsync("deck", null, TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(cards);
         Assert.All(cards, card => Assert.Equal(card.Text.ToUpperInvariant(), card.Text));

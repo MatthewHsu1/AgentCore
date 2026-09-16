@@ -15,7 +15,6 @@ public sealed class StateWriterTests
     private const string Yaml =
         """
         apiVersion: agentcore/v1
-        name: writers
         state:
           resolved:    { type: boolean, default: false, writer: extractor }
           orderStatus: { type: string,  writer: tool, from: lookup_order.status }
@@ -35,6 +34,9 @@ public sealed class StateWriterTests
         agents:
           items:
             - { id: only }
+        entries:
+          main:
+            agent: only
         """;
 
     private static readonly AgentCoreConfiguration Document = ConfigurationLoader.LoadYaml(Yaml);

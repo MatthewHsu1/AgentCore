@@ -97,8 +97,21 @@ AgentCore.Domain.Sources.SourceReference.Title.get -> string!
 AgentCore.Domain.Sources.SourceReference.Title.init -> void
 AgentCore.Domain.Sources.SourceReference.Url.get -> string?
 AgentCore.Domain.Sources.SourceReference.Url.init -> void
+AgentCore.Domain.PendingApproval
+AgentCore.Domain.PendingApproval.<Clone>$() -> AgentCore.Domain.PendingApproval!
+AgentCore.Domain.PendingApproval.Arguments.get -> System.Text.Json.JsonElement
+AgentCore.Domain.PendingApproval.Arguments.init -> void
+AgentCore.Domain.PendingApproval.Deconstruct(out string! RequestId, out string! ToolName, out System.Text.Json.JsonElement Arguments) -> void
+AgentCore.Domain.PendingApproval.Equals(AgentCore.Domain.PendingApproval? other) -> bool
+AgentCore.Domain.PendingApproval.PendingApproval(string! RequestId, string! ToolName, System.Text.Json.JsonElement Arguments) -> void
+AgentCore.Domain.PendingApproval.RequestId.get -> string!
+AgentCore.Domain.PendingApproval.RequestId.init -> void
+AgentCore.Domain.PendingApproval.ToolName.get -> string!
+AgentCore.Domain.PendingApproval.ToolName.init -> void
 AgentCore.Domain.TurnResult
 AgentCore.Domain.TurnResult.<Clone>$() -> AgentCore.Domain.TurnResult!
+AgentCore.Domain.TurnResult.Approvals.get -> System.Collections.Generic.IReadOnlyList<AgentCore.Domain.PendingApproval!>!
+AgentCore.Domain.TurnResult.Approvals.init -> void
 AgentCore.Domain.TurnResult.CallId.get -> string!
 AgentCore.Domain.TurnResult.CallId.init -> void
 AgentCore.Domain.TurnResult.Deconstruct(out string! CallId, out int TurnIndex, out string! StageBefore, out string! StageAfter, out string! ReplyText, out bool IsTerminal, out string? ExtractionFailure, out string? Failure, out System.TimeSpan? InterruptedAfter, out System.DateTimeOffset EndedAt) -> void
@@ -151,6 +164,9 @@ override AgentCore.Domain.Knowledge.KnowledgeScope.ToString() -> string!
 override AgentCore.Domain.Sources.SourceReference.Equals(object? obj) -> bool
 override AgentCore.Domain.Sources.SourceReference.GetHashCode() -> int
 override AgentCore.Domain.Sources.SourceReference.ToString() -> string!
+override AgentCore.Domain.PendingApproval.Equals(object? obj) -> bool
+override AgentCore.Domain.PendingApproval.GetHashCode() -> int
+override AgentCore.Domain.PendingApproval.ToString() -> string!
 override AgentCore.Domain.TurnResult.Equals(object? obj) -> bool
 override AgentCore.Domain.TurnResult.GetHashCode() -> int
 override AgentCore.Domain.TurnResult.ToString() -> string!
@@ -176,5 +192,7 @@ static AgentCore.Domain.Knowledge.KnowledgeScope.operator ==(AgentCore.Domain.Kn
 static AgentCore.Domain.Knowledge.PayloadPath.Read(System.Collections.Generic.IReadOnlyDictionary<string!, object?>! payload, string? path) -> object?
 static AgentCore.Domain.Sources.SourceReference.operator !=(AgentCore.Domain.Sources.SourceReference? left, AgentCore.Domain.Sources.SourceReference? right) -> bool
 static AgentCore.Domain.Sources.SourceReference.operator ==(AgentCore.Domain.Sources.SourceReference? left, AgentCore.Domain.Sources.SourceReference? right) -> bool
+static AgentCore.Domain.PendingApproval.operator !=(AgentCore.Domain.PendingApproval? left, AgentCore.Domain.PendingApproval? right) -> bool
+static AgentCore.Domain.PendingApproval.operator ==(AgentCore.Domain.PendingApproval? left, AgentCore.Domain.PendingApproval? right) -> bool
 static AgentCore.Domain.TurnResult.operator !=(AgentCore.Domain.TurnResult? left, AgentCore.Domain.TurnResult? right) -> bool
 static AgentCore.Domain.TurnResult.operator ==(AgentCore.Domain.TurnResult? left, AgentCore.Domain.TurnResult? right) -> bool

@@ -13,7 +13,12 @@ internal sealed class TypedBindingTool : DeclaredTool
 
     internal TypedBindingTool(ToolConfiguration tool, Delegate method)
         : base(tool)
-        => _inner = AIFunctionFactory.Create(method, tool.Id, tool.Description);
+        => _inner = AIFunctionFactory.Create(method, new AIFunctionFactoryOptions
+        {
+            Name = tool.Id,
+            Description = tool.Description,
+            ConfigureParameterBinding = ToolParameterBindings.For,
+        });
 
     /// <summary>
     /// Gets the schema the host method's parameters describe. It replaces the base schema, which

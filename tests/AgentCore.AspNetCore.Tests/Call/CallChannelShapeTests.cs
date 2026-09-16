@@ -1,4 +1,4 @@
-using AgentCore.Application.Call;
+using AgentCore.Application.Calls;
 using AgentCore.AspNetCore.Call;
 using AgentCore.AspNetCore.Tests.Fakes;
 using Xunit;

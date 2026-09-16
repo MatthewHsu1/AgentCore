@@ -2,8 +2,8 @@
 
   <PropertyGroup>
     <IsPackable>true</IsPackable>
-    <Description>Inbound adapters as Map* extensions: Conversation Relay, webhooks, chat completions.</Description>
-    <PackageTags>agent;ai;aspnetcore;chat-completions</PackageTags>
+    <Description>Inbound adapters as Map* extensions: Conversation Relay, webhooks, Responses.</Description>
+    <PackageTags>agent;ai;aspnetcore;openai-responses</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,6 +15,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Agents.AI" />
+    <PackageReference Include="Microsoft.Agents.AI.Hosting" />
+    <PackageReference Include="Microsoft.Agents.AI.Hosting.OpenAI" />
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
   </ItemGroup>
 

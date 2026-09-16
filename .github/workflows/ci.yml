@@ -46,16 +46,6 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: demo/chat-ui/package-lock.json
-
-      - name: Chat UI dependencies
-        run: npm ci
-        working-directory: demo/chat-ui
-
       - name: Restore
         run: |
           dotnet restore
@@ -63,10 +53,6 @@ jobs:
 
       - name: Build
         run: dotnet build --no-restore -c Release
-
-      - name: Chat UI tests
-        run: npm test
-        working-directory: demo/chat-ui
 
       - name: Unit tests
         run: dotnet test --no-build -c Release

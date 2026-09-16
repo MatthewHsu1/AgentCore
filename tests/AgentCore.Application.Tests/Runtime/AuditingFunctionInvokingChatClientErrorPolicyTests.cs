@@ -52,16 +52,16 @@ public sealed class AuditingFunctionInvokingChatClientErrorPolicyTests
 
     // ---------------------------------------------------------------------------------------
     // 4. Reporting must not change: an answerable fault never leaves the tool as an exception,
-    // so it must never reach ToolFailureScope.Report.
+    // so it must never reach the turn's failure listener.
     // ---------------------------------------------------------------------------------------
     [Fact]
     public async Task AFaultTheModelCanAnswer_IsNeverReported()
     {
         List<object> reported = [];
-        using var scope = ToolFailureScope.Enter(failure => reported.Add(failure));
+        var turn = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", OnToolFailure = failure => reported.Add(failure) };
 
         var tool = new ThrowingDeclaredTool(LookupOrder, new InvalidOperationException("the order is already closed."));
-        await RunSingleRoundAsync(tool, TestContext.Current.CancellationToken);
+        await RunSingleRoundAsync(tool, TestContext.Current.CancellationToken, turn: turn);
 
         Assert.Empty(reported);
     }
@@ -109,11 +109,11 @@ public sealed class AuditingFunctionInvokingChatClientErrorPolicyTests
     public async Task AFaultTheModelCannotAnswer_IsReportedOnceForEveryPropagatingRound()
     {
         List<object> reported = [];
-        using var scope = ToolFailureScope.Enter(failure => reported.Add(failure));
+        var turn = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", OnToolFailure = failure => reported.Add(failure) };
 
         var failure = new TimeoutException("the endpoint did not answer.");
         var tool = new ThrowingDeclaredTool(LookupOrder, failure);
-        await RunUntilTheBudgetThrowsAsync(tool, TestContext.Current.CancellationToken);
+        await RunUntilTheBudgetThrowsAsync(tool, TestContext.Current.CancellationToken, turn);
 
         // MaximumConsecutiveErrorsPerRequest is 3, so the 4th round is the one that spends the
         // budget, and all four reached this middleware and were reported before they propagated.
@@ -128,7 +128,7 @@ public sealed class AuditingFunctionInvokingChatClientErrorPolicyTests
     public async Task ACallerThatHungUp_PassesTheCancellationThroughUnreported()
     {
         List<object> reported = [];
-        using var scope = ToolFailureScope.Enter(failure => reported.Add(failure));
+        var turn = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", OnToolFailure = failure => reported.Add(failure) };
         using CancellationTokenSource source = new();
 
         // The tool cancels the very token the call was made with and then throws, exactly as a
@@ -136,7 +136,11 @@ public sealed class AuditingFunctionInvokingChatClientErrorPolicyTests
         var tool = new CancelingDeclaredTool(LookupOrder, source);
         LoopingToolCallingChatClient inner = new();
         using AuditingFunctionInvokingChatClient client = new(inner);
-        ChatOptions options = new() { Tools = [tool] };
+        ChatOptions options = new()
+        {
+            Tools = [tool],
+            AdditionalProperties = new AdditionalPropertiesDictionary { [TurnInvocation.ArgumentsKey] = turn },
+        };
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             client.GetResponseAsync(
@@ -184,9 +188,9 @@ public sealed class AuditingFunctionInvokingChatClientErrorPolicyTests
         };
         BindingToolSource source = new(registry);
         var registrations = await source.ProvideAsync(
-            new ToolSourceContext(new AgentCoreConfiguration { ApiVersion = "agentcore/v1", Name = "test", Tools = [createCase] }),
+            new ToolSourceContext(new AgentCoreConfiguration { ApiVersion = "agentcore/v1", Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(), Tools = [createCase] }),
             TestContext.Current.CancellationToken);
-        var tool = Assert.IsAssignableFrom<AIFunction>(Assert.Single(registrations).Materialise());
+        var tool = Assert.IsType<AIFunction>(Assert.Single(registrations).Materialise(), exactMatch: false);
 
         var result = await RunSingleRoundAsync(tool, TestContext.Current.CancellationToken);
 
@@ -205,18 +209,19 @@ public sealed class AuditingFunctionInvokingChatClientErrorPolicyTests
     /// The arguments the fake model fills, or <see langword="null"/> for none — enough for a tool
     /// that validates its own arguments before it ever reaches its adapter.
     /// </param>
-    /// <remarks>
-    /// <see cref="ToolCallingChatClient"/> calls the one offered tool once and then answers with
-    /// text, which keeps the round finite regardless of what the tool call returns.
-    /// </remarks>
     private static async Task<JsonObject> RunSingleRoundAsync(
         AIFunction tool,
         CancellationToken cancellationToken,
-        Dictionary<string, object?>? arguments = null)
+        Dictionary<string, object?>? arguments = null,
+        TurnInvocation? turn = null)
     {
         ToolCallingChatClient inner = new("the loop continues.", arguments);
         using AuditingFunctionInvokingChatClient client = new(inner);
         ChatOptions options = new() { Tools = [tool] };
+        if (turn is not null)
+        {
+            options.AdditionalProperties = new AdditionalPropertiesDictionary { [TurnInvocation.ArgumentsKey] = turn };
+        }
 
         await client.GetResponseAsync(
             [new ChatMessage(ChatRole.User, "where is my order")],
@@ -235,11 +240,15 @@ public sealed class AuditingFunctionInvokingChatClientErrorPolicyTests
     /// <see cref="LoopingToolCallingChatClient"/> never stops calling the tool, so a fault that
     /// propagates on every round spends the budget on the fourth.
     /// </remarks>
-    private static async Task<Exception> RunUntilTheBudgetThrowsAsync(AIFunction tool, CancellationToken cancellationToken)
+    private static async Task<Exception> RunUntilTheBudgetThrowsAsync(AIFunction tool, CancellationToken cancellationToken, TurnInvocation? turn = null)
     {
         LoopingToolCallingChatClient inner = new();
         using AuditingFunctionInvokingChatClient client = new(inner);
         ChatOptions options = new() { Tools = [tool] };
+        if (turn is not null)
+        {
+            options.AdditionalProperties = new AdditionalPropertiesDictionary { [TurnInvocation.ArgumentsKey] = turn };
+        }
 
         return await Assert.ThrowsAnyAsync<Exception>(() =>
             client.GetResponseAsync(

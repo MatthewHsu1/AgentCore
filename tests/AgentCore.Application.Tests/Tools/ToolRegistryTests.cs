@@ -133,7 +133,7 @@ public sealed class ToolRegistryTests
                 : new ToolConfiguration { Id = id, Kind = ToolKind.Binding, Binds = id });
         }
 
-        return new ToolSourceContext(new AgentCoreConfiguration { ApiVersion = "agentcore/v1", Name = "test", Tools = tools });
+        return new ToolSourceContext(new AgentCoreConfiguration { ApiVersion = "agentcore/v1", Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(), Tools = tools });
     }
 
     private static FakeToolSource SourceOf(string id)

@@ -63,7 +63,7 @@ public sealed class GoldenCallReplayTests
     [Fact]
     public void DeclaredPolicy_RendersEachGuardNameNextToItsEdge()
     {
-        StagePolicy policy = new(Document.Policy!, new TestGuardEvaluator(Document));
+        StagePolicy policy = new(Document.Entries["main"].Policy!, new TestGuardEvaluator(Document));
 
         var mermaid = policy.ToMermaid();
 
@@ -75,7 +75,7 @@ public sealed class GoldenCallReplayTests
 
     private static List<string> ReplayDeclared(GoldenCall call)
     {
-        StagePolicy policy = new(Document.Policy!, new TestGuardEvaluator(Document));
+        StagePolicy policy = new(Document.Entries["main"].Policy!, new TestGuardEvaluator(Document));
 
         List<string> stages = new(call.Turns.Count);
         for (var index = 0; index < call.Turns.Count; index++)

@@ -28,38 +28,43 @@ public sealed class CallSessionInterruptionTests
     private const string NoToolYaml =
         """
         apiVersion: agentcore/v1
-        name: one-agent
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string ToolYaml =
         """
         apiVersion: agentcore/v1
-        name: one-agent-with-tool
         tools:
           - { id: price_lookup, kind: builtin, uses: orders.read, description: "Look up the price of an item." }
         agents:
           items:
             - { id: only, instructions: "quote the price", tools: [ price_lookup ] }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string ParallelToolYaml =
         """
         apiVersion: agentcore/v1
-        name: one-agent-with-parallel-tool
         tools:
           - { id: quote, kind: builtin, uses: orders.read, description: "Get a price quote for an item." }
         agents:
           items:
             - { id: only, instructions: "quote both items", tools: [ quote ] }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string ExtractorYaml =
         """
         apiVersion: agentcore/v1
-        name: one-agent-with-extractor
         state:
           callerName:
             type: string
@@ -71,6 +76,9 @@ public sealed class CallSessionInterruptionTests
         agents:
           items:
             - { id: only, instructions: "greet the caller" }
+        entries:
+          main:
+            agent: only
         """;
 
     // -------------------------------------------------------------------------------------------
@@ -359,8 +367,8 @@ public sealed class CallSessionInterruptionTests
         using GatedExtractorChatClient extractor = new();
         var chatClients = new RoutingChatClientFactory(reply).Route("fill", extractor);
 
-        var compiled = ConfigurationCompiler.Compile(
-            ConfigurationLoader.LoadYaml(ExtractorYaml), new AgentCompilationContext(chatClients));
+        var compiled = ConfigurationCompiler.CompileAll(
+            ConfigurationLoader.LoadYaml(ExtractorYaml), new AgentCompilationContext(chatClients))["main"];
         InMemoryAuditSink sink = new();
         var session = new CallSessionFactory(
             compiled,
@@ -470,12 +478,12 @@ public sealed class CallSessionInterruptionTests
 
         var document = ConfigurationLoader.LoadYaml(yaml);
         var chatClients = new FakeChatClientFactory(reply);
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             document,
             new AgentCompilationContext(chatClients)
             {
                 Tools = TestToolRegistry.From(document, tools, TestContext.Current.CancellationToken),
-            });
+            })["main"];
 
         var factory = new CallSessionFactory(
             compiled,
@@ -569,7 +577,7 @@ public sealed class CallSessionInterruptionTests
             var chatClients = new RoutingChatClientFactory(replyClient).Route("fill", extractorClient);
 
             var document = ConfigurationLoader.LoadYaml(ExtractorYaml);
-            var compiled = ConfigurationCompiler.Compile(document, new AgentCompilationContext(chatClients));
+            var compiled = ConfigurationCompiler.CompileAll(document, new AgentCompilationContext(chatClients))["main"];
             var factory = new CallSessionFactory(
                 compiled,
                 new GuardEvaluator(compiled.Configuration.Guards),

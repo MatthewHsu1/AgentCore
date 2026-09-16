@@ -9,6 +9,7 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Evaluation;
+using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Secrets;
@@ -31,6 +32,7 @@ using System.Text.Json.Nodes;
 using Xunit;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
 using Microsoft.Agents.AI;
+using static AgentCore.AspNetCore.Tests.DependencyInjection.StartedHostFixture;
 
 namespace AgentCore.AspNetCore.Tests.DependencyInjection;
 
@@ -61,58 +63,68 @@ public sealed class AddAgentCoreTests
             - { kind: openai, model: gpt-4.1-mini, as: reply }
         """;
 
-    private const string OneAgentYaml =
+    // The same agent, reachable on two entries.
+    private const string TwoEntryYaml =
         $$"""
         apiVersion: agentcore/v1
-        name: composed
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
         {{MinimalProviders}}
+        entries:
+          main:
+            agent: only
+          other:
+            agent: only
         """;
 
     // The same agent, and a document that names a telemetry vendor.
     private const string TelemetryYaml =
         $$"""
         apiVersion: agentcore/v1
-        name: composed
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
         {{MinimalProviders}}
           telemetry: { kind: test }
+        entries:
+          main:
+            agent: only
         """;
 
     // The same agent, and a document that names a moderation vendor.
     private const string ModeratedYaml =
         $$"""
         apiVersion: agentcore/v1
-        name: composed
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
         {{MinimalProviders}}
           moderation: { kind: test }
+        entries:
+          main:
+            agent: only
         """;
 
     // The same agent, served by a vendor this host's fake adapter does not answer to.
     private const string OtherVendorYaml =
         $$"""
         apiVersion: agentcore/v1
-        name: other-vendor
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
         {{SpeechAndCall}}
           llm:
             - { kind: anthropic, model: claude-sonnet-5, as: reply }
+        entries:
+          main:
+            agent: only
         """;
 
     // The same agent, with both tunable keys of the document set away from their default.
     private const string TunedYaml =
         $$"""
         apiVersion: agentcore/v1
-        name: tuned
         fallbackReply: "One moment please. I will try that again."
         evaluation:
           sampleRate: 1
@@ -120,12 +132,14 @@ public sealed class AddAgentCoreTests
           items:
             - { id: only, instructions: "I answer everything" }
         {{MinimalProviders}}
+        entries:
+          main:
+            agent: only
         """;
 
     private const string BindingYaml =
         $$"""
         apiVersion: agentcore/v1
-        name: with-binding
         tools:
           - id: create_case
             kind: binding
@@ -139,12 +153,14 @@ public sealed class AddAgentCoreTests
           items:
             - { id: only, instructions: "I answer everything", tools: [ create_case ] }
         {{MinimalProviders}}
+        entries:
+          main:
+            agent: only
         """;
 
     private const string SecretYaml =
         $$"""
         apiVersion: agentcore/v1
-        name: with-secret
         tools:
           - id: lookup_order
             kind: http
@@ -161,66 +177,77 @@ public sealed class AddAgentCoreTests
           items:
             - { id: only, instructions: "I answer everything", tools: [ lookup_order ] }
         {{MinimalProviders}}
+        entries:
+          main:
+            agent: only
         """;
 
     // Row 4 of the section 8.2 compile table, with a guarded edge on each exit of the start node.
     // Check 5 proves the two guards exclusive, so exactly one edge fires for each call.
     private const string GuardedGraphYaml =
         $$"""
-        apiVersion: agentcore/v1
-        name: guarded-composed
-        state:
-          escalate: { type: boolean, writer: extractor, default: false }
-        guards:
-          wants_human: { "===": [ { var: escalate }, true ] }
-          stays_with_bot: { "===": [ { var: escalate }, false ] }
-        agents:
-          items:
-            - { id: router, model: { ref: router } }
-            - { id: human, model: { ref: human } }
-            - { id: bot, model: { ref: bot } }
-        graph:
-          nodes:
-            - { id: route, agent: router, start: true }
-            - { id: escalated, agent: human, output: true }
-            - { id: handled, agent: bot, output: true }
-          edges:
-            - { from: route, to: escalated, when: wants_human }
-            - { from: route, to: handled, when: stays_with_bot }
-        {{SpeechAndCall}}
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: router }
-            - { kind: openai, model: gpt-4.1-mini, as: human }
-            - { kind: openai, model: gpt-4.1-mini, as: bot }
-        """;
+          apiVersion: agentcore/v1
+          state:
+            escalate: { type: boolean, writer: extractor, default: false }
+          guards:
+            wants_human: { "===": [ { var: escalate }, true ] }
+            stays_with_bot: { "===": [ { var: escalate }, false ] }
+          agents:
+            items:
+              - { id: router, model: { ref: router } }
+              - { id: human, model: { ref: human } }
+              - { id: bot, model: { ref: bot } }
+          entries:
+            main:
+              graph:
+                nodes:
+                  - { id: route, agent: router, start: true }
+                  - { id: escalated, agent: human, output: true }
+                  - { id: handled, agent: bot, output: true }
+                edges:
+                  - { from: route, to: escalated, when: wants_human }
+                  - { from: route, to: handled, when: stays_with_bot }
+          providers:
+            call:   { kind: telnyx-relay }
+            speech:
+              stt: { kind: telnyx-relay }
+              tts: { kind: telnyx-relay }
+            llm:
+              - { kind: openai, model: gpt-4.1-mini, as: router }
+              - { kind: openai, model: gpt-4.1-mini, as: human }
+              - { kind: openai, model: gpt-4.1-mini, as: bot }
+          """;
 
-    // A stage names a target that policy.stages does not declare, so check 2 fails the load.
-    private const string BrokenYaml =
-        $$"""
-        apiVersion: agentcore/v1
-        name: broken
-        agents:
-          items:
-            - { id: only, instructions: "I answer everything" }
-        policy:
-          initial: start
-          stages:
-            - { id: start, agent: only, to: [ { stage: nowhere } ] }
-        {{MinimalProviders}}
-        """;
+      // A stage names a target that policy.stages does not declare, so check 2 fails the load.
+      private const string BrokenYaml =
+          $$"""
+          apiVersion: agentcore/v1
+          agents:
+            items:
+              - { id: only, instructions: "I answer everything" }
+          {{MinimalProviders}}
+          entries:
+            main:
+              policy:
+                initial: start
+                stages:
+                  - { id: start, agent: only, to: [ { stage: nowhere } ] }
+          """;
 
-    // A state slot's from: names a tool no tools: entry declares, and no mcp: server offers it
-    // either, so nothing in the served set ever resolves it.
-    private const string UndeclaredToolYaml =
-        $$"""
+      // A state slot's from: names a tool no tools: entry declares, and no mcp: server offers it
+      // either, so nothing in the served set ever resolves it.
+      private const string UndeclaredToolYaml =
+          $$"""
         apiVersion: agentcore/v1
-        name: broken-tool-reference
         state:
           orderStatus: { type: string, writer: tool, from: lookup_order.status }
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
         {{MinimalProviders}}
+        entries:
+          main:
+            agent: only
         """;
 
     // An agent's tools: names an id nothing serves. Unlike UndeclaredToolYaml, the fault sits in
@@ -229,11 +256,13 @@ public sealed class AddAgentCoreTests
     private const string UndeclaredAgentToolYaml =
         $$"""
         apiVersion: agentcore/v1
-        name: broken-agent-tool-reference
         agents:
           items:
             - { id: only, instructions: "I answer everything", tools: [ no_such_tool ] }
         {{MinimalProviders}}
+        entries:
+          main:
+            agent: only
         """;
 
     // Declares no tools: at all. 'discovered_only' is served only by a fake IToolSource the test
@@ -242,11 +271,13 @@ public sealed class AddAgentCoreTests
     private const string DiscoveredOnlyToolYaml =
         $$"""
         apiVersion: agentcore/v1
-        name: discovered-only-tool
         agents:
           items:
             - { id: only, instructions: "I answer everything", tools: [ discovered_only ] }
         {{MinimalProviders}}
+        entries:
+          main:
+            agent: only
         """;
 
     // A kind: agent tool reaches no source at all: the compiler builds it once the agent it names
@@ -256,764 +287,804 @@ public sealed class AddAgentCoreTests
     // found after every source has answered, so by then the source is open.
     private const string CollidingAgentToolYaml =
         $$"""
+          apiVersion: agentcore/v1
+          tools:
+            - id: shared_id
+              kind: agent
+              agent: specialist
+              description: Ask the specialist one product question.
+              parameters:
+                type: object
+                properties: { question: { type: string } }
+                required: [ question ]
+          agents:
+            items:
+              - { id: front, instructions: "the caller talks to me", tools: [ shared_id ] }
+              - { id: specialist, instructions: "I answer product questions" }
+          {{MinimalProviders}}
+          entries:
+            main:
+              policy:
+                initial: talk
+                stages:
+                  - { id: talk, agent: front, terminal: true }
+          """;
+
+      private const string DelegatingAgentToolYaml =
+          $$"""
+          apiVersion: agentcore/v1
+          tools:
+            - id: ask_specialist
+              kind: agent
+              agent: specialist
+              description: Ask the specialist one product question.
+              parameters:
+                type: object
+                properties: { question: { type: string } }
+                required: [ question ]
+          agents:
+            items:
+              - { id: front, instructions: "the caller talks to me", tools: [ ask_specialist ] }
+              - { id: specialist, instructions: "I answer product questions" }
+          {{MinimalProviders}}
+          entries:
+            main:
+              policy:
+                initial: talk
+                stages:
+                  - { id: talk, agent: front, terminal: true }
+          """;
+
+      // BrokenYaml's structural defect (an unreachable policy transition), plus an mcp: server whose
+      // command names a binary that does not exist. Decision 15's whole point is that the structural
+      // error below must surface without AgentCore ever trying to reach that server: a missing
+      // executable fails Process.Start synchronously, so if discovery ran first this would instead
+      // report the MCP failure. See AddAgentCore_TheStructuralFaultSurfaces_BeforeMcpIsEverAsked.
+      private const string StructuralFaultPlusUnreachableMcpYaml =
+          $$"""
+          apiVersion: agentcore/v1
+          mcp:
+            - id: bogus-server
+              transport: stdio
+              command: ["/definitely-not-a-real-binary-agentcore-task5-test"]
+              allow: ["*"]
+          agents:
+            items:
+              - { id: only, instructions: "I answer everything" }
+          {{MinimalProviders}}
+          entries:
+            main:
+              policy:
+                initial: start
+                stages:
+                  - { id: start, agent: only, to: [ { stage: nowhere } ] }
+          """;
+
+      // -------------------------------------------------------------------------------------------
+      // What it registers.
+      // -------------------------------------------------------------------------------------------
+      [Fact]
+      public async Task AddAgentCore_RegistersTheCompiledAgentAsAProcessSingleton()
+      {
+          using var provider = await BuildAsync(OneAgentYaml);
+
+          var first = provider.GetRequiredService<IReadOnlyDictionary<string, CompiledAgent>>()["main"];
+          var second = provider.GetRequiredService<IReadOnlyDictionary<string, CompiledAgent>>()["main"];
+
+          Assert.Same(first, second);
+          Assert.Equal("main", first.Name);
+
+          // The registry compiled once, and every call shares that one result.
+          Assert.Equal(1, provider.GetRequiredService<CompiledAgentRegistry>().CompileCount);
+      }
+
+      [Fact]
+      public async Task AddAgentCore_RegistersOneSessionFactoryThatBuildsANewSessionForEachCall()
+      {
+          using var provider = await BuildAsync(OneAgentYaml);
+          var factory = provider.GetRequiredService<EntryRegistry>().ForFactory("main");
+
+          Assert.Same(factory, provider.GetRequiredService<EntryRegistry>().ForFactory("main"));
+
+          // A CallSession belongs to one call, so it is not a singleton and the container holds none.
+          var first = factory.Create();
+          var second = factory.Create();
+          Assert.NotSame(first, second);
+          Assert.NotEqual(first.CallId, second.CallId);
+      }
+
+      [Fact]
+      public async Task AddAgentCore_RegistersTheKnowledgePortTheHostBound()
+      {
+          FacetCapablePort port = new();
+
+          using var provider = await BuildAsync(
+              OneAgentYaml, options => options.UseKnowledgeRetrieval(_ => port));
+
+          Assert.Same(port, provider.GetRequiredService<IKnowledgeRetrievalPort>());
+      }
+
+      [Fact]
+      public async Task AddAgentCore_TheResolvedPortAnswersWhatElseItServes()
+      {
+          // What a consumer actually does with it: resolve the one port, then ask that port for the
+          // capability it needs. Registering each capability separately would hand out a second
+          // object for the same store, and a store that serves none would have to be registered as
+          // null anyway.
+          FacetCapablePort port = new();
+
+          using var provider = await BuildAsync(
+              OneAgentYaml, options => options.UseKnowledgeRetrieval(_ => port));
+
+          var knowledge = provider.GetRequiredService<IKnowledgeRetrievalPort>();
+
+          Assert.Same(port, knowledge.GetService<IKnowledgeFacetReadPort>());
+      }
+
+      [Fact]
+      public async Task AddAgentCore_ADocumentThatReadsNoKnowledge_ResolvesNoPort()
+      {
+          using var provider = await BuildAsync(OneAgentYaml);
+
+          Assert.Null(provider.GetService<IKnowledgeRetrievalPort>());
+      }
+
+      [Fact]
+      public async Task AddAgentCore_RegistersTheAgentShimAsAProcessSingleton()
+      {
+          using var provider = await BuildAsync(OneAgentYaml);
+
+          var agent = provider.GetRequiredService<EntryRegistry>().ForAgent("main");
+
+          Assert.Same(agent, provider.GetRequiredService<EntryRegistry>().ForAgent("main"));
+          Assert.Equal("main", agent.Name);
+
+          // One session of the shim is one call, drawn from the same factory the rest of the host
+          // uses, so the two seams describe the same calls.
+          var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+          Assert.NotNull(session.GetService<CallSession>());
+      }
+
+      [Fact]
+      public async Task AddAgentCore_RegistersTheInMemorySessionsByDefault()
+      {
+          using var provider = await BuildAsync(OneAgentYaml);
+
+          var sessions = provider.GetRequiredService<EntryRegistry>().ForSessions("main");
+
+          Assert.IsType<InMemoryCallSessions>(sessions);
+          Assert.Same(sessions, provider.GetRequiredService<EntryRegistry>().ForSessions("main"));
+      }
+
+      [Fact]
+      public async Task AddAgentCore_RunsTheIdleSweepForTheDefaultSessions()
+      {
+          // Expiry needs something to drive it. Without this the idle timeout never fires and the
+          // text path holds every call a caller walked away from for the life of the process.
+          using var provider = await BuildAsync(OneAgentYaml);
+
+          Assert.Contains(
+              provider.GetServices<IHostedService>(),
+              service => service is CallSessionSweeper);
+      }
+
+      /// <summary>
+      /// The one thing deferring the boot to host start has to guarantee: a service the document
+      /// produced cannot be read before the document has been read. A provider nobody started answers
+      /// with a refusal that names the fix, and never with a half-built graph or a null.
+      /// </summary>
+      [Fact]
+      public void AServiceReadFromAProviderNobodyStarted_RefusesAndSaysWhatToDo()
+      {
+          ServiceCollection services = new();
+          ConfigureServices(services, OneAgentYaml, null);
+
+          using var provider = services.BuildServiceProvider();
+
+          var failure = Assert.Throws<InvalidOperationException>(
+              provider.GetRequiredService<IReadOnlyDictionary<string, CompiledAgent>>);
+
+          Assert.Contains("has not booted", failure.Message, StringComparison.Ordinal);
+          Assert.Contains("StartAsync", failure.Message, StringComparison.Ordinal);
+      }
+
+      [Fact]
+      public async Task AddAgentCore_UsesTheSessionsTheHostBound()
+      {
+          CountingCallSessions mine = new();
+
+          using var provider = await BuildAsync(
+              OneAgentYaml, options => options.UseCallSessions((_, _) => mine));
+
+          // A distributed store replaces the default one, and the default steps aside.
+          Assert.Same(mine, provider.GetRequiredService<EntryRegistry>().ForSessions("main"));
+      }
+
+      [Fact]
+      public async Task AddAgentCore_OpensOneStorePerEntry()
+      {
+          // A vendor call id arriving on two entries opens two isolated calls. That holds only when
+          // each entry has its own store, so the host's opener runs once per entry and is told which.
+          List<string> opened = [];
+
+          using var provider = await BuildAsync(TwoEntryYaml, options => options.UseCallSessions(
+              (entry, factory) =>
+              {
+                  opened.Add(entry);
+                  return new InMemoryCallSessions(
+                      factory, InMemoryCallSessions.DefaultIdleTimeout, TimeProvider.System);
+              }));
+
+          var registry = provider.GetRequiredService<ICallSessionRegistry>();
+
+          Assert.Equal(["main", "other"], opened.Order(StringComparer.Ordinal));
+          Assert.NotSame(registry.ForSessions("main"), registry.ForSessions("other"));
+      }
+
+      [Fact]
+      public async Task AddAgentCore_RegistersTheSessionRegistryAsAPublicPort()
+      {
+          // A consumer reaches an entry's store through the port, never through the internal
+          // registry, and never through a bare ICallSessions: no store spans the whole host.
+          using var provider = await BuildAsync(OneAgentYaml);
+
+          var registry = provider.GetRequiredService<ICallSessionRegistry>();
+
+          Assert.Equal(["main"], registry.Entries);
+          Assert.Same(
+              provider.GetRequiredService<EntryRegistry>().ForSessions("main"),
+              registry.ForSessions("main"));
+          Assert.Null(provider.GetService<ICallSessions>());
+
+          var failure = Assert.Throws<InvalidOperationException>(() => registry.ForSessions("missing"));
+          Assert.Contains("main", failure.Message, StringComparison.Ordinal);
+      }
+
+      // -------------------------------------------------------------------------------------------
+      // Telemetry shuts down with the host. The container owns the session, so its disposal is the
+      // flush — which is the one path a start that failed also reaches.
+      // -------------------------------------------------------------------------------------------
+      [Fact]
+      public async Task AddAgentCore_RegistersTheTelemetrySessionTheDocumentNames()
+      {
+          var (host, adapter) = await BuildTelemetryHostAsync();
+
+          using (host)
+          {
+              await host.StartAsync(TestContext.Current.CancellationToken);
+
+              // A host that reads its own spans and metrics resolves this. Nothing in this library
+              // does, so only a test holds it to being there at all.
+              Assert.Same(adapter.Session, host.Services.GetRequiredService<ITelemetrySession>());
+          }
+      }
+
+      [Fact]
+      public async Task AddAgentCore_RegistersNoTelemetrySessionWhenTheHostBindsNoVendor()
+      {
+          using var provider = await BuildAsync(OneAgentYaml);
+
+          Assert.Null(provider.GetService<ITelemetrySession>());
+      }
+
+      [Fact]
+      public async Task AddAgentCore_FlushesTheTelemetrySessionWhenTheHostShutsDown()
+      {
+          var (host, adapter) = await BuildTelemetryHostAsync();
+
+          await host.StartAsync(TestContext.Current.CancellationToken);
+
+          Assert.Equal(0, adapter.Session.Flushes);
+
+          await host.StopAsync(TestContext.Current.CancellationToken);
+          host.Dispose();
+
+          Assert.Equal(1, adapter.Session.Flushes);
+      }
+
+      [Fact]
+      public async Task AddAgentCore_FlushesTheTelemetrySessionOnceWhenTheHostIsDisposedTwice()
+      {
+          var (host, adapter) = await BuildTelemetryHostAsync();
+
+          await host.StartAsync(TestContext.Current.CancellationToken);
+          await host.StopAsync(TestContext.Current.CancellationToken);
+
+          // An adapter's session is not required to survive being drained twice, so the second call
+          // has to be a no-op.
+          host.Dispose();
+          host.Dispose();
+
+          Assert.Equal(1, adapter.Session.Flushes);
+      }
+
+      // -------------------------------------------------------------------------------------------
+      // The audit chain shuts down with the host. An event is ACCEPTED when AppendAsync returns, so a
+      // stop that does not drain the queue loses every row still in it.
+      // -------------------------------------------------------------------------------------------
+      [Fact]
+      public async Task AddAgentCore_DrainsTheAuditQueueWhenTheHostShutsDown()
+      {
+          var (host, store) = await BuildAuditHostAsync();
+
+          await host.StartAsync(TestContext.Current.CancellationToken);
+
+          await host.Services
+              .GetRequiredService<IAuditSinkPort>()
+              .AppendAsync(AuditRow(1), TestContext.Current.CancellationToken);
+
+          await host.StopAsync(TestContext.Current.CancellationToken);
+          host.Dispose();
+
+          Assert.Equal(1, store.Written);
+      }
+
+      [Fact]
+      public async Task AddAgentCore_ClosesTheAuditStoreOnlyAfterTheQueueHasDrained()
+      {
+          var (host, store) = await BuildAuditHostAsync();
+
+          await host.StartAsync(TestContext.Current.CancellationToken);
+
+          await host.Services
+              .GetRequiredService<IAuditSinkPort>()
+              .AppendAsync(AuditRow(1), TestContext.Current.CancellationToken);
+
+          await host.StopAsync(TestContext.Current.CancellationToken);
+
+          // The container closes what it resolved before it closes the boot that still owns the store
+          // behind the queue. Closing that store first would hand the drain a store which can no
+          // longer accept the rows it already promised to keep.
+          host.Dispose();
+
+          Assert.True(store.Closed);
+          Assert.Equal(1, store.WrittenWhenClosed);
+      }
+
+      [Fact]
+      public async Task AddAgentCore_ClosesTheCallStoreWhenTheHostShutsDown()
+      {
+          RecordingCallStore store = new();
+          HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+          ConfigureServices(
+              builder.Services,
+              VendorTranscriptYaml,
+              options => options.UseCallStores(new TestCallStoreAdapter(store)));
+
+          IHost host = builder.Build();
+          await host.StartAsync(TestContext.Current.CancellationToken);
+          await host.StopAsync(TestContext.Current.CancellationToken);
+          host.Dispose();
+
+          Assert.True(store.Closed);
+      }
+
+      [Fact]
+      public async Task AddAgentCore_ClosesTheKnowledgePortWhenTheHostShutsDown()
+      {
+          // KnowledgeStartup.OpenAsync's result used to be discarded with `_ = await ...`, so a
+          // successful open -- a QdrantClient in production -- was never tracked against the boot and
+          // outlived host shutdown. This proves the port the adapter built is closed the same way the
+          // call store above is.
+          DisposeTrackingKnowledgeAdapter adapter = new();
+          HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+          ConfigureServices(
+              builder.Services,
+              VendorKnowledgeYaml,
+              options => options.UseKnowledgeStores(adapter));
+
+          IHost host = builder.Build();
+          await host.StartAsync(TestContext.Current.CancellationToken);
+
+          Assert.NotNull(adapter.Built);
+          Assert.False(adapter.Built.Closed);
+
+          await host.StopAsync(TestContext.Current.CancellationToken);
+          host.Dispose();
+
+          Assert.True(adapter.Built.Closed);
+      }
+
+      [Fact]
+      public async Task AHostRegisteredDisposableToolSource_IsClosedWhenTheHostShutsDown()
+      {
+          // Disposal happens once, when the container closes the boot that owns the source — the same
+          // route McpToolSource is closed through, proved here with no MCP server involved. The
+          // reference kept below is exactly the case that makes the risk small rather than zero:
+          // AddToolSource's factory could be called more than once by a host that keeps its own
+          // reference to what it returns, and closing it anyway costs little because the host was
+          // about to lose it either way.
+          DisposeTrackingToolSource source = new();
+          HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+          ConfigureServices(
+              builder.Services,
+              OneAgentYaml,
+              options => options.AddToolSource(_ => source));
+
+          IHost host = builder.Build();
+          await host.StartAsync(TestContext.Current.CancellationToken);
+
+          Assert.False(source.Disposed);
+
+          await host.StopAsync(TestContext.Current.CancellationToken);
+          host.Dispose();
+
+          Assert.True(source.Disposed);
+      }
+
+      // -------------------------------------------------------------------------------------------
+      // The document picks the vendor, and no code names one: the point of the adapter seam.
+      // -------------------------------------------------------------------------------------------
+      [Fact]
+      public async Task TheAdapterOverload_LetsTheDocumentPickTheVendorByItsKind()
+      {
+          // 'kind: openai' selects the adapter registered under that kind. The host lists what it
+          // supports, once, and the document decides which entry runs.
+          using var provider = await BuildAsync(OneAgentYaml, options => options.UseChatClients(
+              new FakeChatClientAdapter("openai", () => new FragmentingChatClient("routed")),
+              new FakeChatClientAdapter("anthropic", () => new FragmentingChatClient("wrong vendor"))));
+
+          var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create();
+          var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
+
+          Assert.Equal("routed", turn.ReplyText);
+      }
+
+      [Fact]
+      public async Task AKindNoRegisteredAdapterServes_FailsTheStartAndNamesBothSides()
+      {
+          var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(() => BuildAsync(
+              OtherVendorYaml,
+              options => options.UseChatClients(
+                  new FakeChatClientAdapter("openai", () => new FragmentingChatClient("hello")))));
+
+          // The message names the kind the document wrote and the kinds the host registers, so the
+          // reader knows which side to change.
+          Assert.Contains("anthropic", failure.Message, StringComparison.Ordinal);
+          Assert.Contains("'openai'", failure.Message, StringComparison.Ordinal);
+      }
+
+      [Fact]
+      public async Task AnAsyncSeam_BuildsItsFactoryWithNoBlockedThread()
+      {
+          using var provider = await BuildAsync(OneAgentYaml, options => options.UseChatClients(
+              async (startup, cancellationToken) =>
+              {
+                  await Task.Yield();
+                  return new RoutingChatClientFactory(new FragmentingChatClient("awaited"));
+              }));
+
+          var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create();
+          var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
+
+          Assert.Equal("awaited", turn.ReplyText);
+      }
+
+      [Fact]
+      public async Task AToolSource_SeesTheChatClientFactoryAlreadyBuilt()
+      {
+          // The seam that builds the factory only runs once, so a null capture here means the tools
+          // were built before it ran — exactly the ordering builtin tools depend on.
+          IChatClientFactory? builtFactory = null;
+          IChatClientFactory? seenWhenToolsWereBuilt = null;
+
+          using var provider = await BuildAsync(OneAgentYaml, options =>
+          {
+              options.UseChatClients((_, _) =>
+              {
+                  builtFactory = new RoutingChatClientFactory(new FragmentingChatClient("hello"));
+                  return ValueTask.FromResult(builtFactory);
+              });
+
+              options.AddToolSource(_ => new SpyToolSource(() => seenWhenToolsWereBuilt = builtFactory));
+          });
+
+          Assert.NotNull(provider.GetRequiredService<IReadOnlyDictionary<string, CompiledAgent>>()["main"]);
+          Assert.NotNull(seenWhenToolsWereBuilt);
+          Assert.Same(builtFactory, seenWhenToolsWereBuilt);
+      }
+
+      // -------------------------------------------------------------------------------------------
+      // The seams the host binds.
+      // -------------------------------------------------------------------------------------------
+      [Fact]
+      public async Task ABindingTool_ReachesTheDelegateTheHostRegistered()
+      {
+          using var provider = await BuildAsync(
+              BindingYaml,
+              options => options.Bind("CreateCase", (_, _) => ValueTask.FromResult<object?>(new JsonObject())));
+
+          var bindings = provider.GetRequiredService<ToolBindingRegistry>();
+
+          Assert.True(bindings.Contains("CreateCase"));
+          Assert.Equal(1, bindings.Count);
+      }
+
+      [Fact]
+      public async Task ABindingToolWithNoDelegate_FailsTheStartAndNamesTheBinding()
+      {
+          var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(() => BuildAsync(BindingYaml));
+
+          Assert.Contains("CreateCase", failure.Message, StringComparison.Ordinal);
+          Assert.Contains("did not register", failure.Message, StringComparison.Ordinal);
+      }
+
+      [Fact]
+      public async Task ASecretReference_ResolvesOnceAtStartup()
+      {
+          using HttpClient client = new();
+          MapSecretResolver resolver = new();
+          resolver.With("orders-api-key", "a-value-no-message-repeats");
+
+          using var provider = await BuildAsync(
+              SecretYaml,
+              options =>
+              {
+                  options.SecretResolver = resolver;
+                  options.AddToolSource(startup => new HttpToolSource(client, startup.Secrets));
+              });
+
+          var secrets = provider.GetRequiredService<ResolvedSecrets>();
+
+          Assert.True(secrets.Contains("orders-api-key"));
+
+          // A resolved set lands in a log line sooner or later, so it reports the count and never a value.
+          Assert.DoesNotContain("a-value-no-message-repeats", secrets.ToString(), StringComparison.Ordinal);
+      }
+
+      [Fact]
+      public async Task ASecretReferenceWithNoResolver_FailsTheStartAndNamesTheSecret()
+      {
+          using HttpClient client = new();
+
+          var failure = await Assert.ThrowsAsync<SecretResolutionException>(() => BuildAsync(
+              SecretYaml,
+              options => options.AddToolSource(startup => new HttpToolSource(client, startup.Secrets))));
+
+          Assert.Equal("orders-api-key", failure.SecretName);
+      }
+
+      // -------------------------------------------------------------------------------------------
+      // Row 4 of the compile table, through the only supported composition root.
+      // -------------------------------------------------------------------------------------------
+      [Fact]
+      public async Task AGuardedGraph_Starts()
+      {
+          using var provider = await BuildGuardedGraphAsync();
+
+          var compiled = provider.GetRequiredService<IReadOnlyDictionary<string, CompiledAgent>>()["main"];
+
+          // The document passes all eight checks and now compiles too. AddAgentCore binds the guard
+          // evaluator, so a guarded edge is reachable from here.
+          Assert.Equal(CompiledAgentShape.ExplicitGraph, compiled.Shape);
+          Assert.Equal("main", compiled.Name);
+      }
+
+      [Theory]
+      [InlineData(true, "ESCALATED", "HANDLED")]
+      [InlineData(false, "HANDLED", "ESCALATED")]
+      public async Task AGuardedGraph_TakesTheEdgeTheStateOfTheCallNames(bool escalate, string taken, string refused)
+      {
+          using var provider = await BuildGuardedGraphAsync();
+          var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create();
+          session.State.TryWrite("escalate", escalate);
+
+          var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
+
+          Assert.Contains(taken, turn.ReplyText, StringComparison.Ordinal);
+          Assert.DoesNotContain(refused, turn.ReplyText, StringComparison.Ordinal);
+      }
+
+      [Fact]
+      public async Task AGuardedGraph_KeepsTwoCallsApartWhenTheyRunAtTheSameTime()
+      {
+          using var provider = await BuildGuardedGraphAsync();
+          var sessions = provider.GetRequiredService<EntryRegistry>().ForFactory("main");
+          var token = TestContext.Current.CancellationToken;
+
+          var escalated = sessions.Create();
+          escalated.State.TryWrite("escalate", true);
+          var handled = sessions.Create();
+          handled.State.TryWrite("escalate", false);
+
+          // One compiled graph, two calls, two edges. Neither call reads the state of the other.
+          var turns = await Task.WhenAll(
+              escalated.RunTurnAsync("hello", token),
+              handled.RunTurnAsync("hello", token));
+
+          Assert.Contains("ESCALATED", turns[0].ReplyText, StringComparison.Ordinal);
+          Assert.Contains("HANDLED", turns[1].ReplyText, StringComparison.Ordinal);
+          Assert.Equal(1, provider.GetRequiredService<CompiledAgentRegistry>().CompileCount);
+      }
+
+      // -------------------------------------------------------------------------------------------
+      // The evaluation seam of D13. Triage row T18 defers the online path, so the rate is 0.
+      // -------------------------------------------------------------------------------------------
+      [Fact]
+      public async Task AddAgentCore_RegistersTheEvaluationSeamWithTheOnlinePathClosed()
+      {
+          using var provider = await BuildAsync(OneAgentYaml);
+
+          var registry = provider.GetRequiredService<EvaluatorRegistry>();
+          var sampler = provider.GetRequiredService<EvaluationSampler>();
+
+          // D13 names fault_code, and it calls no model, so it is the one evaluator that is safe by
+          // default.
+          Assert.True(registry.Contains("fault_code"));
+
+          // T18: a judge must never block a turn, and the offline gate has not proved the evaluators
+          // yet. A rate of 0 draws no number and calls nothing.
+          Assert.Equal(0, sampler.Rate);
+          Assert.False(sampler.ShouldSample());
+
+          Assert.IsType<InMemoryEvaluationScorePublisher>(provider.GetRequiredService<IEvaluationScorePublisher>());
+      }
+
+      [Fact]
+      public async Task AddAgentCore_RegistersNoModeratorWhenTheHostBindsNoVendor()
+      {
+          using var provider = await BuildAsync(OneAgentYaml);
+
+          var registry = provider.GetRequiredService<EvaluatorRegistry>();
+
+          // A host that registers no moderation vendor moderates nothing, and every turn reaches the
+          // model. Moderation needs a vendor account, and a library that refused to start without one
+          // could not be used in a test.
+          Assert.False(registry.Contains(PromptModerator.ModerationEvaluatorName));
+          Assert.Null(PromptModerator.FromRegistry(registry));
+      }
+
+      [Fact]
+      public async Task AddAgentCore_BuildsNoModeratorWhenTheDocumentNamesNoProvider()
+      {
+          var adapter = new FakeModerationAdapter("test", new AlwaysFlagsEvaluator());
+
+          // The vendor is registered and the document names none, so the adapter is never asked to
+          // build anything. Registering a vendor costs nothing until a document names it.
+          using var provider = await BuildAsync(OneAgentYaml, options => options.UseModeration(adapter));
+
+          Assert.False(provider.GetRequiredService<EvaluatorRegistry>()
+              .Contains(PromptModerator.ModerationEvaluatorName));
+          Assert.Equal(0, adapter.Builds);
+      }
+
+      [Fact]
+      public async Task AddAgentCore_BuildsTheModerationVendorTheDocumentNames()
+      {
+          var adapter = new FakeModerationAdapter("test", new AlwaysFlagsEvaluator());
+
+          using var provider = await BuildAsync(ModeratedYaml, options => options.UseModeration(adapter));
+
+          var registry = provider.GetRequiredService<EvaluatorRegistry>();
+
+          // The same object serves the turn loop and the offline golden set, which is what D13 means
+          // by an evaluator written once and used twice.
+          Assert.Equal(1, adapter.Builds);
+          Assert.True(registry.Contains(PromptModerator.ModerationEvaluatorName));
+          Assert.True(registry.Contains("fault_code"));
+      }
+
+      [Fact]
+      public async Task AddAgentCore_MatchesTheModerationKindWithoutRegardToCase()
+      {
+          // A vendor name is written by a human, exactly as the knowledge kinds are matched.
+          var adapter = new FakeModerationAdapter("TEST", new AlwaysFlagsEvaluator());
+
+          using var provider = await BuildAsync(ModeratedYaml, options => options.UseModeration(adapter));
+
+          Assert.Equal(1, adapter.Builds);
+      }
+
+      [Fact]
+      public async Task AddAgentCore_FailsWhenTheDocumentNamesAModerationKindThisHostDoesNotRegister()
+      {
+          var error = await Assert.ThrowsAsync<ConfigurationLoadException>(
+              async () => await BuildAsync(
+                  ModeratedYaml,
+                  options => options.UseModeration(new FakeModerationAdapter("other", new AlwaysFlagsEvaluator()))));
+
+          // The message names what this host does register, so the fix is obvious from the failure.
+          Assert.Contains("test", error.Message, StringComparison.Ordinal);
+          Assert.Contains("'other'", error.Message, StringComparison.Ordinal);
+      }
+
+      [Fact]
+      public async Task AddAgentCore_FailsWhenTwoModerationAdaptersAnswerToOneKind()
+      {
+          var error = await Assert.ThrowsAsync<ConfigurationLoadException>(
+              async () => await BuildAsync(
+                  ModeratedYaml,
+                  options => options.UseModeration(
+                      new FakeModerationAdapter("test", new AlwaysFlagsEvaluator()),
+                      new FakeModerationAdapter("test", new AlwaysFlagsEvaluator()))));
+
+          // Two adapters for one kind means the document silently picked whichever was registered
+          // first, and every seam refuses that.
+          Assert.Contains("two adapters", error.Message, StringComparison.Ordinal);
+
+          // And the noun is this seam's own. VendorSeam.Plural exists to keep four seams' wording
+          // through one shared selector, so moderation's "endpoints" is pinned here — without this,
+          // the argument could be dropped and nothing would fail.
+          Assert.Contains("endpoints", error.Message, StringComparison.Ordinal);
+      }
+
+      [Fact]
+      public async Task AddAgentCore_RefusesATurnTheDocumentsModerationVendorFlags()
+      {
+          using var provider = await BuildAsync(
+              ModeratedYaml,
+              options => options.UseModeration(new FakeModerationAdapter("test", new AlwaysFlagsEvaluator())));
+
+          var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("call-1");
+          var result = await session.RunTurnAsync("...", TestContext.Current.CancellationToken);
+
+          // The wiring reaches the turn loop, and not only the registry.
+          Assert.Equal(AgentCoreConfiguration.DefaultRefusalReply, result.ReplyText);
+      }
+
+      [Fact]
+      public async Task AddAgentCore_TakesTheSampleRateTheDocumentSets()
+      {
+          using var provider = await BuildAsync(TunedYaml);
+
+          var sampler = provider.GetRequiredService<EvaluationSampler>();
+
+          // T18: the rate comes from evaluation.sampleRate, and the composition root reads it.
+          Assert.Equal(1, sampler.Rate);
+          Assert.True(sampler.ShouldSample());
+      }
+
+      // -------------------------------------------------------------------------------------------
+      // The spoken fallback of section 8.7, from the document to the caller.
+      // -------------------------------------------------------------------------------------------
+      [Fact]
+      public async Task AQuietTurn_SpeaksTheFallbackTheDocumentNames()
+      {
+          using var provider = await BuildAsync(TunedYaml, options => options.UseChatClients(
+              _ => new RoutingChatClientFactory(new FragmentingChatClient(string.Empty))));
+          var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create();
+
+          var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
+
+          Assert.Equal("One moment please. I will try that again.", turn.ReplyText);
+          Assert.NotEqual(CallSession.FallbackReply, turn.ReplyText);
+      }
+
+      [Fact]
+      public async Task AQuietTurn_SpeaksTheDefaultFallbackWhenTheDocumentNamesNone()
+      {
+          using var provider = await BuildAsync(OneAgentYaml, options => options.UseChatClients(
+              _ => new RoutingChatClientFactory(new FragmentingChatClient(string.Empty))));
+          var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create();
+
+          var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
+
+          Assert.Equal(CallSession.FallbackReply, turn.ReplyText);
+      }
+
+      [Fact]
+      public async Task AddAgentCore_KeepsAnEvaluationServiceTheHostRegisteredFirst()
+      {
+          EvaluationSampler mine = new(rate: 1);
+          HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+          builder.Services.AddSingleton(mine);
+          ConfigureServices(builder.Services, OneAgentYaml, null);
+
+          using var provider = await StartAsync(builder.Build());
+
+          // The in-memory publisher grows without a bound, and a long-running host replaces it. Every
+          // registration therefore steps aside, exactly as the session store does.
+          Assert.Same(mine, provider.GetRequiredService<EvaluationSampler>());
+      }
+
+      // -------------------------------------------------------------------------------------------
+      // The call titler: one model, named by the document like every other model.
+      // -------------------------------------------------------------------------------------------
+
+      // The same agent, and a document that gives the titler a model of its own.
+      private const string TitlerYaml =
+          $$"""
         apiVersion: agentcore/v1
-        name: colliding
-        tools:
-          - id: shared_id
-            kind: agent
-            agent: specialist
-            description: Ask the specialist one product question.
-            parameters:
-              type: object
-              properties: { question: { type: string } }
-              required: [ question ]
-        agents:
-          items:
-            - { id: front, instructions: "the caller talks to me", tools: [ shared_id ] }
-            - { id: specialist, instructions: "I answer product questions" }
-        policy:
-          initial: talk
-          stages:
-            - { id: talk, agent: front, terminal: true }
-        {{MinimalProviders}}
-        """;
-
-    private const string DelegatingAgentToolYaml =
-        $$"""
-        apiVersion: agentcore/v1
-        name: delegating
-        tools:
-          - id: ask_specialist
-            kind: agent
-            agent: specialist
-            description: Ask the specialist one product question.
-            parameters:
-              type: object
-              properties: { question: { type: string } }
-              required: [ question ]
-        agents:
-          items:
-            - { id: front, instructions: "the caller talks to me", tools: [ ask_specialist ] }
-            - { id: specialist, instructions: "I answer product questions" }
-        policy:
-          initial: talk
-          stages:
-            - { id: talk, agent: front, terminal: true }
-        {{MinimalProviders}}
-        """;
-
-    // BrokenYaml's structural defect (an unreachable policy transition), plus an mcp: server whose
-    // command names a binary that does not exist. Decision 15's whole point is that the structural
-    // error below must surface without AgentCore ever trying to reach that server: a missing
-    // executable fails Process.Start synchronously, so if discovery ran first this would instead
-    // report the MCP failure. See AddAgentCore_TheStructuralFaultSurfaces_BeforeMcpIsEverAsked.
-    private const string StructuralFaultPlusUnreachableMcpYaml =
-        $$"""
-        apiVersion: agentcore/v1
-        name: broken-plus-mcp
-        mcp:
-          - id: bogus-server
-            transport: stdio
-            command: ["/definitely-not-a-real-binary-agentcore-task5-test"]
-            allow: ["*"]
-        agents:
-          items:
-            - { id: only, instructions: "I answer everything" }
-        policy:
-          initial: start
-          stages:
-            - { id: start, agent: only, to: [ { stage: nowhere } ] }
-        {{MinimalProviders}}
-        """;
-
-    // -------------------------------------------------------------------------------------------
-    // What it registers.
-    // -------------------------------------------------------------------------------------------
-    [Fact]
-    public async Task AddAgentCore_RegistersTheCompiledAgentAsAProcessSingleton()
-    {
-        using var provider = await BuildAsync(OneAgentYaml);
-
-        var first = provider.GetRequiredService<CompiledAgent>();
-        var second = provider.GetRequiredService<CompiledAgent>();
-
-        Assert.Same(first, second);
-        Assert.Equal("composed", first.Name);
-
-        // The registry compiled once, and every call shares that one result.
-        Assert.Equal(1, provider.GetRequiredService<CompiledAgentRegistry>().CompileCount);
-    }
-
-    [Fact]
-    public async Task AddAgentCore_RegistersOneSessionFactoryThatBuildsANewSessionForEachCall()
-    {
-        using var provider = await BuildAsync(OneAgentYaml);
-        var factory = provider.GetRequiredService<ICallSessionFactory>();
-
-        Assert.Same(factory, provider.GetRequiredService<ICallSessionFactory>());
-
-        // A CallSession belongs to one call, so it is not a singleton and the container holds none.
-        var first = factory.Create();
-        var second = factory.Create();
-        Assert.NotSame(first, second);
-        Assert.NotEqual(first.CallId, second.CallId);
-    }
-
-    [Fact]
-    public async Task AddAgentCore_RegistersTheKnowledgePortTheHostBound()
-    {
-        FacetCapablePort port = new();
-
-        using var provider = await BuildAsync(
-            OneAgentYaml, options => options.UseKnowledgeRetrieval(_ => port));
-
-        Assert.Same(port, provider.GetRequiredService<IKnowledgeRetrievalPort>());
-    }
-
-    [Fact]
-    public async Task AddAgentCore_TheResolvedPortAnswersWhatElseItServes()
-    {
-        // What a consumer actually does with it: resolve the one port, then ask that port for the
-        // capability it needs. Registering each capability separately would hand out a second
-        // object for the same store, and a store that serves none would have to be registered as
-        // null anyway.
-        FacetCapablePort port = new();
-
-        using var provider = await BuildAsync(
-            OneAgentYaml, options => options.UseKnowledgeRetrieval(_ => port));
-
-        var knowledge = provider.GetRequiredService<IKnowledgeRetrievalPort>();
-
-        Assert.Same(port, knowledge.GetService<IKnowledgeFacetReadPort>());
-    }
-
-    [Fact]
-    public async Task AddAgentCore_ADocumentThatReadsNoKnowledge_ResolvesNoPort()
-    {
-        using var provider = await BuildAsync(OneAgentYaml);
-
-        Assert.Null(provider.GetService<IKnowledgeRetrievalPort>());
-    }
-
-    [Fact]
-    public async Task AddAgentCore_RegistersTheAgentShimAsAProcessSingleton()
-    {
-        using var provider = await BuildAsync(OneAgentYaml);
-
-        var agent = provider.GetRequiredService<AgentCoreAgent>();
-
-        Assert.Same(agent, provider.GetRequiredService<AgentCoreAgent>());
-        Assert.Equal("composed", agent.Name);
-
-        // One session of the shim is one call, drawn from the same factory the rest of the host
-        // uses, so the two seams describe the same calls.
-        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
-        Assert.NotNull(session.GetService<CallSession>());
-    }
-
-    [Fact]
-    public async Task AddAgentCore_RegistersTheInMemorySessionsByDefault()
-    {
-        using var provider = await BuildAsync(OneAgentYaml);
-
-        var sessions = provider.GetRequiredService<ICallSessions>();
-
-        Assert.IsType<InMemoryCallSessions>(sessions);
-        Assert.Same(sessions, provider.GetRequiredService<ICallSessions>());
-    }
-
-    [Fact]
-    public async Task AddAgentCore_RunsTheIdleSweepForTheDefaultSessions()
-    {
-        // Expiry needs something to drive it. Without this the idle timeout never fires and the
-        // text path holds every call a caller walked away from for the life of the process.
-        using var provider = await BuildAsync(OneAgentYaml);
-
-        Assert.Contains(
-            provider.GetServices<IHostedService>(),
-            service => service is CallSessionSweeper);
-    }
-
-    /// <summary>
-    /// The one thing deferring the boot to host start has to guarantee: a service the document
-    /// produced cannot be read before the document has been read. A provider nobody started answers
-    /// with a refusal that names the fix, and never with a half-built graph or a null.
-    /// </summary>
-    [Fact]
-    public void AServiceReadFromAProviderNobodyStarted_RefusesAndSaysWhatToDo()
-    {
-        ServiceCollection services = new();
-        ConfigureServices(services, OneAgentYaml, null);
-
-        using var provider = services.BuildServiceProvider();
-
-        var failure = Assert.Throws<InvalidOperationException>(
-            provider.GetRequiredService<CompiledAgent>);
-
-        Assert.Contains("has not booted", failure.Message, StringComparison.Ordinal);
-        Assert.Contains("StartAsync", failure.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task AddAgentCore_KeepsSessionsTheHostRegisteredFirst()
-    {
-        CountingCallSessions mine = new();
-        HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
-        builder.Services.AddSingleton<ICallSessions>(mine);
-        ConfigureServices(builder.Services, OneAgentYaml, null);
-
-        using var provider = await StartAsync(builder.Build());
-
-        // A distributed store replaces the default one, and the default steps aside.
-        Assert.Same(mine, provider.GetRequiredService<ICallSessions>());
-    }
-
-    // -------------------------------------------------------------------------------------------
-    // Telemetry shuts down with the host. The container owns the session, so its disposal is the
-    // flush — which is the one path a start that failed also reaches.
-    // -------------------------------------------------------------------------------------------
-    [Fact]
-    public async Task AddAgentCore_RegistersTheTelemetrySessionTheDocumentNames()
-    {
-        var (host, adapter) = await BuildTelemetryHostAsync();
-
-        using (host)
-        {
-            await host.StartAsync(TestContext.Current.CancellationToken);
-
-            // A host that reads its own spans and metrics resolves this. Nothing in this library
-            // does, so only a test holds it to being there at all.
-            Assert.Same(adapter.Session, host.Services.GetRequiredService<ITelemetrySession>());
-        }
-    }
-
-    [Fact]
-    public async Task AddAgentCore_RegistersNoTelemetrySessionWhenTheHostBindsNoVendor()
-    {
-        using var provider = await BuildAsync(OneAgentYaml);
-
-        Assert.Null(provider.GetService<ITelemetrySession>());
-    }
-
-    [Fact]
-    public async Task AddAgentCore_FlushesTheTelemetrySessionWhenTheHostShutsDown()
-    {
-        var (host, adapter) = await BuildTelemetryHostAsync();
-
-        await host.StartAsync(TestContext.Current.CancellationToken);
-
-        Assert.Equal(0, adapter.Session.Flushes);
-
-        await host.StopAsync(TestContext.Current.CancellationToken);
-        host.Dispose();
-
-        Assert.Equal(1, adapter.Session.Flushes);
-    }
-
-    [Fact]
-    public async Task AddAgentCore_FlushesTheTelemetrySessionOnceWhenTheHostIsDisposedTwice()
-    {
-        var (host, adapter) = await BuildTelemetryHostAsync();
-
-        await host.StartAsync(TestContext.Current.CancellationToken);
-        await host.StopAsync(TestContext.Current.CancellationToken);
-
-        // An adapter's session is not required to survive being drained twice, so the second call
-        // has to be a no-op.
-        host.Dispose();
-        host.Dispose();
-
-        Assert.Equal(1, adapter.Session.Flushes);
-    }
-
-    // -------------------------------------------------------------------------------------------
-    // The audit chain shuts down with the host. An event is ACCEPTED when AppendAsync returns, so a
-    // stop that does not drain the queue loses every row still in it.
-    // -------------------------------------------------------------------------------------------
-    [Fact]
-    public async Task AddAgentCore_DrainsTheAuditQueueWhenTheHostShutsDown()
-    {
-        var (host, store) = await BuildAuditHostAsync();
-
-        await host.StartAsync(TestContext.Current.CancellationToken);
-
-        await host.Services
-            .GetRequiredService<IAuditSinkPort>()
-            .AppendAsync(AuditRow(1), TestContext.Current.CancellationToken);
-
-        await host.StopAsync(TestContext.Current.CancellationToken);
-        host.Dispose();
-
-        Assert.Equal(1, store.Written);
-    }
-
-    [Fact]
-    public async Task AddAgentCore_ClosesTheAuditStoreOnlyAfterTheQueueHasDrained()
-    {
-        var (host, store) = await BuildAuditHostAsync();
-
-        await host.StartAsync(TestContext.Current.CancellationToken);
-
-        await host.Services
-            .GetRequiredService<IAuditSinkPort>()
-            .AppendAsync(AuditRow(1), TestContext.Current.CancellationToken);
-
-        await host.StopAsync(TestContext.Current.CancellationToken);
-
-        // The container closes what it resolved before it closes the boot that still owns the store
-        // behind the queue. Closing that store first would hand the drain a store which can no
-        // longer accept the rows it already promised to keep.
-        host.Dispose();
-
-        Assert.True(store.Closed);
-        Assert.Equal(1, store.WrittenWhenClosed);
-    }
-
-    [Fact]
-    public async Task AddAgentCore_ClosesTheCallStoreWhenTheHostShutsDown()
-    {
-        RecordingCallStore store = new();
-        HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
-        ConfigureServices(
-            builder.Services,
-            VendorTranscriptYaml,
-            options => options.UseCallStores(new TestCallStoreAdapter(store)));
-
-        IHost host = builder.Build();
-        await host.StartAsync(TestContext.Current.CancellationToken);
-        await host.StopAsync(TestContext.Current.CancellationToken);
-        host.Dispose();
-
-        Assert.True(store.Closed);
-    }
-
-    [Fact]
-    public async Task AddAgentCore_ClosesTheKnowledgePortWhenTheHostShutsDown()
-    {
-        // KnowledgeStartup.OpenAsync's result used to be discarded with `_ = await ...`, so a
-        // successful open -- a QdrantClient in production -- was never tracked against the boot and
-        // outlived host shutdown. This proves the port the adapter built is closed the same way the
-        // call store above is.
-        DisposeTrackingKnowledgeAdapter adapter = new();
-        HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
-        ConfigureServices(
-            builder.Services,
-            VendorKnowledgeYaml,
-            options => options.UseKnowledgeStores(adapter));
-
-        IHost host = builder.Build();
-        await host.StartAsync(TestContext.Current.CancellationToken);
-
-        Assert.NotNull(adapter.Built);
-        Assert.False(adapter.Built.Closed);
-
-        await host.StopAsync(TestContext.Current.CancellationToken);
-        host.Dispose();
-
-        Assert.True(adapter.Built.Closed);
-    }
-
-    [Fact]
-    public async Task AHostRegisteredDisposableToolSource_IsClosedWhenTheHostShutsDown()
-    {
-        // Disposal happens once, when the container closes the boot that owns the source — the same
-        // route McpToolSource is closed through, proved here with no MCP server involved. The
-        // reference kept below is exactly the case that makes the risk small rather than zero:
-        // AddToolSource's factory could be called more than once by a host that keeps its own
-        // reference to what it returns, and closing it anyway costs little because the host was
-        // about to lose it either way.
-        DisposeTrackingToolSource source = new();
-        HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
-        ConfigureServices(
-            builder.Services,
-            OneAgentYaml,
-            options => options.AddToolSource(_ => source));
-
-        IHost host = builder.Build();
-        await host.StartAsync(TestContext.Current.CancellationToken);
-
-        Assert.False(source.Disposed);
-
-        await host.StopAsync(TestContext.Current.CancellationToken);
-        host.Dispose();
-
-        Assert.True(source.Disposed);
-    }
-
-    // -------------------------------------------------------------------------------------------
-    // The document picks the vendor, and no code names one: the point of the adapter seam.
-    // -------------------------------------------------------------------------------------------
-    [Fact]
-    public async Task TheAdapterOverload_LetsTheDocumentPickTheVendorByItsKind()
-    {
-        // 'kind: openai' selects the adapter registered under that kind. The host lists what it
-        // supports, once, and the document decides which entry runs.
-        using var provider = await BuildAsync(OneAgentYaml, options => options.UseChatClients(
-            new FakeChatClientAdapter("openai", () => new FragmentingChatClient("routed")),
-            new FakeChatClientAdapter("anthropic", () => new FragmentingChatClient("wrong vendor"))));
-
-        var session = provider.GetRequiredService<ICallSessionFactory>().Create();
-        var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
-
-        Assert.Equal("routed", turn.ReplyText);
-    }
-
-    [Fact]
-    public async Task AKindNoRegisteredAdapterServes_FailsTheStartAndNamesBothSides()
-    {
-        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(() => BuildAsync(
-            OtherVendorYaml,
-            options => options.UseChatClients(
-                new FakeChatClientAdapter("openai", () => new FragmentingChatClient("hello")))));
-
-        // The message names the kind the document wrote and the kinds the host registers, so the
-        // reader knows which side to change.
-        Assert.Contains("anthropic", failure.Message, StringComparison.Ordinal);
-        Assert.Contains("'openai'", failure.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task AnAsyncSeam_BuildsItsFactoryWithNoBlockedThread()
-    {
-        using var provider = await BuildAsync(OneAgentYaml, options => options.UseChatClients(
-            async (startup, cancellationToken) =>
-            {
-                await Task.Yield();
-                return new RoutingChatClientFactory(new FragmentingChatClient("awaited"));
-            }));
-
-        var session = provider.GetRequiredService<ICallSessionFactory>().Create();
-        var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
-
-        Assert.Equal("awaited", turn.ReplyText);
-    }
-
-    [Fact]
-    public async Task AToolSource_SeesTheChatClientFactoryAlreadyBuilt()
-    {
-        // The seam that builds the factory only runs once, so a null capture here means the tools
-        // were built before it ran — exactly the ordering ui.draw depends on.
-        IChatClientFactory? builtFactory = null;
-        IChatClientFactory? seenWhenToolsWereBuilt = null;
-
-        using var provider = await BuildAsync(OneAgentYaml, options =>
-        {
-            options.UseChatClients((_, _) =>
-            {
-                builtFactory = new RoutingChatClientFactory(new FragmentingChatClient("hello"));
-                return ValueTask.FromResult(builtFactory);
-            });
-
-            options.AddToolSource(_ => new SpyToolSource(() => seenWhenToolsWereBuilt = builtFactory));
-        });
-
-        Assert.NotNull(provider.GetRequiredService<CompiledAgent>());
-        Assert.NotNull(seenWhenToolsWereBuilt);
-        Assert.Same(builtFactory, seenWhenToolsWereBuilt);
-    }
-
-    // -------------------------------------------------------------------------------------------
-    // The seams the host binds.
-    // -------------------------------------------------------------------------------------------
-    [Fact]
-    public async Task ABindingTool_ReachesTheDelegateTheHostRegistered()
-    {
-        using var provider = await BuildAsync(
-            BindingYaml,
-            options => options.Bind("CreateCase", (_, _) => ValueTask.FromResult<object?>(new JsonObject())));
-
-        var bindings = provider.GetRequiredService<ToolBindingRegistry>();
-
-        Assert.True(bindings.Contains("CreateCase"));
-        Assert.Equal(1, bindings.Count);
-    }
-
-    [Fact]
-    public async Task ABindingToolWithNoDelegate_FailsTheStartAndNamesTheBinding()
-    {
-        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(() => BuildAsync(BindingYaml));
-
-        Assert.Contains("CreateCase", failure.Message, StringComparison.Ordinal);
-        Assert.Contains("did not register", failure.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task ASecretReference_ResolvesOnceAtStartup()
-    {
-        using HttpClient client = new();
-        MapSecretResolver resolver = new();
-        resolver.With("orders-api-key", "a-value-no-message-repeats");
-
-        using var provider = await BuildAsync(
-            SecretYaml,
-            options =>
-            {
-                options.SecretResolver = resolver;
-                options.AddToolSource(startup => new HttpToolSource(client, startup.Secrets));
-            });
-
-        var secrets = provider.GetRequiredService<ResolvedSecrets>();
-
-        Assert.True(secrets.Contains("orders-api-key"));
-
-        // A resolved set lands in a log line sooner or later, so it reports the count and never a value.
-        Assert.DoesNotContain("a-value-no-message-repeats", secrets.ToString(), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task ASecretReferenceWithNoResolver_FailsTheStartAndNamesTheSecret()
-    {
-        using HttpClient client = new();
-
-        var failure = await Assert.ThrowsAsync<SecretResolutionException>(() => BuildAsync(
-            SecretYaml,
-            options => options.AddToolSource(startup => new HttpToolSource(client, startup.Secrets))));
-
-        Assert.Equal("orders-api-key", failure.SecretName);
-    }
-
-    // -------------------------------------------------------------------------------------------
-    // Row 4 of the compile table, through the only supported composition root.
-    // -------------------------------------------------------------------------------------------
-    [Fact]
-    public async Task AGuardedGraph_Starts()
-    {
-        using var provider = await BuildGuardedGraphAsync();
-
-        var compiled = provider.GetRequiredService<CompiledAgent>();
-
-        // The document passes all eight checks and now compiles too. AddAgentCore binds the guard
-        // evaluator and CallStateScope, so a guarded edge is reachable from here.
-        Assert.Equal(CompiledAgentShape.ExplicitGraph, compiled.Shape);
-        Assert.Equal("guarded-composed", compiled.Name);
-    }
-
-    [Theory]
-    [InlineData(true, "ESCALATED", "HANDLED")]
-    [InlineData(false, "HANDLED", "ESCALATED")]
-    public async Task AGuardedGraph_TakesTheEdgeTheStateOfTheCallNames(bool escalate, string taken, string refused)
-    {
-        using var provider = await BuildGuardedGraphAsync();
-        var session = provider.GetRequiredService<ICallSessionFactory>().Create();
-        session.State.TryWrite("escalate", escalate);
-
-        var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
-
-        Assert.Contains(taken, turn.ReplyText, StringComparison.Ordinal);
-        Assert.DoesNotContain(refused, turn.ReplyText, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task AGuardedGraph_KeepsTwoCallsApartWhenTheyRunAtTheSameTime()
-    {
-        using var provider = await BuildGuardedGraphAsync();
-        var sessions = provider.GetRequiredService<ICallSessionFactory>();
-        var token = TestContext.Current.CancellationToken;
-
-        var escalated = sessions.Create();
-        escalated.State.TryWrite("escalate", true);
-        var handled = sessions.Create();
-        handled.State.TryWrite("escalate", false);
-
-        // One compiled graph, two calls, two edges. Neither call reads the state of the other.
-        var turns = await Task.WhenAll(
-            escalated.RunTurnAsync("hello", token),
-            handled.RunTurnAsync("hello", token));
-
-        Assert.Contains("ESCALATED", turns[0].ReplyText, StringComparison.Ordinal);
-        Assert.Contains("HANDLED", turns[1].ReplyText, StringComparison.Ordinal);
-        Assert.Equal(1, provider.GetRequiredService<CompiledAgentRegistry>().CompileCount);
-    }
-
-    // -------------------------------------------------------------------------------------------
-    // The evaluation seam of D13. Triage row T18 defers the online path, so the rate is 0.
-    // -------------------------------------------------------------------------------------------
-    [Fact]
-    public async Task AddAgentCore_RegistersTheEvaluationSeamWithTheOnlinePathClosed()
-    {
-        using var provider = await BuildAsync(OneAgentYaml);
-
-        var registry = provider.GetRequiredService<EvaluatorRegistry>();
-        var sampler = provider.GetRequiredService<EvaluationSampler>();
-
-        // D13 names fault_code, and it calls no model, so it is the one evaluator that is safe by
-        // default.
-        Assert.True(registry.Contains("fault_code"));
-
-        // T18: a judge must never block a turn, and the offline gate has not proved the evaluators
-        // yet. A rate of 0 draws no number and calls nothing.
-        Assert.Equal(0, sampler.Rate);
-        Assert.False(sampler.ShouldSample());
-
-        Assert.IsType<InMemoryEvaluationScorePublisher>(provider.GetRequiredService<IEvaluationScorePublisher>());
-    }
-
-    [Fact]
-    public async Task AddAgentCore_RegistersNoModeratorWhenTheHostBindsNoVendor()
-    {
-        using var provider = await BuildAsync(OneAgentYaml);
-
-        var registry = provider.GetRequiredService<EvaluatorRegistry>();
-
-        // A host that registers no moderation vendor moderates nothing, and every turn reaches the
-        // model. Moderation needs a vendor account, and a library that refused to start without one
-        // could not be used in a test.
-        Assert.False(registry.Contains(PromptModerator.ModerationEvaluatorName));
-        Assert.Null(PromptModerator.FromRegistry(registry));
-    }
-
-    [Fact]
-    public async Task AddAgentCore_BuildsNoModeratorWhenTheDocumentNamesNoProvider()
-    {
-        var adapter = new FakeModerationAdapter("test", new AlwaysFlagsEvaluator());
-
-        // The vendor is registered and the document names none, so the adapter is never asked to
-        // build anything. Registering a vendor costs nothing until a document names it.
-        using var provider = await BuildAsync(OneAgentYaml, options => options.UseModeration(adapter));
-
-        Assert.False(provider.GetRequiredService<EvaluatorRegistry>()
-            .Contains(PromptModerator.ModerationEvaluatorName));
-        Assert.Equal(0, adapter.Builds);
-    }
-
-    [Fact]
-    public async Task AddAgentCore_BuildsTheModerationVendorTheDocumentNames()
-    {
-        var adapter = new FakeModerationAdapter("test", new AlwaysFlagsEvaluator());
-
-        using var provider = await BuildAsync(ModeratedYaml, options => options.UseModeration(adapter));
-
-        var registry = provider.GetRequiredService<EvaluatorRegistry>();
-
-        // The same object serves the turn loop and the offline golden set, which is what D13 means
-        // by an evaluator written once and used twice.
-        Assert.Equal(1, adapter.Builds);
-        Assert.True(registry.Contains(PromptModerator.ModerationEvaluatorName));
-        Assert.True(registry.Contains("fault_code"));
-    }
-
-    [Fact]
-    public async Task AddAgentCore_MatchesTheModerationKindWithoutRegardToCase()
-    {
-        // A vendor name is written by a human, exactly as the knowledge kinds are matched.
-        var adapter = new FakeModerationAdapter("TEST", new AlwaysFlagsEvaluator());
-
-        using var provider = await BuildAsync(ModeratedYaml, options => options.UseModeration(adapter));
-
-        Assert.Equal(1, adapter.Builds);
-    }
-
-    [Fact]
-    public async Task AddAgentCore_FailsWhenTheDocumentNamesAModerationKindThisHostDoesNotRegister()
-    {
-        var error = await Assert.ThrowsAsync<ConfigurationLoadException>(
-            async () => await BuildAsync(
-                ModeratedYaml,
-                options => options.UseModeration(new FakeModerationAdapter("other", new AlwaysFlagsEvaluator()))));
-
-        // The message names what this host does register, so the fix is obvious from the failure.
-        Assert.Contains("test", error.Message, StringComparison.Ordinal);
-        Assert.Contains("'other'", error.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task AddAgentCore_FailsWhenTwoModerationAdaptersAnswerToOneKind()
-    {
-        var error = await Assert.ThrowsAsync<ConfigurationLoadException>(
-            async () => await BuildAsync(
-                ModeratedYaml,
-                options => options.UseModeration(
-                    new FakeModerationAdapter("test", new AlwaysFlagsEvaluator()),
-                    new FakeModerationAdapter("test", new AlwaysFlagsEvaluator()))));
-
-        // Two adapters for one kind means the document silently picked whichever was registered
-        // first, and every seam refuses that.
-        Assert.Contains("two adapters", error.Message, StringComparison.Ordinal);
-
-        // And the noun is this seam's own. VendorSeam.Plural exists to keep four seams' wording
-        // through one shared selector, so moderation's "endpoints" is pinned here — without this,
-        // the argument could be dropped and nothing would fail.
-        Assert.Contains("endpoints", error.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task AddAgentCore_RefusesATurnTheDocumentsModerationVendorFlags()
-    {
-        using var provider = await BuildAsync(
-            ModeratedYaml,
-            options => options.UseModeration(new FakeModerationAdapter("test", new AlwaysFlagsEvaluator())));
-
-        var session = provider.GetRequiredService<ICallSessionFactory>().Create("call-1");
-        var result = await session.RunTurnAsync("...", TestContext.Current.CancellationToken);
-
-        // The wiring reaches the turn loop, and not only the registry.
-        Assert.Equal(AgentCoreConfiguration.DefaultRefusalReply, result.ReplyText);
-    }
-
-    [Fact]
-    public async Task AddAgentCore_TakesTheSampleRateTheDocumentSets()
-    {
-        using var provider = await BuildAsync(TunedYaml);
-
-        var sampler = provider.GetRequiredService<EvaluationSampler>();
-
-        // T18: the rate comes from evaluation.sampleRate, and the composition root reads it.
-        Assert.Equal(1, sampler.Rate);
-        Assert.True(sampler.ShouldSample());
-    }
-
-    // -------------------------------------------------------------------------------------------
-    // The spoken fallback of section 8.7, from the document to the caller.
-    // -------------------------------------------------------------------------------------------
-    [Fact]
-    public async Task AQuietTurn_SpeaksTheFallbackTheDocumentNames()
-    {
-        using var provider = await BuildAsync(TunedYaml, options => options.UseChatClients(
-            _ => new RoutingChatClientFactory(new FragmentingChatClient(string.Empty))));
-        var session = provider.GetRequiredService<ICallSessionFactory>().Create();
-
-        var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
-
-        Assert.Equal("One moment please. I will try that again.", turn.ReplyText);
-        Assert.NotEqual(CallSession.FallbackReply, turn.ReplyText);
-    }
-
-    [Fact]
-    public async Task AQuietTurn_SpeaksTheDefaultFallbackWhenTheDocumentNamesNone()
-    {
-        using var provider = await BuildAsync(OneAgentYaml, options => options.UseChatClients(
-            _ => new RoutingChatClientFactory(new FragmentingChatClient(string.Empty))));
-        var session = provider.GetRequiredService<ICallSessionFactory>().Create();
-
-        var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
-
-        Assert.Equal(CallSession.FallbackReply, turn.ReplyText);
-    }
-
-    [Fact]
-    public async Task AddAgentCore_KeepsAnEvaluationServiceTheHostRegisteredFirst()
-    {
-        EvaluationSampler mine = new(rate: 1);
-        HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
-        builder.Services.AddSingleton(mine);
-        ConfigureServices(builder.Services, OneAgentYaml, null);
-
-        using var provider = await StartAsync(builder.Build());
-
-        // The in-memory publisher grows without a bound, and a long-running host replaces it. Every
-        // registration therefore steps aside, exactly as the session store does.
-        Assert.Same(mine, provider.GetRequiredService<EvaluationSampler>());
-    }
-
-    // -------------------------------------------------------------------------------------------
-    // The call titler: one model, named by the document like every other model.
-    // -------------------------------------------------------------------------------------------
-
-    // The same agent, and a document that gives the titler a model of its own.
-    private const string TitlerYaml =
-        $$"""
-        apiVersion: agentcore/v1
-        name: composed
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
@@ -1021,6 +1092,9 @@ public sealed class AddAgentCoreTests
           model: { ref: titles }
         {{MinimalProviders}}
             - { kind: openai, model: gpt-4.1-nano, as: titles }
+        entries:
+          main:
+            agent: only
         """;
 
     [Fact]
@@ -1089,24 +1163,28 @@ public sealed class AddAgentCoreTests
     private const string MemoryAuditYaml =
         $$"""
         apiVersion: agentcore/v1
-        name: composed
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
         {{MinimalProviders}}
           audit: { kind: memory }
+        entries:
+          main:
+            agent: only
         """;
 
     // The same agent, served by an audit vendor the host registers itself.
     private const string VendorAuditYaml =
         $$"""
         apiVersion: agentcore/v1
-        name: composed
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
         {{MinimalProviders}}
           audit: { kind: test }
+        entries:
+          main:
+            agent: only
         """;
 
     [Fact]
@@ -1114,7 +1192,7 @@ public sealed class AddAgentCoreTests
     {
         using var provider = await BuildAsync(OneAgentYaml);
 
-        var session = provider.GetRequiredService<ICallSessionFactory>().Create("call-1");
+        var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("call-1");
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
         // The queue is what keeps the append off the turn, so the rows land on a thread of their own
@@ -1158,7 +1236,7 @@ public sealed class AddAgentCoreTests
             VendorAuditYaml,
             options => options.UseAuditSinks(new TestAuditSinkAdapter(store)));
 
-        var session = provider.GetRequiredService<ICallSessionFactory>().Create("call-1");
+        var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("call-1");
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
         await Queue(provider).FlushAsync(TestContext.Current.CancellationToken);
 
@@ -1213,24 +1291,28 @@ public sealed class AddAgentCoreTests
     private const string VendorTranscriptYaml =
         $$"""
         apiVersion: agentcore/v1
-        name: composed
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
         {{MinimalProviders}}
           calls: { kind: test }
+        entries:
+          main:
+            agent: only
         """;
 
     // The same agent, served by a knowledge vendor the host registers itself.
     private const string VendorKnowledgeYaml =
         $$"""
         apiVersion: agentcore/v1
-        name: composed
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
         {{MinimalProviders}}
           knowledge: { kind: test, collection: manuals, fields: { body: body } }
+        entries:
+          main:
+            agent: only
         """;
 
     // The call store opens at step 4c and the moderation vendor is built at step 4c, so a
@@ -1239,13 +1321,15 @@ public sealed class AddAgentCoreTests
     private const string CallStoreThenModerationFailureYaml =
         $$"""
         apiVersion: agentcore/v1
-        name: composed
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
         {{MinimalProviders}}
           calls: { kind: test }
           moderation: { kind: test }
+        entries:
+          main:
+            agent: only
         """;
 
     [Fact]
@@ -1267,7 +1351,7 @@ public sealed class AddAgentCoreTests
             VendorTranscriptYaml,
             options => options.UseCallStores(new TestCallStoreAdapter(store)));
 
-        var session = provider.GetRequiredService<ICallSessionFactory>().Create("call-1");
+        var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("call-1");
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
         await session.FlushTranscriptAsync();
 
@@ -1327,8 +1411,9 @@ public sealed class AddAgentCoreTests
             }
         }
 
-        public override ValueTask AppendAsync(
-            IReadOnlyList<CallMessage> messages,
+        public override ValueTask<IReadOnlyList<CallMessage>> AppendAsync(
+            string callId,
+            IReadOnlyList<CallMessageDraft> messages,
             CallSessionState? state = null,
             CancellationToken cancellationToken = default)
         {
@@ -1337,11 +1422,13 @@ public sealed class AddAgentCoreTests
                 _roles.AddRange(messages.Select(message => message.Content.Role.Value));
             }
 
-            return ValueTask.CompletedTask;
+            IReadOnlyList<CallMessage> rows = [.. messages.Select(
+                (message, index) => new CallMessage(callId, index, message.TurnIndex ?? 0, message.Content, message.MessageId))];
+            return ValueTask.FromResult(rows);
         }
 
         public override ValueTask RewriteAsync(
-            string callId, int ordinal, ChatMessage content, CancellationToken cancellationToken = default)
+            string callId, string messageId, ChatMessage content, CancellationToken cancellationToken = default)
             => ValueTask.CompletedTask;
 
         public override ValueTask<IReadOnlyList<CallMessage>> ReadAsync(
@@ -1390,7 +1477,7 @@ public sealed class AddAgentCoreTests
     private sealed class FacetCapablePort : IKnowledgeRetrievalPort, IKnowledgeFacetReadPort
     {
         public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
-            string query, CancellationToken cancellationToken = default)
+            string query, KnowledgeScope? scope = null, CancellationToken cancellationToken = default)
             => ValueTask.FromResult<IReadOnlyList<KnowledgeCard>>([]);
 
         public ValueTask<IReadOnlyList<KnowledgeCard>> ReadByFacetAsync(
@@ -1404,7 +1491,7 @@ public sealed class AddAgentCoreTests
         public bool Closed { get; private set; }
 
         public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
-            string query, CancellationToken cancellationToken = default)
+            string query, KnowledgeScope? scope = null, CancellationToken cancellationToken = default)
             => ValueTask.FromResult<IReadOnlyList<KnowledgeCard>>([]);
 
         public void Dispose() => Closed = true;
@@ -1415,7 +1502,7 @@ public sealed class AddAgentCoreTests
     {
         using var provider = await BuildAsync(OneAgentYaml);
 
-        var session = provider.GetRequiredService<ICallSessionFactory>().Create();
+        var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create();
         var turn = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
         Assert.Equal("hello", turn.ReplyText);
@@ -1431,7 +1518,7 @@ public sealed class AddAgentCoreTests
         RecordingCallObserver second = new();
         using var provider = await BuildAsync(OneAgentYaml, options => options.UseObservers(first, second));
 
-        var session = provider.GetRequiredService<ICallSessionFactory>().Create("call-1");
+        var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("call-1");
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
         // The port is public, so a host writes one of these and binds it. Every observer of a call
@@ -1447,7 +1534,7 @@ public sealed class AddAgentCoreTests
             OneAgentYaml,
             options => options.UseObservers(new ThrowingCallObserver()));
 
-        var session = provider.GetRequiredService<ICallSessionFactory>().Create("call-1");
+        var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("call-1");
         var turn = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
         // An observer records the call and is never a part of it. That holds for the host's own, and
@@ -1473,7 +1560,7 @@ public sealed class AddAgentCoreTests
             OneAgentYaml,
             options => options.UseObservers(first).UseObservers(second));
 
-        var session = provider.GetRequiredService<ICallSessionFactory>().Create("call-1");
+        var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("call-1");
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
         // The seam adds rather than replaces, so a host composes its readings across whatever code
@@ -1492,7 +1579,7 @@ public sealed class AddAgentCoreTests
 
         var error = Assert.Single(failure.Errors);
         Assert.Equal(ConfigurationCheck.ReferenceResolution, error.Check);
-        Assert.Equal("/policy/stages/0/to/0/stage", error.Pointer);
+        Assert.Equal("/entries/main/policy/stages/0/to/0/stage", error.Pointer);
         Assert.Contains("'nowhere' is not declared", error.Message, StringComparison.Ordinal);
     }
 
@@ -1591,7 +1678,7 @@ public sealed class AddAgentCoreTests
             DiscoveredOnlyToolYaml,
             options => options.AddToolSource(_ => new DiscoveredOnlyToolSource("discovered_only")));
 
-        Assert.NotNull(provider.GetRequiredService<CompiledAgent>());
+        Assert.NotNull(provider.GetRequiredService<IReadOnlyDictionary<string, CompiledAgent>>()["main"]);
         Assert.True(provider.GetRequiredService<ToolRegistry>().Contains("discovered_only"));
     }
 
@@ -1608,7 +1695,7 @@ public sealed class AddAgentCoreTests
     {
         using var provider = await BuildAsync(DelegatingAgentToolYaml);
 
-        Assert.NotNull(provider.GetRequiredService<CompiledAgent>());
+        Assert.NotNull(provider.GetRequiredService<IReadOnlyDictionary<string, CompiledAgent>>()["main"]);
     }
 
     /// <summary>
@@ -1641,7 +1728,7 @@ public sealed class AddAgentCoreTests
 
         var error = Assert.Single(failure.Errors);
         Assert.Equal(ConfigurationCheck.ReferenceResolution, error.Check);
-        Assert.Equal("/policy/stages/0/to/0/stage", error.Pointer);
+        Assert.Equal("/entries/main/policy/stages/0/to/0/stage", error.Pointer);
         Assert.Contains("'nowhere' is not declared", error.Message, StringComparison.Ordinal);
 
         // Distinguishes the orders directly: an MCP connection failure would name the server id.
@@ -1703,10 +1790,12 @@ public sealed class AddAgentCoreTests
 
         const string yaml = """
             apiVersion: agentcore/v1
-            name: skills-host
             agents:
               items:
-                - { id: support, skills: [warranty-returns] }
+                - { id: only, instructions: "I answer everything" }
+            entries:
+              main:
+                agent: only
             """;
 
         using var host = await BuildAsync(yaml, options => options.UseSkills(folder.Root));
@@ -1721,10 +1810,12 @@ public sealed class AddAgentCoreTests
 
         const string yaml = """
             apiVersion: agentcore/v1
-            name: skills-typo
             agents:
               items:
                 - { id: support, skills: [warranty-return] }
+            entries:
+              main:
+                agent: support
             """;
 
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
@@ -1740,10 +1831,12 @@ public sealed class AddAgentCoreTests
 
         const string yaml = """
             apiVersion: agentcore/v1
-            name: skills-shutdown
             agents:
               items:
                 - { id: support, skills: [warranty-returns] }
+            entries:
+              main:
+                agent: support
             """;
 
         TrackingSkillsSource tracked = new(folder.Root);
@@ -1766,10 +1859,12 @@ public sealed class AddAgentCoreTests
 
         const string yaml = """
             apiVersion: agentcore/v1
-            name: skills-typo-source
             agents:
               items:
                 - { id: support, skills: [warranty-return] }
+            entries:
+              main:
+                agent: support
             """;
 
         TrackingSkillsSource tracked = new(folder.Root);
@@ -1792,7 +1887,6 @@ public sealed class AddAgentCoreTests
 
         const string yaml = """
             apiVersion: agentcore/v1
-            name: skills-reserved-tool-source
             tools:
               - id: load_skill
                 kind: binding
@@ -1805,6 +1899,9 @@ public sealed class AddAgentCoreTests
             agents:
               items:
                 - { id: support, skills: [warranty-returns], tools: [ load_skill ] }
+            entries:
+              main:
+                agent: support
             """;
 
         TrackingSkillsSource tracked = new(folder.Root);
@@ -1870,62 +1967,6 @@ public sealed class AddAgentCoreTests
         Kind = AuditEventKind.TurnCompleted,
         OccurredAt = DateTimeOffset.UnixEpoch.AddSeconds(secondsPastEpoch),
     };
-
-    /// <summary>Starts a host on one document, which is where the whole boot happens.</summary>
-    /// <param name="yaml">The document to boot.</param>
-    /// <param name="configure">The host's own word on the options.</param>
-    /// <returns>The started host, read as the container it is.</returns>
-    private static async Task<StartedHost> BuildAsync(string yaml, Action<AgentCoreOptions>? configure = null)
-    {
-        HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
-        ConfigureServices(builder.Services, yaml, configure);
-
-        return await StartAsync(builder.Build());
-    }
-
-    /// <summary>Starts one host, and closes it itself when the start fails.</summary>
-    /// <param name="host">The host to start.</param>
-    /// <returns>The started host.</returns>
-    /// <remarks>
-    /// A failed start never stops what already started, so disposal is the only cleanup path — and
-    /// it is the one a real host takes too, inside <c>RunAsync</c>'s own finally. StopAsync is
-    /// deliberately not called here: on net10 a host that failed to start throws
-    /// <see cref="ArgumentNullException"/> out of StopAsync when the failure was a constructor.
-    /// </remarks>
-    private static async Task<StartedHost> StartAsync(IHost host)
-    {
-        try
-        {
-            await host.StartAsync(TestContext.Current.CancellationToken);
-        }
-        catch
-        {
-            host.Dispose();
-            throw;
-        }
-
-        return new StartedHost(host);
-    }
-
-    /// <summary>Starts a host on nothing but the options a test writes, with no document default.</summary>
-    /// <param name="configure">The only word on the options.</param>
-    /// <returns>The started host, for the tests that expect it never to get one.</returns>
-    private static async Task<StartedHost> StartBareAsync(Action<AgentCoreOptions> configure)
-    {
-        HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
-        builder.Services.AddAgentCore(configure);
-
-        return await StartAsync(builder.Build());
-    }
-
-    private static void ConfigureServices(
-        IServiceCollection services, string yaml, Action<AgentCoreOptions>? configure)
-        => services.AddAgentCore(options =>
-        {
-            options.Configuration = ConfigurationLoader.LoadYaml(yaml);
-            options.UseChatClients(_ => new RoutingChatClientFactory(new FragmentingChatClient("hello")));
-            configure?.Invoke(options);
-        });
 
     /// <summary>An adapter that starts nothing and hands back a session that records its flush.</summary>
     private sealed class FlushRecordingTelemetryAdapter(string kind) : ITelemetryAdapter
@@ -2143,19 +2184,6 @@ public sealed class AddAgentCoreTests
             onProvide();
             return ValueTask.FromResult<IReadOnlyList<ToolRegistration>>([]);
         }
-    }
-
-    /// <summary>A started host, read as the container it is.</summary>
-    /// <param name="host">The host to read services from, and to close on the way out.</param>
-    /// <remarks>
-    /// Disposing this disposes the host, which disposes the container. That is the whole shutdown
-    /// path: nothing here calls StopAsync, because a host that failed to start never gets one.
-    /// </remarks>
-    private sealed class StartedHost(IHost host) : IServiceProvider, IDisposable
-    {
-        public object? GetService(Type serviceType) => host.Services.GetService(serviceType);
-
-        public void Dispose() => host.Dispose();
     }
 
     /// <summary>A tool source a host registers, which records whether it was ever closed.</summary>

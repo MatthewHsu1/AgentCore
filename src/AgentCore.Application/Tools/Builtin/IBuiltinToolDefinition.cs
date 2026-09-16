@@ -6,7 +6,7 @@ using Microsoft.Extensions.AI;
 namespace AgentCore.Application.Tools.Builtin;
 
 /// <summary>The adapters a built-in may need. A built-in uses none or more of them.</summary>
-/// <param name="ChatClients">The factory a shipped agent runs on, or <see langword="null"/> when the host bound none.</param>
+/// <param name="ChatClients">The factory the tool runs on, or <see langword="null"/> when the host bound none.</param>
 public sealed record BuiltinToolPorts(IChatClientFactory? ChatClients);
 
 /// <summary>What every <c>uses:</c> name AgentCore ships has, whatever kind of thing it builds.</summary>

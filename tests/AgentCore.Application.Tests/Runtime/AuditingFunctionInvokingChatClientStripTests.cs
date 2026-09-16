@@ -2,6 +2,7 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Knowledge.Fakes;
 using AgentCore.Domain.Knowledge;
@@ -11,17 +12,17 @@ using Xunit;
 namespace AgentCore.Application.Tests.Runtime;
 
 /// <summary>
-/// K42's strip: <see cref="AuditingFunctionInvokingChatClient.InvokeFunctionAsync"/> removes
-/// <see cref="TurnAmbients.Clarifications"/> from the ambient for the duration of a <em>nested</em>
-/// tool call, and leaves it alone on the outermost one.
+/// K42's strip: <see cref="AuditingFunctionInvokingChatClient.InvokeFunctionAsync"/> hands a
+/// nested tool call the turn with its <see cref="Clarifications"/> stripped, and hands the
+/// outermost call the whole turn.
 /// </summary>
 /// <remarks>
 /// The first two facts drive <see cref="AuditingFunctionInvokingChatClient"/> directly, the same way
-/// <see cref="AuditingFunctionInvokingChatClientRenderTests"/> does, with the ambient hand-rolled
-/// through <see cref="TurnAmbients.Amend"/>. The third drives a real <see cref="CallSession"/> turn,
-/// because that is the only place that proves <c>CallSession.EnterAmbients</c> actually threads its
-/// own <c>Clarifications</c> instance through — a fact the first two cannot see, since they open the
-/// ambient by hand.
+/// <see cref="AuditingFunctionInvokingChatClientRenderTests"/> does, with the turn filed
+/// on the call's own options. The third drives a real <see cref="CallSession"/> turn,
+/// because that is the only place that proves the session actually threads its
+/// own <c>Clarifications</c> instance through — a fact the first two cannot see, since they file the
+/// turn by hand.
 /// </remarks>
 public sealed class AuditingFunctionInvokingChatClientStripTests
 {
@@ -32,19 +33,27 @@ public sealed class AuditingFunctionInvokingChatClientStripTests
         Clarifications? seen = null;
 
         var tool = AIFunctionFactory.Create(
-            () =>
+            (TurnInvocation? turn) =>
             {
-                seen = TurnAmbients.Current?.Clarifications;
+                seen = turn?.Clarifications;
                 return "done.";
             },
-            "search_tool",
-            "Reads the ambient.");
+            new AIFunctionFactoryOptions
+            {
+                Name = "search_tool",
+                Description = "Reads the turn.",
+                ConfigureParameterBinding = ToolParameterBindings.For,
+            });
 
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Clarifications = clarifications });
+        var invocation = TurnOf(clarifications);
 
         ToolCallingChatClient inner = new("the loop continues.");
         using AuditingFunctionInvokingChatClient client = new(inner);
-        ChatOptions options = new() { Tools = [tool] };
+        ChatOptions options = new()
+        {
+            Tools = [tool],
+            AdditionalProperties = new AdditionalPropertiesDictionary { [TurnInvocation.ArgumentsKey] = invocation },
+        };
 
         await client.GetResponseAsync(
             [new ChatMessage(ChatRole.User, "search")], options, TestContext.Current.CancellationToken);
@@ -55,7 +64,7 @@ public sealed class AuditingFunctionInvokingChatClientStripTests
     [Fact]
     public async Task ANestedToolCall_HasNoHolder_WhileTheOuterCallStillDoes()
     {
-        // The outer tool's own invocation reads the ambient before starting the nested loop, and the
+        // The outer tool's own invocation reads the filed turn before starting the nested loop, and the
         // inner tool reads it from inside that nested loop's own InvokeFunctionAsync. The two reads
         // must disagree: K42's strip is conditional on being nested, not on being any tool call at
         // all, or it would blind the caller's own search too.
@@ -64,35 +73,54 @@ public sealed class AuditingFunctionInvokingChatClientStripTests
         Clarifications? seenNested = null;
 
         var innerTool = AIFunctionFactory.Create(
-            () =>
+            (TurnInvocation? turn) =>
             {
-                seenNested = TurnAmbients.Current?.Clarifications;
+                seenNested = turn?.Clarifications;
                 return "inner done.";
             },
-            "inner_tool",
-            "Reads the ambient from inside a nested loop.");
+            new AIFunctionFactoryOptions
+            {
+                Name = "inner_tool",
+                Description = "Reads the turn from inside a nested loop.",
+                ConfigureParameterBinding = ToolParameterBindings.For,
+            });
 
         var outerTool = AIFunctionFactory.Create(
-            async () =>
+            async (TurnInvocation? outerTurn) =>
             {
-                seenOutside = TurnAmbients.Current?.Clarifications;
+                seenOutside = outerTurn?.Clarifications;
 
                 ToolCallingChatClient innerModel = new("nested done.");
                 using AuditingFunctionInvokingChatClient innerClient = new(innerModel);
-                ChatOptions innerOptions = new() { Tools = [innerTool] };
+                ChatOptions innerOptions = new()
+                {
+                    Tools = [innerTool],
+                    AdditionalProperties = new AdditionalPropertiesDictionary
+                    {
+                        [TurnInvocation.ArgumentsKey] = outerTurn! with { Nested = true, Clarifications = null },
+                    },
+                };
                 await innerClient.GetResponseAsync(
                     [new ChatMessage(ChatRole.User, "go")], innerOptions, TestContext.Current.CancellationToken);
 
                 return "outer done.";
             },
-            "outer_tool",
-            "Runs a nested loop.");
+            new AIFunctionFactoryOptions
+            {
+                Name = "outer_tool",
+                Description = "Runs a nested loop.",
+                ConfigureParameterBinding = ToolParameterBindings.For,
+            });
 
-        using var scope = TurnAmbients.Amend(ambients => ambients with { Clarifications = clarifications });
+        var invocation = TurnOf(clarifications);
 
         ToolCallingChatClient outerModel = new("done.");
         using AuditingFunctionInvokingChatClient outerClient = new(outerModel);
-        ChatOptions outerOptions = new() { Tools = [outerTool] };
+        ChatOptions outerOptions = new()
+        {
+            Tools = [outerTool],
+            AdditionalProperties = new AdditionalPropertiesDictionary { [TurnInvocation.ArgumentsKey] = invocation },
+        };
 
         await outerClient.GetResponseAsync(
             [new ChatMessage(ChatRole.User, "go")], outerOptions, TestContext.Current.CancellationToken);
@@ -101,31 +129,66 @@ public sealed class AuditingFunctionInvokingChatClientStripTests
         Assert.Null(seenNested);
     }
 
+    private static TurnInvocation TurnOf(Clarifications clarifications) => new()
+    {
+        CallId = "call",
+        TurnIndex = 0,
+        Stage = "",
+        Clarifications = clarifications,
+    };
+
     // -------------------------------------------------------------------------------------------
-    // The wiring fact: a real CallSession turn opens its own Clarifications and threads it through
-    // EnterAmbients, so the model's own (outermost) knowledge search sees it, exactly as the two
-    // hand-rolled facts above predict once CallSession is actually driving.
+    // The wiring fact: a real CallSession turn opens its own Clarifications and files it on the
+    // run, so the probe — not the store — sees it. The increment below proves both halves: no
+    // holder, or no filing, and the probe's search never runs.
     // -------------------------------------------------------------------------------------------
     [Fact]
     public async Task RunTurnAsync_AToolModeKnowledgeSearch_SeesTheHolder()
     {
         const string yaml = """
             apiVersion: agentcore/v1
-            name: clarifications-through-callsession
+            state:
+              applies_to:
+                type: string
+                writer: extractor
+                description: "The model, as printed on the machine."
+                enum: [CT900, CT900ENT]
+              brand:
+                type: string
+                writer: extractor
+                description: "The brand of the caller's machine."
+                enum: [sole, spirit]
+            extractor:
+              model: { ref: fill }
+              when: after_reply
+            providers:
+              call:   { kind: telnyx-relay }
+              speech:
+                stt: { kind: telnyx-relay }
+                tts: { kind: telnyx-relay }
+              knowledge:
+                kind: qdrant
+                collection: kb
+                fields: { body: text }
+                scope:
+                  template: "{key}"
+                  fromState: [applies_to, brand]
+                  wildcard: { value: "*", facets: [applies_to, brand] }
+                ambiguity: { maxCandidates: 6, maxAsks: 2 }
             agents:
+              defaults:
+                model: { ref: reply }
               items:
                 - id: only
-                  instructions: "answer the caller"
-                  knowledge: { mode: tool, scoped: false }
-            policy:
-              initial: greeting
-              stages:
-                - { id: greeting, agent: only }
+                  knowledge: { mode: tool, scoped: true }
+            entries:
+              main:
+                agent: only
             """;
 
-        var port = new StubKnowledgePort([Card("a")]);
+        var port = new StubKnowledgePort([]);
 
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             ConfigurationLoader.LoadYaml(yaml),
             new AgentCompilationContext(new FakeChatClientFactory(
                 new ToolCallingChatClient(
@@ -133,15 +196,15 @@ public sealed class AuditingFunctionInvokingChatClientStripTests
                     new Dictionary<string, object?>(StringComparer.Ordinal) { ["userQuestion"] = "what is it" })))
             {
                 Knowledge = port,
-            });
+            })["main"];
 
         var factory = new CallSessionFactory(compiled, new GuardEvaluator(compiled.Configuration.Guards));
         var session = factory.Create("call-strip-1");
 
         await session.RunTurnAsync("what is it", TestContext.Current.CancellationToken);
 
-        Assert.Equal(1, port.Calls);
-        Assert.NotNull(port.ClarificationsAtTheStore);
+        Assert.Equal(2, port.Calls);
+        Assert.Equal(1, session.Clarifications.Read("applies_to").ProbeAsks);
     }
 
     private static KnowledgeCard Card(string id)

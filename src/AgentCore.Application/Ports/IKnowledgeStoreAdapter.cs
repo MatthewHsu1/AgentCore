@@ -24,8 +24,8 @@ public interface IKnowledgeStoreAdapter : IVendorAdapter
     /// </param>
     /// <param name="requireScope">
     /// Whether every agent reading this store declares <c>scoped: true</c>. The store is shared
-    /// across every agent that reads it, so an adapter that fails closed with no ambient
-    /// <c>KnowledgeScope</c> open is only correct when ALL of them want scoping -- one store cannot
+    /// across every agent that reads it, so an adapter that fails closed with no
+    /// <c>KnowledgeScope</c> passed is only correct when ALL of them want scoping -- one store cannot
     /// enforce a scope for one agent while staying open for another. A mixed deployment passes
     /// <see langword="false"/> here, and the per-agent gate then lives in the caller instead of the
     /// store.

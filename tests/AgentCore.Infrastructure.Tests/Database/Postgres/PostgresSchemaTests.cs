@@ -13,10 +13,11 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
     protected override bool Migrated => false;
 
     [PostgresTheory]
-    [InlineData("call")]
-    [InlineData("call_principal")]
-    [InlineData("call_message")]
-    [InlineData("audit_event")]
+    [InlineData("agentcore.call")]
+    [InlineData("agentcore.call_principal")]
+    [InlineData("agentcore.call_message")]
+    [InlineData("agentcore.audit_event")]
+    [InlineData("agentcore.schema_migration")]
     public async Task ApplyAsync_FreshDatabase_CreatesTheTable(string table)
     {
         // Arrange
@@ -27,6 +28,24 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
 
         // Assert
         Assert.True(exists);
+    }
+
+    [PostgresFact]
+    public async Task ApplyAsync_FreshDatabase_GivesCallANextOrdinalColumn()
+    {
+        // Arrange
+        await PostgresSchema.ApplyAsync(DataSource, Token);
+
+        // Act
+        var column = await ScalarAsync<string>(
+            """
+            SELECT is_nullable || ',' || column_default
+              FROM information_schema.columns
+             WHERE table_schema = 'agentcore' AND table_name = 'call' AND column_name = 'next_ordinal'
+            """);
+
+        // Assert
+        Assert.Equal("NO,0", column);
     }
 
     [PostgresFact]
@@ -80,7 +99,7 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
         await PostgresSchema.ApplyAsync(DataSource, Token);
 
         // Act
-        var held = await ScalarAsync<bool>($"SELECT has_table_privilege('agentcore_writer', 'audit_event', '{privilege}')");
+        var held = await ScalarAsync<bool>($"SELECT has_table_privilege('agentcore_writer', 'agentcore.audit_event', '{privilege}')");
 
         // Assert
         Assert.Equal(expected, held);
@@ -98,16 +117,16 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
         await PostgresSchema.ApplyAsync(DataSource, Token);
 
         // Act
-        var held = await ScalarAsync<bool>($"SELECT has_table_privilege('agentcore_writer', 'audit_event', '{privilege}')");
+        var held = await ScalarAsync<bool>($"SELECT has_table_privilege('agentcore_writer', 'agentcore.audit_event', '{privilege}')");
 
         // Assert
         Assert.False(held);
     }
 
     [PostgresTheory]
-    [InlineData("UPDATE audit_event SET kind = 'tampered'")]
-    [InlineData("DELETE FROM audit_event")]
-    [InlineData("TRUNCATE audit_event")]
+    [InlineData("UPDATE agentcore.audit_event SET kind = 'tampered'")]
+    [InlineData("DELETE FROM agentcore.audit_event")]
+    [InlineData("TRUNCATE agentcore.audit_event")]
     public async Task AuditEvent_OwnerWritesOverAnExistingRow_IsRefusedByTrigger(string statement)
     {
         // Arrange
@@ -130,7 +149,7 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
         // Act
         var refusal = await Record.ExceptionAsync(() => ExecuteAsync(
             """
-            INSERT INTO audit_event (write_position, call_id, event_id, sequence, kind, occurred_at)
+            INSERT INTO agentcore.audit_event (write_position, call_id, event_id, sequence, kind, occurred_at)
             VALUES (1, 'C1', gen_random_uuid(), 1, 'call.started', now())
             """));
 
@@ -149,7 +168,7 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
         // Act
         var refusal = await Record.ExceptionAsync(() => ExecuteAsync(
             """
-            INSERT INTO audit_event (call_id, event_id, sequence, kind, occurred_at)
+            INSERT INTO agentcore.audit_event (call_id, event_id, sequence, kind, occurred_at)
             VALUES ('C1', gen_random_uuid(), 1, 'call.ended', now())
             """));
 
@@ -165,7 +184,7 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
         await PostgresSchema.ApplyAsync(DataSource, Token);
         await ExecuteAsync(
             """
-            INSERT INTO audit_event (call_id, event_id, sequence, kind, occurred_at)
+            INSERT INTO agentcore.audit_event (call_id, event_id, sequence, kind, occurred_at)
             VALUES ('C1', gen_random_uuid(), 0, 'call.started', now())
             """);
 
@@ -173,12 +192,12 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
         await ExecuteAsync(
             """
             SET session_replication_role = replica;
-            UPDATE audit_event SET kind = 'call.ended' WHERE sequence = 0;
+            UPDATE agentcore.audit_event SET kind = 'call.ended' WHERE sequence = 0;
             SET session_replication_role = origin;
             """);
 
         // Assert
-        Assert.Equal("call.ended", await ScalarAsync<string>("SELECT kind FROM audit_event WHERE sequence = 0"));
+        Assert.Equal("call.ended", await ScalarAsync<string>("SELECT kind FROM agentcore.audit_event WHERE sequence = 0"));
     }
 
     [PostgresFact]
@@ -186,13 +205,13 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
     {
         // Arrange
         await PostgresSchema.ApplyAsync(DataSource, Token);
-        await ExecuteAsync("INSERT INTO call (call_id) VALUES ('C1')");
+        await ExecuteAsync("INSERT INTO agentcore.call (call_id) VALUES ('C1')");
         await ExecuteAsync(
-            "INSERT INTO call_message (call_id, ordinal, turn_index, role, content, message_id) VALUES ('C1', 0, 0, 'user', '{}', 'm0')");
+            "INSERT INTO agentcore.call_message (call_id, ordinal, turn_index, role, content, message_id) VALUES ('C1', 0, 0, 'user', '{}', 'm0')");
 
         // Act
         var refusal = await Record.ExceptionAsync(() => ExecuteAsync(
-            "INSERT INTO call_message (call_id, ordinal, turn_index, role, content, message_id) VALUES ('C1', 0, 0, 'assistant', '{}', 'm1')"));
+            "INSERT INTO agentcore.call_message (call_id, ordinal, turn_index, role, content, message_id) VALUES ('C1', 0, 0, 'assistant', '{}', 'm1')"));
 
         // Assert
         Assert.Equal("23505", Assert.IsType<PostgresException>(refusal).SqlState);
@@ -207,11 +226,11 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
     {
         // Arrange
         await PostgresSchema.ApplyAsync(DataSource, Token);
-        await ExecuteAsync("INSERT INTO call (call_id) VALUES ('present')");
+        await ExecuteAsync("INSERT INTO agentcore.call (call_id) VALUES ('present')");
 
         // Act
         var refusal = await Record.ExceptionAsync(() => ExecuteAsync(
-            "INSERT INTO call_message (call_id, ordinal, turn_index, role, content, message_id) VALUES ('absent', 0, 0, 'user', '{}', 'm0')"));
+            "INSERT INTO agentcore.call_message (call_id, ordinal, turn_index, role, content, message_id) VALUES ('absent', 0, 0, 'user', '{}', 'm0')"));
 
         // Assert
         Assert.Equal("23503", Assert.IsType<PostgresException>(refusal).SqlState);
@@ -227,25 +246,25 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
     {
         // Arrange
         await PostgresSchema.ApplyAsync(DataSource, Token);
-        await ExecuteAsync("INSERT INTO call (call_id) VALUES ('C1')");
+        await ExecuteAsync("INSERT INTO agentcore.call (call_id) VALUES ('C1')");
         await ExecuteAsync(
-            "INSERT INTO call_message (call_id, ordinal, turn_index, role, content, message_id) VALUES ('C1', 0, 0, 'user', '{}', 'm0')");
+            "INSERT INTO agentcore.call_message (call_id, ordinal, turn_index, role, content, message_id) VALUES ('C1', 0, 0, 'user', '{}', 'm0')");
         await ExecuteAsync(
-            "INSERT INTO call_principal (call_id, principal_key, role) VALUES ('C1', 'p1', 'owner')");
+            "INSERT INTO agentcore.call_principal (call_id, principal_key, role) VALUES ('C1', 'p1', 'owner')");
         await InsertOneEventAsync();
 
         // Act
-        await ExecuteAsync("DELETE FROM call WHERE call_id = 'C1'");
+        await ExecuteAsync("DELETE FROM agentcore.call WHERE call_id = 'C1'");
 
         // Assert
-        Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM call_message"));
-        Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM call_principal"));
-        Assert.Equal(1L, await ScalarAsync<long>("SELECT count(*) FROM audit_event"));
+        Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM agentcore.call_message"));
+        Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM agentcore.call_principal"));
+        Assert.Equal(1L, await ScalarAsync<long>("SELECT count(*) FROM agentcore.audit_event"));
     }
 
     private Task InsertOneEventAsync() => ExecuteAsync(
         """
-        INSERT INTO audit_event (call_id, event_id, sequence, kind, occurred_at)
+        INSERT INTO agentcore.audit_event (call_id, event_id, sequence, kind, occurred_at)
         VALUES ('C1', gen_random_uuid(), 1, 'call.started', now())
         """);
 

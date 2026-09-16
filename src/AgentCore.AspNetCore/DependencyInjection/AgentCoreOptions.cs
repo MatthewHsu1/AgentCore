@@ -2,6 +2,7 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Llm;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Tools;
 using AgentCore.Application.Tools.Binding;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging;
@@ -78,13 +79,34 @@ public sealed class AgentCoreOptions
     internal AgentSkillsSource? SkillsSource { get; private set; }
 
     /// <summary>Gets the call transports this host supports, or <see langword="null"/>.</summary>
-    internal IReadOnlyList<ICallAdapter>? Call { get; private set; }
+    internal IReadOnlyList<ICallAdapter>? CallAdapters { get; private set; }
+
+    /// <summary>Gets the folder under which every call gets its own workspace, or <see langword="null"/>.</summary>
+    internal string? WorkspaceRoot { get; private set; }
 
     /// <summary>Gets the extra tool sources, in the order the registry asks them.</summary>
     internal IReadOnlyList<Func<AgentCoreStartup, IToolSource>> ToolSources => _toolSources;
 
     /// <summary>Gets the observers the host registered, in the order it registered them.</summary>
     internal IReadOnlyList<ICallObserver> Observers => _observers;
+
+    /// <summary>Gets the store opener the host bound, or <see langword="null"/> for the in-memory default.</summary>
+    internal Func<string, ICallSessionFactory, ICallSessions>? CallSessions { get; private set; }
+
+    /// <summary>Binds the session store, one per entry.</summary>
+    /// <param name="open">
+    /// Opens the store for one entry. It takes the entry name and the factory that builds that
+    /// entry's sessions, and it runs once per entry the document declares. Each call must return a
+    /// distinct store: two entries that share one store let a vendor call id arriving on both
+    /// entries read one call through two shapes.
+    /// </param>
+    /// <returns>These options, so a host chains its calls.</returns>
+    public AgentCoreOptions UseCallSessions(Func<string, ICallSessionFactory, ICallSessions> open)
+    {
+        ArgumentNullException.ThrowIfNull(open);
+        CallSessions = open;
+        return this;
+    }
 
     /// <summary>Binds the vendor adapters, and the document picks one by each entry's <c>kind</c>.</summary>
     /// <param name="adapters">One adapter for each vendor this host supports.</param>
@@ -260,7 +282,7 @@ public sealed class AgentCoreOptions
     public AgentCoreOptions UseCall(params ICallAdapter[] adapters)
     {
         ArgumentNullException.ThrowIfNull(adapters);
-        Call = adapters;
+        CallAdapters = adapters;
         return this;
     }
 
@@ -279,6 +301,17 @@ public sealed class AgentCoreOptions
         return this;
     }
 
+    /// <summary>
+    /// Binds the folder under which every call gets its own workspace directory,
+    /// <c>&lt;root&gt;/&lt;callId&gt;/</c>, created with the call and deleted when the call ends.
+    /// </summary>
+    public AgentCoreOptions UseWorkspace(string root)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(root);
+        WorkspaceRoot = root;
+        return this;
+    }
+
     /// <summary>Registers one host delegate behind a <c>binds:</c> name.</summary>
     /// <param name="name">The name a <c>binds:</c> field writes, such as <c>CreateCase</c>.</param>
     /// <param name="binding">The delegate the tool calls.</param>
@@ -294,7 +327,9 @@ public sealed class AgentCoreOptions
     /// <param name="name">The name a <c>binds:</c> field writes, such as <c>CreateCase</c>.</param>
     /// <param name="method">
     /// The method the tool calls. Its parameters are the arguments the model fills, and their JSON
-    /// Schema, so the declaration writes no <c>parameters:</c>.
+    /// Schema, so the declaration writes no <c>parameters:</c>. A parameter of type
+    /// <see cref="ToolCallScope"/> is filled by the runtime with the call the turn belongs to, and
+    /// is not exposed to the model.
     /// </param>
     /// <returns>These options, so a host chains its calls.</returns>
     /// <exception cref="ArgumentException">The name is already registered.</exception>

@@ -97,7 +97,8 @@ public sealed class ToolRegistryStartupTests
         => new()
         {
             ApiVersion = "agentcore/v1",
-            Name = "test",
+            Agents = new AgentsConfiguration { Items = [] },
+            Entries = new Dictionary<string, EntryConfiguration>(),
             Mcp =
             [
                 new McpServerConfiguration
@@ -111,13 +112,19 @@ public sealed class ToolRegistryStartupTests
         };
 
     private static AgentCoreConfiguration NoMcpConfiguration()
-        => new() { ApiVersion = "agentcore/v1", Name = "test" };
+        => new()
+        {
+            ApiVersion = "agentcore/v1",
+            Agents = new AgentsConfiguration { Items = [] },
+            Entries = new Dictionary<string, EntryConfiguration>(),
+        };
 
     private static AgentCoreConfiguration UndeclaredToolConfiguration()
         => new()
         {
             ApiVersion = "agentcore/v1",
-            Name = "test",
+            Agents = new AgentsConfiguration { Items = [] },
+            Entries = new Dictionary<string, EntryConfiguration>(),
             Tools = [new ToolConfiguration { Id = "no_such_tool", Kind = ToolKind.Binding }],
         };
 
@@ -125,7 +132,8 @@ public sealed class ToolRegistryStartupTests
         => new()
         {
             ApiVersion = "agentcore/v1",
-            Name = "test",
+            Agents = new AgentsConfiguration { Items = [] },
+            Entries = new Dictionary<string, EntryConfiguration>(),
             Tools = [new ToolConfiguration { Id = "shared_id", Kind = ToolKind.Agent, Agent = "specialist" }],
         };
 

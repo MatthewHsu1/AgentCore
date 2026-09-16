@@ -19,25 +19,24 @@ internal sealed class StubKnowledgePort : IKnowledgeRetrievalPort
     /// <summary>Gets how many searches reached this store.</summary>
     public int Calls { get; private set; }
 
-    /// <summary>Gets the scope ambient on the flow when the last search arrived, or <see langword="null"/>.</summary>
+    /// <summary>Gets the scope the last search was handed, or <see langword="null"/> when none ran.</summary>
     /// <remarks>
-    /// Read here rather than in the test body on purpose: the real store reads the ambient at exactly
-    /// this point, deep inside the provider's delegate and several awaits below wherever the host
-    /// opened it. A test that reads it anywhere else proves something easier.
+    /// Read here rather than in the test body on purpose: the real store reads the passed scope at
+    /// exactly this point, deep inside the provider's delegate. A test that reads it anywhere else
+    /// proves something easier.
     /// </remarks>
     public KnowledgeScope? ScopeAtTheStore { get; private set; }
 
-    /// <summary>Gets the <see cref="Clarifications"/> ambient on the flow when the last search arrived.</summary>
-    /// <remarks>Read at the same point as <see cref="ScopeAtTheStore"/>, for the same reason.</remarks>
+    /// <summary>Always <see langword="null"/>: the store is handed a scope, never the turn's holder.</summary>
     public Clarifications? ClarificationsAtTheStore { get; private set; }
 
     public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
         string query,
+        KnowledgeScope? scope = null,
         CancellationToken cancellationToken = default)
     {
         LastQuery = query;
-        ScopeAtTheStore = KnowledgeScopeScope.Current;
-        ClarificationsAtTheStore = TurnAmbients.Current?.Clarifications;
+        ScopeAtTheStore = scope;
         Calls++;
         return ValueTask.FromResult(_cards);
     }
@@ -53,6 +52,7 @@ internal sealed class ThrowingKnowledgePort : IKnowledgeRetrievalPort
 
     public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
         string query,
+        KnowledgeScope? scope = null,
         CancellationToken cancellationToken = default)
         => throw _failure;
 }
@@ -82,6 +82,7 @@ internal sealed class HangingKnowledgePort : IKnowledgeRetrievalPort
 
     public async ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
         string query,
+        KnowledgeScope? scope = null,
         CancellationToken cancellationToken = default)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -94,7 +95,7 @@ internal sealed class HangingKnowledgePort : IKnowledgeRetrievalPort
 }
 
 /// <summary>
-/// A store that filters the way the real one does: it folds the ambient scope's facets into its answer.
+/// A store that filters the way the real one does: it folds the passed scope's facets into its answer.
 /// </summary>
 /// <remarks>
 /// <see cref="StubKnowledgePort"/> ignores the scope, so it can prove which scope arrived but never
@@ -114,9 +115,10 @@ internal sealed class ScopeFilteringKnowledgePort : IKnowledgeRetrievalPort
 
     public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
         string query,
+        KnowledgeScope? scope = null,
         CancellationToken cancellationToken = default)
     {
-        var wanted = KnowledgeScopeScope.Current?.Facets ?? NoFacets;
+        var wanted = scope?.Facets ?? NoFacets;
 
         IReadOnlyList<KnowledgeCard> hits =
         [

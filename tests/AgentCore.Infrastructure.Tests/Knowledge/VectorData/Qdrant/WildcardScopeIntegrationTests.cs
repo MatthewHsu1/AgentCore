@@ -1,6 +1,4 @@
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Runtime;
-using AgentCore.Domain.Knowledge;
 using AgentCore.Infrastructure.Knowledge.VectorData.Qdrant;
 using AgentCore.Infrastructure.Tests.Fakes;
 using Qdrant.Client;
@@ -136,39 +134,33 @@ public sealed class WildcardScopeIntegrationTests : IClassFixture<WildcardScopeC
     [QdrantFact]
     public async Task Search_NothingKnown_ReturnsOnlyTheCompanyWideCard()
     {
-        using (KnowledgeScopeScope.Open(Scope(("brand", "*"), ("applies_to", "*"))))
-        {
-            var cards = await Store.SearchAsync("belt", TestContext.Current.CancellationToken);
-            Assert.Equal(["policy"], cards.Select(c => c.CardId).Order(StringComparer.Ordinal));
-        }
+        var cards = await Store.SearchAsync(
+            "belt", Scope(("brand", "*"), ("applies_to", "*")), TestContext.Current.CancellationToken);
+        Assert.Equal(["policy"], cards.Select(c => c.CardId).Order(StringComparer.Ordinal));
     }
 
     [QdrantFact]
     public async Task Search_BrandOnly_AdmitsBrandWideAndRefusesTheMachineCard()
     {
-        using (KnowledgeScopeScope.Open(Scope(("brand", "sole"), ("applies_to", "*"))))
-        {
-            var cards = await Store.SearchAsync("belt", TestContext.Current.CancellationToken);
-            var ids = cards.Select(c => c.CardId).ToList();
+        var cards = await Store.SearchAsync(
+            "belt", Scope(("brand", "sole"), ("applies_to", "*")), TestContext.Current.CancellationToken);
+        var ids = cards.Select(c => c.CardId).ToList();
 
-            Assert.Contains("sole-care", ids);
-            Assert.Contains("policy", ids);
-            Assert.DoesNotContain("f63-belt", ids);
-        }
+        Assert.Contains("sole-care", ids);
+        Assert.Contains("policy", ids);
+        Assert.DoesNotContain("f63-belt", ids);
     }
 
     [QdrantFact]
     public async Task Search_BrandAndMachine_AdmitsAllThree()
     {
-        using (KnowledgeScopeScope.Open(Scope(("brand", "sole"), ("applies_to", "f63"))))
-        {
-            var cards = await Store.SearchAsync("belt", TestContext.Current.CancellationToken);
-            var ids = cards.Select(c => c.CardId).ToList();
+        var cards = await Store.SearchAsync(
+            "belt", Scope(("brand", "sole"), ("applies_to", "f63")), TestContext.Current.CancellationToken);
+        var ids = cards.Select(c => c.CardId).ToList();
 
-            Assert.Contains("f63-belt", ids);
-            Assert.Contains("sole-care", ids);
-            Assert.Contains("policy", ids);
-        }
+        Assert.Contains("f63-belt", ids);
+        Assert.Contains("sole-care", ids);
+        Assert.Contains("policy", ids);
     }
 
     private QdrantKnowledgeStore Store => new(

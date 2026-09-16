@@ -184,10 +184,10 @@ public sealed class CallSchemaTests
     /// <returns>The loaded document.</returns>
     /// <remarks>
     /// Check 1 of section 8.5 is the only check <c>ConfigurationLoader.LoadYaml</c> runs, and the
-    /// document root requires <c>apiVersion</c> and <c>name</c> and nothing else. Every other test
+    /// document root requires <c>apiVersion</c>, <c>agents</c>, and <c>entries</c>. Every other test
     /// in this folder loads the same way.
     /// </remarks>
     private static AgentCoreConfiguration Load(string providers)
         => ConfigurationLoader.LoadYaml(
-            "apiVersion: agentcore/v1\nname: call-schema\n" + providers);
+            "apiVersion: agentcore/v1\nagents:\n  items:\n    - { id: only, instructions: \"ok\" }\nentries:\n  main:\n    agent: only\n" + providers);
 }

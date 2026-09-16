@@ -59,7 +59,7 @@ public sealed class PostgresAuditSinkAdapterTests : PostgresDatabaseTest
         await using var sink = (PostgresAuditSink)await adapter.OpenAsync(Entry, secrets, Token);
 
         // Assert
-        Assert.True(await ScalarAsync<bool>("SELECT to_regclass('audit_event') IS NOT NULL"));
+        Assert.True(await ScalarAsync<bool>("SELECT to_regclass('agentcore.audit_event') IS NOT NULL"));
     }
 
     [PostgresFact]
@@ -81,7 +81,7 @@ public sealed class PostgresAuditSinkAdapterTests : PostgresDatabaseTest
             Token);
 
         // Assert
-        Assert.Equal(1L, await ScalarAsync<long>("SELECT count(*) FROM audit_event"));
+        Assert.Equal(1L, await ScalarAsync<long>("SELECT count(*) FROM agentcore.audit_event"));
     }
 
     private MapSecretResolver Resolver() =>

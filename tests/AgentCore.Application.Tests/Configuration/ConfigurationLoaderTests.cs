@@ -16,7 +16,7 @@ public sealed class ConfigurationLoaderTests
     public void Example_CarriesTheDocumentHeader()
     {
         Assert.Equal(AgentCoreConfiguration.SupportedApiVersion, Example.ApiVersion);
-        Assert.Equal("service-voice", Example.Name);
+        Assert.Equal(["phone", "chat"], [.. Example.Entries.Keys]);
     }
 
     [Fact]
@@ -72,23 +72,22 @@ public sealed class ConfigurationLoaderTests
     {
         Assert.Equal(4, Example.Tools.Count);
 
-        Assert.Equal(ToolKind.Builtin, Example.Tools[0].Kind);
-        Assert.Equal("ui.draw", Example.Tools[0].Uses);
-
-        var binding = Example.Tools[2];
+        var binding = Example.Tools[1];
         Assert.Equal(ToolKind.Binding, binding.Kind);
         Assert.Equal("CreateCase", binding.Binds);
         Assert.NotNull(binding.Parameters);
         Assert.Equal("object", binding.Parameters!["type"]!.GetValue<string>());
 
+        Assert.Equal(ToolKind.Builtin, Example.Tools[2].Kind);
+        Assert.Equal("web.search", Example.Tools[2].Uses);
         Assert.Equal(ToolKind.Builtin, Example.Tools[3].Kind);
-        Assert.Equal("web.search", Example.Tools[3].Uses);
+        Assert.Equal("code.execute", Example.Tools[3].Uses);
     }
 
     [Fact]
     public void Example_ReadsTheSecretReferenceAndResolvesNothing()
     {
-        var http = Example.Tools[1];
+        var http = Example.Tools[0];
 
         Assert.Equal(ToolKind.Http, http.Kind);
         Assert.NotNull(http.Request);
@@ -119,11 +118,12 @@ public sealed class ConfigurationLoaderTests
     [Fact]
     public void Example_BindsThePolicy()
     {
-        Assert.NotNull(Example.Policy);
-        Assert.Equal("greeting", Example.Policy!.Initial);
-        Assert.Equal(5, Example.Policy.Stages.Count);
+        var policy = Example.Entries["phone"].Policy;
+        Assert.NotNull(policy);
+        Assert.Equal("greeting", policy!.Initial);
+        Assert.Equal(5, policy.Stages.Count);
 
-        var identify = Example.Policy.Stages[1];
+        var identify = policy.Stages[1];
         Assert.Equal("identifier", identify.Agent);
         Assert.Equal(StageNoMatch.Stay, identify.OnNoMatch);
         Assert.Equal(3, identify.To.Count);
@@ -131,16 +131,16 @@ public sealed class ConfigurationLoaderTests
         Assert.Equal("saidGoodbye", identify.To[0].When!.Name);
         Assert.True(identify.To[0].When!.IsNamed);
 
-        var close = Example.Policy.Stages[4];
+        var close = policy.Stages[4];
         Assert.True(close.Terminal);
         Assert.Empty(close.To);
 
-        Assert.Null(Example.Policy.Stages[0].To[0].When);
+        Assert.Null(policy.Stages[0].To[0].When);
     }
 
     [Fact]
-    public void Example_DeclaresNoGraph()
-        => Assert.Null(Example.Graph);
+    public void Example_BindsTheChatEntry()
+        => Assert.Equal("webchat", Example.Entries["chat"].Agent);
 
     [Fact]
     public void Example_BindsProviders()
@@ -153,8 +153,8 @@ public sealed class ConfigurationLoaderTests
         Assert.Equal("judge", Example.Providers.Llm[2].As);
         Assert.Equal("cheap", Example.Providers.Llm[3].As);
         Assert.Equal(false, Example.Providers.Llm[3].WebSearch);
+        Assert.Equal(false, Example.Providers.Llm[3].CodeExecute);
         Assert.Equal("telnyx-relay", Example.Providers.Speech!.Stt.Kind);
-        Assert.Equal("telnyx-relay", Example.Providers.Speech.Tts.Kind);
         Assert.Equal("telnyx", Example.Providers.Telephony!.Kind);
         Assert.Equal("qdrant", Example.Providers.Knowledge!.Kind);
         Assert.Equal("https://qdrant.example.com:6334", Example.Providers.Knowledge.Endpoint);
@@ -168,7 +168,6 @@ public sealed class ConfigurationLoaderTests
         // an empty block names no store at all rather than naming a conventional one.
         const string document = """
             apiVersion: agentcore/v1
-            name: plain
             providers:
               call:   { kind: telnyx-relay }
               speech:
@@ -190,7 +189,6 @@ public sealed class ConfigurationLoaderTests
         // It is never filled in from a name AgentCore chose, because AgentCore chooses none.
         const string document = """
             apiVersion: agentcore/v1
-            name: foreign
             providers:
               call:   { kind: telnyx-relay }
               speech:
@@ -200,6 +198,12 @@ public sealed class ConfigurationLoaderTests
                 kind: qdrant
                 collection: pages
                 fields: { body: page_content }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var knowledge = ConfigurationLoader.LoadYaml(document).Providers!.Knowledge!;
@@ -218,7 +222,6 @@ public sealed class ConfigurationLoaderTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             providers:
               call:   { kind: telnyx-relay }
               speech:
@@ -242,7 +245,6 @@ public sealed class ConfigurationLoaderTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: split
             providers:
               call:   { kind: telnyx-relay }
               speech:
@@ -252,6 +254,12 @@ public sealed class ConfigurationLoaderTests
                 kind: qdrant
                 endpoint: https://cluster.example.com:6334
                 collection: manuals
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var configuration = ConfigurationLoader.LoadYaml(document);
@@ -267,13 +275,18 @@ public sealed class ConfigurationLoaderTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: plainvec
             providers:
               call:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
               knowledge: { kind: qdrant, collection: manuals }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var knowledge = ConfigurationLoader.LoadYaml(document).Providers!.Knowledge!;
@@ -286,7 +299,6 @@ public sealed class ConfigurationLoaderTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: mapped
             providers:
               call:   { kind: telnyx-relay }
               speech:
@@ -296,6 +308,12 @@ public sealed class ConfigurationLoaderTests
                 kind: qdrant
                 collection: manuals
                 mapper: acme-catalog
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         Assert.Equal("acme-catalog", ConfigurationLoader.LoadYaml(document).Providers!.Knowledge!.Mapper);
@@ -323,9 +341,14 @@ public sealed class ConfigurationLoaderTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: quiet
             evaluation:
               sampleRate: 0.25
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var configuration = ConfigurationLoader.LoadYaml(document);
@@ -338,9 +361,14 @@ public sealed class ConfigurationLoaderTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             evaluation:
               judge: { temperature: 0 }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
@@ -353,10 +381,15 @@ public sealed class ConfigurationLoaderTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: tuned
             fallbackReply: "One moment please. I will try that again."
             evaluation:
               sampleRate: 0.25
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var configuration = ConfigurationLoader.LoadYaml(document);
@@ -370,7 +403,12 @@ public sealed class ConfigurationLoaderTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: plain
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var configuration = ConfigurationLoader.LoadYaml(document);
@@ -392,8 +430,13 @@ public sealed class ConfigurationLoaderTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: guarded
             refusalReply: "I am not able to answer that."
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var configuration = ConfigurationLoader.LoadYaml(document);
@@ -406,7 +449,12 @@ public sealed class ConfigurationLoaderTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: plain
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var configuration = ConfigurationLoader.LoadYaml(document);
@@ -420,13 +468,23 @@ public sealed class ConfigurationLoaderTests
     {
         var withFallback = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
-            name: tuned
             fallbackReply: "One moment please. I will try that again."
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """);
         var withRefusal = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
-            name: tuned
             refusalReply: "I am not able to answer that."
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """);
 
         Assert.Equal("One moment please. I will try that again.", withFallback.FallbackReply);
@@ -440,9 +498,14 @@ public sealed class ConfigurationLoaderTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: tuned
             fallbackReply: "One moment please. I will try that again."
             refusalReply: "I am not able to answer that."
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var configuration = ConfigurationLoader.LoadYaml(document);
@@ -456,8 +519,13 @@ public sealed class ConfigurationLoaderTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: plain
             evaluation: {}
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var configuration = ConfigurationLoader.LoadYaml(document);
@@ -472,7 +540,7 @@ public sealed class ConfigurationLoaderTests
     public void ASampleRateInsideTheRange_Binds(string written, double expected)
     {
         var configuration = ConfigurationLoader.LoadYaml(
-            $"apiVersion: agentcore/v1\nname: plain\nevaluation:\n  sampleRate: {written}\n");
+            $"apiVersion: agentcore/v1\nevaluation:\n  sampleRate: {written}\nagents:\n  items:\n    - {{ id: only, instructions: \"ok\" }}\nentries:\n  main:\n    agent: only\n");
 
         Assert.Equal(expected, configuration.Evaluation!.SampleRate);
     }
@@ -486,8 +554,15 @@ public sealed class ConfigurationLoaderTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: plain
-            name: again
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
@@ -509,9 +584,14 @@ public sealed class ConfigurationLoaderTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: plain
             !!str 1: first
             1: second
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
@@ -534,7 +614,7 @@ public sealed class ConfigurationLoaderTests
     public void ANumberTooLargeToHold_FailsTheLoad(string written)
     {
         var failure = Assert.Throws<ConfigurationLoadException>(
-            () => ConfigurationLoader.LoadYaml($"apiVersion: agentcore/v1\nname: plain\nevaluation:\n  sampleRate: {written}\n"));
+            () => ConfigurationLoader.LoadYaml($"apiVersion: agentcore/v1\nevaluation:\n  sampleRate: {written}\n"));
 
         Assert.Equal(ConfigurationCheck.Syntax, failure.Check);
         Assert.Contains(failure.Errors, error => error.Message.Contains("larger than a number can hold", StringComparison.Ordinal));
@@ -545,7 +625,7 @@ public sealed class ConfigurationLoaderTests
     public void ANumberTooSmallToHold_ReadsAsZero()
     {
         var configuration = ConfigurationLoader.LoadYaml(
-            "apiVersion: agentcore/v1\nname: plain\nevaluation:\n  sampleRate: 1e-400\n");
+            "apiVersion: agentcore/v1\nevaluation:\n  sampleRate: 1e-400\nagents:\n  items:\n    - { id: only, instructions: \"ok\" }\nentries:\n  main:\n    agent: only\n");
 
         Assert.Equal(0, configuration.Evaluation!.SampleRate);
     }
@@ -561,8 +641,8 @@ public sealed class ConfigurationLoaderTests
         const string document = """
             {
               "apiVersion": "agentcore/v1",
-              "name": "plain",
-              "name": "again"
+              "agents": { "items": [{ "id": "only" }] },
+              "agents": { "items": [{ "id": "only" }] }
             }
             """;
 
@@ -576,9 +656,14 @@ public sealed class ConfigurationLoaderTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: plain
             tools:
-              - { id: draw, kind: builtin, uses: ui.draw, description: d, model: { ref: cheap } }
+              - { id: search, kind: builtin, uses: web.search, description: d, model: { ref: cheap } }
+            agents:
+              items:
+                - { id: search, instructions: "ok" }
+            entries:
+              main:
+                agent: search
             """;
 
         var configuration = ConfigurationLoader.LoadYaml(document);
@@ -591,9 +676,14 @@ public sealed class ConfigurationLoaderTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: plain
             tools:
-              - { id: draw, kind: builtin, uses: ui.draw, description: d, maxRounds: 4 }
+              - { id: dummy, kind: builtin, uses: web.search, description: d, maxRounds: 4 }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var configuration = ConfigurationLoader.LoadYaml(document);
@@ -606,13 +696,18 @@ public sealed class ConfigurationLoaderTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: unlinked
             providers:
               call:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
               knowledge: { kind: qdrant, collection: manuals }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         Assert.Null(ConfigurationLoader.LoadYaml(document).Providers!.Knowledge!.Links);
@@ -624,7 +719,6 @@ public sealed class ConfigurationLoaderTests
         // filter is the only mode that works on any collection. uuid5 and direct derive the key.
         const string document = """
             apiVersion: agentcore/v1
-            name: linked
             providers:
               call:   { kind: telnyx-relay }
               speech:
@@ -634,6 +728,12 @@ public sealed class ConfigurationLoaderTests
                 kind: qdrant
                 collection: manuals
                 links: { field: related }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var links = ConfigurationLoader.LoadYaml(document).Providers!.Knowledge!.Links;
@@ -646,7 +746,7 @@ public sealed class ConfigurationLoaderTests
     [Fact]
     public void ShippedExampleFile_Loads()
     {
-        var path = Path.Combine(RepositoryRoot(), "demo", "AgentCore.Demo", "config", "example.yaml");
+        var path = Path.Combine(RepositoryRoot(), "config", "example.yaml");
         Assert.True(File.Exists(path), $"The shipped example is missing at '{path}'.");
 
         var shipped = ConfigurationLoader.LoadFile(path);

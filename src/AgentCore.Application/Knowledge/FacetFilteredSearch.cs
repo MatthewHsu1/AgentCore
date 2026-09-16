@@ -1,8 +1,10 @@
 using System.Text.Json;
 
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Runtime;
 
 using Microsoft.Extensions.AI;
+using Microsoft.Agents.AI;
 
 namespace AgentCore.Application.Knowledge;
 
@@ -11,24 +13,31 @@ namespace AgentCore.Application.Knowledge;
 /// </summary>
 internal sealed class FacetFilteredSearch : DelegatingAIFunction
 {
-    private readonly IReadOnlyList<KnowledgeFilterableFacetConfiguration> _facets;
+    private readonly IReadOnlyList<KnowledgeFilterableFacetConfiguration>? _facets;
+
+    private readonly KnowledgeSearch.Core _core;
 
     private readonly JsonElement _schema;
 
     /// <summary>Wraps one search function.</summary>
-    /// <param name="innerFunction">The function the framework built.</param>
-    /// <param name="facets">What <c>scope.filterable</c> declared, in document order.</param>
+    /// <param name="innerFunction">The function the framework built: the schema donor, never invoked.</param>
+    /// <param name="facets">What <c>scope.filterable</c> declared, in document order — or null when it declared none.</param>
+    /// <param name="core">The search bound to this agent's store and wiring.</param>
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
     internal FacetFilteredSearch(
         AIFunction innerFunction,
-        IReadOnlyList<KnowledgeFilterableFacetConfiguration> facets)
+        IReadOnlyList<KnowledgeFilterableFacetConfiguration>? facets,
+        KnowledgeSearch.Core core)
         : base(innerFunction)
     {
         ArgumentNullException.ThrowIfNull(innerFunction);
-        ArgumentNullException.ThrowIfNull(facets);
+        ArgumentNullException.ThrowIfNull(core);
 
         _facets = facets;
-        _schema = FacetFilterSchema.Extend(innerFunction.JsonSchema, facets);
+        _core = core;
+        _schema = facets is { Count: > 0 }
+            ? FacetFilterSchema.Extend(innerFunction.JsonSchema, facets)
+            : innerFunction.JsonSchema;
     }
 
     /// <inheritdoc />
@@ -40,35 +49,50 @@ internal sealed class FacetFilteredSearch : DelegatingAIFunction
     {
         ArgumentNullException.ThrowIfNull(arguments);
 
-        var named = FacetFilterReader.Read(arguments, _facets);
+        var named = _facets is { Count: > 0 }
+            ? FacetFilterReader.Read(arguments, _facets)
+            : null;
 
-        using var scope = named.Count > 0 ? ToolFacetScope.Open(named) : null;
+        var turn = arguments.TryGetValue(TurnInvocation.ArgumentsKey, out var filed) && filed is TurnInvocation invocation
+            ? invocation
+            : null;
 
-        return await base.InvokeCoreAsync(Forwarded(arguments), cancellationToken).ConfigureAwait(false);
+        // The donor's own declaration names the question: the model was built against it.
+        var question = FirstQueryArgument(InnerFunction.JsonSchema) is { } name
+            && arguments.TryGetValue(name, out var asked)
+            ? QueryText(asked)
+            : null;
+
+        if (question is null)
+        {
+            throw new InvalidOperationException(
+                "The knowledge search was called without a search question, so there is nothing to look up.");
+        }
+
+        IReadOnlyList<TextSearchProvider.TextSearchResult> results =
+            await _core(question, named?.Count > 0 ? named : null, turn, cancellationToken).ConfigureAwait(false);
+
+        return results;
     }
 
-    /// <summary>The arguments without the one this wrapper owns.</summary>
-    private static AIFunctionArguments Forwarded(AIFunctionArguments arguments)
+    /// <summary>Reads the donor's question argument name off its own schema.</summary>
+    private static string? FirstQueryArgument(JsonElement schema)
     {
-        if (!arguments.ContainsKey(FacetFilterSchema.ArgumentName))
+        if (schema.ValueKind is not JsonValueKind.Object
+            || !schema.TryGetProperty("properties", out var properties)
+            || properties.ValueKind is not JsonValueKind.Object)
         {
-            return arguments;
+            return null;
         }
 
-        Dictionary<string, object?> kept = new(StringComparer.Ordinal);
-
-        foreach (var (name, value) in arguments)
-        {
-            if (!string.Equals(name, FacetFilterSchema.ArgumentName, StringComparison.Ordinal))
-            {
-                kept[name] = value;
-            }
-        }
-
-        return new AIFunctionArguments(kept)
-        {
-            Services = arguments.Services,
-            Context = arguments.Context,
-        };
+        return properties.EnumerateObject().Select(property => property.Name).FirstOrDefault();
     }
+
+    private static string? QueryText(object? value)
+        => value switch
+        {
+            string text => text,
+            JsonElement { ValueKind: JsonValueKind.String } element => element.GetString(),
+            _ => null,
+        };
 }

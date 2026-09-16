@@ -16,7 +16,7 @@ public sealed class StateDomainTests
         AgentCoreConfiguration configuration = new()
         {
             ApiVersion = "agentcore/v1",
-            Name = "doc",
+            Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(),
             State = new Dictionary<string, StateSlotConfiguration>(StringComparer.Ordinal)
             {
                 ["applies_to"] = new()

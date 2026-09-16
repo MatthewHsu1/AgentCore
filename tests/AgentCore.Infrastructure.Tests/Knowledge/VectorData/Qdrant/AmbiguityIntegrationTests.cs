@@ -1,6 +1,4 @@
-using System.Reflection;
 using System.Runtime.CompilerServices;
-using AgentCore.Application.Calls;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
@@ -10,7 +8,6 @@ using AgentCore.Domain.Knowledge;
 using AgentCore.Infrastructure.Knowledge.VectorData.Qdrant;
 using AgentCore.Infrastructure.Tests.Fakes;
 using AgentCore.TestSupport;
-using Grpc.Core;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Qdrant.Client;
@@ -22,21 +19,16 @@ namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant;
 /// <summary>
 /// Section 12's "probe -- against real Qdrant" list.
 /// </summary>
-/// <remarks>
-/// <para>
 /// <see cref="KnowledgeProviderFactory"/>, <see cref="Clarifications"/> and <see cref="ClarificationText"/>
 /// are internal to <c>AgentCore.Application</c>, and this project carries no grant to reach them. Every
 /// row here is instead driven through the same seam a production host uses: a real YAML document
 /// compiled by <see cref="ConfigurationCompiler"/> with a real <see cref="QdrantKnowledgeStore"/> handed
 /// in as <see cref="AgentCompilationContext.Knowledge"/>, and a real <see cref="CallSession"/> turn. The
-/// turn's own "reply" model is a fake that, instead of letting the framework's tool-calling loop run,
-/// reaches directly into the compiled agent's own <c>TextSearchProvider</c> and calls its private search
-/// delegate itself -- the same delegate <c>KnowledgeProviderFactory.Create</c> built from the real store,
-/// reached by reflection into a <em>third-party</em> field exactly as
-/// <c>AgentCore.Application.Tests.Knowledge.KnowledgeProbeTests</c> already does, which needs no grant
-/// because reflection does not go through the C# compiler's accessibility check. Calling it from inside
-/// the fake model, rather than after the turn, is what keeps <c>TurnAmbients.Current</c> populated: that
-/// ambient is only entered around <c>CallSession</c>'s own call into the reply model.
+/// turn's own "reply" model is a fake that calls the compiled agent's own <c>Search</c> tool with the
+/// row's question, the way a model that needs the cards would; the framework's own tool-calling loop
+/// then runs the real search with the running turn. Reading the tool's answer back off the transcript
+/// is what keeps every row on the production path: the loop's own flow is only entered around
+/// <c>CallSession</c>'s call into the reply model.
 /// </para>
 /// <para>
 /// The store fuses a plain dense leg with a required-term leg by RRF (K49's amendment): a card the
@@ -192,7 +184,6 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
     private const string TwoFacetYaml =
         """
         apiVersion: agentcore/v1
-        name: ambiguity-probe-integration
         state:
           model:
             type: string
@@ -224,13 +215,15 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
           items:
             - id: only
               knowledge: { mode: tool, scoped: true }
+        entries:
+          main:
+            agent: only
         """;
 
     /// <summary>One droppable-shaped facet only: dropping it would open the scope empty (K33).</summary>
     private const string SingleFacetYaml =
         """
         apiVersion: agentcore/v1
-        name: ambiguity-probe-single-facet
         state:
           model:
             type: string
@@ -256,16 +249,21 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
           items:
             - id: only
               knowledge: { mode: tool, scoped: true }
+        entries:
+          main:
+            agent: only
         """;
 
     /// <summary>No <c>scope:</c> at all: the agent opens the whole corpus regardless of what the caller has said.</summary>
     private const string UnscopedYaml =
         """
         apiVersion: agentcore/v1
-        name: ambiguity-probe-unscoped
         agents:
           items:
             - { id: only, instructions: "answer the caller", knowledge: { mode: tool, scoped: false } }
+        entries:
+          main:
+            agent: only
         """;
 
     private readonly AmbiguityCorpusFixture _corpus;
@@ -498,15 +496,13 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
         RoutingChatClientFactory chatClients = new(capture);
         chatClients.Route("fill", new FixedTextChatClient("{}"));
 
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             ConfigurationLoader.LoadYaml(yaml),
             new AgentCompilationContext(chatClients)
             {
                 Knowledge = port ?? BuildStore(limit),
                 Loggers = loggers,
-            });
-
-        capture.Bind(SearchProviderOf(compiled.Agents["only"]));
+            })["main"];
 
         var extractor = CallSessionFactory.CreateExtractor(compiled, chatClients);
         var session = new CallSessionFactory(
@@ -581,15 +577,6 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
         return BuildStoreOver(collection, limit: 10, scoped);
     }
 
-    private static TextSearchProvider SearchProviderOf(AIAgent agent)
-    {
-        var inner = agent.GetService<ChatClientAgent>()
-            ?? throw new InvalidOperationException("the compiled agent carries no ChatClientAgent.");
-
-        return inner.AIContextProviders?.OfType<TextSearchProvider>().SingleOrDefault()
-            ?? throw new InvalidOperationException("the compiled agent carries no TextSearchProvider.");
-    }
-
     /// <summary>
     /// A knowledge store that answers the full-scope (main) search from a real backing store and
     /// throws for any narrowed one -- the shape §8 step 4's own probe search takes once a facet is
@@ -607,11 +594,11 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
         }
 
         public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
-            string query, CancellationToken cancellationToken = default)
+            string query, KnowledgeScope? scope = null, CancellationToken cancellationToken = default)
         {
-            if (KnowledgeScopeScope.Current?.Facets.Count == _fullFacetCount)
+            if (scope?.Facets.Count == _fullFacetCount)
             {
-                return _inner.SearchAsync(query, cancellationToken);
+                return _inner.SearchAsync(query, scope, cancellationToken);
             }
 
             throw new InvalidOperationException("the probe's own second search is down (synthetic, for this row only).");
@@ -619,24 +606,20 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
     }
 
     /// <summary>
-    /// Stands in for the turn's reply model. Rather than let the framework's own tool-calling loop
-    /// run, it reaches directly into the compiled agent's <c>TextSearchProvider</c> and calls its
-    /// private search delegate itself, from inside the same ambient scope <see cref="CallSession"/>
-    /// already opened around this call -- so <c>TurnAmbients.Current</c> is exactly what a real tool
-    /// invocation would see.
+    /// Stands in for the turn's reply model. Rather than answer, its first round calls the compiled
+    /// agent's own <c>Search</c> tool with the row's question, the way a model that needs the cards
+    /// would; the framework's own tool-calling loop then invokes the real search with the running
+    /// turn filed in its arguments, from inside the same flow scope <see cref="CallSession"/> opened
+    /// around this call. Its second round reads the tool's own answer back off the transcript and
+    /// keeps it, so every row asserts on what the production search actually returned.
     /// </summary>
     private sealed class SearchCapturingChatClient : IChatClient
     {
         private readonly string _query;
 
-        private Func<string, CancellationToken, Task<IEnumerable<TextSearchProvider.TextSearchResult>>>? _search;
-
         internal SearchCapturingChatClient(string query) => _query = query;
 
         internal IReadOnlyList<TextSearchProvider.TextSearchResult> Results { get; private set; } = [];
-
-        internal void Bind(TextSearchProvider provider)
-            => _search = TextSearchProviderInternals.SearchDelegate(provider);
 
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
             IEnumerable<ChatMessage> messages,
@@ -644,21 +627,40 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(messages);
-
-            if (_search is { } search)
-            {
-                Results = [.. await search(_query, cancellationToken).ConfigureAwait(false)];
-            }
-
             await Task.Yield();
 
             var responseId = Guid.NewGuid().ToString("N");
+
+            var toolAnswer = messages
+                .SelectMany(message => message.Contents.OfType<FunctionResultContent>())
+                .Select(content => content.Result)
+                .OfType<IEnumerable<TextSearchProvider.TextSearchResult>>()
+                .FirstOrDefault();
+
+            if (toolAnswer is null)
+            {
+                yield return new ChatResponseUpdate(
+                    ChatRole.Assistant,
+                    [new FunctionCallContent(
+                        $"search-{responseId}",
+                        "Search",
+                        new Dictionary<string, object?>(StringComparer.Ordinal) { ["userQuestion"] = _query })])
+                {
+                    ResponseId = responseId,
+                    MessageId = responseId,
+                };
+                yield break;
+            }
+
+            Results = [.. toolAnswer];
+
             yield return new ChatResponseUpdate(ChatRole.Assistant, "noted.")
             {
                 ResponseId = responseId,
                 MessageId = responseId,
             };
         }
+
 
         public async Task<ChatResponse> GetResponseAsync(
             IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
@@ -736,4 +738,5 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
             // Nothing to release.
         }
     }
+
 }

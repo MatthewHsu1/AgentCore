@@ -20,11 +20,18 @@ public sealed class ChatCallTitler(ICallStore calls, IChatClient client) : ICall
         + "Reply with the title alone.";
 
     /// <inheritdoc />
-    public async IAsyncEnumerable<string> GenerateAsync(
-        string callId, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public IAsyncEnumerable<string> GenerateAsync(
+        string callId, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(callId);
 
+        return GenerateCoreAsync(callId, cancellationToken);
+    }
+
+    /// <summary>Reads the call's messages and streams the title <see cref="NameAsync"/> writes.</summary>
+    private async IAsyncEnumerable<string> GenerateCoreAsync(
+        string callId, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
         var rows = await calls.ReadAsync(callId, cancellationToken).ConfigureAwait(false);
 
         if (rows.Count == 0)
@@ -40,14 +47,23 @@ public sealed class ChatCallTitler(ICallStore calls, IChatClient client) : ICall
     }
 
     /// <inheritdoc />
-    public async IAsyncEnumerable<string> GenerateFromAsync(
+    public IAsyncEnumerable<string> GenerateFromAsync(
         string callId,
         IReadOnlyList<ChatMessage> messages,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(callId);
         ArgumentNullException.ThrowIfNull(messages);
 
+        return GenerateFromCoreAsync(callId, messages, cancellationToken);
+    }
+
+    /// <summary>Streams the title of caller-supplied messages once the call proves to exist.</summary>
+    private async IAsyncEnumerable<string> GenerateFromCoreAsync(
+        string callId,
+        IReadOnlyList<ChatMessage> messages,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
         if (messages.Count == 0)
         {
             yield break;

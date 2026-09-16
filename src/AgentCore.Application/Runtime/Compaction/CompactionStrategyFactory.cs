@@ -36,10 +36,8 @@ internal static class CompactionStrategyFactory
 
     private static PipelineCompactionStrategy ContextWindow(ResolvedCompaction settings)
         => new PipelineCompactionStrategy(
-        [
             ToolResult(settings, Trigger(settings.Trigger)),
-            new TruncationCompactionStrategy(Trigger(settings.Trigger), settings.Keep),
-        ]);
+            new TruncationCompactionStrategy(Trigger(settings.Trigger), settings.Keep));
 
     private static CompactionTrigger Trigger(CompactionTriggerConfiguration trigger) => trigger switch
     {

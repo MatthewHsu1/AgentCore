@@ -147,7 +147,7 @@ public sealed class McpServerSessionTests
         // The tool object was built while the first connection was alive, and is never rebuilt.
         await fake.KillNewestConnectionAsync();
 
-        var result = await tool.InvokeAsync(new AIFunctionArguments(), Token);
+        var result = await tool.InvokeAsync([], Token);
 
         Assert.Equal(2, fake.ConnectionsOpened);
         Assert.False(IsError(result), $"the call returned an error result: {result}");
@@ -170,11 +170,11 @@ public sealed class McpServerSessionTests
         await fake.AnnounceToolChangeAsync(Token);
         await WaitForAsync(async () =>
         {
-            var probe = await tool.InvokeAsync(new AIFunctionArguments(), Token);
+            var probe = await tool.InvokeAsync([], Token);
             return IsError(probe);
         });
 
-        var result = await tool.InvokeAsync(new AIFunctionArguments(), Token);
+        var result = await tool.InvokeAsync([], Token);
 
         var error = Assert.IsType<JsonObject>(result);
         Assert.True(ToolErrorResult.IsError(error));
@@ -256,7 +256,7 @@ public sealed class McpServerSessionTests
         object? result = null;
         await WaitForAsync(async () =>
         {
-            result = await tool.InvokeAsync(new AIFunctionArguments(), Token);
+            result = await tool.InvokeAsync([], Token);
             return IsError(result);
         });
 
@@ -268,7 +268,7 @@ public sealed class McpServerSessionTests
             StringComparison.Ordinal);
 
         // It stays gone: the guard is on the call, not on one unlucky moment.
-        Assert.True(IsError(await tool.InvokeAsync(new AIFunctionArguments(), Token)));
+        Assert.True(IsError(await tool.InvokeAsync([], Token)));
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -290,11 +290,37 @@ public sealed class McpServerSessionTests
 
         var watch = Stopwatch.StartNew();
         var result = await ((AIFunction)registry.Resolve("jira.create_issue"))
-            .InvokeAsync(new AIFunctionArguments(), Token);
+            .InvokeAsync([], Token);
         watch.Stop();
 
         Assert.True(ToolErrorResult.IsError(Assert.IsType<JsonObject>(result)));
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(20), $"it waited {watch.Elapsed}.");
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Only what the server declared crosses the wire: the filed turn carries delegates.
+    // ---------------------------------------------------------------------------------------------
+    [Fact]
+    public async Task AnEntryTheServerNeverDeclared_NeverCrossesTheWire()
+    {
+        const string Declared = "message";
+        const string Residue = "urn:agentcore:residue";
+
+        // Arrange
+        await using ControllableMcpServer fake = new("echo") { SchemaProperty = Declared };
+        await using McpToolSource source = new(_ => fake.NewTransport(), null);
+
+        var registrations = await source.ProvideAsync(ContextFor(Jira()), Token);
+        var tool = (AIFunction)registrations.Single(r => r.Id == "jira.echo").Materialise();
+
+        // Act
+        var result = await tool.InvokeAsync(
+            new AIFunctionArguments { [Declared] = "hello", [Residue] = new Action(() => { }) },
+            Token);
+
+        // Assert
+        Assert.False(IsError(result), "the call failed instead of reaching the server.");
+        Assert.Equal([Declared], fake.LastArgumentNames);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -311,7 +337,7 @@ public sealed class McpServerSessionTests
 
         await source.DisposeAsync();
 
-        var result = await tool.InvokeAsync(new AIFunctionArguments(), Token);
+        var result = await tool.InvokeAsync([], Token);
 
         Assert.True(ToolErrorResult.IsError(Assert.IsType<JsonObject>(result)));
     }
@@ -342,7 +368,7 @@ public sealed class McpServerSessionTests
     }
 
     private static ToolSourceContext ContextFor(McpServerConfiguration server)
-        => new(new AgentCoreConfiguration { ApiVersion = "agentcore/v1", Name = "mcp", Mcp = [server] });
+        => new(new AgentCoreConfiguration { ApiVersion = "agentcore/v1", Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(), Mcp = [server] });
 
     private static McpServerConfiguration Wedged(int connectTimeoutSeconds, int attempts)
         => new()

@@ -54,7 +54,7 @@ public sealed class ConfigurationValidatorTests
     [Fact]
     public void TheShippedExampleFile_PassesEveryCheck()
     {
-        var path = Path.Combine(RepositoryRoot(), "demo", "AgentCore.Demo", "config", "example.yaml");
+        var path = Path.Combine(RepositoryRoot(), "config", "example.yaml");
         Assert.True(File.Exists(path), $"The shipped example is missing at '{path}'.");
 
         var result = ConfigurationValidator.Evaluate(ConfigurationLoader.LoadFile(path));
@@ -79,30 +79,36 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             agents:
               items:
                 - { id: greeter }
-            policy:
-              initial: greeting
-              stages:
-                - { id: greeting, agent: ghost, terminal: true }
+            entries:
+              main:
+                policy:
+                  initial: greeting
+                  stages:
+                    - { id: greeting, agent: ghost, terminal: true }
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.ReferenceResolution));
 
-        Assert.Equal("/policy/stages/0/agent", error.Pointer);
+        Assert.Equal("/entries/main/policy/stages/0/agent", error.Pointer);
         Assert.Equal("the agent 'ghost' is not declared in agents.items", error.Message);
     }
 
     [Fact]
     public void AnUnknownTool_FailsCheckTwoWithThePointerOfTheSlot()
-    {
+      {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             state:
               orderStatus: { type: string, writer: tool, from: lookup_order.status }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.ReferenceResolution));
@@ -112,38 +118,64 @@ public sealed class ConfigurationValidatorTests
     }
 
     [Fact]
-    public void AnUnknownGuard_FailsCheckTwoWithThePointerOfTheExit()
+    public void ABackgroundChildThatIsNotAnAgent_FailsCheckTwoWithThePointerOfThatChild()
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             agents:
               items:
-                - { id: greeter }
-            policy:
-              initial: greeting
-              stages:
-                - id: greeting
-                  agent: greeter
-                  to: [ { stage: close, when: ghostGuard } ]
-                - { id: close, agent: greeter, terminal: true }
+                - id: coder
+                  background: [searcher]
+            entries:
+              main:
+                agent: coder
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.ReferenceResolution));
 
-        Assert.Equal("/policy/stages/0/to/0/when", error.Pointer);
-        Assert.Equal("the guard 'ghostGuard' is not declared in guards:", error.Message);
+        Assert.Equal("/agents/items/0/background/0", error.Pointer);
+        Assert.Equal("the agent 'searcher' is not declared in agents.items", error.Message);
     }
 
     [Fact]
-    public void AnUnknownExtractorModel_FailsCheckTwoWithThePointerOfTheReference()
+    public void AnUnknownGuard_FailsCheckTwoWithThePointerOfTheExit()
     {
+        const string document = """
+            apiVersion: agentcore/v1
+            agents:
+              items:
+                - { id: greeter }
+            entries:
+              main:
+                policy:
+                  initial: greeting
+                  stages:
+                    - id: greeting
+                      agent: greeter
+                      to: [ { stage: close, when: ghostGuard } ]
+                    - { id: close, agent: greeter, terminal: true }
+            """;
+
+        var error = Assert.Single(Evaluate(document, ConfigurationCheck.ReferenceResolution));
+
+        Assert.Equal("/entries/main/policy/stages/0/to/0/when", error.Pointer);
+        Assert.Equal("the guard 'ghostGuard' is not declared in guards:", error.Message);
+      }
+
+    [Fact]
+    public void AnUnknownExtractorModel_FailsCheckTwoWithThePointerOfTheReference()
+      {
         const string document = $$"""
             apiVersion: agentcore/v1
-            name: broken
             extractor:
               model: { ref: ghost }
             {{MinimalProviders}}
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.ReferenceResolution));
@@ -157,10 +189,15 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = $$"""
             apiVersion: agentcore/v1
-            name: broken
             evaluation:
               judge: { ref: ghost }
             {{MinimalProviders}}
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.ReferenceResolution));
@@ -174,10 +211,15 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = $$"""
             apiVersion: agentcore/v1
-            name: broken
             titler:
               model: { ref: ghost }
             {{MinimalProviders}}
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.ReferenceResolution));
@@ -191,10 +233,15 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = $$"""
             apiVersion: agentcore/v1
-            name: quiet
             evaluation:
               sampleRate: 0
             {{MinimalProviders}}
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         Assert.Empty(Evaluate(document, ConfigurationCheck.ReferenceResolution));
@@ -205,11 +252,13 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = $$"""
             apiVersion: agentcore/v1
-            name: broken
+            {{MinimalProviders}}
             agents:
               items:
                 - { id: greeter, model: { ref: ghost } }
-            {{MinimalProviders}}
+            entries:
+              main:
+                agent: greeter
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.ReferenceResolution));
@@ -223,13 +272,15 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = $$"""
             apiVersion: agentcore/v1
-            name: broken
             agents:
               defaults:
                 model: { ref: ghost }
               items:
                 - { id: greeter }
             {{MinimalProviders}}
+            entries:
+              main:
+                agent: greeter
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.ReferenceResolution));
@@ -245,9 +296,14 @@ public sealed class ConfigurationValidatorTests
         // absent tools: and an absent agents: the same way.
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             extractor:
               model: { ref: fill }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.ReferenceResolution));
@@ -261,10 +317,12 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: fine
             agents:
               items:
                 - { id: greeter }
+            entries:
+              main:
+                agent: greeter
             """;
 
         Assert.Empty(ConfigurationValidator.Evaluate(ConfigurationLoader.LoadYaml(document)).Errors);
@@ -276,12 +334,14 @@ public sealed class ConfigurationValidatorTests
         // No agent lists this tool, so only the compiler used to catch it, and only later.
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             tools:
               - { id: call_ghost, kind: agent, agent: ghost }
             agents:
               items:
                 - { id: planner }
+            entries:
+              main:
+                agent: planner
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.ReferenceResolution));
@@ -304,7 +364,6 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             mcp:
               - id: jira
                 transport: stdio
@@ -314,6 +373,12 @@ public sealed class ConfigurationValidatorTests
                 transport: stdio
                 command: [npx]
                 allow: [search_issues]
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.ReferenceResolution));
@@ -337,7 +402,8 @@ public sealed class ConfigurationValidatorTests
         string? mapper = null) => new()
     {
         ApiVersion = "agentcore/v1",
-        Name = "doc",
+        Agents = new AgentsConfiguration { Items = [new AgentConfiguration { Id = "planner" }] },
+        Entries = new Dictionary<string, EntryConfiguration> { ["main"] = new EntryConfiguration { Agent = "planner" } },
         State = new Dictionary<string, StateSlotConfiguration>(state, StringComparer.Ordinal),
         Extractor = extractor,
         Providers = new()
@@ -741,9 +807,14 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             state:
               stage: { type: string, writer: extractor }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.SlotWriters));
@@ -759,13 +830,18 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             state:
               failedResolveTurns:
                 type: integer
                 writer: counter
                 increment: { var: turnIndex }
                 value: 0
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.SlotWriters));
@@ -782,11 +858,16 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             state:
               resolved: { type: boolean, default: false, writer: extractor }
             guards:
               fixedNow: { "==": [ { var: resolved }, true ] }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.GuardOperators));
@@ -812,11 +893,16 @@ public sealed class ConfigurationValidatorTests
     {
         var document = $$"""
             apiVersion: agentcore/v1
-            name: broken
             state:
               resolved: { type: boolean, default: false, writer: extractor }
             guards:
               bad: { "{{rejected}}": [ { var: resolved }, 1 ] }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.GuardOperators));
@@ -830,9 +916,14 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             guards:
               ghost: { var: neverDeclared }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.GuardOperators));
@@ -846,11 +937,16 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             state:
               resolved: { type: boolean, default: false, writer: extractor }
             guards:
               tooMany: { ">=": [ { var: resolved }, 3 ] }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.GuardOperators));
@@ -866,11 +962,16 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             state:
               resolved: { type: boolean, default: false, writer: extractor }
             guards:
               isResolved: { "!!": { var: resolved } }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.GuardOperators));
@@ -885,11 +986,16 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: fine
             state:
               resolved: { type: boolean, default: false, writer: extractor }
             guards:
               isResolved: { "!!": [ { var: resolved } ] }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         Assert.Empty(ConfigurationValidator.Evaluate(ConfigurationLoader.LoadYaml(document)).Errors);
@@ -901,11 +1007,16 @@ public sealed class ConfigurationValidatorTests
         // JsonLogic reads the sugar for '!' and not for '!!', so only '!!' is rejected.
         const string document = """
             apiVersion: agentcore/v1
-            name: fine
             state:
               resolved: { type: boolean, default: false, writer: extractor }
             guards:
               notResolved: { "!": { var: resolved } }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         Assert.Empty(ConfigurationValidator.Evaluate(ConfigurationLoader.LoadYaml(document)).Errors);
@@ -916,11 +1027,16 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: fine
             guards:
               inResolve: { "===": [ { var: stage }, "resolve" ] }
               longCall:  { ">=": [ { var: callDurationSeconds }, 90 ] }
               lateTurn:  { ">":  [ { var: turnIndex }, 4 ] }
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             """;
 
         Assert.Empty(ConfigurationValidator.Evaluate(ConfigurationLoader.LoadYaml(document)).Errors);
@@ -934,7 +1050,6 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             state:
               callerAskedForHuman: { type: boolean, default: false, writer: extractor }
               callerSaidGoodbye:   { type: boolean, default: false, writer: extractor }
@@ -944,65 +1059,68 @@ public sealed class ConfigurationValidatorTests
             agents:
               items:
                 - { id: greeter }
-            policy:
-              initial: identify
-              stages:
-                - id: identify
-                  agent: greeter
-                  to:
-                    - { stage: close,    when: saidGoodbye }
-                    - { stage: escalate, when: wantsHuman }
-                - { id: close,    agent: greeter, terminal: true }
-                - { id: escalate, agent: greeter, terminal: true }
+            entries:
+              main:
+                policy:
+                  initial: identify
+                  stages:
+                    - id: identify
+                      agent: greeter
+                      to:
+                        - { stage: close,    when: saidGoodbye }
+                        - { stage: escalate, when: wantsHuman }
+                    - { id: close,    agent: greeter, terminal: true }
+                    - { id: escalate, agent: greeter, terminal: true }
+
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.GuardExclusivity));
 
-        Assert.Equal("/policy/stages/0/to/1/when", error.Pointer);
+        Assert.Equal("/entries/main/policy/stages/0/to/1/when", error.Pointer);
         Assert.Equal(
-            "the guard 'saidGoodbye' and the guard 'wantsHuman' are both true at the same time. "
-            + """The state that triggers it is {"callerSaidGoodbye":true,"callerAskedForHuman":true}.""",
-            error.Message);
-    }
+              "the guard 'saidGoodbye' and the guard 'wantsHuman' are both true at the same time. "
+              + """The state that triggers it is {"callerSaidGoodbye":true,"callerAskedForHuman":true}.""",
+              error.Message);
+      }
 
     [Fact]
     public void AnUnconditionalExitBesideAGuardedOne_FailsCheckFive()
-    {
+      {
         const string document = """
-            apiVersion: agentcore/v1
-            name: broken
-            state:
-              resolved: { type: boolean, default: false, writer: extractor }
-            guards:
-              fixedNow: { var: resolved }
-            agents:
-              items:
-                - { id: greeter }
-            policy:
-              initial: resolve
-              stages:
-                - id: resolve
-                  agent: greeter
-                  to:
-                    - { stage: close, when: fixedNow }
-                    - { stage: escalate }
-                - { id: close,    agent: greeter, terminal: true }
-                - { id: escalate, agent: greeter, terminal: true }
-            """;
+              apiVersion: agentcore/v1
+              state:
+                resolved: { type: boolean, default: false, writer: extractor }
+              guards:
+                fixedNow: { var: resolved }
+              agents:
+                items:
+                  - { id: greeter }
+              entries:
+                main:
+                  policy:
+                    initial: resolve
+                    stages:
+                      - id: resolve
+                        agent: greeter
+                        to:
+                          - { stage: close, when: fixedNow }
+                          - { stage: escalate }
+                      - { id: close,    agent: greeter, terminal: true }
+                      - { id: escalate, agent: greeter, terminal: true }
+              """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.GuardExclusivity));
 
-        Assert.Equal("/policy/stages/0/to/1", error.Pointer);
+        Assert.Equal("/entries/main/policy/stages/0/to/1", error.Pointer);
         Assert.Contains("the unconditional exit to 'escalate'", error.Message, StringComparison.Ordinal);
         Assert.Contains("""{"resolved":true}""", error.Message, StringComparison.Ordinal);
-    }
+      }
 
     [Fact]
     public void TwoGraphEdgesTrueAtOnce_FailCheckFiveOnTheEdge()
-    {
+      {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             state:
               resolved:  { type: boolean, default: false, writer: extractor }
               escalated: { type: boolean, default: false, writer: extractor }
@@ -1013,60 +1131,64 @@ public sealed class ConfigurationValidatorTests
               items:
                 - { id: worker }
                 - { id: closer }
-            graph:
-              nodes:
-                - { id: start, agent: worker, start: true }
-                - { id: left,  agent: closer, output: true }
-                - { id: right, agent: closer, output: true }
-              edges:
-                - { from: start, to: left,  when: fixedNow }
-                - { from: start, to: right, when: handedOff }
+            entries:
+              main:
+                graph:
+                  nodes:
+                    - { id: start, agent: worker, start: true }
+                    - { id: left,  agent: closer, output: true }
+                    - { id: right, agent: closer, output: true }
+                  edges:
+                    - { from: start, to: left,  when: fixedNow }
+                    - { from: start, to: right, when: handedOff }
+
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.GuardExclusivity));
 
-        Assert.Equal("/graph/edges/1/when", error.Pointer);
+        Assert.Equal("/entries/main/graph/edges/1/when", error.Pointer);
         Assert.Contains("the guard 'fixedNow' and the guard 'handedOff'", error.Message, StringComparison.Ordinal);
         Assert.Contains("""{"resolved":true,"escalated":false}""", error.Message, StringComparison.Ordinal);
-    }
+      }
 
     [Fact]
     public void ANumberSlot_IsBucketedAroundEveryThresholdTheSiblingsMention()
-    {
-        // failedResolveTurns >= 3 and failedResolveTurns < 3 never overlap, so the buckets must not
-        // invent a false positive. failedResolveTurns >= 3 and failedResolveTurns > 1 do overlap at 4.
+      {
+          // failedResolveTurns >= 3 and failedResolveTurns < 3 never overlap, so the buckets must not
+          // invent a false positive. failedResolveTurns >= 3 and failedResolveTurns > 1 do overlap at 4.
         const string document = """
-            apiVersion: agentcore/v1
-            name: broken
-            state:
-              failedResolveTurns: { type: integer, default: 0, writer: counter, increment: { var: turnIndex } }
-            guards:
-              exhausted: { ">=": [ { var: failedResolveTurns }, 3 ] }
-              tried:     { ">":  [ { var: failedResolveTurns }, 1 ] }
-            agents:
-              items:
-                - { id: greeter }
-            policy:
-              initial: resolve
-              stages:
-                - id: resolve
-                  agent: greeter
-                  to:
-                    - { stage: close,    when: exhausted }
-                    - { stage: escalate, when: tried }
-                - { id: close,    agent: greeter, terminal: true }
-                - { id: escalate, agent: greeter, terminal: true }
-            """;
+              apiVersion: agentcore/v1
+              state:
+                failedResolveTurns: { type: integer, default: 0, writer: counter, increment: { var: turnIndex } }
+              guards:
+                exhausted: { ">=": [ { var: failedResolveTurns }, 3 ] }
+                tried:     { ">":  [ { var: failedResolveTurns }, 1 ] }
+              agents:
+                items:
+                  - { id: greeter }
+              entries:
+                main:
+                  policy:
+                    initial: resolve
+                    stages:
+                      - id: resolve
+                        agent: greeter
+                        to:
+                          - { stage: close,    when: exhausted }
+                          - { stage: escalate, when: tried }
+                      - { id: close,    agent: greeter, terminal: true }
+                      - { id: escalate, agent: greeter, terminal: true }
+              """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.GuardExclusivity));
 
-        Assert.Equal("/policy/stages/0/to/1/when", error.Pointer);
+        Assert.Equal("/entries/main/policy/stages/0/to/1/when", error.Pointer);
         Assert.Contains("""{"failedResolveTurns":3}""", error.Message, StringComparison.Ordinal);
-    }
+      }
 
     [Fact]
     public void AStateDomainAboveTheCeiling_WarnsThatCoverageIsPartial()
-    {
+      {
         var configuration = ConfigurationLoader.LoadYaml(WideDocument(17));
 
         var result = ConfigurationValidator.Evaluate(configuration);
@@ -1074,172 +1196,181 @@ public sealed class ConfigurationValidatorTests
         Assert.Empty(result.Errors);
         var warning = Assert.Single(result.Warnings);
         Assert.Equal(ConfigurationCheck.GuardExclusivity, warning.Check);
-        Assert.Equal("/policy/stages/0/to", warning.Pointer);
+        Assert.Equal("/entries/main/policy/stages/0/to", warning.Pointer);
         Assert.Equal(
-            "the state domain of the stage 'resolve' passes 65536 points, so check 5 sampled 65536 points at random and its coverage is partial",
-            warning.Message);
-    }
+              "the state domain of the stage 'resolve' passes 65536 points, so check 5 sampled 65536 points at random and its coverage is partial",
+              warning.Message);
+      }
 
-    // ---------------------------------------------------------------------------------------------
-    // Check 6: reachability.
-    // ---------------------------------------------------------------------------------------------
+      // ---------------------------------------------------------------------------------------------
+      // Check 6: reachability.
+      // ---------------------------------------------------------------------------------------------
     [Fact]
     public void AnUnreachableStage_FailsCheckSixWithThePointerOfThatStage()
-    {
+      {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             agents:
               items:
                 - { id: greeter }
-            policy:
-              initial: greeting
-              stages:
-                - { id: greeting, agent: greeter, terminal: true }
-                - { id: island,   agent: greeter, terminal: true }
+            entries:
+              main:
+                policy:
+                  initial: greeting
+                  stages:
+                    - { id: greeting, agent: greeter, terminal: true }
+                    - { id: island,   agent: greeter, terminal: true }
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.Reachability));
 
-        Assert.Equal("/policy/stages/1", error.Pointer);
-        Assert.Equal("the stage 'island' is unreachable from the initial stage 'greeting'", error.Message);
-    }
+        Assert.Equal("/entries/main/policy/stages/1", error.Pointer);
+        Assert.Equal("the stage 'island' is unreachable from the initial stage 'greeting' in entry 'main'", error.Message);
+      }
 
     [Fact]
     public void ANonTerminalStageWithNoExit_FailsCheckSix()
-    {
+      {
         const string document = """
-            apiVersion: agentcore/v1
-            name: broken
-            agents:
-              items:
-                - { id: greeter }
-            policy:
-              initial: greeting
-              stages:
-                - { id: greeting, agent: greeter }
-            """;
+              apiVersion: agentcore/v1
+              agents:
+                items:
+                  - { id: greeter }
+              entries:
+                main:
+                  policy:
+                    initial: greeting
+                    stages:
+                      - { id: greeting, agent: greeter }
+              """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.Reachability));
 
-        Assert.Equal("/policy/stages/0", error.Pointer);
+        Assert.Equal("/entries/main/policy/stages/0", error.Pointer);
         Assert.Equal("the stage 'greeting' is not terminal and has no exit", error.Message);
-    }
+      }
 
-    // ---------------------------------------------------------------------------------------------
-    // Check 7: graph well-formedness.
-    // ---------------------------------------------------------------------------------------------
+      // ---------------------------------------------------------------------------------------------
+      // Check 7: graph well-formedness.
+      // ---------------------------------------------------------------------------------------------
     [Fact]
     public void AGraphWithNoStartNode_FailsCheckSeven()
-    {
+      {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             agents:
               items:
                 - { id: worker }
                 - { id: closer }
-            graph:
-              nodes:
-                - { id: first,  agent: worker }
-                - { id: second, agent: closer, output: true }
-              edges:
-                - { from: first, to: second }
+            entries:
+              main:
+                graph:
+                  nodes:
+                    - { id: first,  agent: worker }
+                    - { id: second, agent: closer, output: true }
+                  edges:
+                    - { from: first, to: second }
+
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.GraphWellFormedness));
 
-        Assert.Equal("/graph/nodes", error.Pointer);
-        Assert.Equal("the graph declares 0 start nodes, and check 7 needs exactly one", error.Message);
-    }
+        Assert.Equal("/entries/main/graph/nodes", error.Pointer);
+        Assert.Equal("the graph in entry 'main' declares 0 start nodes, and check 7 needs exactly one", error.Message);
+      }
 
     [Fact]
     public void AnOrphanNode_FailsCheckSevenWithThePointerOfThatNode()
-    {
+      {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             agents:
               items:
                 - { id: worker }
                 - { id: closer }
-            graph:
-              nodes:
-                - { id: first,  agent: worker, start: true }
-                - { id: second, agent: closer, output: true }
-                - { id: island, agent: closer, output: true }
-              edges:
-                - { from: first, to: second }
+            entries:
+              main:
+                graph:
+                  nodes:
+                    - { id: first,  agent: worker, start: true }
+                    - { id: second, agent: closer, output: true }
+                    - { id: island, agent: closer, output: true }
+                  edges:
+                    - { from: first, to: second }
+
             """;
 
-        // An orphan is also unreachable, so check 6 speaks too. This test reads check 7 alone.
+          // An orphan is also unreachable, so check 6 speaks too. This test reads check 7 alone.
         var error = SingleFor(document, ConfigurationCheck.GraphWellFormedness);
 
-        Assert.Equal("/graph/nodes/2", error.Pointer);
+        Assert.Equal("/entries/main/graph/nodes/2", error.Pointer);
         Assert.Equal("the node 'island' is an orphan: no edge reaches it and no edge leaves it", error.Message);
-    }
+      }
 
     [Fact]
     public void APathThatReachesNoOutput_FailsCheckSeven()
-    {
+      {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             agents:
               items:
                 - { id: worker }
                 - { id: closer }
-            graph:
-              nodes:
-                - { id: first,  agent: worker, start: true }
-                - { id: second, agent: closer, output: true }
-                - { id: sink,   agent: closer }
-              edges:
-                - { from: first,  to: second }
-                - { from: second, to: sink }
+            entries:
+              main:
+                graph:
+                  nodes:
+                    - { id: first,  agent: worker, start: true }
+                    - { id: second, agent: closer, output: true }
+                    - { id: sink,   agent: closer }
+                  edges:
+                    - { from: first,  to: second }
+                    - { from: second, to: sink }
+
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.GraphWellFormedness));
 
-        Assert.Equal("/graph/nodes/2", error.Pointer);
+        Assert.Equal("/entries/main/graph/nodes/2", error.Pointer);
         Assert.Equal("no path from the node 'sink' reaches an output node", error.Message);
-    }
+      }
 
     [Fact]
     public void AnUnreachableNode_FailsCheckSix()
-    {
+      {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             agents:
               items:
                 - { id: worker }
                 - { id: closer }
-            graph:
-              nodes:
-                - { id: first,  agent: worker, start: true }
-                - { id: second, agent: closer, output: true }
-                - { id: island, agent: closer, output: true }
-              edges:
-                - { from: first,  to: second }
-                - { from: island, to: second }
+            entries:
+              main:
+                graph:
+                  nodes:
+                    - { id: first,  agent: worker, start: true }
+                    - { id: second, agent: closer, output: true }
+                    - { id: island, agent: closer, output: true }
+                  edges:
+                    - { from: first,  to: second }
+                    - { from: island, to: second }
+
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.Reachability));
 
-        Assert.Equal("/graph/nodes/2", error.Pointer);
-        Assert.Equal("the node 'island' is unreachable from the start node 'first'", error.Message);
-    }
+        Assert.Equal("/entries/main/graph/nodes/2", error.Pointer);
+        Assert.Equal("the node 'island' is unreachable from the start node 'first' in entry 'main'", error.Message);
+      }
 
-    // ---------------------------------------------------------------------------------------------
-    // Check 8: delegation cycles.
-    // ---------------------------------------------------------------------------------------------
+      // ---------------------------------------------------------------------------------------------
+      // Check 8: delegation cycles.
+      // ---------------------------------------------------------------------------------------------
     [Fact]
     public void AnAgentAsToolLoop_FailsCheckEightWithThePointerOfTheToolThatClosesIt()
-    {
+      {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             tools:
               - { id: call_writer,  kind: agent, agent: writer }
               - { id: call_planner, kind: agent, agent: planner }
@@ -1247,6 +1378,9 @@ public sealed class ConfigurationValidatorTests
               items:
                 - { id: planner, tools: [ call_writer ] }
                 - { id: writer,  tools: [ call_planner ] }
+            entries:
+              main:
+                agent: planner
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.DelegationCycles));
@@ -1263,12 +1397,14 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             tools:
               - { id: call_self, kind: agent, agent: planner }
             agents:
               items:
                 - { id: planner, tools: [ call_self ] }
+            entries:
+              main:
+                agent: planner
             """;
 
         var error = Assert.Single(Evaluate(document, ConfigurationCheck.DelegationCycles));
@@ -1282,7 +1418,6 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: fine
             tools:
               - { id: call_writer, kind: agent, agent: writer }
               - { id: call_editor, kind: agent, agent: editor }
@@ -1291,6 +1426,9 @@ public sealed class ConfigurationValidatorTests
                 - { id: planner, tools: [ call_writer ] }
                 - { id: writer,  tools: [ call_editor ] }
                 - { id: editor }
+            entries:
+              main:
+                agent: planner
             """;
 
         Assert.Empty(ConfigurationValidator.Evaluate(ConfigurationLoader.LoadYaml(document)).Errors);
@@ -1304,7 +1442,6 @@ public sealed class ConfigurationValidatorTests
         // coincidence too.
         const string document = """
             apiVersion: agentcore/v1
-            name: fine
             tools:
               - { id: writer,  kind: builtin, uses: planner }
               - { id: planner, kind: binding, binds: writer }
@@ -1312,6 +1449,9 @@ public sealed class ConfigurationValidatorTests
               items:
                 - { id: planner, tools: [ writer ] }
                 - { id: writer,  tools: [ planner ] }
+            entries:
+              main:
+                agent: writer
             """;
 
         Assert.Empty(ConfigurationValidator.Evaluate(ConfigurationLoader.LoadYaml(document)).Errors);
@@ -1325,7 +1465,6 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             state:
               stage: { type: string, writer: extractor }
             guards:
@@ -1333,10 +1472,13 @@ public sealed class ConfigurationValidatorTests
             agents:
               items:
                 - { id: greeter }
-            policy:
-              initial: greeting
-              stages:
-                - { id: greeting, agent: ghost, terminal: true }
+            entries:
+              main:
+                policy:
+                  initial: greeting
+                  stages:
+                    - { id: greeting, agent: ghost, terminal: true }
+
             """;
 
         var configuration = ConfigurationLoader.LoadYaml(document);
@@ -1347,37 +1489,39 @@ public sealed class ConfigurationValidatorTests
         Assert.Contains(failure.Errors, error => error.Check == ConfigurationCheck.ReferenceResolution);
         Assert.Contains(failure.Errors, error => error.Check == ConfigurationCheck.SlotWriters);
         Assert.Contains(failure.Errors, error => error.Check == ConfigurationCheck.GuardOperators);
-    }
+      }
 
     [Fact]
     public void Validate_ReturnsTheWarningsWhenNothingFails()
-    {
+      {
         var configuration = ConfigurationLoader.LoadYaml(ExampleDocument.Yaml);
 
         var result = ConfigurationValidator.Validate(configuration);
 
         Assert.True(result.IsValid);
-    }
+      }
 
-    // ---------------------------------------------------------------------------------------------
-    // Decision 15: structural, then tool references.
-    // ---------------------------------------------------------------------------------------------
-    /// <summary>
-    /// Decision 15's whole point: a YAML typo must not cost a round trip to every MCP server. The
-    /// structural pass therefore has to find a defect that has nothing to do with tool ids, on a
-    /// document whose tool references cannot possibly resolve yet.
-    /// </summary>
+      // ---------------------------------------------------------------------------------------------
+      // Decision 15: structural, then tool references.
+      // ---------------------------------------------------------------------------------------------
+      /// <summary>
+      /// Decision 15's whole point: a YAML typo must not cost a round trip to every MCP server. The
+      /// structural pass therefore has to find a defect that has nothing to do with tool ids, on a
+      /// document whose tool references cannot possibly resolve yet.
+      /// </summary>
     [Fact]
     public void EvaluateStructure_ADefectThatIsNotAToolReference_IsFoundWithNoServedIds()
-    {
+      {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             guards:
               ghost: { var: neverDeclared }
             agents:
               items:
                 - { id: planner, tools: [ jira.create_issue ] }
+            entries:
+              main:
+                agent: planner
             """;
 
         var configuration = ConfigurationLoader.LoadYaml(document);
@@ -1396,10 +1540,12 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken
             agents:
               items:
                 - { id: planner, tools: [ jira.create_issue ] }
+            entries:
+              main:
+                agent: planner
             """;
 
         var configuration = ConfigurationLoader.LoadYaml(document);
@@ -1420,10 +1566,12 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: fine
             agents:
               items:
                 - { id: planner, tools: [ jira.create_issue ] }
+            entries:
+              main:
+                agent: planner
             """;
 
         var configuration = ConfigurationLoader.LoadYaml(document);
@@ -1439,10 +1587,12 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: broken-skills
             agents:
               items:
                 - { id: support, skills: [warranty-return] }
+            entries:
+              main:
+                agent: support
             """;
 
         var configuration = ConfigurationLoader.LoadYaml(document);
@@ -1464,10 +1614,12 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: good-skills
             agents:
               items:
                 - { id: support, skills: [warranty-returns] }
+            entries:
+              main:
+                agent: support
             """;
 
         var configuration = ConfigurationLoader.LoadYaml(document);
@@ -1486,12 +1638,14 @@ public sealed class ConfigurationValidatorTests
     {
         var document = $$"""
             apiVersion: agentcore/v1
-            name: colliding
             tools:
               - { id: {{reserved}}, kind: http, request: { method: GET, url: "https://example.test" } }
             agents:
               items:
                 - { id: support, skills: [warranty-returns], tools: [{{reserved}}] }
+            entries:
+              main:
+                agent: support
             """;
 
         var configuration = ConfigurationLoader.LoadYaml(document);
@@ -1508,12 +1662,14 @@ public sealed class ConfigurationValidatorTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: no-skills-anywhere
             tools:
               - { id: load_skill, kind: http, request: { method: GET, url: "https://example.test" } }
             agents:
               items:
                 - { id: support, tools: [load_skill] }
+            entries:
+              main:
+                agent: support
             """;
 
         var configuration = ConfigurationLoader.LoadYaml(document);
@@ -1561,7 +1717,6 @@ public sealed class ConfigurationValidatorTests
     {
         var text = new StringBuilder();
         text.AppendLine("apiVersion: agentcore/v1");
-        text.AppendLine("name: wide");
         text.AppendLine("state:");
         for (var index = 0; index < slots; index++)
         {
@@ -1580,16 +1735,18 @@ public sealed class ConfigurationValidatorTests
         text.AppendLine("agents:");
         text.AppendLine("  items:");
         text.AppendLine("    - { id: greeter }");
-        text.AppendLine("policy:");
-        text.AppendLine("  initial: resolve");
-        text.AppendLine("  stages:");
-        text.AppendLine("    - id: resolve");
-        text.AppendLine("      agent: greeter");
-        text.AppendLine("      to:");
-        text.AppendLine("        - { stage: close,    when: first }");
-        text.AppendLine("        - { stage: escalate, when: second }");
-        text.AppendLine("    - { id: close,    agent: greeter, terminal: true }");
-        text.AppendLine("    - { id: escalate, agent: greeter, terminal: true }");
+        text.AppendLine("entries:");
+        text.AppendLine("  main:");
+        text.AppendLine("    policy:");
+        text.AppendLine("      initial: resolve");
+        text.AppendLine("      stages:");
+        text.AppendLine("        - id: resolve");
+        text.AppendLine("          agent: greeter");
+        text.AppendLine("          to:");
+        text.AppendLine("            - { stage: close,    when: first }");
+        text.AppendLine("            - { stage: escalate, when: second }");
+        text.AppendLine("        - { id: close,    agent: greeter, terminal: true }");
+        text.AppendLine("        - { id: escalate, agent: greeter, terminal: true }");
         return text.ToString();
     }
 }

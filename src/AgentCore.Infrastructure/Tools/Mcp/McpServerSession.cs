@@ -273,7 +273,6 @@ internal sealed class McpServerSession : IAsyncDisposable
         {
             client = opened = await _connect(timeout, deadline.Token).ConfigureAwait(false);
             offered = await client.ListToolsAsync(cancellationToken: deadline.Token).ConfigureAwait(false);
-            opened = null;
         }
         catch (OperationCanceledException) when (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {

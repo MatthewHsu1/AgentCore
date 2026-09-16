@@ -7,6 +7,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime;
+using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Transcript;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
@@ -21,25 +22,28 @@ public sealed class CallSessionTranscriptTests
 {
     private const string OneAgentYaml = """
         apiVersion: agentcore/v1
-        name: transcript-check
         agents:
           items:
-            - { id: only, instructions: "greet the caller" }
+            - { id: only, instructions: "ok" }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string ToolYaml = """
         apiVersion: agentcore/v1
-        name: transcript-tool-check
         tools:
           - { id: price_lookup, kind: builtin, uses: orders.read, description: "Look up the price of an item." }
         agents:
           items:
             - { id: only, instructions: "quote the price", tools: [ price_lookup ] }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string SlotYaml = """
         apiVersion: agentcore/v1
-        name: reminder-check
         state:
           orderId:
             type: string
@@ -47,341 +51,347 @@ public sealed class CallSessionTranscriptTests
             description: the order the caller is asking about
         guards:
           known: { var: orderId }
-        policy:
-          initial: ask
-          stages:
-            - id: ask
-              agent: only
-              to: [ { stage: done, when: known } ]
-            - id: done
-              agent: only
-              terminal: true
         agents:
           items:
             - { id: only, instructions: "ask for the order id" }
+        entries:
+          main:
+            policy:
+              initial: ask
+              stages:
+                - id: ask
+                  agent: only
+                  to: [ { stage: done, when: known } ]
+                - id: done
+                  agent: only
+                  terminal: true
         """;
 
-    private const string ToolResult = """{ "price": 50 }""";
+      private const string ToolResult = """{ "price": 50 }""";
 
-    /// <summary>
-    /// Item 6a and R4: the record holds the words the caller heard, and never the tail the model
-    /// produced. It is store 1 that must hold them, not only the live history.
-    /// </summary>
-    [Fact]
-    public async Task Interrupt_MidReply_StoredTranscriptHoldsHeardTextOnly()
-    {
-        // Arrange
-        RecordingCallStore store = new();
-        using ScriptedChatClient reply = new("Hello", " there", " caller") { GateAfterFirstFragment = true };
-        var session = CreateSession(OneAgentYaml, reply, store);
-        var (turn, spoke) = StartGatedTurn(session, "hi");
-        await spoke;
+      /// <summary>
+      /// Item 6a and R4: the record holds the words the caller heard, and never the tail the model
+      /// produced. It is store 1 that must hold them, not only the live history.
+      /// </summary>
+      [Fact]
+      public async Task Interrupt_MidReply_StoredTranscriptHoldsHeardTextOnly()
+      {
+          // Arrange
+          RecordingCallStore store = new();
+          using ScriptedChatClient reply = new("Hello", " there", " caller") { GateAfterFirstFragment = true };
+          var session = CreateSession(OneAgentYaml, reply, store);
+          var (turn, spoke) = StartGatedTurn(session, "hi");
+          await spoke;
 
-        // Act
-        var recorded = session.Interrupt("Hello", TimeSpan.FromMilliseconds(300));
+          // Act
+          var recorded = session.Interrupt("Hello", TimeSpan.FromMilliseconds(300));
 
-        // Assert
-        reply.OpenGate();
-        await turn;
-        Assert.True(recorded);
-        await session.FlushTranscriptAsync();
-        Assert.Equal(["hi", "Hello"], store.Live(session.CallId).Select(row => row.Content.Text));
-    }
+          // Assert
+          reply.OpenGate();
+          await turn;
+          Assert.True(recorded);
+          await session.FlushTranscriptAsync();
+          Assert.Equal(["hi", "Hello"], store.Live(session.CallId).Select(row => row.Content.Text));
+      }
 
-    /// <summary>
-    /// The vendor paces the audio, so the model finishes streaming long before the caller finishes
-    /// hearing, and the frame lands after the turn ended. The turn is then corrected in place — every
-    /// word of it, not only its last message. A line the model wrote beside the tool call it
-    /// announced is a line the caller may never have heard.
-    /// </summary>
-    [Fact]
-    public async Task InterruptAfterTheTurnEnded_ToolTurnWithProse_StoresTheHeardWordsOnce()
-    {
-        // Arrange
-        RecordingCallStore store = new();
-        using ProseThenReplyChatClient reply = new("the price is fifty");
-        var session = CreateSession(ToolYaml, reply, store, new StubToolBuilder(ToolResult).Create);
-        await DrainAsync(session.RunTurnStreamingAsync("how much?", TestContext.Current.CancellationToken));
+      /// <summary>
+      /// The vendor paces the audio, so the model finishes streaming long before the caller finishes
+      /// hearing, and the frame lands after the turn ended. The turn is then corrected in place — every
+      /// word of it, not only its last message. A line the model wrote beside the tool call it
+      /// announced is a line the caller may never have heard.
+      /// </summary>
+      [Fact]
+      public async Task InterruptAfterTheTurnEnded_ToolTurnWithProse_StoresTheHeardWordsOnce()
+      {
+          // Arrange
+          RecordingCallStore store = new();
+          using ProseThenReplyChatClient reply = new("the price is fifty");
+          var session = CreateSession(ToolYaml, reply, store, new StubToolBuilder(ToolResult).Create);
+          await DrainAsync(session.RunTurnStreamingAsync("how much?", TestContext.Current.CancellationToken));
 
-        // Act
-        var recorded = session.Interrupt("the price", TimeSpan.FromMilliseconds(400));
+          // Act
+          var recorded = session.Interrupt("the price", TimeSpan.FromMilliseconds(400));
 
-        // Assert
-        Assert.True(recorded);
-        await session.FlushTranscriptAsync();
-        var rows = store.Live(session.CallId);
-        Assert.DoesNotContain(
-            rows.SelectMany(row => row.Content.Contents).OfType<TextContent>(),
-            text => text.Text.Contains(ProseThenReplyChatClient.Prose, StringComparison.Ordinal));
+          // Assert
+          Assert.True(recorded);
+          await session.FlushTranscriptAsync();
+          var rows = store.Live(session.CallId);
+          Assert.DoesNotContain(
+              rows.SelectMany(row => row.Content.Contents).OfType<TextContent>(),
+              text => text.Text.Contains(ProseThenReplyChatClient.Prose, StringComparison.Ordinal));
 
-        // The side effect ran, so the pair stays visible to the next turn.
-        Assert.Contains(rows, row => row.Content.Contents.OfType<FunctionCallContent>().Any());
-        Assert.Contains(rows, row => row.Content.Contents.OfType<FunctionResultContent>().Any());
-        Assert.Equal(
-            ["how much?", "the price"],
-            rows.Select(row => row.Content.Text).Where(text => text.Length > 0));
-    }
+          // The side effect ran, so the pair stays visible to the next turn.
+          Assert.Contains(rows, row => row.Content.Contents.OfType<FunctionCallContent>().Any());
+          Assert.Contains(rows, row => row.Content.Contents.OfType<FunctionResultContent>().Any());
+          Assert.Equal(
+              ["how much?", "the price"],
+              rows.Select(row => row.Content.Text).Where(text => text.Length > 0));
+      }
 
-    /// <summary>
-    /// A barge-in rewrites the assistant reply in place, but a drawing rides the tool-result
-    /// message from earlier in the same turn — a different row entirely. Correcting the reply must
-    /// leave that row, and what it carries, alone.
-    /// </summary>
-    [Fact]
-    public async Task InterruptAfterTheTurnEnded_ToolTurnThatDrew_LeavesTheRenderContentOnTheToolResultRow()
-    {
-        // Arrange
-        RecordingCallStore store = new();
-        using ProseThenReplyChatClient reply = new("the price is fifty");
-        var session = CreateSession(ToolYaml, reply, store, DrawingTool);
-        session.SetHasScreen(true);
-        await DrainAsync(session.RunTurnStreamingAsync("how much?", TestContext.Current.CancellationToken));
+      /// <summary>
+      /// A barge-in rewrites the assistant reply in place, but a render rides the tool-result
+      /// message from earlier in the same turn — a different row entirely. Correcting the reply must
+      /// leave that row, and what it carries, alone.
+      /// </summary>
+      [Fact]
+      public async Task InterruptAfterTheTurnEnded_ToolTurnThatRendered_LeavesTheRenderContentOnTheToolResultRow()
+      {
+          // Arrange
+          RecordingCallStore store = new();
+          using ProseThenReplyChatClient reply = new("the price is fifty");
+          var session = CreateSession(ToolYaml, reply, store, RenderTool);
+          session.SetHasScreen(true);
+          await DrainAsync(session.RunTurnStreamingAsync("how much?", TestContext.Current.CancellationToken));
 
-        // Act
-        var recorded = session.Interrupt("the price", TimeSpan.FromMilliseconds(400));
+          // Act
+          var recorded = session.Interrupt("the price", TimeSpan.FromMilliseconds(400));
 
-        // Assert
-        Assert.True(recorded);
-        await session.FlushTranscriptAsync();
-        var rows = store.Live(session.CallId);
-        Assert.Equal(
-            ["how much?", "the price"],
-            rows.Select(row => row.Content.Text).Where(text => text.Length > 0));
+          // Assert
+          Assert.True(recorded);
+          await session.FlushTranscriptAsync();
+          var rows = store.Live(session.CallId);
+          Assert.Equal(
+              ["how much?", "the price"],
+              rows.Select(row => row.Content.Text).Where(text => text.Length > 0));
 
-        var toolResultRow = Assert.Single(rows, row => row.Content.Contents.OfType<FunctionResultContent>().Any());
-        var render = Assert.Single(toolResultRow.Content.Contents.OfType<RenderContent>());
-        Assert.Equal("chart-1", render.RenderId);
-    }
+          var toolResultRow = Assert.Single(rows, row => row.Content.Contents.OfType<FunctionResultContent>().Any());
+          var render = Assert.Single(toolResultRow.Content.Contents.OfType<RenderContent>());
+          Assert.Equal("chart-1", render.RenderId);
+      }
 
-    /// <summary>
-    /// Drives a real turn end to end through <see cref="CallSession"/>, with a screen bound and a
-    /// real tool that draws through it, and reads what store 1 actually kept. Every other render
-    /// test in this suite hand-rolls the ambient with <c>TurnAmbients.Amend</c>, so none of them
-    /// would notice a broken wire between <see cref="CallSession.EnterAmbients"/> and
-    /// <see cref="TurnAmbients.Renders"/> — this is the one test that goes through that wire itself.
-    /// </summary>
-    [Fact]
-    public async Task ATurnThatDrawsWithAScreenBound_StoresTheRenderContentOnTheToolResultRow()
-    {
-        // Arrange
-        RecordingCallStore store = new();
-        ToolCallingChatClient reply = new("drew it.");
-        var session = CreateSession(ToolYaml, reply, store, DrawingTool);
-        session.SetHasScreen(true);
+      /// <summary>
+      /// Drives a real turn end to end through <see cref="CallSession"/>, with a screen bound and a
+      /// real tool that publishes through it, and reads what store 1 actually kept. Every other render
+      /// test in this suite hand-rolls collectors, so none of them would notice a broken wire between
+      /// the turn's invocation and its renders — this is the one test that goes through that wire
+      /// itself.
+      /// </summary>
+      [Fact]
+      public async Task ATurnThatRendersWithAScreenBound_StoresTheRenderContentOnTheToolResultRow()
+      {
+          // Arrange
+          RecordingCallStore store = new();
+          ToolCallingChatClient reply = new("drew it.");
+          var session = CreateSession(ToolYaml, reply, store, RenderTool);
+          session.SetHasScreen(true);
 
-        // Act
-        await session.RunTurnAsync("how much?", TestContext.Current.CancellationToken);
+          // Act
+          await session.RunTurnAsync("how much?", TestContext.Current.CancellationToken);
 
-        // Assert
-        await session.FlushTranscriptAsync();
-        var rows = store.Live(session.CallId);
-        Assert.Contains(rows.SelectMany(row => row.Content.Contents), content => content is RenderContent);
-    }
+          // Assert
+          await session.FlushTranscriptAsync();
+          var rows = store.Live(session.CallId);
+          Assert.Contains(rows.SelectMany(row => row.Content.Contents), content => content is RenderContent);
+      }
 
-    /// <summary>Builds a real tool that draws through the ambient screen, for <see cref="ToolYaml"/>.</summary>
-    private static AITool? DrawingTool(ToolConfiguration tool)
-        => AIFunctionFactory.Create(
-            () =>
-            {
-                CallRenderScope.Current!.Publish("generative-ui", "chart-1", new { title = "Q3 revenue" });
-                return "drew it.";
-            },
-            tool.Id,
-            tool.Description ?? tool.Id);
+      /// <summary>Builds a real tool that publishes through the turn's screen, for <see cref="ToolYaml"/>.</summary>
+      private static AITool? RenderTool(ToolConfiguration tool)
+          => AIFunctionFactory.Create(
+              (TurnInvocation? turn) =>
+              {
+                  turn!.Screen!.Publish("generative-ui", "chart-1", new { title = "Q3 revenue" });
+                  return "drew it.";
+              },
+              new AIFunctionFactoryOptions
+              {
+                  Name = tool.Id,
+                  Description = tool.Description ?? tool.Id,
+                  ConfigureParameterBinding = ToolParameterBindings.For,
+              });
 
-    /// <summary>
-    /// Step 1's second failure mode: a cut that reached back a turn would replace a sentence the
-    /// caller heard in full, and nothing would detect it. The guard is <c>CallSession</c>'s, so this
-    /// drives it through <see cref="CallSession.Interrupt"/> rather than through the provider.
-    /// </summary>
-    [Fact]
-    public async Task Interrupt_AfterASecondTurn_LeavesTheFirstTurnsReplyWhole()
-    {
-        // Arrange
-        RecordingCallStore store = new();
-        RequestRecordingChatClient reply = new("hi there caller", "it ships Friday from the depot");
-        var session = CreateSession(OneAgentYaml, reply, store);
-        _ = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
-        _ = await session.RunTurnAsync("order 41?", TestContext.Current.CancellationToken);
+      /// <summary>
+      /// Step 1's second failure mode: a cut that reached back a turn would replace a sentence the
+      /// caller heard in full, and nothing would detect it. The guard is <c>CallSession</c>'s, so this
+      /// drives it through <see cref="CallSession.Interrupt"/> rather than through the provider.
+      /// </summary>
+      [Fact]
+      public async Task Interrupt_AfterASecondTurn_LeavesTheFirstTurnsReplyWhole()
+      {
+          // Arrange
+          RecordingCallStore store = new();
+          RequestRecordingChatClient reply = new("hi there caller", "it ships Friday from the depot");
+          var session = CreateSession(OneAgentYaml, reply, store);
+          _ = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
+          _ = await session.RunTurnAsync("order 41?", TestContext.Current.CancellationToken);
 
-        // Act
-        var recorded = session.Interrupt("it ships", TimeSpan.FromMilliseconds(500));
+          // Act
+          var recorded = session.Interrupt("it ships", TimeSpan.FromMilliseconds(500));
 
-        // Assert
-        Assert.True(recorded);
-        await session.FlushTranscriptAsync();
-        Assert.Equal(
-            ["hello", "hi there caller", "order 41?", "it ships"],
-            store.Live(session.CallId).Select(row => row.Content.Text));
-    }
+          // Assert
+          Assert.True(recorded);
+          await session.FlushTranscriptAsync();
+          Assert.Equal(
+              ["hello", "hi there caller", "order 41?", "it ships"],
+              store.Live(session.CallId).Select(row => row.Content.Text));
+      }
 
-    [Fact]
-    public async Task RunTurn_SecondTurn_SendsTheNewCallerMessageAloneAndTheModelStillSeesTheCall()
-    {
-        // Arrange
-        RequestRecordingChatClient reply = new("hi there", "it ships Friday");
-        var session = CreateSession(OneAgentYaml, reply, new RecordingCallStore());
-        _ = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
+      [Fact]
+      public async Task RunTurn_SecondTurn_SendsTheNewCallerMessageAloneAndTheModelStillSeesTheCall()
+      {
+          // Arrange
+          RequestRecordingChatClient reply = new("hi there", "it ships Friday");
+          var session = CreateSession(OneAgentYaml, reply, new RecordingCallStore());
+          _ = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
 
-        // Act
-        _ = await session.RunTurnAsync("order 41?", TestContext.Current.CancellationToken);
+          // Act
+          _ = await session.RunTurnAsync("order 41?", TestContext.Current.CancellationToken);
 
-        // Assert
-        Assert.Equal(
-            ["user:hello", "assistant:hi there", "user:order 41?"],
-            reply.Requests[1]);
-    }
+          // Assert
+          Assert.Equal(
+              ["user:hello", "assistant:hi there", "user:order 41?"],
+              reply.Requests[1]);
+      }
 
-    /// <summary>
-    /// The reminder rides exactly one invocation, as instructions the framework merges and stores
-    /// nowhere. Nothing of it reaches the caller's own message, so store 1 keeps what was said.
-    /// </summary>
-    [Fact]
-    public async Task RunTurn_WithAnUnfilledSlot_KeepsTheReminderOutOfTheStoredTranscript()
-    {
-        // Arrange
-        RecordingCallStore store = new();
-        RequestRecordingChatClient reply = new("which order?");
-        var session = CreateSession(SlotYaml, reply, store);
+      /// <summary>
+      /// The reminder rides exactly one invocation, as instructions the framework merges and stores
+      /// nowhere. Nothing of it reaches the caller's own message, so store 1 keeps what was said.
+      /// </summary>
+      [Fact]
+      public async Task RunTurn_WithAnUnfilledSlot_KeepsTheReminderOutOfTheStoredTranscript()
+      {
+          // Arrange
+          RecordingCallStore store = new();
+          RequestRecordingChatClient reply = new("which order?");
+          var session = CreateSession(SlotYaml, reply, store);
 
-        // Act
-        _ = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
+          // Act
+          _ = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
 
-        // Assert
-        // The reminder rides a message of its own, below the transcript, so the instructions block
-        // stays byte-identical across turns and the vendor's cacheable prefix covers the transcript.
-        Assert.DoesNotContain("<system-reminder>", reply.Instructions[0] ?? string.Empty, StringComparison.Ordinal);
-        Assert.Contains(reply.Requests[0], message => message.Contains("<system-reminder>", StringComparison.Ordinal));
-        await session.FlushTranscriptAsync();
-        Assert.Equal(["hello", "which order?"], store.Live(session.CallId).Select(row => row.Content.Text));
-    }
+          // Assert
+          // The reminder rides a message of its own, below the transcript, so the instructions block
+          // stays byte-identical across turns and the vendor's cacheable prefix covers the transcript.
+          Assert.DoesNotContain("<system-reminder>", reply.Instructions[0] ?? string.Empty, StringComparison.Ordinal);
+          Assert.Contains(reply.Requests[0], message => message.Contains("<system-reminder>", StringComparison.Ordinal));
+          await session.FlushTranscriptAsync();
+          Assert.Equal(["hello", "which order?"], store.Live(session.CallId).Select(row => row.Content.Text));
+      }
 
-    private static CallSession CreateSession(
-        string yaml, IChatClient reply, ICallStore store, Func<ToolConfiguration, AITool?>? tools = null)
-    {
-        var document = ConfigurationLoader.LoadYaml(yaml);
-        var chatClients = new FakeChatClientFactory(reply);
-        var compiled = ConfigurationCompiler.Compile(
-            document,
-            new AgentCompilationContext(chatClients)
-            {
-                CallStore = store,
-                Tools = TestToolRegistry.From(document, tools, TestContext.Current.CancellationToken),
-            });
+      private static CallSession CreateSession(
+          string yaml, IChatClient reply, ICallStore store, Func<ToolConfiguration, AITool?>? tools = null)
+      {
+          var document = ConfigurationLoader.LoadYaml(yaml);
+          var chatClients = new FakeChatClientFactory(reply);
+          var compiled = ConfigurationCompiler.CompileAll(
+              document,
+              new AgentCompilationContext(chatClients)
+              {
+                  CallStore = store,
+                  Tools = TestToolRegistry.From(document, tools, TestContext.Current.CancellationToken),
+              })["main"];
 
-        var factory = new CallSessionFactory(
-            compiled,
-            new GuardEvaluator(compiled.Configuration.Guards),
-            extractor: null);
+          var factory = new CallSessionFactory(
+              compiled,
+              new GuardEvaluator(compiled.Configuration.Guards),
+              extractor: null);
 
-        return factory.Create();
-    }
+          return factory.Create();
+      }
 
-    /// <summary>Starts a streaming turn on a background task and says when the caller can hear it.</summary>
-    /// <param name="session">The call to run the turn on.</param>
-    /// <param name="userInput">What the caller said.</param>
-    /// <returns>The running turn, and a task that completes at its first spoken update.</returns>
-    /// <remarks>
-    /// A run that has handed the host nothing is not the turn the caller is hearing, so a barge-in
-    /// before the first update takes the amendment path instead and records nothing. Waiting for that
-    /// update is what makes the cut land in the reply rather than after it.
-    /// </remarks>
-    private static (Task Turn, Task Spoke) StartGatedTurn(CallSession session, string userInput)
-    {
-        TaskCompletionSource spoke = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        var turn = Task.Run(
-            async () =>
-            {
-                await foreach (var _ in session
-                    .RunTurnStreamingAsync(userInput, TestContext.Current.CancellationToken)
-                    .ConfigureAwait(false))
-                {
-                    spoke.TrySetResult();
-                }
-            },
-            CancellationToken.None);
+      /// <summary>Starts a streaming turn on a background task and says when the caller can hear it.</summary>
+      /// <param name="session">The call to run the turn on.</param>
+      /// <param name="userInput">What the caller said.</param>
+      /// <returns>The running turn, and a task that completes at its first spoken update.</returns>
+      /// <remarks>
+      /// A run that has handed the host nothing is not the turn the caller is hearing, so a barge-in
+      /// before the first update takes the amendment path instead and records nothing. Waiting for that
+      /// update is what makes the cut land in the reply rather than after it.
+      /// </remarks>
+      private static (Task Turn, Task Spoke) StartGatedTurn(CallSession session, string userInput)
+      {
+          TaskCompletionSource spoke = new(TaskCreationOptions.RunContinuationsAsynchronously);
+          var turn = Task.Run(
+              async () =>
+              {
+                  await foreach (var _ in session
+                      .RunTurnStreamingAsync(userInput, TestContext.Current.CancellationToken)
+                      .ConfigureAwait(false))
+                  {
+                      spoke.TrySetResult();
+                  }
+              },
+              CancellationToken.None);
 
-        return (turn, spoke.Task.WaitAsync(TimeSpan.FromSeconds(10)));
-    }
+          return (turn, spoke.Task.WaitAsync(TimeSpan.FromSeconds(10)));
+      }
 
-    /// <summary>Runs a streaming turn to its end. No fact here reads an update.</summary>
-    private static async Task DrainAsync(IAsyncEnumerable<ChatResponseUpdate> updates)
-    {
-        await foreach (var _ in updates.ConfigureAwait(false))
-        {
-        }
-    }
+      /// <summary>Runs a streaming turn to its end. No fact here reads an update.</summary>
+      private static async Task DrainAsync(IAsyncEnumerable<ChatResponseUpdate> updates)
+      {
+          await foreach (var _ in updates.ConfigureAwait(false))
+          {
+          }
+      }
 
-    /// <summary>Writes a line beside the tool call it announces, then answers once the result lands.</summary>
-    /// <remarks>
-    /// This is what a real model produces, and it is the shape a cut has to survive: the prose and
-    /// the call ride one message, so the words and the side effect cannot be dropped together.
-    /// </remarks>
-    private sealed class ProseThenReplyChatClient : IChatClient
-    {
-        /// <summary>The line the model speaks before it calls the tool.</summary>
-        public const string Prose = "Let me check that for you";
+      /// <summary>Writes a line beside the tool call it announces, then answers once the result lands.</summary>
+      /// <remarks>
+      /// This is what a real model produces, and it is the shape a cut has to survive: the prose and
+      /// the call ride one message, so the words and the side effect cannot be dropped together.
+      /// </remarks>
+      private sealed class ProseThenReplyChatClient : IChatClient
+      {
+          /// <summary>The line the model speaks before it calls the tool.</summary>
+          public const string Prose = "Let me check that for you";
 
-        private const string ToolCallId = "call_1";
+          private const string ToolCallId = "call_1";
 
-        private readonly string _reply;
+          private readonly string _reply;
 
-        public ProseThenReplyChatClient(string reply) => _reply = reply;
+          public ProseThenReplyChatClient(string reply) => _reply = reply;
 
-        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            ArgumentNullException.ThrowIfNull(messages);
-            await Task.Yield();
+          public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+              IEnumerable<ChatMessage> messages,
+              ChatOptions? options = null,
+              [EnumeratorCancellation] CancellationToken cancellationToken = default)
+          {
+              ArgumentNullException.ThrowIfNull(messages);
+              await Task.Yield();
 
-            var answered = messages.Any(message => message.Contents.OfType<FunctionResultContent>().Any());
-            var responseId = Guid.NewGuid().ToString("N");
+              var answered = messages.Any(message => message.Contents.OfType<FunctionResultContent>().Any());
+              var responseId = Guid.NewGuid().ToString("N");
 
-            if (!answered && options?.Tools?.OfType<AIFunction>().FirstOrDefault() is { } tool)
-            {
-                yield return new ChatResponseUpdate(
-                    ChatRole.Assistant,
-                    [
-                        new TextContent(Prose),
-                        new FunctionCallContent(
-                            ToolCallId, tool.Name, new Dictionary<string, object?>(StringComparer.Ordinal)),
-                    ])
-                {
-                    ResponseId = responseId,
-                    MessageId = responseId,
-                };
+              if (!answered && options?.Tools?.OfType<AIFunction>().FirstOrDefault() is { } tool)
+              {
+                  yield return new ChatResponseUpdate(
+                      ChatRole.Assistant,
+                      [
+                          new TextContent(Prose),
+                          new FunctionCallContent(
+                              ToolCallId, tool.Name, new Dictionary<string, object?>(StringComparer.Ordinal)),
+                      ])
+                  {
+                      ResponseId = responseId,
+                      MessageId = responseId,
+                  };
 
-                yield break;
-            }
+                  yield break;
+              }
 
-            yield return new ChatResponseUpdate(ChatRole.Assistant, _reply)
-            {
-                ResponseId = responseId,
-                MessageId = responseId,
-            };
-        }
+              yield return new ChatResponseUpdate(ChatRole.Assistant, _reply)
+              {
+                  ResponseId = responseId,
+                  MessageId = responseId,
+              };
+          }
 
-        public async Task<ChatResponse> GetResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
-        {
-            List<ChatResponseUpdate> updates = [];
-            await foreach (var update in GetStreamingResponseAsync(messages, options, cancellationToken)
-                .ConfigureAwait(false))
-            {
-                updates.Add(update);
-            }
+          public async Task<ChatResponse> GetResponseAsync(
+              IEnumerable<ChatMessage> messages,
+              ChatOptions? options = null,
+              CancellationToken cancellationToken = default)
+          {
+              List<ChatResponseUpdate> updates = [];
+              await foreach (var update in GetStreamingResponseAsync(messages, options, cancellationToken)
+                  .ConfigureAwait(false))
+              {
+                  updates.Add(update);
+              }
 
-            return updates.ToChatResponse();
-        }
+              return updates.ToChatResponse();
+          }
 
-        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+          public object? GetService(Type serviceType, object? serviceKey = null) => null;
 
-        public void Dispose()
-        {
-        }
-    }
-}
+          public void Dispose()
+          {
+          }
+      }
+  }

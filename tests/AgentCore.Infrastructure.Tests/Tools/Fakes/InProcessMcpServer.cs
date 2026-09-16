@@ -46,7 +46,7 @@ internal sealed class InProcessMcpServer : IAsyncDisposable
         var serverTransport = new StreamServerTransport(
             clientToServer.Reader.AsStream(), serverToClient.Writer.AsStream());
 
-        var options = new McpServerOptions { ToolCollection = new McpServerPrimitiveCollection<McpServerTool>() };
+        var options = new McpServerOptions { ToolCollection = [] };
         foreach (var (name, description) in tools)
         {
             options.ToolCollection.Add(McpServerTool.Create(

@@ -1,7 +1,6 @@
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Secrets;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Tests.Fakes;
 using AgentCore.Domain.Knowledge;
@@ -50,7 +49,6 @@ public sealed class AmbiguityStartupTests
         => new()
         {
             ApiVersion = "agentcore/v1",
-            Name = "ambiguity-boot",
             Extractor = new ExtractorConfiguration { Model = new ModelReference { Ref = "fill" } },
             State = new Dictionary<string, StateSlotConfiguration>(StringComparer.Ordinal)
             {
@@ -78,11 +76,6 @@ public sealed class AmbiguityStartupTests
                     Ambiguity = new KnowledgeAmbiguityConfiguration(),
                 },
             },
-            Policy = new PolicyConfiguration
-            {
-                Initial = "answering",
-                Stages = [new StageConfiguration { Id = "answering", Agent = "resolver", Terminal = true }],
-            },
             Agents = new AgentsConfiguration
             {
                 Items =
@@ -94,6 +87,17 @@ public sealed class AmbiguityStartupTests
                         Knowledge = new AgentKnowledgeConfiguration { Mode = KnowledgeMode.Prefetch, Scoped = true },
                     },
                 ],
+            },
+            Entries = new Dictionary<string, EntryConfiguration>
+            {
+                ["main"] = new EntryConfiguration
+                {
+                    Policy = new PolicyConfiguration
+                    {
+                        Initial = "answering",
+                        Stages = [new StageConfiguration { Id = "answering", Agent = "resolver", Terminal = true }],
+                    },
+                },
             },
         };
 
@@ -118,7 +122,7 @@ public sealed class AmbiguityStartupTests
     private sealed class EmptyPort : IKnowledgeRetrievalPort
     {
         public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
-            string query, CancellationToken cancellationToken = default)
+            string query, KnowledgeScope? scope = null, CancellationToken cancellationToken = default)
             => ValueTask.FromResult<IReadOnlyList<KnowledgeCard>>([]);
     }
 }

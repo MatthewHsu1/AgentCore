@@ -12,33 +12,18 @@ namespace AgentCore.Application.Llm;
 /// The one <see cref="IChatClientFactory"/> a config-driven host binds. It routes each
 /// <c>providers.llm[]</c> entry to the <see cref="IChatClientAdapter"/> whose kind matches.
 /// </summary>
-/// <remarks>
-/// <para>
-/// The compile table asks for the client behind an <c>as</c> name and never reads a vendor name.
-/// This class holds the vendor-neutral half of that mapping: the <c>as</c> map, the default entry,
-/// and the two client caches, vendor and shaped. The vendor half lives in the adapters, one for
-/// each <c>kind</c>, so the document alone decides which vendor answers which reference.
-/// </para>
-/// <para>
-/// Every client is built while <see cref="CreateAsync"/> runs. A <c>kind</c> no adapter serves and a
-/// credential that does not resolve both stop the host at startup, and not on the first call. An
-/// agent that reached the telephone and then found no model is the silent failure the startup checks
-/// exist to stop.
-/// </para>
-/// <para>
-/// One vendor client is built for each <c>as</c> name and then shared, because a chat client is
-/// thread-safe and a call costs a connection pool. A reference that also sets
-/// <see cref="ModelReference.Temperature"/> takes a thin wrapper over that same vendor client, so the
-/// document keeps its setting and the pool stays one.
-/// </para>
-/// </remarks>
 public sealed class CompositeChatClientFactory : IChatClientFactory, IDisposable
 {
     private readonly Dictionary<string, LlmProviderConfiguration> _entries = new(StringComparer.Ordinal);
+
+    private readonly Dictionary<string, IChatClientAdapter> _adapters = new(StringComparer.Ordinal);
+
     private readonly Dictionary<string, IChatClient> _vendor = new(StringComparer.Ordinal);
+
     private readonly ConcurrentDictionary<string, IChatClient> _shaped = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, bool> _capable = new(StringComparer.Ordinal);
+
     private LlmProviderConfiguration? _default;
+
     private int _disposed;
 
     private CompositeChatClientFactory()
@@ -85,10 +70,11 @@ public sealed class CompositeChatClientFactory : IChatClientFactory, IDisposable
                     $"two entries answer to the name '{entry.As}', so a model reference names two models.");
             }
 
+            factory._adapters[entry.As] = adapter;
+            
             factory._vendor[entry.As] = await adapter
                 .CreateClientAsync(entry, secrets, cancellationToken)
                 .ConfigureAwait(false);
-            factory._capable[entry.As] = adapter.SupportsHostedWebSearch(entry);
 
             factory._default ??= entry;
         }
@@ -127,11 +113,20 @@ public sealed class CompositeChatClientFactory : IChatClientFactory, IDisposable
     }
 
     /// <inheritdoc />
-    public bool SupportsHostedWebSearch(ModelReference? model)
+    public AITool? ResolveHostedTool(AITool marker, ModelReference? model)
     {
+        ArgumentNullException.ThrowIfNull(marker);
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) == 1, this);
 
-        return _capable.TryGetValue(model?.Ref ?? _default?.As ?? string.Empty, out var capable) && capable;
+        var entry = model is null
+            ? _default
+            : _entries.TryGetValue(model.Ref, out var named) ? named : null;
+        if (entry is null || !_adapters.TryGetValue(entry.As, out var adapter))
+        {
+            return null;
+        }
+
+        return adapter.ResolveHostedTool(marker, entry);
     }
 
     /// <summary>Releases every client the adapters built.</summary>

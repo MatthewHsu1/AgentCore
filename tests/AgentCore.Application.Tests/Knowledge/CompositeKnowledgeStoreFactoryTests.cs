@@ -21,16 +21,17 @@ public sealed class CompositeKnowledgeStoreFactoryTests
     private const string NoKnowledgeYaml =
         """
         apiVersion: agentcore/v1
-        name: no-knowledge
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string OneKindYaml =
         """
         apiVersion: agentcore/v1
-        name: one-store
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
@@ -44,12 +45,14 @@ public sealed class CompositeKnowledgeStoreFactoryTests
             endpoint: https://cluster.example.com
             collection: manuals
             fields: { body: body }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string ShoutedKindYaml =
         """
         apiVersion: agentcore/v1
-        name: shouted-store
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
@@ -62,6 +65,9 @@ public sealed class CompositeKnowledgeStoreFactoryTests
             kind: QDRANT
             collection: manuals
             fields: { body: body }
+        entries:
+          main:
+            agent: only
         """;
 
     // ---------------------------------------------------------------------------------------------
@@ -195,7 +201,6 @@ public sealed class CompositeKnowledgeStoreFactoryTests
         const string yaml =
             """
             apiVersion: agentcore/v1
-            name: cited
             agents:
               items:
                 - id: only
@@ -210,6 +215,9 @@ public sealed class CompositeKnowledgeStoreFactoryTests
                 kind: qdrant
                 collection: manuals
                 fields: { body: body, source: null, locator: null }
+            entries:
+              main:
+                agent: only
             """;
         RecordingKnowledgeStoreAdapter qdrant = new("qdrant");
 
@@ -226,7 +234,6 @@ public sealed class CompositeKnowledgeStoreFactoryTests
         const string yaml =
             """
             apiVersion: agentcore/v1
-            name: cited-locator
             agents:
               items:
                 - id: only
@@ -241,6 +248,9 @@ public sealed class CompositeKnowledgeStoreFactoryTests
                 kind: qdrant
                 collection: manuals
                 fields: { body: body, locator: source.locator, source: null }
+            entries:
+              main:
+                agent: only
             """;
         RecordingKnowledgeStoreAdapter qdrant = new("qdrant");
 
@@ -293,7 +303,7 @@ public sealed class CompositeKnowledgeStoreFactoryTests
         => new()
         {
             ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
-            Name = "test",
+            Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(),
             Providers = new ProvidersConfiguration
             {
                 Knowledge = new KnowledgeProviderConfiguration

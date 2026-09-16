@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Knowledge;
@@ -50,11 +49,6 @@ public sealed class AgentCompilationContext
     public ICallStore? CallStore { get; init; }
 
     /// <summary>
-    /// Gets or sets the source of the state a guarded graph edge reads.
-    /// </summary>
-    public Func<IReadOnlyDictionary<string, JsonNode?>>? StateSnapshot { get; init; }
-
-    /// <summary>
     /// Gets or sets the store every agent's <c>knowledge:</c> block reads through.
     /// </summary>
     public IKnowledgeRetrievalPort? Knowledge { get; init; }
@@ -74,4 +68,10 @@ public sealed class AgentCompilationContext
     /// Gets or sets where the compiled agents write their own diagnostics, or <see langword="null"/>.
     /// </summary>
     public ILoggerFactory? Loggers { get; init; }
+
+    /// <summary>
+    /// Gets or sets the root a <c>memory:</c> block's files are kept under, or <see langword="null"/>
+    /// when the host bound no workspace root.
+    /// </summary>
+    public string? WorkspaceRoot { get; init; }
 }

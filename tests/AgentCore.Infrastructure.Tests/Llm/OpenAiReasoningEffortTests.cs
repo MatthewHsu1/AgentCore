@@ -25,7 +25,7 @@ namespace AgentCore.Infrastructure.Tests.Llm;
 /// Every test here runs offline. No request leaves the process and no key is real.
 /// </para>
 /// </remarks>
-public sealed class OpenAiReasoningEffortTests
+public sealed partial class OpenAiReasoningEffortTests
 {
     [Theory]
     [InlineData("none")]
@@ -150,7 +150,67 @@ public sealed class OpenAiReasoningEffortTests
         // A wrapped client answers GetService for the configuring middleware; a bare one does not.
         Assert.NotNull(client.GetService(typeof(ConfigureOptionsChatClient)));
     }
+}
 
+/// <summary>
+/// Which hosted markers <c>openai</c> resolves, and the operator's per-entry veto.
+/// </summary>
+public sealed class OpenAiHostedToolTests
+{
+    [Fact]
+    public void ResolveHostedWebSearch_WithoutAVeto_ResolvesTheMarker()
+    {
+        var adapter = new OpenAiChatClientAdapter();
+        HostedWebSearchTool marker = new();
+
+        Assert.Same(marker, adapter.ResolveHostedTool(marker, Entry(webSearch: null, codeExecute: null)));
+    }
+
+    [Fact]
+    public void ResolveHostedSearch_WithAVeto_AnswersNull()
+    {
+        var adapter = new OpenAiChatClientAdapter();
+
+        Assert.Null(adapter.ResolveHostedTool(new HostedWebSearchTool(), Entry(webSearch: false, codeExecute: null)));
+    }
+
+    [Fact]
+    public void ResolveHostedCodeExecution_WithoutAVeto_ResolvesTheMarker()
+    {
+        var adapter = new OpenAiChatClientAdapter();
+        HostedCodeInterpreterTool marker = new();
+
+        Assert.Same(marker, adapter.ResolveHostedTool(marker, Entry(webSearch: null, codeExecute: null)));
+    }
+
+    [Fact]
+    public void ResolveHostedCodeExecution_WithAVeto_AnswersNull()
+    {
+        var adapter = new OpenAiChatClientAdapter();
+
+        Assert.Null(adapter.ResolveHostedTool(new HostedCodeInterpreterTool(), Entry(webSearch: null, codeExecute: false)));
+    }
+
+    [Fact]
+    public void ResolveHostedTool_ForAnUnknownMarker_AnswersNull()
+    {
+        var adapter = new OpenAiChatClientAdapter();
+
+        Assert.Null(adapter.ResolveHostedTool(new HostedMcpServerTool("s", "https://example.com"), Entry(webSearch: null, codeExecute: null)));
+    }
+
+    private static LlmProviderConfiguration Entry(bool? webSearch, bool? codeExecute) => new()
+    {
+        Kind = OpenAiChatClientAdapter.ProviderKind,
+        Model = "m",
+        As = "reply",
+        WebSearch = webSearch,
+        CodeExecute = codeExecute,
+    };
+}
+
+public sealed partial class OpenAiReasoningEffortTests
+{
     /// <summary>Records the options it was called with, and answers nothing.</summary>
     private sealed class CapturingChatClient : IChatClient
     {

@@ -117,10 +117,12 @@ public sealed class ConfigurationSecretResolverTests
     // ---------------------------------------------------------------------------------------------
     private const string Document = """
         apiVersion: agentcore/v1
-        name: secret-chain-tests
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
+        entries:
+          main:
+            agent: only
         providers:
           call:   { kind: telnyx-relay }
           speech:

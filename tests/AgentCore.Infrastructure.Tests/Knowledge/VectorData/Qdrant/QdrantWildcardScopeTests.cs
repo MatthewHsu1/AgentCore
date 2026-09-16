@@ -1,6 +1,4 @@
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Runtime;
-using AgentCore.Domain.Knowledge;
 using AgentCore.Infrastructure.Knowledge.VectorData.Qdrant;
 using AgentCore.Infrastructure.Tests.Fakes;
 using AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant.Fakes;
@@ -28,10 +26,7 @@ public sealed class QdrantWildcardScopeTests
         var channel = new CapturingSearchChannel([]);
         var store = StoreOver(channel, wildcard: null, wildcardFacets: []);
 
-        using (KnowledgeScopeScope.Open(Scope(("brand", "sole"))))
-        {
-            await store.SearchAsync("belt", TestContext.Current.CancellationToken);
-        }
+        await store.SearchAsync("belt", Scope(("brand", "sole")), TestContext.Current.CancellationToken);
 
         var condition = channel.Query!.Prefetch[0].Filter.Must[0].Field;
         Assert.Equal(Match.MatchValueOneofCase.Keyword, condition.Match.MatchValueCase);
@@ -43,11 +38,7 @@ public sealed class QdrantWildcardScopeTests
     {
         var channel = new CapturingSearchChannel([]);
         var store = StoreOver(channel, wildcard: "*", wildcardFacets: ["brand"]);
-
-        using (KnowledgeScopeScope.Open(Scope(("brand", "sole"))))
-        {
-            await store.SearchAsync("belt", TestContext.Current.CancellationToken);
-        }
+        await store.SearchAsync("belt", Scope(("brand", "sole")), TestContext.Current.CancellationToken);
 
         var match = channel.Query!.Prefetch[0].Filter.Must[0].Field.Match;
         Assert.Equal(Match.MatchValueOneofCase.Keywords, match.MatchValueCase);
@@ -59,11 +50,8 @@ public sealed class QdrantWildcardScopeTests
     {
         var channel = new CapturingSearchChannel([]);
         var store = StoreOver(channel, wildcard: "*", wildcardFacets: ["brand"]);
-
-        using (KnowledgeScopeScope.Open(Scope(("brand", "sole"), ("customer_id", "c-91"))))
-        {
-            await store.SearchAsync("belt", TestContext.Current.CancellationToken);
-        }
+        await store.SearchAsync(
+            "belt", Scope(("brand", "sole"), ("customer_id", "c-91")), TestContext.Current.CancellationToken);
 
         var conditions = channel.Query!.Prefetch[0].Filter.Must;
         var tenant = conditions.Single(c => c.Field.Key.EndsWith("customer_id", StringComparison.Ordinal));
@@ -76,10 +64,7 @@ public sealed class QdrantWildcardScopeTests
         var channel = new CapturingSearchChannel([]);
         var store = StoreOver(channel, wildcard: "*", wildcardFacets: ["brand"]);
 
-        using (KnowledgeScopeScope.Open(Scope(("brand", "*"))))
-        {
-            await store.SearchAsync("belt", TestContext.Current.CancellationToken);
-        }
+        await store.SearchAsync("belt", Scope(("brand", "*")), TestContext.Current.CancellationToken);
 
         var match = channel.Query!.Prefetch[0].Filter.Must[0].Field.Match;
         Assert.Equal(Match.MatchValueOneofCase.Keyword, match.MatchValueCase);
@@ -93,12 +78,9 @@ public sealed class QdrantWildcardScopeTests
         // gate on them. It has to accept the same set the query did.
         var store = StoreOver(
             ChannelWithLink(linkedFacet: "*"), wildcard: "*", wildcardFacets: ["brand"], withLinks: true);
-
-        using (KnowledgeScopeScope.Open(Scope(("brand", "sole"))))
-        {
-            var cards = await store.SearchAsync("belt", TestContext.Current.CancellationToken);
-            Assert.Contains(cards, card => card.ViaLink);
-        }
+        var cards = await store.SearchAsync(
+            "belt", Scope(("brand", "sole")), TestContext.Current.CancellationToken);
+        Assert.Contains(cards, card => card.ViaLink);
     }
 
     [Fact]
@@ -107,11 +89,9 @@ public sealed class QdrantWildcardScopeTests
         var store = StoreOver(
             ChannelWithLink(linkedFacet: "spirit"), wildcard: "*", wildcardFacets: ["brand"], withLinks: true);
 
-        using (KnowledgeScopeScope.Open(Scope(("brand", "sole"))))
-        {
-            var cards = await store.SearchAsync("belt", TestContext.Current.CancellationToken);
-            Assert.DoesNotContain(cards, card => card.ViaLink);
-        }
+        var cards = await store.SearchAsync(
+            "belt", Scope(("brand", "sole")), TestContext.Current.CancellationToken);
+        Assert.DoesNotContain(cards, card => card.ViaLink);
     }
 
     /// <summary>A ranked point linking to one fetched point tagged <paramref name="linkedFacet"/> on <c>brand</c>.</summary>

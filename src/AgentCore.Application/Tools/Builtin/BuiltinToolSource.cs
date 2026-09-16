@@ -1,9 +1,7 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Tools.Drawing;
 using AgentCore.Application.Tools.Registry;
-using AgentCore.Application.Tools.Shipped;
 
 namespace AgentCore.Application.Tools.Builtin;
 
@@ -16,12 +14,7 @@ public sealed class BuiltinToolSource : IToolSource
         new IBuiltinToolDefinition[]
         {
             new WebSearchToolDefinition(),
-        }.ToDictionary(definition => definition.Name, StringComparer.Ordinal);
-
-    private static readonly Dictionary<string, IShippedAgentDefinition> ShippedAgents =
-        new IShippedAgentDefinition[]
-        {
-            new DrawingAgentDefinition(),
+            new CodeExecuteToolDefinition(),
         }.ToDictionary(definition => definition.Name, StringComparer.Ordinal);
 
     private readonly BuiltinToolPorts _ports;
@@ -45,18 +38,9 @@ public sealed class BuiltinToolSource : IToolSource
 
         foreach (var declared in context.DeclarationsOf(ToolKind.Builtin))
         {
-            // Built eagerly, whichever table serves it: a definition reports an unbound port by
-            // throwing, and that failure belongs on the boot rather than on the first call.
+            // Built eagerly: a definition reports an unbound port by throwing, and that failure
+            // belongs on the boot rather than on the first call.
             var uses = declared.Uses;
-
-            if (uses is not null && ShippedAgents.TryGetValue(uses, out var shipped))
-            {
-                var describedAgent = Described(declared, shipped);
-                var agent = ShippedAgentBuilder.Build(shipped, describedAgent, _ports);
-
-                registrations.Add(new ToolRegistration(declared.Id, describedAgent.Description!, () => agent));
-                continue;
-            }
 
             if (uses is null || !Definitions.TryGetValue(uses, out var definition))
             {
@@ -67,8 +51,7 @@ public sealed class BuiltinToolSource : IToolSource
             {
                 throw ToolSourceError.Fail(
                     $"the tool '{declared.Id}' is kind: builtin and uses: '{uses}', which is a plain function "
-                    + $"and reads no {dial}. Take the key out, or point uses: at a shipped agent "
-                    + $"({string.Join(", ", ShippedAgents.Keys)}).");
+                    + $"and reads no {dial}. Take the key out.");
             }
 
             var resolved = Described(declared, definition);
@@ -98,10 +81,17 @@ public sealed class BuiltinToolSource : IToolSource
     /// <param name="tool">The declaration the document holds.</param>
     /// <returns>The key, or <see langword="null"/> when the declaration sets neither.</returns>
     private static string? UnreadDial(ToolConfiguration tool)
-        => tool.Model is not null ? "model:" : tool.MaxRounds is not null ? "maxRounds:" : null;
+    {
+        if (tool.Model is not null)
+        {
+            return "model:";
+        }
+
+        return tool.MaxRounds is not null ? "maxRounds:" : null;
+    }
 
     private static ConfigurationLoadException UnknownName(ToolConfiguration tool)
         => ToolSourceError.Fail(
             $"the tool '{tool.Id}' is kind: builtin and uses: '{tool.Uses}', which AgentCore does "
-            + $"not ship. This release ships {string.Join(", ", Definitions.Keys.Concat(ShippedAgents.Keys))}.");
+            + $"not ship. This release ships {string.Join(", ", Definitions.Keys)}.");
 }

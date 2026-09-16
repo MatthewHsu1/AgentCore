@@ -14,7 +14,6 @@ public sealed class StateDocumentTests
     private const string Yaml =
         """
         apiVersion: agentcore/v1
-        name: written-slots
         state:
           model:  { type: string, writer: tool, from: lookup.model }
           serial: { type: string, writer: tool, from: lookup.serial }
@@ -23,6 +22,9 @@ public sealed class StateDocumentTests
         agents:
           items:
             - { id: only }
+        entries:
+          main:
+            agent: only
         """;
 
     private static readonly AgentCoreConfiguration Document = ConfigurationLoader.LoadYaml(Yaml);
@@ -34,7 +36,6 @@ public sealed class StateDocumentTests
     private static string ManySlotsYaml =>
         $$"""
         apiVersion: agentcore/v1
-        name: many-slots
         state:
         {{string.Join('\n', Enumerable.Range(0, SlotCount)
             .Select(slot => $"  {SlotName(slot)}: {{ type: integer, writer: tool, from: lookup.{SlotName(slot)} }}"))}}
@@ -43,12 +44,15 @@ public sealed class StateDocumentTests
         agents:
           items:
             - { id: only }
+        entries:
+          main:
+            agent: only
         """;
 
     private static AgentCoreConfiguration WithEnumSlot() => new()
     {
         ApiVersion = "agentcore/v1",
-        Name = "doc",
+        Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(),
         State = new Dictionary<string, StateSlotConfiguration>(StringComparer.Ordinal)
         {
             ["applies_to"] = new()
