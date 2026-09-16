@@ -37,7 +37,8 @@ public sealed class ContinuationStoreTests : PostgresDatabaseTest
         var found = await store.GetContinuationAsync("conv_1", Token);
 
         // Assert
-        Assert.Equal(document.RootElement.GetRawText(), found?.GetRawText());
+        Assert.NotNull(found);
+        Assert.True(JsonElement.DeepEquals(document.RootElement, found.Value));
 
         // Act
         using var replacement = JsonDocument.Parse("{}");
