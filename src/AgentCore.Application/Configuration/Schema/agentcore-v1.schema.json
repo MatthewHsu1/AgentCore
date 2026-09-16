@@ -1205,6 +1205,38 @@
         "calls": {
           "$ref": "#/$defs/vendorProvider",
           "description": "Where a call is kept: its row, and the words of it. A document that names none uses the in-process memory store, which is not durable and holds no retention window."
+        },
+        "blobs": {
+          "$ref": "#/$defs/blobProvider",
+          "description": "Where a file the vendor's sandbox wrote is kept after the run, such as s3. A document that names none keeps no sandbox file."
+        }
+      }
+    },
+    "blobProvider": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "endpoint": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The service URL, such as https://s3.us-west-004.backblazeb2.com."
+        },
+        "bucket": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The bucket every blob is written into."
+        },
+        "region": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The region the request signature names. Omit it to read the region off the endpoint host."
         }
       }
     },

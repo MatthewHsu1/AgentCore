@@ -69,6 +69,9 @@ public sealed class AgentCoreOptions
     /// <summary>Gets the call store vendors the host registered, or <see langword="null"/>.</summary>
     internal IReadOnlyList<ICallStoreAdapter>? CallStores { get; private set; }
 
+    /// <summary>Gets the blob store vendors the host registered, or <see langword="null"/>.</summary>
+    internal IReadOnlyList<IBlobStoreAdapter>? BlobStores { get; private set; }
+
     /// <summary>Gets the speech vendors the host registered, or <see langword="null"/>.</summary>
     internal IReadOnlyList<ISpeechAdapter>? Speech { get; private set; }
 
@@ -232,6 +235,16 @@ public sealed class AgentCoreOptions
     {
         ArgumentNullException.ThrowIfNull(adapters);
         CallStores = adapters;
+        return this;
+    }
+
+    /// <summary>Binds the blob store vendors, and the document picks one by <c>providers.blobs.kind</c>.</summary>
+    /// <param name="adapters">The vendors this host supports.</param>
+    /// <returns>These options, so a host chains its calls.</returns>
+    public AgentCoreOptions UseBlobStores(params IBlobStoreAdapter[] adapters)
+    {
+        ArgumentNullException.ThrowIfNull(adapters);
+        BlobStores = adapters;
         return this;
     }
 

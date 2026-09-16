@@ -61,6 +61,7 @@ public static class AgentCoreServiceCollectionExtensions
 
         services.AddSingleton(Boot(boot => boot.Telemetry!));
         services.AddSingleton(Boot(boot => boot.Knowledge!));
+        services.AddSingleton(Boot(boot => boot.Blobs!));
         services.AddSingleton(Boot(boot => boot.CallAdapters!));
         services.AddSingleton(Boot(boot => boot.SpeechAdapters!));
 

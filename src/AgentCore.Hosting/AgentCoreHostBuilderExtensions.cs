@@ -3,6 +3,7 @@ using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
 using AgentCore.Hosting.Secrets;
 using AgentCore.Infrastructure.Audit.Postgres;
+using AgentCore.Infrastructure.Blobs.S3;
 using AgentCore.Infrastructure.Calls.Postgres;
 using AgentCore.Infrastructure.Embeddings.OpenAI;
 using AgentCore.Infrastructure.Evaluation.OpenAiModeration;
@@ -131,6 +132,9 @@ public static class AgentCoreHostBuilderExtensions
 
         // providers.calls.kind picks the adapter.
         options.UseCallStores(new PostgresCallStoreAdapter());
+
+        // providers.blobs.kind picks the adapter.
+        options.UseBlobStores(new S3BlobStoreAdapter());
     }
 
     /// <summary>Opens the client a <c>transport: http</c> MCP server is reached on.</summary>

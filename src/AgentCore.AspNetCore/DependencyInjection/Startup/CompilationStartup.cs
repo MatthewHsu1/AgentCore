@@ -30,6 +30,7 @@ internal static class CompilationStartup
     /// <param name="chatClients">The factory step 3c built, which the compile table asks for every agent and for the extractor.</param>
     /// <param name="tools">The registry step 4 built.</param>
     /// <param name="calls">The store every call's row and every word of it is kept in.</param>
+    /// <param name="blobs">The store step 4d opened, or <see langword="null"/> when the document names no blob vendor.</param>
     /// <param name="evaluators">
     /// The registry the moderator comes out of. R3 puts moderation in the chat pipeline of every
     /// compiled agent, so it is bound here rather than on the session factory.
@@ -46,6 +47,7 @@ internal static class CompilationStartup
         IChatClientFactory chatClients,
         ToolRegistry tools,
         ICallStore calls,
+        IBlobStore? blobs,
         EvaluatorRegistry evaluators,
         IKnowledgeRetrievalPort? knowledge,
         SkillCatalog? skills,
@@ -64,6 +66,7 @@ internal static class CompilationStartup
                 Guards = guards,
                 Moderation = PromptModerator.FromRegistry(evaluators),
                 CallStore = calls,
+                Blobs = blobs,
                 Knowledge = knowledge,
                 Skills = skills,
                 Citations = citations,

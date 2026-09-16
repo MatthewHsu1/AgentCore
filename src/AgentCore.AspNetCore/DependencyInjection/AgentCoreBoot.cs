@@ -92,6 +92,9 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
     /// <summary>Gets the knowledge base, or <see langword="null"/> when no agent reads one.</summary>
     internal IKnowledgeRetrievalPort? Knowledge => Started.Knowledge;
 
+    /// <summary>Gets the blob store, or <see langword="null"/> when the document names none.</summary>
+    internal IBlobStore? Blobs => Started.Blobs;
+
     /// <summary>Gets what each entry's call route runs, keyed by entry name, or <see langword="null"/> when no call routes here.</summary>
     internal IReadOnlyDictionary<string, RequestDelegate>? CallHandlers => Started.CallHandlers;
 
@@ -217,6 +220,10 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
             .OpenAsync(configuration, _options, _loggers, cancellationToken)
             .ConfigureAwait(false));
 
+        var blobs = Track(await BlobStartup
+            .OpenAsync(configuration, _options, cancellationToken)
+            .ConfigureAwait(false));
+
         var evaluators = await EvaluationStartup
             .CreateRegistryAsync(configuration, _options, cancellationToken)
             .ConfigureAwait(false);
@@ -227,6 +234,7 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
                 chatClients,
                 tools.Registry,
                 calls,
+                blobs,
                 evaluators,
                 knowledge,
                 skills,
@@ -247,6 +255,7 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
             telemetry,
             tools.Registry,
             calls,
+            blobs,
             evaluators,
             graph,
             call.Entries,
@@ -356,6 +365,7 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
         ITelemetrySession? Telemetry,
         ToolRegistry Tools,
         ICallStore Calls,
+        IBlobStore? Blobs,
         EvaluatorRegistry Evaluators,
         CompiledGraph Graph,
         EntryRegistry Entries,

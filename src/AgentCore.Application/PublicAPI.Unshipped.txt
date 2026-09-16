@@ -2197,3 +2197,9 @@ static AgentCore.Application.Configuration.Schema.BlobProviderConfiguration.oper
 static AgentCore.Application.Configuration.Schema.BlobProviderConfiguration.operator !=(AgentCore.Application.Configuration.Schema.BlobProviderConfiguration? left, AgentCore.Application.Configuration.Schema.BlobProviderConfiguration? right) -> bool
 static readonly AgentCore.Application.Secrets.KnownSecrets.S3AccessKeyId -> AgentCore.Application.Secrets.SecretName!
 static readonly AgentCore.Application.Secrets.KnownSecrets.S3SecretAccessKey -> AgentCore.Application.Secrets.SecretName!
+AgentCore.Application.Blobs.BlobStoreFactory
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Blobs.get -> AgentCore.Application.Ports.IBlobStore?
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Blobs.init -> void
+AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Blobs.get -> AgentCore.Application.Configuration.Schema.BlobProviderConfiguration?
+AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Blobs.init -> void
+static AgentCore.Application.Blobs.BlobStoreFactory.OpenAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.IBlobStoreAdapter!>! adapters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IBlobStore?>

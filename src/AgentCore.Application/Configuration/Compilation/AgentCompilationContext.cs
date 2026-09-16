@@ -54,6 +54,13 @@ public sealed class AgentCompilationContext
     public IKnowledgeRetrievalPort? Knowledge { get; init; }
 
     /// <summary>
+    /// Gets or sets the store a sandbox file is kept in after the run, or <see langword="null"/>
+    /// when the document names no <c>providers.blobs</c>. With it null, a <c>code.execute</c> agent
+    /// captures nothing.
+    /// </summary>
+    public IBlobStore? Blobs { get; init; }
+
+    /// <summary>
     /// Gets or sets the skills every agent's <c>skills:</c> list is drawn from, or
     /// <see langword="null"/> when the host bound no skills folder.
     /// </summary>
