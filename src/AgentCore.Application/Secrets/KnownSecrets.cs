@@ -35,6 +35,18 @@ public static class KnownSecrets
     /// <summary>The environment variable the PostgreSQL connection string is read from.</summary>
     public const string PostgresConnectionStringVariable = "POSTGRES_CONNECTION_STRING";
 
+    /// <summary>The <c>${secret:name}</c> name the S3 access key id resolves under.</summary>
+    public const string S3AccessKeyIdName = "s3-access-key-id";
+
+    /// <summary>The standard AWS environment variable, read when the chain holds no name.</summary>
+    public const string S3AccessKeyIdVariable = "AWS_ACCESS_KEY_ID";
+
+    /// <summary>The <c>${secret:name}</c> name the S3 secret access key resolves under.</summary>
+    public const string S3SecretAccessKeyName = "s3-secret-access-key";
+
+    /// <summary>The standard AWS environment variable, read when the chain holds no name.</summary>
+    public const string S3SecretAccessKeyVariable = "AWS_SECRET_ACCESS_KEY";
+
     /// <summary>The one OpenAI credential, which chat, embedding, and moderation all read.</summary>
     public static readonly SecretName OpenAi = new(OpenAiApiKeyName, OpenAiApiKeyVariable);
 
@@ -52,4 +64,11 @@ public static class KnownSecrets
     /// <summary>The Grafana Cloud token, which is the password half of the OTLP basic credential.</summary>
     public static readonly SecretName GrafanaCloudApiToken =
         new(GrafanaCloudApiTokenName, GrafanaCloudApiTokenVariable);
+
+    /// <summary>The key id half of the S3 credential. Backblaze B2 calls it the keyID.</summary>
+    public static readonly SecretName S3AccessKeyId = new(S3AccessKeyIdName, S3AccessKeyIdVariable);
+
+    /// <summary>The secret half of the S3 credential. Backblaze B2 calls it the applicationKey.</summary>
+    public static readonly SecretName S3SecretAccessKey =
+        new(S3SecretAccessKeyName, S3SecretAccessKeyVariable);
 }

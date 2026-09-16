@@ -2150,7 +2150,7 @@ AgentCore.Application.Blobs.BlobWrite.OwnerId.get -> string!
 AgentCore.Application.Blobs.BlobWrite.OwnerId.init -> void
 AgentCore.Application.Ports.IBlobStore
 AgentCore.Application.Ports.IBlobStoreAdapter
-AgentCore.Application.Ports.IBlobStoreAdapter.OpenAsync(AgentCore.Application.Configuration.Schema.VendorProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IBlobStore!>
+AgentCore.Application.Ports.IBlobStoreAdapter.OpenAsync(AgentCore.Application.Configuration.Schema.BlobProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IBlobStore!>
 AgentCore.Application.Ports.IBlobStore.DeleteByOwnerAsync(string! ownerId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Ports.IBlobStore.OpenReadAsync(string! ownerId, string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Blobs.BlobRead?>
 AgentCore.Application.Ports.IBlobStore.PutAsync(AgentCore.Application.Blobs.BlobWrite! write, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Blobs.BlobRef!>
@@ -2174,3 +2174,26 @@ static AgentCore.Application.Blobs.BlobWrite.operator ==(AgentCore.Application.B
 static AgentCore.Application.Blobs.BlobWrite.operator !=(AgentCore.Application.Blobs.BlobWrite? left, AgentCore.Application.Blobs.BlobWrite? right) -> bool
 static readonly AgentCore.Application.Blobs.BlobPolicy.DefaultExtensions -> System.Collections.Generic.IReadOnlySet<string!>!
 static AgentCore.Application.Blobs.BlobName.IsSafe(string? name) -> bool
+AgentCore.Application.Configuration.Schema.BlobProviderConfiguration
+AgentCore.Application.Configuration.Schema.BlobProviderConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.BlobProviderConfiguration!
+AgentCore.Application.Configuration.Schema.BlobProviderConfiguration.BlobProviderConfiguration() -> void
+AgentCore.Application.Configuration.Schema.BlobProviderConfiguration.Bucket.get -> string?
+AgentCore.Application.Configuration.Schema.BlobProviderConfiguration.Bucket.init -> void
+AgentCore.Application.Configuration.Schema.BlobProviderConfiguration.Endpoint.get -> string?
+AgentCore.Application.Configuration.Schema.BlobProviderConfiguration.Endpoint.init -> void
+AgentCore.Application.Configuration.Schema.BlobProviderConfiguration.Equals(AgentCore.Application.Configuration.Schema.BlobProviderConfiguration? other) -> bool
+AgentCore.Application.Configuration.Schema.BlobProviderConfiguration.Kind.get -> string!
+AgentCore.Application.Configuration.Schema.BlobProviderConfiguration.Kind.init -> void
+AgentCore.Application.Configuration.Schema.BlobProviderConfiguration.Region.get -> string?
+AgentCore.Application.Configuration.Schema.BlobProviderConfiguration.Region.init -> void
+const AgentCore.Application.Secrets.KnownSecrets.S3AccessKeyIdName = "s3-access-key-id" -> string!
+const AgentCore.Application.Secrets.KnownSecrets.S3AccessKeyIdVariable = "AWS_ACCESS_KEY_ID" -> string!
+const AgentCore.Application.Secrets.KnownSecrets.S3SecretAccessKeyName = "s3-secret-access-key" -> string!
+const AgentCore.Application.Secrets.KnownSecrets.S3SecretAccessKeyVariable = "AWS_SECRET_ACCESS_KEY" -> string!
+override AgentCore.Application.Configuration.Schema.BlobProviderConfiguration.Equals(object? obj) -> bool
+override AgentCore.Application.Configuration.Schema.BlobProviderConfiguration.GetHashCode() -> int
+override AgentCore.Application.Configuration.Schema.BlobProviderConfiguration.ToString() -> string!
+static AgentCore.Application.Configuration.Schema.BlobProviderConfiguration.operator ==(AgentCore.Application.Configuration.Schema.BlobProviderConfiguration? left, AgentCore.Application.Configuration.Schema.BlobProviderConfiguration? right) -> bool
+static AgentCore.Application.Configuration.Schema.BlobProviderConfiguration.operator !=(AgentCore.Application.Configuration.Schema.BlobProviderConfiguration? left, AgentCore.Application.Configuration.Schema.BlobProviderConfiguration? right) -> bool
+static readonly AgentCore.Application.Secrets.KnownSecrets.S3AccessKeyId -> AgentCore.Application.Secrets.SecretName!
+static readonly AgentCore.Application.Secrets.KnownSecrets.S3SecretAccessKey -> AgentCore.Application.Secrets.SecretName!

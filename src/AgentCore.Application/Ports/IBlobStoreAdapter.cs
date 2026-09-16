@@ -12,7 +12,7 @@ public interface IBlobStoreAdapter : IVendorAdapter
     /// <param name="secrets">The chain a credential resolves through, or <see langword="null"/>.</param>
     /// <param name="cancellationToken">Cancels the open.</param>
     ValueTask<IBlobStore> OpenAsync(
-        VendorProviderConfiguration entry,
+        BlobProviderConfiguration entry,
         ISecretResolverPort? secrets,
         CancellationToken cancellationToken = default);
 }
