@@ -17,22 +17,6 @@ namespace AgentCore.Infrastructure.Llm.OpenAI;
 /// <summary>
 /// The OpenAI adapter behind <see cref="IChatClientAdapter"/>.
 /// </summary>
-/// <remarks>
-/// <para>
-/// This class owns the vendor only: the SDK client, the key, the model name of one entry. The
-/// <c>as</c> map, the default entry, the temperature wrapper, and the client cache live in
-/// <c>CompositeChatClientFactory</c>, which calls this adapter once for each <c>providers.llm[]</c>
-/// entry whose <c>kind</c> is <see cref="ProviderKind"/>. The seam therefore moves to another vendor
-/// by registering another adapter, and no code changes.
-/// </para>
-/// <para>
-/// The API key never appears in this file. The first build hands
-/// <see cref="KnownSecrets.OpenAi"/> to <see cref="SecretResolverExtensions.RequireAsync"/>, which
-/// asks the <see cref="ISecretResolverPort"/> chain and then falls back to the variable every OpenAI
-/// tool already reads. No message and no exception of this class carries the value. One vendor
-/// client serves every entry, so the key resolves once and a call costs one connection pool.
-/// </para>
-/// </remarks>
 public sealed class OpenAiChatClientAdapter : IChatClientAdapter
 {
     /// <summary>The one <c>providers.llm[].kind</c> value this adapter serves.</summary>
@@ -64,7 +48,7 @@ public sealed class OpenAiChatClientAdapter : IChatClientAdapter
 
         var client = _client.GetResponsesClient().AsIChatClient(entry.Model);
 
-        return WithResponseDefaults(client, entry.ReasoningEffort);
+        return new OpenAiSandboxFilesClient(WithResponseDefaults(client, entry.ReasoningEffort), _client);
     }
 
     /// <inheritdoc />
