@@ -45,7 +45,7 @@ public sealed class CallRouteSelectionTests
 
         var seams = Build(callKind: "bundled-fake", transport);
 
-        Assert.NotNull(seams.Handler);
+        Assert.NotNull(seams.Handlers?["main"]);
 
         // The block handed over is the providers.call entry of this document, not null and not some
         // empty stand-in. The kind is what proves which entry it is.
@@ -75,7 +75,7 @@ public sealed class CallRouteSelectionTests
 
         // Section 12 asks this case to route nothing AND say so. A route that vanishes in silence is
         // how a deployment loses every call to a 404 with nothing to read.
-        Assert.Null(seams.Handler);
+        Assert.Null(seams.Handlers);
         Assert.NotNull(seams.Unroutable);
         Assert.Contains("dial-out-fake", seams.Unroutable, StringComparison.Ordinal);
     }
@@ -86,7 +86,7 @@ public sealed class CallRouteSelectionTests
         var seams = CallSeamStartup.Build(
             ConfigurationLoader.LoadYaml(Document("bundled-fake")), new AgentCoreOptions());
 
-        Assert.Null(seams.Handler);
+        Assert.Null(seams.Handlers);
         Assert.NotNull(seams.Unroutable);
         Assert.Contains("no call adapter", seams.Unroutable, StringComparison.Ordinal);
     }
@@ -99,7 +99,7 @@ public sealed class CallRouteSelectionTests
         builder.WebHost.UseUrls("http://127.0.0.1:0");
 
         await using var app = builder.Build();
-        app.MapCall("/v1/call");
+        app.MapCall("/v1/call", "main");
         await app.StartAsync(TestContext.Current.CancellationToken);
 
         using HttpClient client = new() { BaseAddress = new Uri(Address(app)) };
@@ -159,10 +159,6 @@ public sealed class CallRouteSelectionTests
     private static string Document(string callKind)
         => $$"""
            apiVersion: agentcore/v1
-           name: call-route-selection
-           agents:
-             items:
-               - { id: only, instructions: "I answer everything" }
            providers:
              call:   { kind: {{callKind}} }
              speech:
@@ -170,6 +166,12 @@ public sealed class CallRouteSelectionTests
                tts: { kind: {{callKind}} }
              llm:
                - { kind: openai, model: gpt-4.1-mini, as: reply }
+           agents:
+             items:
+               - { id: dummy, instructions: "I answer everything" }
+           entries:
+             main:
+               agent: dummy
            """;
 
     /// <summary>A transport that answers a call and names no vendor.</summary>
@@ -186,7 +188,7 @@ public sealed class CallRouteSelectionTests
 
         public CallProviderConfiguration? Configuration { get; private set; }
 
-        public RequestDelegate CreateHandler(CallProviderConfiguration configuration)
+        public RequestDelegate CreateHandler(CallProviderConfiguration configuration, string entryName)
         {
             Configuration = configuration;
             return _ => Task.CompletedTask;

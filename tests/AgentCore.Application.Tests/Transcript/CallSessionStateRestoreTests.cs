@@ -263,7 +263,7 @@ public sealed class CallSessionStateRestoreTests
 
         var dropped = Assert.Single(observer.Events, fact => fact.Kind == CallEventKind.StateRestorePartial);
         Assert.Equal(
-            "the document declares no policy, so the stage 'intake' has nowhere to go.",
+            "the entry declares no policy, so the stage 'intake' has nowhere to go.",
             dropped.Payload[CallEventPayloadKeys.Reason]);
     }
 

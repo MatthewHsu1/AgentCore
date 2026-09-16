@@ -17,7 +17,6 @@ public sealed class TelnyxRelayTurnTests
     internal const string PolicyYaml =
         """
         apiVersion: agentcore/v1
-        name: relay-turn-loop
         agents:
           defaults:
             model: { ref: reply }
@@ -30,6 +29,9 @@ public sealed class TelnyxRelayTurnTests
             tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
+        entries:
+          main:
+            agent: greeter
         """;
 
     // -------------------------------------------------------------------------------------------

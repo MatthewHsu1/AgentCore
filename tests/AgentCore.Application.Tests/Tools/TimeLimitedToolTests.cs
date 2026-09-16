@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Tools.Registry;
 using Microsoft.Extensions.AI;
@@ -130,6 +131,6 @@ public sealed class TimeLimitedToolTests
     private static class Documents
     {
         public static Application.Configuration.Schema.AgentCoreConfiguration Empty { get; }
-            = new() { ApiVersion = "agentcore/v1", Name = "tools" };
+            = new() { ApiVersion = "agentcore/v1", Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>() };
     }
 }

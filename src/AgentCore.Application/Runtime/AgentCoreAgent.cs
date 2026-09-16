@@ -50,26 +50,29 @@ public sealed class AgentCoreAgent : AIAgent
 {
     private readonly ICallSessionFactory _sessions;
 
-    private readonly string? _name;
-    
     private readonly string? _description;
 
-    /// <summary>Creates the shim over one compiled document's turn loop.</summary>
+    /// <summary>Creates the shim over one compiled entry's turn loop.</summary>
     /// <param name="sessions">The factory that starts one <see cref="CallSession"/> for each call.</param>
-    /// <param name="name">The name the agent reports, usually the document name, or <see langword="null"/>.</param>
+    /// <param name="entryName">The entry this agent serves. Reported as <see cref="Name"/>.</param>
     /// <param name="description">The description the agent reports, or <see langword="null"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="sessions"/> is <see langword="null"/>.</exception>
-    public AgentCoreAgent(ICallSessionFactory sessions, string? name = null, string? description = null)
+    /// <exception cref="ArgumentException"><paramref name="entryName"/> is null or empty.</exception>
+    public AgentCoreAgent(ICallSessionFactory sessions, string entryName, string? description = null)
     {
         ArgumentNullException.ThrowIfNull(sessions);
+        ArgumentException.ThrowIfNullOrEmpty(entryName);
 
         _sessions = sessions;
-        _name = name;
+        EntryName = entryName;
         _description = description;
     }
 
+    /// <summary>Gets the entry this agent serves.</summary>
+    public string EntryName { get; }
+
     /// <inheritdoc />
-    public override string? Name => _name;
+    public override string? Name => EntryName;
 
     /// <inheritdoc />
     public override string? Description => _description;
@@ -131,11 +134,10 @@ public sealed class AgentCoreAgent : AIAgent
         // learn it points at nothing. The parameter is not nullable, so this only catches a caller
         // that went around the type.
         ArgumentNullException.ThrowIfNull(session);
-
         var call = Resolve(session);
 
         return new(JsonSerializer.SerializeToElement(
-            new SerializedSession(call.CallId, call.Snapshot()),
+            new SerializedSession(call.CallId, call.Snapshot(), EntryName),
             jsonSerializerOptions ?? CallStateJson.Options));
     }
 
@@ -187,6 +189,12 @@ public sealed class AgentCoreAgent : AIAgent
                 + "bare CallSessionState, the value store 0 keeps in call.state, is the other shape "
                 + "and reading it as this one would lose the call's transcript.",
                 nameof(serializedState));
+        }
+
+        if (stored.Entry is { Length: > 0 } entry && !string.Equals(entry, EntryName, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"The session names entry '{stored.Entry}' and this agent serves entry '{EntryName}'.");
         }
 
         return new(new AgentCoreAgentSession(_sessions.Create(stored.CallId, stored.State)));
@@ -290,16 +298,17 @@ public sealed class AgentCoreAgent : AIAgent
             nameof(messages));
     }
 
-    /// <summary>One serialized session: the call it is, and the state it held.</summary>
+    /// <summary>One serialized session: the call it is, the entry it belongs to, and the state it held.</summary>
     /// <param name="CallId">The id of the call. Store 1 is keyed by it, so it is the half that finds the words.</param>
     /// <param name="State">What the session alone held, or <see langword="null"/> when the blob named none.</param>
+    /// <param name="Entry">The entry that wrote the blob. A key minted by one entry never reads on another.</param>
     /// <remarks>
     /// A separate shape from <see cref="CallSessionState"/> on purpose. That one is the value store 0
     /// writes under a <c>call_id</c> column, so putting the id inside it would give one fact two
     /// homes; here there is no column, so the envelope carries the key beside the value instead.
     /// Internal because it is a wire shape and not a promise: D15 makes every public type permanent.
     /// </remarks>
-    internal sealed record SerializedSession(string? CallId, CallSessionState? State);
+    internal sealed record SerializedSession(string? CallId, CallSessionState? State, string? Entry);
 
     /// <summary>One call, as the framework sees it.</summary>
     /// <remarks>

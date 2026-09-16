@@ -77,11 +77,10 @@ public sealed class CompactionCompilationTests
         // the conversation holds, on every turn.
         using SequencedChatClient reply = new("hello there.");
 
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             new AgentCoreConfiguration
             {
                 ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
-                Name = "compaction-reaches-the-model",
                 Agents = new AgentsConfiguration
                 {
                     Items =
@@ -98,8 +97,12 @@ public sealed class CompactionCompilationTests
                         },
                     ],
                 },
+                Entries = new Dictionary<string, EntryConfiguration>
+                {
+                    ["main"] = new EntryConfiguration { Agent = "only" },
+                },
             },
-            new AgentCompilationContext(new FakeChatClientFactory(reply)));
+            new AgentCompilationContext(new FakeChatClientFactory(reply)))["main"];
 
         var agent = Assert.Single(compiled.Agents.Values);
         var token = TestContext.Current.CancellationToken;
@@ -135,7 +138,7 @@ public sealed class CompactionCompilationTests
     private static AgentCoreConfiguration TwoTriggerConditions() => new()
     {
         ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
-        Name = "compaction-bad-trigger",
+        Entries = new Dictionary<string, EntryConfiguration> { ["main"] = new EntryConfiguration { Agent = "only" } },
         Agents = new AgentsConfiguration
         {
             Items =
@@ -156,7 +159,7 @@ public sealed class CompactionCompilationTests
     private static AIAgent WithCompaction() => CompileOne(new AgentCoreConfiguration
     {
         ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
-        Name = "compaction-only",
+        Entries = new Dictionary<string, EntryConfiguration> { ["main"] = new EntryConfiguration { Agent = "only" } },
         Agents = new AgentsConfiguration
         {
             Items =
@@ -173,7 +176,7 @@ public sealed class CompactionCompilationTests
     private static AIAgent WithoutCompaction() => CompileOne(new AgentCoreConfiguration
     {
         ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
-        Name = "no-compaction",
+        Entries = new Dictionary<string, EntryConfiguration> { ["main"] = new EntryConfiguration { Agent = "only" } },
         Agents = new AgentsConfiguration
         {
             Items = [new AgentConfiguration { Id = "only" }],
@@ -185,20 +188,10 @@ public sealed class CompactionCompilationTests
     {
         using SequencedChatClient reply = new("hello there.");
 
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             new AgentCoreConfiguration
             {
                 ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
-                Name = "compaction-per-agent",
-                Policy = new PolicyConfiguration
-                {
-                    Initial = "opening",
-                    Stages =
-                    [
-                        new StageConfiguration { Id = "opening", Agent = "withBlock" },
-                        new StageConfiguration { Id = "closing", Agent = "withoutBlock" },
-                    ],
-                },
                 Agents = new AgentsConfiguration
                 {
                     Items =
@@ -207,8 +200,23 @@ public sealed class CompactionCompilationTests
                         new AgentConfiguration { Id = "withoutBlock" },
                     ],
                 },
+                Entries = new Dictionary<string, EntryConfiguration>
+                {
+                    ["main"] = new EntryConfiguration
+                    {
+                        Policy = new PolicyConfiguration
+                        {
+                            Initial = "opening",
+                            Stages =
+                            [
+                                new StageConfiguration { Id = "opening", Agent = "withBlock" },
+                                new StageConfiguration { Id = "closing", Agent = "withoutBlock" },
+                            ],
+                        },
+                    },
+                },
             },
-            new AgentCompilationContext(new FakeChatClientFactory(reply)));
+            new AgentCompilationContext(new FakeChatClientFactory(reply)))["main"];
 
         return (Providers(compiled.Agents["withBlock"]), Providers(compiled.Agents["withoutBlock"]));
     }
@@ -223,9 +231,9 @@ public sealed class CompactionCompilationTests
     {
         using SequencedChatClient reply = new("hello there.");
 
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             configuration,
-            new AgentCompilationContext(new FakeChatClientFactory(reply)));
+            new AgentCompilationContext(new FakeChatClientFactory(reply)))["main"];
 
         return Assert.Single(compiled.Agents.Values);
     }

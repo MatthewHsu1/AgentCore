@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Routing;
+using AgentCore.AspNetCore.Call;
 
 namespace AgentCore.AspNetCore.Vendors.TelnyxRelay;
 
@@ -18,7 +19,7 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay;
 /// <b>Nothing here decides whether this transport is in use.</b> The composition root reads
 /// <c>providers.call</c> while the host starts, picks the one transport it names, and asks it for a
 /// handler through <see cref="TelnyxRelayCallAdapter.CreateHandler"/>;
-/// <see cref="Call.CallEndpointRouteBuilderExtensions.MapCall(IEndpointRouteBuilder, string)"/>
+/// <see cref="Call.CallEndpointRouteBuilderExtensions.MapCall(IEndpointRouteBuilder, string, string)"/>
 /// owns only the route string. This type maps whatever it is handed, and it is
 /// <see langword="internal"/> so that <see cref="TelnyxRelayCallAdapter"/> is the only thing that
 /// hands it anything, apart from the test host, through <c>InternalsVisibleTo</c>: a host names its
@@ -41,10 +42,11 @@ internal static class TelnyxRelayEndpointRouteBuilderExtensions
     /// </remarks>
     public const string DefaultPattern = "/v1/telnyx/relay";
 
-    /// <summary>Maps the socket on one route, with the limits the host chose.</summary>
+    /// <summary>Maps the socket for one entry on one route, with the limits the host chose.</summary>
     /// <param name="endpoints">The route builder of the host.</param>
     /// <param name="pattern">The route to answer on.</param>
     /// <param name="options">What the endpoint may do, and for how long.</param>
+    /// <param name="entry">The entry key this route answers on.</param>
     /// <returns>The mapped endpoint, so a host adds its own conventions.</returns>
     /// <remarks>
     /// The options are not checked here. <see cref="TelnyxRelayCallAdapter.BuildOptions"/> is what
@@ -58,15 +60,20 @@ internal static class TelnyxRelayEndpointRouteBuilderExtensions
     public static IEndpointConventionBuilder MapTelnyxRelay(
         this IEndpointRouteBuilder endpoints,
         string pattern,
-        TelnyxRelayOptions options)
+        TelnyxRelayOptions options,
+        string entry)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
         ArgumentException.ThrowIfNullOrEmpty(pattern);
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentException.ThrowIfNullOrEmpty(entry);
+
+        options.EntryName = entry;
 
         // Map, and not MapGet. An HTTP/2 WebSocket arrives as CONNECT rather than GET, and MapGet
         // would answer 405 to it.
-        return endpoints.Map(pattern, (HttpContext http) => HandleAsync(http, options));
+        return endpoints.Map(pattern, (HttpContext http) => HandleAsync(http, options))
+            .WithMetadata(new AgentCoreEntryMetadata(entry, "TelnyxRelay"));
     }
 
     internal static async Task HandleAsync(HttpContext http, TelnyxRelayOptions options)

@@ -46,7 +46,12 @@ public sealed class ResolvedSecretsTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: two-readers
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             tools:
               - id: first
                 kind: http
@@ -60,9 +65,6 @@ public sealed class ResolvedSecretsTests
                   method: GET
                   url: "https://api.example.com/b"
                   headers: { Authorization: "Bearer ${secret:orders-api-key}" }
-            agents:
-              items:
-                - { id: only }
             """;
 
         MapSecretResolver resolver = new MapSecretResolver().With(ApiKeyName, ApiKeyValue);
@@ -82,7 +84,6 @@ public sealed class ResolvedSecretsTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: no-secrets
             tools:
               - id: plain
                 kind: http
@@ -93,6 +94,9 @@ public sealed class ResolvedSecretsTests
             agents:
               items:
                 - { id: only }
+            entries:
+              main:
+                agent: only
             """;
 
         MapSecretResolver resolver = new();

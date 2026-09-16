@@ -39,19 +39,20 @@ public sealed class CallSessionModerationTests
     private const string PlainYaml =
         """
         apiVersion: agentcore/v1
-        name: moderated
         refusalReply: "I am sorry. I cannot help with that request."
         agents:
           defaults:
             model: { ref: reply }
           items:
             - { id: only, instructions: "I answer everything" }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string ExtractingYaml =
         """
         apiVersion: agentcore/v1
-        name: moderated-extracting
         state:
           callerSaidGoodbye: { type: boolean, default: false, writer: extractor }
         extractor:
@@ -62,6 +63,9 @@ public sealed class CallSessionModerationTests
             model: { ref: reply }
           items:
             - { id: only, instructions: "I answer everything" }
+        entries:
+          main:
+            agent: only
         """;
 
     // -------------------------------------------------------------------------------------------
@@ -356,12 +360,12 @@ public sealed class CallSessionModerationTests
 
         // R3 puts moderation in the chat pipeline of every compiled agent, so the moderator is
         // bound at compile time and not on the session factory.
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             document,
             new AgentCompilationContext(chatClients)
             {
                 Moderation = moderation is null ? null : new PromptModerator(moderation),
-            });
+            })["main"];
 
         return new CallSessionFactory(
             compiled,

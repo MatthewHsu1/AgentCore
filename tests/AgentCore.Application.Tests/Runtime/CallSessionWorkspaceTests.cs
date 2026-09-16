@@ -25,53 +25,58 @@ public sealed class CallSessionWorkspaceTests : IDisposable
     private const string SimpleYaml =
         """
         apiVersion: agentcore/v1
-        name: one-agent
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string TerminalYaml =
         """
-        apiVersion: agentcore/v1
-        name: two-stage
-        state:
-          callerSaidGoodbye:
-            type: boolean
-            default: false
-            writer: extractor
-            description: whether the caller said goodbye
-        guards:
-          saidGoodbye: { var: callerSaidGoodbye }
-        extractor:
-          model: { ref: fill }
-          when: after_reply
-        agents:
-          defaults:
-            model: { ref: reply }
-          items:
-            - { id: greeter, instructions: "greet the caller" }
-            - { id: closer,  instructions: "close the call" }
-        policy:
-          initial: greeting
-          stages:
-            - id: greeting
-              agent: greeter
-              to: [ { stage: close, when: saidGoodbye } ]
-            - id: close
-              agent: closer
-              terminal: true
-        """;
+          apiVersion: agentcore/v1
+          state:
+            callerSaidGoodbye:
+              type: boolean
+              default: false
+              writer: extractor
+              description: whether the caller said goodbye
+          guards:
+            saidGoodbye: { var: callerSaidGoodbye }
+          extractor:
+            model: { ref: fill }
+            when: after_reply
+          agents:
+            defaults:
+              model: { ref: reply }
+            items:
+              - { id: greeter, instructions: "greet the caller" }
+              - { id: closer,  instructions: "close the call" }
+          entries:
+            main:
+              policy:
+                initial: greeting
+                stages:
+                  - id: greeting
+                    agent: greeter
+                    to: [ { stage: close, when: saidGoodbye } ]
+                  - id: close
+                    agent: closer
+                    terminal: true
+          """;
 
-    private const string ScopeYaml =
-        """
+      private const string ScopeYaml =
+          """
         apiVersion: agentcore/v1
-        name: scope-check
         tools:
           - { id: request_human, kind: binding, binds: RequestHuman, description: "Ask a human to take the call." }
         agents:
           items:
             - { id: only, instructions: "help the caller", tools: [ request_human ] }
+        entries:
+          main:
+            agent: only
         """;
 
     private readonly string _root = Path.Combine(Path.GetTempPath(), "agentcore-ws-" + Guid.NewGuid().ToString("N"));
@@ -150,7 +155,7 @@ public sealed class CallSessionWorkspaceTests : IDisposable
             new ToolCallingChatClient(
                 "connecting you now.",
                 new Dictionary<string, object?>(StringComparer.Ordinal) { ["reason"] = "the caller wants a person" }));
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             document,
             new AgentCompilationContext(chatClients)
             {
@@ -158,7 +163,7 @@ public sealed class CallSessionWorkspaceTests : IDisposable
                     [new BindingToolSource(bindings)],
                     new ToolSourceContext(document),
                     TestContext.Current.CancellationToken),
-            });
+            })["main"];
 
         var factory = new CallSessionFactory(
             compiled,
@@ -186,12 +191,12 @@ public sealed class CallSessionWorkspaceTests : IDisposable
             chatClients.Route("fill", fill);
         }
 
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             document,
             new AgentCompilationContext(chatClients)
             {
                 Tools = TestToolRegistry.From(document, builder: null, TestContext.Current.CancellationToken),
-            });
+            })["main"];
 
         return new CallSessionFactory(
             compiled,

@@ -28,7 +28,7 @@ public sealed class StateKnowledgeScopeTests
         return new StateDocument(new AgentCoreConfiguration
         {
             ApiVersion = "agentcore/v1",
-            Name = "doc",
+            Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(),
             State = new Dictionary<string, StateSlotConfiguration>(StringComparer.Ordinal)
             {
                 ["brand"] = Slot("sole", "spirit"),

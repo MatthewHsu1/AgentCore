@@ -92,7 +92,8 @@ public sealed class KnowledgeFilterValidatorTests
     private static AgentCoreConfiguration Filterable(params KnowledgeFilterableFacetConfiguration[] facets) => new()
     {
         ApiVersion = "agentcore/v1",
-        Name = "doc",
+        Agents = new AgentsConfiguration { Items = [new AgentConfiguration { Id = "planner" }] },
+        Entries = new Dictionary<string, EntryConfiguration> { ["main"] = new EntryConfiguration { Agent = "planner" } },
         Providers = new()
         {
             Knowledge = new()

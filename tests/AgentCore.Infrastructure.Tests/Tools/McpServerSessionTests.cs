@@ -368,7 +368,7 @@ public sealed class McpServerSessionTests
     }
 
     private static ToolSourceContext ContextFor(McpServerConfiguration server)
-        => new(new AgentCoreConfiguration { ApiVersion = "agentcore/v1", Name = "mcp", Mcp = [server] });
+        => new(new AgentCoreConfiguration { ApiVersion = "agentcore/v1", Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(), Mcp = [server] });
 
     private static McpServerConfiguration Wedged(int connectTimeoutSeconds, int attempts)
         => new()

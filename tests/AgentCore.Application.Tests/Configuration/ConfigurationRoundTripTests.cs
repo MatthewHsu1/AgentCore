@@ -48,7 +48,7 @@ public sealed class ConfigurationRoundTripTests
     {
         var fromYaml = ConfigurationLoader.LoadYaml(ExampleDocument.Yaml);
         var changed = ConfigurationLoader.LoadJson(
-            ExampleDocument.Json.Replace("\"service-voice\"", "\"other-voice\"", StringComparison.Ordinal));
+            ExampleDocument.Json.Replace("Please say it again.", "Please try once more.", StringComparison.Ordinal));
 
         Assert.NotEqual(Content(fromYaml), Content(changed));
     }
@@ -68,17 +68,23 @@ public sealed class ConfigurationRoundTripTests
     {
         var fromYaml = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
-            name: tuned
             fallbackReply: "One moment please. I will try that again."
             evaluation:
               sampleRate: 0.25
+            agents:
+              items:
+                - { id: only }
+            entries:
+              main:
+                agent: only
             """);
         var fromJson = ConfigurationLoader.LoadJson("""
             {
               "apiVersion": "agentcore/v1",
-              "name": "tuned",
               "fallbackReply": "One moment please. I will try that again.",
-              "evaluation": { "sampleRate": 0.25 }
+              "evaluation": { "sampleRate": 0.25 },
+              "agents": { "items": [{ "id": "only" }] },
+              "entries": { "main": { "agent": "only" } }
             }
             """);
 
@@ -110,16 +116,22 @@ public sealed class ConfigurationRoundTripTests
     {
         var fromYaml = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
-            name: tuned
             fallbackReply: "One moment please. I will try that again."
             refusalReply: "I am not able to answer that."
+            agents:
+              items:
+                - { id: only }
+            entries:
+              main:
+                agent: only
             """);
         var fromJson = ConfigurationLoader.LoadJson("""
             {
               "apiVersion": "agentcore/v1",
-              "name": "tuned",
               "fallbackReply": "One moment please. I will try that again.",
-              "refusalReply": "I am not able to answer that."
+              "refusalReply": "I am not able to answer that.",
+              "agents": { "items": [{ "id": "only" }] },
+              "entries": { "main": { "agent": "only" } }
             }
             """);
 
@@ -210,7 +222,6 @@ public sealed class ConfigurationRoundTripTests
     {
         const string yaml = """
             apiVersion: agentcore/v1
-            name: agentic
             agents:
               defaults:
                 todos: true
@@ -233,11 +244,13 @@ public sealed class ConfigurationRoundTripTests
                     until:
                       - todos: {}
                       - background: {}
+            entries:
+              main:
+                agent: coder
             """;
         const string json = $$"""
             {
               "apiVersion": "agentcore/v1",
-              "name": "agentic",
               "agents": {
                 "defaults": {
                   "todos": true,
@@ -264,7 +277,8 @@ public sealed class ConfigurationRoundTripTests
                     }
                   }
                 ]
-              }
+              },
+              "entries": { "main": { "agent": "coder" } }
             }
             """;
 

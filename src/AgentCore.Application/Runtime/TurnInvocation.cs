@@ -24,7 +24,7 @@ internal sealed record TurnInvocation
     /// <summary>Gets the zero-based index of the turn now running.</summary>
     public required int TurnIndex { get; init; }
 
-    /// <summary>Gets the stage the machine holds. Empty when the document declares no policy.</summary>
+    /// <summary>Gets the stage the machine holds. Empty when the entry declares no policy.</summary>
     public required string Stage { get; init; }
 
     /// <summary>Gets the folder this call owns on disk, or <see langword="null"/>.</summary>

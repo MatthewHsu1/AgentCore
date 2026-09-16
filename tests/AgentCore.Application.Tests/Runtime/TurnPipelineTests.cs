@@ -36,19 +36,20 @@ public sealed class TurnPipelineTests
     private const string PlainYaml =
         """
         apiVersion: agentcore/v1
-        name: pipeline
         refusalReply: "I am sorry. I cannot help with that request."
         agents:
           defaults:
             model: { ref: reply }
           items:
             - { id: only, instructions: "I answer everything" }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string ToolYaml =
         """
         apiVersion: agentcore/v1
-        name: pipeline-tools
         refusalReply: "I am sorry. I cannot help with that request."
         tools:
           - { id: lookup_order, kind: builtin, uses: orders.read, description: "Look up an order by its id." }
@@ -57,6 +58,9 @@ public sealed class TurnPipelineTests
             model: { ref: reply }
           items:
             - { id: only, instructions: "I answer everything", tools: [ lookup_order ] }
+        entries:
+          main:
+            agent: only
         """;
 
     // -------------------------------------------------------------------------------------------
@@ -304,69 +308,70 @@ public sealed class TurnPipelineTests
     // -------------------------------------------------------------------------------------------
     private const string GraphYaml =
         """
-        apiVersion: agentcore/v1
-        name: pipeline-graph
-        agents:
-          items:
-            - { id: researcher, model: { ref: researcher }, instructions: "look things up" }
-            - { id: responder,  model: { ref: responder },  instructions: "answer the caller" }
-        graph:
-          pattern: sequential
-          agents: [ researcher, responder ]
-        """;
+          apiVersion: agentcore/v1
+          agents:
+            items:
+              - { id: researcher, model: { ref: researcher }, instructions: "look things up" }
+              - { id: responder,  model: { ref: responder },  instructions: "answer the caller" }
+          entries:
+            main:
+              graph:
+                pattern: sequential
+                agents: [ researcher, responder ]
+          """;
 
-    private static CallSessionFactory BuildGraph(
-        IChatClient researcher,
-        IChatClient responder,
-        ScriptedModerationEvaluator? moderation)
-    {
-        RoutingChatClientFactory chatClients = new(researcher);
-        chatClients.Route("responder", responder);
+      private static CallSessionFactory BuildGraph(
+          IChatClient researcher,
+          IChatClient responder,
+          ScriptedModerationEvaluator? moderation)
+      {
+          RoutingChatClientFactory chatClients = new(researcher);
+          chatClients.Route("responder", responder);
 
-        var compiled = ConfigurationCompiler.Compile(
-            ConfigurationLoader.LoadYaml(GraphYaml),
-            new AgentCompilationContext(chatClients)
-            {
-                Moderation = moderation is null ? null : new PromptModerator(moderation),
-            });
+          var compiled = ConfigurationCompiler.CompileAll(
+              ConfigurationLoader.LoadYaml(GraphYaml),
+              new AgentCompilationContext(chatClients)
+              {
+                  Moderation = moderation is null ? null : new PromptModerator(moderation),
+              })["main"];
 
-        return new CallSessionFactory(
-            compiled,
-            new GuardEvaluator(compiled.Configuration.Guards),
-            observers: CallObservers.Standard(new InMemoryAuditSink(), logger: null));
-    }
+          return new CallSessionFactory(
+              compiled,
+              new GuardEvaluator(compiled.Configuration.Guards),
+              observers: CallObservers.Standard(new InMemoryAuditSink(), logger: null));
+      }
 
-    private static CompiledAgent Compile(
-        string yaml,
-        IChatClient reply,
-        out RoutingChatClientFactory chatClients,
-        Func<ToolConfiguration, AITool?>? tools = null,
-        ScriptedModerationEvaluator? moderation = null)
-    {
-        var document = ConfigurationLoader.LoadYaml(yaml);
-        chatClients = new RoutingChatClientFactory(reply);
+      private static CompiledAgent Compile(
+          string yaml,
+          IChatClient reply,
+          out RoutingChatClientFactory chatClients,
+          Func<ToolConfiguration, AITool?>? tools = null,
+          ScriptedModerationEvaluator? moderation = null)
+      {
+          var document = ConfigurationLoader.LoadYaml(yaml);
+          chatClients = new RoutingChatClientFactory(reply);
 
-        return ConfigurationCompiler.Compile(
-            document,
-            new AgentCompilationContext(chatClients)
-            {
-                Tools = TestToolRegistry.From(document, tools, TestContext.Current.CancellationToken),
-                Moderation = moderation is null ? null : new PromptModerator(moderation),
-            });
-    }
+          return ConfigurationCompiler.CompileAll(
+              document,
+              new AgentCompilationContext(chatClients)
+              {
+                  Tools = TestToolRegistry.From(document, tools, TestContext.Current.CancellationToken),
+                  Moderation = moderation is null ? null : new PromptModerator(moderation),
+              })["main"];
+      }
 
-    private static CallSessionFactory Build(
-        string yaml,
-        IChatClient reply,
-        IAuditSinkPort? sink = null,
-        Func<ToolConfiguration, AITool?>? tools = null,
-        ScriptedModerationEvaluator? moderation = null)
-    {
-        var compiled = Compile(yaml, reply, out _, tools, moderation);
+      private static CallSessionFactory Build(
+          string yaml,
+          IChatClient reply,
+          IAuditSinkPort? sink = null,
+          Func<ToolConfiguration, AITool?>? tools = null,
+          ScriptedModerationEvaluator? moderation = null)
+      {
+          var compiled = Compile(yaml, reply, out _, tools, moderation);
 
-        return new CallSessionFactory(
-            compiled,
-            new GuardEvaluator(compiled.Configuration.Guards),
-            observers: CallObservers.Standard(sink ?? new InMemoryAuditSink(), logger: null));
-    }
-}
+          return new CallSessionFactory(
+              compiled,
+              new GuardEvaluator(compiled.Configuration.Guards),
+              observers: CallObservers.Standard(sink ?? new InMemoryAuditSink(), logger: null));
+      }
+  }

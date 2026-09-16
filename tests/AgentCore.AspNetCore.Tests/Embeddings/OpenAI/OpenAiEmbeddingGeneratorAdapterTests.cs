@@ -23,7 +23,6 @@ public sealed class OpenAiEmbeddingGeneratorAdapterTests
     private const string OneGeneratorYaml =
         """
         apiVersion: agentcore/v1
-        name: one-generator
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
@@ -33,6 +32,9 @@ public sealed class OpenAiEmbeddingGeneratorAdapterTests
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
           embeddings: { kind: openai, model: text-embedding-3-small, dimensions: 512 }
+        entries:
+          main:
+            agent: only
         """;
 
     [Fact]

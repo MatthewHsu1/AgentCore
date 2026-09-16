@@ -57,7 +57,7 @@ internal sealed class ResponsesHost : IAsyncDisposable
         });
 
         var app = builder.Build();
-        app.MapResponses();
+        app.MapResponses("main");
         await app.StartAsync();
 
         var address = app.Services

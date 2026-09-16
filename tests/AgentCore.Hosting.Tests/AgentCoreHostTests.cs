@@ -208,15 +208,17 @@ public sealed class AgentCoreHostTests
     /// </remarks>
     private const string McpDocument = """
         apiVersion: agentcore/v1
-        name: hosting-tests-mcp
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything" }
+        entries:
+          main:
+            agent: only
         mcp:
           - id: no-such-server
             transport: stdio
             command: ["/definitely-not-a-real-binary-agentcore-test"]
             allow: ["*"]
-        agents:
-          items:
-            - { id: only, instructions: "I answer everything" }
         providers:
           call:   { kind: telnyx-relay }
           speech:
@@ -379,10 +381,12 @@ public sealed class AgentCoreHostTests
     /// </remarks>
     private const string Document = """
         apiVersion: agentcore/v1
-        name: hosting-tests
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
+        entries:
+          main:
+            agent: only
         providers:
           call:   { kind: telnyx-relay }
           speech:

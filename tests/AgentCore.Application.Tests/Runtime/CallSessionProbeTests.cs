@@ -23,7 +23,6 @@ public sealed class CallSessionProbeTests
     private const string ProbeYaml =
         """
         apiVersion: agentcore/v1
-        name: probe-two-turn
         state:
           applies_to:
             type: string
@@ -58,6 +57,9 @@ public sealed class CallSessionProbeTests
           items:
             - id: only
               knowledge: { mode: tool, scoped: true }
+        entries:
+          main:
+            agent: only
         """;
 
     [Fact]
@@ -82,9 +84,9 @@ public sealed class CallSessionProbeTests
         chatClients.Route("reply", reply);
         chatClients.Route("fill", extractor);
 
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             ConfigurationLoader.LoadYaml(ProbeYaml),
-            new AgentCompilationContext(chatClients) { Knowledge = port });
+            new AgentCompilationContext(chatClients) { Knowledge = port })["main"];
         var stateExtractor = CallSessionFactory.CreateExtractor(compiled, chatClients);
 
         var session = new CallSessionFactory(

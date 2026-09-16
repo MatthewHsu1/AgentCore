@@ -24,7 +24,6 @@ public sealed class CompositeChatClientFactoryTests
     private const string TwoVendorsYaml =
         """
         apiVersion: agentcore/v1
-        name: two-vendors
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
@@ -36,12 +35,14 @@ public sealed class CompositeChatClientFactoryTests
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
             - { kind: anthropic, model: claude-sonnet-5, as: fill }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string OneVendorYaml =
         """
         apiVersion: agentcore/v1
-        name: one-vendor
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
@@ -53,12 +54,14 @@ public sealed class CompositeChatClientFactoryTests
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
             - { kind: openai, model: gpt-5.4-nano, as: fill }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string UpperCaseKindYaml =
         """
         apiVersion: agentcore/v1
-        name: shouted-vendor
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
@@ -69,12 +72,14 @@ public sealed class CompositeChatClientFactoryTests
             tts: { kind: telnyx-relay }
           llm:
             - { kind: OpenAI, model: gpt-4.1-mini, as: reply }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string DuplicateAsYaml =
         """
         apiVersion: agentcore/v1
-        name: twice-named
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
@@ -86,15 +91,20 @@ public sealed class CompositeChatClientFactoryTests
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
             - { kind: openai, model: gpt-5.4-nano, as: reply }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string NoModelYaml =
         """
         apiVersion: agentcore/v1
-        name: no-model
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
+        entries:
+          main:
+            agent: only
         """;
 
     // ---------------------------------------------------------------------------------------------

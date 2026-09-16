@@ -6,6 +6,7 @@ using AgentCore.Application.Calls;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.AspNetCore.Call;
+using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.Domain.Audit;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -86,6 +87,10 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
 
     private volatile CallSession? _session;
 
+    // Resolved once per socket from the stamped entry, then cached: every session open, touch,
+    // and close on this connection answers on the same entry.
+    private volatile ICallSessions? _entrySessions;
+
     private const string BeforeSetupCallId = "(before setup)";
 
     // volatile for the same reason _session is: the read loop assigns it when the setup frame
@@ -94,6 +99,13 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
     private bool _loggedPromptBeforeSetup;
     private bool _loggedMalformedInterrupt;
     private bool _loggedSecondSetup;
+
+    /// <summary>Reads this socket's entry session store, resolving it once from the registry.</summary>
+    /// <returns>The store for the entry the handler stamped into the options.</returns>
+    private ICallSessions EntrySessions()
+        => _entrySessions
+            ?? throw new InvalidOperationException(
+                $"The entry '{_options.EntryName}' is not declared, so this socket names no session store.");
 
     private TelnyxRelayConnection(HttpContext http, WebSocket socket, TelnyxRelayOptions options, ILogger logger)
     {
@@ -163,11 +175,20 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
     /// <returns>A task that completes when the socket is closed.</returns>
     public static Task RunAsync(HttpContext http, WebSocket socket, TelnyxRelayOptions options)
     {
+        ArgumentNullException.ThrowIfNull(http);
+        ArgumentNullException.ThrowIfNull(socket);
+        ArgumentNullException.ThrowIfNull(options);
+
         var logger = http.RequestServices
             .GetRequiredService<ILoggerFactory>()
             .CreateLogger("AgentCore.TelnyxRelay");
 
-        return new TelnyxRelayConnection(http, socket, options, logger).RunAsync();
+        TelnyxRelayConnection connection = new(http, socket, options, logger);
+        connection._entrySessions = http.RequestServices
+            .GetRequiredService<AgentCoreBoot>()
+            .Entries.ForSessions(options.EntryName);
+
+        return connection.RunAsync();
     }
 
     private async Task RunAsync()
@@ -325,8 +346,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
     /// <returns>A task that completes once the words are written and the session is gone.</returns>
     private async Task CloseSessionAsync(string callId)
     {
-        var sessions = _http.RequestServices.GetRequiredService<ICallSessions>();
-        await sessions.CloseAsync(callId, CancellationToken.None).ConfigureAwait(false);
+        await EntrySessions().CloseAsync(callId, CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <summary>Works out the status and the description the vendor sees on the close frame.</summary>
@@ -641,7 +661,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
 
     private async Task StartCallAsync(RelayFrame.Setup setup)
     {
-        var sessions = _http.RequestServices.GetRequiredService<ICallSessions>();
+        var sessions = EntrySessions();
 
         // One socket carries one call, and the vendor sends one setup frame. A second one replaces
         // the session rather than refusing the socket, because section 7.1 forbids dropping a call
@@ -754,8 +774,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
         // throws costs this call its place in the sweep, never the call itself.
         try
         {
-            var sessions = _http.RequestServices.GetRequiredService<ICallSessions>();
-            _ = await sessions.TryGetAsync(session.CallId, _connectionToken).ConfigureAwait(false);
+            _ = await EntrySessions().TryGetAsync(session.CallId, _connectionToken).ConfigureAwait(false);
         }
         catch (Exception fault) when (fault is not OperationCanceledException)
         {

@@ -1,4 +1,4 @@
-using AgentCore.Application.Ports;
+using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.Application.Sessions.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -7,20 +7,8 @@ using Microsoft.Extensions.Logging;
 namespace AgentCore.AspNetCore.Sessions;
 
 /// <summary>
-/// Runs the idle sweep of <see cref="InMemoryCallSessions"/> for as long as the host is up.
+/// Runs the idle sweep of every <see cref="InMemoryCallSessions"/> for as long as the host is up.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Expiry needs something to drive it: a store that only sweeps when it is read never drops the
-/// call nobody comes back to, which is the one that grows. A host that registered a session store
-/// of its own gets nothing from this — that store owns its own expiry, wherever it keeps them.
-/// </para>
-/// <para>
-/// The session store is resolved inside <see cref="ExecuteAsync"/> and not through the constructor.
-/// A host builds every <see cref="IHostedService"/> before it starts any of them, and the default
-/// store reaches back through the compiled graph — which does not exist until the boot has run.
-/// </para>
-/// </remarks>
 internal sealed class CallSessionSweeper(
     IServiceProvider services, TimeProvider timeProvider, ILogger<CallSessionSweeper> logger) : BackgroundService
 {
@@ -30,10 +18,7 @@ internal sealed class CallSessionSweeper(
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (services.GetRequiredService<ICallSessions>() is not InMemoryCallSessions memory)
-        {
-            return;
-        }
+        var entries = services.GetRequiredService<EntryRegistry>();
 
         using PeriodicTimer timer = new(Interval, timeProvider);
 
@@ -43,7 +28,29 @@ internal sealed class CallSessionSweeper(
             // held, and the next tick is the only thing that will try them again.
             try
             {
-                await memory.SweepAsync(stoppingToken).ConfigureAwait(false);
+                List<Exception>? faults = null;
+                foreach (var store in entries.CallSessions.Values)
+                {
+                    if (store is not InMemoryCallSessions memory)
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        await memory.SweepAsync(stoppingToken).ConfigureAwait(false);
+                    }
+                    catch (Exception fault) when (fault is not OperationCanceledException)
+                    {
+                        faults ??= [];
+                        faults.Add(fault);
+                    }
+                }
+
+                if (faults is { Count: > 0 })
+                {
+                    throw new AggregateException(faults);
+                }
             }
             catch (Exception fault) when (fault is not OperationCanceledException)
             {

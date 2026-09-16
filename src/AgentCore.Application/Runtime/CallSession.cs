@@ -135,6 +135,7 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
     internal Guid? AmendableEventId { get; set; }
 
     internal CallSessionState? Checkpoint { get; set; }
+    
     internal Clarifications Clarifications => _clarifications;
 
     internal CallTurnRunner Runner { get; }
@@ -197,9 +198,9 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
 
         _startedAt = timeProvider.GetUtcNow();
 
-        // A document with no policy: has no stage machine. The single-agent row and both graph rows
+        // An entry with no policy: has no stage machine. The single-agent row and both graph rows
         // read that way, and neither of them ever ends a call by itself.
-        _policy = compiled.Configuration.Policy is null ? null : compiled.CreatePolicy(guards);
+        _policy = compiled.Policy is null ? null : compiled.CreatePolicy(guards);
 
         State = new StateDocument(compiled.Configuration, _policy?.Stage);
 
@@ -242,12 +243,12 @@ public sealed class CallSession : IConversationPort, IAsyncDisposable
     public string? Workspace => _workspace?.Path;
 
     /// <summary>
-    /// Gets the stage the machine holds. It is empty when the document declares no policy.
+    /// Gets the stage the machine holds. It is empty when the entry declares no policy.
     /// </summary>
     public string Stage => State.Stage;
 
     /// <summary>
-    /// Gets whether the call reached a terminal stage. A document with no policy never does.
+    /// Gets whether the call reached a terminal stage. An entry with no policy never does.
     /// </summary>
     public bool IsComplete { get; internal set; }
 

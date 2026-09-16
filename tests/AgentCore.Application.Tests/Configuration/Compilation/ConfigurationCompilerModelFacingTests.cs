@@ -22,12 +22,14 @@ public sealed class ConfigurationCompilerModelFacingTests
     private const string Yaml =
         """
         apiVersion: agentcore/v1
-        name: model-facing-check
         tools:
           - { id: draw_card, kind: builtin, uses: test.draw, description: "Draw a card for the caller." }
         agents:
           items:
             - { id: only, model: { ref: reply }, instructions: "greet the caller", tools: [ draw_card ] }
+        entries:
+          main:
+            agent: only
         """;
 
     [Fact]
@@ -38,7 +40,7 @@ public sealed class ConfigurationCompilerModelFacingTests
 
         RequestCapturingChatClient recorder = new(new ToolCallingChatClient("done."));
         var document = ConfigurationLoader.LoadYaml(Yaml);
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             document,
             new AgentCompilationContext(new FakeChatClientFactory(recorder))
             {
@@ -46,7 +48,7 @@ public sealed class ConfigurationCompilerModelFacingTests
                     document,
                     static declared => declared.Uses == "test.draw" ? DrawCard() : null,
                     TestContext.Current.CancellationToken),
-            });
+            })["main"];
 
         var session = await compiled.Agent.CreateSessionAsync(TestContext.Current.CancellationToken);
         await compiled.Agent.RunAsync(

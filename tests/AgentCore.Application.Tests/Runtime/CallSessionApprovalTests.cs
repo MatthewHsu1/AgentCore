@@ -22,7 +22,6 @@ public sealed class CallSessionApprovalTests
     private const string GatedYaml =
         """
         apiVersion: agentcore/v1
-        name: approval-roundtrip
         tools:
           - { id: send_email, kind: builtin, uses: test.send, description: "Send an email." }
         agents:
@@ -30,6 +29,9 @@ public sealed class CallSessionApprovalTests
             - id: only
               instructions: "send the mail"
               tools: [ send_email ]
+        entries:
+          main:
+            agent: only
         """;
 
     [Fact]
@@ -147,7 +149,7 @@ public sealed class CallSessionApprovalTests
             "done.",
             new Dictionary<string, object?>(StringComparer.Ordinal) { ["to"] = "a@b.com" });
         var document = ConfigurationLoader.LoadYaml(yaml);
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             document,
             new AgentCompilationContext(new FakeChatClientFactory(client))
             {
@@ -155,7 +157,7 @@ public sealed class CallSessionApprovalTests
                     document,
                     declared => declared.Uses == "test.send" ? GatedSendEmail(onSend) : null,
                     token),
-            });
+            })["main"];
 
         return new CallSessionFactory(
             compiled,

@@ -9,6 +9,9 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay;
 /// </remarks>
 internal sealed class TelnyxRelayOptions
 {
+    /// <summary>Gets or sets the entry key this socket answers on.</summary>
+    public string EntryName { get; set; } = string.Empty;
+
     /// <summary>Gets or sets the largest inbound frame the endpoint accepts, in bytes.</summary>
     /// <remarks>
     /// The WebSocket middleware turns the request timeout off once it accepts, so nothing else

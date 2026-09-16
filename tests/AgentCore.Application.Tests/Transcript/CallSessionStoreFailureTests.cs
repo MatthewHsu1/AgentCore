@@ -22,10 +22,12 @@ public sealed class CallSessionStoreFailureTests
 {
     private const string OneAgentYaml = """
         apiVersion: agentcore/v1
-        name: store-failure-check
         agents:
           items:
-            - { id: only, instructions: "greet the caller" }
+            - { id: only, instructions: "ok" }
+        entries:
+          main:
+            agent: only
         """;
 
     /// <summary>
@@ -137,9 +139,9 @@ public sealed class CallSessionStoreFailureTests
         string yaml, IChatClient reply, ICallStore store, params ICallObserver[] observers)
     {
         var document = ConfigurationLoader.LoadYaml(yaml);
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             document,
-            new AgentCompilationContext(new FakeChatClientFactory(reply)) { CallStore = store });
+            new AgentCompilationContext(new FakeChatClientFactory(reply)) { CallStore = store })["main"];
 
         return new CallSessionFactory(
             compiled,

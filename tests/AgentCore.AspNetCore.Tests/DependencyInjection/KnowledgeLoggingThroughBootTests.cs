@@ -41,12 +41,11 @@ public sealed class KnowledgeLoggingThroughBootTests
         await using var boot = Boot(new ThrowingPort(down), loggers);
         await boot.BootAsync(TestContext.Current.CancellationToken);
 
-        // Run the retrieval the way the framework runs it, on the agent the boot actually compiled.
-        var provider = Assert.Single(Providers(boot.Compiled.Agents["resolver"]).OfType<KnowledgePrefetchProvider>());
+        var provider = Assert.Single(Providers(boot.CompiledEntries["main"].Agents["resolver"]).OfType<KnowledgePrefetchProvider>());
 
 #pragma warning disable MAAI001 // The context constructors are the framework's own experimental surface.
         AIContextProvider.InvokingContext context = new(
-            boot.Compiled.Agents["resolver"], null, new AIContext());
+            boot.CompiledEntries["main"].Agents["resolver"], null, new AIContext());
 #pragma warning restore MAAI001
         await provider.InvokingAsync(context, TestContext.Current.CancellationToken);
 
@@ -60,7 +59,6 @@ public sealed class KnowledgeLoggingThroughBootTests
         => new()
         {
             ApiVersion = "agentcore/v1",
-            Name = "knowledge-logging-through-boot",
             Agents = new AgentsConfiguration
             {
                 Items =
@@ -69,9 +67,6 @@ public sealed class KnowledgeLoggingThroughBootTests
                     {
                         Id = "resolver",
                         Instructions = "I answer from the knowledge base",
-
-                        // scoped: false, so the provider's own gate cannot short-circuit ahead of the
-                        // port and leave nothing for the failure row to report.
                         Knowledge = new AgentKnowledgeConfiguration
                         {
                             Mode = KnowledgeMode.Prefetch,
@@ -79,6 +74,10 @@ public sealed class KnowledgeLoggingThroughBootTests
                         },
                     },
                 ],
+            },
+            Entries = new Dictionary<string, EntryConfiguration>
+            {
+                ["main"] = new EntryConfiguration { Agent = "resolver" },
             },
         };
 

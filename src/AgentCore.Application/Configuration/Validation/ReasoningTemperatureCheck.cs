@@ -45,9 +45,9 @@ internal static class ReasoningTemperatureCheck
         Check(configuration.Extractor?.Model, "/extractor/model", reasoning, errors);
         Check(configuration.Evaluation?.Judge, "/evaluation/judge", reasoning, errors);
         Check(configuration.Titler?.Model, "/titler/model", reasoning, errors);
-        Check(configuration.Agents?.Defaults?.Model, "/agents/defaults/model", reasoning, errors);
+        Check(configuration.Agents.Defaults?.Model, "/agents/defaults/model", reasoning, errors);
 
-        var agents = configuration.Agents?.Items ?? [];
+        var agents = configuration.Agents.Items;
         for (var index = 0; index < agents.Count; index++)
         {
             Check(agents[index].Model, Reference("/agents/items", index), reasoning, errors);

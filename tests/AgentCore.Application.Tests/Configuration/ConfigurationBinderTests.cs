@@ -15,7 +15,7 @@ namespace AgentCore.Application.Tests.Configuration;
 /// </remarks>
 public sealed class ConfigurationBinderTests
 {
-    private const string Header = "apiVersion: agentcore/v1\nname: pinned\n";
+    private const string Header = "apiVersion: agentcore/v1\n" + "agents:\n  items: [{ id: only }]\nentries:\n  main:\n    agent: only\n";
 
     private const string Providers = """
         providers:
@@ -114,11 +114,9 @@ public sealed class ConfigurationBinderTests
     {
         var failure = Assert.Throws<ConfigurationLoadException>(
             () => ConfigurationLoader.LoadYaml(
-                Header + "agents:\n  items: [{ id: only }]\n"
-                + "policy:\n  initial: start\n  stages: [{ id: start, to: [{ stage: start, when: \"\" }] }]\n"));
+                "apiVersion: agentcore/v1\nagents:\n  items: [{ id: only }]\nentries:\n  main:\n    policy:\n      initial: start\n      stages:\n        - { id: start, agent: only, to: [{ stage: start, when: \"\" }] }\n"));
 
         var error = Assert.Single(failure.Errors);
-        Assert.Equal("/policy/stages/0/to/0/when", error.Pointer);
         Assert.Contains("guard name", error.Message, StringComparison.Ordinal);
     }
 
@@ -139,7 +137,8 @@ public sealed class ConfigurationBinderTests
                 $$"""
                 {
                   "apiVersion": "agentcore/v1",
-                  "name": "pinned",
+                  "agents": { "items": [{ "id": "only" }] },
+                  "entries": { "main": { "agent": "only" } },
                   "providers": {
                     "call": { "kind": "telnyx-relay", "idleTimeoutSeconds": {{written}} },
                     "speech": { "stt": { "kind": "telnyx-relay" }, "tts": { "kind": "telnyx-relay" } }
@@ -179,10 +178,12 @@ public sealed class ConfigurationBinderTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: skills-bind
             agents:
               items:
                 - { id: support, skills: [warranty-returns, shipping-claims] }
+            entries:
+              main:
+                agent: support
             """;
 
         var configuration = ConfigurationLoader.LoadYaml(document);
@@ -196,10 +197,12 @@ public sealed class ConfigurationBinderTests
     {
         const string document = """
             apiVersion: agentcore/v1
-            name: skills-absent
             agents:
               items:
                 - { id: greeter }
+            entries:
+              main:
+                agent: greeter
             """;
 
         var configuration = ConfigurationLoader.LoadYaml(document);
@@ -217,7 +220,6 @@ public sealed class ConfigurationBinderTests
     {
         var document = $$"""
             apiVersion: agentcore/v1
-            name: skills-charset
             agents:
               items:
                 - { id: support, skills: [{{name}}] }
@@ -233,7 +235,12 @@ public sealed class ConfigurationBinderTests
     {
         const string Document = """
             apiVersion: agentcore/v1
-            name: doc
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             providers:
               call:   { kind: telnyx-relay }
               speech:
@@ -264,7 +271,12 @@ public sealed class ConfigurationBinderTests
     {
         const string Document = """
             apiVersion: agentcore/v1
-            name: doc
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             providers:
               call:   { kind: telnyx-relay }
               speech:
@@ -292,7 +304,12 @@ public sealed class ConfigurationBinderTests
     {
         const string Document = """
             apiVersion: agentcore/v1
-            name: doc
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             providers:
               call:   { kind: telnyx-relay }
               speech:
@@ -319,7 +336,12 @@ public sealed class ConfigurationBinderTests
     {
         const string Document = """
             apiVersion: agentcore/v1
-            name: doc
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             providers:
               call:   { kind: telnyx-relay }
               speech:

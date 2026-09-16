@@ -44,28 +44,34 @@ public sealed class FilesCompilationTests : IDisposable
     private const string FilesYaml =
         """
         apiVersion: agentcore/v1
-        name: harness-files
         agents:
           items:
             - { id: only, instructions: "work with files", files: { store: workspace } }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string ReadOnlyFilesYaml =
         """
         apiVersion: agentcore/v1
-        name: harness-files-readonly
         agents:
           items:
             - { id: only, instructions: "read files", files: { store: workspace, write: false } }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string NoFilesYaml =
         """
         apiVersion: agentcore/v1
-        name: harness-no-files
         agents:
           items:
             - { id: only, instructions: "no files here" }
+        entries:
+          main:
+            agent: only
         """;
 
     private readonly string _root =
@@ -143,9 +149,9 @@ public sealed class FilesCompilationTests : IDisposable
     {
         var document = ConfigurationLoader.LoadYaml(FilesYaml);
 
-        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationCompiler.Compile(
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationCompiler.CompileAll(
             document,
-            new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hi")))));
+            new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hi"))))["main"]);
 
         Assert.Equal("/agents/items/0/files", failure.Pointer);
         Assert.Contains("options.UseWorkspace(", failure.Message, StringComparison.Ordinal);
@@ -253,9 +259,9 @@ public sealed class FilesCompilationTests : IDisposable
         var document = ConfigurationLoader.LoadYaml(yaml);
         var chatClients = new RoutingChatClientFactory(client ?? new SequencedChatClient("done"));
 
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             document,
-            new AgentCompilationContext(chatClients) { WorkspaceRoot = root });
+            new AgentCompilationContext(chatClients) { WorkspaceRoot = root })["main"];
 
         return new CallSessionFactory(
             compiled,
@@ -265,9 +271,9 @@ public sealed class FilesCompilationTests : IDisposable
 
     private static AIAgent CompileOne(string yaml, SequencedChatClient reply, string root)
     {
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             ConfigurationLoader.LoadYaml(yaml),
-            new AgentCompilationContext(new FakeChatClientFactory(reply)) { WorkspaceRoot = root });
+            new AgentCompilationContext(new FakeChatClientFactory(reply)) { WorkspaceRoot = root })["main"];
 
         return Assert.Single(compiled.Agents.Values);
     }

@@ -6,7 +6,8 @@
   "type": "object",
   "required": [
     "apiVersion",
-    "name"
+    "agents",
+    "entries"
   ],
   "additionalProperties": false,
   "properties": {
@@ -14,22 +15,17 @@
       "const": "agentcore/v1",
       "description": "The only version this schema accepts."
     },
-    "name": {
-      "type": "string",
-      "minLength": 1,
-      "description": "The name of the configured agent."
-    },
     "fallbackReply": {
       "type": "string",
       "minLength": 1,
       "pattern": "\\S",
-      "description": "Section 8.7: the line the caller hears when a turn fails. It sits at the root because every document shape speaks it. The default is the sentence AgentCore ships."
+      "description": "Section 8.7: the line the caller hears when a turn fails. The root default; an entry may override it. The default is the sentence AgentCore ships."
     },
     "refusalReply": {
       "type": "string",
       "minLength": 1,
       "pattern": "\\S",
-      "description": "The line the caller hears when the agent refuses to answer. Content moderation reads the caller's spoken input before the model runs, and the agent refuses the turn when the endpoint flags it. It sits at the root beside fallbackReply because every document shape speaks it. The key is optional, and the default is the sentence AgentCore ships. fallbackReply cannot serve here: its default asks the caller to say it again, which invites the harmful request a second time, and section 8.7 gives fallbackReply to a turn that failed, while a refusal never asks the model at all."
+      "description": "The line the caller hears when the agent refuses to answer. Content moderation reads the caller's spoken input before the model runs, and the agent refuses the turn when the endpoint flags it. The root default beside fallbackReply; an entry may override it. The key is optional, and the default is the sentence AgentCore ships. fallbackReply cannot serve here: its default asks the caller to say it again, which invites the harmful request a second time, and section 8.7 gives fallbackReply to a turn that failed, while a refusal never asks the model at all."
     },
     "state": {
       "type": "object",
@@ -70,11 +66,15 @@
     "agents": {
       "$ref": "#/$defs/agents"
     },
-    "policy": {
-      "$ref": "#/$defs/policy"
-    },
-    "graph": {
-      "$ref": "#/$defs/graph"
+    "entries": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/entry"
+      }
     },
     "providers": {
       "$ref": "#/$defs/providers"
@@ -84,16 +84,6 @@
     },
     "titler": {
       "$ref": "#/$defs/titler"
-    }
-  },
-  "dependentSchemas": {
-    "graph": {
-      "description": "Section 8.2: a document that holds both policy and graph is a load-time error.",
-      "not": {
-        "required": [
-          "policy"
-        ]
-      }
     }
   },
   "$defs": {
@@ -719,6 +709,10 @@
         "id": {
           "$ref": "#/$defs/identifier"
         },
+        "description": {
+          "type": "string",
+          "description": "One line a parent sees beside this agent's id in its background-agent list."
+        },
         "instructions": {
           "type": "string"
         },
@@ -948,6 +942,49 @@
       "type": "string",
       "minLength": 1,
       "description": "Names one tool exactly, or a prefix with a trailing *."
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "agent": {
+          "type": "string",
+          "minLength": 1
+        },
+        "policy": {
+          "$ref": "#/$defs/policy"
+        },
+        "graph": {
+          "$ref": "#/$defs/graph"
+        },
+        "fallbackReply": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "refusalReply": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "agent"
+          ]
+        },
+        {
+          "required": [
+            "policy"
+          ]
+        },
+        {
+          "required": [
+            "graph"
+          ]
+        }
+      ]
     },
     "policy": {
       "type": "object",

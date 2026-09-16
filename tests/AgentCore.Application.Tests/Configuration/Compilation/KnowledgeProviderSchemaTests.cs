@@ -18,7 +18,6 @@ public sealed class KnowledgeProviderSchemaTests
     private const string MinimalYaml =
         """
         apiVersion: agentcore/v1
-        name: knowledge-defaults
         providers:
           call:   { kind: telnyx-relay }
           speech:
@@ -28,12 +27,14 @@ public sealed class KnowledgeProviderSchemaTests
         agents:
           items:
             - { id: only, instructions: "hello" }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string FullYaml =
         """
         apiVersion: agentcore/v1
-        name: knowledge-full
         providers:
           call:   { kind: telnyx-relay }
           speech:
@@ -64,12 +65,14 @@ public sealed class KnowledgeProviderSchemaTests
         agents:
           items:
             - { id: only, instructions: "hello" }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string UnknownKeyYaml =
         """
         apiVersion: agentcore/v1
-        name: knowledge-typo
         providers:
           call:   { kind: telnyx-relay }
           speech:
@@ -79,6 +82,9 @@ public sealed class KnowledgeProviderSchemaTests
         agents:
           items:
             - { id: only, instructions: "hello" }
+        entries:
+          main:
+            agent: only
         """;
 
     [Fact]
@@ -145,7 +151,6 @@ public sealed class KnowledgeProviderSchemaTests
         const string yaml =
             """
             apiVersion: agentcore/v1
-            name: knowledge-bad-template
             providers:
               call:   { kind: telnyx-relay }
               speech:
@@ -160,6 +165,9 @@ public sealed class KnowledgeProviderSchemaTests
             agents:
               items:
                 - { id: only, instructions: "hello" }
+            entries:
+              main:
+                agent: only
             """;
 
         Assert.Throws<ConfigurationLoadException>(() => Load(yaml));

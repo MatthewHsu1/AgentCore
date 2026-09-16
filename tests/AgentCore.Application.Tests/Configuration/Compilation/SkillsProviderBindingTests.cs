@@ -18,18 +18,22 @@ public sealed class SkillsProviderBindingTests
 {
     private const string SkillsYaml = """
         apiVersion: agentcore/v1
-        name: skills-only
         agents:
           items:
             - { id: support, skills: [warranty-returns] }
+        entries:
+          main:
+            agent: support
         """;
 
     private const string NoSkillsYaml = """
         apiVersion: agentcore/v1
-        name: no-skills
         agents:
           items:
             - { id: greeter }
+        entries:
+          main:
+            agent: greeter
         """;
 
     [Fact]
@@ -71,9 +75,9 @@ public sealed class SkillsProviderBindingTests
     {
         using SequencedChatClient reply = new("hello there.");
 
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             ConfigurationLoader.LoadYaml(yaml),
-            new AgentCompilationContext(new FakeChatClientFactory(reply)) { Skills = catalog });
+            new AgentCompilationContext(new FakeChatClientFactory(reply)) { Skills = catalog })["main"];
 
         return Assert.Single(compiled.Agents.Values);
     }

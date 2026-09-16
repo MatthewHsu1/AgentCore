@@ -150,7 +150,7 @@ internal sealed class CallTurnRunner
 
             // The reminder rides a request that happens anyway, and it rides exactly one, as a message
             // the framework appends for that invocation and stores nowhere. It reads the state document
-            // and never the transcript. Only a document with a policy: has a stage that waits on a slot.
+            // and never the transcript. Only an entry with a policy: has a stage that waits on a slot.
             var reminder = _session.Policy is null ? null : UnfilledSlotReminder.Build(_session.State, _session.Policy.CurrentStage);
             ChatMessage spoken = userInput;
 

@@ -51,17 +51,17 @@ public sealed class HarnessCompilationTests
     {
         using SequencedChatClient reply = new("hello there.");
 
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             new AgentCoreConfiguration
             {
                 ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
-                Name = "harness-todos",
+                Entries = new Dictionary<string, EntryConfiguration> { ["main"] = new EntryConfiguration { Agent = "only" } },
                 Agents = new AgentsConfiguration
                 {
                     Items = [new AgentConfiguration { Id = "only", Todos = true }],
                 },
             },
-            new AgentCompilationContext(new FakeChatClientFactory(reply)));
+            new AgentCompilationContext(new FakeChatClientFactory(reply)))["main"];
 
         var agent = Assert.Single(compiled.Agents.Values);
         var token = TestContext.Current.CancellationToken;
@@ -79,17 +79,17 @@ public sealed class HarnessCompilationTests
     {
         using SequencedChatClient reply = new("hello there.");
 
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             new AgentCoreConfiguration
             {
                 ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
-                Name = "harness-mode",
+                Entries = new Dictionary<string, EntryConfiguration> { ["main"] = new EntryConfiguration { Agent = "only" } },
                 Agents = new AgentsConfiguration
                 {
                     Items = [new AgentConfiguration { Id = "only", Mode = true }],
                 },
             },
-            new AgentCompilationContext(new FakeChatClientFactory(reply)));
+            new AgentCompilationContext(new FakeChatClientFactory(reply)))["main"];
 
         var agent = Assert.Single(compiled.Agents.Values);
         var token = TestContext.Current.CancellationToken;
@@ -105,17 +105,17 @@ public sealed class HarnessCompilationTests
     [Fact]
     public void Compile_TodosAndModeTrue_HarnessStateKeysIsTheUnionOfBoth()
     {
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             new AgentCoreConfiguration
             {
                 ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
-                Name = "harness-keys",
+                Entries = new Dictionary<string, EntryConfiguration> { ["main"] = new EntryConfiguration { Agent = "only" } },
                 Agents = new AgentsConfiguration
                 {
                     Items = [new AgentConfiguration { Id = "only", Todos = true, Mode = true }],
                 },
             },
-            new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hello there."))));
+            new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hello there."))))["main"];
 
         Assert.Equal(
             new HashSet<string>(StringComparer.Ordinal)
@@ -129,66 +129,71 @@ public sealed class HarnessCompilationTests
     [Fact]
     public void Compile_NeitherTodosNorMode_HarnessStateKeysIsEmpty()
     {
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             new AgentCoreConfiguration
             {
                 ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
-                Name = "harness-no-keys",
+                Entries = new Dictionary<string, EntryConfiguration> { ["main"] = new EntryConfiguration { Agent = "only" } },
                 Agents = new AgentsConfiguration
                 {
                     Items = [new AgentConfiguration { Id = "only" }],
                 },
             },
-            new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hello there."))));
+            new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hello there."))))["main"];
 
         Assert.Empty(compiled.HarnessStateKeys);
     }
 
     private const string TwoAgentsOnlyOneWithTodosYaml =
         """
+          apiVersion: agentcore/v1
+          guards:
+            always: { ">=": [ { var: turnIndex }, 0 ] }
+          agents:
+            items:
+              - { id: todoer, instructions: "track todos", todos: true }
+              - { id: plain, instructions: "just talk" }
+          entries:
+            main:
+              policy:
+                initial: working
+                stages:
+                  - { id: working, agent: todoer, to: [ { stage: done, when: always } ] }
+                  - { id: done, agent: plain, terminal: true }
+          """;
+
+      [Fact]
+      public void Compile_TwoAgentsOnlyOneWithTodos_HarnessStateKeysHasTheTodoKey()
+      {
+          var compiled = ConfigurationCompiler.CompileAll(
+              ConfigurationLoader.LoadYaml(TwoAgentsOnlyOneWithTodosYaml),
+              new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hello there."))))["main"];
+
+          Assert.Equal(
+              new HashSet<string>(StringComparer.Ordinal) { new TodoProvider().StateKeys[0] },
+              compiled.HarnessStateKeys);
+      }
+
+      private const string ShellYaml =
+          """
         apiVersion: agentcore/v1
-        name: harness-policy-keys
-        guards:
-          always: { ">=": [ { var: turnIndex }, 0 ] }
-        agents:
-          items:
-            - { id: todoer, instructions: "track todos", todos: true }
-            - { id: plain, instructions: "just talk" }
-        policy:
-          initial: working
-          stages:
-            - { id: working, agent: todoer, to: [ { stage: done, when: always } ] }
-            - { id: done, agent: plain, terminal: true }
-        """;
-
-    [Fact]
-    public void Compile_TwoAgentsOnlyOneWithTodos_HarnessStateKeysHasTheTodoKey()
-    {
-        var compiled = ConfigurationCompiler.Compile(
-            ConfigurationLoader.LoadYaml(TwoAgentsOnlyOneWithTodosYaml),
-            new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hello there."))));
-
-        Assert.Equal(
-            new HashSet<string>(StringComparer.Ordinal) { new TodoProvider().StateKeys[0] },
-            compiled.HarnessStateKeys);
-    }
-
-    private const string ShellYaml =
-        """
-        apiVersion: agentcore/v1
-        name: harness-shell
         agents:
           items:
             - { id: only, instructions: "run commands", shell: { kind: local } }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string ShellBadPolicyYaml =
         """
         apiVersion: agentcore/v1
-        name: harness-shell-bad-policy
         agents:
           items:
             - { id: only, instructions: "run commands", shell: { kind: local, policy: { deny: ["("] } } }
+        entries:
+          main:
+            agent: only
         """;
 
     [Fact]
@@ -196,9 +201,9 @@ public sealed class HarnessCompilationTests
     {
         var document = ConfigurationLoader.LoadYaml(ShellYaml);
 
-        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationCompiler.Compile(
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationCompiler.CompileAll(
             document,
-            new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hi")))));
+            new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hi"))))["main"]);
 
         Assert.Equal("/agents/items/0/shell", failure.Pointer);
         Assert.Contains("options.UseWorkspace(", failure.Message, StringComparison.Ordinal);
@@ -209,12 +214,12 @@ public sealed class HarnessCompilationTests
     {
         var document = ConfigurationLoader.LoadYaml(ShellBadPolicyYaml);
 
-        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationCompiler.Compile(
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationCompiler.CompileAll(
             document,
             new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hi")))
             {
                 WorkspaceRoot = Path.Combine(Path.GetTempPath(), "agentcore-shell-" + Guid.NewGuid().ToString("N")),
-            }));
+            })["main"]);
 
         Assert.Equal("/agents/items/0/shell/policy", failure.Pointer);
         Assert.Contains("'('", failure.Message, StringComparison.Ordinal);
@@ -226,12 +231,12 @@ public sealed class HarnessCompilationTests
         var root = Path.Combine(Path.GetTempPath(), "agentcore-shell-" + Guid.NewGuid().ToString("N"));
         try
         {
-            var compiled = ConfigurationCompiler.Compile(
+            var compiled = ConfigurationCompiler.CompileAll(
                 ConfigurationLoader.LoadYaml(ShellYaml),
                 new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hi")))
                 {
                     WorkspaceRoot = root,
-                });
+                })["main"];
 
             Assert.Single(compiled.Agents.Values);
             Assert.Empty(compiled.HarnessStateKeys);
@@ -251,12 +256,12 @@ public sealed class HarnessCompilationTests
         var root = Path.Combine(Path.GetTempPath(), "agentcore-shell-env-" + Guid.NewGuid().ToString("N"));
         try
         {
-            var compiled = ConfigurationCompiler.Compile(
+            var compiled = ConfigurationCompiler.CompileAll(
                 ConfigurationLoader.LoadYaml(ShellYaml),
                 new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hi")))
                 {
                     WorkspaceRoot = root,
-                });
+                })["main"];
 
             var providers = Providers(Assert.Single(compiled.Agents.Values));
 
@@ -276,17 +281,17 @@ public sealed class HarnessCompilationTests
     {
         using SequencedChatClient reply = new("hello there.");
 
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             new AgentCoreConfiguration
             {
                 ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
-                Name = "harness-only",
+                Entries = new Dictionary<string, EntryConfiguration> { ["main"] = new EntryConfiguration { Agent = "only" } },
                 Agents = new AgentsConfiguration
                 {
                     Items = [new AgentConfiguration { Id = "only", Todos = withTodos, Mode = withMode }],
                 },
             },
-            new AgentCompilationContext(new FakeChatClientFactory(reply)));
+            new AgentCompilationContext(new FakeChatClientFactory(reply)))["main"];
 
         return Assert.Single(compiled.Agents.Values);
     }

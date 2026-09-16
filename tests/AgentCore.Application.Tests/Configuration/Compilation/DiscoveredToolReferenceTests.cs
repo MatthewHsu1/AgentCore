@@ -26,10 +26,12 @@ public sealed class DiscoveredToolReferenceTests
     private const string DiscoveredOnlyYaml =
         """
         apiVersion: agentcore/v1
-        name: discovered-only
         agents:
           items:
             - { id: only, instructions: "answer", tools: [ discovered_only ] }
+        entries:
+          main:
+            agent: only
         """;
 
     [Fact]
@@ -39,9 +41,9 @@ public sealed class DiscoveredToolReferenceTests
         var registry = await BuildRegistryAsync(document, "discovered_only", TestContext.Current.CancellationToken);
 
         using ToolCallingChatClient client = new("answered");
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             document,
-            new AgentCompilationContext(new FakeChatClientFactory(client)) { Tools = registry });
+            new AgentCompilationContext(new FakeChatClientFactory(client)) { Tools = registry })["main"];
 
         await compiled.Agent.RunAsync("hello", cancellationToken: TestContext.Current.CancellationToken);
 
@@ -55,12 +57,12 @@ public sealed class DiscoveredToolReferenceTests
         var document = ConfigurationLoader.LoadYaml(DiscoveredOnlyYaml);
         var emptyRegistry = await BuildRegistryAsync(document, null, TestContext.Current.CancellationToken);
 
-        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationCompiler.Compile(
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationCompiler.CompileAll(
             document,
             new AgentCompilationContext(new FakeChatClientFactory(new ToolCallingChatClient("unused")))
             {
                 Tools = emptyRegistry,
-            }));
+            })["main"]);
 
         var error = Assert.Single(failure.Errors);
         Assert.Equal("/agents/items/0/tools/0", error.Pointer);

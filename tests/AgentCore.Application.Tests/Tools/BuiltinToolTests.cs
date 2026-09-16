@@ -63,7 +63,7 @@ public sealed class BuiltinToolTests
         var context = new ToolSourceContext(new AgentCoreConfiguration
         {
             ApiVersion = "agentcore/v1",
-            Name = "test",
+            Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(),
             Tools = [new ToolConfiguration { Id = "x", Kind = ToolKind.Builtin, Uses = "knowledge.invent" }],
         });
 
@@ -94,7 +94,7 @@ public sealed class BuiltinToolTests
             var context = new ToolSourceContext(new AgentCoreConfiguration
             {
                 ApiVersion = "agentcore/v1",
-                Name = "test",
+                Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(),
                 Tools = [tool],
             });
 

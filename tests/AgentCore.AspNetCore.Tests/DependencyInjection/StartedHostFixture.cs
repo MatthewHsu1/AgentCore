@@ -20,7 +20,6 @@ internal static class StartedHostFixture
     internal const string OneAgentYaml =
         """
         apiVersion: agentcore/v1
-        name: composed
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
@@ -31,6 +30,9 @@ internal static class StartedHostFixture
             tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
+        entries:
+          main:
+            agent: only
         """;
 
     /// <summary>Starts a host on one document.</summary>

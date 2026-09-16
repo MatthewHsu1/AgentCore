@@ -8,7 +8,7 @@ using Microsoft.Agents.AI;
 namespace AgentCore.Application.Configuration.Compilation;
 
 /// <summary>
-/// One document, compiled to the row that it selected.
+/// One entry, compiled to the row that it selected.
 /// </summary>
 public sealed class CompiledAgent
 {
@@ -21,6 +21,10 @@ public sealed class CompiledAgent
 #pragma warning disable MAAI001 // BackgroundAgentsProvider is evaluation-only in Microsoft.Agents.AI 1.21.0.
     internal CompiledAgent(
         AgentCoreConfiguration configuration,
+        string entryName,
+        PolicyConfiguration? policy,
+        string fallbackReply,
+        string refusalReply,
         CompileTableRow row,
         ICallStore calls,
         AIAgent entry,
@@ -32,7 +36,15 @@ public sealed class CompiledAgent
         IReadOnlyList<BackgroundAgentsProvider> backgroundProviders,
         Func<AIAgent, AIAgent> turnLayers)
     {
+        ArgumentException.ThrowIfNullOrEmpty(entryName);
+        ArgumentNullException.ThrowIfNull(fallbackReply);
+        ArgumentNullException.ThrowIfNull(refusalReply);
+
         Configuration = configuration;
+        EntryName = entryName;
+        Policy = policy;
+        FallbackReply = fallbackReply;
+        RefusalReply = refusalReply;
         Shape = row.Shape;
         SessionCarriesHistory = row.SessionCarriesHistory;
         Agent = entry;
@@ -63,11 +75,23 @@ public sealed class CompiledAgent
     /// <summary>Gets the document this agent was compiled from.</summary>
     public AgentCoreConfiguration Configuration { get; }
 
-    /// <summary>Gets the row of the compile table this document selected.</summary>
+    /// <summary>Gets the entry key this agent was compiled from. It is the agent's name.</summary>
+    public string EntryName { get; }
+
+    /// <summary>Gets this entry's stage machine, or <see langword="null"/> when the entry holds none.</summary>
+    public PolicyConfiguration? Policy { get; }
+
+    /// <summary>Gets the resolved line the caller hears when a turn fails.</summary>
+    public string FallbackReply { get; }
+
+    /// <summary>Gets the resolved line the caller hears when the agent refuses to answer.</summary>
+    public string RefusalReply { get; }
+
+    /// <summary>Gets the row of the compile table this entry selected.</summary>
     public CompiledAgentShape Shape { get; }
 
-    /// <summary>Gets the name of the document.</summary>
-    public string Name => Configuration.Name;
+    /// <summary>Gets the name of the entry.</summary>
+    public string Name => EntryName;
 
     /// <summary>
     /// Gets the agent a turn runs.
@@ -148,10 +172,10 @@ public sealed class CompiledAgent
     /// <returns>The machine, in the initial stage.</returns>
     public StagePolicy CreatePolicy(IGuardEvaluator guards)
     {
-        if (Configuration.Policy is not { } policy)
+        if (Policy is not { } policy)
         {
             throw new InvalidOperationException(
-                $"The document '{Name}' declares no policy, so it has no stage machine.");
+                $"The entry '{EntryName}' declares no policy, so it has no stage machine.");
         }
 
         return new StagePolicy(policy, guards);

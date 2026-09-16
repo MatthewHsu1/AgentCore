@@ -3,6 +3,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tools;
+using AgentCore.AspNetCore.Call;
+using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Sessions;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Hosting.OpenAI;
@@ -18,34 +20,6 @@ namespace AgentCore.AspNetCore.Endpoints;
 /// The Responses path: an OpenAI-compatible <c>POST /v1/responses</c> over the turn loop,
 /// with the call continuing across requests through the session store.
 /// </summary>
-/// <remarks>
-/// <para>
-/// This is the app-owned counterpart to the framework's <c>MapOpenAIResponses</c>,
-/// which owns conversation-items storage and runs every turn sessionless. Here the
-/// protocol conversion alone comes from the framework
-/// (<c>OpenAIResponses.ToAgentRunRequest</c>, <c>GetSessionStoreId</c>,
-/// <c>WriteResponse</c>, <c>WriteResponseStreamAsync</c>); the route, the session
-/// save and load, and the storage stay here, so a second turn resumes the same
-/// call — its stage, its slots, and its words — rather than starting a new one.
-/// </para>
-/// <para>
-/// The turn itself runs on the <see cref="CallSession"/> directly rather than through
-/// the <c>AIAgent</c> seam, for the two things that seam cannot carry: where the turn
-/// hangs (<see cref="CallTurnOrigin"/>) and an approval answer. The session save and
-/// load stay on the agent seam, and the reply is rendered through it, so the stored
-/// envelope keeps the one shape the agent reads back.
-/// </para>
-/// <para>
-/// Turn facts travel in the response <c>metadata</c>, the spec's own extension point:
-/// <c>call_id</c>, <c>turn_index</c>, <c>stage_before</c>, <c>stage_after</c>,
-/// <c>is_terminal</c>, and, when set, <c>message_id</c>, <c>extraction_failure</c>,
-/// and <c>approvals</c> (a JSON array of the pending requests). A typed OpenAI client
-/// reads these; no bespoke top-level member is added. The stream carries text only —
-/// its frames are the framework's fixed shapes — with the stage on a header; renders,
-/// sources, and tool-call halves stay a chat-completions-stream capability, and the
-/// words stay in store 1 either way.
-/// </para>
-/// </remarks>
 public static class ResponsesEndpointRouteBuilderExtensions
 {
     /// <summary>The route this endpoint answers on when the host names none.</summary>
@@ -54,26 +28,31 @@ public static class ResponsesEndpointRouteBuilderExtensions
     /// <summary>The answer header that reports the stage the machine holds.</summary>
     public const string StageHeaderName = "X-AgentCore-Stage";
 
-    /// <summary>Maps the endpoint on <see cref="DefaultPattern"/>.</summary>
+    /// <summary>Maps the endpoint for one entry on <see cref="DefaultPattern"/>.</summary>
     /// <param name="endpoints">The route builder of the host.</param>
+    /// <param name="entry">The entry key this route answers on.</param>
     /// <returns>The mapped endpoint, so a host adds its own conventions.</returns>
-    public static IEndpointConventionBuilder MapResponses(this IEndpointRouteBuilder endpoints)
-        => endpoints.MapResponses(DefaultPattern);
+    public static IEndpointConventionBuilder MapResponses(this IEndpointRouteBuilder endpoints, string entry)
+        => endpoints.MapResponses(DefaultPattern, entry);
 
-    /// <summary>Maps the endpoint on one route.</summary>
+    /// <summary>Maps the endpoint for one entry on one route.</summary>
     /// <param name="endpoints">The route builder of the host.</param>
     /// <param name="pattern">The route to answer on.</param>
+    /// <param name="entry">The entry key this route answers on.</param>
     /// <returns>The mapped endpoint, so a host adds its own conventions.</returns>
-    public static IEndpointConventionBuilder MapResponses(this IEndpointRouteBuilder endpoints, string pattern)
+    public static IEndpointConventionBuilder MapResponses(
+        this IEndpointRouteBuilder endpoints, string pattern, string entry)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
         ArgumentException.ThrowIfNullOrEmpty(pattern);
+        ArgumentException.ThrowIfNullOrEmpty(entry);
 
-        return endpoints.MapPost(pattern, HandleAsync);
+        return endpoints.MapPost(pattern, (HttpContext http) => HandleAsync(http, entry))
+            .WithMetadata(new AgentCoreEntryMetadata(entry, "Responses"));
     }
 
     /// <summary>Runs one turn of one call, and files the session under the ids the answer carries.</summary>
-    private static async Task HandleAsync(HttpContext http)
+    private static async Task HandleAsync(HttpContext http, string entry)
     {
         var cancellationToken = http.RequestAborted;
 
@@ -132,7 +111,23 @@ public static class ResponsesEndpointRouteBuilderExtensions
             conversationId = ReadConversationId(body);
         }
 
-        var agent = http.RequestServices.GetRequiredService<AgentCoreAgent>();
+        AgentCoreAgent agent;
+        try
+        {
+            agent = http.RequestServices.GetRequiredService<AgentCoreBoot>().Entries.ForAgent(entry);
+        }
+        catch (InvalidOperationException failure)
+        {
+            await WriteErrorAsync(
+                http,
+                StatusCodes.Status503ServiceUnavailable,
+                failure.Message,
+                "invalid_request_error",
+                "unknown_entry",
+                cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         var sessions = http.RequestServices.GetRequiredService<AgentCoreAgentSessionStore>();
 
         // The continuation this turn hangs off, or null for the first turn of a call.
@@ -191,7 +186,22 @@ public static class ResponsesEndpointRouteBuilderExtensions
         }
         else if (known)
         {
-            session = await sessions.GetSessionAsync(agent, key, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                session = await sessions.GetSessionAsync(agent, key, cancellationToken).ConfigureAwait(false);
+            }
+            catch (InvalidOperationException failure)
+            {
+                // A key minted by another entry is unknown to this one, never a cross-entry read.
+                await WriteErrorAsync(
+                    http,
+                    StatusCodes.Status404NotFound,
+                    failure.Message,
+                    "invalid_request_error",
+                    "continuation_not_found",
+                    cancellationToken).ConfigureAwait(false);
+                return;
+            }
         }
         else
         {
@@ -358,6 +368,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
             .WriteAsJsonAsync(node, cancellationToken)
             .ConfigureAwait(false);
     }
+    
     /// <summary>Runs one turn and writes one Responses event for each update, filed under its ids.</summary>
     /// <remarks>
     /// The session is filed after the enumeration ends, because the turn commits —

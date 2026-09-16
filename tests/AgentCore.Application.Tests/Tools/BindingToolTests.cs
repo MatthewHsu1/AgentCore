@@ -222,7 +222,7 @@ public sealed class BindingToolTests
         var context = new ToolSourceContext(new AgentCoreConfiguration
         {
             ApiVersion = "agentcore/v1",
-            Name = "test",
+            Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(),
             Tools = [tool],
         });
 
@@ -238,7 +238,7 @@ public sealed class BindingToolTests
         var context = new ToolSourceContext(new AgentCoreConfiguration
         {
             ApiVersion = "agentcore/v1",
-            Name = "test",
+            Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(),
             Tools = [new ToolConfiguration { Id = "open_case", Kind = ToolKind.Binding, Binds = "CreateCase" }],
         });
 
@@ -257,7 +257,7 @@ public sealed class BindingToolTests
         var context = new ToolSourceContext(new AgentCoreConfiguration
         {
             ApiVersion = "agentcore/v1",
-            Name = "test",
+            Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(),
             Tools =
             [
                 new ToolConfiguration

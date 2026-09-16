@@ -225,7 +225,8 @@ public sealed class HttpToolSourceTests
         var context = new ToolSourceContext(new AgentCoreConfiguration
         {
             ApiVersion = "agentcore/v1",
-            Name = "test",
+            Agents = new AgentsConfiguration { Items = [] },
+            Entries = new Dictionary<string, EntryConfiguration>(),
             Tools = [LookupOrder],
         });
 
@@ -251,7 +252,8 @@ public sealed class HttpToolSourceTests
         var context = new ToolSourceContext(new AgentCoreConfiguration
         {
             ApiVersion = "agentcore/v1",
-            Name = "test",
+            Agents = new AgentsConfiguration { Items = [] },
+            Entries = new Dictionary<string, EntryConfiguration>(),
             Tools = [tool],
         });
 
@@ -267,7 +269,8 @@ public sealed class HttpToolSourceTests
         var context = new ToolSourceContext(new AgentCoreConfiguration
         {
             ApiVersion = "agentcore/v1",
-            Name = "test",
+            Agents = new AgentsConfiguration { Items = [] },
+            Entries = new Dictionary<string, EntryConfiguration>(),
             Tools = [new ToolConfiguration { Id = "call_api", Kind = ToolKind.Http, Description = "Call it." }],
         });
 

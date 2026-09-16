@@ -28,7 +28,7 @@ public sealed class CompiledAgentConcurrencyTests
             async () =>
             {
                 // Every call asks the registry for the agent, exactly as the turn loop does.
-                var compiled = registry.GetOrCompile(document, context);
+                var compiled = registry.GetOrCompile(document, "main", context);
 
                 // Nothing starts until all 26 are ready, so the fan-out is really simultaneous.
                 gate.SignalAndWait(token);
@@ -57,7 +57,7 @@ public sealed class CompiledAgentConcurrencyTests
         CompiledAgentRegistry registry = new();
 
         var token = TestContext.Current.CancellationToken;
-        var compiled = registry.GetOrCompile(document, context);
+        var compiled = registry.GetOrCompile(document, "main", context);
         using Barrier gate = new(FanOut);
 
         var runs = Enumerable.Range(0, FanOut).Select(index => Task.Run(
@@ -85,8 +85,8 @@ public sealed class CompiledAgentConcurrencyTests
         AgentCompilationContext context = new(new FakeChatClientFactory(client));
         CompiledAgentRegistry registry = new();
 
-        var first = registry.GetOrCompile(document, context);
-        var second = registry.GetOrCompile(document, context);
+        var first = registry.GetOrCompile(document, "main", context);
+        var second = registry.GetOrCompile(document, "main", context);
 
         Assert.Same(first, second);
         Assert.Equal(1, registry.CompileCount);

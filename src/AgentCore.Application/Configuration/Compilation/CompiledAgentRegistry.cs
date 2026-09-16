@@ -1,30 +1,22 @@
+using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 
 namespace AgentCore.Application.Configuration.Compilation;
 
 /// <summary>
-/// Holds each compiled agent for the life of the process.
+/// Holds each compiled entry for the life of the process.
 /// </summary>
-/// <remarks>
-/// <para>
-/// T44 closed by measurement: a fan-out of 26 simultaneous runs is clean against one shared
-/// <c>ChatClientAgent</c>, against one shared <c>AsAIAgent()</c> wrapper, and against one wrapper for
-/// each call, with a worst-case first text of 26.5 ms to 27.6 ms across the three shapes. Nothing
-/// serializes inside the wrapper, so sharing one agent costs nothing and compiling one for each call
-/// buys nothing.
-/// </para>
-/// <para>
-/// Register this registry as a singleton. Every call asks it for the agent, and it compiles once.
-/// <see cref="CompileCount"/> exists so a test can prove that.
-/// </para>
-/// </remarks>
 public sealed class CompiledAgentRegistry
 {
-    private readonly Dictionary<AgentCoreConfiguration, CompiledAgent> _compiled = [];
+    internal readonly record struct EntryKey(AgentCoreConfiguration Configuration, string Entry);
+
+    private readonly Dictionary<EntryKey, CompiledAgent> _compiled = [];
+
     private readonly Lock _gate = new();
+    
     private int _compileCount;
 
-    /// <summary>Gets how many times this registry ran the compile table.</summary>
+    /// <summary>Gets how many entries this registry has compiled.</summary>
     public int CompileCount
     {
         get
@@ -36,27 +28,96 @@ public sealed class CompiledAgentRegistry
         }
     }
 
-    /// <summary>Gets the compiled agent for one document, compiling it the first time only.</summary>
+    /// <summary>Gets the compiled agent for one entry, compiling it the first time only.</summary>
+    /// <param name="configuration">The loaded document.</param>
+    /// <param name="entryName">The entry key.</param>
+    /// <param name="context">The seams the document names. It is read on the first call only.</param>
+    /// <returns>The one compiled agent for that entry.</returns>
+    /// <exception cref="ConfigurationLoadException">The entry name is not declared.</exception>
+    public CompiledAgent GetOrCompile(
+        AgentCoreConfiguration configuration,
+        string entryName,
+        AgentCompilationContext context)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentNullException.ThrowIfNull(entryName);
+        ArgumentNullException.ThrowIfNull(context);
+
+        lock (_gate)
+        {
+            ThrowWhenUnknownEntry(configuration, entryName);
+
+            var key = new EntryKey(configuration, entryName);
+            if (_compiled.TryGetValue(key, out var existing))
+            {
+                return existing;
+            }
+
+            // The compile runs inside the lock, so 26 simultaneous callers still compile once.
+            CacheAllLocked(configuration, context);
+            return _compiled[key];
+        }
+    }
+
+    /// <summary>Compiles every entry of one document, so boot fails fast on a bad entry.</summary>
     /// <param name="configuration">The loaded document.</param>
     /// <param name="context">The seams the document names. It is read on the first call only.</param>
-    /// <returns>The one compiled agent for that document.</returns>
-    public CompiledAgent GetOrCompile(AgentCoreConfiguration configuration, AgentCompilationContext context)
+    /// <returns>The compiled agents, keyed by entry name.</returns>
+    public IReadOnlyDictionary<string, CompiledAgent> EnsureAll(
+        AgentCoreConfiguration configuration,
+        AgentCompilationContext context)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(context);
 
         lock (_gate)
         {
-            if (_compiled.TryGetValue(configuration, out var existing))
+            CacheAllLocked(configuration, context);
+
+            Dictionary<string, CompiledAgent> compiled = new(StringComparer.Ordinal);
+            foreach (var name in configuration.Entries.Keys)
             {
-                return existing;
+                compiled[name] = _compiled[new EntryKey(configuration, name)];
             }
 
-            // The compile runs inside the lock, so 26 simultaneous callers still compile once.
-            var compiled = ConfigurationCompiler.Compile(configuration, context);
-            _compileCount++;
-            _compiled[configuration] = compiled;
             return compiled;
+        }
+    }
+
+    private void CacheAllLocked(AgentCoreConfiguration configuration, AgentCompilationContext context)
+    {
+        var missing = false;
+        foreach (var name in configuration.Entries.Keys)
+        {
+            if (!_compiled.ContainsKey(new EntryKey(configuration, name)))
+            {
+                missing = true;
+                break;
+            }
+        }
+
+        if (!missing)
+        {
+            return;
+        }
+
+        var compiled = ConfigurationCompiler.CompileAll(configuration, context);
+        foreach (var (name, agent) in compiled)
+        {
+            if (_compiled.TryAdd(new EntryKey(configuration, name), agent))
+            {
+                _compileCount++;
+            }
+        }
+    }
+
+    private static void ThrowWhenUnknownEntry(AgentCoreConfiguration configuration, string entryName)
+    {
+        if (!configuration.Entries.ContainsKey(entryName))
+        {
+            throw ConfigurationCompiler.Fail(
+                "/entries",
+                $"the entry '{entryName}' is not declared. Valid entries: {string.Join(", ", configuration.Entries.Keys)}.");
         }
     }
 }

@@ -15,17 +15,17 @@ namespace AgentCore.AspNetCore.DependencyInjection;
 /// <param name="ChatClients">The factory the compile table asks for every agent and for the extractor.</param>
 /// <param name="Guards">The shared evaluator. It holds no state of its own.</param>
 /// <param name="Registry">The registry that compiled the document, and would compile it again.</param>
-/// <param name="Compiled">The one graph every call shares.</param>
+/// <param name="Entries">The compiled entries, keyed by entry name. Every call shares them.</param>
 internal readonly record struct CompiledGraph(
     IChatClientFactory ChatClients,
     GuardEvaluator Guards,
     CompiledAgentRegistry Registry,
-    CompiledAgent Compiled);
+    IReadOnlyDictionary<string, CompiledAgent> Entries);
 
 /// <summary>Step 5: compile the document once, so every call shares the result.</summary>
 internal static class CompilationStartup
 {
-    /// <summary>Compiles the document against the tools and the chat clients already built.</summary>
+    /// <summary>Compiles every entry of the document against the tools and the chat clients already built.</summary>
     /// <param name="configuration">The loaded document.</param>
     /// <param name="chatClients">The factory step 3c built, which the compile table asks for every agent and for the extractor.</param>
     /// <param name="tools">The registry step 4 built.</param>
@@ -39,8 +39,8 @@ internal static class CompilationStartup
     /// <param name="citations">The wording <c>providers.knowledge.citation</c> named.</param>
     /// <param name="loggers">The factory the guard evaluator and the knowledge provider take their loggers from.</param>
     /// <param name="workspaceRoot">The root <c>options.UseWorkspace(...)</c> bound, or <see langword="null"/>.</param>
-    /// <returns>The compiled graph, and the seams that made it.</returns>
-    /// <exception cref="ConfigurationLoadException">The document does not compile.</exception>
+    /// <returns>The compiled entries, and the seams that made them.</returns>
+    /// <exception cref="ConfigurationLoadException">An entry does not compile.</exception>
     internal static ValueTask<CompiledGraph> CompileAsync(
         AgentCoreConfiguration configuration,
         IChatClientFactory chatClients,
@@ -56,7 +56,7 @@ internal static class CompilationStartup
         GuardEvaluator guards = new(configuration.Guards, loggers.CreateLogger<GuardEvaluator>());
         CompiledAgentRegistry registry = new();
 
-        var compiled = registry.GetOrCompile(
+        var entries = registry.EnsureAll(
             configuration,
             new AgentCompilationContext(chatClients)
             {
@@ -71,6 +71,6 @@ internal static class CompilationStartup
                 WorkspaceRoot = workspaceRoot,
             });
 
-        return ValueTask.FromResult(new CompiledGraph(chatClients, guards, registry, compiled));
+        return ValueTask.FromResult(new CompiledGraph(chatClients, guards, registry, entries));
     }
 }

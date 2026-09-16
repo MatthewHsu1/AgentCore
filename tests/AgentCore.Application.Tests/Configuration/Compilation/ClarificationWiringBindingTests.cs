@@ -25,7 +25,6 @@ public sealed class ClarificationWiringBindingTests
     private const string WiredYaml =
         """
         apiVersion: agentcore/v1
-        name: clarification-wiring
         state:
           model:
             type: string
@@ -55,6 +54,9 @@ public sealed class ClarificationWiringBindingTests
             - id: only
               instructions: "I read the bank"
               knowledge: { mode: tool, scoped: true }
+        entries:
+          main:
+            agent: only
         """;
 
     [Fact]
@@ -104,9 +106,9 @@ public sealed class ClarificationWiringBindingTests
     {
         using SequencedChatClient reply = new("hello there.");
 
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             ConfigurationLoader.LoadYaml(WiredYaml),
-            new AgentCompilationContext(new FakeChatClientFactory(reply)) { Knowledge = port });
+            new AgentCompilationContext(new FakeChatClientFactory(reply)) { Knowledge = port })["main"];
 
         return Assert.Single(Providers(compiled.Agents["only"]).OfType<FacetFilterProvider>());
     }

@@ -16,7 +16,6 @@ public sealed class CompileTableTests
     internal const string OneAgentYaml =
         """
         apiVersion: agentcore/v1
-        name: one-agent
         agents:
           defaults:
             model: { ref: reply, temperature: 0.3 }
@@ -24,24 +23,28 @@ public sealed class CompileTableTests
               the stable cached prefix
           items:
             - { id: only, instructions: "the stage delta" }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string PolicyAndGraphYaml =
         """
         apiVersion: agentcore/v1
-        name: both
         agents:
           items:
             - { id: first }
             - { id: second }
-        policy:
-          initial: one
-          stages:
-            - { id: one, agent: first, to: [ { stage: two } ] }
-            - { id: two, agent: second, terminal: true }
-        graph:
-          pattern: sequential
-          agents: [ first, second ]
+        entries:
+          main:
+            policy:
+              initial: one
+              stages:
+                - { id: one, agent: first, to: [ { stage: two } ] }
+                - { id: two, agent: second, terminal: true }
+            graph:
+              pattern: sequential
+              agents: [ first, second ]
         """;
 
     /// <summary>The <c>agents.defaults.instructions</c> of <see cref="SharedPrefixYaml"/>.</summary>
@@ -51,7 +54,6 @@ public sealed class CompileTableTests
     private const string SharedPrefixYaml =
         """
         apiVersion: agentcore/v1
-        name: shared-prefix
         agents:
           defaults:
             model: { ref: reply }
@@ -60,46 +62,48 @@ public sealed class CompileTableTests
           items:
             - { id: greeter, instructions: "the greeter delta" }
             - { id: closer, instructions: "the closer delta" }
-        graph:
-          pattern: sequential
-          agents: [ greeter, closer ]
+        entries:
+          main:
+            graph:
+              pattern: sequential
+              agents: [ greeter, closer ]
         """;
 
     private const string PatternYaml =
         """
         apiVersion: agentcore/v1
-        name: pattern-graph
         agents:
           items:
             - { id: first }
             - { id: second }
-        graph:
-          pattern: sequential
-          agents: [ first, second ]
+        entries:
+          main:
+            graph:
+              pattern: sequential
+              agents: [ first, second ]
         """;
 
     internal const string ExplicitGraphYaml =
         """
         apiVersion: agentcore/v1
-        name: explicit-graph
         agents:
           items:
             - { id: first }
             - { id: second }
-        graph:
-          nodes:
-            - { id: start, agent: first, start: true }
-            - { id: finish, agent: second, output: true }
-          edges:
-            - { from: start, to: finish }
+        entries:
+          main:
+            graph:
+              nodes:
+                - { id: start, agent: first, start: true }
+                - { id: finish, agent: second, output: true }
+              edges:
+                - { from: start, to: finish }
         """;
-
     [Fact]
     public void Row1_OneAgentAndNoRuntime_IsTheSingleAgentShape()
     {
         var document = ConfigurationLoader.LoadYaml(OneAgentYaml);
-
-        Assert.Equal(CompiledAgentShape.SingleAgent, ConfigurationCompiler.SelectShape(document));
+        Assert.Equal(CompiledAgentShape.SingleAgent, ConfigurationCompiler.SelectEntryRow(document.Entries["main"], "/entries/main").Shape);
     }
 
     [Fact]
@@ -120,14 +124,13 @@ public sealed class CompileTableTests
     public void Row2_AgentsPlusPolicy_IsThePolicyShape()
     {
         var document = ConfigurationLoader.LoadYaml(Tests.Configuration.ExampleDocument.Yaml);
-
-        Assert.Equal(CompiledAgentShape.Policy, ConfigurationCompiler.SelectShape(document));
+        Assert.Equal(CompiledAgentShape.Policy, ConfigurationCompiler.SelectEntryRow(document.Entries["phone"], "/entries/phone").Shape);
     }
 
     [Fact]
     public void Row2_TheSection81Example_Compiles()
     {
-        var compiled = Compile(Tests.Configuration.ExampleDocument.Yaml);
+        var compiled = Compile(Tests.Configuration.ExampleDocument.Yaml, "phone");
 
         Assert.Equal(CompiledAgentShape.Policy, compiled.Shape);
         // 5 agents on the stage machine, plus analyst and webchat, which policy: never reaches.
@@ -142,7 +145,7 @@ public sealed class CompileTableTests
     [Fact]
     public void Row2_KnowsEveryStageOfTheExample()
     {
-        var compiled = Compile(Tests.Configuration.ExampleDocument.Yaml);
+        var compiled = Compile(Tests.Configuration.ExampleDocument.Yaml, "phone");
 
         Assert.Throws<KeyNotFoundException>(() => compiled.ForStage("nowhere"));
     }
@@ -151,8 +154,7 @@ public sealed class CompileTableTests
     public void Row3_GraphWithAPattern_IsThePatternGraphShape()
     {
         var document = ConfigurationLoader.LoadYaml(PatternYaml);
-
-        Assert.Equal(CompiledAgentShape.PatternGraph, ConfigurationCompiler.SelectShape(document));
+        Assert.Equal(CompiledAgentShape.PatternGraph, ConfigurationCompiler.SelectEntryRow(document.Entries["main"], "/entries/main").Shape);
     }
 
     [Theory]
@@ -167,16 +169,14 @@ public sealed class CompileTableTests
         var compiled = Compile(yaml);
 
         Assert.Equal(CompiledAgentShape.PatternGraph, compiled.Shape);
-        Assert.Equal("pattern-graph", compiled.Agent.Name);
-        Assert.IsNotType<ChatClientAgent>(compiled.Agent);
+        Assert.Equal("main", compiled.Agent.Name);
     }
 
     [Fact]
     public void Row4_GraphWithNodesAndEdges_IsTheExplicitGraphShape()
     {
         var document = ConfigurationLoader.LoadYaml(ExplicitGraphYaml);
-
-        Assert.Equal(CompiledAgentShape.ExplicitGraph, ConfigurationCompiler.SelectShape(document));
+        Assert.Equal(CompiledAgentShape.ExplicitGraph, ConfigurationCompiler.SelectEntryRow(document.Entries["main"], "/entries/main").Shape);
     }
 
     [Fact]
@@ -185,7 +185,7 @@ public sealed class CompileTableTests
         var compiled = Compile(ExplicitGraphYaml);
 
         Assert.Equal(CompiledAgentShape.ExplicitGraph, compiled.Shape);
-        Assert.Equal("explicit-graph", compiled.Agent.Name);
+        Assert.Equal("main", compiled.Agent.Name);
         Assert.IsNotType<ChatClientAgent>(compiled.Agent);
     }
 
@@ -196,7 +196,7 @@ public sealed class CompileTableTests
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => Compile(yaml));
 
-        Assert.Equal("/graph/nodes", failure.Pointer);
+        Assert.Equal("/entries/main/graph/nodes", failure.Pointer);
         Assert.Contains("start nodes", failure.Message, StringComparison.Ordinal);
     }
 
@@ -211,7 +211,7 @@ public sealed class CompileTableTests
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => Compile(yaml));
 
-        Assert.Equal("/graph/edges/0/when", failure.Pointer);
+        Assert.Equal("/entries/main/graph/edges/0/when", failure.Pointer);
     }
 
     [Fact]
@@ -226,8 +226,8 @@ public sealed class CompileTableTests
     {
         // The same rule again, against a record built in code. Row 5 is a rule of the table, and not
         // only a rule of the JSON Schema.
-        var policy = ConfigurationLoader.LoadYaml(Tests.Configuration.ExampleDocument.Yaml);
-        var both = policy with
+        var document = ConfigurationLoader.LoadYaml(Tests.Configuration.ExampleDocument.Yaml);
+        var both = document.Entries["phone"] with
         {
             Graph = new GraphConfiguration
             {
@@ -236,10 +236,10 @@ public sealed class CompileTableTests
             },
         };
 
-        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationCompiler.SelectShape(both));
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationCompiler.SelectEntryRow(both, "/entries/phone"));
 
-        Assert.Equal(ConfigurationError.RootPointer, failure.Pointer);
-        Assert.Contains("both policy: and graph:", failure.Message, StringComparison.Ordinal);
+        Assert.Equal("/entries/phone", failure.Pointer);
+        Assert.Contains("two of agent:, policy:, and graph:", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -248,17 +248,18 @@ public sealed class CompileTableTests
         var yaml =
             """
             apiVersion: agentcore/v1
-            name: ambiguous
             agents:
               items:
                 - { id: first }
                 - { id: second }
+            entries:
+              main: {}
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(
-            () => ConfigurationCompiler.SelectShape(ConfigurationLoader.LoadYaml(yaml)));
+            () => ConfigurationLoader.LoadYaml(yaml));
 
-        Assert.Equal("/agents/items", failure.Pointer);
+        Assert.Equal("/entries/main", failure.Pointer);
     }
 
     [Fact]
@@ -267,11 +268,16 @@ public sealed class CompileTableTests
         var yaml =
             """
             apiVersion: agentcore/v1
-            name: empty
+            agents:
+              items:
+                - { id: only }
+            entries:
+              main: {}
             """;
 
-        Assert.Throws<ConfigurationLoadException>(
-            () => ConfigurationCompiler.SelectShape(ConfigurationLoader.LoadYaml(yaml)));
+        var failure = Assert.Throws<ConfigurationLoadException>(
+            () => ConfigurationLoader.LoadYaml(yaml));
+        Assert.Equal("/entries/main", failure.Pointer);
     }
 
     [Fact]
@@ -280,39 +286,43 @@ public sealed class CompileTableTests
         var yaml =
             """
             apiVersion: agentcore/v1
-            name: missing-agent
             agents:
               items:
                 - { id: first }
-            policy:
-              initial: one
-              stages:
-                - { id: one, agent: first, to: [ { stage: two } ] }
-                - { id: two, agent: nobody, terminal: true }
+            entries:
+              main:
+                policy:
+                  initial: one
+                  stages:
+                    - { id: one, agent: first, to: [ { stage: two } ] }
+                    - { id: two, agent: nobody, terminal: true }
             """;
 
         var failure = Assert.Throws<ConfigurationLoadException>(() => Compile(yaml));
 
-        Assert.Equal("/policy/stages/1/agent", failure.Pointer);
+        Assert.Equal("/entries/main/policy/stages/1/agent", failure.Pointer);
     }
 
     [Fact]
-    public void PolicyWithNoAgents_IsALoadTimeError()
+    public void AnInitialStageThatNamesNoAgent_IsALoadTimeError()
     {
         var yaml =
             """
             apiVersion: agentcore/v1
-            name: no-agents
-            policy:
-              initial: one
-              stages:
-                - { id: one, terminal: true }
+            agents:
+              items:
+                - { id: only }
+            entries:
+              main:
+                policy:
+                  initial: one
+                  stages:
+                    - { id: one, terminal: true }
             """;
 
-        var failure = Assert.Throws<ConfigurationLoadException>(
-            () => ConfigurationCompiler.SelectShape(ConfigurationLoader.LoadYaml(yaml)));
+        var failure = Assert.Throws<ConfigurationLoadException>(() => Compile(yaml));
 
-        Assert.Equal("/policy", failure.Pointer);
+        Assert.Equal("/entries/main/policy/initial", failure.Pointer);
     }
 
     [Fact]
@@ -363,21 +373,21 @@ public sealed class CompileTableTests
         using ScriptedChatClient client = new("ok");
         FakeChatClientFactory factory = new(client);
 
-        ConfigurationCompiler.Compile(
+        _ = ConfigurationCompiler.CompileAll(
             document,
-            new AgentCompilationContext(factory) { Knowledge = new StubKnowledgePort([]) });
+            new AgentCompilationContext(factory) { Knowledge = new StubKnowledgePort([]) })["phone"];
 
         // 5 agents on the stage machine, plus analyst and webchat, which policy: never reaches.
         Assert.Equal(7, factory.Requested.Count);
         Assert.All(factory.Requested, model => Assert.Equal("reply", model!.Ref));
     }
 
-    internal static CompiledAgent Compile(string yaml)
+    internal static CompiledAgent Compile(string yaml, string entryName = "main")
     {
         var document = ConfigurationLoader.LoadYaml(yaml);
         var client = new ScriptedChatClient("ok");
-        return ConfigurationCompiler.Compile(
+        return ConfigurationCompiler.CompileAll(
             document,
-            new AgentCompilationContext(new FakeChatClientFactory(client)) { Knowledge = new StubKnowledgePort([]) });
+            new AgentCompilationContext(new FakeChatClientFactory(client)) { Knowledge = new StubKnowledgePort([]) })[entryName];
     }
 }

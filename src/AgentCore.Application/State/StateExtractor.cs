@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Schema;
@@ -39,6 +38,7 @@ public sealed class StateExtractor
         + "Never guess, and never speak to the caller.";
 
     private readonly IChatClient _chatClient;
+
     private readonly ChatOptions _options;
 
     /// <summary>Creates the extractor for one loaded document.</summary>
@@ -53,16 +53,19 @@ public sealed class StateExtractor
         if (configuration.Extractor is null)
         {
             throw new InvalidOperationException(
-                $"The document '{configuration.Name}' declares no extractor, so no extractor slot can be filled.");
+                "The document declares no extractor, so no extractor slot can be filled.");
         }
 
         Configuration = configuration;
+
         _chatClient = chatClient;
+
         SlotNames = [.. configuration.State
             .Where(entry => entry.Value.Writer == StateWriter.Extractor)
             .Select(entry => entry.Key)];
 
         Schema = BuildSchema(configuration);
+        
         _options = new ChatOptions
         {
             ResponseFormat = ChatResponseFormat.ForJsonSchema(

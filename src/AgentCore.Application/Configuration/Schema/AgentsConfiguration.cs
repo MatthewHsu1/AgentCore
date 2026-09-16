@@ -69,6 +69,12 @@ public sealed record AgentConfiguration
     /// <summary>Gets the agent id. A stage or a graph node names this id.</summary>
     public required string Id { get; init; }
 
+    /// <summary>
+    /// Gets the one-line summary a parent sees when this agent is listed as a background child,
+    /// or <see langword="null"/> to list the id alone.
+    /// </summary>
+    public string? Description { get; init; }
+
     /// <summary>Gets the instruction delta this agent appends below the shared prefix.</summary>
     public string? Instructions { get; init; }
 

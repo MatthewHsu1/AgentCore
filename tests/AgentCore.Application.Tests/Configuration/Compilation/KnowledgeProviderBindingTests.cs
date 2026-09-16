@@ -21,31 +21,33 @@ public sealed class KnowledgeProviderBindingTests
     private const string KnowledgeYaml =
         """
         apiVersion: agentcore/v1
-        name: knowledge-binding
         agents:
           items:
             - { id: only, instructions: "I answer everything", knowledge: { mode: prefetch, scoped: false } }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string MixedYaml =
         """
-        apiVersion: agentcore/v1
-        name: knowledge-binding-mixed
-        policy:
-          initial: greeting
-          stages:
-            - { id: greeting, agent: reader }
-            - { id: closing, agent: quiet }
-        agents:
-          items:
-            - { id: reader, instructions: "I read the bank", knowledge: { mode: tool, scoped: false } }
-            - { id: quiet,  instructions: "I answer from my own instructions" }
-        """;
+          apiVersion: agentcore/v1
+          agents:
+            items:
+              - { id: reader, instructions: "I read the bank", knowledge: { mode: tool, scoped: false } }
+              - { id: quiet,  instructions: "I answer from my own instructions" }
+          entries:
+            main:
+              policy:
+                initial: greeting
+                stages:
+                  - { id: greeting, agent: reader }
+                  - { id: closing, agent: quiet }
+          """;
 
-    private const string FilterableYaml =
-        """
+      private const string FilterableYaml =
+          """
         apiVersion: agentcore/v1
-        name: knowledge-binding-filterable
         providers:
           call:   { kind: telnyx-relay }
           speech:
@@ -63,15 +65,20 @@ public sealed class KnowledgeProviderBindingTests
         agents:
           items:
             - { id: only, instructions: "I read the bank", knowledge: { mode: tool, scoped: false } }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string NoKnowledgeYaml =
         """
         apiVersion: agentcore/v1
-        name: no-knowledge-binding
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
+        entries:
+          main:
+            agent: only
         """;
 
     [Fact]
@@ -96,12 +103,12 @@ public sealed class KnowledgeProviderBindingTests
     {
         using SequencedChatClient reply = new("hello there.");
 
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             ConfigurationLoader.LoadYaml(MixedYaml),
             new AgentCompilationContext(new FakeChatClientFactory(reply))
             {
                 Knowledge = new StubKnowledgePort([]),
-            });
+            })["main"];
 
         Assert.Contains(Providers(compiled.Agents["reader"]), provider => provider is FacetFilterProvider);
         Assert.DoesNotContain(Providers(compiled.Agents["quiet"]), provider => provider is FacetFilterProvider or KnowledgePrefetchProvider);
@@ -114,12 +121,12 @@ public sealed class KnowledgeProviderBindingTests
         // that works and silently ignores every key the document set.
         using SequencedChatClient reply = new("hello there.");
 
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             ConfigurationLoader.LoadYaml(MixedYaml),
             new AgentCompilationContext(new FakeChatClientFactory(reply))
             {
                 Knowledge = new StubKnowledgePort([]),
-            });
+            })["main"];
 
         var reader = compiled.Agents["reader"];
         var provider = Assert.Single(Providers(reader).OfType<FacetFilterProvider>());
@@ -182,9 +189,9 @@ public sealed class KnowledgeProviderBindingTests
     {
         using SequencedChatClient reply = new("hello there.");
 
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             ConfigurationLoader.LoadYaml(yaml),
-            new AgentCompilationContext(new FakeChatClientFactory(reply)) { Knowledge = port });
+            new AgentCompilationContext(new FakeChatClientFactory(reply)) { Knowledge = port })["main"];
 
         return Assert.Single(compiled.Agents.Values);
     }

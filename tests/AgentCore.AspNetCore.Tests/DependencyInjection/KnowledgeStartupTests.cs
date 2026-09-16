@@ -146,7 +146,8 @@ public sealed class KnowledgeStartupTests
         => new()
         {
             ApiVersion = "agentcore/v1",
-            Name = "test",
+            Agents = new AgentsConfiguration { Items = [] },
+            Entries = new Dictionary<string, EntryConfiguration>(),
             Providers = new ProvidersConfiguration { Knowledge = knowledge },
         };
 

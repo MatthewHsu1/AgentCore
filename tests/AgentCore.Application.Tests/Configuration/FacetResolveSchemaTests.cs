@@ -11,7 +11,12 @@ public sealed class FacetResolveSchemaTests
 {
     private const string Facets = """
         apiVersion: agentcore/v1
-        name: plain
+        agents:
+          items:
+            - { id: only, instructions: "ok" }
+        entries:
+          main:
+            agent: only
         providers:
           call:   { kind: telnyx-relay }
           speech:

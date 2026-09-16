@@ -96,7 +96,7 @@ internal sealed class CallTurnCompletion
             // Section 8.7, last row. A quiet run is silence on a voice call, so an empty reply is a
             // failure even though nothing threw.
             failure ??= CallSession.EmptyReplyReason;
-            reply = _session.Compiled.Configuration.FallbackReply;
+            reply = _session.Compiled.FallbackReply;
             spokenReply = reply;
         }
 

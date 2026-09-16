@@ -18,7 +18,6 @@ public sealed class KnowledgeCitationFormatterFactoryTests
     private const string BaseYaml =
         """
         apiVersion: agentcore/v1
-        name: citations
         providers:
           call:   { kind: telnyx-relay }
           speech:
@@ -31,6 +30,9 @@ public sealed class KnowledgeCitationFormatterFactoryTests
         agents:
           items:
             - { id: only, instructions: "hello" }
+        entries:
+          main:
+            agent: only
         """;
 
     [Fact]

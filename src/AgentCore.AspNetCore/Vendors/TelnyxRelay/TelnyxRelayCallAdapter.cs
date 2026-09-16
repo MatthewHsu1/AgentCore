@@ -41,11 +41,13 @@ public sealed class TelnyxRelayCallAdapter : ICallTransportAdapter
     public bool CarriesText => true;
 
     /// <inheritdoc/>
-    public RequestDelegate CreateHandler(CallProviderConfiguration configuration)
+    public RequestDelegate CreateHandler(CallProviderConfiguration configuration, string entryName)
     {
         ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentException.ThrowIfNullOrEmpty(entryName);
 
         var options = BuildOptions(configuration);
+        options.EntryName = entryName;
         return http => TelnyxRelayEndpointRouteBuilderExtensions.HandleAsync(http, options);
     }
 

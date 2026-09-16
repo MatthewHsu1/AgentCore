@@ -2,6 +2,7 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.AspNetCore.DependencyInjection;
+using AgentCore.AspNetCore.DependencyInjection.Startup;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using static AgentCore.AspNetCore.Tests.DependencyInjection.StartedHostFixture;
@@ -30,7 +31,7 @@ public sealed class WorkspaceStartupTests : IDisposable
     {
         using var provider = await BuildAsync(OneAgentYaml, options => options.UseWorkspace(_tempRoot));
 
-        var sessions = provider.GetRequiredService<ICallSessions>();
+        var sessions = provider.GetRequiredService<EntryRegistry>().ForSessions("main");
         var session = await sessions.OpenAsync("call-1", TestContext.Current.CancellationToken);
 
         Assert.Equal(Path.Combine(_tempRoot, "call-1"), session.Workspace);
@@ -42,7 +43,7 @@ public sealed class WorkspaceStartupTests : IDisposable
     {
         using var provider = await BuildAsync(OneAgentYaml);
 
-        var sessions = provider.GetRequiredService<ICallSessions>();
+        var sessions = provider.GetRequiredService<EntryRegistry>().ForSessions("main");
         var session = await sessions.OpenAsync("call-1", TestContext.Current.CancellationToken);
 
         Assert.Null(session.Workspace);
@@ -68,7 +69,7 @@ public sealed class WorkspaceStartupTests : IDisposable
     {
         using var provider = await BuildAsync(MemoryAgentYaml, options => options.UseWorkspace(_tempRoot));
 
-        var sessions = provider.GetRequiredService<ICallSessions>();
+        var sessions = provider.GetRequiredService<EntryRegistry>().ForSessions("main");
         var session = await sessions.OpenAsync("call-1", TestContext.Current.CancellationToken);
 
         Assert.StartsWith(_tempRoot, session.Workspace, StringComparison.Ordinal);
@@ -103,7 +104,7 @@ public sealed class WorkspaceStartupTests : IDisposable
     {
         using var provider = await BuildAsync(FilesAgentYaml, options => options.UseWorkspace(_tempRoot));
 
-        var sessions = provider.GetRequiredService<ICallSessions>();
+        var sessions = provider.GetRequiredService<EntryRegistry>().ForSessions("main");
         var session = await sessions.OpenAsync("call-1", TestContext.Current.CancellationToken);
 
         Assert.StartsWith(_tempRoot, session.Workspace, StringComparison.Ordinal);
@@ -129,7 +130,6 @@ public sealed class WorkspaceStartupTests : IDisposable
     private const string MemoryAgentYaml =
         """
         apiVersion: agentcore/v1
-        name: composed
         agents:
           items:
             - { id: only, instructions: "I answer everything", memory: { store: workspace } }
@@ -140,12 +140,14 @@ public sealed class WorkspaceStartupTests : IDisposable
             tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string FilesAgentYaml =
         """
         apiVersion: agentcore/v1
-        name: composed
         agents:
           items:
             - { id: only, instructions: "I answer everything", files: { store: workspace } }
@@ -156,5 +158,8 @@ public sealed class WorkspaceStartupTests : IDisposable
             tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
+        entries:
+          main:
+            agent: only
         """;
 }

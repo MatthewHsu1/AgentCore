@@ -189,7 +189,8 @@ public sealed class McpConfigurationTests
         var document = JsonNode.Parse("""
             {
                 "apiVersion": "agentcore/v1",
-                "name": "mcp-schema",
+                "agents": { "items": [{ "id": "only" }] },
+                "entries": { "main": { "agent": "only" } },
                 "mcp": [
                     { "id": "jira", "transport": "stdio", "command": ["npx"], "allow": [null] }
                 ]
@@ -206,11 +207,15 @@ public sealed class McpConfigurationTests
     [Fact]
     public void AnAgentReferencingADottedMcpToolId_PassesTheLoad()
     {
-        var configuration = Load("""
+        var configuration = ConfigurationLoader.LoadYaml("""
+            apiVersion: agentcore/v1
             agents:
               items:
                 - id: front
                   tools: [jira.create_issue]
+            entries:
+              main:
+                agent: front
             """);
 
         var agent = Assert.Single(configuration.Agents!.Items);
@@ -222,11 +227,15 @@ public sealed class McpConfigurationTests
     public void AnAgentReferencingATwoDottedToolId_FailsTheLoad()
     {
         var failure = Assert.Throws<ConfigurationLoadException>(
-            () => Load("""
+            () => ConfigurationLoader.LoadYaml("""
+                apiVersion: agentcore/v1
                 agents:
                   items:
                     - id: front
                       tools: [jira.create.issue]
+                entries:
+                  main:
+                    agent: front
                 """));
 
         Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
@@ -237,5 +246,5 @@ public sealed class McpConfigurationTests
     /// <returns>The loaded document.</returns>
     private static AgentCoreConfiguration Load(string section)
         => ConfigurationLoader.LoadYaml(
-            "apiVersion: agentcore/v1\nname: mcp-schema\n" + section);
+            "apiVersion: agentcore/v1\nagents:\n  items:\n    - { id: only, instructions: \"ok\" }\nentries:\n  main:\n    agent: only\n" + section);
 }

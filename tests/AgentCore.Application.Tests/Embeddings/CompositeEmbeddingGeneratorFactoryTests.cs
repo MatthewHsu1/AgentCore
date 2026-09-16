@@ -20,16 +20,17 @@ public sealed class CompositeEmbeddingGeneratorFactoryTests
     private const string NoEmbeddingsYaml =
         """
         apiVersion: agentcore/v1
-        name: no-embeddings
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string OneKindYaml =
         """
         apiVersion: agentcore/v1
-        name: one-generator
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
@@ -39,12 +40,14 @@ public sealed class CompositeEmbeddingGeneratorFactoryTests
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
           embeddings: { kind: openai, model: text-embedding-3-small }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string ShoutedKindYaml =
         """
         apiVersion: agentcore/v1
-        name: shouted-generator
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
@@ -54,6 +57,9 @@ public sealed class CompositeEmbeddingGeneratorFactoryTests
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
           embeddings: { kind: OPENAI, model: text-embedding-3-small }
+        entries:
+          main:
+            agent: only
         """;
 
     // ---------------------------------------------------------------------------------------------

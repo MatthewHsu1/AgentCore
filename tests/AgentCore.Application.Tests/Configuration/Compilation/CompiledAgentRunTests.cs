@@ -92,52 +92,53 @@ public sealed class CompiledAgentRunTests
     {
         var yaml =
             """
-            apiVersion: agentcore/v1
-            name: sequential-graph
-            agents:
-              items:
-                - { id: first }
-                - { id: second }
-            graph:
-              pattern: sequential
-              agents: [ first, second ]
-            """;
+              apiVersion: agentcore/v1
+              agents:
+                items:
+                  - { id: first }
+                  - { id: second }
+              entries:
+                main:
+                  graph:
+                    pattern: sequential
+                    agents: [ first, second ]
+              """;
 
-        using ScriptedChatClient client = new("done");
-        var compiled = Compile(yaml, client);
+          using ScriptedChatClient client = new("done");
+          var compiled = Compile(yaml, client);
 
-        var reply = await compiled.Agent.RunAsync("hello", cancellationToken: TestContext.Current.CancellationToken);
+          var reply = await compiled.Agent.RunAsync("hello", cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Contains("done", reply.Text, StringComparison.Ordinal);
-    }
+          Assert.Contains("done", reply.Text, StringComparison.Ordinal);
+      }
 
-    private static async Task<string?> FirstNonEmptyDeltaAsync(AIAgent agent, ScriptedChatClient client)
-    {
-        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(30));
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
-            timeout.Token, TestContext.Current.CancellationToken);
+      private static async Task<string?> FirstNonEmptyDeltaAsync(AIAgent agent, ScriptedChatClient client)
+      {
+          using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(30));
+          using var linked = CancellationTokenSource.CreateLinkedTokenSource(
+              timeout.Token, TestContext.Current.CancellationToken);
 
-        string? first = null;
-        await foreach (var update in agent.RunStreamingAsync("hello", cancellationToken: linked.Token))
-        {
-            if (string.IsNullOrEmpty(update.Text))
-            {
-                continue;
-            }
+          string? first = null;
+          await foreach (var update in agent.RunStreamingAsync("hello", cancellationToken: linked.Token))
+          {
+              if (string.IsNullOrEmpty(update.Text))
+              {
+                  continue;
+              }
 
-            first = update.Text;
+              first = update.Text;
 
-            // The reply reached us, so let the model finish. The order proves the seam streams.
-            client.OpenGate();
-            break;
-        }
+              // The reply reached us, so let the model finish. The order proves the seam streams.
+              client.OpenGate();
+              break;
+          }
 
-        client.OpenGate();
-        return first;
-    }
+          client.OpenGate();
+          return first;
+      }
 
-    private static CompiledAgent Compile(string yaml, ScriptedChatClient client)
-        => ConfigurationCompiler.Compile(
-            ConfigurationLoader.LoadYaml(yaml),
-            new AgentCompilationContext(new FakeChatClientFactory(client)));
-}
+      private static CompiledAgent Compile(string yaml, ScriptedChatClient client)
+          => ConfigurationCompiler.CompileAll(
+              ConfigurationLoader.LoadYaml(yaml),
+              new AgentCompilationContext(new FakeChatClientFactory(client)))["main"];
+  }

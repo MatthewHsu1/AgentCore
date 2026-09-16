@@ -5,7 +5,7 @@ using Microsoft.Agents.AI;
 namespace AgentCore.Application.Configuration.Compilation;
 
 /// <summary>
-/// Row 2: <c>agents:</c> plus <c>policy:</c>. The machine picks a stage each turn, the stage names
+/// Row 2: the entry holds <c>policy:</c>. The machine picks a stage each turn, the stage names
 /// one agent, and that agent's run answers the caller. Runtime is <c>Stateless</c>.
 /// </summary>
 internal sealed class PolicyRow : CompileTableRow
@@ -21,15 +21,22 @@ internal sealed class PolicyRow : CompileTableRow
 
     internal override (AIAgent Entry, Dictionary<string, string> Stages) BuildEntry(
         AgentCoreConfiguration configuration,
+        string entryName,
+        EntryConfiguration entry,
+        string entryPointer,
         Dictionary<string, AIAgent> agents,
         AgentCompilationContext context)
     {
-        var policy = configuration.Policy!;
+        var policy = entry.Policy!;
+        var policyPointer = ConfigurationError.AppendPointer(entryPointer, "policy");
+        var initialPointer = ConfigurationError.AppendPointer(policyPointer, "initial");
         Dictionary<string, string> stages = new(StringComparer.Ordinal);
 
         for (var index = 0; index < policy.Stages.Count; index++)
         {
             var stage = policy.Stages[index];
+            var stagePointer = ConfigurationError.AppendPointer(
+                ConfigurationError.AppendPointer(policyPointer, "stages"), index);
             if (stage.Agent is not { } agentId)
             {
                 stages[stage.Id] = NoAgentId;
@@ -39,8 +46,7 @@ internal sealed class PolicyRow : CompileTableRow
             if (!agents.ContainsKey(agentId))
             {
                 throw ConfigurationCompiler.Fail(
-                    ConfigurationError.AppendPointer(
-                        ConfigurationError.AppendPointer("/policy/stages", index), "agent"),
+                    ConfigurationError.AppendPointer(stagePointer, "agent"),
                     $"the stage '{stage.Id}' names the agent '{agentId}', which agents.items does not declare.");
             }
 
@@ -50,14 +56,14 @@ internal sealed class PolicyRow : CompileTableRow
         if (!stages.TryGetValue(policy.Initial, out var initialAgent))
         {
             throw ConfigurationCompiler.Fail(
-                "/policy/initial",
+                initialPointer,
                 $"the initial stage '{policy.Initial}' is not declared in policy.stages.");
         }
 
         if (initialAgent.Length == 0)
         {
             throw ConfigurationCompiler.Fail(
-                "/policy/initial",
+                initialPointer,
                 $"the initial stage '{policy.Initial}' names no agent, so no turn can run.");
         }
 

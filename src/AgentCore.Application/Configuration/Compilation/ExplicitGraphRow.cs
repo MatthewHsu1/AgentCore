@@ -7,8 +7,8 @@ using Microsoft.Agents.AI.Workflows;
 namespace AgentCore.Application.Configuration.Compilation;
 
 /// <summary>
-/// Row 4: <c>graph:</c> with <c>nodes:</c> and <c>edges:</c>. It builds a <c>WorkflowBuilder</c>,
-/// binds the agents as executors, then <c>AsAIAgent()</c>.
+/// Row 4: the entry holds <c>graph:</c> with <c>nodes:</c> and <c>edges:</c>. It builds a
+/// <c>WorkflowBuilder</c>, binds the agents as executors, then <c>AsAIAgent()</c>.
 /// </summary>
 internal sealed class ExplicitGraphRow : CompileTableRow
 {
@@ -18,10 +18,16 @@ internal sealed class ExplicitGraphRow : CompileTableRow
 
     internal override (AIAgent Entry, Dictionary<string, string> Stages) BuildEntry(
         AgentCoreConfiguration configuration,
+        string entryName,
+        EntryConfiguration entry,
+        string entryPointer,
         Dictionary<string, AIAgent> agents,
         AgentCompilationContext context)
     {
-        var graph = configuration.Graph!;
+        var graph = entry.Graph!;
+        var graphPointer = ConfigurationError.AppendPointer(entryPointer, "graph");
+        var nodesPointer = ConfigurationError.AppendPointer(graphPointer, "nodes");
+        var edgesPointer = ConfigurationError.AppendPointer(graphPointer, "edges");
 
         Dictionary<string, ExecutorBinding> nodes = new(StringComparer.Ordinal);
         List<GraphNodeConfiguration> starts = [];
@@ -30,7 +36,7 @@ internal sealed class ExplicitGraphRow : CompileTableRow
         for (var index = 0; index < graph.Nodes.Count; index++)
         {
             var node = graph.Nodes[index];
-            var pointer = ConfigurationError.AppendPointer("/graph/nodes", index);
+            var pointer = ConfigurationError.AppendPointer(nodesPointer, index);
 
             if (node.Agent is not { } agentId || !agents.TryGetValue(agentId, out var agent))
             {
@@ -65,21 +71,21 @@ internal sealed class ExplicitGraphRow : CompileTableRow
         if (starts.Count != 1)
         {
             throw ConfigurationCompiler.Fail(
-                "/graph/nodes",
+                nodesPointer,
                 $"the graph declares {starts.Count} start nodes. Check 7 of section 8.5 needs exactly one.");
         }
 
-        var entry = ExecutorBindingExtensions.BindExecutor(new GraphStateEntry());
+        var stateEntry = ExecutorBindingExtensions.BindExecutor(new GraphStateEntry());
 
-        WorkflowBuilder builder = new(entry);
-        builder = builder.AddEdge(entry, nodes[starts[0].Id]);
-        
+        WorkflowBuilder builder = new(stateEntry);
+        builder = builder.AddEdge(stateEntry, nodes[starts[0].Id]);
+
         var guarded = false;
 
         for (var index = 0; index < graph.Edges.Count; index++)
         {
             var edge = graph.Edges[index];
-            var pointer = ConfigurationError.AppendPointer("/graph/edges", index);
+            var pointer = ConfigurationError.AppendPointer(edgesPointer, index);
 
             if (!nodes.TryGetValue(edge.From, out var from))
             {
@@ -110,6 +116,7 @@ internal sealed class ExplicitGraphRow : CompileTableRow
                     + "GuardEvaluator. A guarded edge that silently became unconditional is exactly "
                     + "the silent graph failure section 8.2 refuses to ship.");
             }
+            
             // One gate per guarded edge, holding the run until its guard is true. The gate is a
             // workflow executor rather than an edge predicate because the predicate only ever sees
             // the edge message: per-call state reaches the gate through the run, filed by the
@@ -134,22 +141,22 @@ internal sealed class ExplicitGraphRow : CompileTableRow
             builder = builder.WithOutputFrom([.. outputs]);
         }
 
-        var compiled = builder.WithName(configuration.Name)
+        var compiled = builder.WithName(entryName)
                               .Build()
-                              .AsAIAgent(name: configuration.Name);
+                              .AsAIAgent(name: entryName);
 
-        AIAgent withOutputCheck = new RequireOutputAgent(compiled, configuration.Name);
+        AIAgent withOutputCheck = new RequireOutputAgent(compiled, entryName);
 
         return (
-            guarded ? new GraphStateAgent(withOutputCheck, configuration.Name) : withOutputCheck,
+            guarded ? new GraphStateAgent(withOutputCheck, entryName) : withOutputCheck,
             NoStages());
     }
 
     /// <remarks>An explicit graph answers from its <c>output: true</c> nodes.</remarks>
-    internal override HashSet<string>? SpokenAuthors(AgentCoreConfiguration configuration)
+    internal override HashSet<string>? SpokenAuthors(AgentCoreConfiguration configuration, EntryConfiguration entry)
     {
         HashSet<string> outputs = new(StringComparer.Ordinal);
-        foreach (var node in configuration.Graph!.Nodes)
+        foreach (var node in entry.Graph!.Nodes)
         {
             if (node.Output && node.Agent is { } agentId)
             {

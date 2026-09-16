@@ -35,7 +35,6 @@ internal static class ExampleDocument
     public const string Yaml =
         """
         apiVersion: agentcore/v1
-        name: service-voice
         fallbackReply: "I am sorry. I could not finish that. Please say it again."
         refusalReply: "I am sorry. I cannot help with that request."
 
@@ -127,29 +126,35 @@ internal static class ExampleDocument
             - { id: webchat, instructions: "<stage delta>", tools: [ lookup_order ],
                 knowledge: { mode: tool, citations: false } }
 
-        policy:
-          initial: greeting
-          stages:
-            - id: greeting
-              agent: greeter
-              to: [ { stage: identify } ]
-            - id: identify
-              agent: identifier
-              to:
-                - { stage: close,    when: saidGoodbye }
-                - { stage: escalate, when: wantsHuman }
-                - { stage: resolve,  when: identified }
-            - id: resolve
-              agent: resolver
-              to:
-                - { stage: close,    when: goodbyeOrFixed }
-                - { stage: escalate, when: humanOrExhausted }
-            - id: escalate
-              agent: escalator
-              to: [ { stage: close } ]
-            - id: close
-              agent: closer
-              terminal: true
+        entries:
+          phone:
+            fallbackReply: "Sorry — say it again."
+            policy:
+              initial: greeting
+              stages:
+                - id: greeting
+                  agent: greeter
+                  to: [ { stage: identify } ]
+                - id: identify
+                  agent: identifier
+                  to:
+                    - { stage: close,    when: saidGoodbye }
+                    - { stage: escalate, when: wantsHuman }
+                    - { stage: resolve,  when: identified }
+                - id: resolve
+                  agent: resolver
+                  to:
+                    - { stage: close,    when: goodbyeOrFixed }
+                    - { stage: escalate, when: humanOrExhausted }
+                - id: escalate
+                  agent: escalator
+                  to: [ { stage: close } ]
+                - id: close
+                  agent: closer
+                  terminal: true
+          chat:
+            agent: webchat
+            refusalReply: "Sorry — I can't help with that here."
 
         providers:
           llm:
@@ -202,7 +207,6 @@ internal static class ExampleDocument
         """
         {
           "apiVersion": "agentcore/v1",
-          "name": "service-voice",
           "fallbackReply": "I am sorry. I could not finish that. Please say it again.",
           "refusalReply": "I am sorry. I cannot help with that request.",
           "state": {
@@ -497,65 +501,74 @@ internal static class ExampleDocument
               }
             ]
           },
-          "policy": {
-            "initial": "greeting",
-            "stages": [
-              {
-                "id": "greeting",
-                "agent": "greeter",
-                "to": [
+          "entries": {
+            "phone": {
+              "fallbackReply": "Sorry — say it again.",
+              "policy": {
+                "initial": "greeting",
+                "stages": [
                   {
-                    "stage": "identify"
-                  }
-                ]
-              },
-              {
-                "id": "identify",
-                "agent": "identifier",
-                "to": [
-                  {
-                    "stage": "close",
-                    "when": "saidGoodbye"
+                    "id": "greeting",
+                    "agent": "greeter",
+                    "to": [
+                      {
+                        "stage": "identify"
+                      }
+                    ]
                   },
                   {
-                    "stage": "escalate",
-                    "when": "wantsHuman"
+                    "id": "identify",
+                    "agent": "identifier",
+                    "to": [
+                      {
+                        "stage": "close",
+                        "when": "saidGoodbye"
+                      },
+                      {
+                        "stage": "escalate",
+                        "when": "wantsHuman"
+                      },
+                      {
+                        "stage": "resolve",
+                        "when": "identified"
+                      }
+                    ]
                   },
                   {
-                    "stage": "resolve",
-                    "when": "identified"
-                  }
-                ]
-              },
-              {
-                "id": "resolve",
-                "agent": "resolver",
-                "to": [
-                  {
-                    "stage": "close",
-                    "when": "goodbyeOrFixed"
+                    "id": "resolve",
+                    "agent": "resolver",
+                    "to": [
+                      {
+                        "stage": "close",
+                        "when": "goodbyeOrFixed"
+                      },
+                      {
+                        "stage": "escalate",
+                        "when": "humanOrExhausted"
+                      }
+                    ]
                   },
                   {
-                    "stage": "escalate",
-                    "when": "humanOrExhausted"
-                  }
-                ]
-              },
-              {
-                "id": "escalate",
-                "agent": "escalator",
-                "to": [
+                    "id": "escalate",
+                    "agent": "escalator",
+                    "to": [
+                      {
+                        "stage": "close"
+                      }
+                    ]
+                  },
                   {
-                    "stage": "close"
+                    "id": "close",
+                    "agent": "closer",
+                    "terminal": true
                   }
                 ]
-              },
-              {
-                "id": "close",
-                "agent": "closer",
-                "terminal": true
               }
-            ]
+            },
+            "chat": {
+              "agent": "webchat",
+              "refusalReply": "Sorry — I can't help with that here."
+            }
           },
           "providers": {
             "llm": [

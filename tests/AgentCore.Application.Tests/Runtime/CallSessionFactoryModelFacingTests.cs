@@ -23,7 +23,6 @@ public sealed class CallSessionFactoryModelFacingTests
     private const string Yaml =
         """
         apiVersion: agentcore/v1
-        name: extractor-model-facing-check
         state:
           callerSaidGoodbye: { type: boolean, default: false, writer: extractor }
         extractor:
@@ -32,14 +31,17 @@ public sealed class CallSessionFactoryModelFacingTests
         agents:
           items:
             - { id: only }
+        entries:
+          main:
+            agent: only
         """;
 
     [Fact]
     public async Task TheExtractorTheFactoryBuilds_NeverForwardsARenderContentTheTurnAttached()
     {
         var document = ConfigurationLoader.LoadYaml(Yaml);
-        var compiled = ConfigurationCompiler.Compile(
-            document, new AgentCompilationContext(new FakeChatClientFactory(new ScriptedChatClient("ok"))));
+        var compiled = ConfigurationCompiler.CompileAll(
+            document, new AgentCompilationContext(new FakeChatClientFactory(new ScriptedChatClient("ok"))))["main"];
 
         RequestCapturingChatClient recorder = new(
             new ScriptedChatClient("""{ "callerSaidGoodbye": null }"""));

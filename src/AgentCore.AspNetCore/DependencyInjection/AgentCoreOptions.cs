@@ -79,7 +79,7 @@ public sealed class AgentCoreOptions
     internal AgentSkillsSource? SkillsSource { get; private set; }
 
     /// <summary>Gets the call transports this host supports, or <see langword="null"/>.</summary>
-    internal IReadOnlyList<ICallAdapter>? Call { get; private set; }
+    internal IReadOnlyList<ICallAdapter>? CallAdapters { get; private set; }
 
     /// <summary>Gets the folder under which every call gets its own workspace, or <see langword="null"/>.</summary>
     internal string? WorkspaceRoot { get; private set; }
@@ -89,6 +89,24 @@ public sealed class AgentCoreOptions
 
     /// <summary>Gets the observers the host registered, in the order it registered them.</summary>
     internal IReadOnlyList<ICallObserver> Observers => _observers;
+
+    /// <summary>Gets the store opener the host bound, or <see langword="null"/> for the in-memory default.</summary>
+    internal Func<string, ICallSessionFactory, ICallSessions>? CallSessions { get; private set; }
+
+    /// <summary>Binds the session store, one per entry.</summary>
+    /// <param name="open">
+    /// Opens the store for one entry. It takes the entry name and the factory that builds that
+    /// entry's sessions, and it runs once per entry the document declares. Each call must return a
+    /// distinct store: two entries that share one store let a vendor call id arriving on both
+    /// entries read one call through two shapes.
+    /// </param>
+    /// <returns>These options, so a host chains its calls.</returns>
+    public AgentCoreOptions UseCallSessions(Func<string, ICallSessionFactory, ICallSessions> open)
+    {
+        ArgumentNullException.ThrowIfNull(open);
+        CallSessions = open;
+        return this;
+    }
 
     /// <summary>Binds the vendor adapters, and the document picks one by each entry's <c>kind</c>.</summary>
     /// <param name="adapters">One adapter for each vendor this host supports.</param>
@@ -264,7 +282,7 @@ public sealed class AgentCoreOptions
     public AgentCoreOptions UseCall(params ICallAdapter[] adapters)
     {
         ArgumentNullException.ThrowIfNull(adapters);
-        Call = adapters;
+        CallAdapters = adapters;
         return this;
     }
 

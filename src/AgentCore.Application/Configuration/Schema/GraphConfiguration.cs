@@ -62,12 +62,12 @@ public sealed record GraphEdgeConfiguration
 }
 
 /// <summary>
-/// The <c>graph:</c> section. It holds either a pattern or a node and edge list, never both.
+/// An entry's <c>graph:</c> block. It holds either a pattern or a node and edge list, never both.
 /// </summary>
 /// <remarks>
 /// Section 8.2 compiles the first form through <c>AgentWorkflowBuilder</c> and the second through
-/// <c>WorkflowBuilder</c> and <c>AsAIAgent()</c>. A document that holds both <c>policy:</c> and
-/// <c>graph:</c> is a load-time error.
+/// <c>WorkflowBuilder</c> and <c>AsAIAgent()</c>. An entry that holds more than one of
+/// <c>agent:</c>, <c>policy:</c>, and <c>graph:</c> is a load-time error.
 /// </remarks>
 public sealed record GraphConfiguration
 {

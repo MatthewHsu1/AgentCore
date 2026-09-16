@@ -74,7 +74,7 @@ public static class ConfigurationValidator
         var errors = new List<ConfigurationError>();
         var warnings = new List<ConfigurationError>();
         var names = DeclaredNames.From(configuration);
-
+        CheckEntryShapes(configuration, names, errors);
         CheckReferences(configuration, names, errors);
         ReasoningTemperatureCheck.Run(configuration, errors);
         CheckSlotWriters(configuration, errors);
@@ -181,6 +181,76 @@ public static class ConfigurationValidator
     }
 
     // ---------------------------------------------------------------------------------------------
+    // Check 2, entry shapes: each entry holds exactly one of agent:/policy:/graph:.
+    // ---------------------------------------------------------------------------------------------
+    private static void CheckEntryShapes(AgentCoreConfiguration configuration, DeclaredNames names, List<ConfigurationError> errors)
+    {
+        if (configuration.Agents.Items.Count == 0)
+        {
+            errors.Add(Reference(
+                "/agents/items",
+                "the document declares no agents:, so no entry can resolve an agent."));
+        }
+
+        if (configuration.Entries.Count == 0)
+        {
+            errors.Add(Reference(
+                "/entries",
+                "the document declares no entries:, so it compiles to nothing."));
+            return;
+        }
+
+        foreach (var (name, entry) in configuration.Entries)
+        {
+            var pointer = Pointer.Entry(name);
+            var shapes = (entry.Agent is null ? 0 : 1) + (entry.Policy is null ? 0 : 1) + (entry.Graph is null ? 0 : 1);
+
+            if (shapes == 0)
+            {
+                errors.Add(Reference(
+                    pointer,
+                    $"the entry '{name}' declares none of agent:, policy:, or graph:. It holds exactly one."));
+            }
+            else if (shapes > 1)
+            {
+                errors.Add(Reference(
+                    pointer,
+                    $"the entry '{name}' declares more than one of agent:, policy:, and graph:. It holds exactly one."));
+            }
+
+            if (entry.Agent is { } agentId)
+            {
+                if (string.IsNullOrWhiteSpace(agentId))
+                {
+                    errors.Add(Reference(
+                        ConfigurationError.AppendPointer(pointer, "agent"),
+                        $"the entry '{name}' names an empty agent:. It names one id from agents.items."));
+                }
+                else if (!names.Agents.Contains(agentId))
+                {
+                    errors.Add(Reference(
+                        ConfigurationError.AppendPointer(pointer, "agent"),
+                        $"the agent '{agentId}' is not declared in agents.items"));
+                }
+            }
+
+            if (entry.FallbackReply is { } fallback && string.IsNullOrWhiteSpace(fallback))
+            {
+                errors.Add(Reference(
+                    ConfigurationError.AppendPointer(pointer, "fallbackReply"),
+                    $"the entry '{name}' sets a blank fallbackReply, so a failed turn would speak nothing."));
+            }
+
+            if (entry.RefusalReply is { } refusal && string.IsNullOrWhiteSpace(refusal))
+            {
+                errors.Add(Reference(
+                    ConfigurationError.AppendPointer(pointer, "refusalReply"),
+                    $"the entry '{name}' sets a blank refusalReply, so a refused turn would speak nothing."));
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // Check 2: reference resolution.
     // ---------------------------------------------------------------------------------------------
     private static void CheckReferences(AgentCoreConfiguration configuration, DeclaredNames names, List<ConfigurationError> errors)
@@ -213,8 +283,8 @@ public static class ConfigurationValidator
             AddUnknownModel(titler.Model, "/titler/model/ref", names, errors);
         }
 
-        var items = configuration.Agents?.Items ?? [];
-        if (configuration.Agents?.Defaults is { } defaults)
+        var items = configuration.Agents.Items;
+        if (configuration.Agents.Defaults is { } defaults)
         {
             AddUnknownModel(defaults.Model, "/agents/defaults/model/ref", names, errors);
         }
@@ -243,86 +313,95 @@ public static class ConfigurationValidator
             }
         }
 
-        if (configuration.Policy is { } policy)
+        foreach (var (name, entry) in configuration.Entries)
         {
-            if (!names.Stages.Contains(policy.Initial))
+            if (entry.Policy is { } policy)
             {
-                errors.Add(Reference("/policy/initial", $"the stage '{policy.Initial}' is not declared in policy.stages"));
-            }
+                var stages = names.Stages[name];
 
-            for (var index = 0; index < policy.Stages.Count; index++)
-            {
-                var stage = policy.Stages[index];
-
-                if (stage.Agent is { } agentId && !names.Agents.Contains(agentId))
+                if (!stages.Contains(policy.Initial))
                 {
                     errors.Add(Reference(
-                        ConfigurationError.AppendPointer(Pointer.Stage(index), "agent"),
-                        $"the agent '{agentId}' is not declared in agents.items"));
+                        ConfigurationError.AppendPointer(Pointer.Policy(name), "initial"),
+                        $"the stage '{policy.Initial}' is not declared in policy.stages in entry '{name}'"));
                 }
 
-                for (var exit = 0; exit < stage.To.Count; exit++)
+                for (var index = 0; index < policy.Stages.Count; index++)
                 {
-                    var transition = stage.To[exit];
-                    var pointer = Pointer.Transition(index, exit);
+                    var stage = policy.Stages[index];
 
-                    if (!names.Stages.Contains(transition.Stage))
+                    if (stage.Agent is { } agentId && !names.Agents.Contains(agentId))
                     {
                         errors.Add(Reference(
-                            ConfigurationError.AppendPointer(pointer, "stage"),
-                            $"the stage '{transition.Stage}' is not declared in policy.stages"));
+                            ConfigurationError.AppendPointer(Pointer.Stage(name, index), "agent"),
+                            $"the agent '{agentId}' is not declared in agents.items"));
                     }
 
-                    AddUnknownGuard(transition.When, ConfigurationError.AppendPointer(pointer, "when"), names, errors);
+                    for (var exit = 0; exit < stage.To.Count; exit++)
+                    {
+                        var transition = stage.To[exit];
+                        var pointer = Pointer.Transition(name, index, exit);
+
+                        if (!stages.Contains(transition.Stage))
+                        {
+                            errors.Add(Reference(
+                                ConfigurationError.AppendPointer(pointer, "stage"),
+                                $"the stage '{transition.Stage}' is not declared in policy.stages in entry '{name}'"));
+                        }
+
+                        AddUnknownGuard(transition.When, ConfigurationError.AppendPointer(pointer, "when"), names, errors);
+                    }
                 }
             }
-        }
 
-        if (configuration.Graph is not { } graph)
-        {
-            return;
-        }
-
-        for (var index = 0; index < graph.Agents.Count; index++)
-        {
-            if (!names.Agents.Contains(graph.Agents[index]))
+            if (entry.Graph is not { } graph)
             {
-                errors.Add(Reference(
-                    ConfigurationError.AppendPointer("/graph/agents", index),
-                    $"the agent '{graph.Agents[index]}' is not declared in agents.items"));
-            }
-        }
-
-        for (var index = 0; index < graph.Nodes.Count; index++)
-        {
-            if (graph.Nodes[index].Agent is { } agentId && !names.Agents.Contains(agentId))
-            {
-                errors.Add(Reference(
-                    ConfigurationError.AppendPointer(Pointer.Node(index), "agent"),
-                    $"the agent '{agentId}' is not declared in agents.items"));
-            }
-        }
-
-        for (var index = 0; index < graph.Edges.Count; index++)
-        {
-            var edge = graph.Edges[index];
-            var pointer = Pointer.Edge(index);
-
-            if (!names.Nodes.Contains(edge.From))
-            {
-                errors.Add(Reference(
-                    ConfigurationError.AppendPointer(pointer, "from"),
-                    $"the node '{edge.From}' is not declared in graph.nodes"));
+                continue;
             }
 
-            if (!names.Nodes.Contains(edge.To))
+            var nodes = names.Nodes[name];
+
+            for (var index = 0; index < graph.Agents.Count; index++)
             {
-                errors.Add(Reference(
-                    ConfigurationError.AppendPointer(pointer, "to"),
-                    $"the node '{edge.To}' is not declared in graph.nodes"));
+                if (!names.Agents.Contains(graph.Agents[index]))
+                {
+                    errors.Add(Reference(
+                        ConfigurationError.AppendPointer(Pointer.GraphAgents(name), index),
+                        $"the agent '{graph.Agents[index]}' is not declared in agents.items"));
+                }
             }
 
-            AddUnknownGuard(edge.When, ConfigurationError.AppendPointer(pointer, "when"), names, errors);
+            for (var index = 0; index < graph.Nodes.Count; index++)
+            {
+                if (graph.Nodes[index].Agent is { } nodeAgent && !names.Agents.Contains(nodeAgent))
+                {
+                    errors.Add(Reference(
+                        ConfigurationError.AppendPointer(Pointer.Node(name, index), "agent"),
+                        $"the agent '{nodeAgent}' is not declared in agents.items"));
+                }
+            }
+
+            for (var index = 0; index < graph.Edges.Count; index++)
+            {
+                var edge = graph.Edges[index];
+                var pointer = Pointer.Edge(name, index);
+
+                if (!nodes.Contains(edge.From))
+                {
+                    errors.Add(Reference(
+                        ConfigurationError.AppendPointer(pointer, "from"),
+                        $"the node '{edge.From}' is not declared in graph.nodes in entry '{name}'"));
+                }
+
+                if (!nodes.Contains(edge.To))
+                {
+                    errors.Add(Reference(
+                        ConfigurationError.AppendPointer(pointer, "to"),
+                        $"the node '{edge.To}' is not declared in graph.nodes in entry '{name}'"));
+                }
+
+                AddUnknownGuard(edge.When, ConfigurationError.AppendPointer(pointer, "when"), names, errors);
+            }
         }
     }
 
@@ -364,7 +443,7 @@ public static class ConfigurationValidator
             }
         }
 
-        var items = configuration.Agents?.Items ?? [];
+        var items = configuration.Agents.Items;
         for (var index = 0; index < items.Count; index++)
         {
             var agent = items[index];
@@ -390,7 +469,7 @@ public static class ConfigurationValidator
         List<ConfigurationError> errors)
     {
         var served = string.Join(", ", servedSkillNames.Order(StringComparer.Ordinal));
-        var items = configuration.Agents?.Items ?? [];
+        var items = configuration.Agents.Items;
 
         for (var index = 0; index < items.Count; index++)
         {
@@ -417,7 +496,7 @@ public static class ConfigurationValidator
     /// <param name="errors">The list every failure is added to.</param>
     private static void CheckSkillToolNames(AgentCoreConfiguration configuration, List<ConfigurationError> errors)
     {
-        var items = configuration.Agents?.Items ?? [];
+        var items = configuration.Agents.Items;
         if (!items.Any(agent => agent.Skills.Count > 0))
         {
             return;
@@ -803,32 +882,34 @@ public static class ConfigurationValidator
                 CheckOneRule(configuration, increment, ConfigurationError.AppendPointer(Pointer.State(slot.Key), IncrementField), errors);
             }
         }
-
-        if (configuration.Policy is { } policy)
+        foreach (var (name, entry) in configuration.Entries)
         {
-            for (var index = 0; index < policy.Stages.Count; index++)
+            if (entry.Policy is { } policy)
             {
-                var stage = policy.Stages[index];
-                for (var exit = 0; exit < stage.To.Count; exit++)
+                for (var index = 0; index < policy.Stages.Count; index++)
                 {
-                    if (stage.To[exit].When?.Rule is { } rule)
+                    var stage = policy.Stages[index];
+                    for (var exit = 0; exit < stage.To.Count; exit++)
                     {
-                        CheckOneRule(configuration, rule, ConfigurationError.AppendPointer(Pointer.Transition(index, exit), "when"), errors);
+                        if (stage.To[exit].When?.Rule is { } rule)
+                        {
+                            CheckOneRule(configuration, rule, ConfigurationError.AppendPointer(Pointer.Transition(name, index, exit), "when"), errors);
+                        }
                     }
                 }
             }
-        }
 
-        if (configuration.Graph is not { } graph)
-        {
-            return;
-        }
-
-        for (var index = 0; index < graph.Edges.Count; index++)
-        {
-            if (graph.Edges[index].When?.Rule is { } rule)
+            if (entry.Graph is not { } graph)
             {
-                CheckOneRule(configuration, rule, ConfigurationError.AppendPointer(Pointer.Edge(index), "when"), errors);
+                continue;
+            }
+
+            for (var index = 0; index < graph.Edges.Count; index++)
+            {
+                if (graph.Edges[index].When?.Rule is { } rule)
+                {
+                    CheckOneRule(configuration, rule, ConfigurationError.AppendPointer(Pointer.Edge(name, index), "when"), errors);
+                }
             }
         }
     }
@@ -872,69 +953,71 @@ public static class ConfigurationValidator
     {
         var evaluator = new GuardEvaluator(configuration.Guards);
 
-        if (configuration.Policy is { } policy)
+        foreach (var (name, entry) in configuration.Entries)
         {
-            for (var index = 0; index < policy.Stages.Count; index++)
+            if (entry.Policy is { } policy)
             {
-                var stage = policy.Stages[index];
-                var exits = new List<SiblingExit>(stage.To.Count);
-
-                for (var exit = 0; exit < stage.To.Count; exit++)
+                for (var index = 0; index < policy.Stages.Count; index++)
                 {
-                    var transition = stage.To[exit];
-                    var pointer = Pointer.Transition(index, exit);
+                    var stage = policy.Stages[index];
+                    var exits = new List<SiblingExit>(stage.To.Count);
 
-                    exits.Add(new SiblingExit(
-                        DescribeExit(transition.When, "exit", transition.Stage),
-                        transition.When is null ? pointer : ConfigurationError.AppendPointer(pointer, "when"),
-                        transition.When));
+                    for (var exit = 0; exit < stage.To.Count; exit++)
+                    {
+                        var transition = stage.To[exit];
+                        var pointer = Pointer.Transition(name, index, exit);
+
+                        exits.Add(new SiblingExit(
+                            DescribeExit(transition.When, "exit", transition.Stage),
+                            transition.When is null ? pointer : ConfigurationError.AppendPointer(pointer, "when"),
+                            transition.When));
+                    }
+
+                    var pinned = new Dictionary<string, JsonNode?>(StringComparer.Ordinal)
+                    {
+                        [ReservedStateSlots.Stage] = JsonValue.Create(stage.Id),
+                    };
+
+                    GuardExclusivityCheck.Run(
+                        exits,
+                        ConfigurationError.AppendPointer(Pointer.Stage(name, index), "to"),
+                        $"the stage '{stage.Id}'",
+                        evaluator,
+                        configuration.State,
+                        pinned,
+                        errors,
+                        warnings);
                 }
+            }
 
-                var pinned = new Dictionary<string, JsonNode?>(StringComparer.Ordinal)
+            if (entry.Graph is not { } graph || graph.Edges.Count == 0)
+            {
+                continue;
+            }
+
+            foreach (var group in graph.Edges.Select(static (edge, index) => (edge, index)).GroupBy(static pair => pair.edge.From, StringComparer.Ordinal))
+            {
+                var exits = new List<SiblingExit>();
+
+                foreach (var pair in group)
                 {
-                    // The exits of one stage run inside that stage, so the reserved slot is known.
-                    [ReservedStateSlots.Stage] = JsonValue.Create(stage.Id),
-                };
+                    var pointer = Pointer.Edge(name, pair.index);
+                    exits.Add(new SiblingExit(
+                        DescribeExit(pair.edge.When, "edge", pair.edge.To),
+                        pair.edge.When is null ? pointer : ConfigurationError.AppendPointer(pointer, "when"),
+                        pair.edge.When));
+                }
 
                 GuardExclusivityCheck.Run(
                     exits,
-                    ConfigurationError.AppendPointer(Pointer.Stage(index), "to"),
-                    $"the stage '{stage.Id}'",
+                    Pointer.GraphEdges(name),
+                    $"the node '{group.Key}'",
                     evaluator,
                     configuration.State,
-                    pinned,
+                    new Dictionary<string, JsonNode?>(StringComparer.Ordinal),
                     errors,
                     warnings);
             }
-        }
-
-        if (configuration.Graph is not { } graph || graph.Edges.Count == 0)
-        {
-            return;
-        }
-
-        foreach (var group in graph.Edges.Select(static (edge, index) => (edge, index)).GroupBy(static pair => pair.edge.From, StringComparer.Ordinal))
-        {
-            var exits = new List<SiblingExit>();
-
-            foreach (var pair in group)
-            {
-                var pointer = Pointer.Edge(pair.index);
-                exits.Add(new SiblingExit(
-                    DescribeExit(pair.edge.When, "edge", pair.edge.To),
-                    pair.edge.When is null ? pointer : ConfigurationError.AppendPointer(pointer, "when"),
-                    pair.edge.When));
-            }
-
-            GuardExclusivityCheck.Run(
-                exits,
-                "/graph/edges",
-                $"the node '{group.Key}'",
-                evaluator,
-                configuration.State,
-                new Dictionary<string, JsonNode?>(StringComparer.Ordinal),
-                errors,
-                warnings);
         }
     }
 
@@ -951,116 +1034,119 @@ public static class ConfigurationValidator
     // ---------------------------------------------------------------------------------------------
     private static void CheckReachability(AgentCoreConfiguration configuration, List<ConfigurationError> errors)
     {
-        if (configuration.Policy is { } policy)
+        foreach (var (name, entry) in configuration.Entries)
         {
-            var edges = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-            foreach (var stage in policy.Stages)
+            if (entry.Policy is { } policy)
             {
-                edges[stage.Id] = [.. stage.To.Select(static transition => transition.Stage)];
-            }
-
-            var reachable = Reach(policy.Initial, edges);
-
-            for (var index = 0; index < policy.Stages.Count; index++)
-            {
-                var stage = policy.Stages[index];
-                if (!reachable.Contains(stage.Id))
+                var edges = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+                foreach (var stage in policy.Stages)
                 {
-                    errors.Add(Reachability(
-                        Pointer.Stage(index),
-                        $"the stage '{stage.Id}' is unreachable from the initial stage '{policy.Initial}'"));
+                    edges[stage.Id] = [.. stage.To.Select(static transition => transition.Stage)];
                 }
 
-                if (!stage.Terminal && stage.To.Count == 0)
+                var reachable = Reach(policy.Initial, edges);
+
+                for (var index = 0; index < policy.Stages.Count; index++)
                 {
-                    errors.Add(Reachability(
-                        Pointer.Stage(index),
-                        $"the stage '{stage.Id}' is not terminal and has no exit"));
+                    var stage = policy.Stages[index];
+                    if (!reachable.Contains(stage.Id))
+                    {
+                        errors.Add(Reachability(
+                            Pointer.Stage(name, index),
+                            $"the stage '{stage.Id}' is unreachable from the initial stage '{policy.Initial}' in entry '{name}'"));
+                    }
+
+                    if (!stage.Terminal && stage.To.Count == 0)
+                    {
+                        errors.Add(Reachability(
+                            Pointer.Stage(name, index),
+                            $"the stage '{stage.Id}' is not terminal and has no exit"));
+                    }
                 }
             }
-        }
 
-        if (configuration.Graph is not { } graph || graph.Nodes.Count == 0)
-        {
-            return;
-        }
-
-        var starts = graph.Nodes.Where(static node => node.Start).Select(static node => node.Id).ToList();
-        if (starts.Count != 1)
-        {
-            // Check 7 reports the start-node count. Reachability has no root to walk from.
-            return;
-        }
-
-        var forward = BuildAdjacency(graph);
-        var live = Reach(starts[0], forward);
-
-        for (var index = 0; index < graph.Nodes.Count; index++)
-        {
-            if (!live.Contains(graph.Nodes[index].Id))
+            if (entry.Graph is not { } graph || graph.Nodes.Count == 0)
             {
-                errors.Add(Reachability(
-                    Pointer.Node(index),
-                    $"the node '{graph.Nodes[index].Id}' is unreachable from the start node '{starts[0]}'"));
+                continue;
+            }
+
+            var starts = graph.Nodes.Where(static node => node.Start).Select(static node => node.Id).ToList();
+            if (starts.Count != 1)
+            {
+                continue;
+            }
+
+            var forward = BuildAdjacency(graph);
+            var live = Reach(starts[0], forward);
+
+            for (var index = 0; index < graph.Nodes.Count; index++)
+            {
+                if (!live.Contains(graph.Nodes[index].Id))
+                {
+                    errors.Add(Reachability(
+                        Pointer.Node(name, index),
+                        $"the node '{graph.Nodes[index].Id}' is unreachable from the start node '{starts[0]}' in entry '{name}'"));
+                }
             }
         }
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Check 7: graph well-formedness.
-    // ---------------------------------------------------------------------------------------------
     private static void CheckGraphWellFormedness(AgentCoreConfiguration configuration, List<ConfigurationError> errors)
     {
-        if (configuration.Graph is not { } graph || graph.Nodes.Count == 0)
+        foreach (var (name, entry) in configuration.Entries)
         {
-            return;
-        }
-
-        var starts = graph.Nodes.Count(static node => node.Start);
-        if (starts != 1)
-        {
-            errors.Add(WellFormedness(
-                "/graph/nodes",
-                string.Create(CultureInfo.InvariantCulture, $"the graph declares {starts} start nodes, and check 7 needs exactly one")));
-        }
-
-        var outgoing = new HashSet<string>(StringComparer.Ordinal);
-        var incoming = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (var edge in graph.Edges)
-        {
-            outgoing.Add(edge.From);
-            incoming.Add(edge.To);
-        }
-
-        for (var index = 0; index < graph.Nodes.Count; index++)
-        {
-            var node = graph.Nodes[index];
-            if (!outgoing.Contains(node.Id) && !incoming.Contains(node.Id))
+            if (entry.Graph is not { } graph || graph.Nodes.Count == 0)
             {
-                errors.Add(WellFormedness(
-                    Pointer.Node(index),
-                    $"the node '{node.Id}' is an orphan: no edge reaches it and no edge leaves it"));
+                continue;
             }
-        }
 
-        var outputs = graph.Nodes.Where(static node => node.Output).Select(static node => node.Id).ToHashSet(StringComparer.Ordinal);
-        if (outputs.Count == 0)
-        {
-            errors.Add(WellFormedness("/graph/nodes", "the graph declares no output node, so no path reaches an output"));
-            return;
-        }
-
-        var forward = BuildAdjacency(graph);
-        for (var index = 0; index < graph.Nodes.Count; index++)
-        {
-            var node = graph.Nodes[index];
-            var reachable = Reach(node.Id, forward);
-            if (!reachable.Overlaps(outputs))
+            var starts = graph.Nodes.Count(static node => node.Start);
+            if (starts != 1)
             {
                 errors.Add(WellFormedness(
-                    Pointer.Node(index),
-                    $"no path from the node '{node.Id}' reaches an output node"));
+                    Pointer.GraphNodes(name),
+                    string.Create(CultureInfo.InvariantCulture, $"the graph in entry '{name}' declares {starts} start nodes, and check 7 needs exactly one")));
+            }
+
+            var outgoing = new HashSet<string>(StringComparer.Ordinal);
+            var incoming = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (var edge in graph.Edges)
+            {
+                outgoing.Add(edge.From);
+                incoming.Add(edge.To);
+            }
+
+            for (var index = 0; index < graph.Nodes.Count; index++)
+            {
+                var node = graph.Nodes[index];
+                if (!outgoing.Contains(node.Id) && !incoming.Contains(node.Id))
+                {
+                    errors.Add(WellFormedness(
+                        Pointer.Node(name, index),
+                        $"the node '{node.Id}' is an orphan: no edge reaches it and no edge leaves it"));
+                }
+            }
+
+            var outputs = graph.Nodes.Where(static node => node.Output).Select(static node => node.Id).ToHashSet(StringComparer.Ordinal);
+            if (outputs.Count == 0)
+            {
+                errors.Add(WellFormedness(Pointer.GraphNodes(name), "the graph declares no output node, so no path reaches an output"));
+                continue;
+            }
+
+            var forward = BuildAdjacency(graph);
+            for (var index = 0; index < graph.Nodes.Count; index++)
+            {
+                var node = graph.Nodes[index];
+                var reachable = Reach(node.Id, forward);
+                if (!reachable.Overlaps(outputs))
+                {
+                    errors.Add(WellFormedness(
+                        Pointer.Node(name, index),
+                        $"no path from the node '{node.Id}' reaches an output node"));
+                }
             }
         }
     }
@@ -1070,7 +1156,7 @@ public static class ConfigurationValidator
     // ---------------------------------------------------------------------------------------------
     private static void CheckDelegationCycles(AgentCoreConfiguration configuration, List<ConfigurationError> errors)
     {
-        var items = configuration.Agents?.Items ?? [];
+        var items = configuration.Agents.Items;
         if (items.Count == 0)
         {
             return;
@@ -1271,24 +1357,28 @@ public static class ConfigurationValidator
 
         public required HashSet<string> Guards { get; init; }
 
-        public required HashSet<string> Stages { get; init; }
-
-        public required HashSet<string> Nodes { get; init; }
-
         public required HashSet<string> Models { get; init; }
+
+        public required Dictionary<string, HashSet<string>> Stages { get; init; }
+
+        public required Dictionary<string, HashSet<string>> Nodes { get; init; }
 
         public static DeclaredNames From(AgentCoreConfiguration configuration)
             => new()
             {
-                Agents = (configuration.Agents?.Items ?? [])
+                Agents = configuration.Agents.Items
                     .Select(static agent => agent.Id).ToHashSet(StringComparer.Ordinal),
                 Guards = configuration.Guards.Keys.ToHashSet(StringComparer.Ordinal),
-                Stages = (configuration.Policy?.Stages ?? [])
-                    .Select(static stage => stage.Id).ToHashSet(StringComparer.Ordinal),
-                Nodes = (configuration.Graph?.Nodes ?? [])
-                    .Select(static node => node.Id).ToHashSet(StringComparer.Ordinal),
-
-                // An absent providers: section, or an absent providers.llm, declares no model name.
+                Stages = configuration.Entries.ToDictionary(
+                    static entry => entry.Key,
+                    entry => (entry.Value.Policy?.Stages ?? [])
+                        .Select(static stage => stage.Id).ToHashSet(StringComparer.Ordinal),
+                    StringComparer.Ordinal),
+                Nodes = configuration.Entries.ToDictionary(
+                    static entry => entry.Key,
+                    entry => (entry.Value.Graph?.Nodes ?? [])
+                        .Select(static node => node.Id).ToHashSet(StringComparer.Ordinal),
+                    StringComparer.Ordinal),
                 Models = (configuration.Providers?.Llm ?? [])
                     .Select(static provider => provider.As).ToHashSet(StringComparer.Ordinal),
             };
@@ -1318,13 +1408,25 @@ public static class ConfigurationValidator
 
         public static string Mcp(int index) => ConfigurationError.AppendPointer("/mcp", index);
 
-        public static string Stage(int index) => ConfigurationError.AppendPointer("/policy/stages", index);
+        public static string Entry(string name) => ConfigurationError.AppendPointer("/entries", name);
 
-        public static string Transition(int stage, int exit)
-            => ConfigurationError.AppendPointer(ConfigurationError.AppendPointer(Stage(stage), "to"), exit);
+        public static string Policy(string name) => ConfigurationError.AppendPointer(Entry(name), "policy");
 
-        public static string Node(int index) => ConfigurationError.AppendPointer("/graph/nodes", index);
+        public static string Graph(string name) => ConfigurationError.AppendPointer(Entry(name), "graph");
 
-        public static string Edge(int index) => ConfigurationError.AppendPointer("/graph/edges", index);
+        public static string GraphAgents(string name) => ConfigurationError.AppendPointer(Graph(name), "agents");
+
+        public static string GraphNodes(string name) => ConfigurationError.AppendPointer(Graph(name), "nodes");
+
+        public static string GraphEdges(string name) => ConfigurationError.AppendPointer(Graph(name), "edges");
+
+        public static string Stage(string name, int index) => ConfigurationError.AppendPointer(ConfigurationError.AppendPointer(Policy(name), "stages"), index);
+
+        public static string Transition(string name, int stage, int exit)
+            => ConfigurationError.AppendPointer(ConfigurationError.AppendPointer(Stage(name, stage), "to"), exit);
+
+        public static string Node(string name, int index) => ConfigurationError.AppendPointer(ConfigurationError.AppendPointer(Graph(name), "nodes"), index);
+
+        public static string Edge(string name, int index) => ConfigurationError.AppendPointer(ConfigurationError.AppendPointer(Graph(name), "edges"), index);
     }
 }

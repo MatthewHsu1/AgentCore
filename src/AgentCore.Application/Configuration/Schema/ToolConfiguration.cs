@@ -21,9 +21,9 @@ public enum ToolKind
     /// </summary>
     /// <remarks>
     /// This is agent-as-tool, and it is not handoff. The outer agent sees one function, calls it,
-    /// and keeps control. The inner agent runs its own tool-calling loop and returns text. Handoff
-    /// transfers control instead, and <c>graph:</c> with <c>pattern: handoff</c> already carries it,
-    /// so the two do not overlap. Check 8 of section 8.5 walks the edges this kind declares.
+    /// and keeps control. Handoff transfers control instead, and an entry's <c>graph:</c> with
+    /// <c>pattern: handoff</c> already carries it, so the two do not overlap. Check 8 of section 8.5
+    /// walks the edges this kind declares.
     /// </remarks>
     Agent,
 }

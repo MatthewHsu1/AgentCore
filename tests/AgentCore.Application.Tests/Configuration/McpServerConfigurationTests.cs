@@ -31,7 +31,12 @@ public sealed class McpServerConfigurationTests
     {
         var document = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
-            name: stdio-env
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             mcp:
               - id: github
                 transport: stdio
@@ -56,7 +61,12 @@ public sealed class McpServerConfigurationTests
     {
         var document = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
-            name: http-headers
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             mcp:
               - id: jira
                 transport: http
@@ -75,7 +85,12 @@ public sealed class McpServerConfigurationTests
     {
         var document = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
-            name: mcp-secrets
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             mcp:
               - id: github
                 transport: stdio
@@ -103,7 +118,12 @@ public sealed class McpServerConfigurationTests
     {
         var document = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
-            name: missing-secret
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             mcp:
               - id: github
                 transport: stdio
@@ -127,7 +147,12 @@ public sealed class McpServerConfigurationTests
     {
         var document = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
-            name: secret-in-argv
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             mcp:
               - id: github
                 transport: stdio
@@ -147,7 +172,12 @@ public sealed class McpServerConfigurationTests
     {
         var document = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
-            name: secret-in-url
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             mcp:
               - id: jira
                 transport: http
@@ -166,7 +196,12 @@ public sealed class McpServerConfigurationTests
     {
         var document = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
-            name: clean
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             mcp:
               - id: github
                 transport: stdio
@@ -190,7 +225,13 @@ public sealed class McpServerConfigurationTests
     {
         var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml($"""
             apiVersion: agentcore/v1
-            name: wrong-key
+            agents:
+              items:
+                - id: only
+                  instructions: "ok"
+            entries:
+              main:
+                agent: only
             mcp:
               - id: server
                 transport: {transport}
@@ -210,7 +251,13 @@ public sealed class McpServerConfigurationTests
     {
         var document = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
-            name: timings
+            agents:
+              items:
+                - id: only
+                  instructions: "ok"
+            entries:
+              main:
+                agent: only
             mcp:
               - id: jira
                 transport: http
@@ -233,7 +280,12 @@ public sealed class McpServerConfigurationTests
     {
         var document = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
-            name: no-timings
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             mcp:
               - id: jira
                 transport: http
@@ -256,7 +308,12 @@ public sealed class McpServerConfigurationTests
     {
         var document = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
-            name: inherit
+            agents:
+              items:
+                - { id: only, instructions: "ok" }
+            entries:
+              main:
+                agent: only
             mcp:
               - id: a
                 transport: stdio

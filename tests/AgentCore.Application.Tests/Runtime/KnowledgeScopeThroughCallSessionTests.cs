@@ -33,243 +33,245 @@ public sealed class KnowledgeScopeThroughCallSessionTests
 {
     private const string Yaml =
         """
-        apiVersion: agentcore/v1
-        name: knowledge-scope-through-callsession
-        agents:
-          items:
-            - id: only
-              instructions: "answer the caller"
-              knowledge: { mode: prefetch, scoped: true }
-        policy:
-          initial: greeting
-          stages:
-            - { id: greeting, agent: only }
-        """;
+          apiVersion: agentcore/v1
+          agents:
+            items:
+              - id: only
+                instructions: "answer the caller"
+                knowledge: { mode: prefetch, scoped: true }
+          entries:
+            main:
+              policy:
+                initial: greeting
+                stages:
+                  - { id: greeting, agent: only }
+          """;
 
-    /// <summary>
-    /// The document the three <c>Scope_</c> facts run against. Unlike <see cref="Yaml"/>, it declares
-    /// <c>providers.knowledge.scope</c>, so <c>StateKnowledgeScope.Compose</c> builds a scope from
-    /// state rather than passing the host's ambient through unchanged — which is why the two
-    /// <c>RunTurnAsync_UnderAHostScope_</c> facts above must keep using the plain <see cref="Yaml"/>:
-    /// their <c>Assert.Same</c> needs the ambient untouched.
-    /// </summary>
-    private const string ScopedYaml =
-        """
-        apiVersion: agentcore/v1
-        name: knowledge-scope-through-callsession-scoped
-        state:
-          brand: { type: string, writer: extractor, enum: [sole, other] }
-          applies_to: { type: string, writer: extractor, enum: [f63, other] }
-        extractor:
-          model: { ref: fill }
-        providers:
-          call:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          knowledge:
-            kind: qdrant
-            collection: kb
-            fields: { body: text }
-            scope:
-              template: "facets.{key}"
-              wildcard:
-                value: "*"
-                facets: [brand, applies_to]
-              fromState: [brand, applies_to]
-        agents:
-          items:
-            - id: only
-              instructions: "answer the caller"
-              knowledge: { mode: prefetch, scoped: true }
-        policy:
-          initial: greeting
-          stages:
-            - { id: greeting, agent: only }
-        """;
+      /// <summary>
+      /// The document the three <c>Scope_</c> facts run against. Unlike <see cref="Yaml"/>, it declares
+      /// <c>providers.knowledge.scope</c>, so <c>StateKnowledgeScope.Compose</c> builds a scope from
+      /// state rather than passing the host's ambient through unchanged — which is why the two
+      /// <c>RunTurnAsync_UnderAHostScope_</c> facts above must keep using the plain <see cref="Yaml"/>:
+      /// their <c>Assert.Same</c> needs the ambient untouched.
+      /// </summary>
+      private const string ScopedYaml =
+          """
+          apiVersion: agentcore/v1
+          state:
+            brand: { type: string, writer: extractor, enum: [sole, other] }
+            applies_to: { type: string, writer: extractor, enum: [f63, other] }
+          extractor:
+            model: { ref: fill }
+          providers:
+            call:   { kind: telnyx-relay }
+            speech:
+              stt: { kind: telnyx-relay }
+              tts: { kind: telnyx-relay }
+            knowledge:
+              kind: qdrant
+              collection: kb
+              fields: { body: text }
+              scope:
+                template: "facets.{key}"
+                wildcard:
+                  value: "*"
+                  facets: [brand, applies_to]
+                fromState: [brand, applies_to]
+          agents:
+            items:
+              - id: only
+                instructions: "answer the caller"
+                knowledge: { mode: prefetch, scoped: true }
+          entries:
+            main:
+              policy:
+                initial: greeting
+                stages:
+                  - { id: greeting, agent: only }
+          """;
 
-    private StubKnowledgePort _port = null!;
+      private StubKnowledgePort _port = null!;
 
-    [Fact]
-    public async Task RunTurnAsync_UnderAHostScope_TheStoreStillSeesThatScope()
-    {
-        using SequencedChatClient reply = new("hello there.");
-        var port = new StubKnowledgePort([Card("a")]);
-        var session = Build(reply, port).Create("call-1");
+      [Fact]
+      public async Task RunTurnAsync_UnderAHostScope_TheStoreStillSeesThatScope()
+      {
+          using SequencedChatClient reply = new("hello there.");
+          var port = new StubKnowledgePort([Card("a")]);
+          var session = Build(reply, port).Create("call-1");
 
-        var scope = Scope();
-        session.Scope = scope;
-        await session.RunTurnAsync("the screen says e33", TestContext.Current.CancellationToken);
+          var scope = Scope();
+          session.Scope = scope;
+          await session.RunTurnAsync("the screen says e33", TestContext.Current.CancellationToken);
 
-        Assert.Equal(1, port.Calls);
-        Assert.Same(scope, port.ScopeAtTheStore);
-    }
+          Assert.Equal(1, port.Calls);
+          Assert.Same(scope, port.ScopeAtTheStore);
+      }
 
-    [Fact]
-    public async Task RunTurnStreamingAsync_UnderAHostScope_TheStoreStillSeesThatScope()
-    {
-        // The streaming path runs the same turn through a second enumeration, so it needs its own
-        // fact rather than an argument from the non-streaming one.
-        using SequencedChatClient reply = new("hello there.");
-        var port = new StubKnowledgePort([Card("a")]);
-        var session = Build(reply, port).Create("call-2");
+      [Fact]
+      public async Task RunTurnStreamingAsync_UnderAHostScope_TheStoreStillSeesThatScope()
+      {
+          // The streaming path runs the same turn through a second enumeration, so it needs its own
+          // fact rather than an argument from the non-streaming one.
+          using SequencedChatClient reply = new("hello there.");
+          var port = new StubKnowledgePort([Card("a")]);
+          var session = Build(reply, port).Create("call-2");
 
-        var scope = Scope();
-        session.Scope = scope;
-        await foreach (var update in session
-            .RunTurnStreamingAsync("the screen says e33", TestContext.Current.CancellationToken))
-        {
-            Assert.NotNull(update);
-        }
+          var scope = Scope();
+          session.Scope = scope;
+          await foreach (var update in session
+              .RunTurnStreamingAsync("the screen says e33", TestContext.Current.CancellationToken))
+          {
+              Assert.NotNull(update);
+          }
 
-        Assert.Equal(1, port.Calls);
-        Assert.Same(scope, port.ScopeAtTheStore);
-    }
+          Assert.Equal(1, port.Calls);
+          Assert.Same(scope, port.ScopeAtTheStore);
+      }
 
-    [Fact]
-    public async Task RunTurnAsync_WithNoHostScope_LeavesTheAmbientAbsent()
-    {
-        // The counterpart fact. Carrying the scope through must not invent one: an unscoped host
-        // still reaches the provider's gate, and the agent is told it cannot look anything up.
-        using SequencedChatClient reply = new("hello there.");
-        var port = new StubKnowledgePort([Card("a")]);
-        var session = Build(reply, port).Create("call-3");
+      [Fact]
+      public async Task RunTurnAsync_WithNoHostScope_LeavesTheAmbientAbsent()
+      {
+          // The counterpart fact. Carrying the scope through must not invent one: an unscoped host
+          // still reaches the provider's gate, and the agent is told it cannot look anything up.
+          using SequencedChatClient reply = new("hello there.");
+          var port = new StubKnowledgePort([Card("a")]);
+          var session = Build(reply, port).Create("call-3");
 
-        await session.RunTurnAsync("the screen says e33", TestContext.Current.CancellationToken);
+          await session.RunTurnAsync("the screen says e33", TestContext.Current.CancellationToken);
 
-        Assert.Equal(0, port.Calls);
-    }
+          Assert.Equal(0, port.Calls);
+      }
 
-    [Fact]
-    public async Task RunTurnAsync_AfterTheTurn_PutsBackWhatTheHostHadOpen()
-    {
-        // The turn loop opens ambients of its own over the host's. Closing them must restore the
-        // host's scope rather than clearing it, or a second turn of the same call runs unscoped.
-        using SequencedChatClient reply = new("hello there.");
-        var port = new StubKnowledgePort([Card("a")]);
-        var session = Build(reply, port).Create("call-4");
+      [Fact]
+      public async Task RunTurnAsync_AfterTheTurn_PutsBackWhatTheHostHadOpen()
+      {
+          // The turn loop opens ambients of its own over the host's. Closing them must restore the
+          // host's scope rather than clearing it, or a second turn of the same call runs unscoped.
+          using SequencedChatClient reply = new("hello there.");
+          var port = new StubKnowledgePort([Card("a")]);
+          var session = Build(reply, port).Create("call-4");
 
-        var scope = Scope();
-        session.Scope = scope;
-        await session.RunTurnAsync("the screen says e33", TestContext.Current.CancellationToken);
+          var scope = Scope();
+          session.Scope = scope;
+          await session.RunTurnAsync("the screen says e33", TestContext.Current.CancellationToken);
 
-        Assert.Same(scope, session.Scope);
-    }
+          Assert.Same(scope, session.Scope);
+      }
 
-    [Fact]
-    public async Task Scope_ResumedCall_IsBuiltFromTheRestoredSlots()
-    {
-        // The host cannot do this itself: Restore runs inside OpenSessionAsync, which is the first
-        // statement of the run method, so session.State is empty until the turn has begun.
-        using SequencedChatClient reply = new("hello there.");
-        var session = ResumedSession(reply, stored: new Dictionary<string, string>
-        {
-            ["brand"] = "sole",
-            ["applies_to"] = "f63",
-        });
+      [Fact]
+      public async Task Scope_ResumedCall_IsBuiltFromTheRestoredSlots()
+      {
+          // The host cannot do this itself: Restore runs inside OpenSessionAsync, which is the first
+          // statement of the run method, so session.State is empty until the turn has begun.
+          using SequencedChatClient reply = new("hello there.");
+          var session = ResumedSession(reply, stored: new Dictionary<string, string>
+          {
+              ["brand"] = "sole",
+              ["applies_to"] = "f63",
+          });
 
-        await session.RunTurnAsync("is the belt covered?", TestContext.Current.CancellationToken);
+          await session.RunTurnAsync("is the belt covered?", TestContext.Current.CancellationToken);
 
-        Assert.Equal("sole", _port.ScopeAtTheStore!.Facets["brand"]);
-        Assert.Equal("f63", _port.ScopeAtTheStore.Facets["applies_to"]);
-    }
+          Assert.Equal("sole", _port.ScopeAtTheStore!.Facets["brand"]);
+          Assert.Equal("f63", _port.ScopeAtTheStore.Facets["applies_to"]);
+      }
 
-    [Fact]
-    public async Task Scope_ResumedCall_WithAnOffEnumSlot_LeavesThatSlotWildcard()
-    {
-        // "F63 Treadmill" is outside applies_to's enum: [f63, other], so Restore's TryWrite refuses
-        // it and the slot stays unfilled. Compose then reads it as the wildcard, same as a slot
-        // nothing ever wrote — the refused blob value never reaches the search filter.
-        using SequencedChatClient reply = new("hello there.");
-        var session = ResumedSession(reply, stored: new Dictionary<string, string>
-        {
-            ["brand"] = "sole",
-            ["applies_to"] = "F63 Treadmill",
-        });
+      [Fact]
+      public async Task Scope_ResumedCall_WithAnOffEnumSlot_LeavesThatSlotWildcard()
+      {
+          // "F63 Treadmill" is outside applies_to's enum: [f63, other], so Restore's TryWrite refuses
+          // it and the slot stays unfilled. Compose then reads it as the wildcard, same as a slot
+          // nothing ever wrote — the refused blob value never reaches the search filter.
+          using SequencedChatClient reply = new("hello there.");
+          var session = ResumedSession(reply, stored: new Dictionary<string, string>
+          {
+              ["brand"] = "sole",
+              ["applies_to"] = "F63 Treadmill",
+          });
 
-        await session.RunTurnAsync("is the belt covered?", TestContext.Current.CancellationToken);
+          await session.RunTurnAsync("is the belt covered?", TestContext.Current.CancellationToken);
 
-        Assert.Equal("sole", _port.ScopeAtTheStore!.Facets["brand"]);
-        Assert.Equal("*", _port.ScopeAtTheStore.Facets["applies_to"]);
-    }
+          Assert.Equal("sole", _port.ScopeAtTheStore!.Facets["brand"]);
+          Assert.Equal("*", _port.ScopeAtTheStore.Facets["applies_to"]);
+      }
 
-    [Fact]
-    public async Task Scope_NothingKnown_IsAllWildcard()
-    {
-        using SequencedChatClient reply = new("hello there.");
-        var session = FreshSession(reply);
+      [Fact]
+      public async Task Scope_NothingKnown_IsAllWildcard()
+      {
+          using SequencedChatClient reply = new("hello there.");
+          var session = FreshSession(reply);
 
-        await session.RunTurnAsync("what are your opening hours?", TestContext.Current.CancellationToken);
+          await session.RunTurnAsync("what are your opening hours?", TestContext.Current.CancellationToken);
 
-        Assert.Equal("*", _port.ScopeAtTheStore!.Facets["brand"]);
-        Assert.Equal("*", _port.ScopeAtTheStore.Facets["applies_to"]);
-    }
+          Assert.Equal("*", _port.ScopeAtTheStore!.Facets["brand"]);
+          Assert.Equal("*", _port.ScopeAtTheStore.Facets["applies_to"]);
+      }
 
-    [Fact]
-    public async Task Scope_StreamingTurn_ComposesTheSameScope()
-    {
-        // The streaming path drives the turn through its own entry point, so it needs its own
-        // fact rather than an argument from the single-shot one: the scope the store sees must
-        // match what a non-streaming turn composes.
-        using SequencedChatClient reply = new("hello there.");
-        var session = FreshSession(reply);
+      [Fact]
+      public async Task Scope_StreamingTurn_ComposesTheSameScope()
+      {
+          // The streaming path drives the turn through its own entry point, so it needs its own
+          // fact rather than an argument from the single-shot one: the scope the store sees must
+          // match what a non-streaming turn composes.
+          using SequencedChatClient reply = new("hello there.");
+          var session = FreshSession(reply);
 
-        await foreach (var _ in session.RunTurnStreamingAsync("what are your opening hours?", TestContext.Current.CancellationToken))
-        {
-        }
+          await foreach (var _ in session.RunTurnStreamingAsync("what are your opening hours?", TestContext.Current.CancellationToken))
+          {
+          }
 
-        Assert.Equal("*", _port.ScopeAtTheStore!.Facets["brand"]);
-        Assert.Equal("*", _port.ScopeAtTheStore.Facets["applies_to"]);
-    }
+          Assert.Equal("*", _port.ScopeAtTheStore!.Facets["brand"]);
+          Assert.Equal("*", _port.ScopeAtTheStore.Facets["applies_to"]);
+      }
 
 
-    private static CallSessionFactory Build(IChatClient reply, StubKnowledgePort port, string yaml = Yaml)
-    {
-        var compiled = ConfigurationCompiler.Compile(
-            ConfigurationLoader.LoadYaml(yaml),
-            new AgentCompilationContext(new FakeChatClientFactory(reply)) { Knowledge = port });
+      private static CallSessionFactory Build(IChatClient reply, StubKnowledgePort port, string yaml = Yaml)
+      {
+          var compiled = ConfigurationCompiler.CompileAll(
+              ConfigurationLoader.LoadYaml(yaml),
+              new AgentCompilationContext(new FakeChatClientFactory(reply)) { Knowledge = port })["main"];
 
-        return new CallSessionFactory(compiled, new GuardEvaluator(compiled.Configuration.Guards));
-    }
+          return new CallSessionFactory(compiled, new GuardEvaluator(compiled.Configuration.Guards));
+      }
 
-    private CallSession FreshSession(IChatClient reply)
-    {
-        _port = new StubKnowledgePort([Card("a")]);
+      private CallSession FreshSession(IChatClient reply)
+      {
+          _port = new StubKnowledgePort([Card("a")]);
 
-        return Build(reply, _port, ScopedYaml).Create("call-fresh");
-    }
+          return Build(reply, _port, ScopedYaml).Create("call-fresh");
+      }
 
-    private CallSession ResumedSession(IChatClient reply, IReadOnlyDictionary<string, string> stored)
-    {
-        _port = new StubKnowledgePort([Card("a")]);
+      private CallSession ResumedSession(IChatClient reply, IReadOnlyDictionary<string, string> stored)
+      {
+          _port = new StubKnowledgePort([Card("a")]);
 
-        // The real restore path: a CallSessionState of the shape store 0 hands back, fed through
-        // CallSessionFactory.Create so Resume/Restore write the slots, rather than the test poking
-        // session.State directly and skipping the coercion and enum checks Restore applies.
-        CallSessionState state = new()
-        {
-            Stage = "greeting",
-            Slots = stored.ToDictionary(
-                pair => pair.Key,
-                pair => (JsonNode?)JsonValue.Create(pair.Value),
-                StringComparer.Ordinal),
-        };
+          // The real restore path: a CallSessionState of the shape store 0 hands back, fed through
+          // CallSessionFactory.Create so Resume/Restore write the slots, rather than the test poking
+          // session.State directly and skipping the coercion and enum checks Restore applies.
+          CallSessionState state = new()
+          {
+              Stage = "greeting",
+              Slots = stored.ToDictionary(
+                  pair => pair.Key,
+                  pair => (JsonNode?)JsonValue.Create(pair.Value),
+                  StringComparer.Ordinal),
+          };
 
-        return Build(reply, _port, ScopedYaml).Create("call-resumed", state);
-    }
+          return Build(reply, _port, ScopedYaml).Create("call-resumed", state);
+      }
 
-    private static KnowledgeScope Scope()
-        => new() { Facets = new Dictionary<string, string> { ["model"] = "ct900" } };
+      private static KnowledgeScope Scope()
+          => new() { Facets = new Dictionary<string, string> { ["model"] = "ct900" } };
 
-    private static KnowledgeCard Card(string id)
-        => new()
-        {
-            CardId = id,
-            Text = "card " + id,
-            Authority = 3,
-            SourceRef = "ct900-om",
-            SourceLocator = "p.27",
-            Score = 0.87,
-            ViaLink = false,
-        };
-}
+      private static KnowledgeCard Card(string id)
+          => new()
+          {
+              CardId = id,
+              Text = "card " + id,
+              Authority = 3,
+              SourceRef = "ct900-om",
+              SourceLocator = "p.27",
+              Score = 0.87,
+              ViaLink = false,
+          };
+  }

@@ -4,10 +4,6 @@ using AgentCore.Application.Runtime.Harness;
 
 namespace AgentCore.Application.Runtime;
 
-// The persistable half of the session (LangGraph checkpoint seam): restoring a previous
-// session's stage, slots, and ask budget onto the live document, as far as the compiled
-// document still allows. Never throws a call away over a stale blob — every refusal lands as
-// a diagnostic and the call runs on what restored.
 internal sealed class CallSessionStateStore
 {
     private readonly CallSession _session;
@@ -31,13 +27,13 @@ internal sealed class CallSessionStateStore
 
         if (_session.Policy is null)
         {
-            // A document with no policy: has no stage machine and no stage to hold, so the only
-            // stored stage it can honour is no stage at all. An id from a build that still declared
-            // policy: would otherwise land in the reserved stage slot, where the guards and the
-            // audit chain read it as though a machine were holding it.
+            // An entry with no policy: has no stage machine and no stage to hold, so the only
+            // stored stage it can honour is no stage at all. An id from a build whose entry still
+            // declared policy: would otherwise land in the reserved stage slot, where the guards
+            // and the audit chain read it as though a machine were holding it.
             if (stored.Stage.Length > 0)
             {
-                refusedStage = $"the document declares no policy, so the stage '{stored.Stage}' has nowhere to go.";
+                refusedStage = $"the entry declares no policy, so the stage '{stored.Stage}' has nowhere to go.";
             }
         }
         else if (!_session.Policy.Declares(stored.Stage))

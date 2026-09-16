@@ -24,7 +24,6 @@ public sealed class OpenAiChatClientAdapterTests
     private const string TwoModelsYaml =
         """
         apiVersion: agentcore/v1
-        name: two-models
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
@@ -36,6 +35,9 @@ public sealed class OpenAiChatClientAdapterTests
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
             - { kind: openai, model: gpt-5.4-nano, as: fill }
+        entries:
+          main:
+            agent: only
         """;
 
     [Fact]

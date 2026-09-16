@@ -39,32 +39,32 @@ public sealed class TurnObservabilityTests
 
     private const string PolicyYaml =
         """
-        apiVersion: agentcore/v1
-        name: observed
-        state:
-          callerSaidGoodbye: { type: boolean, default: false, writer: extractor }
-        guards:
-          saidGoodbye: { var: callerSaidGoodbye }
-        extractor:
-          model: { ref: fill }
-          when: after_reply
-        agents:
-          defaults:
-            model: { ref: reply }
-          items:
-            - { id: greeter, instructions: "greet the caller" }
-            - { id: closer,  instructions: "close the call" }
-        policy:
-          initial: greeting
-          stages:
-            - { id: greeting, agent: greeter, to: [ { stage: close, when: saidGoodbye } ] }
-            - { id: close,    agent: closer,  terminal: true }
-        """;
+          apiVersion: agentcore/v1
+          state:
+            callerSaidGoodbye: { type: boolean, default: false, writer: extractor }
+          guards:
+            saidGoodbye: { var: callerSaidGoodbye }
+          extractor:
+            model: { ref: fill }
+            when: after_reply
+          agents:
+            defaults:
+              model: { ref: reply }
+            items:
+              - { id: greeter, instructions: "greet the caller" }
+              - { id: closer,  instructions: "close the call" }
+          entries:
+            main:
+              policy:
+                initial: greeting
+                stages:
+                  - { id: greeting, agent: greeter, to: [ { stage: close, when: saidGoodbye } ] }
+                  - { id: close,    agent: closer,  terminal: true }
+          """;
 
-    private const string ToolYaml =
-        """
+      private const string ToolYaml =
+          """
         apiVersion: agentcore/v1
-        name: observed-tools
         tools:
           - { id: lookup_order, kind: builtin, uses: orders.read, description: "Look up an order by its id." }
         agents:
@@ -72,6 +72,9 @@ public sealed class TurnObservabilityTests
             model: { ref: reply }
           items:
             - { id: only, instructions: "I answer everything", tools: [ lookup_order ] }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string StayingNull = """{ "callerSaidGoodbye": null }""";
@@ -296,12 +299,14 @@ public sealed class TurnObservabilityTests
         var document = ConfigurationLoader.LoadYaml(
             """
             apiVersion: agentcore/v1
-            name: broken-guard
             guards:
               impossible: { "no_such_operator": [ 1, 2 ] }
             agents:
               items:
                 - { id: only, instructions: "I answer everything" }
+            entries:
+              main:
+                agent: only
             """);
 
         _ = new GuardEvaluator(document.Guards, logger);
@@ -442,12 +447,12 @@ public sealed class TurnObservabilityTests
             chatClients.Route("fill", fill);
         }
 
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             document,
             new AgentCompilationContext(chatClients)
             {
                 Tools = TestToolRegistry.From(document, tools, TestContext.Current.CancellationToken),
-            });
+            })["main"];
 
         return new CallSessionFactory(
             compiled,

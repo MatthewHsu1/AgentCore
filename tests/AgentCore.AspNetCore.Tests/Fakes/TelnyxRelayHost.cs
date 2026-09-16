@@ -4,6 +4,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.AspNetCore.Call;
 using AgentCore.AspNetCore.DependencyInjection;
+using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -41,7 +42,7 @@ internal sealed class TelnyxRelayHost : IAsyncDisposable
     }
 
     /// <summary>Gets the sessions the host resolved, so a test reads the live ones.</summary>
-    public ICallSessions Sessions => _app.Services.GetRequiredService<ICallSessions>();
+    public ICallSessions Sessions => _app.Services.GetRequiredService<EntryRegistry>().ForSessions("main");
 
     /// <summary>Gets the <c>ws://</c> address of the relay route.</summary>
     /// <remarks>
@@ -167,14 +168,14 @@ internal sealed class TelnyxRelayHost : IAsyncDisposable
             // The vendor-neutral seam picks the transport out of providers.call and the adapter the
             // test registered. Nothing here names a route or a vendor.
             route = CallEndpointRouteBuilderExtensions.DefaultPattern;
-            app.MapCall();
+            app.MapCall("main");
         }
         else
         {
             route = TelnyxRelayEndpointRouteBuilderExtensions.DefaultPattern;
             var relayOptions = new TelnyxRelayOptions();
             relay?.Invoke(relayOptions);
-            app.MapTelnyxRelay(route, relayOptions);
+            app.MapTelnyxRelay(route, relayOptions, "main");
         }
 
         await app.StartAsync();

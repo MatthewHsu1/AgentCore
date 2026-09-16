@@ -3,7 +3,7 @@ using AgentCore.Application.Calls;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Sessions.Memory;
+using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.AspNetCore.Sessions;
 using Microsoft.Agents.AI.Hosting;
 using Microsoft.AspNetCore.WebSockets;
@@ -37,18 +37,17 @@ public static class AgentCoreServiceCollectionExtensions
 
         services.AddSingleton<AgentCoreBoot>();
         services.AddHostedService<AgentCoreBootService>();
-
         services.AddSingleton(Boot(boot => boot.Configuration));
         services.AddSingleton(Boot(boot => boot.Secrets));
         services.AddSingleton(Boot(boot => boot.Bindings));
         services.AddSingleton(Boot(boot => boot.CompiledRegistry));
-        services.AddSingleton(Boot(boot => boot.Compiled));
+        services.AddSingleton(Boot(boot => boot.CompiledEntries));
         services.AddSingleton(Boot(boot => boot.ChatClients));
         services.AddSingleton(Boot(boot => boot.Guards));
         services.AddSingleton(Boot(boot => boot.Tools));
         services.AddSingleton(Boot(boot => boot.Calls));
-        services.AddSingleton(Boot(boot => boot.Sessions));
-        services.AddSingleton(Boot(boot => boot.Agent));
+        services.AddSingleton(Boot(boot => boot.Entries));
+        services.AddSingleton<ICallSessionRegistry>(provider => provider.GetRequiredService<EntryRegistry>());
         services.AddSingleton(Boot(boot => boot.AuditQueue));
 
         services.TryAddSingleton(provider =>
@@ -69,11 +68,6 @@ public static class AgentCoreServiceCollectionExtensions
             provider.GetRequiredService<IOptions<AgentCoreOptions>>().Value.TimeProvider
             ?? TimeProvider.System);
 
-        services.TryAddSingleton<ICallSessions>(provider => new InMemoryCallSessions(
-            provider.GetRequiredService<ICallSessionFactory>(),
-            InMemoryCallSessions.DefaultIdleTimeout,
-            provider.GetRequiredService<TimeProvider>()));
-
         services.AddHostedService(provider => new CallSessionSweeper(
             provider,
             provider.GetRequiredService<TimeProvider>(),
@@ -90,7 +84,7 @@ public static class AgentCoreServiceCollectionExtensions
         services.TryAddSingleton(provider => new EvaluationSampler(
             provider.GetRequiredService<AgentCoreConfiguration>().Evaluation?.SampleRate
             ?? EvaluationConfiguration.DefaultSampleRate));
-            
+
         services.TryAddSingleton<IEvaluationScorePublisher, InMemoryEvaluationScorePublisher>();
 
         return services;

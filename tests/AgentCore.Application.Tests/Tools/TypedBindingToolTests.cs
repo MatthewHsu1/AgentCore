@@ -282,7 +282,7 @@ public sealed class TypedBindingToolTests
     }
 
     private static ToolSourceContext ContextFor(ToolConfiguration tool)
-        => new(new AgentCoreConfiguration { ApiVersion = "agentcore/v1", Name = "test", Tools = [tool] });
+        => new(new AgentCoreConfiguration { ApiVersion = "agentcore/v1", Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(), Tools = [tool] });
 
     /// <summary>Builds the tool the way the boot does: through the source, off the document.</summary>
     private static async Task<AIFunction> CreateAsync(Delegate method)

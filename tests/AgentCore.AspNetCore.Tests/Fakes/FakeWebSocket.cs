@@ -380,7 +380,7 @@ internal sealed class RelayConnectionHarness : IAsyncDisposable
 
         DefaultHttpContext http = new() { RequestServices = provider };
 
-        TelnyxRelayOptions options = new();
+        TelnyxRelayOptions options = new() { EntryName = "main" };
         relay?.Invoke(options);
 
         FakeWebSocket socket = new();
@@ -388,7 +388,6 @@ internal sealed class RelayConnectionHarness : IAsyncDisposable
 
         return new RelayConnectionHarness(provider, lifetime, socket, connection);
     }
-
     /// <summary>Stops the host, which is what the <c>EndpointUnavailable</c> close status reports.</summary>
     public void StopApplication() => _lifetime.StopApplication();
 

@@ -8,13 +8,13 @@
 # The document version. agentcore/v1 is the only value this release accepts.
 apiVersion: agentcore/v1
 
-# The name of this agent. One deployment serves one brand.
-name: service-voice
+# The entry key names each agent: one deployment serves one brand per entry.
+# There is no root name:. Section E8 gives the name to the entries: key.
 
 # The line the caller hears when a turn fails. Section 8.7 names the two failures that reach it: a
 # run that returns no text after 40 tool rounds, and a tool that fails four times in a row. The key
-# sits at the root because every shape speaks it, and a document with agents:, policy:, or graph:
-# reads the same line. The key is optional. The default is:
+# sits at the root because every entry speaks it, and each entry may override it with its own
+# fallbackReply:. The key is optional. The default is:
 #   "I am sorry. I could not finish that. Please say it again."
 # An empty line is silence on a voice call, so a blank value is a load error.
 fallbackReply: "I am sorry. I could not finish that. Please say it again."
@@ -257,41 +257,53 @@ agents:
         knowledge: { mode: tool, citations: false } }
 
 # ---------------------------------------------------------------------------------------------
-# policy: the stage machine, run by Stateless over string stages.
+# entries: the agents this document serves, keyed by entry name.
 #
+# Each entry holds exactly one shape — agent:, policy:, or graph: — plus optional spoken-line
+# overrides. The phone entry below runs the stage machine over string stages, run by Stateless.
 # The machine picks a stage each turn, and the stage names one agent. Check 5 evaluates the exits
 # of one stage as siblings: two true at the same time is a startup error. Zero true is normal and
 # means the stage stays where it is; a stage may set onNoMatch: error to reject that.
 #
-# A document may hold policy: or graph:, never both.
+# The chat entry names one agents.items id and runs it directly.
 # ---------------------------------------------------------------------------------------------
-policy:
-  initial: greeting
-  stages:
-    - id: greeting
-      agent: greeter
-      to: [ { stage: identify } ]
+entries:
+  phone:
+    # The voice line for this entry. Overrides the root fallbackReply above.
+    fallbackReply: "Sorry — say it again."
+    policy:
+      initial: greeting
+      stages:
+        - id: greeting
+          agent: greeter
+          to: [ { stage: identify } ]
 
-    - id: identify
-      agent: identifier
-      to:
-        - { stage: close,    when: saidGoodbye }
-        - { stage: escalate, when: wantsHuman }
-        - { stage: resolve,  when: identified }
+        - id: identify
+          agent: identifier
+          to:
+            - { stage: close,    when: saidGoodbye }
+            - { stage: escalate, when: wantsHuman }
+            - { stage: resolve,  when: identified }
 
-    - id: resolve
-      agent: resolver
-      to:
-        - { stage: close,    when: goodbyeOrFixed }
-        - { stage: escalate, when: humanOrExhausted }
+        - id: resolve
+          agent: resolver
+          to:
+            - { stage: close,    when: goodbyeOrFixed }
+            - { stage: escalate, when: humanOrExhausted }
 
-    - id: escalate
-      agent: escalator
-      to: [ { stage: close } ]
+        - id: escalate
+          agent: escalator
+          to: [ { stage: close } ]
 
-    - id: close
-      agent: closer
-      terminal: true
+        - id: close
+          agent: closer
+          terminal: true
+
+  chat:
+    # One agents.items id, run directly with no stage machine.
+    agent: webchat
+    # The refusal line for this entry. Overrides the root refusalReply above.
+    refusalReply: "Sorry — I can't help with that here."
 
 # ---------------------------------------------------------------------------------------------
 # providers: the seam where the ports of section 7 bind.

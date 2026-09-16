@@ -17,7 +17,6 @@ public sealed class StateExtractorTests
     private const string Yaml =
         """
         apiVersion: agentcore/v1
-        name: extractor
         state:
           callerAskedForHuman: { type: boolean, default: false, writer: extractor }
           callerSaidGoodbye:   { type: boolean, default: false, writer: extractor }
@@ -29,6 +28,9 @@ public sealed class StateExtractorTests
         agents:
           items:
             - { id: only }
+        entries:
+          main:
+            agent: only
         """;
 
     private static readonly AgentCoreConfiguration Document = ConfigurationLoader.LoadYaml(Yaml);
@@ -211,10 +213,12 @@ public sealed class StateExtractorTests
     private const string CompileTableYaml =
         """
         apiVersion: agentcore/v1
-        name: no-extractor
         agents:
           items:
             - { id: only }
+        entries:
+          main:
+            agent: only
         """;
 
     private static (StateExtractor Extractor, StateDocument State) Build()

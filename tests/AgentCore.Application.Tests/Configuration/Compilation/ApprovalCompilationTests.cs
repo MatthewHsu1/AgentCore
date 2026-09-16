@@ -19,7 +19,6 @@ public sealed class ApprovalCompilationTests
     private const string GatedToolYaml =
         """
         apiVersion: agentcore/v1
-        name: approval-auto
         tools:
           - { id: send_email, kind: builtin, uses: test.send, description: "Send an email." }
         agents:
@@ -28,12 +27,14 @@ public sealed class ApprovalCompilationTests
               instructions: "send the mail"
               tools: [ send_email ]
               approval: { auto: [ send_email ] }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string UngatedToolYaml =
         """
         apiVersion: agentcore/v1
-        name: approval-auto
         tools:
           - { id: send_email, kind: builtin, uses: test.send, description: "Send an email." }
         agents:
@@ -42,6 +43,9 @@ public sealed class ApprovalCompilationTests
               instructions: "send the mail"
               tools: [ send_email ]
               approval: { auto: [ get_time ] }
+        entries:
+          main:
+            agent: only
         """;
 
     [Fact]
@@ -161,16 +165,18 @@ public sealed class ApprovalCompilationTests
         const string plainYaml =
             """
             apiVersion: agentcore/v1
-            name: plain
             agents:
               items:
                 - { id: only, instructions: "answer" }
+            entries:
+              main:
+                agent: only
             """;
         var token = TestContext.Current.CancellationToken;
         using ToolCallingChatClient client = new("unused");
         var document = ConfigurationLoader.LoadYaml(plainYaml);
-        var compiled = ConfigurationCompiler.Compile(
-            document, new AgentCompilationContext(new FakeChatClientFactory(client)));
+        var compiled = ConfigurationCompiler.CompileAll(
+            document, new AgentCompilationContext(new FakeChatClientFactory(client)))["main"];
 
         Assert.Empty(compiled.HarnessStateKeys);
     }
@@ -178,7 +184,7 @@ public sealed class ApprovalCompilationTests
     private static CompiledAgent Compile(string yaml, IChatClient client, Action onSend, CancellationToken token)
     {
         var document = ConfigurationLoader.LoadYaml(yaml);
-        return ConfigurationCompiler.Compile(
+        return ConfigurationCompiler.CompileAll(
             document,
             new AgentCompilationContext(new FakeChatClientFactory(client))
             {
@@ -186,7 +192,7 @@ public sealed class ApprovalCompilationTests
                     document,
                     declared => declared.Uses == "test.send" ? GatedSendEmail(onSend) : null,
                     token),
-            });
+            })["main"];
     }
 
     private static ApprovalRequiredAIFunction GatedSendEmail(Action onSend) => new ApprovalRequiredAIFunction(AIFunctionFactory.Create(

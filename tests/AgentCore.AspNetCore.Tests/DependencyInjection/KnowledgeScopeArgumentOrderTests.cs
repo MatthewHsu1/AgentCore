@@ -76,33 +76,15 @@ public sealed class KnowledgeScopeArgumentOrderTests
         => new()
         {
             ApiVersion = "agentcore/v1",
-            Name = "scope-argument-order",
             Providers = new ProvidersConfiguration
             {
                 Knowledge = new KnowledgeProviderConfiguration
                 {
                     Kind = "test",
                     Collection = "kb",
-
-                    // An agent here declares scoped: true, so the block has to say where this
-                    // collection keeps its facets. Nothing is inherited.
                     Fields = new KnowledgeFieldsConfiguration { Body = "body" },
                     Scope = new KnowledgeScopeConfiguration { Template = "facets.{key}" },
                 },
-            },
-            Policy = new PolicyConfiguration
-            {
-                Initial = "answering",
-                Stages =
-                [
-                    new StageConfiguration
-                    {
-                        Id = "answering",
-                        Agent = "resolver",
-                        To = [new StageTransition { Stage = "reviewing" }],
-                    },
-                    new StageConfiguration { Id = "reviewing", Agent = "analyst", Terminal = true },
-                ],
             },
             Agents = new AgentsConfiguration
             {
@@ -121,6 +103,26 @@ public sealed class KnowledgeScopeArgumentOrderTests
                         Knowledge = new AgentKnowledgeConfiguration { Mode = KnowledgeMode.Prefetch, Scoped = false },
                     },
                 ],
+            },
+            Entries = new Dictionary<string, EntryConfiguration>
+            {
+                ["main"] = new EntryConfiguration
+                {
+                    Policy = new PolicyConfiguration
+                    {
+                        Initial = "answering",
+                        Stages =
+                        [
+                            new StageConfiguration
+                            {
+                                Id = "answering",
+                                Agent = "resolver",
+                                To = [new StageTransition { Stage = "reviewing" }],
+                            },
+                            new StageConfiguration { Id = "reviewing", Agent = "analyst", Terminal = true },
+                        ],
+                    },
+                },
             },
         };
 

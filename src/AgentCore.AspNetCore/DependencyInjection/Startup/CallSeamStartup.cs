@@ -17,33 +17,33 @@ namespace AgentCore.AspNetCore.DependencyInjection.Startup;
 /// carries text, so it is itself both and there is nothing to build. The list goes in the container
 /// beside the document so that a vendor which does need constructing has somewhere to be found.
 /// </param>
-/// <param name="Handler">
-/// What <c>MapCall</c>'s route runs, or <see langword="null"/> when this document routes no inbound
-/// call — the host registered no transport, wrote no <c>providers.call</c> block, or named a vendor
-/// this process dials out to, which has no inbound URL.
+/// <param name="Handlers">
+/// What each <c>MapCall</c> route runs, keyed by entry name, or <see langword="null"/> when this
+/// document routes no inbound call — the host registered no transport, wrote no
+/// <c>providers.call</c> block, or named a vendor this process dials out to, which has no inbound URL.
 /// </param>
 /// <param name="Unroutable">
-/// Why <paramref name="Handler"/> is <see langword="null"/>, in the words a deployer can act on, or
-/// <see langword="null"/> when a call does route.
+/// Why <paramref name="Handlers"/> is <see langword="null"/>, in the words a deployer can act on, or
+/// <see langword="null"/> when calls route.
 /// </param>
 internal readonly record struct CallSeamAdapters(
     IReadOnlyList<ICallAdapter>? Call,
     IReadOnlyList<ISpeechAdapter>? Speech,
-    RequestDelegate? Handler,
+    IReadOnlyDictionary<string, RequestDelegate>? Handlers,
     string? Unroutable);
 
 /// <summary>The two provider blocks a call arrives on: <c>providers.call</c> and <c>providers.speech</c>.</summary>
 internal static class CallSeamStartup
 {
-    /// <summary>Checks the two blocks agree, and hands back the vendor lists to register.</summary>
-    /// <param name="configuration">The loaded document. It carries both provider blocks.</param>
+    /// <summary>Checks the two blocks agree, and hands back the vendor lists and one handler per entry to register.</summary>
+    /// <param name="configuration">The loaded document. It carries both provider blocks and the entries.</param>
     /// <param name="options">The options the host filled. It carries the registered vendors.</param>
-    /// <returns>The two lists, each one or <see langword="null"/> when the host registered none.</returns>
+    /// <returns>The two lists and the per-entry handlers, each one or <see langword="null"/> when the host registered none.</returns>
     internal static CallSeamAdapters Build(
         AgentCoreConfiguration configuration,
         AgentCoreOptions options)
     {
-        if (options.Call is not { } callAdapters)
+        if (options.CallAdapters is not { } callAdapters)
         {
             return new CallSeamAdapters(
                 null, options.Speech, null, "this host registered no call adapter");
@@ -55,7 +55,7 @@ internal static class CallSeamStartup
         var callEntry = configuration.Providers?.Call
             ?? throw MissingCallBlock();
 
-        var selectedCall = VendorAdapterSelector.Select(
+        var selectedCall = VendorAdapterSelector.Select<ICallAdapter>(
             callEntry.Kind, callAdapters, CallSeams.Call);
 
         var speechEntry = configuration.Providers?.Speech
@@ -69,13 +69,22 @@ internal static class CallSeamStartup
         // Built here and not where the route is mapped, so an unusable limit in providers.call stops
         // the host rather than the first call that arrives on it. A vendor this process dials out to
         // has no inbound URL, and that is not a failure: it is the other half of the seam working.
-        return selectedCall is ICallTransportAdapter transport
-            ? new CallSeamAdapters(callAdapters, options.Speech, transport.CreateHandler(callEntry), null)
-            : new CallSeamAdapters(
+        if (selectedCall is not ICallTransportAdapter transport)
+        {
+            return new CallSeamAdapters(
                 callAdapters,
                 options.Speech,
                 null,
                 $"'{selectedCall.Kind}' is a vendor this process dials out to, so it answers no inbound route");
+        }
+
+        Dictionary<string, RequestDelegate> handlers = new(StringComparer.Ordinal);
+        foreach (var entryName in configuration.Entries.Keys)
+        {
+            handlers[entryName] = transport.CreateHandler(callEntry, entryName);
+        }
+
+        return new CallSeamAdapters(callAdapters, options.Speech, handlers, null);
     }
 
     /// <summary>Refuses a configuration that turned the call seam on and named no transport.</summary>

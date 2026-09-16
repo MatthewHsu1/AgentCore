@@ -44,7 +44,7 @@ public sealed record StageConfiguration
 }
 
 /// <summary>
-/// The <c>policy:</c> section: a stage machine over string stages, run by <c>Stateless</c>.
+/// An entry's <c>policy:</c> block: a stage machine over string stages, run by <c>Stateless</c>.
 /// </summary>
 public sealed record PolicyConfiguration
 {

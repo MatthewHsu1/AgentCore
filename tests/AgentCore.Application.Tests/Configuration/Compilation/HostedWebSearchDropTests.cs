@@ -119,21 +119,11 @@ public sealed class HostedWebSearchDropTests
         using SequencedChatClient reply = new("hello there.");
         var registry = BuildRegistry([new BuiltinToolSource(new BuiltinToolPorts(null))], [SearchTool()]);
 
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             new AgentCoreConfiguration
             {
                 ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
-                Name = "hosted-web-search-two-models",
                 Tools = [SearchTool()],
-                Policy = new PolicyConfiguration
-                {
-                    Initial = "opening",
-                    Stages =
-                    [
-                        new StageConfiguration { Id = "opening", Agent = "capable" },
-                        new StageConfiguration { Id = "closing", Agent = "incapable" },
-                    ],
-                },
                 Agents = new AgentsConfiguration
                 {
                     Items =
@@ -142,8 +132,23 @@ public sealed class HostedWebSearchDropTests
                         new AgentConfiguration { Id = "incapable", Model = new ModelReference { Ref = incapableRef }, Tools = [SearchToolId] },
                     ],
                 },
+                Entries = new Dictionary<string, EntryConfiguration>
+                {
+                    ["main"] = new EntryConfiguration
+                    {
+                        Policy = new PolicyConfiguration
+                        {
+                            Initial = "opening",
+                            Stages =
+                            [
+                                new StageConfiguration { Id = "opening", Agent = "capable" },
+                                new StageConfiguration { Id = "closing", Agent = "incapable" },
+                            ],
+                        },
+                    },
+                },
             },
-            new AgentCompilationContext(new RoutingCapabilityChatClientFactory(capableRef, reply)) { Tools = registry });
+            new AgentCompilationContext(new RoutingCapabilityChatClientFactory(capableRef, reply)) { Tools = registry })["main"];
 
         var token = TestContext.Current.CancellationToken;
         await compiled.Agents["capable"].RunAsync("hi", cancellationToken: token);
@@ -225,7 +230,7 @@ public sealed class HostedWebSearchDropTests
         AgentCoreConfiguration document = new()
         {
             ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
-            Name = "hosted-web-search-drop",
+            Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(),
             Tools = declared,
         };
 

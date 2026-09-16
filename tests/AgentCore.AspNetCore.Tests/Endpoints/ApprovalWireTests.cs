@@ -28,7 +28,6 @@ public sealed class ApprovalWireTests
     private const string ApprovalYaml =
         """
         apiVersion: agentcore/v1
-        name: approval-wire
         agents:
           defaults:
             model: { ref: reply }
@@ -41,6 +40,9 @@ public sealed class ApprovalWireTests
             tts: { kind: telnyx-relay }
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
+        entries:
+          main:
+            agent: greeter
         """;
 
     [Fact]

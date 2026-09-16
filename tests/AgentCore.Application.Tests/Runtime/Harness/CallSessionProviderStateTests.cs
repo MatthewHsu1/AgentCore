@@ -26,19 +26,23 @@ public sealed class CallSessionProviderStateTests
     private const string TodosYaml =
         """
         apiVersion: agentcore/v1
-        name: harness-provider-state
         agents:
           items:
             - { id: only, instructions: "track todos", todos: true }
+        entries:
+          main:
+            agent: only
         """;
 
     private const string NoTodosYaml =
         """
         apiVersion: agentcore/v1
-        name: harness-provider-state-none
         agents:
           items:
             - { id: only, instructions: "just talk" }
+        entries:
+          main:
+            agent: only
         """;
 
     [Fact]
@@ -89,7 +93,7 @@ public sealed class CallSessionProviderStateTests
         TodoAddThenTextChatClient firstChatClient = new();
         var firstCompiled = Compile(TodosYaml, firstChatClient, firstStore);
         AgentCoreAgent firstAgent = new(
-            new CallSessionFactory(firstCompiled, new GuardEvaluator(firstCompiled.Configuration.Guards)));
+            new CallSessionFactory(firstCompiled, new GuardEvaluator(firstCompiled.Configuration.Guards)), "main");
 
         var firstSession = await firstAgent.CreateSessionAsync(
             "call-1", TestContext.Current.CancellationToken);
@@ -105,7 +109,7 @@ public sealed class CallSessionProviderStateTests
         SequencedChatClient secondChatClient = new("hello there.");
         var secondCompiled = Compile(TodosYaml, secondChatClient, secondStore);
         AgentCoreAgent secondAgent = new(
-            new CallSessionFactory(secondCompiled, new GuardEvaluator(secondCompiled.Configuration.Guards)));
+            new CallSessionFactory(secondCompiled, new GuardEvaluator(secondCompiled.Configuration.Guards)), "main");
 
         var revived = await secondAgent.DeserializeSessionAsync(
             serialized, cancellationToken: TestContext.Current.CancellationToken);
@@ -163,9 +167,9 @@ public sealed class CallSessionProviderStateTests
     }
 
     private static CompiledAgent Compile(string yaml, IChatClient chatClient, ICallStore store)
-        => ConfigurationCompiler.Compile(
+        => ConfigurationCompiler.CompileAll(
             ConfigurationLoader.LoadYaml(yaml),
-            new AgentCompilationContext(new FakeChatClientFactory(chatClient)) { CallStore = store });
+            new AgentCompilationContext(new FakeChatClientFactory(chatClient)) { CallStore = store })["main"];
 
     /// <summary>
     /// Calls <c>todos_add {"todos":[{"title":"buy milk"}]}</c> on the very first request this

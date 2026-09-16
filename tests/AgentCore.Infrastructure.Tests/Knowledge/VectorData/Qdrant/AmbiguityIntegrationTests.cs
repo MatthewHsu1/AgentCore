@@ -184,7 +184,6 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
     private const string TwoFacetYaml =
         """
         apiVersion: agentcore/v1
-        name: ambiguity-probe-integration
         state:
           model:
             type: string
@@ -216,13 +215,15 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
           items:
             - id: only
               knowledge: { mode: tool, scoped: true }
+        entries:
+          main:
+            agent: only
         """;
 
     /// <summary>One droppable-shaped facet only: dropping it would open the scope empty (K33).</summary>
     private const string SingleFacetYaml =
         """
         apiVersion: agentcore/v1
-        name: ambiguity-probe-single-facet
         state:
           model:
             type: string
@@ -248,16 +249,21 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
           items:
             - id: only
               knowledge: { mode: tool, scoped: true }
+        entries:
+          main:
+            agent: only
         """;
 
     /// <summary>No <c>scope:</c> at all: the agent opens the whole corpus regardless of what the caller has said.</summary>
     private const string UnscopedYaml =
         """
         apiVersion: agentcore/v1
-        name: ambiguity-probe-unscoped
         agents:
           items:
             - { id: only, instructions: "answer the caller", knowledge: { mode: tool, scoped: false } }
+        entries:
+          main:
+            agent: only
         """;
 
     private readonly AmbiguityCorpusFixture _corpus;
@@ -490,13 +496,13 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
         RoutingChatClientFactory chatClients = new(capture);
         chatClients.Route("fill", new FixedTextChatClient("{}"));
 
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             ConfigurationLoader.LoadYaml(yaml),
             new AgentCompilationContext(chatClients)
             {
                 Knowledge = port ?? BuildStore(limit),
                 Loggers = loggers,
-            });
+            })["main"];
 
         var extractor = CallSessionFactory.CreateExtractor(compiled, chatClients);
         var session = new CallSessionFactory(

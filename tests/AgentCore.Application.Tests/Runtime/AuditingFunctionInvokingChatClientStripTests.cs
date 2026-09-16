@@ -147,7 +147,6 @@ public sealed class AuditingFunctionInvokingChatClientStripTests
     {
         const string yaml = """
             apiVersion: agentcore/v1
-            name: clarifications-through-callsession
             state:
               applies_to:
                 type: string
@@ -182,11 +181,14 @@ public sealed class AuditingFunctionInvokingChatClientStripTests
               items:
                 - id: only
                   knowledge: { mode: tool, scoped: true }
+            entries:
+              main:
+                agent: only
             """;
 
         var port = new StubKnowledgePort([]);
 
-        var compiled = ConfigurationCompiler.Compile(
+        var compiled = ConfigurationCompiler.CompileAll(
             ConfigurationLoader.LoadYaml(yaml),
             new AgentCompilationContext(new FakeChatClientFactory(
                 new ToolCallingChatClient(
@@ -194,7 +196,7 @@ public sealed class AuditingFunctionInvokingChatClientStripTests
                     new Dictionary<string, object?>(StringComparer.Ordinal) { ["userQuestion"] = "what is it" })))
             {
                 Knowledge = port,
-            });
+            })["main"];
 
         var factory = new CallSessionFactory(compiled, new GuardEvaluator(compiled.Configuration.Guards));
         var session = factory.Create("call-strip-1");
