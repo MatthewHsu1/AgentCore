@@ -177,6 +177,32 @@ public sealed class HostedFileCaptureProviderTests
         Assert.Contains("sandbox:/mnt/data/<name>", context.Instructions, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task InvokingAsync_KeepsWhatTheEarlierProvidersBuilt()
+    {
+        // Arrange
+        var agent = Agent();
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        var tool = AIFunctionFactory.Create(() => "ok", "count_orders");
+        ChatMessage asked = new(ChatRole.User, "How many orders?");
+        AIContext incoming = new()
+        {
+            Instructions = "You answer the Spirit agent.",
+            Messages = [asked],
+            Tools = [tool],
+        };
+
+        // Act
+        var context = await Provider(new ScriptedHostedFileClient(), new RecordingBlobStore())
+            .InvokingAsync(new AIContextProvider.InvokingContext(agent, session, incoming), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Contains("You answer the Spirit agent.", context.Instructions, StringComparison.Ordinal);
+        Assert.Contains("/mnt/data", context.Instructions, StringComparison.Ordinal);
+        Assert.Same(asked, Assert.Single(context.Messages!));
+        Assert.Same(tool, Assert.Single(context.Tools!));
+    }
+
     private static HostedFileCaptureProvider Provider(ScriptedHostedFileClient files, RecordingBlobStore blobs)
         => new(files, blobs, BlobPolicy.Default, NullLogger.Instance);
 

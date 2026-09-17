@@ -48,7 +48,7 @@ internal sealed class HostedFileCaptureProvider : AIContextProvider
     }
 
     /// <inheritdoc />
-    protected override ValueTask<AIContext> InvokingCoreAsync(InvokingContext context, CancellationToken cancellationToken = default)
+    protected override ValueTask<AIContext> ProvideAIContextAsync(InvokingContext context, CancellationToken cancellationToken = default)
         => new(new AIContext { Instructions = Instructions });
 
     /// <inheritdoc />
