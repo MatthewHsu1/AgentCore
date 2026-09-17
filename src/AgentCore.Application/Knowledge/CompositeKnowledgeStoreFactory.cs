@@ -114,15 +114,11 @@ public static class CompositeKnowledgeStoreFactory
     /// <summary>Writes the registered kinds, so a failure names what the host does register.</summary>
     private static string Registered(IReadOnlyList<IKnowledgeStoreAdapter> adapters)
     {
-        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
-        List<string> kinds = [];
-        foreach (var adapter in adapters)
-        {
-            if (seen.Add(adapter.Kind))
-            {
-                kinds.Add("'" + adapter.Kind + "'");
-            }
-        }
+        var kinds = adapters
+            .Select(adapter => adapter.Kind)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(kind => "'" + kind + "'")
+            .ToList();
 
         return kinds.Count == 0 ? "no adapter" : string.Join(", ", kinds);
     }

@@ -28,6 +28,9 @@ public static class ResponsesEndpointRouteBuilderExtensions
     /// <summary>The answer header that reports the stage the machine holds.</summary>
     public const string StageHeaderName = "X-AgentCore-Stage";
 
+    /// <summary>The OpenAI error type every refused request reports.</summary>
+    private const string InvalidRequestError = "invalid_request_error";
+
     /// <summary>Maps the endpoint for one entry on <see cref="DefaultPattern"/>.</summary>
     /// <param name="endpoints">The route builder of the host.</param>
     /// <param name="entry">The entry key this route answers on.</param>
@@ -69,7 +72,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
                 http,
                 StatusCodes.Status400BadRequest,
                 "the request body is not well-formed JSON: " + exception.Message,
-                "invalid_request_error",
+                InvalidRequestError,
                 "malformed_body",
                 cancellationToken).ConfigureAwait(false);
             return;
@@ -100,7 +103,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
                     http,
                     StatusCodes.Status400BadRequest,
                     "the request is not a Responses request: " + exception.Message,
-                    "invalid_request_error",
+                    InvalidRequestError,
                     "invalid_body",
                     cancellationToken).ConfigureAwait(false);
                 return;
@@ -122,7 +125,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
                 http,
                 StatusCodes.Status503ServiceUnavailable,
                 failure.Message,
-                "invalid_request_error",
+                InvalidRequestError,
                 "unknown_entry",
                 cancellationToken).ConfigureAwait(false);
             return;
@@ -168,7 +171,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
                     StatusCodes.Status400BadRequest,
                     "an approval answer names the call it resumes. Send it with the conversation "
                     + "or previous response id the asking turn answered with.",
-                    "invalid_request_error",
+                    InvalidRequestError,
                     "missing_session",
                     cancellationToken).ConfigureAwait(false);
                 return;
@@ -197,7 +200,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
                     http,
                     StatusCodes.Status404NotFound,
                     failure.Message,
-                    "invalid_request_error",
+                    InvalidRequestError,
                     "continuation_not_found",
                     cancellationToken).ConfigureAwait(false);
                 return;
@@ -213,7 +216,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
                 StatusCodes.Status404NotFound,
                 $"no call opens under '{key}'. Send the request with neither a conversation nor a "
                 + "previous response id to start one.",
-                "invalid_request_error",
+                InvalidRequestError,
                 "continuation_not_found",
                 cancellationToken).ConfigureAwait(false);
 
@@ -236,7 +239,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
                     StatusCodes.Status400BadRequest,
                     "the request carries both a user message and an approval answer. One turn carries "
                     + "either words or an answer, never both.",
-                    "invalid_request_error",
+                    InvalidRequestError,
                     "mixed_turn",
                     cancellationToken).ConfigureAwait(false);
                 return;
@@ -251,7 +254,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
                     StatusCodes.Status409Conflict,
                     $"the call queues no approval under id '{approval.RequestId}'. It was "
                     + "answered already, belongs to another call, or was never asked.",
-                    "invalid_request_error",
+                    InvalidRequestError,
                     "no_pending_approval",
                     cancellationToken).ConfigureAwait(false);
                 return;
@@ -265,7 +268,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
                 http,
                 StatusCodes.Status400BadRequest,
                 "the request carries no user message with text, so there is no turn to run.",
-                "invalid_request_error",
+                InvalidRequestError,
                 "no_user_message",
                 cancellationToken).ConfigureAwait(false);
             return;
@@ -313,7 +316,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
                 http,
                 StatusCodes.Status409Conflict,
                 exception.Message,
-                "invalid_request_error",
+                InvalidRequestError,
                 "turn_refused",
                 cancellationToken).ConfigureAwait(false);
         }

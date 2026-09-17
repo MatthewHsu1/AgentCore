@@ -23,13 +23,7 @@ internal sealed class TurnStreamFiles
     /// <param name="update">One update of the stream.</param>
     internal void Note(ChatResponseUpdate update)
     {
-        foreach (var content in update.Contents)
-        {
-            if (content is HostedFileContent or CodeInterpreterToolResultContent)
-            {
-                _references.Add(content);
-            }
-        }
+        _references.AddRange(update.Contents.Where(content => content is HostedFileContent or CodeInterpreterToolResultContent));
     }
 
     /// <summary>Links every noted file the store kept, in the order they were noted.</summary>

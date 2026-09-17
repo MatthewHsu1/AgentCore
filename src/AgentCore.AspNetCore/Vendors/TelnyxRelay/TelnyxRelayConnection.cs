@@ -59,7 +59,6 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay;
 /// </remarks>
 internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
 {
-    private readonly HttpContext _http;
     private readonly TelnyxRelayOptions _options;
     private readonly ILogger _logger;
     private readonly Channel<OutboundItem> _outbound;
@@ -109,7 +108,6 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
 
     private TelnyxRelayConnection(HttpContext http, WebSocket socket, TelnyxRelayOptions options, ILogger logger)
     {
-        _http = http;
         _options = options;
         _logger = logger;
 
@@ -403,7 +401,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
         Task lastTurn,
         Task writing)
     {
-        if (reading.IsFaulted && reading.Exception!.GetBaseException() is RelayProtocolException protocol)
+        if (reading.IsFaulted && reading.Exception.GetBaseException() is RelayProtocolException protocol)
         {
             return (protocol.Status, protocol.Message);
         }
@@ -419,7 +417,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
         }
 
         if (reading.IsFaulted
-            && reading.Exception!.GetBaseException() is not WebSocketException
+            && reading.Exception.GetBaseException() is not WebSocketException
             {
                 WebSocketErrorCode: WebSocketError.ConnectionClosedPrematurely,
             })

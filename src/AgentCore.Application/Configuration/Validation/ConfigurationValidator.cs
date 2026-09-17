@@ -22,6 +22,9 @@ public static class ConfigurationValidator
     /// <summary>The <c>increment:</c> field of a counter slot. Named once, so the check below and the two maps under it cannot drift apart.</summary>
     private const string IncrementField = "increment";
 
+    /// <summary>The <c>agent:</c> field an entry, tool, stage, or node points at.</summary>
+    private const string AgentField = "agent";
+
     /// <summary>Runs checks 2 to 8 and returns everything they find.</summary>
     /// <param name="configuration">The bound document.</param>
     /// <returns>Every error and every partial-coverage warning.</returns>
@@ -223,13 +226,13 @@ public static class ConfigurationValidator
                 if (string.IsNullOrWhiteSpace(agentId))
                 {
                     errors.Add(Reference(
-                        ConfigurationError.AppendPointer(pointer, "agent"),
+                        ConfigurationError.AppendPointer(pointer, AgentField),
                         $"the entry '{name}' names an empty agent:. It names one id from agents.items."));
                 }
                 else if (!names.Agents.Contains(agentId))
                 {
                     errors.Add(Reference(
-                        ConfigurationError.AppendPointer(pointer, "agent"),
+                        ConfigurationError.AppendPointer(pointer, AgentField),
                         $"the agent '{agentId}' is not declared in agents.items"));
                 }
             }
@@ -263,7 +266,7 @@ public static class ConfigurationValidator
             if (tool.Kind == ToolKind.Agent && tool.Agent is { } target && !names.Agents.Contains(target))
             {
                 errors.Add(Reference(
-                    ConfigurationError.AppendPointer(Pointer.Tool(index), "agent"),
+                    ConfigurationError.AppendPointer(Pointer.Tool(index), AgentField),
                     $"the agent '{target}' is not declared in agents.items"));
             }
         }
@@ -333,7 +336,7 @@ public static class ConfigurationValidator
                     if (stage.Agent is { } agentId && !names.Agents.Contains(agentId))
                     {
                         errors.Add(Reference(
-                            ConfigurationError.AppendPointer(Pointer.Stage(name, index), "agent"),
+                            ConfigurationError.AppendPointer(Pointer.Stage(name, index), AgentField),
                             $"the agent '{agentId}' is not declared in agents.items"));
                     }
 
@@ -376,7 +379,7 @@ public static class ConfigurationValidator
                 if (graph.Nodes[index].Agent is { } nodeAgent && !names.Agents.Contains(nodeAgent))
                 {
                     errors.Add(Reference(
-                        ConfigurationError.AppendPointer(Pointer.Node(name, index), "agent"),
+                        ConfigurationError.AppendPointer(Pointer.Node(name, index), AgentField),
                         $"the agent '{nodeAgent}' is not declared in agents.items"));
                 }
             }
@@ -1285,12 +1288,10 @@ public static class ConfigurationValidator
                 continue;
             }
 
-            foreach (var target in targets)
+            foreach (var target in targets.Where(target => !seen.Contains(target)))
             {
-                if (seen.Add(target))
-                {
-                    pending.Push(target);
-                }
+                seen.Add(target);
+                pending.Push(target);
             }
         }
 

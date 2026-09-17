@@ -105,17 +105,17 @@ public static class UnfilledSlotReminder
     /// </remarks>
     private static void CollectStageExits(AgentCoreConfiguration configuration, StageConfiguration stage, HashSet<string> names)
     {
-        foreach (var exit in stage.To)
+        foreach (var when in stage.To.Select(exit => exit.When))
         {
-            if (exit.When is null)
+            if (when is null)
             {
                 // An unconditional exit waits on no slots, so it adds nothing to read.
                 continue;
             }
 
-            var rule = exit.When.Rule;
+            var rule = when.Rule;
             if (rule is null
-                && exit.When.Name is { } guardName
+                && when.Name is { } guardName
                 && configuration.Guards.TryGetValue(guardName, out var named))
             {
                 rule = named;

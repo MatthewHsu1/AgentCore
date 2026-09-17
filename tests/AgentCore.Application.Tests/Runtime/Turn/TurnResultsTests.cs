@@ -56,7 +56,7 @@ public sealed class TurnResultsTests
     }
 
     [Theory]
-    [MemberData(nameof(StructuredResults))]
+    [MemberData(nameof(StructuredResults), DisableDiscoveryEnumeration = true)]
     public void AStructuredResult_IsRecorded_WhateverShapeTheToolAnsweredIn(object result, string expected)
     {
         TurnResults results = new();
@@ -75,7 +75,7 @@ public sealed class TurnResultsTests
     };
 
     [Theory]
-    [MemberData(nameof(UnstructuredResults))]
+    [MemberData(nameof(UnstructuredResults), DisableDiscoveryEnumeration = true)]
     public void AnUnstructuredResult_IsNotRecorded(object? result)
     {
         TurnResults results = new();

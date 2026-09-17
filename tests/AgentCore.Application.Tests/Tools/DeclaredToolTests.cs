@@ -56,7 +56,7 @@ public sealed class DeclaredToolTests
     ];
 
     [Theory]
-    [MemberData(nameof(RepresentativeFaults))]
+    [MemberData(nameof(RepresentativeFaults), DisableDiscoveryEnumeration = true)]
     public async Task AnyFaultTheBodyThrows_PropagatesUnfiltered(Exception failure)
     {
         var thrown = await Assert.ThrowsAnyAsync<Exception>(

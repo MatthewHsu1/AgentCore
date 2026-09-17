@@ -86,9 +86,8 @@ internal sealed class CallShells : IAsyncDisposable
             _ = probe.ContinueWith(
                 static (task, state) =>
                 {
-                    if (task.IsFaulted || task.IsCanceled)
+                    if ((task.IsFaulted || task.IsCanceled) && state is (CallShells shells, CallShellOptions key))
                     {
-                        var (shells, key) = ((CallShells, CallShellOptions))state!;
                         lock (shells._lock)
                         {
                             if (shells._environments.TryGetValue(key, out var current)

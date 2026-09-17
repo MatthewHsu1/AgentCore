@@ -62,14 +62,14 @@ internal static class StateDomain
         ArgumentNullException.ThrowIfNull(domains);
 
         var total = 1L;
-        foreach (var domain in domains)
+        foreach (var count in domains.Select(domain => domain.Points.Count))
         {
-            if (domain.Points.Count == 0)
+            if (count == 0)
             {
                 return 0;
             }
 
-            total *= domain.Points.Count;
+            total *= count;
             if (total > MaximumPoints)
             {
                 return long.MaxValue;

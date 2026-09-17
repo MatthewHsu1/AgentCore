@@ -185,12 +185,12 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
     {
         var messages = base.CreateResponseMessages(results);
 
-        foreach (var message in messages)
+        foreach (var contents in messages.Select(message => message.Contents))
         {
             // Materialised before the loop below adds to the very list this reads: Contents is a
             // List<AIContent> underneath, and its enumerator throws on the next MoveNext once
             // anything has been appended, even where nothing further was left to enumerate.
-            foreach (var callId in message.Contents.OfType<FunctionResultContent>().Select(r => r.CallId).ToList())
+            foreach (var callId in contents.OfType<FunctionResultContent>().Select(r => r.CallId).ToList())
             {
                 // A nested loop's calls drain nothing: their ids were registered under the
                 // stripped copy, so removing the entry without draining keeps the outer drain
@@ -200,12 +200,12 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
                 {
                     foreach (var drawn in drain.Renders?.TakeFor(callId) ?? [])
                     {
-                        message.Contents.Add(drawn);
+                        contents.Add(drawn);
                     }
 
                     foreach (var cited in drain.Sources?.TakeFor(callId) ?? [])
                     {
-                        message.Contents.Add(cited);
+                        contents.Add(cited);
                     }
                 }
             }

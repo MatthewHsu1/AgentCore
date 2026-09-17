@@ -29,6 +29,7 @@ internal sealed class EntryRegistry : ICallSessionRegistry
         Factories = factories;
         Agents = agents;
         CallSessions = callSessions;
+        Entries = callSessions.Keys.ToArray();
     }
 
     /// <summary>Gets the session factories, keyed by entry name.</summary>
@@ -41,7 +42,7 @@ internal sealed class EntryRegistry : ICallSessionRegistry
     public IReadOnlyDictionary<string, ICallSessions> CallSessions { get; }
 
     /// <inheritdoc/>
-    public IReadOnlyCollection<string> Entries => CallSessions.Keys.ToArray();
+    public IReadOnlyCollection<string> Entries { get; }
 
     /// <summary>Reads one entry's factory.</summary>
     /// <param name="entry">The entry key a route named.</param>

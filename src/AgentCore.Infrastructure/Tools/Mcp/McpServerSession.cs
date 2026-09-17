@@ -350,7 +350,7 @@ internal sealed class McpServerSession : IAsyncDisposable
             }
 
             await ConnectAndListAsync(cancellationToken).ConfigureAwait(false);
-            return _client!;
+            return _client;
         }
         finally
         {

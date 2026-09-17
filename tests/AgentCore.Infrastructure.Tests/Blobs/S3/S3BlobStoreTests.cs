@@ -172,6 +172,8 @@ public sealed class S3BlobStoreTests : IAsyncLifetime
     [S3Fact]
     public async Task DeleteByOwnerAsync_NothingStored_DoesNotThrow()
     {
-        await Store.DeleteByOwnerAsync(_owner, TestContext.Current.CancellationToken);
+        var error = await Record.ExceptionAsync(() => Store.DeleteByOwnerAsync(_owner, TestContext.Current.CancellationToken).AsTask());
+
+        Assert.Null(error);
     }
 }

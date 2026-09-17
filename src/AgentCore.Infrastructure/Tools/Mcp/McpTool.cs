@@ -84,7 +84,7 @@ internal sealed class McpTool : AIFunction
             var outgoing = arguments;
             if (_declared is { } declared)
             {
-                outgoing = new AIFunctionArguments();
+                outgoing = [];
                 foreach (var entry in arguments.Where(candidate => declared.Contains(candidate.Key)))
                 {
                     outgoing[entry.Key] = entry.Value;

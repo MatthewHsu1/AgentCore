@@ -420,7 +420,7 @@ public sealed class QdrantKnowledgeAdapter : IKnowledgeStoreAdapter
                 $"'{entry.Collection}' holds points keyed by number, and providers.knowledge.links.lookup "
                 + $"is {links.Lookup.ToString().ToLowerInvariant()}, which builds a UUID key. Every "
                 + "link expansion would silently return nothing. Set links.lookup: filter to match on "
-                + $"'{entry.Fields!.Id}' instead.");
+                + $"'{entry.Fields.Id}' instead.");
         }
 
         Guid expected;
@@ -432,7 +432,7 @@ public sealed class QdrantKnowledgeAdapter : IKnowledgeStoreAdapter
                     $"'{entry.Collection}' holds a point whose '{entry.Fields.Id}' is '{cardId}', which is "
                     + "not a GUID, but providers.knowledge.links.lookup is direct. Qdrant's point key is a "
                     + "GUID or an unsigned integer, so a free-form id cannot be one. Set links.lookup: "
-                    + $"filter to match on '{entry.Fields!.Id}' instead.");
+                    + $"filter to match on '{entry.Fields.Id}' instead.");
             }
         }
         else
@@ -448,7 +448,7 @@ public sealed class QdrantKnowledgeAdapter : IKnowledgeStoreAdapter
                 + $"{links.Lookup.ToString().ToLowerInvariant()} with namespace "
                 + $"'{links.Namespace}' and prefix '{links.Prefix}', which derives {expected}. "
                 + $"Every '{links.Field}' expansion would silently return nothing. Correct the "
-                + $"namespace or prefix, or set links.lookup: filter to match on '{entry.Fields!.Id}'.");
+                + $"namespace or prefix, or set links.lookup: filter to match on '{entry.Fields.Id}'.");
         }
     }
 

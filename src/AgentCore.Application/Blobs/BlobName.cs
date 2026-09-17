@@ -26,12 +26,9 @@ public static class BlobName
             return false;
         }
 
-        foreach (var c in name)
+        if (name.Any(c => c is '/' or '\\' || char.IsControl(c)))
         {
-            if (c is '/' or '\\' || char.IsControl(c))
-            {
-                return false;
-            }
+            return false;
         }
 
         return Encoding.UTF8.GetByteCount(name) <= MaxBytes;

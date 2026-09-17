@@ -46,7 +46,7 @@ public sealed class AgentCoreHttpClients : IHttpClientFactory, IHttpMessageHandl
     /// </param>
     public AgentCoreHttpClients(HttpMessageHandler? primaryHandler = null, ILoggerFactory? loggers = null)
     {
-        ServiceCollection services = new();
+        ServiceCollection services = [];
 
         services.AddLogging();
         if (loggers is not null)

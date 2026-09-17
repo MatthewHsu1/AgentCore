@@ -39,7 +39,7 @@ public static class AuditEventVocabulary
             // An empty value here is the one thing that cannot be true: every text hashes to 64
             // characters, the empty string included, so an empty hash proves nothing and would leave
             // the row unverifiable against store 1 forever.
-            RequireHash(auditEvent, AuditPayloadKeys.ReplyTextSha256, replyText);
+            RequireHash(AuditPayloadKeys.ReplyTextSha256, replyText, nameof(auditEvent));
         }
 
         RequirePromptFlagged(auditEvent);
@@ -86,7 +86,7 @@ public static class AuditEventVocabulary
                     nameof(auditEvent));
             }
 
-            RequireHash(auditEvent, AuditPayloadKeys.UtteranceUntilInterruptSha256, utterance);
+            RequireHash(AuditPayloadKeys.UtteranceUntilInterruptSha256, utterance, nameof(auditEvent));
         }
     }
 
@@ -147,17 +147,16 @@ public static class AuditEventVocabulary
         return true;
     }
 
-
     /// <summary>
     /// Refuses a payload value that is not a SHA-256 digest.
     /// </summary>
-    private static void RequireHash(AuditEvent auditEvent, string key, string? value)
+    private static void RequireHash(string key, string? value, string paramName)
     {
         if (!AuditHash.TryParse(value, out _))
         {
             throw new ArgumentException(
                 $"The audit payload value of '{key}' is {AuditHash.Length} lowercase hexadecimal characters. This one is '{value}'.",
-                nameof(auditEvent));
+                paramName);
         }
     }
 }
