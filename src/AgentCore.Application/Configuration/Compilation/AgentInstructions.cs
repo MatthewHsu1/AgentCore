@@ -6,20 +6,6 @@ namespace AgentCore.Application.Configuration.Compilation;
 /// Composes the instructions of one agent from the framework's base, the shared prefix, and the
 /// stage delta.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Section 8.1 states one caching rule, and it is a cost rule only.
-/// <c>agents.defaults.instructions</c> is the stable cached prefix, and each stage appends a delta
-/// below it. Anything that changes per turn must sit below the prefix, or it defeats the cache for
-/// every later turn. <see cref="Base"/> is the same for every agent in every document, so it sits
-/// above the prefix and is part of it.
-/// </para>
-/// <para>
-/// OpenAI caches automatically with no marker, at a 1,024-token minimum prefix, and a cached prompt
-/// still counts in full against the rate limit. Breaking the prefix is therefore a billing bug and
-/// never a capacity one.
-/// </para>
-/// </remarks>
 public static class AgentInstructions
 {
     /// <summary>The separator between the base, the cached prefix, and the stage delta.</summary>

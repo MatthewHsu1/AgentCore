@@ -31,8 +31,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
 
     /// <summary>
     /// The request header that names the zone the person is in, as an IANA id such as
-    /// <c>America/Chicago</c>. The browser knows it and the server does not. Read on every turn,
-    /// so a person who travels moves the clock with them; a bad or missing value changes nothing.
+    /// <c>America/Chicago</c>.
     /// </summary>
     public const string TimeZoneHeaderName = "X-AgentCore-Time-Zone";
 
