@@ -1,5 +1,4 @@
-#pragma warning disable MEAI001
-
+using AgentCore.Application.Transcript;
 using AgentCore.Application.Blobs;
 using AgentCore.Application.Calls;
 using AgentCore.Application.Calls.Memory;
@@ -16,23 +15,18 @@ public sealed class TurnStreamFilesTests
     private static ChatResponseUpdate UpdateWith(params AIContent[] contents)
         => new(ChatRole.Assistant, contents);
 
-    /// <summary>A reference the capture provider stamped as kept, as it does before the stream ends.</summary>
-    private static HostedFileContent Kept(string name, string mediaType, long length)
-    {
-        HostedFileContent reference = new("cfile_" + name) { Name = name };
-        SandboxFiles.MarkKept(reference, new BlobRef("call-1", name, mediaType, length));
-        return reference;
-    }
+    /// <summary>A file the capture provider kept, as it writes onto the content before the stream ends.</summary>
+    private static FileContent Kept(string name, string mediaType, long length)
+        => new() { Name = name, FileId = "cfile_" + name, MediaType = mediaType, Length = length, Kept = true };
 
     [Fact]
     public async Task ResolveAsync_NotedFileTheCaptureKept_YieldsOnePartWithTheLink()
     {
-        // Arrange: the same reference passes twice, as a re-yielded update would; a refused one passes too.
+        // Arrange: the same content passes twice, as a re-yielded update would; a refused one passes too.
         CallRepository calls = new(new InMemoryCallStore(), new StubBlobStore());
         TurnStreamFiles files = new();
         var chart = Kept("chart.png", "image/png", 48213);
-        HostedFileContent refused = new("cfile_2") { Name = "refused.png" };
-        SandboxFiles.MarkRefused(refused);
+        FileContent refused = new() { Name = "refused.png", FileId = "cfile_2" };
         files.Note(UpdateWith(new TextContent("see"), chart));
         files.Note(UpdateWith(chart));
         files.Note(UpdateWith(refused));
@@ -87,7 +81,7 @@ public sealed class TurnStreamFilesTests
             => throw new NotSupportedException();
 
         public ValueTask<BlobRef?> StatAsync(string ownerId, string name, CancellationToken cancellationToken = default)
-            => throw new NotSupportedException("The read path links from the stamp and never asks the store.");
+            => throw new NotSupportedException("The read path links from the content and never asks the store.");
 
         public ValueTask<Uri?> LinkAsync(BlobRef blob, TimeSpan lifetime, CancellationToken cancellationToken = default)
             => ValueTask.FromResult(Links ? new Uri($"https://blobs.test/{blob.OwnerId}/{blob.Name}?ttl={(int)lifetime.TotalSeconds}") : null);

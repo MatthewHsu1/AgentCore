@@ -33,19 +33,12 @@ public sealed class CallRepository : ICallStore
     /// <summary>The adapter the rows live in. For a host checking which vendor it opened; go through the repository for everything else.</summary>
     public ICallStore Store => _calls;
 
-    /// <summary>Links every sandbox file the messages reference and the capture kept, each once, in first-seen order.</summary>
-    /// <remarks>
-    /// Read off the messages, never off the store: the capture stamped each reference with what it
-    /// kept, so a history read makes no request per file. The link is minted here on every read, so
-    /// it is fresh however old the reply is. A file the capture refused, or never saw, has no stamp
-    /// and gets no link: the reply's words still name it, and that is all there is to show. A blob
-    /// deleted behind a stamped message gives a link that answers 404, as every chat product's does.
-    /// </remarks>
+    /// <summary>Links every sandbox file the messages carry and the capture kept, each name once, in first-seen order.</summary>
     /// <param name="callId">The call that owns the files.</param>
     /// <param name="messages">The messages to read the references off: the stored transcript, or one turn's updates.</param>
     /// <param name="cancellationToken">Cancels the signing.</param>
     /// <returns>One link per kept file.</returns>
-    public async Task<IReadOnlyList<SandboxFileLink>> LinkFilesAsync(
+    public async Task<IReadOnlyList<FileLink>> LinkFilesAsync(
         string callId,
         IEnumerable<ChatMessage> messages,
         CancellationToken cancellationToken = default)
@@ -58,15 +51,34 @@ public sealed class CallRepository : ICallStore
             return [];
         }
 
-        List<SandboxFileLink> links = [];
+        List<BlobRef> kept = [];
 
-        foreach (var facts in SandboxFiles.KeptIn(messages.SelectMany(message => message.Contents)))
+        foreach (var file in messages.SelectMany(message => message.Contents).OfType<FileContent>())
         {
-            BlobRef blob = new(callId, facts.Name, facts.MediaType, facts.Length);
+            if (!file.Kept || !BlobName.IsSafe(file.Name))
+            {
+                continue;
+            }
 
+            BlobRef blob = new(callId, file.Name, file.MediaType, file.Length);
+            var at = kept.FindIndex(known => string.Equals(known.Name, blob.Name, StringComparison.Ordinal));
+
+            if (at >= 0)
+            {
+                kept[at] = blob;
+            }
+            else
+            {
+                kept.Add(blob);
+            }
+        }
+
+        List<FileLink> links = [];
+
+        foreach (var blob in kept)
+        {
             var url = await _blobs.LinkAsync(blob, BlobLink.Lifetime, cancellationToken).ConfigureAwait(false);
-
-            links.Add(new SandboxFileLink(blob, url));
+            links.Add(new FileLink(blob, url));
         }
 
         return links;

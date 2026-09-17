@@ -1,5 +1,4 @@
-#pragma warning disable MEAI001
-
+using AgentCore.Application.Transcript;
 using AgentCore.Application.Blobs;
 using AgentCore.Application.Calls;
 using AgentCore.Application.Calls.Memory;
@@ -13,23 +12,15 @@ namespace AgentCore.Application.Tests.Calls;
 /// <summary>The one door to a stored call: its row, its words, and its files go together.</summary>
 public sealed class CallRepositoryTests
 {
-    /// <summary>A reply whose references the capture stamped as kept, 3 bytes each.</summary>
+    /// <summary>A reply whose files the capture kept, 3 bytes each.</summary>
     private static ChatMessage ReplyWith(params (string Name, string MediaType)[] kept)
         => new(ChatRole.Assistant, [new TextContent("see"), .. kept.Select(file => Kept(file.Name, file.MediaType))]);
 
-    private static HostedFileContent Kept(string name, string mediaType)
-    {
-        HostedFileContent reference = new("cfile_" + name) { Name = name };
-        SandboxFiles.MarkKept(reference, new BlobRef("call-1", name, mediaType, 3));
-        return reference;
-    }
+    private static FileContent Kept(string name, string mediaType, long length = 3)
+        => new() { Name = name, FileId = "cfile_" + name, MediaType = mediaType, Length = length, Kept = true };
 
-    private static HostedFileContent Refused(string name)
-    {
-        HostedFileContent reference = new("cfile_" + name) { Name = name };
-        SandboxFiles.MarkRefused(reference);
-        return reference;
-    }
+    private static FileContent Refused(string name)
+        => new() { Name = name, FileId = "cfile_" + name };
 
     private static async Task<BlobRef> KeepAsync(RecordingBlobStore blobs, string callId, string name, string mediaType)
         => await blobs.PutAsync(new BlobWrite(callId, name, mediaType, new MemoryStream([1, 2, 3]), 3), TestContext.Current.CancellationToken);
@@ -72,9 +63,9 @@ public sealed class CallRepositoryTests
     }
 
     [Fact]
-    public async Task LinkFilesAsync_LinksFromTheStamp_EachOnce_InFirstSeenOrder_WithoutAskingTheStore()
+    public async Task LinkFilesAsync_LinksFromTheContent_EachOnce_InFirstSeenOrder_WithoutAskingTheStore()
     {
-        // Arrange: the store is empty on purpose. The stamp is the index.
+        // Arrange: the store is empty on purpose. The content is the index.
         CountingBlobStore blobs = new();
         CallRepository calls = new(new InMemoryCallStore(), blobs);
 
@@ -113,17 +104,35 @@ public sealed class CallRepositoryTests
     }
 
     [Fact]
-    public async Task LinkFilesAsync_FileInsideAnInterpreterResult_IsFound()
+    public async Task LinkFilesAsync_SameNameKeptTwice_TheLaterFactsWinInTheFirstPlace()
     {
-        // Arrange
+        // Arrange: the model redrew chart.png after rows.csv; the store replaced the first.
         CallRepository calls = new(new InMemoryCallStore(), new RecordingBlobStore());
-        ChatMessage reply = new(ChatRole.Assistant, [new CodeInterpreterToolResultContent("ci_1") { Outputs = [Kept("chart.png", "image/png")] }]);
+        ChatMessage reply = new(ChatRole.Assistant, [Kept("chart.png", "image/png", 10), Kept("rows.csv", "text/csv", 5), Kept("chart.png", "image/png", 20)]);
 
         // Act
         var links = await calls.LinkFilesAsync("call-1", [reply], TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal("chart.png", Assert.Single(links).Blob.Name);
+        Assert.Equal(
+            [new BlobRef("call-1", "chart.png", "image/png", 20), new BlobRef("call-1", "rows.csv", "text/csv", 5)],
+            links.Select(link => link.Blob));
+    }
+
+    [Theory]
+    [InlineData("../etc/passwd")]
+    [InlineData("a/b.png")]
+    [InlineData("")]
+    public async Task LinkFilesAsync_UnsafeName_IsNotLinked(string name)
+    {
+        // Arrange
+        CallRepository calls = new(new InMemoryCallStore(), new RecordingBlobStore());
+
+        // Act
+        var links = await calls.LinkFilesAsync("call-1", [new ChatMessage(ChatRole.Assistant, [Kept(name, "image/png")])], TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(links);
     }
 
     /// <summary>Links like the recording store, and counts how often anyone asks it whether a blob exists.</summary>

@@ -1,9 +1,11 @@
 #pragma warning disable OPENAI001
-#pragma warning disable MEAI001 // IHostedFileClient and HostedFileContent.Scope are evaluation-only in Microsoft.Extensions.AI 10.10.0.
+#pragma warning disable MEAI001 // IHostedFileClient is evaluation-only in Microsoft.Extensions.AI 10.10.0.
 
+using AgentCore.Application.Transcript;
 using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Runtime.CompilerServices;
+using AgentCore.Application.Blobs;
 using AgentCore.Infrastructure.Llm.OpenAI;
 using Microsoft.Extensions.AI;
 using OpenAI;
@@ -13,7 +15,7 @@ using Xunit;
 namespace AgentCore.Infrastructure.Tests.Llm;
 
 /// <summary>
-/// The vendor middleware that turns a <c>container_file_citation</c> into a <see cref="HostedFileContent"/>.
+/// The vendor middleware that turns a <c>container_file_citation</c> into a <see cref="FileContent"/>.
 /// </summary>
 /// <remarks>
 /// The wire shape is the OpenAI API reference's <c>container_file_citation</c> object. The
@@ -36,7 +38,7 @@ public sealed class OpenAiSandboxFilesClientTests
     private static readonly OpenAIClient OpenAi = new(new ApiKeyCredential("sk-test"));
 
     [Fact]
-    public async Task GetResponseAsync_ContainerFileCitation_AddsOneHostedFileContent()
+    public async Task GetResponseAsync_ContainerFileCitation_AddsOneFileContent()
     {
         // Arrange
         var inner = new ScriptedChatClient(new ChatResponse(new ChatMessage(ChatRole.Assistant, [CitedText()])));
@@ -46,10 +48,11 @@ public sealed class OpenAiSandboxFilesClientTests
         var response = await client.GetResponseAsync("draw", cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
-        var file = Assert.Single(response.Messages[0].Contents.OfType<HostedFileContent>());
+        var file = Assert.Single(response.Messages[0].Contents.OfType<FileContent>());
         Assert.Equal("cfile_68c8f1a2b3c4d5e6f7a8b9c1", file.FileId);
         Assert.Equal("cntr_68c8f1a2b3c4d5e6f7a8b9c0", file.Scope);
         Assert.Equal("chart.png", file.Name);
+        Assert.False(file.Kept);
         Assert.Equal("Here is your chart: [Download](sandbox:/mnt/data/chart.png)", response.Text);
     }
 
@@ -61,10 +64,10 @@ public sealed class OpenAiSandboxFilesClientTests
         using var client = new OpenAiSandboxFilesClient(inner, OpenAi);
 
         // Act
-        var files = new List<HostedFileContent>();
+        var files = new List<FileContent>();
         await foreach (var update in client.GetStreamingResponseAsync("draw", cancellationToken: TestContext.Current.CancellationToken))
         {
-            files.AddRange(update.Contents.OfType<HostedFileContent>());
+            files.AddRange(update.Contents.OfType<FileContent>());
         }
 
         // Assert
@@ -86,7 +89,7 @@ public sealed class OpenAiSandboxFilesClientTests
         var response = await client.GetResponseAsync("cite", cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Empty(response.Messages[0].Contents.OfType<HostedFileContent>());
+        Assert.Empty(response.Messages[0].Contents.OfType<FileContent>());
     }
 
     [Fact]

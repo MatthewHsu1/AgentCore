@@ -1,6 +1,7 @@
 #pragma warning disable OPENAI001
-#pragma warning disable MEAI001 // IHostedFileClient and HostedFileContent.Scope are evaluation-only in Microsoft.Extensions.AI 10.10.0.
+#pragma warning disable MEAI001 // IHostedFileClient is evaluation-only in Microsoft.Extensions.AI 10.10.0.
 
+using AgentCore.Application.Transcript;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.AI;
 using OpenAI;
@@ -9,7 +10,9 @@ using OpenAI.Responses;
 namespace AgentCore.Infrastructure.Llm.OpenAI;
 
 /// <summary>
-/// Makes a file the OpenAI sandbox wrote look the way Microsoft.Extensions.AI says it should.
+/// Surfaces every file the OpenAI sandbox wrote as one flat <see cref="FileContent"/> on the
+/// reply. OpenAI reports a file only as a citation on the text, and Microsoft.Extensions.AI keeps it
+/// there, so this is the one place that knows the vendor's shape.
 /// </summary>
 internal sealed class OpenAiSandboxFilesClient : DelegatingChatClient
 {
@@ -56,10 +59,10 @@ internal sealed class OpenAiSandboxFilesClient : DelegatingChatClient
         }
     }
 
-    /// <summary>Appends one <see cref="HostedFileContent"/> for every container-file citation in the list.</summary>
+    /// <summary>Appends one <see cref="FileContent"/> for every container-file citation in the list.</summary>
     private static void Surface(IList<AIContent> contents)
     {
-        List<HostedFileContent>? found = null;
+        List<FileContent>? found = null;
 
         foreach (var content in contents)
         {
@@ -72,7 +75,12 @@ internal sealed class OpenAiSandboxFilesClient : DelegatingChatClient
             {
                 if (annotation.RawRepresentation is ContainerFileCitationMessageAnnotation raw)
                 {
-                    (found ??= []).Add(new HostedFileContent(raw.FileId) { Scope = raw.ContainerId, Name = raw.Filename });
+                    (found ??= []).Add(new FileContent
+                    {
+                        Name = raw.Filename ?? raw.FileId,
+                        FileId = raw.FileId,
+                        Scope = raw.ContainerId,
+                    });
                 }
             }
         }

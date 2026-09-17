@@ -1,5 +1,6 @@
-#pragma warning disable MEAI001 // IHostedFileClient and HostedFileContent.Scope are evaluation-only in Microsoft.Extensions.AI 10.10.0.
+#pragma warning disable MEAI001 // IHostedFileClient is evaluation-only in Microsoft.Extensions.AI 10.10.0.
 
+using AgentCore.Application.Transcript;
 using AgentCore.Application.Blobs;
 using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Ports;
@@ -11,7 +12,8 @@ using Microsoft.Extensions.Logging;
 namespace AgentCore.Application.Runtime.Harness;
 
 /// <summary>
-/// Copies every file the vendor's sandbox wrote during a run into the call's blob store.
+/// Copies every file the vendor's sandbox wrote during a run into the call's blob store, and
+/// writes what it kept onto the file's <see cref="FileContent"/>.
 /// </summary>
 internal sealed class HostedFileCaptureProvider : AIContextProvider
 {
@@ -54,11 +56,11 @@ internal sealed class HostedFileCaptureProvider : AIContextProvider
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        List<HostedFileContent>? found = null;
+        List<FileContent>? found = null;
 
         foreach (var message in context.ResponseMessages ?? [])
         {
-            foreach (var file in SandboxFiles.In(message.Contents))
+            foreach (var file in message.Contents.OfType<FileContent>())
             {
                 (found ??= []).Add(file);
             }
@@ -94,14 +96,14 @@ internal sealed class HostedFileCaptureProvider : AIContextProvider
             : null;
     }
 
-    private async ValueTask KeepAsync(string callId, HostedFileContent file, CancellationToken cancellationToken)
+    // Kept stays false on every path that does not store the file, so a refusal writes nothing.
+    private async ValueTask KeepAsync(string callId, FileContent file, CancellationToken cancellationToken)
     {
-        var name = SandboxFiles.NameOf(file);
+        var name = file.Name;
 
         if (!BlobName.IsSafe(name))
         {
             Log.SandboxFileRefused(_logger, callId, name, "the name is not a plain file name");
-            SandboxFiles.MarkRefused(file);
             return;
         }
 
@@ -119,26 +121,27 @@ internal sealed class HostedFileCaptureProvider : AIContextProvider
             if (_policy.WhyRefused(name, buffer.Length) is { } reason)
             {
                 Log.SandboxFileRefused(_logger, callId, name, reason);
-                SandboxFiles.MarkRefused(file);
                 return;
             }
 
             buffer.Position = 0;
 
-            var mediaType = download.MediaType ?? file.MediaType ?? "application/octet-stream";
+            var mediaType = download.MediaType ?? file.MediaType;
 
             var kept = await _blobs
                 .PutAsync(new BlobWrite(callId, name, mediaType, buffer, buffer.Length), cancellationToken)
                 .ConfigureAwait(false);
 
-            // The reply is committed to the transcript after this provider runs, so the stamp is
-            // what every later read links from. No read ever asks the store whether the file exists.
-            SandboxFiles.MarkKept(file, kept);
+            // The reply is committed to the transcript after this provider runs, so what is written
+            // here is what every later read links from. No read ever asks the store whether the
+            // file exists.
+            file.MediaType = kept.MediaType;
+            file.Length = kept.Length;
+            file.Kept = true;
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             Log.SandboxFileCaptureFailed(_logger, callId, name, exception);
-            SandboxFiles.MarkRefused(file);
         }
     }
 

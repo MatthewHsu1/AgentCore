@@ -1,6 +1,6 @@
-#pragma warning disable MEAI001 // HostedFileContent.Scope is evaluation-only in Microsoft.Extensions.AI 10.10.0.
 #pragma warning disable MAAI001 // The context constructors are evaluation-only in Microsoft.Agents.AI 1.21.0.
 
+using AgentCore.Application.Transcript;
 using AgentCore.Application.Blobs;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Harness;
@@ -14,7 +14,8 @@ using Xunit;
 namespace AgentCore.Application.Tests.Runtime.Harness;
 
 /// <summary>
-/// After a run: every sandbox file the vendor surfaced is downloaded and stored under the call.
+/// After a run: every sandbox file the vendor surfaced is downloaded and stored under the call, and
+/// the content it rode in on says what was kept.
 /// </summary>
 public sealed class HostedFileCaptureProviderTests
 {
@@ -27,7 +28,7 @@ public sealed class HostedFileCaptureProviderTests
         var files = new ScriptedHostedFileClient().Serve("cfile_1", Png, "image/png");
         RecordingBlobStore blobs = new();
         var (agent, session) = await AgentWithFiledTurn("call-7");
-        var response = Reply(new HostedFileContent("cfile_1") { Scope = "cntr_1", Name = "chart.png" });
+        var response = Reply(File("cfile_1", "chart.png", "cntr_1"));
 
         // Act
         await Provider(files, blobs).InvokedAsync(new AIContextProvider.InvokedContext(agent, session, [], response), TestContext.Current.CancellationToken);
@@ -41,55 +42,37 @@ public sealed class HostedFileCaptureProviderTests
     }
 
     [Fact]
-    public async Task InvokedAsync_FileKept_StampsTheReferenceWithWhatWasStored()
+    public async Task InvokedAsync_FileKept_WritesWhatWasStoredOntoTheContent()
     {
-        // Arrange: the vendor's reference names no media type; the download does.
+        // Arrange: the vendor names no media type; the download does.
         var files = new ScriptedHostedFileClient().Serve("cfile_1", Png, "image/png");
         RecordingBlobStore blobs = new();
         var (agent, session) = await AgentWithFiledTurn("call-7");
-        HostedFileContent reference = new("cfile_1") { Name = "chart.png" };
+        var file = File("cfile_1", "chart.png");
 
         // Act
-        await Provider(files, blobs).InvokedAsync(new AIContextProvider.InvokedContext(agent, session, [], Reply(reference)), TestContext.Current.CancellationToken);
+        await Provider(files, blobs).InvokedAsync(new AIContextProvider.InvokedContext(agent, session, [], Reply(file)), TestContext.Current.CancellationToken);
 
-        // Assert: a later read links from the stamp alone.
-        var facts = Assert.Single(SandboxFiles.KeptIn([reference]));
-        Assert.Equal(new SandboxFileFacts("chart.png", "image/png", Png.Length), facts);
+        // Assert: a later read links from the content alone.
+        Assert.True(file.Kept);
+        Assert.Equal("image/png", file.MediaType);
+        Assert.Equal(Png.Length, file.Length);
     }
 
     [Fact]
-    public async Task InvokedAsync_FileRefused_StampsTheReferenceAsNotKept()
+    public async Task InvokedAsync_FileRefused_LeavesTheContentNotKept()
     {
         // Arrange: a 100-byte cap, a 300-byte file.
         var files = new ScriptedHostedFileClient().Serve("cfile_6", new byte[300], "image/png");
         var (agent, session) = await AgentWithFiledTurn("call-7");
-        HostedFileContent reference = new("cfile_6") { Name = "big.png" };
+        var file = File("cfile_6", "big.png");
         var provider = new HostedFileCaptureProvider(files, new RecordingBlobStore(), new BlobPolicy(100, ["png"]), NullLogger.Instance);
 
         // Act
-        await provider.InvokedAsync(new AIContextProvider.InvokedContext(agent, session, [], Reply(reference)), TestContext.Current.CancellationToken);
+        await provider.InvokedAsync(new AIContextProvider.InvokedContext(agent, session, [], Reply(file)), TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Empty(SandboxFiles.KeptIn([reference]));
-    }
-
-    [Fact]
-    public async Task InvokedAsync_FileInsideAnInterpreterResult_IsStoredToo()
-    {
-        // Arrange
-        var files = new ScriptedHostedFileClient().Serve("cfile_2", Png, "image/png");
-        RecordingBlobStore blobs = new();
-        var (agent, session) = await AgentWithFiledTurn("call-7");
-        var response = Reply(new CodeInterpreterToolResultContent("call_x")
-        {
-            Outputs = [new HostedFileContent("cfile_2") { Name = "plot.png" }],
-        });
-
-        // Act
-        await Provider(files, blobs).InvokedAsync(new AIContextProvider.InvokedContext(agent, session, [], response), TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.True(blobs.Blobs.ContainsKey(("call-7", "plot.png")));
+        Assert.False(file.Kept);
     }
 
     [Fact]
@@ -101,7 +84,7 @@ public sealed class HostedFileCaptureProviderTests
         var agent = Agent();
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
         session.StateBag.SetValue(BlobOwnerKey.Value, "call-child");
-        var response = Reply(new HostedFileContent("cfile_3") { Name = "rows.csv" });
+        var response = Reply(File("cfile_3", "rows.csv"));
 
         // Act
         await Provider(files, blobs).InvokedAsync(new AIContextProvider.InvokedContext(agent, session, [], response), TestContext.Current.CancellationToken);
@@ -118,7 +101,7 @@ public sealed class HostedFileCaptureProviderTests
         RecordingBlobStore blobs = new();
         var agent = Agent();
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
-        var response = Reply(new HostedFileContent("cfile_4") { Name = "chart.png" });
+        var response = Reply(File("cfile_4", "chart.png"));
 
         // Act
         await Provider(files, blobs).InvokedAsync(new AIContextProvider.InvokedContext(agent, session, [], response), TestContext.Current.CancellationToken);
@@ -136,7 +119,7 @@ public sealed class HostedFileCaptureProviderTests
         var files = new ScriptedHostedFileClient().Serve("cfile_5", Png, "image/png");
         RecordingBlobStore blobs = new();
         var (agent, session) = await AgentWithFiledTurn("call-7");
-        var response = Reply(new HostedFileContent("cfile_5") { Name = name });
+        var response = Reply(File("cfile_5", name));
 
         // Act
         await Provider(files, blobs).InvokedAsync(new AIContextProvider.InvokedContext(agent, session, [], response), TestContext.Current.CancellationToken);
@@ -152,7 +135,7 @@ public sealed class HostedFileCaptureProviderTests
         var files = new ScriptedHostedFileClient().Serve("cfile_6", new byte[300], "image/png");
         RecordingBlobStore blobs = new();
         var (agent, session) = await AgentWithFiledTurn("call-7");
-        var response = Reply(new HostedFileContent("cfile_6") { Name = "big.png" });
+        var response = Reply(File("cfile_6", "big.png"));
         var provider = new HostedFileCaptureProvider(files, blobs, new BlobPolicy(100, ["png"]), NullLogger.Instance);
 
         // Act
@@ -169,7 +152,7 @@ public sealed class HostedFileCaptureProviderTests
         ScriptedHostedFileClient files = new();
         RecordingBlobStore blobs = new();
         var (agent, session) = await AgentWithFiledTurn("call-7");
-        var response = Reply(new HostedFileContent("cfile_missing") { Name = "chart.png" });
+        var response = Reply(File("cfile_missing", "chart.png"));
 
         // Act
         await Provider(files, blobs).InvokedAsync(new AIContextProvider.InvokedContext(agent, session, [], response), TestContext.Current.CancellationToken);
@@ -206,6 +189,9 @@ public sealed class HostedFileCaptureProviderTests
         TurnRegistry.Set(session, new TurnInvocation { CallId = callId, TurnIndex = 0, Stage = "s" });
         return (agent, session);
     }
+
+    private static FileContent File(string fileId, string name, string? scope = null)
+        => new() { Name = name, FileId = fileId, Scope = scope };
 
     private static List<ChatMessage> Reply(params AIContent[] contents)
         => [new ChatMessage(ChatRole.Assistant, [new TextContent("see sandbox:/mnt/data/x"), .. contents])];

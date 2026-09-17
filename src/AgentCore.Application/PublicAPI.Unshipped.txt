@@ -2208,17 +2208,15 @@ static AgentCore.Application.Blobs.BlobLink.Lifetime.get -> System.TimeSpan
 static AgentCore.Application.Blobs.BlobLink.DispositionOf(string! mediaType, string! name) -> string!
 AgentCore.Application.Ports.IBlobStore.LinkAsync(AgentCore.Application.Blobs.BlobRef! blob, System.TimeSpan lifetime, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Uri?>
 AgentCore.Application.Ports.IBlobStore.StatAsync(string! ownerId, string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Blobs.BlobRef?>
-AgentCore.Application.Blobs.SandboxFiles
-static AgentCore.Application.Blobs.SandboxFiles.NamesIn(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.AIContent!>! contents) -> System.Collections.Generic.IReadOnlyList<string!>!
-AgentCore.Application.Blobs.SandboxFileLink
-AgentCore.Application.Blobs.SandboxFileLink.<Clone>$() -> AgentCore.Application.Blobs.SandboxFileLink!
-AgentCore.Application.Blobs.SandboxFileLink.Blob.get -> AgentCore.Application.Blobs.BlobRef!
-AgentCore.Application.Blobs.SandboxFileLink.Blob.init -> void
-AgentCore.Application.Blobs.SandboxFileLink.Deconstruct(out AgentCore.Application.Blobs.BlobRef! Blob, out System.Uri? Url) -> void
-AgentCore.Application.Blobs.SandboxFileLink.Equals(AgentCore.Application.Blobs.SandboxFileLink? other) -> bool
-AgentCore.Application.Blobs.SandboxFileLink.SandboxFileLink(AgentCore.Application.Blobs.BlobRef! Blob, System.Uri? Url) -> void
-AgentCore.Application.Blobs.SandboxFileLink.Url.get -> System.Uri?
-AgentCore.Application.Blobs.SandboxFileLink.Url.init -> void
+AgentCore.Application.Blobs.FileLink
+AgentCore.Application.Blobs.FileLink.<Clone>$() -> AgentCore.Application.Blobs.FileLink!
+AgentCore.Application.Blobs.FileLink.Blob.get -> AgentCore.Application.Blobs.BlobRef!
+AgentCore.Application.Blobs.FileLink.Blob.init -> void
+AgentCore.Application.Blobs.FileLink.Deconstruct(out AgentCore.Application.Blobs.BlobRef! Blob, out System.Uri? Url) -> void
+AgentCore.Application.Blobs.FileLink.Equals(AgentCore.Application.Blobs.FileLink? other) -> bool
+AgentCore.Application.Blobs.FileLink.FileLink(AgentCore.Application.Blobs.BlobRef! Blob, System.Uri? Url) -> void
+AgentCore.Application.Blobs.FileLink.Url.get -> System.Uri?
+AgentCore.Application.Blobs.FileLink.Url.init -> void
 AgentCore.Application.Calls.CallRepository
 AgentCore.Application.Calls.CallRepository.AppendAsync(string! callId, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.CallMessageDraft!>! messages, AgentCore.Application.Calls.CallSessionState? state = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.CallMessage!>!>
 AgentCore.Application.Calls.CallRepository.AppendMessageAsync(string! callId, Microsoft.Extensions.AI.ChatMessage! message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Transcript.CallMessage!>
@@ -2232,7 +2230,7 @@ AgentCore.Application.Calls.CallRepository.EraseAsync(string! callId, System.Thr
 AgentCore.Application.Calls.CallRepository.GetAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Calls.CallRecord?>
 AgentCore.Application.Calls.CallRepository.GetContinuationAsync(string! continuationId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Text.Json.JsonElement?>
 AgentCore.Application.Calls.CallRepository.KeepsFiles.get -> bool
-AgentCore.Application.Calls.CallRepository.LinkFilesAsync(string! callId, System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<AgentCore.Application.Blobs.SandboxFileLink!>!>!
+AgentCore.Application.Calls.CallRepository.LinkFilesAsync(string! callId, System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<AgentCore.Application.Blobs.FileLink!>!>!
 AgentCore.Application.Calls.CallRepository.ListAsync(string! principalKey, string? after, int limit, AgentCore.Application.Calls.CallStatus? status = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Calls.CallPage!>
 AgentCore.Application.Calls.CallRepository.ReadAsync(string! callId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.CallMessage!>!>
 AgentCore.Application.Calls.CallRepository.RenameAsync(string! callId, string! title, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
@@ -2243,28 +2241,23 @@ AgentCore.Application.Calls.CallRepository.SetExternalIdAsync(string! callId, st
 AgentCore.Application.Calls.CallRepository.SetStatusAsync(string! callId, AgentCore.Application.Calls.CallStatus status, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Calls.CallRepository.SweepAsync(System.TimeSpan retention, int batchSize = 500, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<int>
 AgentCore.Application.Calls.CallRepository.TruncateAsync(string! callId, int fromOrdinal, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<int>
-override AgentCore.Application.Blobs.SandboxFileLink.Equals(object? obj) -> bool
-override AgentCore.Application.Blobs.SandboxFileLink.GetHashCode() -> int
-override AgentCore.Application.Blobs.SandboxFileLink.ToString() -> string!
-static AgentCore.Application.Blobs.SandboxFileLink.operator ==(AgentCore.Application.Blobs.SandboxFileLink? left, AgentCore.Application.Blobs.SandboxFileLink? right) -> bool
-static AgentCore.Application.Blobs.SandboxFileLink.operator !=(AgentCore.Application.Blobs.SandboxFileLink? left, AgentCore.Application.Blobs.SandboxFileLink? right) -> bool
+override AgentCore.Application.Blobs.FileLink.Equals(object? obj) -> bool
+override AgentCore.Application.Blobs.FileLink.GetHashCode() -> int
+override AgentCore.Application.Blobs.FileLink.ToString() -> string!
+static AgentCore.Application.Blobs.FileLink.operator ==(AgentCore.Application.Blobs.FileLink? left, AgentCore.Application.Blobs.FileLink? right) -> bool
+static AgentCore.Application.Blobs.FileLink.operator !=(AgentCore.Application.Blobs.FileLink? left, AgentCore.Application.Blobs.FileLink? right) -> bool
 AgentCore.Application.Calls.CallRepository.Store.get -> AgentCore.Application.Ports.ICallStore!
-AgentCore.Application.Blobs.SandboxFileFacts
-AgentCore.Application.Blobs.SandboxFileFacts.<Clone>$() -> AgentCore.Application.Blobs.SandboxFileFacts!
-AgentCore.Application.Blobs.SandboxFileFacts.Deconstruct(out string! Name, out string! MediaType, out long Length) -> void
-AgentCore.Application.Blobs.SandboxFileFacts.Equals(AgentCore.Application.Blobs.SandboxFileFacts? other) -> bool
-AgentCore.Application.Blobs.SandboxFileFacts.Length.get -> long
-AgentCore.Application.Blobs.SandboxFileFacts.Length.init -> void
-AgentCore.Application.Blobs.SandboxFileFacts.MediaType.get -> string!
-AgentCore.Application.Blobs.SandboxFileFacts.MediaType.init -> void
-AgentCore.Application.Blobs.SandboxFileFacts.Name.get -> string!
-AgentCore.Application.Blobs.SandboxFileFacts.Name.init -> void
-AgentCore.Application.Blobs.SandboxFileFacts.SandboxFileFacts(string! Name, string! MediaType, long Length) -> void
-override AgentCore.Application.Blobs.SandboxFileFacts.Equals(object? obj) -> bool
-override AgentCore.Application.Blobs.SandboxFileFacts.GetHashCode() -> int
-override AgentCore.Application.Blobs.SandboxFileFacts.ToString() -> string!
-static AgentCore.Application.Blobs.SandboxFileFacts.operator ==(AgentCore.Application.Blobs.SandboxFileFacts? left, AgentCore.Application.Blobs.SandboxFileFacts? right) -> bool
-static AgentCore.Application.Blobs.SandboxFileFacts.operator !=(AgentCore.Application.Blobs.SandboxFileFacts? left, AgentCore.Application.Blobs.SandboxFileFacts? right) -> bool
-static AgentCore.Application.Blobs.SandboxFiles.KeptIn(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.AIContent!>! contents) -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Blobs.SandboxFileFacts!>!
-static AgentCore.Application.Blobs.SandboxFiles.MarkKept(Microsoft.Extensions.AI.HostedFileContent! file, AgentCore.Application.Blobs.BlobRef! blob) -> void
-static AgentCore.Application.Blobs.SandboxFiles.MarkRefused(Microsoft.Extensions.AI.HostedFileContent! file) -> void
+AgentCore.Application.Transcript.FileContent
+AgentCore.Application.Transcript.FileContent.FileId.get -> string!
+AgentCore.Application.Transcript.FileContent.FileId.set -> void
+AgentCore.Application.Transcript.FileContent.Kept.get -> bool
+AgentCore.Application.Transcript.FileContent.Kept.set -> void
+AgentCore.Application.Transcript.FileContent.Length.get -> long
+AgentCore.Application.Transcript.FileContent.Length.set -> void
+AgentCore.Application.Transcript.FileContent.MediaType.get -> string!
+AgentCore.Application.Transcript.FileContent.MediaType.set -> void
+AgentCore.Application.Transcript.FileContent.Name.get -> string!
+AgentCore.Application.Transcript.FileContent.Name.set -> void
+AgentCore.Application.Transcript.FileContent.FileContent() -> void
+AgentCore.Application.Transcript.FileContent.Scope.get -> string?
+AgentCore.Application.Transcript.FileContent.Scope.set -> void
