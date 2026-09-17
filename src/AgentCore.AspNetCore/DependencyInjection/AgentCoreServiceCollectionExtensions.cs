@@ -46,6 +46,7 @@ public static class AgentCoreServiceCollectionExtensions
         services.AddSingleton(Boot(boot => boot.Guards));
         services.AddSingleton(Boot(boot => boot.Tools));
         services.AddSingleton(Boot(boot => boot.Calls));
+        services.AddSingleton<ICallStore>(provider => provider.GetRequiredService<CallRepository>());
         services.AddSingleton(Boot(boot => boot.Entries));
         services.AddSingleton<ICallSessionRegistry>(provider => provider.GetRequiredService<EntryRegistry>());
         services.AddSingleton(Boot(boot => boot.AuditQueue));

@@ -78,6 +78,55 @@ public sealed class S3BlobStore : IBlobStore, IDisposable
     }
 
     /// <inheritdoc />
+    public async ValueTask<BlobRef?> StatAsync(
+        string ownerId,
+        string name,
+        CancellationToken cancellationToken = default)
+    {
+        var key = KeyOf(ownerId, name);
+
+        GetObjectMetadataResponse head;
+
+        try
+        {
+            head = await _client.GetObjectMetadataAsync(_bucket, key, cancellationToken).ConfigureAwait(false);
+        }
+        catch (AmazonS3Exception e) when (e.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        return new BlobRef(ownerId, name, head.Headers.ContentType, head.ContentLength);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// A presigned GET. Only <c>host</c> is signed: a browser sends no other header the bucket
+    /// could check. The media type and disposition ride as response overrides, which the
+    /// signature covers, so the link cannot be bent into serving the bytes another way.
+    /// </remarks>
+    public ValueTask<Uri?> LinkAsync(BlobRef blob, TimeSpan lifetime, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(blob);
+
+        GetPreSignedUrlRequest request = new()
+        {
+            BucketName = _bucket,
+            Key = KeyOf(blob.OwnerId, blob.Name),
+            Verb = HttpVerb.GET,
+            Protocol = Protocol.HTTPS,
+            Expires = DateTime.UtcNow.Add(lifetime),
+            ResponseHeaderOverrides =
+            {
+                ContentType = blob.MediaType,
+                ContentDisposition = BlobLink.DispositionOf(blob.MediaType, blob.Name),
+            },
+        };
+
+        return new(new Uri(_client.GetPreSignedURL(request)));
+    }
+
+    /// <inheritdoc />
     public async ValueTask DeleteByOwnerAsync(string ownerId, CancellationToken cancellationToken = default)
     {
         var prefix = OwnerPrefix(ownerId);

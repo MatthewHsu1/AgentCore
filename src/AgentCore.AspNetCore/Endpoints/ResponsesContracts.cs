@@ -205,6 +205,22 @@ internal sealed record SourcePayload
     public required string Origin { get; init; }
 }
 
+/// <summary>One file the sandbox wrote and the store kept, as the browser reads it.</summary>
+internal sealed record FilePayload
+{
+    /// <summary>Gets the file name, as the model wrote it under <c>/mnt/data</c>.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the IANA media type, such as <c>image/png</c>.</summary>
+    public required string MediaType { get; init; }
+
+    /// <summary>Gets how many bytes it holds.</summary>
+    public required long Length { get; init; }
+
+    /// <summary>Gets the link to fetch it from, or <see langword="null"/> when the store has no web door.</summary>
+    public string? Url { get; init; }
+}
+
 /// <summary>One thing a stream asks the browser to draw.</summary>
 internal sealed record RenderedPayload
 {

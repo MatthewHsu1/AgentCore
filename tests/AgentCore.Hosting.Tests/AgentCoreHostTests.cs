@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AgentCore.Application.Audit;
 using AgentCore.Application.Audit.Memory;
+using AgentCore.Application.Calls;
 using AgentCore.Application.Calls.Memory;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
@@ -126,8 +127,8 @@ public sealed class AgentCoreHostTests
         using var host = await StartAsync();
 
         Assert.IsType<InMemoryAuditSink>(host.Services.GetRequiredService<QueuedAuditSink>().Store);
-        Assert.IsType<InMemoryCallStore>(host.Services.GetRequiredService<ICallStore>());
-        Assert.IsType<InMemoryCallStore>(host.Services.GetRequiredService<ICallStore>());
+        Assert.IsType<InMemoryCallStore>(host.Services.GetRequiredService<CallRepository>().Store);
+        Assert.IsType<InMemoryCallStore>(host.Services.GetRequiredService<CallRepository>().Store);
     }
 
     [Fact]
@@ -150,7 +151,7 @@ public sealed class AgentCoreHostTests
             options => options.UseCallStores(new FakeCallStoreAdapter()),
             Calls);
 
-        Assert.IsType<InMemoryCallStore>(host.Services.GetRequiredService<ICallStore>());
+        Assert.IsType<InMemoryCallStore>(host.Services.GetRequiredService<CallRepository>().Store);
     }
 
     // ---------------------------------------------------------------------------------------------

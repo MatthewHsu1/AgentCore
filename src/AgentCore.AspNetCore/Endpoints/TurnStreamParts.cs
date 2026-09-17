@@ -136,3 +136,6 @@ internal sealed record TurnStreamTool(ToolPayload Payload) : TurnStreamPart;
 
 /// <summary>One tool call waiting on the caller, as the browser reads it.</summary>
 internal sealed record TurnStreamApproval(ApprovalPayload Payload) : TurnStreamPart;
+
+/// <summary>One file the turn produced, as the browser reads it.</summary>
+internal sealed record TurnStreamFile(FilePayload Payload) : TurnStreamPart;

@@ -125,6 +125,51 @@ public sealed class S3BlobStoreTests : IAsyncLifetime
     }
 
     [S3Fact]
+    public async Task StatAsync_StoredBlob_ReturnsItsFactsWithoutTheBytes()
+    {
+        // Arrange
+        var bytes = Encoding.UTF8.GetBytes("a,b\n1,2\n");
+        var token = TestContext.Current.CancellationToken;
+        await Store.PutAsync(new BlobWrite(_owner, "rows.csv", "text/csv", new MemoryStream(bytes), bytes.Length), token);
+
+        // Act
+        var stat = await Store.StatAsync(_owner, "rows.csv", token);
+
+        // Assert
+        Assert.Equal(new BlobRef(_owner, "rows.csv", "text/csv", bytes.Length), stat);
+    }
+
+    [S3Fact]
+    public async Task StatAsync_UnknownName_ReturnsNull()
+    {
+        // Act
+        var stat = await Store.StatAsync(_owner, "never.png", TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(stat);
+    }
+
+    [S3Fact]
+    public async Task LinkAsync_StoredBlob_IsFetchableWithNoCredential()
+    {
+        // Arrange
+        var bytes = new byte[] { 0x89, 0x50, 0x4E, 0x47 };
+        var token = TestContext.Current.CancellationToken;
+        var blob = await Store.PutAsync(new BlobWrite(_owner, "chart.png", "image/png", new MemoryStream(bytes), bytes.Length), token);
+
+        // Act
+        var url = await Store.LinkAsync(blob, TimeSpan.FromMinutes(1), token);
+        using HttpClient anonymous = new();
+        using var fetched = await anonymous.GetAsync(url, token);
+
+        // Assert
+        Assert.Equal(System.Net.HttpStatusCode.OK, fetched.StatusCode);
+        Assert.Equal("image/png", fetched.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("inline", fetched.Content.Headers.ContentDisposition?.DispositionType);
+        Assert.Equal(bytes, await fetched.Content.ReadAsByteArrayAsync(token));
+    }
+
+    [S3Fact]
     public async Task DeleteByOwnerAsync_NothingStored_DoesNotThrow()
     {
         await Store.DeleteByOwnerAsync(_owner, TestContext.Current.CancellationToken);

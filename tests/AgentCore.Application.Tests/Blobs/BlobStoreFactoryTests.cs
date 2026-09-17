@@ -119,6 +119,12 @@ public sealed class BlobStoreFactoryTests
         public ValueTask<BlobRead?> OpenReadAsync(string ownerId, string name, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
+        public ValueTask<BlobRef?> StatAsync(string ownerId, string name, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public ValueTask<Uri?> LinkAsync(BlobRef blob, TimeSpan lifetime, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
         public ValueTask DeleteByOwnerAsync(string ownerId, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
     }

@@ -1340,7 +1340,7 @@ public sealed class AddAgentCoreTests
         // The turn loop writes the words of every call whatever a document says, so this seam has a
         // working default rather than a null, and a first run needs no database.
         Assert.NotNull(provider.GetService<ICallStore>());
-        Assert.IsType<InMemoryCallStore>(provider.GetRequiredService<ICallStore>());
+        Assert.IsType<InMemoryCallStore>(provider.GetRequiredService<CallRepository>().Store);
     }
 
     [Fact]
@@ -1357,7 +1357,7 @@ public sealed class AddAgentCoreTests
 
         // The host lists its vendors once and providers.calls.kind picks one. Nothing but the
         // document decides where the words of a call land.
-        Assert.Same(store, provider.GetRequiredService<ICallStore>());
+        Assert.Same(store, provider.GetRequiredService<CallRepository>().Store);
         Assert.Equal(["user", "assistant"], store.Roles);
     }
 

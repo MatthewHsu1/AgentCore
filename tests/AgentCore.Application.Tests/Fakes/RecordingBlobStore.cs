@@ -24,6 +24,15 @@ internal sealed class RecordingBlobStore : IBlobStore
             ? new BlobRead(blob.MediaType, blob.Bytes.Length, new MemoryStream(blob.Bytes))
             : null);
 
+    public ValueTask<BlobRef?> StatAsync(string ownerId, string name, CancellationToken cancellationToken = default)
+        => ValueTask.FromResult(_blobs.TryGetValue((ownerId, name), out var blob)
+            ? new BlobRef(ownerId, name, blob.MediaType, blob.Bytes.Length)
+            : null);
+
+    /// <summary>A recognisable fake link, so a test can see what was linked and for how long.</summary>
+    public ValueTask<Uri?> LinkAsync(BlobRef blob, TimeSpan lifetime, CancellationToken cancellationToken = default)
+        => ValueTask.FromResult<Uri?>(new Uri($"https://blobs.test/{blob.OwnerId}/{blob.Name}?ttl={(int)lifetime.TotalSeconds}"));
+
     public ValueTask DeleteByOwnerAsync(string ownerId, CancellationToken cancellationToken = default)
     {
         foreach (var key in _blobs.Keys.Where(key => key.Owner == ownerId).ToList())

@@ -1,4 +1,5 @@
 using AgentCore.Application.Audit;
+using AgentCore.Application.Calls;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
@@ -75,7 +76,7 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
     internal ToolRegistry Tools => Started.Tools;
 
     /// <summary>Gets the backing every call's row and every word of it is kept in.</summary>
-    internal ICallStore Calls => Started.Calls;
+    internal CallRepository Calls => Started.Calls;
 
     /// <summary>Gets the registry the turn loop reads, and the offline golden set alike.</summary>
     internal EvaluatorRegistry Evaluators => Started.Evaluators;
@@ -216,13 +217,15 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
 
         ConfigurationValidator.ValidateSkillToolNames(configuration);
 
-        var calls = Track(await CallStartup
+        var store = Track(await CallStartup
             .OpenAsync(configuration, _options, _loggers, cancellationToken)
             .ConfigureAwait(false));
 
         var blobs = Track(await BlobStartup
             .OpenAsync(configuration, _options, cancellationToken)
             .ConfigureAwait(false));
+
+        CallRepository calls = new(store, blobs);
 
         var evaluators = await EvaluationStartup
             .CreateRegistryAsync(configuration, _options, cancellationToken)
@@ -364,7 +367,7 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
         ResolvedSecrets Secrets,
         ITelemetrySession? Telemetry,
         ToolRegistry Tools,
-        ICallStore Calls,
+        CallRepository Calls,
         IBlobStore? Blobs,
         EvaluatorRegistry Evaluators,
         CompiledGraph Graph,

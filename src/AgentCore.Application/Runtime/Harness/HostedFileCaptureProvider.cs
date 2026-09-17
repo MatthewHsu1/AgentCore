@@ -13,19 +13,6 @@ namespace AgentCore.Application.Runtime.Harness;
 /// <summary>
 /// Copies every file the vendor's sandbox wrote during a run into the call's blob store.
 /// </summary>
-/// <remarks>
-/// <para>
-/// The model takes no action. It writes a file under <c>/mnt/data</c> and links it as
-/// <c>sandbox:/mnt/data/&lt;name&gt;</c>, as it does unprompted. After the run this provider reads
-/// each <see cref="HostedFileContent"/> the vendor surfaced, downloads it, and stores it under
-/// <c>(callId, name)</c>. The host rewrites the link later; the model never learns a route.
-/// </para>
-/// <para>
-/// A file that cannot be kept is logged, never thrown: the reply still goes out, with a link the
-/// host cannot resolve. Capture runs once per run, at its end. The sandbox container idles out
-/// after twenty minutes; a run that idles longer than that before it ends would lose the file.
-/// </para>
-/// </remarks>
 internal sealed class HostedFileCaptureProvider : AIContextProvider
 {
     private const string Instructions =
@@ -71,7 +58,7 @@ internal sealed class HostedFileCaptureProvider : AIContextProvider
 
         foreach (var message in context.ResponseMessages ?? [])
         {
-            foreach (var file in FilesIn(message))
+            foreach (var file in SandboxFiles.In(message.Contents))
             {
                 (found ??= []).Add(file);
             }
@@ -107,38 +94,14 @@ internal sealed class HostedFileCaptureProvider : AIContextProvider
             : null;
     }
 
-    /// <summary>Every sandbox file reference in one message: on the message, or inside an interpreter result.</summary>
-    private static IEnumerable<HostedFileContent> FilesIn(ChatMessage message)
-    {
-        foreach (var content in message.Contents)
-        {
-            switch (content)
-            {
-                case HostedFileContent file:
-                    yield return file;
-                    break;
-
-                case CodeInterpreterToolResultContent { Outputs: { } outputs }:
-                    foreach (var output in outputs)
-                    {
-                        if (output is HostedFileContent nested)
-                        {
-                            yield return nested;
-                        }
-                    }
-
-                    break;
-            }
-        }
-    }
-
     private async ValueTask KeepAsync(string callId, HostedFileContent file, CancellationToken cancellationToken)
     {
-        var name = file.Name ?? file.FileId;
+        var name = SandboxFiles.NameOf(file);
 
         if (!BlobName.IsSafe(name))
         {
             Log.SandboxFileRefused(_logger, callId, name, "the name is not a plain file name");
+            SandboxFiles.MarkRefused(file);
             return;
         }
 
@@ -156,6 +119,7 @@ internal sealed class HostedFileCaptureProvider : AIContextProvider
             if (_policy.WhyRefused(name, buffer.Length) is { } reason)
             {
                 Log.SandboxFileRefused(_logger, callId, name, reason);
+                SandboxFiles.MarkRefused(file);
                 return;
             }
 
@@ -163,13 +127,18 @@ internal sealed class HostedFileCaptureProvider : AIContextProvider
 
             var mediaType = download.MediaType ?? file.MediaType ?? "application/octet-stream";
 
-            await _blobs
+            var kept = await _blobs
                 .PutAsync(new BlobWrite(callId, name, mediaType, buffer, buffer.Length), cancellationToken)
                 .ConfigureAwait(false);
+
+            // The reply is committed to the transcript after this provider runs, so the stamp is
+            // what every later read links from. No read ever asks the store whether the file exists.
+            SandboxFiles.MarkKept(file, kept);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             Log.SandboxFileCaptureFailed(_logger, callId, name, exception);
+            SandboxFiles.MarkRefused(file);
         }
     }
 

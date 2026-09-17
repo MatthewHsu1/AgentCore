@@ -41,6 +41,39 @@ public sealed class HostedFileCaptureProviderTests
     }
 
     [Fact]
+    public async Task InvokedAsync_FileKept_StampsTheReferenceWithWhatWasStored()
+    {
+        // Arrange: the vendor's reference names no media type; the download does.
+        var files = new ScriptedHostedFileClient().Serve("cfile_1", Png, "image/png");
+        RecordingBlobStore blobs = new();
+        var (agent, session) = await AgentWithFiledTurn("call-7");
+        HostedFileContent reference = new("cfile_1") { Name = "chart.png" };
+
+        // Act
+        await Provider(files, blobs).InvokedAsync(new AIContextProvider.InvokedContext(agent, session, [], Reply(reference)), TestContext.Current.CancellationToken);
+
+        // Assert: a later read links from the stamp alone.
+        var facts = Assert.Single(SandboxFiles.KeptIn([reference]));
+        Assert.Equal(new SandboxFileFacts("chart.png", "image/png", Png.Length), facts);
+    }
+
+    [Fact]
+    public async Task InvokedAsync_FileRefused_StampsTheReferenceAsNotKept()
+    {
+        // Arrange: a 100-byte cap, a 300-byte file.
+        var files = new ScriptedHostedFileClient().Serve("cfile_6", new byte[300], "image/png");
+        var (agent, session) = await AgentWithFiledTurn("call-7");
+        HostedFileContent reference = new("cfile_6") { Name = "big.png" };
+        var provider = new HostedFileCaptureProvider(files, new RecordingBlobStore(), new BlobPolicy(100, ["png"]), NullLogger.Instance);
+
+        // Act
+        await provider.InvokedAsync(new AIContextProvider.InvokedContext(agent, session, [], Reply(reference)), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(SandboxFiles.KeptIn([reference]));
+    }
+
+    [Fact]
     public async Task InvokedAsync_FileInsideAnInterpreterResult_IsStoredToo()
     {
         // Arrange

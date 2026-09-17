@@ -65,7 +65,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
         }
         catch (JsonException exception)
         {
-            await WriteErrorAsync(
+            await ResponsesRequestReader.WriteErrorAsync(
                 http,
                 StatusCodes.Status400BadRequest,
                 "the request body is not well-formed JSON: " + exception.Message,
@@ -96,7 +96,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
             // call, so read it off the body and run the answer alone.
             if (agentcore?.Approval is null)
             {
-                await WriteErrorAsync(
+                await ResponsesRequestReader.WriteErrorAsync(
                     http,
                     StatusCodes.Status400BadRequest,
                     "the request is not a Responses request: " + exception.Message,
@@ -108,7 +108,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
 
             runRequest = null;
             messages = [];
-            conversationId = ReadConversationId(body);
+            conversationId = ResponsesRequestReader.ReadConversationId(body);
         }
 
         AgentCoreAgent agent;
@@ -118,7 +118,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
         }
         catch (InvalidOperationException failure)
         {
-            await WriteErrorAsync(
+            await ResponsesRequestReader.WriteErrorAsync(
                 http,
                 StatusCodes.Status503ServiceUnavailable,
                 failure.Message,
@@ -137,7 +137,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
         // the same precedence off the body.
         var key = runRequest is not null
             ? OpenAIResponses.GetSessionStoreId(runRequest)
-            : ReadContinuationId(body);
+            : ResponsesRequestReader.ReadContinuationId(body);
 
         if (string.IsNullOrWhiteSpace(key))
         {
@@ -163,7 +163,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
         {
             if (agentcore?.Approval is not null)
             {
-                await WriteErrorAsync(
+                await ResponsesRequestReader.WriteErrorAsync(
                     http,
                     StatusCodes.Status400BadRequest,
                     "an approval answer names the call it resumes. Send it with the conversation "
@@ -174,7 +174,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
                 return;
             }
 
-            conversationId = NewConversationId();
+            conversationId = ResponsesRequestReader.NewConversationId();
             session = await agent.CreateSessionAsync(conversationId, cancellationToken).ConfigureAwait(false);
         }
         else if (namesNewCall)
@@ -193,7 +193,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
             catch (InvalidOperationException failure)
             {
                 // A key minted by another entry is unknown to this one, never a cross-entry read.
-                await WriteErrorAsync(
+                await ResponsesRequestReader.WriteErrorAsync(
                     http,
                     StatusCodes.Status404NotFound,
                     failure.Message,
@@ -208,7 +208,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
             // Either an unknown response id — a turn no answer ever carried — or an unknown
             // conversation beside an approval-only body the parse refused. A conversation with words
             // reaches the namesNewCall branch; an approval never starts a call.
-            await WriteErrorAsync(
+            await ResponsesRequestReader.WriteErrorAsync(
                 http,
                 StatusCodes.Status404NotFound,
                 $"no call opens under '{key}'. Send the request with neither a conversation nor a "
@@ -229,9 +229,9 @@ public static class ResponsesEndpointRouteBuilderExtensions
         ChatMessage input;
         if (agentcore?.Approval is { } approval)
         {
-            if (LastUserText(messages) is { Length: > 0 })
+            if (ResponsesRequestReader.LastUserText(messages) is { Length: > 0 })
             {
-                await WriteErrorAsync(
+                await ResponsesRequestReader.WriteErrorAsync(
                     http,
                     StatusCodes.Status400BadRequest,
                     "the request carries both a user message and an approval answer. One turn carries "
@@ -246,7 +246,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
             // and the queue the suspending turn filed — is still closed. This opens it first.
             if (await call.TryCreateApprovalAnswerAsync(approval.RequestId, approval.Approved, cancellationToken).ConfigureAwait(false) is not { } answer)
             {
-                await WriteErrorAsync(
+                await ResponsesRequestReader.WriteErrorAsync(
                     http,
                     StatusCodes.Status409Conflict,
                     $"the call queues no approval under id '{approval.RequestId}'. It was "
@@ -259,9 +259,9 @@ public static class ResponsesEndpointRouteBuilderExtensions
 
             input = answer;
         }
-        else if (LastUserMessage(messages) is not { } user)
+        else if (ResponsesRequestReader.LastUserMessage(messages) is not { } user)
         {
-            await WriteErrorAsync(
+            await ResponsesRequestReader.WriteErrorAsync(
                 http,
                 StatusCodes.Status400BadRequest,
                 "the request carries no user message with text, so there is no turn to run.",
@@ -296,7 +296,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
             {
                 // The dialect is opt-in by the member only our clients send: an OpenAI SDK
                 // never carries agentcore, so its stream stays the framework's pure shapes.
-                await StreamTurnAsync(http, agent, sessions, session, call, input, origin, responseId, conversationId, agentcore is not null, cancellationToken)
+                await ResponsesTurnStream.WriteAsync(http, agent, sessions, session, call, input, origin, responseId, conversationId, agentcore is not null, cancellationToken)
                     .ConfigureAwait(false);
             }
             else
@@ -309,7 +309,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
         {
             // The turn loop refuses a turn on a finished call, and refuses a second turn while one
             // runs. Both are a caller mistake and neither is a defect of this host.
-            await WriteErrorAsync(
+            await ResponsesRequestReader.WriteErrorAsync(
                 http,
                 StatusCodes.Status409Conflict,
                 exception.Message,
@@ -369,106 +369,6 @@ public static class ResponsesEndpointRouteBuilderExtensions
             .ConfigureAwait(false);
     }
     
-    /// <summary>Runs one turn and writes one Responses event for each update, filed under its ids.</summary>
-    /// <remarks>
-    /// The session is filed after the enumeration ends, because the turn commits —
-    /// and the session only holds the turn — once the last update has left it.
-    /// The framework's frames carry text alone; when the request spoke the dialect,
-    /// each update's browser parts ride beside them as <c>agentcore_*</c> members, so drawings,
-    /// citations, tool halves, and approval asks stream.
-    /// </remarks>
-    private static async Task StreamTurnAsync(
-        HttpContext http,
-        AgentCoreAgent agent,
-        AgentCoreAgentSessionStore sessions,
-        AgentSession session,
-        CallSession call,
-        ChatMessage input,
-        CallTurnOrigin? origin,
-        string responseId,
-        string? conversationId,
-        bool dialect,
-        CancellationToken cancellationToken)
-    {
-        http.Response.StatusCode = StatusCodes.Status200OK;
-        http.Response.ContentType = "text/event-stream";
-        http.Response.Headers.CacheControl = "no-cache";
-
-        // The headers leave before the turn ends, so this one names the stage the turn speaks in.
-        http.Response.Headers[StageHeaderName] = call.Stage;
-
-        // One turn's worth of ids: the pairing dies with the stream.
-        ToolCallNames toolNames = new();
-
-        var updates = StreamAgentUpdatesAsync(http, agent, call, input, origin, dialect, toolNames, cancellationToken);
-        await foreach (var frame in OpenAIResponses
-            .WriteResponseStreamAsync(updates, responseId, conversationId, cancellationToken)
-            .ConfigureAwait(false))
-        {
-            await http.Response.WriteAsync(frame, cancellationToken).ConfigureAwait(false);
-
-            // Without this the reply arrives in one piece, which defeats the whole streaming path.
-            await http.Response.Body.FlushAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        await SaveAsync(sessions, agent, session, responseId, conversationId, cancellationToken)
-            .ConfigureAwait(false);
-    }
-
-    /// <summary>Runs one streaming turn on the call, wrapping each update with the agent's id.</summary>
-    /// <remarks>
-    /// The framework converter sees every update untouched: it ignores the contents it
-    /// knows nothing of, so dialect lines duplicate nothing and pure streams lose nothing.
-    /// </remarks>
-    private static async IAsyncEnumerable<AgentResponseUpdate> StreamAgentUpdatesAsync(
-        HttpContext http,
-        AgentCoreAgent agent,
-        CallSession call,
-        ChatMessage input,
-        CallTurnOrigin? origin,
-        bool dialect,
-        ToolCallNames toolNames,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
-    {
-        await foreach (var update in call
-            .RunTurnMessageStreamingAtOriginAsync(input, origin, cancellationToken)
-            .ConfigureAwait(false))
-        {
-            if (dialect)
-            {
-                foreach (var part in TurnStreamParts.From(update, toolNames))
-                {
-                    await WritePartLineAsync(http, part, cancellationToken).ConfigureAwait(false);
-                }
-            }
-
-            yield return new AgentResponseUpdate(update) { AgentId = agent.Id };
-        }
-    }
-
-    /// <summary>Writes one dialect event: one <c>agentcore_*</c> member, bare.</summary>
-    private static async Task WritePartLineAsync(
-        HttpContext http, TurnStreamPart part, CancellationToken cancellationToken)
-    {
-        JsonObject line = part switch
-        {
-            TurnStreamRender render
-                => new JsonObject { ["agentcore_data"] = JsonSerializer.SerializeToNode(render.Payload, ResponsesJson.Options) },
-            TurnStreamSource source
-                => new JsonObject { ["agentcore_source"] = JsonSerializer.SerializeToNode(source.Payload, ResponsesJson.Options) },
-            TurnStreamTool tool
-                => new JsonObject { ["agentcore_tool"] = JsonSerializer.SerializeToNode(tool.Payload, ResponsesJson.Options) },
-            TurnStreamApproval approval
-                => new JsonObject { ["agentcore_approval"] = JsonSerializer.SerializeToNode(approval.Payload, ResponsesJson.Options) },
-            _ => throw new InvalidOperationException($"Unknown stream part: {part.GetType()}."),
-        };
-
-        await http.Response.WriteAsync("data: ", cancellationToken).ConfigureAwait(false);
-        await http.Response.WriteAsync(line.ToJsonString(), cancellationToken).ConfigureAwait(false);
-        await http.Response.WriteAsync("\n\n", cancellationToken).ConfigureAwait(false);
-        await http.Response.Body.FlushAsync(cancellationToken).ConfigureAwait(false);
-    }
-
     /// <summary>Files the session the turn just advanced, under every id that names it now.</summary>
     /// <remarks>
     /// A conversation id is stable across turns and a response id changes each one,
@@ -476,7 +376,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
     /// continue by either pointer. A chain turn without a conversation files under
     /// its new response id alone.
     /// </remarks>
-    private static async Task SaveAsync(
+    internal static async Task SaveAsync(
         AgentCoreAgentSessionStore sessions,
         AIAgent agent,
         AgentSession session,
@@ -491,87 +391,4 @@ public static class ResponsesEndpointRouteBuilderExtensions
 
         await sessions.SaveSessionAsync(agent, responseId, session, cancellationToken).ConfigureAwait(false);
     }
-
-    /// <summary>Reads the last user message that carries words, the session owning the rest.</summary>
-    private static ChatMessage? LastUserMessage(IReadOnlyList<ChatMessage> messages)
-    {
-        ChatMessage? picked = null;
-        foreach (var message in messages)
-        {
-            if (message.Role == ChatRole.User && message.Text is { Length: > 0 })
-            {
-                picked = message;
-            }
-        }
-
-        return picked;
-    }
-
-    /// <summary>Reads whether any user message of the run carries words.</summary>
-    private static string? LastUserText(IReadOnlyList<ChatMessage> messages)
-        => LastUserMessage(messages)?.Text;
-
-    /// <summary>Reads the conversation id off a body the protocol parse refused.</summary>
-    private static string? ReadConversationId(JsonElement body)
-    {
-        if (body.TryGetProperty("conversation", out var conversation))
-        {
-            if (conversation.ValueKind == JsonValueKind.String)
-            {
-                return conversation.GetString();
-            }
-
-            if (conversation.ValueKind == JsonValueKind.Object
-                && conversation.TryGetProperty("id", out var id)
-                && id.ValueKind == JsonValueKind.String)
-            {
-                return id.GetString();
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>Reads the continuation off a body the protocol parse refused.</summary>
-    private static string? ReadContinuationId(JsonElement body)
-    {
-        if (body.TryGetProperty("previous_response_id", out var response)
-            && response.ValueKind == JsonValueKind.String
-            && response.GetString() is { Length: > 0 } responseId)
-        {
-            return responseId;
-        }
-
-        return ReadConversationId(body);
-    }
-
-    /// <summary>Answers one failure in the shape an OpenAI client reads.</summary>
-    private static async Task WriteErrorAsync(
-        HttpContext http,
-        int status,
-        string message,
-        string type,
-        string code,
-        CancellationToken cancellationToken)
-    {
-        http.Response.StatusCode = status;
-
-        await http.Response.WriteAsJsonAsync(
-            new JsonObject
-            {
-                ["error"] = new JsonObject
-                {
-                    ["message"] = message,
-                    ["type"] = type,
-                    ["code"] = code,
-                    ["param"] = null,
-                },
-            },
-            cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <summary>Builds the id of one conversation.</summary>
-    /// <returns>The id, in the shape an OpenAI client already reads.</returns>
-    private static string NewConversationId()
-        => string.Create(CultureInfo.InvariantCulture, $"conv_{Guid.NewGuid():N}");
 }
