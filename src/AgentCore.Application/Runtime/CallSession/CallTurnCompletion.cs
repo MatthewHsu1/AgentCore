@@ -11,6 +11,7 @@ namespace AgentCore.Application.Runtime;
 internal sealed class CallTurnCompletion
 {
     private readonly CallSession _session;
+    
     private readonly CallTurnCommit _commit;
 
     internal CallTurnCompletion(CallSession session)
