@@ -22,6 +22,8 @@ internal sealed class CallTurnRunner
 
     private bool _hasScreen;
 
+    private TimeZoneInfo? _timeZone;
+
     internal CallTurnRunner(CallSession session)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -46,6 +48,11 @@ internal sealed class CallTurnRunner
     /// Gives this call the screen its tools draw on, or takes it away.
     /// </summary>
     internal void SetHasScreen(bool hasScreen) => _hasScreen = hasScreen;
+
+    /// <summary>
+    /// Tells this call which zone the person is in, so the clock line reads their date.
+    /// </summary>
+    internal void SetTimeZone(TimeZoneInfo zone) => _timeZone = zone;
 
     /// <summary>Runs one turn of the call against the session the call holds.</summary>
     /// <param name="userInput">What the caller said or answered.</param>
@@ -298,6 +305,7 @@ internal sealed class CallTurnRunner
             TurnIndex = turn.Index,
             Stage = turn.StageBefore,
             Instructions = turn.Reminder,
+            TimeZone = _timeZone,
             Workspace = _session.Workspace,
             Shells = _session.Shells,
             Knowledge = turn.Knowledge,

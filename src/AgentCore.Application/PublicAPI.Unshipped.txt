@@ -226,11 +226,11 @@ AgentCore.Application.Configuration.Compilation.ResolvedCompaction.Trigger.get -
 AgentCore.Application.Configuration.Compilation.ResolvedCompaction.Trigger.init -> void
 AgentCore.Application.Configuration.Compilation.ResolvedHarness
 AgentCore.Application.Configuration.Compilation.ResolvedHarness.<Clone>$() -> AgentCore.Application.Configuration.Compilation.ResolvedHarness!
-AgentCore.Application.Configuration.Compilation.ResolvedHarness.Deconstruct(out bool Todos, out bool Mode) -> void
+AgentCore.Application.Configuration.Compilation.ResolvedHarness.Deconstruct(out bool Todos, out bool Mode, out bool Clock, out bool BaseInstructions) -> void
 AgentCore.Application.Configuration.Compilation.ResolvedHarness.Equals(AgentCore.Application.Configuration.Compilation.ResolvedHarness? other) -> bool
 AgentCore.Application.Configuration.Compilation.ResolvedHarness.Mode.get -> bool
 AgentCore.Application.Configuration.Compilation.ResolvedHarness.Mode.init -> void
-AgentCore.Application.Configuration.Compilation.ResolvedHarness.ResolvedHarness(bool Todos, bool Mode) -> void
+AgentCore.Application.Configuration.Compilation.ResolvedHarness.ResolvedHarness(bool Todos, bool Mode, bool Clock, bool BaseInstructions) -> void
 AgentCore.Application.Configuration.Compilation.ResolvedHarness.Todos.get -> bool
 AgentCore.Application.Configuration.Compilation.ResolvedHarness.Todos.init -> void
 AgentCore.Application.Configuration.Compilation.ResolvedKnowledge
@@ -2261,3 +2261,21 @@ AgentCore.Application.Transcript.FileContent.Name.set -> void
 AgentCore.Application.Transcript.FileContent.FileContent() -> void
 AgentCore.Application.Transcript.FileContent.Scope.get -> string?
 AgentCore.Application.Transcript.FileContent.Scope.set -> void
+AgentCore.Application.Configuration.Compilation.ResolvedHarness.Clock.get -> bool
+AgentCore.Application.Configuration.Compilation.ResolvedHarness.Clock.init -> void
+AgentCore.Application.Configuration.Compilation.ResolvedHarness.BaseInstructions.get -> bool
+AgentCore.Application.Configuration.Compilation.ResolvedHarness.BaseInstructions.init -> void
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Clock.get -> System.TimeProvider?
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Clock.init -> void
+AgentCore.Application.Configuration.Schema.AgentDefaults.Clock.get -> bool?
+AgentCore.Application.Configuration.Schema.AgentDefaults.Clock.init -> void
+AgentCore.Application.Configuration.Schema.AgentDefaults.BaseInstructions.get -> bool?
+AgentCore.Application.Configuration.Schema.AgentDefaults.BaseInstructions.init -> void
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Clock.get -> bool?
+AgentCore.Application.Configuration.Schema.AgentConfiguration.Clock.init -> void
+AgentCore.Application.Configuration.Schema.AgentConfiguration.BaseInstructions.get -> bool?
+AgentCore.Application.Configuration.Schema.AgentConfiguration.BaseInstructions.init -> void
+static AgentCore.Application.Configuration.Compilation.AgentInstructions.Base.get -> string!
+AgentCore.Application.Runtime.Harness.CallerTimeZone
+static AgentCore.Application.Runtime.Harness.CallerTimeZone.Parse(string? id) -> System.TimeZoneInfo?
+static AgentCore.Application.Runtime.Harness.CallerTimeZone.Set(Microsoft.Agents.AI.AgentSession! session, System.TimeZoneInfo! zone) -> void

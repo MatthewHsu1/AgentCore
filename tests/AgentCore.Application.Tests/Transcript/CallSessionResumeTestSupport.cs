@@ -17,6 +17,8 @@ internal static class CallSessionResumeTestSupport
     internal const string OneAgentYaml = """
         apiVersion: agentcore/v1
         agents:
+          # These tests read the exact messages the model sees; the clock line would be one more.
+          defaults: { clock: false }
           items:
             - { id: only, instructions: "ok" }
         entries:

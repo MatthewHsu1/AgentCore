@@ -660,6 +660,14 @@
               "type": "boolean",
               "description": "Whether agents inherit the mode tools."
             },
+            "clock": {
+              "type": "boolean",
+              "description": "Whether agents are told the current date and time each turn. Defaults to true."
+            },
+            "baseInstructions": {
+              "type": "boolean",
+              "description": "Whether the framework's base instructions sit above instructions. Defaults to true."
+            },
             "approval": {
               "$ref": "#/$defs/approval",
               "description": "The standing approval rules every agent inherits."
@@ -732,6 +740,14 @@
         "mode": {
           "type": "boolean",
           "description": "The agent gets the mode tools (AgentModeProvider)."
+        },
+        "clock": {
+          "type": "boolean",
+          "description": "The agent is told the current date and time each turn (ClockContextProvider). Defaults to true."
+        },
+        "baseInstructions": {
+          "type": "boolean",
+          "description": "The framework's base instructions sit above this agent's own. Defaults to true."
         },
         "memory": {
           "$ref": "#/$defs/memory",

@@ -39,6 +39,26 @@ public sealed class BackgroundChildAgentTests
     }
 
     [Fact]
+    public async Task CreateSessionAsync_InsideAParentRunWithAZone_StampsTheZoneOnTheChild()
+    {
+        // Arrange
+        var token = TestContext.Current.CancellationToken;
+        BackgroundChildAgent child = new(new ChatClientAgent(new ScriptedChatClient("child")));
+        SessionCreatingProvider creating = new(child);
+        ChatClientAgent parent = new(new ScriptedChatClient("parent"), new ChatClientAgentOptions { AIContextProviders = [creating] });
+        var zone = TimeZoneInfo.CreateCustomTimeZone("Asia/Taipei", TimeSpan.FromHours(8), "Taipei", "Taipei");
+        var turn = new TurnInvocation { CallId = "call-9", TurnIndex = 0, Stage = "s", TimeZone = zone };
+
+        // Act
+        await parent.RunAsync("go", await parent.CreateSessionAsync(token), turn.RunOptions(), token);
+
+        // Assert
+        Assert.NotNull(creating.Created);
+        Assert.True(creating.Created.StateBag.TryGetValue<string>(CallerTimeZone.Key, out var stamped));
+        Assert.Equal("Asia/Taipei", stamped);
+    }
+
+    [Fact]
     public async Task CreateSessionAsync_OutsideAnyRun_StampsNothing()
     {
         // Arrange

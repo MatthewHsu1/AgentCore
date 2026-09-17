@@ -3,7 +3,8 @@ using Microsoft.Agents.AI;
 namespace AgentCore.Application.Runtime.Harness;
 
 /// <summary>
-/// Wraps one <c>background:</c> child so every session it gets knows which call started it.
+/// Wraps one <c>background:</c> child so every session it gets knows which call started it, and
+/// which zone the person on that call is in.
 /// </summary>
 /// <remarks>
 /// <c>BackgroundAgentsProvider</c> creates the child session inside the parent's tool call, before
@@ -21,9 +22,16 @@ internal sealed class BackgroundChildAgent(AIAgent inner) : DelegatingAIAgent(in
 
         var session = await InnerAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
 
-        if (TurnInvocation.From(parent?.RunOptions)?.CallId is { } callId)
+        var turn = TurnInvocation.From(parent?.RunOptions);
+
+        if (turn?.CallId is { } callId)
         {
             session.StateBag.SetValue(BlobOwnerKey.Value, callId);
+        }
+
+        if (turn?.TimeZone is { } zone)
+        {
+            CallerTimeZone.Stamp(session, zone);
         }
 
         return session;

@@ -11,7 +11,7 @@ namespace AgentCore.Application.Configuration.Compilation;
 
 /// <summary>
 /// The context providers behind one agent's harness switches (<c>todos:</c>, <c>mode:</c>,
-/// <c>memory:</c>, <c>files:</c>, <c>shell:</c>, <c>background:</c>), added into the provider list
+/// <c>clock:</c>, <c>memory:</c>, <c>files:</c>, <c>shell:</c>, <c>background:</c>), added into the provider list
 /// <see cref="AgentContextProviderCompiler"/> builds.
 /// </summary>
 internal static class AgentHarnessProviders
@@ -59,7 +59,7 @@ internal static class AgentHarnessProviders
 
 #pragma warning disable MAAI001 // BackgroundAgentsProvider is evaluation-only in Microsoft.Agents.AI 1.21.0.
 
-    /// <summary>Adds this agent's harness providers, in declaration order: todos, mode, memory, files, shell, background.</summary>
+    /// <summary>Adds this agent's harness providers, in declaration order: todos, mode, clock, memory, files, shell, background.</summary>
     /// <param name="providers">The provider list under construction.</param>
     /// <param name="defaults">The <c>agents.defaults</c> section, or <see langword="null"/>.</param>
     /// <param name="item">The agent being compiled.</param>
@@ -88,6 +88,11 @@ internal static class AgentHarnessProviders
         if (harness.Mode)
         {
             providers.Add(new AgentModeProvider());
+        }
+
+        if (harness.Clock)
+        {
+            providers.Add(new ClockContextProvider(context.Clock ?? TimeProvider.System));
         }
 
         if (item.Memory is { Store: AgentFileStoreKind.Workspace })

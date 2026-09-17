@@ -332,19 +332,40 @@ public sealed class CompileTableTests
 
         var composed = AgentInstructions.Compose(document.Agents!.Defaults, document.Agents.Items[0]);
 
-        Assert.Equal("the stable cached prefix" + AgentInstructions.Separator + "the stage delta", composed);
-        Assert.StartsWith("the stable cached prefix", composed, StringComparison.Ordinal);
+        Assert.Equal(
+            AgentInstructions.Base + AgentInstructions.Separator
+            + "the stable cached prefix" + AgentInstructions.Separator + "the stage delta",
+            composed);
+        Assert.StartsWith(AgentInstructions.Base, composed, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheBase_SitsAboveThePrefix_AndBaseInstructionsFalseDropsIt()
+    {
+        AgentDefaults defaults = new() { Instructions = "prefix" };
+        AgentConfiguration agent = new() { Id = "solo", Instructions = "delta" };
+
+        Assert.Equal(
+            AgentInstructions.Base + AgentInstructions.Separator + "prefix" + AgentInstructions.Separator + "delta",
+            AgentInstructions.Compose(defaults, agent));
+        Assert.Equal(
+            "prefix" + AgentInstructions.Separator + "delta",
+            AgentInstructions.Compose(defaults with { BaseInstructions = false }, agent));
+        Assert.Equal(
+            "prefix" + AgentInstructions.Separator + "delta",
+            AgentInstructions.Compose(defaults, agent with { BaseInstructions = false }));
+        Assert.Equal(AgentInstructions.Base, AgentInstructions.Compose(null, new AgentConfiguration { Id = "bare" }));
     }
 
     [Fact]
     public void AnAgentWithNoDelta_KeepsThePrefixAlone()
     {
-        AgentDefaults defaults = new() { Instructions = "prefix" };
+        AgentDefaults defaults = new() { Instructions = "prefix", BaseInstructions = false };
         AgentConfiguration agent = new() { Id = "solo" };
 
         Assert.Equal("prefix", AgentInstructions.Compose(defaults, agent));
-        Assert.Equal("delta", AgentInstructions.Compose(null, agent with { Instructions = "delta" }));
-        Assert.Null(AgentInstructions.Compose(null, agent));
+        Assert.Equal("delta", AgentInstructions.Compose(null, agent with { Instructions = "delta", BaseInstructions = false }));
+        Assert.Null(AgentInstructions.Compose(null, agent with { BaseInstructions = false }));
     }
 
     [Fact]
@@ -360,10 +381,11 @@ public sealed class CompileTableTests
         // Section 8.1 makes agents.defaults.instructions a cached prefix, and the compiler has one
         // build path for every agent. This asserts that path and not AgentInstructions.Compose: an
         // agent the compiler built without the prefix would defeat the cache for every later turn.
-        Assert.Equal(SharedPrefix + AgentInstructions.Separator + "the greeter delta", greeter.Instructions);
-        Assert.Equal(SharedPrefix + AgentInstructions.Separator + "the closer delta", closer.Instructions);
-        Assert.StartsWith(SharedPrefix, greeter.Instructions, StringComparison.Ordinal);
-        Assert.StartsWith(SharedPrefix, closer.Instructions, StringComparison.Ordinal);
+        var above = AgentInstructions.Base + AgentInstructions.Separator + SharedPrefix + AgentInstructions.Separator;
+        Assert.Equal(above + "the greeter delta", greeter.Instructions);
+        Assert.Equal(above + "the closer delta", closer.Instructions);
+        Assert.StartsWith(AgentInstructions.Base, greeter.Instructions, StringComparison.Ordinal);
+        Assert.StartsWith(AgentInstructions.Base, closer.Instructions, StringComparison.Ordinal);
     }
 
     [Fact]

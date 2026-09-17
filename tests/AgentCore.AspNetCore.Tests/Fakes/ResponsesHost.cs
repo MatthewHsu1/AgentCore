@@ -73,12 +73,21 @@ internal sealed class ResponsesHost : IAsyncDisposable
 
     /// <summary>Sends one Responses request body.</summary>
     /// <param name="json">The request body.</param>
+    /// <param name="headers">Request headers to send beside the body, or none.</param>
     /// <returns>The answer.</returns>
-    public async Task<HttpResponseMessage> PostAsync(string json)
+    public async Task<HttpResponseMessage> PostAsync(string json, IReadOnlyDictionary<string, string>? headers = null)
     {
-        using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        return await Client.PostAsync(
-            ResponsesEndpointRouteBuilderExtensions.DefaultPattern, content, TestContext.Current.CancellationToken);
+        using HttpRequestMessage request = new(HttpMethod.Post, ResponsesEndpointRouteBuilderExtensions.DefaultPattern)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json"),
+        };
+
+        foreach (var (name, value) in headers ?? new Dictionary<string, string>())
+        {
+            request.Headers.TryAddWithoutValidation(name, value);
+        }
+
+        return await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, TestContext.Current.CancellationToken);
     }
 
     /// <summary>Reads every server-sent event of one answer.</summary>

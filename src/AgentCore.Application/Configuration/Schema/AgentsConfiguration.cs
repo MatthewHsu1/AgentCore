@@ -57,6 +57,12 @@ public sealed record AgentDefaults
     /// <summary>Gets whether agents inherit the mode tools, or <see langword="null"/> to name nothing.</summary>
     public bool? Mode { get; init; }
 
+    /// <summary>Gets whether agents are told the current date and time each turn, or <see langword="null"/> to name nothing.</summary>
+    public bool? Clock { get; init; }
+
+    /// <summary>Gets whether the framework's base instructions sit above <see cref="Instructions"/>, or <see langword="null"/> to name nothing.</summary>
+    public bool? BaseInstructions { get; init; }
+
     /// <summary>Gets the shared <c>approval:</c> block, or <see langword="null"/> when the document declares none.</summary>
     public ApprovalConfiguration? Approval { get; init; }
 }
@@ -98,6 +104,12 @@ public sealed record AgentConfiguration
 
     /// <summary>Gets whether this agent gets the mode tools, or <see langword="null"/> to inherit.</summary>
     public bool? Mode { get; init; }
+
+    /// <summary>Gets whether this agent is told the current date and time each turn, or <see langword="null"/> to inherit.</summary>
+    public bool? Clock { get; init; }
+
+    /// <summary>Gets whether the framework's base instructions sit above this agent's, or <see langword="null"/> to inherit.</summary>
+    public bool? BaseInstructions { get; init; }
 
     /// <summary>Gets this agent's <c>memory:</c> block, or <see langword="null"/> for none.</summary>
     public AgentMemoryConfiguration? Memory { get; init; }

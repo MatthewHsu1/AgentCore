@@ -212,6 +212,16 @@ agents:
     model: { ref: reply, temperature: 0.3 }
     instructions: |
       <the stable cached prefix: persona, safety, transfer rules, and tool etiquette>
+    # Two posture switches sit ON until you turn them off, per agent or here for all of them.
+    # baseInstructions: puts the framework's base above the prefix: resolve before you ask, own
+    # what you cannot do, do not repeat a failed call, finish. It names no persona and yields to
+    # everything below it. clock: tells the model the date, time, and zone once per turn, as a
+    # message below the cached prefix, so "the past ten days" has an anchor and nobody has to
+    # type the year. The zone is the server's unless the request carries X-AgentCore-Time-Zone
+    # with the browser's IANA id; then it is the person's. Turn either off only for an agent
+    # whose prompt is measured byte for byte.
+    # baseInstructions: true
+    # clock: true
     # citations defaults to false and scoped defaults to true. A forgotten flag is then silent
     # and safe, and the dangerous direction is the one you type on purpose.
     #

@@ -40,6 +40,7 @@ internal static class CompilationStartup
     /// <param name="citations">The wording <c>providers.knowledge.citation</c> named.</param>
     /// <param name="loggers">The factory the guard evaluator and the knowledge provider take their loggers from.</param>
     /// <param name="workspaceRoot">The root <c>options.UseWorkspace(...)</c> bound, or <see langword="null"/>.</param>
+    /// <param name="clock">The clock the host bound, or <see langword="null"/> for the system clock.</param>
     /// <returns>The compiled entries, and the seams that made them.</returns>
     /// <exception cref="ConfigurationLoadException">An entry does not compile.</exception>
     internal static ValueTask<CompiledGraph> CompileAsync(
@@ -53,7 +54,8 @@ internal static class CompilationStartup
         SkillCatalog? skills,
         IKnowledgeCitationFormatter citations,
         ILoggerFactory loggers,
-        string? workspaceRoot = null)
+        string? workspaceRoot = null,
+        TimeProvider? clock = null)
     {
         GuardEvaluator guards = new(configuration.Guards, loggers.CreateLogger<GuardEvaluator>());
         CompiledAgentRegistry registry = new();
@@ -72,6 +74,7 @@ internal static class CompilationStartup
                 Citations = citations,
                 Loggers = loggers,
                 WorkspaceRoot = workspaceRoot,
+                Clock = clock,
             });
 
         return ValueTask.FromResult(new CompiledGraph(chatClients, guards, registry, entries));

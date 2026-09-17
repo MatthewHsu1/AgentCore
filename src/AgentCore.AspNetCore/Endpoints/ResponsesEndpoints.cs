@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Harness;
 using AgentCore.Application.Tools;
 using AgentCore.AspNetCore.Call;
 using AgentCore.AspNetCore.DependencyInjection;
@@ -27,6 +28,13 @@ public static class ResponsesEndpointRouteBuilderExtensions
 
     /// <summary>The answer header that reports the stage the machine holds.</summary>
     public const string StageHeaderName = "X-AgentCore-Stage";
+
+    /// <summary>
+    /// The request header that names the zone the person is in, as an IANA id such as
+    /// <c>America/Chicago</c>. The browser knows it and the server does not. Read on every turn,
+    /// so a person who travels moves the clock with them; a bad or missing value changes nothing.
+    /// </summary>
+    public const string TimeZoneHeaderName = "X-AgentCore-Time-Zone";
 
     /// <summary>The OpenAI error type every refused request reports.</summary>
     private const string InvalidRequestError = "invalid_request_error";
@@ -292,6 +300,11 @@ public static class ResponsesEndpointRouteBuilderExtensions
         // one on the whole-reply branch would let the tool report a picture the caller never sees.
         // Set per request, not once: the session outlives a request and the branch can differ per turn.
         call.SetHasScreen(streaming);
+
+        if (CallerTimeZone.Parse(http.Request.Headers[TimeZoneHeaderName]) is { } zone)
+        {
+            CallerTimeZone.Set(session, zone);
+        }
 
         try
         {

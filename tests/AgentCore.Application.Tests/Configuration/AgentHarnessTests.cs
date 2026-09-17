@@ -5,8 +5,8 @@ using Xunit;
 namespace AgentCore.Application.Tests.Configuration;
 
 /// <summary>
-/// <see cref="AgentHarness"/>: the key-by-key merge of one agent's <c>todos:</c> / <c>mode:</c>
-/// switches against <c>agents.defaults</c>.
+/// <see cref="AgentHarness"/>: the key-by-key merge of one agent's <c>todos:</c> / <c>mode:</c> /
+/// <c>clock:</c> / <c>baseInstructions:</c> switches against <c>agents.defaults</c>.
 /// </summary>
 public sealed class AgentHarnessTests
 {
@@ -17,6 +17,37 @@ public sealed class AgentHarnessTests
 
         Assert.False(resolved.Todos);
         Assert.False(resolved.Mode);
+    }
+
+    [Fact]
+    public void Compose_NoKeyAnywhere_ClockAndBaseAreOn()
+    {
+        var resolved = AgentHarness.Compose(defaults: null, Agent(todos: null, mode: null));
+
+        Assert.True(resolved.Clock);
+        Assert.True(resolved.BaseInstructions);
+    }
+
+    [Fact]
+    public void Compose_DefaultsFalse_TurnsClockAndBaseOff()
+    {
+        var resolved = AgentHarness.Compose(
+            new AgentDefaults { Clock = false, BaseInstructions = false },
+            Agent(todos: null, mode: null));
+
+        Assert.False(resolved.Clock);
+        Assert.False(resolved.BaseInstructions);
+    }
+
+    [Fact]
+    public void Compose_AgentTrueOverDefaultsFalse_TakesTheAgent()
+    {
+        var resolved = AgentHarness.Compose(
+            new AgentDefaults { Clock = false, BaseInstructions = false },
+            Agent(todos: null, mode: null) with { Clock = true, BaseInstructions = true });
+
+        Assert.True(resolved.Clock);
+        Assert.True(resolved.BaseInstructions);
     }
 
     [Fact]

@@ -243,7 +243,8 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
                 skills,
                 KnowledgeCitationFormatterFactory.Resolve(configuration, _options.KnowledgeCitations),
                 _loggers,
-                _options.WorkspaceRoot)
+                _options.WorkspaceRoot,
+                _options.TimeProvider)
             .ConfigureAwait(false);
 
         var seams = CallSeamStartup.Build(configuration, _options);

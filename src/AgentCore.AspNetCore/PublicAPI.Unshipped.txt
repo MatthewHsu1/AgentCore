@@ -79,3 +79,4 @@ static readonly AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.Co
 static readonly AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.FirstRetryDelay -> System.TimeSpan
 static readonly AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.RequestDeadline -> System.TimeSpan
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseBlobStores(params AgentCore.Application.Ports.IBlobStoreAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+const AgentCore.AspNetCore.Endpoints.ResponsesEndpointRouteBuilderExtensions.TimeZoneHeaderName = "X-AgentCore-Time-Zone" -> string!

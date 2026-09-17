@@ -77,6 +77,12 @@ public sealed class AgentCompilationContext
     public ILoggerFactory? Loggers { get; init; }
 
     /// <summary>
+    /// Gets or sets the clock a <c>clock:</c> agent reads the date from, or <see langword="null"/>
+    /// for <see cref="TimeProvider.System"/>.
+    /// </summary>
+    public TimeProvider? Clock { get; init; }
+
+    /// <summary>
     /// Gets or sets the root a <c>memory:</c> block's files are kept under, or <see langword="null"/>
     /// when the host bound no workspace root.
     /// </summary>

@@ -42,6 +42,9 @@ internal sealed record TurnInvocation
     /// <summary>Gets the instructions for this one invocation, or <see langword="null"/> for none.</summary>
     public string? Instructions { get; init; }
 
+    /// <summary>Gets the zone the person on the call is in, or <see langword="null"/> when the host named none.</summary>
+    public TimeZoneInfo? TimeZone { get; init; }
+
     /// <summary>Gets whether this row's session carries the caller's own history.</summary>
     public bool CarriesHistory { get; init; }
 

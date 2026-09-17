@@ -42,6 +42,10 @@ public sealed class TurnContextProviderTests
           agents:
             defaults:
               model: { ref: reply }
+              # The assertions below read the instructions block byte for byte, and the first
+              # system message: neither the base nor the clock line belongs in that reading.
+              baseInstructions: false
+              clock: false
             items:
               - { id: greeter, instructions: "greet the caller", tools: [ ask_specialist ] }
               - { id: specialist, model: { ref: specialist }, instructions: "answer the greeter" }
