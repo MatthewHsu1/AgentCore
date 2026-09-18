@@ -339,6 +339,9 @@ public sealed class AgentCoreHostTests
         Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
     }
 
+    /// <summary>The default Responses route, with the document's one entry filled in.</summary>
+    private const string MainResponses = "/v1/main/responses";
+
     [Fact]
     public async Task ResponsesAnswersOnTheDefaultRoute()
     {
@@ -347,9 +350,23 @@ public sealed class AgentCoreHostTests
 
         // No user message is a caller mistake this endpoint names, and naming it proves the route
         // reached the endpoint rather than the 404 handler.
-        var response = await PostEmptyAsync(client, ResponsesEndpointRouteBuilderExtensions.DefaultPattern);
+        var response = await PostEmptyAsync(client, MainResponses);
 
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ResponsesRefusesAnEntryTheDocumentDoesNotDeclare()
+    {
+        await using var app = await StartMappedAsync();
+        using HttpClient client = new() { BaseAddress = Address(app) };
+
+        var response = await PostEmptyAsync(client, "/v1/nobody/responses");
+
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        Assert.Contains("\"code\":\"unknown_entry\"", body);
+        Assert.Contains("Valid entries: main", body);
     }
 
     [Fact]
@@ -357,16 +374,39 @@ public sealed class AgentCoreHostTests
     {
         // A host that mounts a second Responses surface of its own needs this one out of the
         // way, and it must actually leave the default route behind when it moves.
-        const string Moved = "/agentcore/v1/responses";
-        await using var app = await StartMappedAsync(Moved);
+        await using var app = await StartMappedAsync("/agentcore/v1/{entry}/responses");
         using HttpClient client = new() { BaseAddress = Address(app) };
 
         Assert.Equal(
             System.Net.HttpStatusCode.BadRequest,
-            (await PostEmptyAsync(client, Moved)).StatusCode);
+            (await PostEmptyAsync(client, "/agentcore/v1/main/responses")).StatusCode);
         Assert.Equal(
             System.Net.HttpStatusCode.NotFound,
-            (await PostEmptyAsync(client, ResponsesEndpointRouteBuilderExtensions.DefaultPattern)).StatusCode);
+            (await PostEmptyAsync(client, MainResponses)).StatusCode);
+    }
+
+    [Fact]
+    public async Task CallRefusesAnEntryTheDocumentDoesNotDeclare()
+    {
+        await using var app = await StartMappedAsync();
+        using HttpClient client = new() { BaseAddress = Address(app) };
+
+        var response = await client.GetAsync("/v1/nobody/call", TestContext.Current.CancellationToken);
+
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Contains(
+            "Valid entries: main",
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task ResponsesRefusesARouteWithNoEntryParameter()
+    {
+        await using var app = await BuildAsync();
+
+        var failure = Assert.Throws<ArgumentException>(() => app.MapAgentCoreHost("/v1/responses"));
+
+        Assert.Contains("{entry}", failure.Message);
     }
 
     // ---------------------------------------------------------------------------------------------

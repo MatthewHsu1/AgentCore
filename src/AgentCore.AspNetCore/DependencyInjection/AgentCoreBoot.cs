@@ -10,11 +10,8 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
 using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Tools.Registry;
-using AgentCore.AspNetCore.Call;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Routing;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -96,8 +93,8 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
     /// <summary>Gets the blob store, or <see langword="null"/> when the document names none.</summary>
     internal IBlobStore? Blobs => Started.Blobs;
 
-    /// <summary>Gets what each entry's call route runs, keyed by entry name, or <see langword="null"/> when no call routes here.</summary>
-    internal IReadOnlyDictionary<string, RequestDelegate>? CallHandlers => Started.CallHandlers;
+    /// <summary>Gets what the call route runs, or <see langword="null"/> when no call routes here.</summary>
+    internal RequestDelegate? CallHandler => Started.CallHandler;
 
     /// <summary>Gets why no call routes here, or <see langword="null"/> when calls route.</summary>
     internal string? CallUnroutable => Started.CallUnroutable;
@@ -267,48 +264,8 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
             knowledge,
             seams.Call,
             seams.Speech,
-            seams.Handlers,
+            seams.Handler,
             seams.Unroutable);
-
-        ValidateMappedEntries(configuration);
-    }
-
-    /// <summary>Refuses a mapped route that names an entry the document does not declare.</summary>
-    /// <param name="configuration">The loaded document. It carries the declared entries.</param>
-    /// <exception cref="ConfigurationLoadException">A route names an unknown entry.</exception>
-    private void ValidateMappedEntries(AgentCoreConfiguration configuration)
-    {
-        var sources = _services?.GetService<IEnumerable<EndpointDataSource>>();
-        if (sources is null)
-        {
-            return;
-        }
-
-        List<ConfigurationError> failures = [];
-        foreach (var endpoint in sources.SelectMany(source => source.Endpoints))
-        {
-            if (endpoint.Metadata.GetMetadata<AgentCoreEntryMetadata>() is not { } mapped)
-            {
-                continue;
-            }
-
-            if (!configuration.Entries.ContainsKey(mapped.Entry))
-            {
-                failures.Add(new ConfigurationError
-                {
-                    Pointer = "/entries",
-                    Message =
-                        $"Map{mapped.Surface} names an unknown entry. "
-                        + EntryRegistry.UnknownEntryMessage(mapped.Entry, configuration.Entries.Keys),
-                    Check = ConfigurationCheck.ReferenceResolution,
-                });
-            }
-        }
-
-        if (failures.Count > 0)
-        {
-            throw new ConfigurationLoadException(failures);
-        }
     }
 
     /// <inheritdoc/>
@@ -377,7 +334,7 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
         IKnowledgeRetrievalPort? Knowledge,
         IReadOnlyList<ICallAdapter>? CallAdapters,
         IReadOnlyList<ISpeechAdapter>? SpeechAdapters,
-        IReadOnlyDictionary<string, RequestDelegate>? CallHandlers,
+        RequestDelegate? CallHandler,
         string? CallUnroutable);
 }
 

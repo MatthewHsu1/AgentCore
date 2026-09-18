@@ -61,7 +61,7 @@ internal static class ResponsesTurnStream
             await http.Response.Body.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        await ResponsesEndpointRouteBuilderExtensions.SaveAsync(sessions, agent, session, responseId, conversationId, cancellationToken)
+        await ResponsesSessionFiling.SaveAsync(sessions, agent, session, responseId, conversationId, cancellationToken)
             .ConfigureAwait(false);
     }
 

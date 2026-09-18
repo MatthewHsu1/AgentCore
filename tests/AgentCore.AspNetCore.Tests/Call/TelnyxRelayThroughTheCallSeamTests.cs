@@ -42,7 +42,7 @@ public sealed class TelnyxRelayThroughTheCallSeamTests
             reply,
             options => options.UseCall(new TelnyxRelayCallAdapter()));
 
-        var answer = await host.GetAsync(CallEndpointRouteBuilderExtensions.DefaultPattern);
+        var answer = await host.GetAsync(TelnyxRelayHost.MainCall);
 
         // 404 would mean MapCall mapped nothing, and every call to this deployment would be lost
         // with nothing to read. 400 is the relay's own HandleAsync refusing a request that is not a

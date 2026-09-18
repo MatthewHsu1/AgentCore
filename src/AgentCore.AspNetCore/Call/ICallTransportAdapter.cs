@@ -9,9 +9,12 @@ namespace AgentCore.AspNetCore.Call;
 /// </summary>
 public interface ICallTransportAdapter : ICallAdapter
 {
-    /// <summary>Builds the handler one entry answers a call with.</summary>
+    /// <summary>Builds the handler the call route answers every entry with.</summary>
     /// <param name="configuration">The <c>providers.call</c> block, including its limits.</param>
-    /// <param name="entryName">The entry key the handler answers on.</param>
-    /// <returns>The delegate the entry's call route runs.</returns>
-    RequestDelegate CreateHandler(CallProviderConfiguration configuration, string entryName);
+    /// <returns>
+    /// The delegate the call route runs. The URL names the entry, and the route has already
+    /// refused one the document does not declare; the handler reads it with
+    /// <see cref="CallEndpointRouteBuilderExtensions.EntryOf"/>.
+    /// </returns>
+    RequestDelegate CreateHandler(CallProviderConfiguration configuration);
 }

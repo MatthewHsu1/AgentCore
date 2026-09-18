@@ -1,11 +1,8 @@
-using System.Globalization;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Harness;
-using AgentCore.Application.Tools;
-using AgentCore.AspNetCore.Call;
 using AgentCore.AspNetCore.DependencyInjection;
+using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.AspNetCore.Sessions;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Hosting.OpenAI;
@@ -18,13 +15,16 @@ using Microsoft.Extensions.DependencyInjection;
 namespace AgentCore.AspNetCore.Endpoints;
 
 /// <summary>
-/// The Responses path: an OpenAI-compatible <c>POST /v1/responses</c> over the turn loop,
+/// The Responses path: an OpenAI-compatible <c>POST /v1/{entry}/responses</c> over the turn loop,
 /// with the call continuing across requests through the session store.
 /// </summary>
 public static class ResponsesEndpointRouteBuilderExtensions
 {
-    /// <summary>The route this endpoint answers on when the host names none.</summary>
-    public const string DefaultPattern = "/v1/responses";
+    /// <summary>The route parameter that names the entry, as <c>{entry}</c> in a pattern.</summary>
+    public const string EntryRouteParameter = "entry";
+
+    /// <summary>The route every entry answers on when the host names none.</summary>
+    public const string DefaultPattern = "/v1/{" + EntryRouteParameter + "}/responses";
 
     /// <summary>The answer header that reports the stage the machine holds.</summary>
     public const string StageHeaderName = "X-AgentCore-Stage";
@@ -38,33 +38,38 @@ public static class ResponsesEndpointRouteBuilderExtensions
     /// <summary>The OpenAI error type every refused request reports.</summary>
     private const string InvalidRequestError = "invalid_request_error";
 
-    /// <summary>Maps the endpoint for one entry on <see cref="DefaultPattern"/>.</summary>
+    /// <summary>Maps every entry on <see cref="DefaultPattern"/>, with the URL naming the entry.</summary>
     /// <param name="endpoints">The route builder of the host.</param>
-    /// <param name="entry">The entry key this route answers on.</param>
     /// <returns>The mapped endpoint, so a host adds its own conventions.</returns>
-    public static IEndpointConventionBuilder MapResponses(this IEndpointRouteBuilder endpoints, string entry)
-        => endpoints.MapResponses(DefaultPattern, entry);
+    public static IEndpointConventionBuilder MapResponses(this IEndpointRouteBuilder endpoints)
+        => endpoints.MapResponses(DefaultPattern);
 
-    /// <summary>Maps the endpoint for one entry on one route.</summary>
+    /// <summary>Maps every entry on one route, with the URL naming the entry.</summary>
     /// <param name="endpoints">The route builder of the host.</param>
-    /// <param name="pattern">The route to answer on.</param>
-    /// <param name="entry">The entry key this route answers on.</param>
+    /// <param name="pattern">The route to answer on. It must carry the <c>{entry}</c> parameter.</param>
     /// <returns>The mapped endpoint, so a host adds its own conventions.</returns>
-    public static IEndpointConventionBuilder MapResponses(
-        this IEndpointRouteBuilder endpoints, string pattern, string entry)
+    /// <exception cref="ArgumentException"><paramref name="pattern"/> carries no <c>{entry}</c>.</exception>
+    public static IEndpointConventionBuilder MapResponses(this IEndpointRouteBuilder endpoints, string pattern)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
         ArgumentException.ThrowIfNullOrEmpty(pattern);
-        ArgumentException.ThrowIfNullOrEmpty(entry);
 
-        return endpoints.MapPost(pattern, (HttpContext http) => HandleAsync(http, entry))
-            .WithMetadata(new AgentCoreEntryMetadata(entry, "Responses"));
+        if (!pattern.Contains("{" + EntryRouteParameter + "}", StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"The pattern '{pattern}' carries no {{{EntryRouteParameter}}} parameter, so no URL can name "
+                + "an entry.",
+                nameof(pattern));
+        }
+
+        return endpoints.MapPost(pattern, HandleAsync);
     }
 
     /// <summary>Runs one turn of one call, and files the session under the ids the answer carries.</summary>
-    private static async Task HandleAsync(HttpContext http, string entry)
+    private static async Task HandleAsync(HttpContext http)
     {
         var cancellationToken = http.RequestAborted;
+        var entry = http.Request.RouteValues[EntryRouteParameter] as string ?? string.Empty;
 
         JsonElement body;
         try
@@ -121,17 +126,13 @@ public static class ResponsesEndpointRouteBuilderExtensions
             conversationId = ResponsesRequestReader.ReadConversationId(body);
         }
 
-        AgentCoreAgent agent;
-        try
-        {
-            agent = http.RequestServices.GetRequiredService<AgentCoreBoot>().Entries.ForAgent(entry);
-        }
-        catch (InvalidOperationException failure)
+        var entries = http.RequestServices.GetRequiredService<AgentCoreBoot>().Entries;
+        if (!entries.Agents.TryGetValue(entry, out var agent))
         {
             await ResponsesRequestReader.WriteErrorAsync(
                 http,
-                StatusCodes.Status503ServiceUnavailable,
-                failure.Message,
+                StatusCodes.Status404NotFound,
+                EntryRegistry.UnknownEntryMessage(entry, entries.Entries),
                 InvalidRequestError,
                 "unknown_entry",
                 cancellationToken).ConfigureAwait(false);
@@ -316,7 +317,7 @@ public static class ResponsesEndpointRouteBuilderExtensions
             }
             else
             {
-                await WriteTurnAsync(http, agent, sessions, session, call, input, origin, responseId, conversationId, cancellationToken)
+                await ResponsesTurnReply.WriteAsync(http, agent, sessions, session, call, input, origin, responseId, conversationId, cancellationToken)
                     .ConfigureAwait(false);
             }
         }
@@ -332,78 +333,5 @@ public static class ResponsesEndpointRouteBuilderExtensions
                 "turn_refused",
                 cancellationToken).ConfigureAwait(false);
         }
-    }
-
-    /// <summary>Runs one turn and answers the whole reply, filed under its ids.</summary>
-    private static async Task WriteTurnAsync(
-        HttpContext http,
-        AgentCoreAgent agent,
-        AgentCoreAgentSessionStore sessions,
-        AgentSession session,
-        CallSession call,
-        ChatMessage input,
-        CallTurnOrigin? origin,
-        string responseId,
-        string? conversationId,
-        CancellationToken cancellationToken)
-    {
-        var turn = await call
-            .RunTurnMessageAtOriginAsync(input, origin, cancellationToken)
-            .ConfigureAwait(false);
-
-        await SaveAsync(sessions, agent, session, responseId, conversationId, cancellationToken)
-            .ConfigureAwait(false);
-
-        var response = new AgentResponse(new ChatMessage(ChatRole.Assistant, turn.ReplyText))
-        {
-            AgentId = agent.Id,
-            ResponseId = responseId,
-            CreatedAt = turn.EndedAt,
-        };
-
-        var rendered = OpenAIResponses.WriteResponse(response, responseId, conversationId);
-
-        // The render is a closed JsonElement, so the turn facts go on as JSON: the object
-        // the framework wrote, with the metadata member replaced by ours beside its own.
-
-        var node = JsonNode.Parse(rendered.GetRawText())!.AsObject();
-        JsonObject metadata = node["metadata"]?.AsObject() ?? [];
-
-        foreach (var (name, value) in ResponsesAgentCore.TurnMetadata(call, turn))
-        {
-            metadata[name] = value;
-        }
-
-        node["metadata"] = metadata;
-
-        http.Response.StatusCode = StatusCodes.Status200OK;
-        http.Response.Headers[StageHeaderName] = turn.StageAfter;
-        
-        await http.Response
-            .WriteAsJsonAsync(node, cancellationToken)
-            .ConfigureAwait(false);
-    }
-    
-    /// <summary>Files the session the turn just advanced, under every id that names it now.</summary>
-    /// <remarks>
-    /// A conversation id is stable across turns and a response id changes each one,
-    /// so a turn that carried a conversation is filed under both: the next turn may
-    /// continue by either pointer. A chain turn without a conversation files under
-    /// its new response id alone.
-    /// </remarks>
-    internal static async Task SaveAsync(
-        AgentCoreAgentSessionStore sessions,
-        AIAgent agent,
-        AgentSession session,
-        string responseId,
-        string? conversationId,
-        CancellationToken cancellationToken)
-    {
-        if (conversationId is not null)
-        {
-            await sessions.SaveSessionAsync(agent, conversationId, session, cancellationToken).ConfigureAwait(false);
-        }
-
-        await sessions.SaveSessionAsync(agent, responseId, session, cancellationToken).ConfigureAwait(false);
     }
 }

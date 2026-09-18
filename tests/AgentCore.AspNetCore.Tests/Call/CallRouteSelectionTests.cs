@@ -45,7 +45,7 @@ public sealed class CallRouteSelectionTests
 
         var seams = Build(callKind: "bundled-fake", transport);
 
-        Assert.NotNull(seams.Handlers?["main"]);
+        Assert.NotNull(seams.Handler);
 
         // The block handed over is the providers.call entry of this document, not null and not some
         // empty stand-in. The kind is what proves which entry it is.
@@ -75,7 +75,7 @@ public sealed class CallRouteSelectionTests
 
         // Section 12 asks this case to route nothing AND say so. A route that vanishes in silence is
         // how a deployment loses every call to a 404 with nothing to read.
-        Assert.Null(seams.Handlers);
+        Assert.Null(seams.Handler);
         Assert.NotNull(seams.Unroutable);
         Assert.Contains("dial-out-fake", seams.Unroutable, StringComparison.Ordinal);
     }
@@ -86,7 +86,7 @@ public sealed class CallRouteSelectionTests
         var seams = CallSeamStartup.Build(
             ConfigurationLoader.LoadYaml(Document("bundled-fake")), new AgentCoreOptions());
 
-        Assert.Null(seams.Handlers);
+        Assert.Null(seams.Handler);
         Assert.NotNull(seams.Unroutable);
         Assert.Contains("no call adapter", seams.Unroutable, StringComparison.Ordinal);
     }
@@ -99,11 +99,11 @@ public sealed class CallRouteSelectionTests
         builder.WebHost.UseUrls("http://127.0.0.1:0");
 
         await using var app = builder.Build();
-        app.MapCall("/v1/call", "main");
+        app.MapCall();
         await app.StartAsync(TestContext.Current.CancellationToken);
 
         using HttpClient client = new() { BaseAddress = new Uri(Address(app)) };
-        var response = await client.GetAsync("/v1/call", TestContext.Current.CancellationToken);
+        var response = await client.GetAsync("/v1/main/call", TestContext.Current.CancellationToken);
 
         // A readable refusal, and not the 404 a route that mapped nothing would have produced.
         Assert.Equal(System.Net.HttpStatusCode.ServiceUnavailable, response.StatusCode);
@@ -116,7 +116,18 @@ public sealed class CallRouteSelectionTests
     [Fact]
     public void TheDefaultPatternIsVendorNeutral()
     {
-        Assert.Equal("/v1/call", CallEndpointRouteBuilderExtensions.DefaultPattern);
+        Assert.Equal("/v1/{entry}/call", CallEndpointRouteBuilderExtensions.DefaultPattern);
+    }
+
+    [Fact]
+    public void ARouteWithNoEntryParameterIsRefused()
+    {
+        var builder = WebApplication.CreateSlimBuilder();
+        using var app = builder.Build();
+
+        var failure = Assert.Throws<ArgumentException>(() => app.MapCall("/v1/call"));
+
+        Assert.Contains("{entry}", failure.Message, StringComparison.Ordinal);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -188,7 +199,7 @@ public sealed class CallRouteSelectionTests
 
         public CallProviderConfiguration? Configuration { get; private set; }
 
-        public RequestDelegate CreateHandler(CallProviderConfiguration configuration, string entryName)
+        public RequestDelegate CreateHandler(CallProviderConfiguration configuration)
         {
             Configuration = configuration;
             return _ => Task.CompletedTask;

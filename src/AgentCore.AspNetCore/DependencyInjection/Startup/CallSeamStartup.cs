@@ -17,28 +17,28 @@ namespace AgentCore.AspNetCore.DependencyInjection.Startup;
 /// carries text, so it is itself both and there is nothing to build. The list goes in the container
 /// beside the document so that a vendor which does need constructing has somewhere to be found.
 /// </param>
-/// <param name="Handlers">
-/// What each <c>MapCall</c> route runs, keyed by entry name, or <see langword="null"/> when this
+/// <param name="Handler">
+/// What the <c>MapCall</c> route runs for every entry, or <see langword="null"/> when this
 /// document routes no inbound call — the host registered no transport, wrote no
 /// <c>providers.call</c> block, or named a vendor this process dials out to, which has no inbound URL.
 /// </param>
 /// <param name="Unroutable">
-/// Why <paramref name="Handlers"/> is <see langword="null"/>, in the words a deployer can act on, or
+/// Why <paramref name="Handler"/> is <see langword="null"/>, in the words a deployer can act on, or
 /// <see langword="null"/> when calls route.
 /// </param>
 internal readonly record struct CallSeamAdapters(
     IReadOnlyList<ICallAdapter>? Call,
     IReadOnlyList<ISpeechAdapter>? Speech,
-    IReadOnlyDictionary<string, RequestDelegate>? Handlers,
+    RequestDelegate? Handler,
     string? Unroutable);
 
 /// <summary>The two provider blocks a call arrives on: <c>providers.call</c> and <c>providers.speech</c>.</summary>
 internal static class CallSeamStartup
 {
-    /// <summary>Checks the two blocks agree, and hands back the vendor lists and one handler per entry to register.</summary>
-    /// <param name="configuration">The loaded document. It carries both provider blocks and the entries.</param>
+    /// <summary>Checks the two blocks agree, and hands back the vendor lists and the handler to register.</summary>
+    /// <param name="configuration">The loaded document. It carries both provider blocks.</param>
     /// <param name="options">The options the host filled. It carries the registered vendors.</param>
-    /// <returns>The two lists and the per-entry handlers, each one or <see langword="null"/> when the host registered none.</returns>
+    /// <returns>The two lists and the handler, each one or <see langword="null"/> when the host registered none.</returns>
     internal static CallSeamAdapters Build(
         AgentCoreConfiguration configuration,
         AgentCoreOptions options)
@@ -78,13 +78,7 @@ internal static class CallSeamStartup
                 $"'{selectedCall.Kind}' is a vendor this process dials out to, so it answers no inbound route");
         }
 
-        Dictionary<string, RequestDelegate> handlers = new(StringComparer.Ordinal);
-        foreach (var entryName in configuration.Entries.Keys)
-        {
-            handlers[entryName] = transport.CreateHandler(callEntry, entryName);
-        }
-
-        return new CallSeamAdapters(callAdapters, options.Speech, handlers, null);
+        return new CallSeamAdapters(callAdapters, options.Speech, transport.CreateHandler(callEntry), null);
     }
 
     /// <summary>Refuses a configuration that turned the call seam on and named no transport.</summary>

@@ -23,7 +23,7 @@ public sealed class TelnyxRelayEndpointTests
         using FragmentingChatClient reply = new("hello");
         await using var host = await TelnyxRelayHost.StartAsync(TelnyxRelayTurnTests.PolicyYaml, reply);
 
-        var answer = await host.GetAsync(TelnyxRelayEndpointRouteBuilderExtensions.DefaultPattern);
+        var answer = await host.GetAsync(TelnyxRelayHost.MainRelay);
 
         Assert.Equal(HttpStatusCode.BadRequest, answer.StatusCode);
     }
@@ -40,7 +40,7 @@ public sealed class TelnyxRelayEndpointTests
             TelnyxRelayTurnTests.PolicyYaml,
             reply);
 
-        var answer = await host.GetAsync(TelnyxRelayEndpointRouteBuilderExtensions.DefaultPattern);
+        var answer = await host.GetAsync(TelnyxRelayHost.MainRelay);
 
         Assert.Equal(HttpStatusCode.InternalServerError, answer.StatusCode);
         Assert.Contains("UseWebSockets", host.LastError, StringComparison.Ordinal);

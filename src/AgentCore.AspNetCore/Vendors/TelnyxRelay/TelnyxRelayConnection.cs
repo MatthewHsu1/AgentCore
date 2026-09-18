@@ -60,8 +60,11 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay;
 internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
 {
     private readonly TelnyxRelayOptions _options;
+
     private readonly ILogger _logger;
+
     private readonly Channel<OutboundItem> _outbound;
+
     private readonly CancellationTokenSource _cancellation;
 
     // The same token every loop reads, captured once. Read off the field and never off
@@ -69,8 +72,11 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
     // its way out, and a disposed source's Token getter throws, while the struct captured here goes
     // on answering "already cancelled" for as long as anyone holds it.
     private readonly CancellationToken _connectionToken;
+
     private readonly IHostApplicationLifetime _lifetime;
+
     private readonly ConnectionTaskObserver _observer;
+
     private readonly JsonWebSocketPump _pump;
 
     // The last of the two barge-in gates, in this connection's own vocabulary. SpeakAsync stamps
@@ -95,20 +101,23 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
     // volatile for the same reason _session is: the read loop assigns it when the setup frame
     // arrives, and teardown reads it from another task to find the last turn.
     private volatile CallTurnArbiter? _arbiter;
+
     private bool _loggedPromptBeforeSetup;
+
     private bool _loggedMalformedInterrupt;
+
     private bool _loggedSecondSetup;
 
-    /// <summary>Reads this socket's entry session store, resolving it once from the registry.</summary>
-    /// <returns>The store for the entry the handler stamped into the options.</returns>
+    /// <summary>Reads this socket's entry session store, resolved once from the URL's entry.</summary>
+    /// <returns>The store for the entry the URL named.</returns>
     private ICallSessions EntrySessions()
         => _entrySessions
-            ?? throw new InvalidOperationException(
-                $"The entry '{_options.EntryName}' is not declared, so this socket names no session store.");
+            ?? throw new InvalidOperationException("This socket resolved no session store.");
 
     private TelnyxRelayConnection(HttpContext http, WebSocket socket, TelnyxRelayOptions options, ILogger logger)
     {
         _options = options;
+
         _logger = logger;
 
         // A dropped socket ends this call, and so does the host shutting down. Both stop the read
@@ -116,9 +125,11 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
         // reads. IHostApplicationLifetime is resolved here, from the request's own provider, and
         // never at MapTelnyxRelay time: nothing is bound to it until a call actually arrives.
         _lifetime = http.RequestServices.GetRequiredService<IHostApplicationLifetime>();
+
         _cancellation = CancellationTokenSource.CreateLinkedTokenSource(
             http.RequestAborted,
             _lifetime.ApplicationStopping);
+            
         _connectionToken = _cancellation.Token;
 
         // AddAgentCore registers this from options.TimeProvider, or TimeProvider.System when the
@@ -184,7 +195,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
         TelnyxRelayConnection connection = new(http, socket, options, logger);
         connection._entrySessions = http.RequestServices
             .GetRequiredService<AgentCoreBoot>()
-            .Entries.ForSessions(options.EntryName);
+            .Entries.ForSessions(CallEndpointRouteBuilderExtensions.EntryOf(http));
 
         return connection.RunAsync();
     }

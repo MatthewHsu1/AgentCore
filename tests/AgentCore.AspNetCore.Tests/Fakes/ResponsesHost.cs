@@ -57,7 +57,7 @@ internal sealed class ResponsesHost : IAsyncDisposable
         });
 
         var app = builder.Build();
-        app.MapResponses("main");
+        app.MapResponses();
         await app.StartAsync();
 
         var address = app.Services
@@ -77,7 +77,7 @@ internal sealed class ResponsesHost : IAsyncDisposable
     /// <returns>The answer.</returns>
     public async Task<HttpResponseMessage> PostAsync(string json, IReadOnlyDictionary<string, string>? headers = null)
     {
-        using HttpRequestMessage request = new(HttpMethod.Post, ResponsesEndpointRouteBuilderExtensions.DefaultPattern)
+        using HttpRequestMessage request = new(HttpMethod.Post, "/v1/main/responses")
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json"),
         };

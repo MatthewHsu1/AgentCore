@@ -162,7 +162,7 @@ internal static class ExampleDocument
             - { kind: openai, model: gpt-5.4-nano, as: fill }       # the extractor, chosen on null discipline
             - { kind: openai, model: gpt-4.1,      as: judge }      # evaluation only, chosen on judgement
             - { kind: openai, model: gpt-4.1-nano, as: cheap, webSearch: false, codeExecute: false }
-          call:      { kind: telnyx-relay }        # the pipe: who carries the call and owns /v1/call
+          call:      { kind: telnyx-relay }        # the pipe: who carries the call and owns /v1/{entry}/call
           speech:                                  # the ears and the mouth, named one role at a time
             stt: { kind: telnyx-relay }            # recognition. Bundled here, so it matches call
             tts: { kind: telnyx-relay }            # synthesis. Bundled here, so it matches call

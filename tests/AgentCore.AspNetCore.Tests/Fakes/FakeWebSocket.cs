@@ -3,6 +3,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Threading.Channels;
 using AgentCore.Application.Configuration.Parsing;
+using AgentCore.AspNetCore.Call;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
 using Microsoft.AspNetCore.Http;
@@ -379,8 +380,9 @@ internal sealed class RelayConnectionHarness : IAsyncDisposable
         }
 
         DefaultHttpContext http = new() { RequestServices = provider };
+        http.Request.RouteValues[CallEndpointRouteBuilderExtensions.EntryRouteParameter] = "main";
 
-        TelnyxRelayOptions options = new() { EntryName = "main" };
+        TelnyxRelayOptions options = new();
         relay?.Invoke(options);
 
         FakeWebSocket socket = new();

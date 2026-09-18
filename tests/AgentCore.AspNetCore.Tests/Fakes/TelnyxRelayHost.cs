@@ -28,6 +28,12 @@ namespace AgentCore.AspNetCore.Tests.Fakes;
 /// </remarks>
 internal sealed class TelnyxRelayHost : IAsyncDisposable
 {
+    /// <summary>The vendor-neutral call route, with the document's one entry filled in.</summary>
+    public const string MainCall = "/v1/main/call";
+
+    /// <summary>The relay's own route, with the document's one entry filled in.</summary>
+    public const string MainRelay = "/v1/main/telnyx/relay";
+
     private readonly WebApplication _app;
     private readonly Uri _socketAddress;
     private readonly HttpClient _client;
@@ -92,7 +98,7 @@ internal sealed class TelnyxRelayHost : IAsyncDisposable
     /// transport the seam is meant to pick.
     /// </param>
     /// <param name="logging">Anything a test adds to the logging pipeline.</param>
-    /// <returns>The started host, answering on <c>CallEndpointRouteBuilderExtensions.DefaultPattern</c>.</returns>
+    /// <returns>The started host, answering on <see cref="MainCall"/>.</returns>
     /// <remarks>
     /// <see cref="StartAsync"/> maps the relay through the internal <c>MapTelnyxRelay</c> and so
     /// bypasses the seam entirely, which is right for the several dozen frame-level tests that use
@@ -167,15 +173,15 @@ internal sealed class TelnyxRelayHost : IAsyncDisposable
         {
             // The vendor-neutral seam picks the transport out of providers.call and the adapter the
             // test registered. Nothing here names a route or a vendor.
-            route = CallEndpointRouteBuilderExtensions.DefaultPattern;
-            app.MapCall("main");
+            route = MainCall;
+            app.MapCall();
         }
         else
         {
-            route = TelnyxRelayEndpointRouteBuilderExtensions.DefaultPattern;
+            route = MainRelay;
             var relayOptions = new TelnyxRelayOptions();
             relay?.Invoke(relayOptions);
-            app.MapTelnyxRelay(route, relayOptions, "main");
+            app.MapTelnyxRelay(TelnyxRelayEndpointRouteBuilderExtensions.DefaultPattern, relayOptions);
         }
 
         await app.StartAsync();
