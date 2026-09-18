@@ -6,13 +6,13 @@ using Microsoft.Extensions.AI;
 namespace AgentCore.AspNetCore.Endpoints;
 
 /// <summary>
-/// The sandbox files one turn surfaced, linked for the browser once the turn is over.
+/// The files one turn published, linked for the browser once the turn is over.
 /// </summary>
 internal sealed class TurnStreamFiles
 {
-    private readonly List<AIContent> _files = [];
+    private readonly List<FileContent> _files = [];
 
-    /// <summary>Notes every sandbox file one update carries.</summary>
+    /// <summary>Notes every published file one update carries.</summary>
     /// <param name="update">One update of the stream.</param>
     internal void Note(ChatResponseUpdate update)
     {
@@ -35,7 +35,7 @@ internal sealed class TurnStreamFiles
         }
 
         var links = await calls
-            .LinkFilesAsync(callId, [new ChatMessage(ChatRole.Assistant, _files)], cancellationToken)
+            .LinkFilesAsync(callId, [new ChatMessage(ChatRole.Assistant, [.. _files])], cancellationToken)
             .ConfigureAwait(false);
 
         foreach (var (blob, url) in links)
@@ -43,6 +43,7 @@ internal sealed class TurnStreamFiles
             yield return new TurnStreamFile(new FilePayload
             {
                 Name = blob.Name,
+                Title = _files.LastOrDefault(file => string.Equals(file.Name, blob.Name, StringComparison.Ordinal))?.Title,
                 MediaType = blob.MediaType,
                 Length = blob.Length,
                 Url = url?.ToString(),

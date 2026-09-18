@@ -78,16 +78,14 @@ public sealed class BlobStoreFactoryTests
             () => ConfigurationLoader.LoadYaml(Document("kind: s3", "path: /tmp")));
     }
 
-    private const string KnowledgeLine = Configuration.ExampleDocument.LastProviderLine;
-
-    /// <summary>Builds the section 8.1 document with one blobs block written into it.</summary>
+    /// <summary>Builds the section 8.1 document with its blobs block replaced by these entries, or taken out.</summary>
     private static string Document(params string[] entries)
-        => entries.Length == 0
-            ? Configuration.ExampleDocument.Yaml
-            : Configuration.ExampleDocument.Yaml.Replace(
-                KnowledgeLine,
-                KnowledgeLine + "\n  blobs:\n" + string.Join("\n", entries.Select(entry => "    " + entry)),
-                StringComparison.Ordinal);
+        => Configuration.ExampleDocument.Yaml.Replace(
+            Configuration.ExampleDocument.BlobsLine,
+            entries.Length == 0
+                ? string.Empty
+                : "  blobs:\n" + string.Join("\n", entries.Select(entry => "    " + entry)),
+            StringComparison.Ordinal);
 
     /// <summary>An adapter that opens nothing and records what it was handed.</summary>
     private sealed class FakeBlobStoreAdapter(string kind) : IBlobStoreAdapter

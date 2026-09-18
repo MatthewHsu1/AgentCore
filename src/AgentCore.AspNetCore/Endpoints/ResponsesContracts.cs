@@ -205,11 +205,14 @@ internal sealed record SourcePayload
     public required string Origin { get; init; }
 }
 
-/// <summary>One file the sandbox wrote and the store kept, as the browser reads it.</summary>
+/// <summary>One file the model published from the workspace and the store kept, as the browser reads it.</summary>
 internal sealed record FilePayload
 {
-    /// <summary>Gets the file name, as the model wrote it under <c>/mnt/data</c>.</summary>
+    /// <summary>Gets the file name the store keeps it under.</summary>
     public required string Name { get; init; }
+
+    /// <summary>Gets the label the model gave it for the person, or <see langword="null"/>.</summary>
+    public string? Title { get; init; }
 
     /// <summary>Gets the IANA media type, such as <c>image/png</c>.</summary>
     public required string MediaType { get; init; }

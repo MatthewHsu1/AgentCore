@@ -82,7 +82,7 @@ internal static class AgentToolCompiler
         ModelReference? model,
         AgentCompilationContext context)
     {
-        if (tool is HostedWebSearchTool or HostedCodeInterpreterTool)
+        if (tool is HostedWebSearchTool)
         {
             if (context.ChatClients.ResolveHostedTool(tool, model) is not { } resolved)
             {

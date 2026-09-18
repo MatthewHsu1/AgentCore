@@ -147,6 +147,8 @@ public sealed class ToolRegistryStartupTests
             options,
             startup,
             new RoutingChatClientFactory(new FragmentingChatClient("hello")),
+            blobs: null,
+            NullLoggerFactory.Instance,
             configuration,
             TestContext.Current.CancellationToken);
     }

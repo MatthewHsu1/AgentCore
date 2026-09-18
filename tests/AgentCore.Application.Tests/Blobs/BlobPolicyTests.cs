@@ -11,6 +11,9 @@ public sealed class BlobPolicyTests
     [InlineData("report.PDF", 1)]
     [InlineData("rows.csv", 0)]
     [InlineData("big.png", 10L * 1024 * 1024)]
+    [InlineData("report.md", 518)]
+    [InlineData("units.xlsx", 4_096)]
+    [InlineData("bundle.zip", 4_096)]
     public void WhyRefused_AllowedExtensionUnderCap_ReturnsNull(string name, long length)
     {
         // Act
@@ -34,6 +37,7 @@ public sealed class BlobPolicyTests
     [Theory]
     [InlineData("page.html")]
     [InlineData("logo.svg")]
+    [InlineData("feed.xml")]
     [InlineData("run.exe")]
     [InlineData("chart.png.js")]
     public void WhyRefused_ExtensionOffTheList_NamesTheExtension(string name)
@@ -88,5 +92,17 @@ public sealed class BlobPolicyTests
     {
         // Act & Assert
         Assert.Throws<ArgumentOutOfRangeException>(() => new BlobPolicy(0, ["png"]));
+    }
+
+    [Fact]
+    public void DefaultExtensions_EachHasAMediaType()
+    {
+        // Act
+        var untyped = BlobPolicy.DefaultExtensions
+            .Where(extension => BlobMediaTypes.Of("file." + extension) == BlobMediaTypes.Fallback)
+            .ToList();
+
+        // Assert
+        Assert.Empty(untyped);
     }
 }

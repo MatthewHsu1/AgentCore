@@ -32,8 +32,7 @@ internal static class AgentContextProviderCompiler
         ResolvedClarification clarification,
         KnowledgeScopeConfiguration? scope,
         Func<string, AIAgent?> resolve,
-        ICollection<BackgroundAgentsProvider>? background = null,
-        IReadOnlyList<AITool>? tools = null)
+        ICollection<BackgroundAgentsProvider>? background = null)
     {
         List<AIContextProvider> providers = [new TurnContextProvider()];
 
@@ -74,7 +73,7 @@ internal static class AgentContextProviderCompiler
 #pragma warning restore MAAI001
         }
         
-        AgentHarnessProviders.Add(providers, defaults, item, context, pointer, resolve, background, tools);
+        AgentHarnessProviders.Add(providers, defaults, item, context, pointer, resolve, background);
 
         if (AgentKnowledge.Compose(defaults, item) is not { } composed)
         {

@@ -60,6 +60,9 @@ internal sealed record TurnInvocation
     /// <summary>Gets what the turn's tools answer into. Never <see langword="null"/> on a loop-built turn.</summary>
     public TurnResults? Results { get; init; }
 
+    /// <summary>Gets what the turn publishes files into. Never <see langword="null"/> on a loop-built turn.</summary>
+    public TurnFiles? Files { get; init; }
+
     /// <summary>Gets the tools a delegated run of this call is offered, or <see langword="null"/> for none.</summary>
     public IReadOnlyList<AITool>? Tools { get; init; }
 

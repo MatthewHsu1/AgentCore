@@ -700,8 +700,6 @@ AgentCore.Application.Configuration.Schema.LlmProviderConfiguration
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.LlmProviderConfiguration!
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.As.get -> string!
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.As.init -> void
-AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.CodeExecute.get -> bool?
-AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.CodeExecute.init -> void
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.Equals(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration? other) -> bool
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.Kind.get -> string!
 AgentCore.Application.Configuration.Schema.LlmProviderConfiguration.Kind.init -> void
@@ -1391,11 +1389,19 @@ AgentCore.Application.Tools.Binding.ToolBindingRegistry.TryGetMethod(string! nam
 AgentCore.Application.Tools.Builtin.BuiltinToolNames
 AgentCore.Application.Tools.Builtin.BuiltinToolPorts
 AgentCore.Application.Tools.Builtin.BuiltinToolPorts.<Clone>$() -> AgentCore.Application.Tools.Builtin.BuiltinToolPorts!
-AgentCore.Application.Tools.Builtin.BuiltinToolPorts.BuiltinToolPorts(AgentCore.Application.Ports.IChatClientFactory? ChatClients) -> void
 AgentCore.Application.Tools.Builtin.BuiltinToolPorts.ChatClients.get -> AgentCore.Application.Ports.IChatClientFactory?
 AgentCore.Application.Tools.Builtin.BuiltinToolPorts.ChatClients.init -> void
-AgentCore.Application.Tools.Builtin.BuiltinToolPorts.Deconstruct(out AgentCore.Application.Ports.IChatClientFactory? ChatClients) -> void
 AgentCore.Application.Tools.Builtin.BuiltinToolPorts.Equals(AgentCore.Application.Tools.Builtin.BuiltinToolPorts? other) -> bool
+AgentCore.Application.Tools.Builtin.BuiltinToolPorts.BuiltinToolPorts(AgentCore.Application.Ports.IChatClientFactory? ChatClients, AgentCore.Application.Ports.IBlobStore? Blobs = null, AgentCore.Application.Blobs.BlobPolicy? BlobPolicy = null, string? WorkspaceRoot = null, Microsoft.Extensions.Logging.ILoggerFactory? Loggers = null) -> void
+AgentCore.Application.Tools.Builtin.BuiltinToolPorts.Deconstruct(out AgentCore.Application.Ports.IChatClientFactory? ChatClients, out AgentCore.Application.Ports.IBlobStore? Blobs, out AgentCore.Application.Blobs.BlobPolicy? BlobPolicy, out string? WorkspaceRoot, out Microsoft.Extensions.Logging.ILoggerFactory? Loggers) -> void
+AgentCore.Application.Tools.Builtin.BuiltinToolPorts.Blobs.get -> AgentCore.Application.Ports.IBlobStore?
+AgentCore.Application.Tools.Builtin.BuiltinToolPorts.Blobs.init -> void
+AgentCore.Application.Tools.Builtin.BuiltinToolPorts.BlobPolicy.get -> AgentCore.Application.Blobs.BlobPolicy?
+AgentCore.Application.Tools.Builtin.BuiltinToolPorts.BlobPolicy.init -> void
+AgentCore.Application.Tools.Builtin.BuiltinToolPorts.WorkspaceRoot.get -> string?
+AgentCore.Application.Tools.Builtin.BuiltinToolPorts.WorkspaceRoot.init -> void
+AgentCore.Application.Tools.Builtin.BuiltinToolPorts.Loggers.get -> Microsoft.Extensions.Logging.ILoggerFactory?
+AgentCore.Application.Tools.Builtin.BuiltinToolPorts.Loggers.init -> void
 AgentCore.Application.Tools.Builtin.BuiltinToolSource
 AgentCore.Application.Tools.Builtin.BuiltinToolSource.BuiltinToolSource(AgentCore.Application.Tools.Builtin.BuiltinToolPorts! ports) -> void
 AgentCore.Application.Tools.Builtin.BuiltinToolSource.ProvideAsync(AgentCore.Application.Tools.Registry.ToolSourceContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Application.Tools.Registry.ToolRegistration!>!>
@@ -1562,8 +1568,8 @@ const AgentCore.Application.Secrets.KnownSecrets.QdrantApiKeyVariable = "QDRANT_
 const AgentCore.Application.State.StateExtractor.SchemaName = "agentcore_state" -> string!
 const AgentCore.Application.State.UnfilledSlotReminder.CloseTag = "</system-reminder>" -> string!
 const AgentCore.Application.State.UnfilledSlotReminder.OpenTag = "<system-reminder>" -> string!
-const AgentCore.Application.Tools.Builtin.BuiltinToolNames.CodeExecute = "code.execute" -> string!
 const AgentCore.Application.Tools.Builtin.BuiltinToolNames.WebSearch = "web.search" -> string!
+const AgentCore.Application.Tools.Builtin.BuiltinToolNames.FilePublish = "file.publish" -> string!
 const AgentCore.Application.Tools.ToolErrorResult.ErrorProperty = "error" -> string!
 const AgentCore.Application.Tools.ToolErrorResult.MessageProperty = "message" -> string!
 const AgentCore.Application.Tools.ToolErrorResult.ToolProperty = "tool" -> string!
@@ -2198,8 +2204,6 @@ static AgentCore.Application.Configuration.Schema.BlobProviderConfiguration.oper
 static readonly AgentCore.Application.Secrets.KnownSecrets.S3AccessKeyId -> AgentCore.Application.Secrets.SecretName!
 static readonly AgentCore.Application.Secrets.KnownSecrets.S3SecretAccessKey -> AgentCore.Application.Secrets.SecretName!
 AgentCore.Application.Blobs.BlobStoreFactory
-AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Blobs.get -> AgentCore.Application.Ports.IBlobStore?
-AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Blobs.init -> void
 AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Blobs.get -> AgentCore.Application.Configuration.Schema.BlobProviderConfiguration?
 AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Blobs.init -> void
 static AgentCore.Application.Blobs.BlobStoreFactory.OpenAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.IBlobStoreAdapter!>! adapters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IBlobStore?>
@@ -2259,8 +2263,8 @@ AgentCore.Application.Transcript.FileContent.MediaType.set -> void
 AgentCore.Application.Transcript.FileContent.Name.get -> string!
 AgentCore.Application.Transcript.FileContent.Name.set -> void
 AgentCore.Application.Transcript.FileContent.FileContent() -> void
-AgentCore.Application.Transcript.FileContent.Scope.get -> string?
-AgentCore.Application.Transcript.FileContent.Scope.set -> void
+AgentCore.Application.Transcript.FileContent.Title.get -> string?
+AgentCore.Application.Transcript.FileContent.Title.set -> void
 AgentCore.Application.Configuration.Compilation.ResolvedHarness.Clock.get -> bool
 AgentCore.Application.Configuration.Compilation.ResolvedHarness.Clock.init -> void
 AgentCore.Application.Configuration.Compilation.ResolvedHarness.BaseInstructions.get -> bool
@@ -2279,3 +2283,15 @@ static AgentCore.Application.Configuration.Compilation.AgentInstructions.Base.ge
 AgentCore.Application.Runtime.Harness.CallerTimeZone
 static AgentCore.Application.Runtime.Harness.CallerTimeZone.Parse(string? id) -> System.TimeZoneInfo?
 static AgentCore.Application.Runtime.Harness.CallerTimeZone.Set(Microsoft.Agents.AI.AgentSession! session, System.TimeZoneInfo! zone) -> void
+AgentCore.Application.Configuration.Schema.ShellConfiguration.Env.get -> System.Collections.Generic.IReadOnlyDictionary<string!, AgentCore.Application.Configuration.Parsing.SecretTemplate!>!
+AgentCore.Application.Configuration.Schema.ShellConfiguration.Env.init -> void
+AgentCore.Application.Configuration.Schema.ShellConfiguration.MaxOutputKb.get -> int?
+AgentCore.Application.Configuration.Schema.ShellConfiguration.MaxOutputKb.init -> void
+AgentCore.Application.Configuration.Schema.ShellConfiguration.Image.get -> string?
+AgentCore.Application.Configuration.Schema.ShellConfiguration.Image.init -> void
+AgentCore.Application.Configuration.Schema.ShellConfiguration.Network.get -> string?
+AgentCore.Application.Configuration.Schema.ShellConfiguration.Network.init -> void
+AgentCore.Application.Configuration.Schema.ShellConfiguration.MemoryMb.get -> int?
+AgentCore.Application.Configuration.Schema.ShellConfiguration.MemoryMb.init -> void
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Secrets.get -> AgentCore.Application.Secrets.ResolvedSecrets?
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Secrets.init -> void

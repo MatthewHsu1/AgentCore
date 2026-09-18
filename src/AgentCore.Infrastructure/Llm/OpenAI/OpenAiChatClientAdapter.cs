@@ -48,7 +48,7 @@ public sealed class OpenAiChatClientAdapter : IChatClientAdapter
 
         var client = _client.GetResponsesClient().AsIChatClient(entry.Model);
 
-        return new OpenAiSandboxFilesClient(WithResponseDefaults(client, entry.ReasoningEffort), _client);
+        return WithResponseDefaults(client, entry.ReasoningEffort);
     }
 
     /// <inheritdoc />
@@ -60,7 +60,6 @@ public sealed class OpenAiChatClientAdapter : IChatClientAdapter
         return marker switch
         {
             HostedWebSearchTool when entry.WebSearch != false => marker,
-            HostedCodeInterpreterTool when entry.CodeExecute != false => marker,
             _ => null,
         };
     }

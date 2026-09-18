@@ -31,6 +31,12 @@ internal static class ExampleDocument
     /// </remarks>
     public const string LastProviderLine = "    citation: source-locator";
 
+    /// <summary>
+    /// The one-line <c>providers.blobs</c> entry, for a test that takes it out or swaps its own in.
+    /// </summary>
+    public const string BlobsLine =
+        "  blobs: { kind: s3, endpoint: https://s3.us-east-005.backblazeb2.com, bucket: agentcore-files, region: us-east-005 }";
+
     /// <summary>The section 8.1 document as YAML.</summary>
     public const string Yaml =
         """
@@ -107,7 +113,7 @@ internal static class ExampleDocument
               properties: { summary: { type: string } }
               required: [ summary ]
           - { id: search, kind: builtin, uses: web.search }
-          - { id: python, kind: builtin, uses: code.execute }
+          - { id: publish, kind: builtin, uses: file.publish }
         agents:
           defaults:
             model: { ref: reply, temperature: 0.3 }
@@ -121,7 +127,7 @@ internal static class ExampleDocument
             - { id: resolver,   instructions: "<stage delta>", tools: [] }
             - { id: escalator,  instructions: "<stage delta>", tools: [ create_case ] }
             - { id: closer,     instructions: "<stage delta>", tools: [] }
-            - { id: analyst, instructions: "<stage delta>", tools: [ lookup_order, create_case, search, python ],
+            - { id: analyst, instructions: "<stage delta>", tools: [ lookup_order, create_case, search, publish ],
                 knowledge: { mode: tool, limit: 8, citations: true, scoped: false } }
             - { id: webchat, instructions: "<stage delta>", tools: [ lookup_order ],
                 knowledge: { mode: tool, citations: false } }
@@ -161,7 +167,7 @@ internal static class ExampleDocument
             - { kind: openai, model: gpt-4.1-mini, as: reply }      # the voice path, chosen on latency
             - { kind: openai, model: gpt-5.4-nano, as: fill }       # the extractor, chosen on null discipline
             - { kind: openai, model: gpt-4.1,      as: judge }      # evaluation only, chosen on judgement
-            - { kind: openai, model: gpt-4.1-nano, as: cheap, webSearch: false, codeExecute: false }
+            - { kind: openai, model: gpt-4.1-nano, as: cheap, webSearch: false }
           call:      { kind: telnyx-relay }        # the pipe: who carries the call and owns /v1/{entry}/call
           speech:                                  # the ears and the mouth, named one role at a time
             stt: { kind: telnyx-relay }            # recognition. Bundled here, so it matches call
@@ -169,6 +175,7 @@ internal static class ExampleDocument
           telephony: { kind: telnyx }              # dial, transfer, hang up. Not the pipe — that is call
           moderation: { kind: openai }             # reads what the CALLER said, before the model runs
           embeddings: { kind: openai, model: text-embedding-3-small }
+          blobs: { kind: s3, endpoint: https://s3.us-east-005.backblazeb2.com, bucket: agentcore-files, region: us-east-005 }
           knowledge:
             kind: qdrant
             endpoint: https://qdrant.example.com:6334
@@ -416,9 +423,9 @@ internal static class ExampleDocument
               "uses": "web.search"
             },
             {
-              "id": "python",
+              "id": "publish",
               "kind": "builtin",
-              "uses": "code.execute"
+              "uses": "file.publish"
             }
           ],
           "agents": {
@@ -479,7 +486,7 @@ internal static class ExampleDocument
                   "lookup_order",
                   "create_case",
                   "search",
-                  "python"
+                  "publish"
                 ],
                 "knowledge": {
                   "mode": "tool",
@@ -591,8 +598,7 @@ internal static class ExampleDocument
                 "kind": "openai",
                 "model": "gpt-4.1-nano",
                 "as": "cheap",
-                "webSearch": false,
-                "codeExecute": false
+                "webSearch": false
               }
             ],
             "call": {
@@ -615,6 +621,12 @@ internal static class ExampleDocument
             "embeddings": {
               "kind": "openai",
               "model": "text-embedding-3-small"
+            },
+            "blobs": {
+              "kind": "s3",
+              "endpoint": "https://s3.us-east-005.backblazeb2.com",
+              "bucket": "agentcore-files",
+              "region": "us-east-005"
             },
             "knowledge": {
               "kind": "qdrant",

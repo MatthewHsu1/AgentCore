@@ -5,6 +5,7 @@ using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Secrets;
 using AgentCore.Application.Skills;
 using AgentCore.Application.Tools.Registry;
 using Microsoft.Extensions.Logging;
@@ -30,7 +31,6 @@ internal static class CompilationStartup
     /// <param name="chatClients">The factory step 3c built, which the compile table asks for every agent and for the extractor.</param>
     /// <param name="tools">The registry step 4 built.</param>
     /// <param name="calls">The store every call's row and every word of it is kept in.</param>
-    /// <param name="blobs">The store step 4d opened, or <see langword="null"/> when the document names no blob vendor.</param>
     /// <param name="evaluators">
     /// The registry the moderator comes out of. R3 puts moderation in the chat pipeline of every
     /// compiled agent, so it is bound here rather than on the session factory.
@@ -41,6 +41,7 @@ internal static class CompilationStartup
     /// <param name="loggers">The factory the guard evaluator and the knowledge provider take their loggers from.</param>
     /// <param name="workspaceRoot">The root <c>options.UseWorkspace(...)</c> bound, or <see langword="null"/>.</param>
     /// <param name="clock">The clock the host bound, or <see langword="null"/> for the system clock.</param>
+    /// <param name="secrets">The set a <c>shell:</c> block's <c>env:</c> resolves its <c>${secret:name}</c> references against.</param>
     /// <returns>The compiled entries, and the seams that made them.</returns>
     /// <exception cref="ConfigurationLoadException">An entry does not compile.</exception>
     internal static ValueTask<CompiledGraph> CompileAsync(
@@ -48,14 +49,14 @@ internal static class CompilationStartup
         IChatClientFactory chatClients,
         ToolRegistry tools,
         ICallStore calls,
-        IBlobStore? blobs,
         EvaluatorRegistry evaluators,
         IKnowledgeRetrievalPort? knowledge,
         SkillCatalog? skills,
         IKnowledgeCitationFormatter citations,
         ILoggerFactory loggers,
         string? workspaceRoot = null,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null,
+        ResolvedSecrets? secrets = null)
     {
         GuardEvaluator guards = new(configuration.Guards, loggers.CreateLogger<GuardEvaluator>());
         CompiledAgentRegistry registry = new();
@@ -68,13 +69,13 @@ internal static class CompilationStartup
                 Guards = guards,
                 Moderation = PromptModerator.FromRegistry(evaluators),
                 CallStore = calls,
-                Blobs = blobs,
                 Knowledge = knowledge,
                 Skills = skills,
                 Citations = citations,
                 Loggers = loggers,
                 WorkspaceRoot = workspaceRoot,
                 Clock = clock,
+                Secrets = secrets,
             });
 
         return ValueTask.FromResult(new CompiledGraph(chatClients, guards, registry, entries));

@@ -1,10 +1,8 @@
-using System.Text.RegularExpressions;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Runtime.Harness;
 using AgentCore.Application.Runtime.Turn;
 using Microsoft.Agents.AI;
-using Microsoft.Agents.AI.Tools.Shell;
 using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Configuration.Compilation;
@@ -67,7 +65,6 @@ internal static class AgentHarnessProviders
     /// <param name="pointer">This agent's JSON pointer, for a <c>memory:</c>, <c>files:</c>, <c>shell:</c>, or <c>background:</c> failure.</param>
     /// <param name="resolve">Resolves an <c>agents.items</c> id to its compiled agent, or <see langword="null"/> when undeclared.</param>
     /// <param name="background">Collects the built background providers, so the call can release their sessions when it ends.</param>
-    /// <param name="tools">This agent's compiled tools, or <see langword="null"/> when it advertises none.</param>
     public static void Add(
         List<AIContextProvider> providers,
         AgentDefaults? defaults,
@@ -75,8 +72,7 @@ internal static class AgentHarnessProviders
         AgentCompilationContext context,
         string pointer,
         Func<string, AIAgent?> resolve,
-        ICollection<BackgroundAgentsProvider>? background = null,
-        IReadOnlyList<AITool>? tools = null)
+        ICollection<BackgroundAgentsProvider>? background = null)
     {
         var harness = AgentHarness.Compose(defaults, item);
 
@@ -107,7 +103,7 @@ internal static class AgentHarnessProviders
 
         if (item.Shell is { } shell)
         {
-            var options = BuildShellOptions(item, shell, context, pointer);
+            var options = AgentShellOptionsCompiler.Build(item, shell, context, pointer);
             providers.Add(new CallShellProvider(options));
             providers.Add(new CallShellEnvironmentProvider(options));
         }
@@ -117,11 +113,6 @@ internal static class AgentHarnessProviders
             var provider = AgentBackgroundCompiler.Build(item, pointer, resolve);
             providers.Add(provider);
             background?.Add(provider);
-        }
-
-        if (AgentCaptureCompiler.Build(defaults, item, context, tools) is { } capture)
-        {
-            providers.Add(capture);
         }
     }
 #pragma warning restore MAAI001
@@ -294,69 +285,6 @@ internal static class AgentHarnessProviders
     }
 
 #pragma warning restore MAAI001
-
-    private static CallShellOptions BuildShellOptions(
-        AgentConfiguration item,
-        ShellConfiguration shell,
-        AgentCompilationContext context, string pointer)
-    {
-        if (context.WorkspaceRoot is null)
-        {
-            throw ConfigurationCompiler.Fail(
-                ConfigurationError.AppendPointer(pointer, "shell"),
-                $"the agent '{item.Id}' declares a shell: block and this host bound no workspace "
-                + "root, so the shell has no working directory. Call options.UseWorkspace(...) with "
-                + "the folder, or remove the shell: block.");
-        }
-
-        var policy = shell.Policy is { } declared ? BuildPolicy(item, declared, pointer) : null;
-
-        var timeout = shell.TimeoutSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : (TimeSpan?)null;
-
-        return new CallShellOptions(shell.Kind, policy, timeout);
-    }
-
-    private static ShellPolicy BuildPolicy(
-        AgentConfiguration item,
-        ShellPolicyConfiguration policy,
-        string pointer)
-    {
-        // ShellPolicy treats a supplied-but-empty allow list as deny-all (it denies any command that
-        // matches none of the allow patterns, and an empty list matches nothing), so an agent that
-        // declares no allow: must reach the executor with allowList: null, not an empty collection.
-        var allow = policy.Allow.Count == 0 ? null : policy.Allow;
-
-        try
-        {
-            return new ShellPolicy(denyList: policy.Deny, allowList: allow);
-        }
-        catch (ArgumentException exception)
-        {
-            // ShellPolicy compiles every pattern into a Regex eagerly in its own constructor, so a
-            // bad pattern in either list throws here, at compile time, rather than at the model's
-            // first command.
-            var bad = policy.Deny.Concat(allow ?? [])
-                .FirstOrDefault(pattern => !IsValidRegex(pattern));
-
-            throw ConfigurationCompiler.Fail(
-                ConfigurationError.AppendPointer(ConfigurationError.AppendPointer(pointer, "shell"), "policy"),
-                $"the agent '{item.Id}' declares a shell: policy whose pattern '{bad}' is not a "
-                + $"valid regex: {exception.Message}");
-        }
-    }
-
-    private static bool IsValidRegex(string pattern)
-    {
-        try
-        {
-            _ = new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(1));
-            return true;
-        }
-        catch (ArgumentException)
-        {
-            return false;
-        }
-    }
 
 #pragma warning disable MAAI001 // File-store types are evaluation-only in Microsoft.Agents.AI 1.21.0.
 

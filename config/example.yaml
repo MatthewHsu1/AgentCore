@@ -189,10 +189,15 @@ tools:
 
   # kind: builtin. These are markers, not code. Each tells the model provider it may run a hosted
   # tool. A provider that does not run it ignores it. AgentToolCompiler drops the marker for a
-  # model vetoed with webSearch: false or codeExecute: false (see 8. providers). That is a
-  # warning at compile time, never a boot failure.
+  # model vetoed with webSearch: false (see 8. providers). That is a warning at compile time,
+  # never a boot failure.
   - { id: search, kind: builtin, uses: web.search }
-  - { id: python, kind: builtin, uses: code.execute }
+
+  # kind: builtin, a plain function. The model calls it when a file in the call's workspace is a
+  # deliverable: the file is copied into providers.blobs (see 8. providers), owned by the call,
+  # and the person gets a link. Files not published are lost when the call ends. Needs
+  # providers.blobs and options.UseWorkspace(...) on the host; missing either fails the boot.
+  - { id: publish, kind: builtin, uses: file.publish }
 
   # kind: binding, typed form. Not used in this example. The host registered
   #   options.Bind("CloseCase", (string caseId, string reason) => ...)
@@ -290,7 +295,7 @@ agents:
     - { id: closer,     instructions: "<stage delta>", tools: [] }
 
     # Internal. Everything on. scoped: false searches every product on purpose.
-    - { id: analyst, instructions: "<stage delta>", tools: [ lookup_order, create_case, search, python ],
+    - { id: analyst, instructions: "<stage delta>", tools: [ lookup_order, create_case, search, publish ],
         knowledge: { mode: tool, limit: 8, citations: true, scoped: false } }
 
     # Customer facing. Tools yes, citations no. Sets two keys and inherits limit: 5.
@@ -363,14 +368,14 @@ entries:
 # This section binds adapters to ports. It never changes agent shape.
 providers:
   # The models. as: is the name every model: { ref: ... } in this file points at.
-  # webSearch: false and codeExecute: false are vetoes, not defaults. Omitted or true both leave
-  # the choice to the vendor's adapter. cheap is the least capable model, so vetoing both there
-  # costs nothing and stops a future hosted tool from running on it by accident.
+  # webSearch: false is a veto, not a default. Omitted or true both leave the choice to the
+  # vendor's adapter. cheap is the least capable model, so vetoing it there costs nothing and
+  # stops a future hosted tool from running on it by accident.
   llm:
     - { kind: openai, model: gpt-4.1-mini, as: reply }      # the voice path, chosen on latency
     - { kind: openai, model: gpt-5.4-nano, as: fill }       # the extractor, chosen on null discipline
     - { kind: openai, model: gpt-4.1,      as: judge }      # evaluation only, chosen on judgement
-    - { kind: openai, model: gpt-4.1-nano, as: cheap, webSearch: false, codeExecute: false }
+    - { kind: openai, model: gpt-4.1-nano, as: cheap, webSearch: false }
 
   # Three voice planes. They are not duplicates.
   #   call        the media pipe. It carries the audio and owns the route /v1/{entry}/call.
@@ -393,6 +398,10 @@ providers:
   # dimensions: is optional. Write it only if your ingester asked for a narrower vector than the
   # model's own width.
   embeddings: { kind: openai, model: text-embedding-3-small }
+
+  # Where a file the model publishes (file.publish) is kept after the call, owned by the call id.
+  # Any S3-compatible store. Reads the s3-access-key and s3-secret-key secrets.
+  blobs: { kind: s3, endpoint: https://s3.us-east-005.backblazeb2.com, bucket: agentcore-files, region: us-east-005 }
 
   # -------------------------------------------------------------------------------------------
   # 8.1 knowledge: the collection this deployment reads

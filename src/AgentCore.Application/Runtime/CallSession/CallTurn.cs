@@ -23,5 +23,6 @@ internal sealed record CallTurn(
     TurnRenders? Renders,
     TurnSources Sources,
     TurnResults Results,
+    TurnFiles Files,
     KnowledgeScope? Knowledge,
     string? MessageId);

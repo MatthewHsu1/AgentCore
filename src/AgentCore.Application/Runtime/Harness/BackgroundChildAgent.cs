@@ -1,10 +1,11 @@
+using AgentCore.Application.Runtime.Turn;
 using Microsoft.Agents.AI;
 
 namespace AgentCore.Application.Runtime.Harness;
 
 /// <summary>
-/// Wraps one <c>background:</c> child so every session it gets knows which call started it, and
-/// which zone the person on that call is in.
+/// Wraps one <c>background:</c> child so every session it gets knows which call started it,
+/// which zone the person on that call is in, and which workspace and shells that call owns.
 /// </summary>
 /// <remarks>
 /// <c>BackgroundAgentsProvider</c> creates the child session inside the parent's tool call, before
@@ -34,6 +35,30 @@ internal sealed class BackgroundChildAgent(AIAgent inner) : DelegatingAIAgent(in
             CallerTimeZone.Stamp(session, zone);
         }
 
+        if (turn is not null)
+        {
+            TurnRegistry.Set(session, Shared(turn));
+        }
+
         return session;
     }
+
+    /// <summary>
+    /// The part of the parent's turn a child may share: the call, its workspace folder, and its
+    /// shells, so <c>files:</c> and <c>shell:</c> on the child work on the same disk. Every drain,
+    /// screen, tool list, and clarification stays with the parent; a child's publish reports a
+    /// link in its result instead.
+    /// </summary>
+    private static TurnInvocation Shared(TurnInvocation parent)
+        => new()
+        {
+            CallId = parent.CallId,
+            TurnIndex = parent.TurnIndex,
+            Stage = parent.Stage,
+            Workspace = parent.Workspace,
+            Shells = parent.Shells,
+            Knowledge = parent.Knowledge,
+            TimeZone = parent.TimeZone,
+            Nested = true,
+        };
 }

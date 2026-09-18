@@ -101,8 +101,8 @@ internal static class ResponsesTurnStream
 
         if (dialect)
         {
-            // The enumeration above ends only after the run's providers have finished, and the
-            // capture provider is one of them: by here the bytes are in the store or never will be.
+            // The enumeration above ends only after the run has finished, and the publish tool ran
+            // inside it: by here the bytes are in the store or never will be.
             var calls = http.RequestServices.GetRequiredService<CallRepository>();
 
             await foreach (var part in files.ResolveAsync(calls, call.CallId, cancellationToken).ConfigureAwait(false))

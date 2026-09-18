@@ -2,6 +2,7 @@
 
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Harness;
+using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Fakes;
 using Microsoft.Agents.AI;
 using Xunit;
@@ -56,6 +57,37 @@ public sealed class BackgroundChildAgentTests
         Assert.NotNull(creating.Created);
         Assert.True(creating.Created.StateBag.TryGetValue<string>(CallerTimeZone.Key, out var stamped));
         Assert.Equal("Asia/Taipei", stamped);
+    }
+
+    [Fact]
+    public async Task CreateSessionAsync_InsideTheParentsRun_FilesTheParentsWorkspaceOnTheChild()
+    {
+        // Arrange
+        var token = TestContext.Current.CancellationToken;
+        BackgroundChildAgent child = new(new ChatClientAgent(new ScriptedChatClient("child")));
+        SessionCreatingProvider creating = new(child);
+        ChatClientAgent parent = new(new ScriptedChatClient("parent"), new ChatClientAgentOptions { AIContextProviders = [creating] });
+        var renders = new TurnRenders();
+        var turn = new TurnInvocation
+        {
+            CallId = "call-9",
+            TurnIndex = 0,
+            Stage = "s",
+            Workspace = "/work/call-9",
+            Renders = renders,
+        };
+
+        // Act
+        await parent.RunAsync("go", await parent.CreateSessionAsync(token), turn.RunOptions(), token);
+
+        // Assert
+        Assert.NotNull(creating.Created);
+        var filed = TurnRegistry.For(creating.Created);
+        Assert.NotNull(filed);
+        Assert.Equal("/work/call-9", filed.Workspace);
+        Assert.Equal("call-9", filed.CallId);
+        Assert.True(filed.Nested);
+        Assert.Null(filed.Renders);
     }
 
     [Fact]

@@ -37,6 +37,9 @@ internal sealed class ResponsesHost : IAsyncDisposable
     /// <summary>Gets the client that speaks to the host.</summary>
     public HttpClient Client { get; }
 
+    /// <summary>Gets the started host's services, for a test that reads what a turn stored.</summary>
+    public IServiceProvider Services => _app.Services;
+
     /// <summary>Starts one host over one document.</summary>
     /// <param name="yaml">The document, as YAML.</param>
     /// <param name="reply">The model behind every name the routing factory does not hold.</param>

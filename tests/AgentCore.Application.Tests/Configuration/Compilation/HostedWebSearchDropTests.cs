@@ -17,7 +17,6 @@ namespace AgentCore.Application.Tests.Configuration.Compilation;
 public sealed class HostedWebSearchDropTests
 {
     private const string SearchToolId = BuiltinToolNames.WebSearch;
-    private const string CodeToolId = BuiltinToolNames.CodeExecute;
 
     [Fact]
     public void Compile_CapableModel_KeepsTheTool()
@@ -25,30 +24,6 @@ public sealed class HostedWebSearchDropTests
         var tools = Tools(agent: "reply", capable: true);
 
         Assert.Single(tools.OfType<HostedWebSearchTool>());
-    }
-
-    [Fact]
-    public void Compile_CodeExecuteOnCapableVendor_KeepsTheTool()
-    {
-        var tools = BuildAgentTools(
-            "reply",
-            model: null,
-            CodeTool(),
-            new ScreeningChatClientFactory(new HostedCodeInterpreterTool()));
-
-        Assert.Single(tools.OfType<HostedCodeInterpreterTool>());
-    }
-
-    [Fact]
-    public void Compile_CodeExecuteOnIncapableVendor_DropsTheTool()
-    {
-        var tools = BuildAgentTools(
-            "reply",
-            model: null,
-            CodeTool(),
-            new ScreeningChatClientFactory(new HostedWebSearchTool()));
-
-        Assert.Empty(tools.OfType<HostedCodeInterpreterTool>());
     }
 
     [Fact]
@@ -160,9 +135,6 @@ public sealed class HostedWebSearchDropTests
 
     private static ToolConfiguration SearchTool()
         => new() { Id = SearchToolId, Kind = ToolKind.Builtin, Uses = BuiltinToolNames.WebSearch };
-
-    private static ToolConfiguration CodeTool()
-        => new() { Id = CodeToolId, Kind = ToolKind.Builtin, Uses = BuiltinToolNames.CodeExecute };
 
     private static List<AITool> Tools(string agent, bool capable)
         => BuildAgentTools(agent, model: null, SearchTool(), new ScreeningChatClientFactory(Marker(capable)));

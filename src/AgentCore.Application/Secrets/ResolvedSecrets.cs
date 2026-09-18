@@ -139,6 +139,24 @@ public sealed class ResolvedSecrets
                 yield return reference;
             }
         }
+
+        for (var index = 0; index < configuration.Agents.Items.Count; index++)
+        {
+            if (configuration.Agents.Items[index].Shell is not { } shell)
+            {
+                continue;
+            }
+
+            var env = ConfigurationError.AppendPointer(
+                ConfigurationError.AppendPointer(
+                    ConfigurationError.AppendPointer("/agents/items", index), "shell"),
+                "env");
+
+            foreach (var reference in In(shell.Env, env))
+            {
+                yield return reference;
+            }
+        }
     }
 
     /// <summary>Yields every entry of one string map that references a secret.</summary>

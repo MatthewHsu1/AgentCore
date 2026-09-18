@@ -15,11 +15,10 @@ namespace AgentCore.Application.Tests.Tools;
 /// The first tool kind of section 8.1: <c>kind: builtin</c>, which AgentCore ships.
 /// </summary>
 /// <remarks>
-/// The shipped example holds two built-ins: <c>web.search</c> and <c>code.execute</c>, markers
-/// that build one <c>HostedWebSearchTool</c> and one <c>HostedCodeInterpreterTool</c> and run no
-/// code of their own — see <c>HostedWebSearchDropTests</c> for what reaches a compiled agent. They
-/// call nothing, so the call path, the section 8.7 error-result shape, description resolution, and
-/// cancellation that a plain built-in which actually runs would exercise stay untested until one ships.
+/// The shipped example holds two built-ins: <c>web.search</c>, a marker that builds one
+/// <c>HostedWebSearchTool</c> and runs no code of its own — see <c>HostedWebSearchDropTests</c> for
+/// what reaches a compiled agent — and <c>file.publish</c>, a plain function whose call path is
+/// covered in <c>FilePublishToolDefinitionTests</c>.
 /// </remarks>
 public sealed class BuiltinToolTests
 {
@@ -81,8 +80,10 @@ public sealed class BuiltinToolTests
     /// <summary>Builds one declared tool through <see cref="BuiltinToolSource"/>, synchronously.</summary>
     private sealed class BuiltinFactory
     {
-        private readonly BuiltinToolSource _source =
-            new(new BuiltinToolPorts(new RecordingChatClientFactory()));
+        private readonly BuiltinToolSource _source = new(new BuiltinToolPorts(
+            new RecordingChatClientFactory(),
+            new RecordingBlobStore(),
+            WorkspaceRoot: Path.Combine(Path.GetTempPath(), "agentcore-builtin-tests")));
 
         public AITool? Create(ToolConfiguration tool)
         {

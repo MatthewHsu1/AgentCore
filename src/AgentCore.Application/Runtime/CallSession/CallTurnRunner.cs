@@ -209,6 +209,7 @@ internal sealed class CallTurnRunner
                 _hasScreen ? new TurnRenders() : null,
                 new TurnSources(),
                 new TurnResults(),
+                new TurnFiles(),
                 knowledge,
                 origin?.MessageId);
         }
@@ -315,6 +316,7 @@ internal sealed class CallTurnRunner
             Sources = turn.Sources,
             Renders = turn.Renders,
             Results = turn.Results,
+            Files = turn.Files,
             OnToolFailure = failure => _session.Events.RaiseToolFailure(turn.Index, failure),
             Tools = _delegatedTools?.Tools,
             ToolsFor = _delegatedTools?.ToolId,

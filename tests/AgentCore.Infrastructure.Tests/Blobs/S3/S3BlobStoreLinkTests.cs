@@ -14,17 +14,33 @@ namespace AgentCore.Infrastructure.Tests.Blobs.S3;
 /// </summary>
 public sealed class S3BlobStoreLinkTests
 {
-    private static S3BlobStore Open()
+    private static S3BlobStore Open(string endpoint = "https://s3.us-east-005.backblazeb2.com")
         => new(
             new AmazonS3Client(
                 new BasicAWSCredentials("fakeKeyId", "fakeSecret"),
                 new AmazonS3Config
                 {
-                    ServiceURL = "https://s3.us-east-005.backblazeb2.com",
+                    ServiceURL = endpoint,
                     AuthenticationRegion = "us-east-005",
                     ForcePathStyle = true,
                 }),
             "SpiritAI");
+
+    [Fact]
+    public async Task LinkAsync_PlainHttpEndpoint_LinksOverHttp()
+    {
+        // Arrange
+        using var store = Open("http://localhost:59000");
+
+        // Act
+        var url = await store.LinkAsync(new BlobRef("call-1", "rows.csv", "text/csv", 8), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(url);
+        Assert.Equal("http", url.Scheme);
+        Assert.Equal("localhost", url.Host);
+        Assert.Equal(59000, url.Port);
+    }
 
     [Fact]
     public async Task LinkAsync_SignsHostOnly_AndCarriesTheResponseOverrides()

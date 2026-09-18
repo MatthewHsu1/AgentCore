@@ -12,12 +12,12 @@ public sealed class FileContentTests
     [Fact]
     public void Kept_SurvivesTheTranscriptEncoder()
     {
-        // Arrange: what the capture wrote, stored, read back.
+        // Arrange: what the publish tool wrote, stored, read back.
         FileContent file = new()
         {
             Name = "chart.png",
-            FileId = "cfile_1",
-            Scope = "cntr_1",
+            FileId = "out/chart.png",
+            Title = "Sales by month",
             MediaType = "image/png",
             Length = 48213,
             Kept = true,
@@ -30,7 +30,7 @@ public sealed class FileContentTests
 
         // Assert
         var read = Assert.Single(restored.Contents.OfType<FileContent>());
-        Assert.Equal(("chart.png", "cfile_1", "cntr_1", "image/png", 48213L, true), (read.Name, read.FileId, read.Scope, read.MediaType, read.Length, read.Kept));
+        Assert.Equal(("chart.png", "out/chart.png", "Sales by month", "image/png", 48213L, true), (read.Name, read.FileId, read.Title, read.MediaType, read.Length, read.Kept));
         Assert.Contains("\"agentcore.file\"", json, StringComparison.Ordinal);
     }
 }

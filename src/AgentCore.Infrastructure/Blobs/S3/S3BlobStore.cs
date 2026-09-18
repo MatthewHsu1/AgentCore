@@ -100,11 +100,6 @@ public sealed class S3BlobStore : IBlobStore, IDisposable
     }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// A presigned GET. Only <c>host</c> is signed: a browser sends no other header the bucket
-    /// could check. The media type and disposition ride as response overrides, which the
-    /// signature covers, so the link cannot be bent into serving the bytes another way.
-    /// </remarks>
     public ValueTask<Uri?> LinkAsync(BlobRef blob, TimeSpan lifetime, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(blob);
@@ -114,7 +109,7 @@ public sealed class S3BlobStore : IBlobStore, IDisposable
             BucketName = _bucket,
             Key = KeyOf(blob.OwnerId, blob.Name),
             Verb = HttpVerb.GET,
-            Protocol = Protocol.HTTPS,
+            Protocol = LinkProtocol(),
             Expires = DateTime.UtcNow.Add(lifetime),
             ResponseHeaderOverrides =
             {
@@ -158,6 +153,13 @@ public sealed class S3BlobStore : IBlobStore, IDisposable
 
     /// <inheritdoc />
     public void Dispose() => _client.Dispose();
+
+    /// <summary>The endpoint's scheme, or https when the client was given a region and no URL.</summary>
+    private Protocol LinkProtocol()
+        => Uri.TryCreate(_client.Config.ServiceURL, UriKind.Absolute, out var endpoint)
+            && string.Equals(endpoint.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+            ? Protocol.HTTP
+            : Protocol.HTTPS;
 
     private async ValueTask DeleteBatchAsync(List<KeyVersion> batch, CancellationToken cancellationToken)
     {

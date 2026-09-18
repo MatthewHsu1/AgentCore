@@ -196,8 +196,13 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
             .BuildAsync(_options, startup, cancellationToken)
             .ConfigureAwait(false));
 
+        // Opened before the tools: file.publish reads the store at build time.
+        var blobs = Track(await BlobStartup
+            .OpenAsync(configuration, _options, cancellationToken)
+            .ConfigureAwait(false));
+
         var tools = await ToolRegistryStartup
-            .BuildAsync(this, _options, startup, chatClients, configuration, cancellationToken)
+            .BuildAsync(this, _options, startup, chatClients, blobs, _loggers, configuration, cancellationToken)
             .ConfigureAwait(false);
 
         ConfigurationValidator.ValidateToolReferences(configuration, tools.ServedIds);
@@ -218,10 +223,6 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
             .OpenAsync(configuration, _options, _loggers, cancellationToken)
             .ConfigureAwait(false));
 
-        var blobs = Track(await BlobStartup
-            .OpenAsync(configuration, _options, cancellationToken)
-            .ConfigureAwait(false));
-
         CallRepository calls = new(store, blobs);
 
         var evaluators = await EvaluationStartup
@@ -234,14 +235,14 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
                 chatClients,
                 tools.Registry,
                 calls,
-                blobs,
                 evaluators,
                 knowledge,
                 skills,
                 KnowledgeCitationFormatterFactory.Resolve(configuration, _options.KnowledgeCitations),
                 _loggers,
                 _options.WorkspaceRoot,
-                _options.TimeProvider)
+                _options.TimeProvider,
+                secrets)
             .ConfigureAwait(false);
 
         var seams = CallSeamStartup.Build(configuration, _options);

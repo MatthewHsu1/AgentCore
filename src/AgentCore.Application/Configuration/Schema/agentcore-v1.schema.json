@@ -920,6 +920,33 @@
         "timeoutSeconds": {
           "type": "integer",
           "minimum": 1
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "The environment passed to the executor, on top of what the executor kind already supplies. A value may hold ${secret:name}."
+        },
+        "maxOutputKb": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The per-stream output cap, in KiB."
+        },
+        "image": {
+          "type": "string",
+          "minLength": 1,
+          "description": "kind: docker. The container image."
+        },
+        "network": {
+          "type": "string",
+          "minLength": 1,
+          "description": "kind: docker. The Docker network mode."
+        },
+        "memoryMb": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "kind: docker. The container memory limit, in MB."
         }
       }
     },
@@ -1224,7 +1251,7 @@
         },
         "blobs": {
           "$ref": "#/$defs/blobProvider",
-          "description": "Where a file the vendor's sandbox wrote is kept after the run, such as s3. A document that names none keeps no sandbox file."
+          "description": "Where a file the agent produces is kept after the run, such as s3. A document that names none keeps no such file."
         }
       }
     },
@@ -1291,10 +1318,6 @@
         "webSearch": {
           "type": "boolean",
           "description": "Whether this entry may run a hosted web search. An opt-out: omitted or true lets the vendor's adapter decide, false vetoes it even on a model the adapter thinks is capable."
-        },
-        "codeExecute": {
-          "type": "boolean",
-          "description": "Whether this entry may run hosted code execution. An opt-out: omitted or true lets the vendor's adapter decide, false vetoes it even on a model the adapter thinks is capable."
         }
       }
     },

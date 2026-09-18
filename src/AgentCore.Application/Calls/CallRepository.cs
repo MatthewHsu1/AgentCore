@@ -7,8 +7,8 @@ using Microsoft.Extensions.AI;
 namespace AgentCore.Application.Calls;
 
 /// <summary>
-/// Everything a host or a consumer does with a stored call: its row, its words, and the files its
-/// sandbox wrote. The one door; the stores behind it are adapters nobody else needs to name.
+/// Everything a host or a consumer does with a stored call: its row, its words, and the files it
+/// published. The one door; the stores behind it are adapters nobody else needs to name.
 /// </summary>
 public sealed class CallRepository : ICallStore
 {
@@ -18,7 +18,7 @@ public sealed class CallRepository : ICallStore
 
     /// <summary>Makes the repository over the stores the document opened.</summary>
     /// <param name="calls">The store the rows and words live in.</param>
-    /// <param name="blobs">The store the sandbox files live in, or <see langword="null"/> when the document names none.</param>
+    /// <param name="blobs">The store the published files live in, or <see langword="null"/> when the document names none.</param>
     public CallRepository(ICallStore calls, IBlobStore? blobs)
     {
         ArgumentNullException.ThrowIfNull(calls);
@@ -33,7 +33,7 @@ public sealed class CallRepository : ICallStore
     /// <summary>The adapter the rows live in. For a host checking which vendor it opened; go through the repository for everything else.</summary>
     public ICallStore Store => _calls;
 
-    /// <summary>Links every sandbox file the messages carry and the capture kept, each name once, in first-seen order.</summary>
+    /// <summary>Links every published file the messages carry and the store kept, each name once, in first-seen order.</summary>
     /// <param name="callId">The call that owns the files.</param>
     /// <param name="messages">The messages to read the references off: the stored transcript, or one turn's updates.</param>
     /// <param name="cancellationToken">Cancels the signing.</param>

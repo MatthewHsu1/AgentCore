@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Diagnostics;
 using Microsoft.Agents.AI.Tools.Shell;
@@ -118,6 +119,15 @@ internal sealed class CallShells : IAsyncDisposable
         return await prober.RefreshAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// The host variables copied into a <see cref="AgentCore.Application.Configuration.Schema.ShellKind.Local"/> executor's clean environment,
+    /// on top of whatever the executor already preserves on its own. LANG missing breaks locale-aware
+    /// tools (encoding, sorting); TMPDIR missing sends scratch writes to a directory a sandboxed host
+    /// may not grant. PATH and HOME are listed too, so this allowlist does not depend on the
+    /// executor's own choice of what it preserves.
+    /// </summary>
+    private static readonly string[] CleanEnvironmentAllowlist = ["PATH", "HOME", "LANG", "TMPDIR"];
+
     private ShellExecutor Create(CallShellOptions options)
     {
         switch (options.Kind)
@@ -129,6 +139,8 @@ internal sealed class CallShells : IAsyncDisposable
                     Mode = ShellMode.Persistent,
                     ConfineWorkingDirectory = true,
                     AcknowledgeUnsafe = true,
+                    CleanEnvironment = true,
+                    Environment = BuildLocalEnvironment(options.Env),
                     Policy = options.Policy,
                 };
                 if (options.Timeout is { } localTimeout)
@@ -136,16 +148,22 @@ internal sealed class CallShells : IAsyncDisposable
                     localOptions.Timeout = localTimeout;
                 }
 
+                if (options.MaxOutputBytes is { } localMaxOutputBytes)
+                {
+                    localOptions.MaxOutputBytes = localMaxOutputBytes;
+                }
+
                 return new LocalShellExecutor(localOptions);
 
             case ShellKind.Docker:
                 // MountReadonly is false because the workspace is this call's own scratch folder,
                 // and files: already writes to it. Every other Docker default (network none,
-                // read-only root, nobody user, pids limit) stays.
+                // read-only root, nobody user, pids limit) stays unless the shell: block overrides it.
                 DockerShellExecutorOptions dockerOptions = new()
                 {
                     HostWorkdir = _workspace,
                     MountReadonly = false,
+                    Environment = options.Env ?? ReadOnlyDictionary<string, string>.Empty,
                     Policy = options.Policy,
                 };
                 if (options.Timeout is { } dockerTimeout)
@@ -153,11 +171,59 @@ internal sealed class CallShells : IAsyncDisposable
                     dockerOptions.Timeout = dockerTimeout;
                 }
 
+                if (options.MaxOutputBytes is { } dockerMaxOutputBytes)
+                {
+                    dockerOptions.MaxOutputBytes = dockerMaxOutputBytes;
+                }
+
+                if (options.Image is { } image)
+                {
+                    dockerOptions.Image = image;
+                }
+
+                if (options.Network is { } network)
+                {
+                    dockerOptions.Network = network;
+                }
+
+                if (options.MemoryBytes is { } memoryBytes)
+                {
+                    dockerOptions.MemoryBytes = memoryBytes;
+                }
+
                 return new DockerShellExecutor(dockerOptions);
 
             default:
                 throw new ArgumentOutOfRangeException(nameof(options), options.Kind, "Unknown shell kind.");
         }
+    }
+
+    /// <summary>
+    /// Builds a <see cref="AgentCore.Application.Configuration.Schema.ShellKind.Local"/> executor's environment: the agent's declared
+    /// <c>shell.env</c>, then <see cref="CleanEnvironmentAllowlist"/> backfilled from this process's
+    /// own environment for whatever <c>shell.env</c> did not already set.
+    /// </summary>
+    private static Dictionary<string, string?> BuildLocalEnvironment(IReadOnlyDictionary<string, string>? declared)
+    {
+        Dictionary<string, string?> environment = new(StringComparer.Ordinal);
+
+        if (declared is not null)
+        {
+            foreach (var (key, value) in declared)
+            {
+                environment[key] = value;
+            }
+        }
+
+        foreach (var name in CleanEnvironmentAllowlist)
+        {
+            if (!environment.ContainsKey(name) && Environment.GetEnvironmentVariable(name) is { } value)
+            {
+                environment[name] = value;
+            }
+        }
+
+        return environment;
     }
 
     /// <summary>

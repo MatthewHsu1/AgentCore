@@ -3,6 +3,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Tools.Builtin;
 using AgentCore.Application.Tools.Registry;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.AspNetCore.DependencyInjection.Startup;
 
@@ -27,6 +28,8 @@ internal static class ToolRegistryStartup
     /// <param name="options">The options the host filled.</param>
     /// <param name="startup">The loaded document and the resolved secrets.</param>
     /// <param name="chatClients">The factory a shipped agent runs on. Step 3c fails the boot rather than returning none.</param>
+    /// <param name="blobs">The store step 4d opened, or <see langword="null"/> when the document names none.</param>
+    /// <param name="loggers">The factory a built-in takes its logger from.</param>
     /// <param name="configuration">The loaded document.</param>
     /// <param name="cancellationToken">Cancels the discovery.</param>
     /// <returns>The registry, and the served-ids union decision 15's reference pass reads.</returns>
@@ -40,12 +43,18 @@ internal static class ToolRegistryStartup
         AgentCoreOptions options,
         AgentCoreStartup startup,
         IChatClientFactory chatClients,
+        IBlobStore? blobs,
+        ILoggerFactory loggers,
         AgentCoreConfiguration configuration,
         CancellationToken cancellationToken)
     {
         List<IToolSource> sources =
         [
-            new BuiltinToolSource(new BuiltinToolPorts(chatClients)),
+            new BuiltinToolSource(new BuiltinToolPorts(
+                chatClients,
+                blobs,
+                WorkspaceRoot: options.WorkspaceRoot,
+                Loggers: loggers)),
             new BindingToolSource(options.Bindings),
         ];
 

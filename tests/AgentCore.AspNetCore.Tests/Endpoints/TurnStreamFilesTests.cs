@@ -9,13 +9,13 @@ using Xunit;
 
 namespace AgentCore.AspNetCore.Tests.Endpoints;
 
-/// <summary>Which sandbox files reach the browser as a part, and with what link.</summary>
+/// <summary>Which published files reach the browser as a part, and with what link.</summary>
 public sealed class TurnStreamFilesTests
 {
     private static ChatResponseUpdate UpdateWith(params AIContent[] contents)
         => new(ChatRole.Assistant, contents);
 
-    /// <summary>A file the capture provider kept, as it writes onto the content before the stream ends.</summary>
+    /// <summary>A file the publish tool kept, as it files it on the turn before the stream ends.</summary>
     private static FileContent Kept(string name, string mediaType, long length)
         => new() { Name = name, FileId = "cfile_" + name, MediaType = mediaType, Length = length, Kept = true };
 

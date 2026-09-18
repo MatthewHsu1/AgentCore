@@ -140,6 +140,36 @@ public sealed class CallShellsTests : IDisposable
     }
 
     [Fact]
+    public async Task Get_Local_CleanEnvironment_DropsTheHostsCanaryButKeepsPathAndADeclaredEnvVar()
+    {
+        Environment.SetEnvironmentVariable("AGENTCORE_TEST_CANARY", "leaked");
+        try
+        {
+            await using CallShells shells = new(_workspace, logger: null);
+            CallShellOptions options = new(
+                ShellKind.Local,
+                Policy: null,
+                Timeout: null,
+                Env: new Dictionary<string, string> { ["PROBE_OK"] = "yes" });
+
+            var canary = await shells.Get(options).RunAsync(
+                "echo \"c=$AGENTCORE_TEST_CANARY\"", TestContext.Current.CancellationToken);
+            Assert.Equal("c=", canary.Stdout.Trim());
+
+            var declared = await shells.Get(options).RunAsync(
+                "echo $PROBE_OK", TestContext.Current.CancellationToken);
+            Assert.Equal("yes", declared.Stdout.Trim());
+
+            var path = await shells.Get(options).RunAsync("ls / >/dev/null && echo ok", TestContext.Current.CancellationToken);
+            Assert.Equal("ok", path.Stdout.Trim());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("AGENTCORE_TEST_CANARY", null);
+        }
+    }
+
+    [Fact]
     public async Task Get_Docker_ReturnsADockerShellExecutor_WithNoDockerNeeded()
     {
         // DockerShellExecutor construction is lazy: it never talks to docker until RunAsync, so this

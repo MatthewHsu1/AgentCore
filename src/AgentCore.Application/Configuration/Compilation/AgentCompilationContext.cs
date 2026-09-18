@@ -2,6 +2,7 @@ using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Secrets;
 using AgentCore.Application.Skills;
 using AgentCore.Application.Tools.Registry;
 using Microsoft.Extensions.Logging;
@@ -54,13 +55,6 @@ public sealed class AgentCompilationContext
     public IKnowledgeRetrievalPort? Knowledge { get; init; }
 
     /// <summary>
-    /// Gets or sets the store a sandbox file is kept in after the run, or <see langword="null"/>
-    /// when the document names no <c>providers.blobs</c>. With it null, a <c>code.execute</c> agent
-    /// captures nothing.
-    /// </summary>
-    public IBlobStore? Blobs { get; init; }
-
-    /// <summary>
     /// Gets or sets the skills every agent's <c>skills:</c> list is drawn from, or
     /// <see langword="null"/> when the host bound no skills folder.
     /// </summary>
@@ -87,4 +81,10 @@ public sealed class AgentCompilationContext
     /// when the host bound no workspace root.
     /// </summary>
     public string? WorkspaceRoot { get; init; }
+
+    /// <summary>
+    /// Gets or sets the set a <c>shell:</c> block's <c>env:</c> resolves its <c>${secret:name}</c>
+    /// references against, or <see langword="null"/> to treat every such reference as unresolved.
+    /// </summary>
+    public ResolvedSecrets? Secrets { get; init; }
 }

@@ -7,8 +7,9 @@ namespace AgentCore.Application.Runtime.Harness;
 /// <remarks>
 /// A parent run has a turn filed in <c>TurnRegistry</c>, so its providers read the call id there.
 /// A child session has no turn: the framework starts it with fresh, empty state and null run
-/// options. <see cref="BackgroundChildAgent"/> stamps this key when the session is created, and
-/// <see cref="HostedFileCaptureProvider"/> reads it back when the turn lookup finds nothing.
+/// options. <see cref="BackgroundChildAgent"/> stamps this key when the session is created, so the
+/// <c>file.publish</c> tool a background child calls can still find the call that owns the file
+/// when the turn lookup finds nothing.
 /// </remarks>
 internal static class BlobOwnerKey
 {

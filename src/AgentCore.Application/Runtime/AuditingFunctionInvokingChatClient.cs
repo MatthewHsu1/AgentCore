@@ -38,7 +38,11 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
     private readonly ConcurrentDictionary<string, Drain> _drains = new(StringComparer.Ordinal);
 
     private sealed record Drain(
-        TurnRenders? Renders, TurnSources? Sources, Action<ToolFailure>? OnToolFailure, bool Nested);
+        TurnRenders? Renders,
+        TurnSources? Sources,
+        TurnFiles? Files,
+        Action<ToolFailure>? OnToolFailure,
+        bool Nested);
 
     /// <summary>Creates the client.</summary>
     /// <param name="innerClient">The model this loop sends its rounds to.</param>
@@ -91,16 +95,21 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
             // Snapshot the turn once per tool call and file it in the call's arguments, so tools
             // declare what they need as parameters.
             context.Arguments[TurnInvocation.ArgumentsKey] = invocation;
-            _drains[callId] = new Drain(invocation.Renders, invocation.Sources, invocation.OnToolFailure, nested);
+            _drains[callId] = new Drain(
+                invocation.Renders, invocation.Sources, invocation.Files, invocation.OnToolFailure, nested);
             invocation.Results?.NoteCall(callId, Release);
         }
 
         using var outerCall = invocation?.Renders is { } renders && !nested
             ? renders.BeginOuterCall(invocation.OuterCallId ?? callId)
             : null;
-            
+
         using var outerSources = invocation?.Sources is { } sources && !nested
             ? sources.BeginOuterCall(invocation.OuterCallId ?? callId)
+            : null;
+
+        using var outerFiles = invocation?.Files is { } files && !nested
+            ? files.BeginOuterCall(invocation.OuterCallId ?? callId)
             : null;
 
         try
@@ -179,7 +188,7 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
 
     /// <summary>
     /// Builds the messages the model reads, reports every tool it could not find, and attaches
-    /// whatever this turn drew or cited to the tool-result message it belongs to.
+    /// whatever this turn drew, cited, or published to the tool-result message it belongs to.
     /// </summary>
     protected override IList<ChatMessage> CreateResponseMessages(ReadOnlySpan<FunctionInvocationResult> results)
     {
@@ -206,6 +215,11 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
                     foreach (var cited in drain.Sources?.TakeFor(callId) ?? [])
                     {
                         contents.Add(cited);
+                    }
+
+                    foreach (var published in drain.Files?.TakeFor(callId) ?? [])
+                    {
+                        contents.Add(published);
                     }
                 }
             }

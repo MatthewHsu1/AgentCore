@@ -163,7 +163,7 @@ public sealed class OpenAiHostedToolTests
         var adapter = new OpenAiChatClientAdapter();
         HostedWebSearchTool marker = new();
 
-        Assert.Same(marker, adapter.ResolveHostedTool(marker, Entry(webSearch: null, codeExecute: null)));
+        Assert.Same(marker, adapter.ResolveHostedTool(marker, Entry(webSearch: null)));
     }
 
     [Fact]
@@ -171,24 +171,7 @@ public sealed class OpenAiHostedToolTests
     {
         var adapter = new OpenAiChatClientAdapter();
 
-        Assert.Null(adapter.ResolveHostedTool(new HostedWebSearchTool(), Entry(webSearch: false, codeExecute: null)));
-    }
-
-    [Fact]
-    public void ResolveHostedCodeExecution_WithoutAVeto_ResolvesTheMarker()
-    {
-        var adapter = new OpenAiChatClientAdapter();
-        HostedCodeInterpreterTool marker = new();
-
-        Assert.Same(marker, adapter.ResolveHostedTool(marker, Entry(webSearch: null, codeExecute: null)));
-    }
-
-    [Fact]
-    public void ResolveHostedCodeExecution_WithAVeto_AnswersNull()
-    {
-        var adapter = new OpenAiChatClientAdapter();
-
-        Assert.Null(adapter.ResolveHostedTool(new HostedCodeInterpreterTool(), Entry(webSearch: null, codeExecute: false)));
+        Assert.Null(adapter.ResolveHostedTool(new HostedWebSearchTool(), Entry(webSearch: false)));
     }
 
     [Fact]
@@ -196,16 +179,15 @@ public sealed class OpenAiHostedToolTests
     {
         var adapter = new OpenAiChatClientAdapter();
 
-        Assert.Null(adapter.ResolveHostedTool(new HostedMcpServerTool("s", "https://example.com"), Entry(webSearch: null, codeExecute: null)));
+        Assert.Null(adapter.ResolveHostedTool(new HostedMcpServerTool("s", "https://example.com"), Entry(webSearch: null)));
     }
 
-    private static LlmProviderConfiguration Entry(bool? webSearch, bool? codeExecute) => new()
+    private static LlmProviderConfiguration Entry(bool? webSearch) => new()
     {
         Kind = OpenAiChatClientAdapter.ProviderKind,
         Model = "m",
         As = "reply",
         WebSearch = webSearch,
-        CodeExecute = codeExecute,
     };
 }
 
