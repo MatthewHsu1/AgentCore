@@ -15,9 +15,12 @@ public sealed class ChatCallTitler(ICallStore calls, IChatClient client) : ICall
     // charged for. The cap holds for a caller's messages too, which arrive unbounded.
     private const int MaxMessages = 6;
 
+    // A system message
     private const string Instruction =
-        "Write a title for this conversation. Six words at most. No quotation marks, no final stop. "
-        + "Reply with the title alone.";
+        "You name conversations. The user message holds a transcript, one line per turn. "
+        + "Write a title for it: the topic the person raised, six words at most, "
+        + "no quotation marks, no final stop. When the transcript raises no topic yet, "
+        + "use the person's own first words as the title. Reply with the title alone.";
 
     /// <inheritdoc />
     public IAsyncEnumerable<string> GenerateAsync(
@@ -93,7 +96,10 @@ public sealed class ChatCallTitler(ICallStore calls, IChatClient client) : ICall
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         List<ChatMessage> prompt =
-            [.. messages.Take(MaxMessages), new ChatMessage(ChatRole.User, Instruction)];
+        [
+            new ChatMessage(ChatRole.System, Instruction),
+            new ChatMessage(ChatRole.User, Transcript(messages.Take(MaxMessages))),
+        ];
 
         StringBuilder title = new();
 
@@ -118,5 +124,18 @@ public sealed class ChatCallTitler(ICallStore calls, IChatClient client) : ICall
         {
             await calls.RenameAsync(callId, whole, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>Folds the messages into one text, one <c>role: words</c> line per message.</summary>
+    private static string Transcript(IEnumerable<ChatMessage> messages)
+    {
+        StringBuilder text = new();
+
+        foreach (var message in messages)
+        {
+            text.Append(message.Role.Value).Append(": ").AppendLine(message.Text);
+        }
+
+        return text.ToString();
     }
 }

@@ -144,10 +144,32 @@ public sealed class ChatCallTitlerTests
         await CollectAsync(titler.GenerateFromAsync("c1", many, Token));
 
         // Assert
-        // The titler appends the instruction as the last message; everything before it is the caller's.
-        Assert.Equal(
-            ["m0", "m1", "m2", "m3", "m4", "m5"],
-            client.Seen.SkipLast(1).Select(message => message.Text));
+        // The instruction is the system message; the caller's words are folded into the one user message.
+        var transcript = Assert.Single(client.Seen, message => message.Role == ChatRole.User).Text;
+        Assert.Equal("user: m0\nuser: m1\nuser: m2\nuser: m3\nuser: m4\nuser: m5\n", transcript.ReplaceLineEndings("\n"));
+    }
+
+    [Fact]
+    public async Task GenerateFromAsync_Always_SendsTheInstructionAsTheSystemMessageAndTheWordsAsTheUser()
+    {
+        // Arrange
+        InMemoryCallStore calls = new();
+        await calls.CreateAsync("c1", Token);
+        StubChatClient client = new("A squeaky belt");
+        ChatCallTitler titler = new(calls, client);
+
+        // Act
+        await CollectAsync(titler.GenerateFromAsync("c1", Said("my belt squeaks"), Token));
+
+        // Assert
+        Assert.Collection(
+            client.Seen,
+            message => Assert.Equal(ChatRole.System, message.Role),
+            message =>
+            {
+                Assert.Equal(ChatRole.User, message.Role);
+                Assert.Equal("user: my belt squeaks", message.Text.Trim());
+            });
     }
 
     private static List<ChatMessage> Said(string words) => [new ChatMessage(ChatRole.User, words)];
