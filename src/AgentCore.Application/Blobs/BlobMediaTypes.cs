@@ -15,6 +15,7 @@ internal static class BlobMediaTypes
         ["webp"] = "image/webp",
         ["pdf"] = "application/pdf",
         ["csv"] = "text/csv",
+        ["tsv"] = "text/tab-separated-values",
         ["txt"] = "text/plain",
         ["md"] = "text/markdown",
         ["json"] = "application/json",

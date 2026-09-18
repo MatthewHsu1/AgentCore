@@ -10,6 +10,7 @@ public sealed class BlobPolicyTests
     [InlineData("chart.png", 15_769)]
     [InlineData("report.PDF", 1)]
     [InlineData("rows.csv", 0)]
+    [InlineData("rows.tsv", 0)]
     [InlineData("big.png", 10L * 1024 * 1024)]
     [InlineData("report.md", 518)]
     [InlineData("units.xlsx", 4_096)]

@@ -15,7 +15,7 @@ public sealed class BlobPolicy
     /// </summary>
     public static readonly IReadOnlySet<string> DefaultExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "png", "jpg", "jpeg", "gif", "webp", "pdf", "csv", "txt", "md", "json", "zip", "xlsx", "docx", "pptx",
+        "png", "jpg", "jpeg", "gif", "webp", "pdf", "csv", "tsv", "txt", "md", "json", "zip", "xlsx", "docx", "pptx",
     };
 
     /// <summary>The policy the harness uses when the document names none.</summary>
