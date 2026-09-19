@@ -75,27 +75,7 @@ public static class ConfigurationCompiler
 
         if (hasGraph)
         {
-            var graph = entry.Graph!;
-            var graphPointer = ConfigurationError.AppendPointer(entryPointer, "graph");
-            var hasPattern = graph.Pattern is not null;
-            var hasNodes = graph.Nodes.Count > 0 || graph.Edges.Count > 0;
-
-            if (hasPattern && hasNodes)
-            {
-                throw Fail(graphPointer, "the graph holds both pattern: and nodes:. It holds one or the other.");
-            }
-
-            if (hasPattern)
-            {
-                return PatternGraphRow.Instance;
-            }
-
-            if (hasNodes)
-            {
-                return ExplicitGraphRow.Instance;
-            }
-
-            throw Fail(graphPointer, "the graph declares neither pattern: nor nodes: and edges:.");
+            return SelectGraphRow(entry.Graph!, ConfigurationError.AppendPointer(entryPointer, "graph"));
         }
 
         if (hasPolicy)
@@ -105,19 +85,47 @@ public static class ConfigurationCompiler
 
         if (hasAgent)
         {
-            if (entry.Agent!.Length == 0)
-            {
-                throw Fail(
-                    ConfigurationError.AppendPointer(entryPointer, "agent"),
-                    "the entry holds an empty agent:. It names one agents.items id.");
-            }
-
-            return SingleAgentRow.Instance;
+            return SelectSingleAgentRow(entry.Agent!, ConfigurationError.AppendPointer(entryPointer, "agent"));
         }
 
         throw Fail(
             entryPointer,
             "the entry holds none of agent:, policy:, and graph:, so it compiles to nothing.");
+    }
+
+    /// <summary>Picks the graph row: <c>pattern:</c> or <c>nodes:</c> and <c>edges:</c>, never both, never neither.</summary>
+    private static CompileTableRow SelectGraphRow(GraphConfiguration graph, string graphPointer)
+    {
+        var hasPattern = graph.Pattern is not null;
+        var hasNodes = graph.Nodes.Count > 0 || graph.Edges.Count > 0;
+
+        if (hasPattern && hasNodes)
+        {
+            throw Fail(graphPointer, "the graph holds both pattern: and nodes:. It holds one or the other.");
+        }
+
+        if (hasPattern)
+        {
+            return PatternGraphRow.Instance;
+        }
+
+        if (hasNodes)
+        {
+            return ExplicitGraphRow.Instance;
+        }
+
+        throw Fail(graphPointer, "the graph declares neither pattern: nor nodes: and edges:.");
+    }
+
+    /// <summary>Picks the single-agent row, once <c>agent:</c> names an id.</summary>
+    private static SingleAgentRow SelectSingleAgentRow(string agentId, string agentPointer)
+    {
+        if (agentId.Length == 0)
+        {
+            throw Fail(agentPointer, "the entry holds an empty agent:. It names one agents.items id.");
+        }
+
+        return SingleAgentRow.Instance;
     }
 
     /// <summary>Compiles one document into one agent per entry.</summary>
