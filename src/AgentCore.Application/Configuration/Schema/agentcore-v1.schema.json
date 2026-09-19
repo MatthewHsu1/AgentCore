@@ -784,6 +784,13 @@
           "items": {
             "$ref": "#/$defs/skillName"
           }
+        },
+        "pinned": {
+          "type": "array",
+          "description": "Skills whose body sits in the system prompt on every turn, with no load_skill call. A name here cannot also be in skills.",
+          "items": {
+            "$ref": "#/$defs/skillName"
+          }
         }
       }
     },

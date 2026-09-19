@@ -1630,6 +1630,58 @@ public sealed class ConfigurationValidatorTests
         Assert.Null(exception);
     }
 
+    [Fact]
+    public void ValidateSkillReferences_APinnedNameTheFolderDoesNotServe_FailsAtThePinnedSlot()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            agents:
+              items:
+                - { id: support, pinned: [openui] }
+            entries:
+              main:
+                agent: support
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+        var served = new HashSet<string>(["warranty-returns"], StringComparer.Ordinal);
+
+        var failure = Assert.Throws<ConfigurationLoadException>(
+            () => ConfigurationValidator.ValidateSkillReferences(configuration, served));
+
+        var error = Assert.Single(failure.Errors);
+        Assert.Equal("/agents/items/0/pinned/0", error.Pointer);
+        Assert.Equal(
+            "the skill 'openui' is not in the bound skills folder. The folder serves: warranty-returns.",
+            error.Message);
+    }
+
+    [Fact]
+    public void ValidateSkillReferences_ASkillBothPinnedAndLoadable_Fails()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            agents:
+              items:
+                - { id: support, skills: [openui], pinned: [openui] }
+            entries:
+              main:
+                agent: support
+            """;
+
+        var configuration = ConfigurationLoader.LoadYaml(document);
+        var served = new HashSet<string>(["openui"], StringComparer.Ordinal);
+
+        var failure = Assert.Throws<ConfigurationLoadException>(
+            () => ConfigurationValidator.ValidateSkillReferences(configuration, served));
+
+        var error = Assert.Single(failure.Errors);
+        Assert.Equal("/agents/items/0/pinned/0", error.Pointer);
+        Assert.Equal(
+            "the skill 'openui' is both pinned and in the skills: list. A pinned skill is already in the prompt, so drop it from skills:.",
+            error.Message);
+    }
+
     [Theory]
     [InlineData("load_skill")]
     [InlineData("read_skill_resource")]

@@ -39,7 +39,7 @@ internal static class ServedReferenceCheck
         }
     }
 
-    /// <summary>Resolves every agent's <c>skills:</c> entry against what the bound folder serves.</summary>
+    /// <summary>Resolves every agent's <c>skills:</c> and <c>pinned:</c> entry against what the bound folder serves.</summary>
     public static void Skills(AgentCoreConfiguration configuration, IReadOnlySet<string> servedSkillNames, List<ConfigurationError> errors)
     {
         var served = string.Join(", ", servedSkillNames.Order(StringComparer.Ordinal));
@@ -48,20 +48,60 @@ internal static class ServedReferenceCheck
         for (var index = 0; index < items.Count; index++)
         {
             var agent = items[index];
+            SkillNames(agent.Skills, "skills", index, servedSkillNames, served, errors);
+            SkillNames(agent.Pinned, "pinned", index, servedSkillNames, served, errors);
+        }
+    }
 
-            for (var slot = 0; slot < agent.Skills.Count; slot++)
+    /// <summary>
+    /// Refuses a skill that is both pinned and loadable. Its body would sit in the prompt and be
+    /// offered to <c>load_skill</c> at once, and the second copy is pure cost.
+    /// </summary>
+    public static void PinnedSkills(AgentCoreConfiguration configuration, List<ConfigurationError> errors)
+    {
+        var items = configuration.Agents.Items;
+
+        for (var index = 0; index < items.Count; index++)
+        {
+            var agent = items[index];
+            var loadable = new HashSet<string>(agent.Skills, StringComparer.Ordinal);
+
+            for (var slot = 0; slot < agent.Pinned.Count; slot++)
             {
-                if (servedSkillNames.Contains(agent.Skills[slot]))
+                if (!loadable.Contains(agent.Pinned[slot]))
                 {
                     continue;
                 }
 
                 errors.Add(Reference(
                     ConfigurationError.AppendPointer(
-                        ConfigurationError.AppendPointer(ValidationPointer.Agent(index), "skills"), slot),
-                    $"the skill '{agent.Skills[slot]}' is not in the bound skills folder. "
-                    + $"The folder serves: {served}."));
+                        ConfigurationError.AppendPointer(ValidationPointer.Agent(index), "pinned"), slot),
+                    $"the skill '{agent.Pinned[slot]}' is both pinned and in the skills: list. "
+                    + "A pinned skill is already in the prompt, so drop it from skills:."));
             }
+        }
+    }
+
+    private static void SkillNames(
+        IReadOnlyList<string> names,
+        string key,
+        int agentIndex,
+        IReadOnlySet<string> servedSkillNames,
+        string served,
+        List<ConfigurationError> errors)
+    {
+        for (var slot = 0; slot < names.Count; slot++)
+        {
+            if (servedSkillNames.Contains(names[slot]))
+            {
+                continue;
+            }
+
+            errors.Add(Reference(
+                ConfigurationError.AppendPointer(
+                    ConfigurationError.AppendPointer(ValidationPointer.Agent(agentIndex), key), slot),
+                $"the skill '{names[slot]}' is not in the bound skills folder. "
+                + $"The folder serves: {served}."));
         }
     }
 

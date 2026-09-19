@@ -108,12 +108,12 @@ public static class ConfigurationValidator
     }
 
     /// <summary>
-    /// Resolves every <c>skills:</c> entry against the names the bound skills folder serves, and
-    /// throws when one names a skill nothing serves.
+    /// Resolves every <c>skills:</c> and <c>pinned:</c> entry against the names the bound skills
+    /// folder serves.
     /// </summary>
     /// <param name="configuration">The bound document.</param>
     /// <param name="servedSkillNames">Every skill name the bound folder serves.</param>
-    /// <exception cref="ConfigurationLoadException">A reference names a skill nothing serves.</exception>
+    /// <exception cref="ConfigurationLoadException">A reference names a skill nothing serves, or a skill is both pinned and loadable.</exception>
     public static void ValidateSkillReferences(AgentCoreConfiguration configuration, IReadOnlySet<string> servedSkillNames)
     {
         ArgumentNullException.ThrowIfNull(configuration);
@@ -121,6 +121,7 @@ public static class ConfigurationValidator
 
         var errors = new List<ConfigurationError>();
         ServedReferenceCheck.Skills(configuration, servedSkillNames, errors);
+        ServedReferenceCheck.PinnedSkills(configuration, errors);
         ThrowOnErrors(errors);
     }
 

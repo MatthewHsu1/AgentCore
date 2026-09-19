@@ -34,20 +34,18 @@ internal static class AgentContextProviderCompiler
         Func<string, AIAgent?> resolve,
         ICollection<BackgroundAgentsProvider>? background = null)
     {
-        List<AIContextProvider> providers = [new TurnContextProvider()];
+        List<AIContextProvider> providers = [];
+
+        if (item.Pinned.Count > 0)
+        {
+            providers.Add(new PinnedSkillsProvider(RequireCatalog(item, context, pointer, "pinned"), item.Pinned));
+        }
+
+        providers.Add(new TurnContextProvider());
 
         if (item.Skills.Count > 0)
         {
-            if (context.Skills is not { } catalog)
-            {
-                throw ConfigurationCompiler.Fail(
-                    ConfigurationError.AppendPointer(pointer, "skills"),
-                    $"the agent '{item.Id}' declares a skills: list and this host bound no skills "
-                    + "folder, so there is nothing to load. Call options.UseSkills(...) with the "
-                    + "folder that holds the SKILL.md directories, or remove the skills: list.");
-            }
-
-            providers.Add(SkillsProviderFactory.Create(catalog, item.Skills, context.Loggers));
+            providers.Add(SkillsProviderFactory.Create(RequireCatalog(item, context, pointer, "skills"), item.Skills, context.Loggers));
         }
 
         ResolvedCompaction? compaction;
@@ -105,4 +103,13 @@ internal static class AgentContextProviderCompiler
         return providers;
     }
 #pragma warning restore MAAI001
+
+    private static SkillCatalog RequireCatalog(AgentConfiguration item, AgentCompilationContext context, string pointer, string key)
+    {
+        return context.Skills ?? throw ConfigurationCompiler.Fail(
+            ConfigurationError.AppendPointer(pointer, key),
+            $"the agent '{item.Id}' declares a {key}: list and this host bound no skills "
+            + "folder, so there is nothing to load. Call options.UseSkills(...) with the "
+            + $"folder that holds the SKILL.md directories, or remove the {key}: list.");
+    }
 }

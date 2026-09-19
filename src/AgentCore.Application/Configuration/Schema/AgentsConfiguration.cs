@@ -93,6 +93,11 @@ public sealed record AgentConfiguration
     /// <summary>Gets the names of the skills this agent may load.</summary>
     public IReadOnlyList<string> Skills { get; init; } = [];
 
+    /// <summary>
+    /// Gets the names of the skills whose body sits in this agent's system prompt on every turn,
+    /// </summary>
+    public IReadOnlyList<string> Pinned { get; init; } = [];
+
     /// <summary>Gets this agent's <c>knowledge:</c> block, or <see langword="null"/> to inherit key by key.</summary>
     public AgentKnowledgeConfiguration? Knowledge { get; init; }
 
