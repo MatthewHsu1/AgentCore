@@ -5,53 +5,6 @@ using System.Threading.Channels;
 
 namespace AgentCore.AspNetCore.Conversation;
 
-/// <summary>What reading one inbound message produced.</summary>
-/// <param name="Frame">The parsed frame, or <see langword="null"/> when none was read.</param>
-/// <param name="UnknownType">The discriminator no case matched, or <see langword="null"/>.</param>
-/// <param name="RefusedType">The known discriminator whose body would not bind, or <see langword="null"/>.</param>
-/// <remarks>
-/// All three <see langword="null"/> is the only unreadable case, and the only one a caller may
-/// close the socket over.
-/// </remarks>
-internal readonly record struct FrameOutcome(object? Frame, string? UnknownType, string? RefusedType);
-
-/// <summary>Reads one reassembled inbound message into a <see cref="FrameOutcome"/>.</summary>
-/// <param name="utf8">The whole message, already reassembled.</param>
-/// <returns>What the adapter's own reader made of those bytes.</returns>
-/// <remarks>
-/// A delegate of its own, rather than a <see cref="Func{T, TResult}"/>: a ref struct cannot be a
-/// type argument, and the span is the whole point — it is what keeps the pooled buffer behind the
-/// message from ever being aliased by something async.
-/// </remarks>
-internal delegate FrameOutcome FrameParser(ReadOnlySpan<byte> utf8);
-
-/// <summary>What one pump may do, and for how long.</summary>
-/// <param name="MaxFrameBytes">The largest inbound message the pump accepts, in bytes.</param>
-/// <param name="IdleTimeout">How long the pump waits with no inbound message before it ends the conversation.</param>
-/// <param name="CloseTimeout">How long the close handshake may take before the socket is aborted.</param>
-/// <param name="ProtocolFault">
-/// Builds the exception the pump throws when the peer broke the contract. The adapter supplies it,
-/// so the pump raises the adapter's own exception type and the adapter's own close-status rules
-/// still recognise it.
-/// </param>
-/// <param name="LogUnknownFrameType">
-/// Logs a discriminator no case matched. The pump calls it once for the conversation, not once for the
-/// frame, and passes the name; the line itself names the vendor, which is why it is a callback.
-/// </param>
-/// <param name="LogRefusedFrameBody">
-/// Logs a known discriminator whose body would not bind, on the same once-for-the-conversation rule as
-/// <paramref name="LogUnknownFrameType"/>.
-/// </param>
-/// <param name="LogIdleTimeout">Logs that the idle deadline, rather than teardown, ended the conversation.</param>
-internal sealed record JsonWebSocketPumpOptions(
-    int MaxFrameBytes,
-    TimeSpan IdleTimeout,
-    TimeSpan CloseTimeout,
-    Func<WebSocketCloseStatus, string, Exception> ProtocolFault,
-    Action<string> LogUnknownFrameType,
-    Action<string> LogRefusedFrameBody,
-    Action LogIdleTimeout);
-
 /// <summary>
 /// The read loop, the write loop, and the close of one duplex JSON-over-WebSocket connection.
 /// </summary>
@@ -115,7 +68,6 @@ internal sealed class JsonWebSocketPump(
             while (!connectionToken.IsCancellationRequested)
             {
                 message.ResetWrittenCount();
-                ValueWebSocketReceiveResult result;
 
                 // The vendor never reconnects, so a socket with no inbound frame for IdleTimeout is
                 // a conversation that already ended, not a fault. The first receive of every message races
@@ -169,37 +121,11 @@ internal sealed class JsonWebSocketPump(
                 // sending faster than IdleTimeout — CancelAfter is never involved, so this touches
                 // nothing outside this one local source.
                 await idleCancel.CancelAsync().ConfigureAwait(false);
-                result = await receiving.ConfigureAwait(false);
+                var first = await receiving.ConfigureAwait(false);
 
-                // The rest of one message, however many more fragments the vendor chose. A loop
-                // that parsed each receive on its own would fail on a fragment, and it would cut a
-                // multi-byte character in half. Only the first fragment above raced the idle
-                // deadline: the vendor is, by definition, no longer silent once one fragment of a
-                // message has already arrived.
-                while (true)
+                if (!await AssembleMessageAsync(first, rented, message).ConfigureAwait(false))
                 {
-                    if (result.MessageType == WebSocketMessageType.Close)
-                    {
-                        return;
-                    }
-
-                    if (message.WrittenCount + result.Count > options.MaxFrameBytes)
-                    {
-                        throw options.ProtocolFault(
-                            WebSocketCloseStatus.MessageTooBig,
-                            "the relay frame passes the size limit.");
-                    }
-
-                    message.Write(rented.AsSpan(0, result.Count));
-
-                    if (result.EndOfMessage)
-                    {
-                        break;
-                    }
-
-                    result = await socket
-                        .ReceiveAsync(rented.AsMemory(), connectionToken)
-                        .ConfigureAwait(false);
+                    return;
                 }
 
                 // Parsed here, synchronously, before any await sees this iteration again. Passing
@@ -211,34 +137,7 @@ internal sealed class JsonWebSocketPump(
 
                 if (outcome.Frame is null)
                 {
-                    if (outcome.UnknownType is null && outcome.RefusedType is null)
-                    {
-                        // Neither name is set, so the bytes carried no readable type at all: not
-                        // JSON, not an object, or a type that is not a string. That is the only
-                        // shape this endpoint closes a socket over.
-                        throw options.ProtocolFault(
-                            WebSocketCloseStatus.InvalidPayloadData,
-                            "the relay sent a frame this endpoint cannot parse.");
-                    }
-
-                    // Log once for the conversation, not once for the frame. Section 3.1.
-                    if (outcome.UnknownType is { } unmodelled)
-                    {
-                        if (!_loggedUnknownFrame)
-                        {
-                            _loggedUnknownFrame = true;
-                            options.LogUnknownFrameType(unmodelled);
-                        }
-                    }
-                    else if (!_loggedRefusedFrameBody)
-                    {
-                        // A known type whose body will not bind. Section 7.1 treats a vendor that
-                        // changes a frame exactly as it treats one that adds a frame: the frame is
-                        // refused, and the conversation goes on.
-                        _loggedRefusedFrameBody = true;
-                        options.LogRefusedFrameBody(outcome.RefusedType!);
-                    }
-
+                    RefuseFrame(outcome);
                     continue;
                 }
 
@@ -257,6 +156,86 @@ internal sealed class JsonWebSocketPump(
                 // what the caller said, and the pool behind it is shared with the whole process.
                 ArrayPool<byte>.Shared.Return(rented, clearArray: true);
             }
+        }
+    }
+
+    /// <summary>Collects the rest of one message into <paramref name="message"/>, fragment by fragment.</summary>
+    /// <param name="first">The fragment that already won the idle race.</param>
+    /// <param name="rented">The array every fragment lands in before it is copied out.</param>
+    /// <param name="message">The writer the whole message is assembled into.</param>
+    /// <returns>
+    /// <see langword="true"/> once the whole message is in <paramref name="message"/>;
+    /// <see langword="false"/> when the peer sent a close frame instead.
+    /// </returns>
+    /// <remarks>
+    /// A loop that parsed each receive on its own would fail on a fragment, and it would cut a
+    /// multi-byte character in half. Only the first fragment raced the idle deadline: the vendor
+    /// is, by definition, no longer silent once one fragment of a message has already arrived.
+    /// </remarks>
+    private async Task<bool> AssembleMessageAsync(
+        ValueWebSocketReceiveResult first,
+        byte[] rented,
+        ArrayBufferWriter<byte> message)
+    {
+        var result = first;
+
+        while (true)
+        {
+            if (result.MessageType == WebSocketMessageType.Close)
+            {
+                return false;
+            }
+
+            if (message.WrittenCount + result.Count > options.MaxFrameBytes)
+            {
+                throw options.ProtocolFault(
+                    WebSocketCloseStatus.MessageTooBig,
+                    "the relay frame passes the size limit.");
+            }
+
+            message.Write(rented.AsSpan(0, result.Count));
+
+            if (result.EndOfMessage)
+            {
+                return true;
+            }
+
+            result = await socket
+                .ReceiveAsync(rented.AsMemory(), connectionToken)
+                .ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Logs, or closes the socket over, a message the parser produced no frame for.</summary>
+    /// <param name="outcome">An outcome whose <see cref="FrameOutcome.Frame"/> is <see langword="null"/>.</param>
+    private void RefuseFrame(FrameOutcome outcome)
+    {
+        if (outcome.UnknownType is null && outcome.RefusedType is null)
+        {
+            // Neither name is set, so the bytes carried no readable type at all: not
+            // JSON, not an object, or a type that is not a string. That is the only
+            // shape this endpoint closes a socket over.
+            throw options.ProtocolFault(
+                WebSocketCloseStatus.InvalidPayloadData,
+                "the relay sent a frame this endpoint cannot parse.");
+        }
+
+        // Log once for the conversation, not once for the frame. Section 3.1.
+        if (outcome.UnknownType is { } unmodelled)
+        {
+            if (!_loggedUnknownFrame)
+            {
+                _loggedUnknownFrame = true;
+                options.LogUnknownFrameType(unmodelled);
+            }
+        }
+        else if (!_loggedRefusedFrameBody)
+        {
+            // A known type whose body will not bind. Section 7.1 treats a vendor that
+            // changes a frame exactly as it treats one that adds a frame: the frame is
+            // refused, and the conversation goes on.
+            _loggedRefusedFrameBody = true;
+            options.LogRefusedFrameBody(outcome.RefusedType!);
         }
     }
 
