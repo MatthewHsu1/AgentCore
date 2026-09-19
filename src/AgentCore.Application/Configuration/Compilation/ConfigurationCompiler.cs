@@ -166,7 +166,16 @@ public static class ConfigurationCompiler
                 context.Moderation,
                 row.SpokenAuthors(configuration, entry));
 
-            compiled[entryName] = new CompiledAgent(document, entryName, entry.Policy, row, build, shared, layers);
+            compiled[entryName] = new CompiledAgentBuilder
+            {
+                Document = document,
+                EntryName = entryName,
+                Policy = entry.Policy,
+                Row = row,
+                Entry = build,
+                Agents = shared,
+                Layers = layers,
+            }.Build();
         }
 
         return compiled;

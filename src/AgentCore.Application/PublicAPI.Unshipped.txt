@@ -177,13 +177,10 @@ AgentCore.Application.Configuration.Compilation.CompiledAgent.Agent.get -> Micro
 AgentCore.Application.Configuration.Compilation.CompiledAgent.Agents.get -> System.Collections.Generic.IReadOnlyDictionary<string!, Microsoft.Agents.AI.AIAgent!>!
 AgentCore.Application.Configuration.Compilation.CompiledAgent.Configuration.get -> AgentCore.Application.Configuration.Schema.AgentCoreConfiguration!
 AgentCore.Application.Configuration.Compilation.CompiledAgent.CreatePolicy(AgentCore.Application.Configuration.Validation.IGuardEvaluator! guards) -> AgentCore.Application.Policy.StagePolicy!
-AgentCore.Application.Configuration.Compilation.CompiledAgent.EntryName.get -> string!
 AgentCore.Application.Configuration.Compilation.CompiledAgent.FallbackReply.get -> string!
 AgentCore.Application.Configuration.Compilation.CompiledAgent.ForStage(string! stageId) -> Microsoft.Agents.AI.AIAgent?
 AgentCore.Application.Configuration.Compilation.CompiledAgent.Name.get -> string!
 AgentCore.Application.Configuration.Compilation.CompiledAgent.Policy.get -> AgentCore.Application.Configuration.Schema.PolicyConfiguration?
-AgentCore.Application.Configuration.Compilation.CompiledAgent.RefusalReply.get -> string!
-AgentCore.Application.Configuration.Compilation.CompiledAgent.Shape.get -> AgentCore.Application.Configuration.Compilation.CompiledAgentShape
 AgentCore.Application.Configuration.Compilation.CompiledAgentRegistry
 AgentCore.Application.Configuration.Compilation.CompiledAgentRegistry.CompileCount.get -> int
 AgentCore.Application.Configuration.Compilation.CompiledAgentRegistry.CompiledAgentRegistry() -> void
