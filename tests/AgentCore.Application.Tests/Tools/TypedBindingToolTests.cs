@@ -217,18 +217,16 @@ public sealed class TypedBindingToolTests
             return reason;
         });
 
+        TurnInvocation turn = new()
+        {
+            ConversationId = "conversation-9",
+            TurnIndex = 4,
+            Stage = "handling",
+            Workspace = "ws",
+        };
+
         var result = await tool.InvokeAsync(
-            new AIFunctionArguments
-            {
-                ["reason"] = "the caller wants a person",
-                [TurnInvocation.ArgumentsKey] = new TurnInvocation
-                {
-                    ConversationId = "conversation-9",
-                    TurnIndex = 4,
-                    Stage = "handling",
-                    Workspace = "ws",
-                },
-            },
+            turn.FileIn(new AIFunctionArguments { ["reason"] = "the caller wants a person" }),
             TestContext.Current.CancellationToken);
 
         Assert.Equal("the caller wants a person", $"{result}");

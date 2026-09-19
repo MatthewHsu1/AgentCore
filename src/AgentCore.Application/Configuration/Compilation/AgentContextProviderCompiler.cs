@@ -7,7 +7,6 @@ using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Skills;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Compaction;
-using Microsoft.Extensions.AI;
 namespace AgentCore.Application.Configuration.Compilation;
 
 internal static class AgentContextProviderCompiler
@@ -18,22 +17,20 @@ internal static class AgentContextProviderCompiler
     /// </summary>
     private static readonly SourceLocatorCitationFormatter DefaultCitations = new();
 
-    /// <summary>
-    /// Builds the context providers of one agent. <paramref name="clarification"/> is the document's
-    /// ambiguity wiring (§8), the same for every agent — built once by the caller rather than
-    /// re-derived per agent.
-    /// </summary>
-#pragma warning disable MAAI001 // BackgroundAgentsProvider is evaluation-only in Microsoft.Agents.AI 1.21.0.
+    /// <summary>Builds the context providers of one agent.</summary>
+    /// <param name="walk">What every agent of this walk shares.</param>
+    /// <param name="item">The agent being compiled.</param>
+    /// <param name="context">The compile-time seams.</param>
+    /// <param name="pointer">This agent's JSON pointer.</param>
+    /// <param name="resolve">Resolves an <c>agents.items</c> id to its compiled agent, or <see langword="null"/> when undeclared.</param>
     public static List<AIContextProvider> Build(
-        AgentDefaults? defaults,
+        AgentsWalk walk,
         AgentConfiguration item,
         AgentCompilationContext context,
         string pointer,
-        ResolvedClarification clarification,
-        KnowledgeScopeConfiguration? scope,
-        Func<string, AIAgent?> resolve,
-        ICollection<BackgroundAgentsProvider>? background = null)
+        Func<string, AIAgent?> resolve)
     {
+        var defaults = walk.Defaults;
         List<AIContextProvider> providers = [];
 
         if (item.Pinned.Count > 0)
@@ -71,7 +68,7 @@ internal static class AgentContextProviderCompiler
 #pragma warning restore MAAI001
         }
         
-        AgentHarnessProviders.Add(providers, defaults, item, context, pointer, resolve, background);
+        AgentHarnessProviders.Add(providers, defaults, item, context, pointer, resolve, walk.Background);
 
         if (AgentKnowledge.Compose(defaults, item) is not { } composed)
         {
@@ -90,7 +87,7 @@ internal static class AgentContextProviderCompiler
 
         // The document-level wiring, carried onto this agent's own resolved knowledge so the search
         // side does not have to re-derive it.
-        var knowledge = composed with { Clarification = clarification };
+        var knowledge = composed with { Clarification = walk.Clarification };
 
         providers.Add(KnowledgeProviderFactory.Create(
             port,
@@ -98,11 +95,10 @@ internal static class AgentContextProviderCompiler
             item.Id,
             context.Citations ?? DefaultCitations,
             context.Loggers,
-            scope));
+            walk.Scope));
 
         return providers;
     }
-#pragma warning restore MAAI001
 
     private static SkillCatalog RequireCatalog(AgentConfiguration item, AgentCompilationContext context, string pointer, string key)
     {

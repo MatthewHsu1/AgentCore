@@ -191,8 +191,6 @@ public static class ConfigurationCompiler
             return new CompiledAgentSet(agents, harnessStateKeys, backgroundProviders);
         }
 
-        var clarification = ResolvedClarification.From(configuration);
-
         Dictionary<string, ToolConfiguration> tools = new(StringComparer.Ordinal);
         foreach (var tool in configuration.Tools)
         {
@@ -215,6 +213,12 @@ public static class ConfigurationCompiler
         // declaration order, and it holds the agents it entered so a delegation loop becomes a
         // compile error rather than a stack overflow.
         List<string> path = [];
+
+        AgentsWalk walk = new(
+            section.Defaults,
+            ResolvedClarification.From(configuration),
+            configuration.Providers?.Knowledge?.Scope,
+            backgroundProviders);
 
         foreach (var item in section.Items)
         {
@@ -254,15 +258,7 @@ public static class ConfigurationCompiler
             var compiledTools = AgentToolCompiler.Build(
                 item, item.Model ?? section.Defaults?.Model, tools, context, pointer, Resolve);
 
-            var providers = AgentContextProviderCompiler.Build(
-                section.Defaults,
-                item,
-                context,
-                pointer,
-                clarification,
-                configuration.Providers?.Knowledge?.Scope,
-                Resolve,
-                backgroundProviders);
+            var providers = AgentContextProviderCompiler.Build(walk, item, context, pointer, Resolve);
             harnessStateKeys.UnionWith(AgentHarnessProviders.StateKeysOf(providers));
             harnessStateKeys.UnionWith(AgentApproval.StateKeysFor(section.Defaults, item, compiledTools));
 

@@ -53,12 +53,13 @@ internal static class ExitExclusivityCheck
             };
 
             GuardExclusivityCheck.Run(
-                exits,
-                ConfigurationError.AppendPointer(ValidationPointer.Stage(name, index), "to"),
-                $"the stage '{stage.Id}'",
+                new SiblingGroup(
+                    exits,
+                    ConfigurationError.AppendPointer(ValidationPointer.Stage(name, index), "to"),
+                    $"the stage '{stage.Id}'",
+                    pinned),
                 evaluator,
                 configuration.State,
-                pinned,
                 errors,
                 warnings);
         }
@@ -83,12 +84,13 @@ internal static class ExitExclusivityCheck
                 .ToList();
 
             GuardExclusivityCheck.Run(
-                exits,
-                ValidationPointer.GraphEdges(name),
-                $"the node '{group.Key}'",
+                new SiblingGroup(
+                    exits,
+                    ValidationPointer.GraphEdges(name),
+                    $"the node '{group.Key}'",
+                    new Dictionary<string, JsonNode?>(StringComparer.Ordinal)),
                 evaluator,
                 configuration.State,
-                new Dictionary<string, JsonNode?>(StringComparer.Ordinal),
                 errors,
                 warnings);
         }

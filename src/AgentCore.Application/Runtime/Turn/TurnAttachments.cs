@@ -1,3 +1,5 @@
+using Microsoft.Extensions.AI;
+
 namespace AgentCore.Application.Runtime.Turn;
 
 /// <summary>
@@ -10,7 +12,8 @@ namespace AgentCore.Application.Runtime.Turn;
 /// outside any turn there is none, and a publish is discarded.
 /// </remarks>
 /// <typeparam name="TContent">The content one publish files.</typeparam>
-internal abstract class TurnAttachments<TContent>
+internal abstract class TurnAttachments<TContent> : ITurnAttachments
+    where TContent : AIContent
 {
     private readonly Lock _gate = new();
 
@@ -24,7 +27,7 @@ internal abstract class TurnAttachments<TContent>
     /// <summary>Opens one outermost tool call as the key publishes file under.</summary>
     /// <param name="callId">The id of the outermost tool call now running.</param>
     /// <returns>The scope. Disposing it puts back the key that was open before.</returns>
-    internal IDisposable BeginOuterCall(string callId)
+    public IDisposable BeginOuterCall(string callId)
     {
         ArgumentNullException.ThrowIfNull(callId);
 
@@ -50,6 +53,8 @@ internal abstract class TurnAttachments<TContent>
             return _byCallId.Remove(callId, out var filed) ? filed : [];
         }
     }
+
+    IReadOnlyList<AIContent> ITurnAttachments.TakeFor(string callId) => TakeFor(callId);
 
     /// <summary>Files one content under a call. A later publish of the same thing wins, in the place the earlier one took, so publish order is kept.</summary>
     /// <param name="callId">The outer call to file under.</param>

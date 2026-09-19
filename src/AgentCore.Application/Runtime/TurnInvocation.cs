@@ -9,13 +9,13 @@ using Microsoft.Agents.AI;
 namespace AgentCore.Application.Runtime;
 
 // Everything one turn hands its tools, as one explicit value. The loop builds one per turn;
-// the invoking client snapshots it into every tool call's arguments, so a tool declares what
+// the invoking client files it beside every tool call's arguments, so a tool declares what
 // it needs as a parameter instead of reading the flow. Nested runs see the same turn with the
 // clarifications stripped and the outermost call id stamped, via `with` copies the client makes.
 internal sealed record TurnInvocation
 {
-    /// <summary>The argument name the invoking client files the turn under. Namespaced: a model
-    /// argument will never be called this, and the binder intercepts the type before JSON binding.</summary>
+    /// <summary>The options key the loop files the turn under, for the invoking client to read.
+    /// Namespaced: no vendor field will ever be called this.</summary>
     internal const string ArgumentsKey = "urn:agentcore:turn";
 
     /// <summary>Gets the id of the conversation the turn belongs to.</summary>
@@ -63,6 +63,13 @@ internal sealed record TurnInvocation
     /// <summary>Gets what the turn publishes files into. Never <see langword="null"/> on a loop-built turn.</summary>
     public TurnFiles? Files { get; init; }
 
+    /// <summary>
+    /// Lists every kind of thing this turn's tools produce for the caller, in the order they attach to
+    /// a tool-result message. A new kind is one new property and one name here.
+    /// </summary>
+    internal IReadOnlyList<ITurnAttachments> Attachments()
+        => [.. new ITurnAttachments?[] { Renders, Sources, Files }.OfType<ITurnAttachments>()];
+
     /// <summary>Gets the tools a delegated run of this conversation is offered, or <see langword="null"/> for none.</summary>
     public IReadOnlyList<AITool>? Tools { get; init; }
 
@@ -87,7 +94,6 @@ internal sealed record TurnInvocation
     /// </summary>
     public StateDocument? State { get; init; }
 
-    /// <summary>Builds the per-run options carrying this turn to the invoking client.</summary>
     /// <summary>Reads the turn filed on a run's options by <see cref="RunOptions"/>, or null when there is none.</summary>
     internal static TurnInvocation? From(AgentRunOptions? options)
         => options is ChatClientAgentRunOptions run
@@ -95,6 +101,26 @@ internal sealed record TurnInvocation
             ? filed as TurnInvocation
             : null;
 
+    /// <summary>Reads the turn filed beside one tool call's arguments by <see cref="FileIn"/>, or null outside a turn.</summary>
+    internal static TurnInvocation? FiledIn(AIFunctionArguments? arguments)
+        => arguments?.Context?.TryGetValue(typeof(TurnInvocation), out var filed) == true
+            ? filed as TurnInvocation
+            : null;
+
+    /// <summary>
+    /// Files this turn beside one tool call's arguments, where the runtime-bound parameters read it.
+    /// Beside, never among: the arguments dictionary is the model's own call record, and a checkpoint
+    /// persists it, while <see cref="AIFunctionArguments.Context"/> lives only as long as the call.
+    /// </summary>
+    /// <returns>The same arguments, for a caller that builds them inline.</returns>
+    internal AIFunctionArguments FileIn(AIFunctionArguments arguments)
+    {
+        arguments.Context ??= new Dictionary<object, object?>();
+        arguments.Context[typeof(TurnInvocation)] = this;
+        return arguments;
+    }
+
+    /// <summary>Builds the per-run options carrying this turn to the invoking client.</summary>
     internal ChatClientAgentRunOptions RunOptions()
     {
         ChatOptions chat = new()

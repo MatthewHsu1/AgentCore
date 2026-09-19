@@ -82,9 +82,7 @@ internal static class AgentDelegationTool
         {
             ArgumentNullException.ThrowIfNull(arguments);
 
-            var parent = arguments.TryGetValue(TurnInvocation.ArgumentsKey, out var turn) && turn is TurnInvocation p
-                ? p
-                : null;
+            var parent = TurnInvocation.FiledIn(arguments);
 
             // Schemaless the donor advertises one query string; declared, the payload the
             // document shaped. Either way the nested agent reads words, not arguments.

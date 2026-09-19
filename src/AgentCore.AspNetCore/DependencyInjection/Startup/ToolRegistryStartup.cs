@@ -3,7 +3,6 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Tools.Builtin;
 using AgentCore.Application.Tools.Registry;
-using Microsoft.Extensions.Logging;
 
 namespace AgentCore.AspNetCore.DependencyInjection.Startup;
 
@@ -27,10 +26,11 @@ internal static class ToolRegistryStartup
     /// <param name="boot">The owner every source is tracked against, the moment it is built.</param>
     /// <param name="options">The options the host filled.</param>
     /// <param name="startup">The loaded document and the resolved secrets.</param>
-    /// <param name="chatClients">The factory a shipped agent runs on. Step 3c fails the boot rather than returning none.</param>
-    /// <param name="blobs">The store step 4d opened, or <see langword="null"/> when the document names none.</param>
-    /// <param name="loggers">The factory a built-in takes its logger from.</param>
-    /// <param name="configuration">The loaded document.</param>
+    /// <param name="ports">
+    /// What a shipped built-in runs on: the chat client factory step 3c built (it fails the boot rather
+    /// than returning none), the blob store step 4d opened or <see langword="null"/>, the workspace
+    /// root, and the logger factory.
+    /// </param>
     /// <param name="cancellationToken">Cancels the discovery.</param>
     /// <returns>The registry, and the served-ids union decision 15's reference pass reads.</returns>
     /// <exception cref="Application.Configuration.Parsing.ConfigurationLoadException">
@@ -42,19 +42,14 @@ internal static class ToolRegistryStartup
         AgentCoreBoot boot,
         AgentCoreOptions options,
         AgentCoreStartup startup,
-        IChatClientFactory chatClients,
-        IBlobStore? blobs,
-        ILoggerFactory loggers,
-        AgentCoreConfiguration configuration,
+        BuiltinToolPorts ports,
         CancellationToken cancellationToken)
     {
+        var configuration = startup.Configuration;
+
         List<IToolSource> sources =
         [
-            new BuiltinToolSource(new BuiltinToolPorts(
-                chatClients,
-                blobs,
-                WorkspaceRoot: options.WorkspaceRoot,
-                Loggers: loggers)),
+            new BuiltinToolSource(ports),
             new BindingToolSource(options.Bindings),
         ];
 

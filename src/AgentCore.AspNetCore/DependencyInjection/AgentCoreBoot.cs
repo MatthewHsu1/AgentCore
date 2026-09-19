@@ -9,6 +9,7 @@ using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
 using AgentCore.Application.Tools.Binding;
+using AgentCore.Application.Tools.Builtin;
 using AgentCore.Application.Tools.Registry;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
 using Microsoft.AspNetCore.Http;
@@ -202,7 +203,12 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
             .ConfigureAwait(false));
 
         var tools = await ToolRegistryStartup
-            .BuildAsync(this, _options, startup, chatClients, blobs, _loggers, configuration, cancellationToken)
+            .BuildAsync(
+                this,
+                _options,
+                startup,
+                new BuiltinToolPorts(chatClients, blobs, WorkspaceRoot: _options.WorkspaceRoot, Loggers: _loggers),
+                cancellationToken)
             .ConfigureAwait(false);
 
         ConfigurationValidator.ValidateToolReferences(configuration, tools.ServedIds);
@@ -232,17 +238,20 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
         var graph = await CompilationStartup
             .CompileAsync(
                 configuration,
-                chatClients,
-                tools.Registry,
-                conversations,
-                evaluators,
-                knowledge,
-                skills,
-                KnowledgeCitationFormatterFactory.Resolve(configuration, _options.KnowledgeCitations),
-                _loggers,
-                _options.WorkspaceRoot,
-                _options.TimeProvider,
-                secrets)
+                new AgentCompilationContext(chatClients)
+                {
+                    Tools = tools.Registry,
+                    Guards = new GuardEvaluator(configuration.Guards, _loggers.CreateLogger<GuardEvaluator>()),
+                    Moderation = PromptModerator.FromRegistry(evaluators),
+                    ConversationStore = conversations,
+                    Knowledge = knowledge,
+                    Skills = skills,
+                    Citations = KnowledgeCitationFormatterFactory.Resolve(configuration, _options.KnowledgeCitations),
+                    Loggers = _loggers,
+                    WorkspaceRoot = _options.WorkspaceRoot,
+                    Clock = _options.TimeProvider,
+                    Secrets = secrets,
+                })
             .ConfigureAwait(false);
 
         var seams = ConversationSeamStartup.Build(configuration, _options);

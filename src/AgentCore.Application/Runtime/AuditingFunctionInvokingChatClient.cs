@@ -38,17 +38,13 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
     private readonly ConcurrentDictionary<string, Drain> _drains = new(StringComparer.Ordinal);
 
     private sealed record Drain(
-        TurnRenders? Renders,
-        TurnSources? Sources,
-        TurnFiles? Files,
+        IReadOnlyList<ITurnAttachments> Attachments,
         Action<ToolFailure>? OnToolFailure,
         bool Nested)
     {
-        /// <summary>Takes what one call drew, cited, and published, in that order.</summary>
+        /// <summary>Takes what one call produced, kind by kind, in the turn's own order.</summary>
         public IEnumerable<AIContent> TakeFor(string callId)
-            => (Renders?.TakeFor(callId) ?? [])
-                .Concat<AIContent>(Sources?.TakeFor(callId) ?? [])
-                .Concat(Files?.TakeFor(callId) ?? []);
+            => Attachments.SelectMany(kind => kind.TakeFor(callId));
     }
 
     /// <summary>Creates the client.</summary>
@@ -99,24 +95,15 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
 
         if (invocation is not null)
         {
-            // Snapshot the turn once per tool call and file it in the call's arguments, so tools
+            // Snapshot the turn once per tool call and file it beside the call's arguments, so tools
             // declare what they need as parameters.
-            context.Arguments[TurnInvocation.ArgumentsKey] = invocation;
-            _drains[callId] = new Drain(
-                invocation.Renders, invocation.Sources, invocation.Files, invocation.OnToolFailure, nested);
+            invocation.FileIn(context.Arguments);
+            _drains[callId] = new Drain(invocation.Attachments(), invocation.OnToolFailure, nested);
             invocation.Results?.NoteCall(callId, Release);
         }
 
-        using var outerCall = invocation?.Renders is { } renders && !nested
-            ? renders.BeginOuterCall(invocation.OuterCallId ?? callId)
-            : null;
-
-        using var outerSources = invocation?.Sources is { } sources && !nested
-            ? sources.BeginOuterCall(invocation.OuterCallId ?? callId)
-            : null;
-
-        using var outerFiles = invocation?.Files is { } files && !nested
-            ? files.BeginOuterCall(invocation.OuterCallId ?? callId)
+        using var outerCall = invocation is not null && !nested
+            ? OuterCall.Open(_drains[callId].Attachments, invocation.OuterCallId ?? callId)
             : null;
 
         try
@@ -146,13 +133,6 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
             });
 
             throw;
-        }
-        finally
-        {
-            // Filed for the tool alone: the workflow checkpoint persists arguments at turn end,
-            // and a live turn does not survive JSON. The tool already ran, and nothing downstream
-            // reads the key back.
-            context.Arguments.Remove(TurnInvocation.ArgumentsKey);
         }
     }
 

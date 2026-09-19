@@ -55,7 +55,7 @@ internal static class KnowledgeProviderFactory
             RecentMessageMemoryLimit = 4,
         };
 
-        KnowledgeSearch.Core core = KnowledgeSearch.Bind(port, knowledge, agent, citations, logger);
+        KnowledgeSearch.Core core = KnowledgeSearch.Bind(new KnowledgeBinding(port, knowledge, agent, citations, logger));
 
         // The template's own delegate never runs: tool-mode searches go through the
         // invocation-bound wrapper, prefetch through per-invocation providers. It fails

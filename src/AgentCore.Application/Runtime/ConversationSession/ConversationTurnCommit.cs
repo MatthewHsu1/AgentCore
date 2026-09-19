@@ -41,15 +41,7 @@ internal sealed class ConversationTurnCommit
 
             // Only now. The chain stores a hash of the spoken text and store 1 stores the text, so a
             // reply.interrupted raised before the append would name a hash of words nothing holds.
-            var completedEventId = _session.Events.WriteTurnEvents(
-                turn.Index,
-                result.EndedAt,
-                turn.StageBefore,
-                result.StageAfter,
-                outcome.Reply,
-                outcome.SpokenReply,
-                outcome.ToolFault,
-                outcome.InterruptedAfter);
+            var completedEventId = _session.Events.WriteTurnEvents(result, outcome.SpokenReply, outcome.ToolFault);
 
             // A turn one barge-in already cut is not amendable again, so it is not published here.
             _session.AmendableEventId = outcome.InterruptedAfter is null ? completedEventId : null;

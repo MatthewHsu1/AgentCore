@@ -723,11 +723,10 @@ public sealed class KnowledgeProviderFactoryTests
             Invoking("hello", session), TestContext.Current.CancellationToken).ConfigureAwait(false);
         var search = Assert.Single(context.Tools!, tool => tool.Name == "Search");
         var results = await ((AIFunction)search).InvokeAsync(
-            new AIFunctionArguments(new Dictionary<string, object?>(StringComparer.Ordinal)
+            turn.FileIn(new AIFunctionArguments(new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 ["userQuestion"] = query,
-                [TurnInvocation.ArgumentsKey] = turn,
-            }),
+            })),
             TestContext.Current.CancellationToken).ConfigureAwait(false)
             as IReadOnlyList<TextSearchProvider.TextSearchResult>;
         return results!;

@@ -13,17 +13,9 @@ namespace AgentCore.Application.Runtime;
 /// </summary>
 public sealed class ConversationSessionFactory : IConversationSessionFactory
 {
-    private readonly CompiledAgent _compiled;
-
-    private readonly IGuardEvaluator _guards;
-
-    private readonly StateExtractor? _extractor;
-
-    private readonly TimeProvider _time;
+    private readonly ConversationSessionSeams _seams;
 
     private readonly IConversationObserver[] _observers;
-
-    private readonly ILogger? _logger;
 
     private readonly string? _workspaceRoot;
 
@@ -43,11 +35,7 @@ public sealed class ConversationSessionFactory : IConversationSessionFactory
         ArgumentNullException.ThrowIfNull(compiled);
         ArgumentNullException.ThrowIfNull(guards);
 
-        _compiled = compiled;
-        _guards = guards;
-        _extractor = extractor;
-        _time = timeProvider ?? TimeProvider.System;
-        _logger = logger;
+        _seams = new ConversationSessionSeams(compiled, guards, extractor, timeProvider ?? TimeProvider.System, logger);
         _workspaceRoot = workspaceRoot;
 
         // Copied, not held: the list is the caller's, and a caller that keeps adding to it after this
@@ -85,12 +73,8 @@ public sealed class ConversationSessionFactory : IConversationSessionFactory
 
         ConversationSession session = new(
             resolvedConversationId,
-            _compiled,
-            _guards,
-            _extractor,
-            _time,
-            new ConversationObserverDispatcher(_observers, _logger),
-            _logger,
+            _seams,
+            new ConversationObserverDispatcher(_observers, _seams.Logger),
             workspace);
 
         // Named, not applied. The session resumes on its first turn, where store 0's own copy

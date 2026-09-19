@@ -30,34 +30,22 @@ internal static class KnowledgeSearch
         new() { Facets = new Dictionary<string, string>(StringComparer.Ordinal) };
 
     /// <summary>Binds the core to one agent's port, wiring and loggers.</summary>
-    internal static Core Bind(
-        IKnowledgeRetrievalPort port,
-        ResolvedKnowledge knowledge,
-        string agent,
-        IKnowledgeCitationFormatter citations,
-        ILogger logger)
+    internal static Core Bind(KnowledgeBinding binding)
     {
-        ArgumentNullException.ThrowIfNull(port);
-        ArgumentNullException.ThrowIfNull(knowledge);
-        ArgumentNullException.ThrowIfNull(agent);
-        ArgumentNullException.ThrowIfNull(citations);
-        ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(binding);
 
-        return (query, facets, turn, cancellationToken) => RunAsync(
-            port, knowledge, agent, query, facets, turn, citations, logger, cancellationToken);
+        return (query, facets, turn, cancellationToken) => RunAsync(binding, query, facets, turn, cancellationToken);
     }
 
     private static async Task<IReadOnlyList<TextSearchProvider.TextSearchResult>> RunAsync(
-        IKnowledgeRetrievalPort port,
-        ResolvedKnowledge knowledge,
-        string agent,
+        KnowledgeBinding binding,
         string query,
         IReadOnlyDictionary<string, string>? facets,
         TurnInvocation? turn,
-        IKnowledgeCitationFormatter citations,
-        ILogger logger,
         CancellationToken cancellationToken)
     {
+        var (port, knowledge, agent, citations, logger) = binding;
+
         // No scope filters nothing, so it is the absent scope in disguise. The shared store
         // can only fail closed when EVERY agent is scoped, so in a mixed deployment this is
         // the only check standing between a scoped agent and every customer's cards. A null
@@ -96,7 +84,7 @@ internal static class KnowledgeSearch
                 && under.Facets.Count > 0)
             {
                 return await KnowledgeProbe
-                    .RunAsync(port, knowledge, under, agent, query, turn?.Clarifications, turn?.CarriesHistory ?? false, logger, cancellationToken)
+                    .RunAsync(binding, under, query, turn?.Clarifications, turn?.CarriesHistory ?? false, cancellationToken)
                     .ConfigureAwait(false);
             }
 

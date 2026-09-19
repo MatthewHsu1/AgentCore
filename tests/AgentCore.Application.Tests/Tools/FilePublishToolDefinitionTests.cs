@@ -181,21 +181,21 @@ public sealed class FilePublishToolDefinitionTests : IDisposable
     {
         var function = (AIFunction)Build(policy);
 
-        Dictionary<string, object?> arguments = new(StringComparer.Ordinal) { ["path"] = path, ["title"] = title };
+        AIFunctionArguments arguments = new(new Dictionary<string, object?>(StringComparer.Ordinal) { ["path"] = path, ["title"] = title });
 
         if (turn)
         {
-            arguments[TurnInvocation.ArgumentsKey] = new TurnInvocation
+            new TurnInvocation
             {
                 ConversationId = "conversation-1",
                 TurnIndex = 0,
                 Stage = string.Empty,
                 Workspace = Path.Combine(_root, "conversation-1"),
                 Files = files,
-            };
+            }.FileIn(arguments);
         }
 
-        var result = await function.InvokeAsync(new AIFunctionArguments(arguments), TestContext.Current.CancellationToken);
+        var result = await function.InvokeAsync(arguments, TestContext.Current.CancellationToken);
 
         return Assert.IsType<JsonObject>(ToolResultJson.ToNode(result));
     }

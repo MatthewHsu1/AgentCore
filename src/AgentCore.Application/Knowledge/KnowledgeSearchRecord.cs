@@ -26,7 +26,6 @@ internal static class KnowledgeSearchRecord
         double latencyMs,
         Exception? failure)
         => KnowledgeAuditRecord.For(
-            turnId: null,
             agent,
             knowledge.Mode,
             query,

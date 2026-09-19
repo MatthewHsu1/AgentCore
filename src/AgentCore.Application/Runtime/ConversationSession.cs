@@ -159,18 +159,14 @@ public sealed class ConversationSession : IConversationPort, IAsyncDisposable
     /// </summary>
     internal ConversationSession(
         string conversationId,
-        CompiledAgent compiled,
-        IGuardEvaluator guards,
-        StateExtractor? extractor,
-        TimeProvider timeProvider,
+        ConversationSessionSeams seams,
         ConversationObserverDispatcher? observers = null,
-        ILogger? logger = null,
         ConversationWorkspace? workspace = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(conversationId);
-        ArgumentNullException.ThrowIfNull(compiled);
-        ArgumentNullException.ThrowIfNull(guards);
-        ArgumentNullException.ThrowIfNull(timeProvider);
+        ArgumentNullException.ThrowIfNull(seams);
+
+        var (compiled, guards, extractor, timeProvider, logger) = seams;
 
         ConversationId = conversationId;
 

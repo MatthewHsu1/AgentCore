@@ -1,4 +1,5 @@
 using System.Globalization;
+using AgentCore.Domain;
 using AgentCore.Domain.Audit;
 
 namespace AgentCore.Application.Runtime;
@@ -85,28 +86,17 @@ internal sealed class ConversationEventChain
     }
 
     /// <summary>Raises the durable facts of one finished turn, in the order they happened.</summary>
-    /// <param name="turnIndex">The turn that just spoke.</param>
-    /// <param name="endedAt">The moment the turn ended.</param>
-    /// <param name="stageBefore">The stage the turn spoke in.</param>
-    /// <param name="stageAfter">The stage the machine holds after the turn.</param>
-    /// <param name="reply">The text the caller heard.</param>
+    /// <param name="result">The turn that just spoke: its index, stages, the text the caller heard, when it ended, and how far it played.</param>
     /// <param name="spokenReply">The whole reply the model produced.</param>
     /// <param name="toolFault">The message of the fault, or <see langword="null"/>.</param>
-    /// <param name="interruptedAfter">The played duration, or <see langword="null"/>.</param>
     /// <returns>
     /// The identity of the <c>turn.completed</c> fact, so a barge-in that arrives after this turn
     /// already ended can name it through <see cref="ConversationEvent.AmendsEventId"/>.
     /// </returns>
-    internal Guid WriteTurnEvents(
-        int turnIndex,
-        DateTimeOffset endedAt,
-        string stageBefore,
-        string stageAfter,
-        string reply,
-        string spokenReply,
-        string? toolFault,
-        TimeSpan? interruptedAfter)
+    internal Guid WriteTurnEvents(TurnResult result, string spokenReply, string? toolFault)
     {
+        var (turnIndex, endedAt) = (result.TurnIndex, result.EndedAt);
+
         if (toolFault is not null)
         {
             _ = Raise(
@@ -126,13 +116,13 @@ internal sealed class ConversationEventChain
             payload: new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [AuditPayloadKeys.ReplyTextSha256] = AuditHash.OfText(spokenReply).Value,
-                [AuditPayloadKeys.StageBefore] = stageBefore,
-                [AuditPayloadKeys.StageAfter] = stageAfter,
+                [AuditPayloadKeys.StageBefore] = result.StageBefore,
+                [AuditPayloadKeys.StageAfter] = result.StageAfter,
             });
 
-        if (interruptedAfter is { } played)
+        if (result.InterruptedAfter is { } played)
         {
-            RaiseReplyInterrupted(turnIndex, endedAt, completed, reply, played);
+            RaiseReplyInterrupted(turnIndex, endedAt, completed, result.ReplyText, played);
         }
 
         return completed;
