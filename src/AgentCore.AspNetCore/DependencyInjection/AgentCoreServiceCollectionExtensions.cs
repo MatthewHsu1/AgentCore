@@ -1,3 +1,4 @@
+using AgentCore.Application.Cache;
 using AgentCore.Application.Audit;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Configuration.Schema;
@@ -70,6 +71,10 @@ public static class AgentCoreServiceCollectionExtensions
         services.TryAddSingleton(provider =>
             provider.GetRequiredService<IOptions<AgentCoreOptions>>().Value.TimeProvider
             ?? TimeProvider.System);
+
+        services.TryAddSingleton(provider =>
+            provider.GetRequiredService<IOptions<AgentCoreOptions>>().Value.Cache
+            ?? PassThroughHybridCache.Instance);
 
         services.AddHostedService(provider => new ConversationSessionSweeper(
             provider,

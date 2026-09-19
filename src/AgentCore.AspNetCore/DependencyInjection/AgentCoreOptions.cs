@@ -5,6 +5,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Tools.Binding;
 using Microsoft.Agents.AI;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 
 namespace AgentCore.AspNetCore.DependencyInjection;
@@ -32,6 +33,11 @@ public sealed class AgentCoreOptions
 
     /// <summary>Gets or sets the factory the library takes its loggers from.</summary>
     public ILoggerFactory? LoggerFactory { get; set; }
+
+    /// <summary>
+    /// Gets or sets the cache this container reads through, or <see langword="null"/> for none.
+    /// </summary>
+    public HybridCache? Cache { get; set; }
 
     /// <summary>Gets the map from a <c>binds:</c> name to the host delegate behind it.</summary>
     public ToolBindingRegistry Bindings { get; } = new();

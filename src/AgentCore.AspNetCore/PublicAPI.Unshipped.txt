@@ -23,6 +23,8 @@ AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.SecretResolver.get -> 
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.SecretResolver.set -> void
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.TimeProvider.get -> System.TimeProvider?
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.TimeProvider.set -> void
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Cache.get -> Microsoft.Extensions.Caching.Hybrid.HybridCache?
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Cache.set -> void
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseAuditSinks(params AgentCore.Application.Ports.IAuditSinkAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseConversation(params AgentCore.Application.Ports.IConversationAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseConversationSessions(System.Func<string!, AgentCore.Application.Ports.IConversationSessionFactory!, AgentCore.Application.Ports.IConversationSessions!>! open) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
