@@ -1,6 +1,7 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Diagnostics;
+using AgentCore.Application.Tools.Registry;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -26,47 +27,66 @@ internal static class AgentToolCompiler
         for (var index = 0; index < item.Tools.Count; index++)
         {
             var id = item.Tools[index];
-
             var toolPointer = ConfigurationError.AppendPointer(
                 ConfigurationError.AppendPointer(pointer, "tools"), index);
 
-            if (!declared.TryGetValue(id, out var tool))
+            if (Resolve(id, declared, context.Tools, resolveAgent, toolPointer) is { } tool)
             {
-                if (context.Tools is { } discovered && discovered.Contains(id))
-                {
-                    Add(tools, discovered.Resolve(id), item.Id, id, model, context);
-                    continue;
-                }
-
-                if (context.Tools is null)
-                {
-                    // No factory, so nothing this loop could have built anyway.
-                    continue;
-                }
-
-                throw ConfigurationCompiler.Fail(toolPointer, $"the tool id '{id}' is not declared in tools:, and no tool source serves it.");
-            }
-
-            if (tool.Kind == ToolKind.Agent)
-            {
-                // A kind: agent tool needs no tool factory. Section 7 says section 8 adds no port,
-                // and this kind adds none either: the inner agent is already in the document.
-                Add(tools, AgentDelegationTool.Create(tool, ResolveInner(tool, resolveAgent, toolPointer)), item.Id, id, model, context);
-                continue;
-            }
-
-            if (context.Tools is { } registry)
-            {
-                if (!registry.Contains(id))
-                {
-                    throw ConfigurationCompiler.Fail(toolPointer, $"the tool id '{id}' is declared, and no tool source serves it.");
-                }
-
-                Add(tools, registry.Resolve(id), item.Id, id, model, context);
+                Add(tools, tool, item.Id, id, model, context);
             }
         }
 
         return tools.Count == 0 ? null : tools;
+    }
+
+    /// <summary>Finds the tool one id names, or <see langword="null"/> when no source can build it.</summary>
+    private static AITool? Resolve(
+        string id,
+        Dictionary<string, ToolConfiguration> declared,
+        ToolRegistry? registry,
+        Func<string, AIAgent?> resolveAgent,
+        string pointer)
+    {
+        if (!declared.TryGetValue(id, out var tool))
+        {
+            return Undeclared(id, registry, pointer);
+        }
+
+        if (tool.Kind == ToolKind.Agent)
+        {
+            // A kind: agent tool needs no tool factory. Section 7 says section 8 adds no port,
+            // and this kind adds none either: the inner agent is already in the document.
+            return AgentDelegationTool.Create(tool, ResolveInner(tool, resolveAgent, pointer));
+        }
+
+        return Declared(id, registry, pointer);
+    }
+
+    /// <summary>An id that tools: does not declare. Only a registry that serves it can build it.</summary>
+    private static AITool? Undeclared(string id, ToolRegistry? registry, string pointer)
+    {
+        if (registry is null)
+        {
+            // No factory, so nothing could have been built anyway.
+            return null;
+        }
+
+        return registry.Contains(id)
+            ? registry.Resolve(id)
+            : throw ConfigurationCompiler.Fail(pointer, $"the tool id '{id}' is not declared in tools:, and no tool source serves it.");
+    }
+
+    /// <summary>An id that tools: declares. The registry, when there is one, has to serve it.</summary>
+    private static AITool? Declared(string id, ToolRegistry? registry, string pointer)
+    {
+        if (registry is null)
+        {
+            return null;
+        }
+
+        return registry.Contains(id)
+            ? registry.Resolve(id)
+            : throw ConfigurationCompiler.Fail(pointer, $"the tool id '{id}' is declared, and no tool source serves it.");
     }
 
     /// <summary>Adds one tool, unless it is a hosted marker its agent's model cannot run.</summary>
