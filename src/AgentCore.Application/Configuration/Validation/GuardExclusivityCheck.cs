@@ -23,24 +23,19 @@ internal sealed record SiblingExit(string Description, string Pointer, GuardRefe
 internal static class GuardExclusivityCheck
 {
     /// <summary>Runs check 5 over one group of siblings.</summary>
-    /// <param name="exits">The siblings, in document order.</param>
-    /// <param name="groupPointer">The JSON Pointer to the group, used by the coverage warning.</param>
-    /// <param name="groupDescription">How the warning names the group.</param>
+    /// <param name="group">The siblings, and what the group already fixes.</param>
     /// <param name="evaluator">The evaluator that resolves and runs a rule.</param>
     /// <param name="slots">The declared state slots.</param>
-    /// <param name="pinned">Slots whose value the group already fixes, such as <c>stage</c>.</param>
     /// <param name="errors">Receives an overlap error.</param>
     /// <param name="warnings">Receives a partial-coverage warning.</param>
     public static void Run(
-        IReadOnlyList<SiblingExit> exits,
-        string groupPointer,
-        string groupDescription,
+        SiblingGroup group,
         GuardEvaluator evaluator,
         IReadOnlyDictionary<string, StateSlotConfiguration> slots,
-        IReadOnlyDictionary<string, JsonNode?> pinned,
         List<ConfigurationError> errors,
         List<ConfigurationError> warnings)
     {
+        var exits = group.Exits;
         if (exits.Count < 2)
         {
             // One exit cannot overlap a sibling, and no exit is check 6's concern.
@@ -55,7 +50,7 @@ internal static class GuardExclusivityCheck
             facts.Collect(rules[index]);
         }
 
-        var domains = StateDomain.Build(facts, slots, pinned);
+        var domains = StateDomain.Build(facts, slots, group.Pinned);
         var total = StateDomain.CountPoints(domains);
 
         IEnumerable<Dictionary<string, JsonNode?>> points;
@@ -64,10 +59,10 @@ internal static class GuardExclusivityCheck
             points = StateDomain.Sample(domains, StateDomain.MaximumPoints);
             warnings.Add(new ConfigurationError
             {
-                Pointer = groupPointer,
+                Pointer = group.Pointer,
                 Message = string.Create(
                     CultureInfo.InvariantCulture,
-                    $"the state domain of {groupDescription} passes {StateDomain.MaximumPoints} points, so check 5 sampled {StateDomain.MaximumPoints} points at random and its coverage is partial"),
+                    $"the state domain of {group.Description} passes {StateDomain.MaximumPoints} points, so check 5 sampled {StateDomain.MaximumPoints} points at random and its coverage is partial"),
                 Check = ConfigurationCheck.GuardExclusivity,
             });
         }

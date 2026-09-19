@@ -7,7 +7,7 @@ namespace AgentCore.Application.Ports;
 /// </summary>
 public interface ISourcePort
 {
-    /// <summary>Cites one source for the running call.</summary>
+    /// <summary>Cites one source for the running conversation.</summary>
     /// <param name="source">Where the answer came from.</param>
     void Publish(SourceReference source);
 }

@@ -57,6 +57,12 @@ public sealed record AgentDefaults
     /// <summary>Gets whether agents inherit the mode tools, or <see langword="null"/> to name nothing.</summary>
     public bool? Mode { get; init; }
 
+    /// <summary>Gets whether agents are told the current date and time each turn, or <see langword="null"/> to name nothing.</summary>
+    public bool? Clock { get; init; }
+
+    /// <summary>Gets whether the framework's base instructions sit above <see cref="Instructions"/>, or <see langword="null"/> to name nothing.</summary>
+    public bool? BaseInstructions { get; init; }
+
     /// <summary>Gets the shared <c>approval:</c> block, or <see langword="null"/> when the document declares none.</summary>
     public ApprovalConfiguration? Approval { get; init; }
 }
@@ -81,11 +87,16 @@ public sealed record AgentConfiguration
     /// <summary>Gets the model of this agent, or <see langword="null"/> to inherit the default.</summary>
     public ModelReference? Model { get; init; }
 
-    /// <summary>Gets the ids of the tools this agent may call.</summary>
+    /// <summary>Gets the ids of the tools this agent may conversation.</summary>
     public IReadOnlyList<string> Tools { get; init; } = [];
 
     /// <summary>Gets the names of the skills this agent may load.</summary>
     public IReadOnlyList<string> Skills { get; init; } = [];
+
+    /// <summary>
+    /// Gets the names of the skills whose body sits in this agent's system prompt on every turn,
+    /// </summary>
+    public IReadOnlyList<string> Pinned { get; init; } = [];
 
     /// <summary>Gets this agent's <c>knowledge:</c> block, or <see langword="null"/> to inherit key by key.</summary>
     public AgentKnowledgeConfiguration? Knowledge { get; init; }
@@ -99,6 +110,12 @@ public sealed record AgentConfiguration
     /// <summary>Gets whether this agent gets the mode tools, or <see langword="null"/> to inherit.</summary>
     public bool? Mode { get; init; }
 
+    /// <summary>Gets whether this agent is told the current date and time each turn, or <see langword="null"/> to inherit.</summary>
+    public bool? Clock { get; init; }
+
+    /// <summary>Gets whether the framework's base instructions sit above this agent's, or <see langword="null"/> to inherit.</summary>
+    public bool? BaseInstructions { get; init; }
+
     /// <summary>Gets this agent's <c>memory:</c> block, or <see langword="null"/> for none.</summary>
     public AgentMemoryConfiguration? Memory { get; init; }
 
@@ -107,7 +124,7 @@ public sealed record AgentConfiguration
 
     /// <summary>
     /// Gets this agent's <c>shell:</c> block, or <see langword="null"/> for none. One executor per
-    /// call, never a process singleton.
+    /// conversation, never a process singleton.
     /// </summary>
     public ShellConfiguration? Shell { get; init; }
 

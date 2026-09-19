@@ -36,7 +36,7 @@ public sealed class ConfigurationCompilerModelFacingTests
     public async Task TheSecondRoundOfACompiledAgent_NeverForwardsARenderContentTheFirstRoundsToolAttached()
     {
         TurnRenders renders = new();
-        var turn = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", Renders = renders };
+        var turn = new TurnInvocation { ConversationId = "conversation", TurnIndex = 0, Stage = "", Renders = renders };
 
         RequestCapturingChatClient recorder = new(new ToolCallingChatClient("done."));
         var document = ConfigurationLoader.LoadYaml(Yaml);

@@ -12,7 +12,7 @@ namespace AgentCore.Infrastructure.Tests.Tools.Fakes;
 /// </summary>
 /// <remarks>
 /// <see cref="InProcessMcpServer"/> answers one connection and never changes. The session tests need
-/// the opposite: a server that refuses the first attempts, that dies between two calls, and that
+/// the opposite: a server that refuses the first attempts, that dies between two conversations, and that
 /// withdraws a tool it had offered. Each <see cref="NewTransport"/> is a fresh pipe pair and a fresh
 /// <see cref="McpServer"/>, which is what a real reconnect gets.
 /// </remarks>
@@ -41,7 +41,7 @@ internal sealed class ControllableMcpServer : IAsyncDisposable
     /// </summary>
     public bool RefuseToList { get; set; }
 
-    /// <summary>Gets the argument names the newest call carried, in order.</summary>
+    /// <summary>Gets the argument names the newest conversation carried, in order.</summary>
     public IReadOnlyList<string> LastArgumentNames { get; private set; } = [];
 
     /// <summary>

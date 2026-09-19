@@ -10,14 +10,14 @@ namespace AgentCore.AspNetCore.Tests.Fakes;
 /// </remarks>
 internal static class RelayFrames
 {
-    /// <summary>Builds the first frame of a call.</summary>
-    public static string Setup(string callSessionId = "call-one", string callControlId = "v2:leg-one")
+    /// <summary>Builds the first frame of a conversation.</summary>
+    public static string Setup(string conversationSessionId = "conversation-one", string callControlId = "v2:leg-one")
         => $$"""
         {"type":"setup","sessionId":"session-one","accountSid":"account-one",
          "callSid":"{{callControlId}}","callControlId":"{{callControlId}}",
-         "callSessionId":"{{callSessionId}}","callLegId":"leg-one",
+         "conversationSessionId":"{{conversationSessionId}}","callLegId":"leg-one",
          "from":"+13122010094","to":"+13122123456","direction":"inbound",
-         "callerName":"","customParameters":{},"callStatus":"active"}
+         "callerName":"","customParameters":{},"conversationStatus":"active"}
         """;
 
     /// <summary>Builds one transcript frame.</summary>

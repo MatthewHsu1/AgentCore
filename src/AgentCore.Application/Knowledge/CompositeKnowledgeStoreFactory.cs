@@ -12,7 +12,7 @@ namespace AgentCore.Application.Knowledge;
 /// </summary>
 public static class CompositeKnowledgeStoreFactory
 {
-    /// <summary>What the knowledge field calls itself, so the shared selector writes its failures.</summary>
+    /// <summary>What the knowledge field conversations itself, so the shared selector writes its failures.</summary>
     private static readonly VendorSeam KnowledgeSeam =
         new("providers.knowledge.kind", "/providers/knowledge/kind", "options.UseKnowledgeStores(...)", "stores");
 
@@ -114,15 +114,11 @@ public static class CompositeKnowledgeStoreFactory
     /// <summary>Writes the registered kinds, so a failure names what the host does register.</summary>
     private static string Registered(IReadOnlyList<IKnowledgeStoreAdapter> adapters)
     {
-        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
-        List<string> kinds = [];
-        foreach (var adapter in adapters)
-        {
-            if (seen.Add(adapter.Kind))
-            {
-                kinds.Add("'" + adapter.Kind + "'");
-            }
-        }
+        var kinds = adapters
+            .Select(adapter => adapter.Kind)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(kind => "'" + kind + "'")
+            .ToList();
 
         return kinds.Count == 0 ? "no adapter" : string.Join(", ", kinds);
     }

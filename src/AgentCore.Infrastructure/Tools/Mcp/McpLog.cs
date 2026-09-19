@@ -35,9 +35,9 @@ internal static partial class McpLog
     [LoggerMessage(
         EventId = 101,
         Level = LogLevel.Warning,
-        Message = "MCP server {Server}: the call to '{Tool}' failed on the connection. "
+        Message = "MCP server {Server}: the conversation to '{Tool}' failed on the connection. "
             + "Reconnecting once and repeating it.")]
-    public static partial void CallFailedReconnecting(ILogger logger, string server, string tool, Exception error);
+    public static partial void ConversationFailedReconnecting(ILogger logger, string server, string tool, Exception error);
 
     /// <summary>A connection would not close cleanly.</summary>
     /// <param name="logger">The logger of the session.</param>
@@ -69,7 +69,7 @@ internal static partial class McpLog
         EventId = 105,
         Level = LogLevel.Warning,
         Message = "MCP server {Server}: changed the arguments of {Drifted}. The model keeps the schema it "
-            + "was given at boot, because rewriting a prompt during a live call is worse than a stale "
+            + "was given at boot, because rewriting a prompt during a live conversation is worse than a stale "
             + "one. Restart this service to pick the new schema up.")]
     public static partial void ToolSchemasDrifted(ILogger logger, string server, string drifted);
 

@@ -15,7 +15,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay;
 /// </summary>
 /// <remarks>
 /// Every test here runs offline against a fake model and a fake relay. There is no Telnyx account,
-/// no network call, and no API key anywhere in this file.
+/// no network conversation, and no API key anywhere in this file.
 /// </remarks>
 public sealed class TelnyxRelayBargeInTests
 {
@@ -43,7 +43,7 @@ public sealed class TelnyxRelayBargeInTests
 
         try
         {
-            await relay.SendAsync(RelayFrames.Setup(callSessionId: "call-barge"));
+            await relay.SendAsync(RelayFrames.Setup(conversationSessionId: "conversation-barge"));
             await relay.SendAsync(RelayFrames.Prompt("hi", last: true));
 
             try
@@ -55,7 +55,7 @@ public sealed class TelnyxRelayBargeInTests
 
                 // SendAsync completing only means the bytes left this client, the same way
                 // TelnyxRelayHost.WaitForSessionAsync's own remark explains for a setup frame. The
-                // connection must actually raise the turn id and call CallSession.Interrupt before
+                // connection must actually raise the turn id and conversation ConversationSession.Interrupt before
                 // the gate below opens, or a fragment already queued behind the gate could still
                 // beat the guard onto the wire.
                 await capture.Observed.WaitAsync(bounded.Token);
@@ -70,7 +70,7 @@ public sealed class TelnyxRelayBargeInTests
             reply.Release();
         }
 
-        var session = await host.FindSessionAsync("call-barge");
+        var session = await host.FindSessionAsync("conversation-barge");
         Assert.NotNull(session);
 
         var turn = await WaitForTurnAsync(session!);
@@ -106,7 +106,7 @@ public sealed class TelnyxRelayBargeInTests
 
         try
         {
-            await relay.SendAsync(RelayFrames.Setup(callSessionId: "call-race"));
+            await relay.SendAsync(RelayFrames.Setup(conversationSessionId: "conversation-race"));
             await relay.SendAsync(RelayFrames.Prompt("hi", last: true));
 
             try
@@ -185,7 +185,7 @@ public sealed class TelnyxRelayBargeInTests
         using var bounded = CancellationTokenSource.CreateLinkedTokenSource(
             deadline.Token, TestContext.Current.CancellationToken);
 
-        await SendRawAsync(socket, RelayFrames.Setup(callSessionId: "call-held"));
+        await SendRawAsync(socket, RelayFrames.Setup(conversationSessionId: "conversation-held"));
         await SendRawAsync(socket, RelayFrames.Prompt("hi", last: true));
 
         await Task.Delay(300, TestContext.Current.CancellationToken);
@@ -284,13 +284,13 @@ public sealed class TelnyxRelayBargeInTests
     }
 
     [Fact(Timeout = 30_000)]
-    public async Task AnInterruptWithNoUtteranceUntilInterrupt_IsRefusedAndTheCallContinues()
+    public async Task AnInterruptWithNoUtteranceUntilInterrupt_IsRefusedAndTheConversationContinues()
     {
         // Section 7.1's rule for an unknown frame type applies here too: a frame the vendor got
-        // wrong must not drop the call. RelayFrames.Interrupt always emits both fields, so a raw
+        // wrong must not drop the conversation. RelayFrames.Interrupt always emits both fields, so a raw
         // frame is sent by hand here, missing utteranceUntilInterrupt entirely — the one shape
         // HandleInterrupt's own guard exists to survive, since System.Text.Json deserializes a
-        // missing non-nullable string as null rather than throwing, and CallSession.Interrupt
+        // missing non-nullable string as null rather than throwing, and ConversationSession.Interrupt
         // itself would otherwise take an ArgumentNullException straight into the read loop.
         using FragmentingChatClient reply = new("hello");
         EventObservedLoggerProvider capture = new("MalformedInterruptFrame");
@@ -329,11 +329,11 @@ public sealed class TelnyxRelayBargeInTests
     }
 
     [Fact(Timeout = 30_000)]
-    public async Task AnInterruptWithANegativeDuration_IsRefusedAndTheCallContinues()
+    public async Task AnInterruptWithANegativeDuration_IsRefusedAndTheConversationContinues()
     {
         // The same guard, the other malformed shape it exists for: System.Text.Json enforces no
         // range check on durationUntilInterruptMs, so a negative value would otherwise reach
-        // CallSession.Interrupt's own ArgumentOutOfRangeException uncaught and take the read loop
+        // ConversationSession.Interrupt's own ArgumentOutOfRangeException uncaught and take the read loop
         // down with it. D28 forbids clamping it into something plausible instead of refusing it.
         using FragmentingChatClient reply = new("hello");
         EventObservedLoggerProvider capture = new("MalformedInterruptFrame");
@@ -377,9 +377,9 @@ public sealed class TelnyxRelayBargeInTests
     {
         // The caller can finish a second sentence before the agent speaks. There is no interrupt
         // frame, so there is no heard text, and IConversationPort throws on a second turn. Holding
-        // one prompt keeps the caller's words; throwing would drop the call.
+        // one prompt keeps the caller's words; throwing would drop the conversation.
         //
-        // reply.Calls == 2 alone cannot tell the held path from an accident: if the release below
+        // reply.Conversations == 2 alone cannot tell the held path from an accident: if the release below
         // happened to win the race against the server actually dispatching "two" while the first
         // turn was still running, "two" would just start its own ordinary second turn instead of
         // being held — and Calls would still read 2, the same as it would against code with no
@@ -441,7 +441,7 @@ public sealed class TelnyxRelayBargeInTests
         // Item 6a of section 11 draws the line at one held prompt. This proves the line actually
         // holds: a third and a fourth final prompt, arriving while one is already held, both run no
         // turn of their own, and PendingPromptDropped — which the connection only ever logs once
-        // for the call — fires exactly once despite two drops, not once per dropped frame.
+        // for the conversation — fires exactly once despite two drops, not once per dropped frame.
         using BlockingChatClient reply = new("first reply");
         EventObservedLoggerProvider heldCapture = new("PromptHeld");
         EventObservedLoggerProvider droppedCapture = new("PendingPromptDropped");
@@ -515,7 +515,7 @@ public sealed class TelnyxRelayBargeInTests
     public async Task ATurnAfterABargeIn_AnswersNormally()
     {
         // Item 6a is half proved by AfterAnInterrupt_NoFurtherTextFrameReachesTheRelay: a barge-in
-        // ends one turn cleanly. The other half — the call itself goes on — needs its own proof,
+        // ends one turn cleanly. The other half — the conversation itself goes on — needs its own proof,
         // because nothing else here shows the caller can speak again and get a real answer rather
         // than silence or a leftover interrupted reply.
         using BlockingChatClient reply = new("hello there caller");
@@ -532,7 +532,7 @@ public sealed class TelnyxRelayBargeInTests
 
         try
         {
-            await relay.SendAsync(RelayFrames.Setup(callSessionId: "call-continues"));
+            await relay.SendAsync(RelayFrames.Setup(conversationSessionId: "conversation-continues"));
             await relay.SendAsync(RelayFrames.Prompt("hi", last: true));
 
             try
@@ -553,7 +553,7 @@ public sealed class TelnyxRelayBargeInTests
             reply.Release();
         }
 
-        var session = await host.FindSessionAsync("call-continues");
+        var session = await host.FindSessionAsync("conversation-continues");
         Assert.NotNull(session);
 
         var firstTurn = await WaitForTurnAsync(session!);
@@ -600,7 +600,7 @@ public sealed class TelnyxRelayBargeInTests
 
         try
         {
-            await relay.SendAsync(RelayFrames.Setup(callSessionId: "call-held-turn"));
+            await relay.SendAsync(RelayFrames.Setup(conversationSessionId: "conversation-held-turn"));
             await relay.SendAsync(RelayFrames.Prompt("one", last: true));
 
             try
@@ -668,11 +668,11 @@ public sealed class TelnyxRelayBargeInTests
     {
         // The sibling test above holds turn two before it produces anything at all, and both sides
         // of the seam then agree on their own: the connection marks _spokenTurnId, which still names
-        // turn one, and CallSession finds its own run not audible. This test closes the gap between
-        // those two answers. A run becomes audible to CallSession at its first piece of *content*,
+        // turn one, and ConversationSession finds its own run not audible. This test closes the gap between
+        // those two answers. A run becomes audible to ConversationSession at its first piece of *content*,
         // and content is not a word: a tool call, a tool result, or a line of reasoning makes turn
         // two audible to the core while not one syllable of it has reached the relay. The connection
-        // still marks turn one, correctly, and still lets turn two speak — but CallSession, asked
+        // still marks turn one, correctly, and still lets turn two speak — but ConversationSession, asked
         // nothing about which turn was heard, would cut turn two at its first thought and write the
         // caller's heard text onto a turn nobody heard. cutsRunningTurn is the answer the connection
         // already has, carried across the seam so the core stops guessing.
@@ -698,7 +698,7 @@ public sealed class TelnyxRelayBargeInTests
 
         try
         {
-            await relay.SendAsync(RelayFrames.Setup(callSessionId: "call-thinking-turn"));
+            await relay.SendAsync(RelayFrames.Setup(conversationSessionId: "conversation-thinking-turn"));
             await relay.SendAsync(RelayFrames.Prompt("one", last: true));
 
             try
@@ -718,7 +718,7 @@ public sealed class TelnyxRelayBargeInTests
             reply.ReleaseFirstTurn();
         }
 
-        var session = await host.FindSessionAsync("call-thinking-turn");
+        var session = await host.FindSessionAsync("conversation-thinking-turn");
         Assert.NotNull(session);
 
         try
@@ -777,7 +777,7 @@ public sealed class TelnyxRelayBargeInTests
     }
 
     /// <summary>Polls for the turn a barge-in ends, bounded the same way <c>TelnyxRelayHost</c>'s own waits are.</summary>
-    private static async Task<TurnResult> WaitForTurnAsync(CallSession session)
+    private static async Task<TurnResult> WaitForTurnAsync(ConversationSession session)
     {
         for (var attempt = 0; attempt < 1_000; attempt++)
         {

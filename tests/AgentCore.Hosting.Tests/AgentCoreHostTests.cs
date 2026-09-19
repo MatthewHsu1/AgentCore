@@ -1,7 +1,8 @@
 using System.Text.Json.Nodes;
 using AgentCore.Application.Audit;
 using AgentCore.Application.Audit.Memory;
-using AgentCore.Application.Calls.Memory;
+using AgentCore.Application.Conversation;
+using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Knowledge;
@@ -11,7 +12,7 @@ using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Endpoints;
 using AgentCore.Domain.Knowledge;
 using AgentCore.Infrastructure.Audit.Postgres;
-using AgentCore.Infrastructure.Calls.Postgres;
+using AgentCore.Infrastructure.Conversation.Postgres;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.AI;
@@ -32,7 +33,7 @@ namespace AgentCore.Hosting.Tests;
 /// seam is a setter, so defaults written after a host's callback would silently replace it.
 /// </para>
 /// <para>
-/// Every test runs offline against a fake model. There is no OpenAI account, no network call, and
+/// Every test runs offline against a fake model. There is no OpenAI account, no network conversation, and
 /// no API key anywhere in this file — which is itself the proof that the default vendor list costs
 /// nothing until a document names it.
 /// </para>
@@ -110,10 +111,10 @@ public sealed class AgentCoreHostTests
     }
 
     [Fact]
-    public async Task ProvidersCallsPostgresReachesTheAdapterRatherThanTheSelector()
+    public async Task ProvidersConversationsPostgresReachesTheAdapterRatherThanTheSelector()
     {
         var failure = await Assert.ThrowsAsync<SecretResolutionException>(
-            () => StartAsync(options => options.SecretResolver = new EmptySecretResolver(), Calls));
+            () => StartAsync(options => options.SecretResolver = new EmptySecretResolver(), Conversations));
 
         Assert.Contains(KnownSecrets.PostgresConnectionString.Name, failure.Message, StringComparison.Ordinal);
     }
@@ -126,8 +127,8 @@ public sealed class AgentCoreHostTests
         using var host = await StartAsync();
 
         Assert.IsType<InMemoryAuditSink>(host.Services.GetRequiredService<QueuedAuditSink>().Store);
-        Assert.IsType<InMemoryCallStore>(host.Services.GetRequiredService<ICallStore>());
-        Assert.IsType<InMemoryCallStore>(host.Services.GetRequiredService<ICallStore>());
+        Assert.IsType<InMemoryConversationStore>(host.Services.GetRequiredService<Conversations>().Store);
+        Assert.IsType<InMemoryConversationStore>(host.Services.GetRequiredService<Conversations>().Store);
     }
 
     [Fact]
@@ -144,13 +145,13 @@ public sealed class AgentCoreHostTests
     }
 
     [Fact]
-    public async Task AHostCallStoreWinsOverTheDefaultVendorOnTheSameKind()
+    public async Task AHostConversationStoreWinsOverTheDefaultVendorOnTheSameKind()
     {
         using var host = await StartAsync(
-            options => options.UseCallStores(new FakeCallStoreAdapter()),
-            Calls);
+            options => options.UseConversationStores(new FakeConversationStoreAdapter()),
+            Conversations);
 
-        Assert.IsType<InMemoryCallStore>(host.Services.GetRequiredService<ICallStore>());
+        Assert.IsType<InMemoryConversationStore>(host.Services.GetRequiredService<Conversations>().Store);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -220,7 +221,7 @@ public sealed class AgentCoreHostTests
             command: ["/definitely-not-a-real-binary-agentcore-test"]
             allow: ["*"]
         providers:
-          call:   { kind: telnyx-relay }
+          conversation:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
@@ -338,6 +339,9 @@ public sealed class AgentCoreHostTests
         Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
     }
 
+    /// <summary>The default Responses route, with the document's one entry filled in.</summary>
+    private const string MainResponses = "/v1/main/responses";
+
     [Fact]
     public async Task ResponsesAnswersOnTheDefaultRoute()
     {
@@ -346,9 +350,23 @@ public sealed class AgentCoreHostTests
 
         // No user message is a caller mistake this endpoint names, and naming it proves the route
         // reached the endpoint rather than the 404 handler.
-        var response = await PostEmptyAsync(client, ResponsesEndpointRouteBuilderExtensions.DefaultPattern);
+        var response = await PostEmptyAsync(client, MainResponses);
 
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ResponsesRefusesAnEntryTheDocumentDoesNotDeclare()
+    {
+        await using var app = await StartMappedAsync();
+        using HttpClient client = new() { BaseAddress = Address(app) };
+
+        var response = await PostEmptyAsync(client, "/v1/nobody/responses");
+
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        Assert.Contains("\"code\":\"unknown_entry\"", body);
+        Assert.Contains("Valid entries: main", body);
     }
 
     [Fact]
@@ -356,16 +374,39 @@ public sealed class AgentCoreHostTests
     {
         // A host that mounts a second Responses surface of its own needs this one out of the
         // way, and it must actually leave the default route behind when it moves.
-        const string Moved = "/agentcore/v1/responses";
-        await using var app = await StartMappedAsync(Moved);
+        await using var app = await StartMappedAsync("/agentcore/v1/{entry}/responses");
         using HttpClient client = new() { BaseAddress = Address(app) };
 
         Assert.Equal(
             System.Net.HttpStatusCode.BadRequest,
-            (await PostEmptyAsync(client, Moved)).StatusCode);
+            (await PostEmptyAsync(client, "/agentcore/v1/main/responses")).StatusCode);
         Assert.Equal(
             System.Net.HttpStatusCode.NotFound,
-            (await PostEmptyAsync(client, ResponsesEndpointRouteBuilderExtensions.DefaultPattern)).StatusCode);
+            (await PostEmptyAsync(client, MainResponses)).StatusCode);
+    }
+
+    [Fact]
+    public async Task ConversationRefusesAnEntryTheDocumentDoesNotDeclare()
+    {
+        await using var app = await StartMappedAsync();
+        using HttpClient client = new() { BaseAddress = Address(app) };
+
+        var response = await client.GetAsync("/v1/nobody/call", TestContext.Current.CancellationToken);
+
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Contains(
+            "Valid entries: main",
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task ResponsesRefusesARouteWithNoEntryParameter()
+    {
+        await using var app = await BuildAsync();
+
+        var failure = Assert.Throws<ArgumentException>(() => app.MapAgentCoreHost("/v1/responses"));
+
+        Assert.Contains("{entry}", failure.Message);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -374,8 +415,8 @@ public sealed class AgentCoreHostTests
 
     /// <summary>The smallest document the schema accepts: one agent, one model, and the required pair.</summary>
     /// <remarks>
-    /// A document that writes a <c>providers</c> block at all must write <c>call</c> and
-    /// <c>speech</c> too, and both speech roles must name the same vendor the call does. Those kinds
+    /// A document that writes a <c>providers</c> block at all must write <c>conversation</c> and
+    /// <c>speech</c> too, and both speech roles must name the same vendor the conversation does. Those kinds
     /// resolve here because the default list this library registers already names that transport —
     /// which is the point: a test writes no vendor of its own except the model.
     /// </remarks>
@@ -388,7 +429,7 @@ public sealed class AgentCoreHostTests
           main:
             agent: only
         providers:
-          call:   { kind: telnyx-relay }
+          conversation:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
@@ -401,8 +442,8 @@ public sealed class AgentCoreHostTests
 
     /// <summary>The <c>providers</c> line that asks for the durable transcript vendor.</summary>
 
-    /// <summary>The <c>providers</c> line that asks for the durable call store vendor.</summary>
-    private const string Calls = "  calls: { kind: postgres }";
+    /// <summary>The <c>providers</c> line that asks for the durable conversation store vendor.</summary>
+    private const string Conversations = "  conversations: { kind: postgres }";
 
     /// <summary>
     /// The <c>providers</c> lines for a knowledge store on an endpoint nothing listens on, so the
@@ -499,16 +540,16 @@ public sealed class AgentCoreHostTests
     }
 
 
-    /// <summary>A call store vendor answering to the same kind the default list names.</summary>
-    private sealed class FakeCallStoreAdapter : ICallStoreAdapter
+    /// <summary>A conversation store vendor answering to the same kind the default list names.</summary>
+    private sealed class FakeConversationStoreAdapter : IConversationStoreAdapter
     {
-        public string Kind => PostgresCallStoreAdapter.ProviderKind;
+        public string Kind => PostgresConversationStoreAdapter.ProviderKind;
 
-        public ValueTask<ICallStore> OpenAsync(
+        public ValueTask<IConversationStore> OpenAsync(
             VendorProviderConfiguration entry,
             ISecretResolverPort? secrets,
             CancellationToken cancellationToken = default)
-            => ValueTask.FromResult<ICallStore>(new InMemoryCallStore());
+            => ValueTask.FromResult<IConversationStore>(new InMemoryConversationStore());
     }
 
     /// <summary>An embedding vendor whose generator is never actually asked to embed anything.</summary>

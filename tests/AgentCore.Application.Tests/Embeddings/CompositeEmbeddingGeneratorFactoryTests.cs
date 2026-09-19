@@ -35,7 +35,7 @@ public sealed class CompositeEmbeddingGeneratorFactoryTests
           items:
             - { id: only, instructions: "I answer everything" }
         providers:
-          call:   { kind: telnyx-relay }
+          conversation:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
@@ -52,7 +52,7 @@ public sealed class CompositeEmbeddingGeneratorFactoryTests
           items:
             - { id: only, instructions: "I answer everything" }
         providers:
-          call:   { kind: telnyx-relay }
+          conversation:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
@@ -99,7 +99,7 @@ public sealed class CompositeEmbeddingGeneratorFactoryTests
     }
 
     // ---------------------------------------------------------------------------------------------
-    // What it refuses, at startup and never on the first call.
+    // What it refuses, at startup and never on the first conversation.
     // ---------------------------------------------------------------------------------------------
     [Fact]
     public async Task AKindNoAdapterServes_FailsAndNamesTheRegisteredKinds()

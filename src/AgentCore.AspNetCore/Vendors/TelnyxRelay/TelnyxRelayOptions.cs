@@ -4,14 +4,11 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay;
 /// What the relay endpoint may do, and for how long.
 /// </summary>
 /// <remarks>
-/// Every default here is chosen for a phone call. A call is short, it is quiet in bytes, and a
+/// Every default here is chosen for a phone conversation. A conversation is short, it is quiet in bytes, and a
 /// dead one must be noticed in seconds rather than minutes.
 /// </remarks>
 internal sealed class TelnyxRelayOptions
 {
-    /// <summary>Gets or sets the entry key this socket answers on.</summary>
-    public string EntryName { get; set; } = string.Empty;
-
     /// <summary>Gets or sets the largest inbound frame the endpoint accepts, in bytes.</summary>
     /// <remarks>
     /// The WebSocket middleware turns the request timeout off once it accepts, so nothing else
@@ -23,9 +20,9 @@ internal sealed class TelnyxRelayOptions
     /// <summary>Gets or sets how long teardown gives a stuck task before it moves on.</summary>
     /// <remarks>
     /// Every wait that could otherwise wedge a connection shares this one bound: how long the last
-    /// turn of a call may take to unwind once teardown cancels it, how long the close handshake may
-    /// take before the socket is aborted, and how long the words of a call may take to reach store 1
-    /// before its session is dropped. A telephony call that already dropped never answers a close
+    /// turn of a conversation may take to unwind once teardown cancels it, how long the close handshake may
+    /// take before the socket is aborted, and how long the words of a conversation may take to reach store 1
+    /// before its session is dropped. A telephony conversation that already dropped never answers a close
     /// frame, a chat client is not guaranteed to honour cancellation promptly, and a transcript
     /// store talks to a database, so each wait needs a bound or any one of them could wedge the
     /// connection forever. Because they run one after another rather than together, one wedged
@@ -35,9 +32,9 @@ internal sealed class TelnyxRelayOptions
     /// </remarks>
     public TimeSpan CloseTimeout { get; set; } = TimeSpan.FromSeconds(5);
 
-    /// <summary>Gets or sets how long the endpoint waits with no inbound frame before it ends the call.</summary>
+    /// <summary>Gets or sets how long the endpoint waits with no inbound frame before it ends the conversation.</summary>
     /// <remarks>
-    /// The vendor never reconnects, so a silent socket is a call that is already over. The clock
+    /// The vendor never reconnects, so a silent socket is a conversation that is already over. The clock
     /// is a <see cref="TimeProvider"/>, resolved from the request's own service provider rather
     /// than a property of this class: <see cref="DependencyInjection.AgentCoreOptions.TimeProvider"/>
     /// when the host bound one, otherwise <see cref="TimeProvider.System"/>. A test that wants a

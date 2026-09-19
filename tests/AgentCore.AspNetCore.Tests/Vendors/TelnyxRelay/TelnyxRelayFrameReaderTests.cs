@@ -10,7 +10,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay;
 /// </summary>
 /// <remarks>
 /// Every JSON body below is copied from the Telnyx Conversation Relay page, so these are golden
-/// inputs and not invented ones. Every test here runs offline. There is no network call and no API
+/// inputs and not invented ones. Every test here runs offline. There is no network conversation and no API
 /// key anywhere in this file.
 /// </remarks>
 public sealed class TelnyxRelayFrameReaderTests
@@ -25,9 +25,9 @@ public sealed class TelnyxRelayFrameReaderTests
         const string Json =
             """
             {"type":"setup","sessionId":"7a7e6a4f","accountSid":"1f1a8b6f",
-             "callSid":"v2:abc","callControlId":"v2:abc","callSessionId":"ff55a038",
+             "callSid":"v2:abc","callControlId":"v2:abc","conversationSessionId":"ff55a038",
              "callLegId":"428c31b6","from":"+13122010094","to":"+13122123456",
-             "direction":"inbound","callerName":"","callStatus":"active",
+             "direction":"inbound","callerName":"","conversationStatus":"active",
              "customParameters":{"customer_id":"customer_123"}}
             """;
 
@@ -37,7 +37,7 @@ public sealed class TelnyxRelayFrameReaderTests
         Assert.Equal("7a7e6a4f", setup.SessionId);
         Assert.Equal("v2:abc", setup.CallSid);
         Assert.Equal("v2:abc", setup.CallControlId);
-        Assert.Equal("ff55a038", setup.CallSessionId);
+        Assert.Equal("ff55a038", setup.ConversationSessionId);
         Assert.Equal("+13122010094", setup.From);
         Assert.Equal("+13122123456", setup.To);
         Assert.Equal("customer_123", setup.CustomParameters!["customer_id"]);
@@ -98,7 +98,7 @@ public sealed class TelnyxRelayFrameReaderTests
     [Fact]
     public void AnUnknownType_IsRefusedAndNamed()
     {
-        // A vendor that adds a frame must not be able to drop a call. Section 7.1.
+        // A vendor that adds a frame must not be able to drop a conversation. Section 7.1.
         Assert.False(Read("""{"type":"whisper","text":"x"}""", out var frame, out var unknown));
         Assert.Null(frame);
         Assert.Equal("whisper", unknown);
@@ -117,7 +117,7 @@ public sealed class TelnyxRelayFrameReaderTests
     public void ADecimalInterruptDuration_IsARefusedBodyAndNotAnUnreadableFrame()
     {
         // The wire carries an integer of milliseconds, and the record binds one. A vendor that
-        // starts sending 1820.5 must not thereby end a call at the exact moment of a barge-in, so
+        // starts sending 1820.5 must not thereby end a conversation at the exact moment of a barge-in, so
         // the type is named on refusedType and the caller keeps the socket. Section 7.1.
         const string Json =
             """
@@ -135,11 +135,11 @@ public sealed class TelnyxRelayFrameReaderTests
     public void ANonStringCustomParameter_IsARefusedBodyAndNotAnUnreadableFrame()
     {
         // customParameters binds to a dictionary of strings, and the host chooses what goes in it.
-        // A number there would otherwise end the call on the setup frame, before it ever began.
+        // A number there would otherwise end the conversation on the setup frame, before it ever began.
         const string Json =
             """
             {"type":"setup","sessionId":"7a7e6a4f","callSid":"v2:abc","callControlId":"v2:abc",
-             "callSessionId":"ff55a038","from":"+13122010094","to":"+13122123456",
+             "conversationSessionId":"ff55a038","from":"+13122010094","to":"+13122123456",
              "customParameters":{"a":7}}
             """;
 

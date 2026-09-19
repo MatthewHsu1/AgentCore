@@ -8,7 +8,7 @@ namespace AgentCore.Application.Providers;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Every seam — chat clients, knowledge, moderation, telemetry, speech, and the call transport —
+/// Every seam — chat clients, knowledge, moderation, telemetry, speech, and the conversation transport —
 /// asked the same question and, before this type, each carried its own copy of the answer. The
 /// copies had drifted: four failed when two adapters answered to one kind, and the chat client one
 /// silently kept whichever the host listed last.
@@ -26,7 +26,7 @@ public static class VendorAdapterSelector
     /// <typeparam name="TAdapter">The adapter interface of one seam.</typeparam>
     /// <param name="kind">The <c>kind</c> the document wrote.</param>
     /// <param name="adapters">The vendors this host registered for that seam.</param>
-    /// <param name="seam">What this seam calls itself, for the failure messages.</param>
+    /// <param name="seam">What this seam conversations itself, for the failure messages.</param>
     /// <returns>The one adapter serving <paramref name="kind"/>.</returns>
     /// <exception cref="ArgumentNullException">The adapters are <see langword="null"/>.</exception>
     /// <exception cref="ConfigurationLoadException">
@@ -77,7 +77,7 @@ public static class VendorAdapterSelector
     /// <summary>Writes what the host does register, and the move that would fix the document.</summary>
     /// <remarks>
     /// A host that registered nothing has no kind to offer the reader instead, so that message names
-    /// the call itself — the shape <c>AddAgentCoreAsync</c> already uses when it names
+    /// the conversation itself — the shape <c>AddAgentCoreAsync</c> already uses when it names
     /// <c>options.UseChatClients(...)</c> to a host that bound no chat client adapter. A host that
     /// registered some other vendor is told to add one for this kind, because the list it just read
     /// is the rest of the answer.
@@ -85,7 +85,7 @@ public static class VendorAdapterSelector
     private static string Registered<TAdapter>(Dictionary<string, List<TAdapter>> byKind, VendorSeam seam)
         where TAdapter : IVendorAdapter
         => byKind.Count == 0
-            ? $"no adapter. Call {seam.RegistrationHint}, or change the document."
+            ? $"no adapter. Conversation {seam.RegistrationHint}, or change the document."
             : string.Join(", ", byKind.Keys.Select(k => "'" + k + "'"))
                 + ". Register an adapter for that kind, or change the document.";
 

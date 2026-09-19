@@ -4,7 +4,7 @@ using AgentCore.Domain.Knowledge;
 namespace AgentCore.Application.Knowledge;
 
 /// <summary>
-/// What one retrieval actually did — the reader is the on-call engineer, and the model never sees it.
+/// What one retrieval actually did — the reader is the on-conversation engineer, and the model never sees it.
 /// </summary>
 internal sealed record KnowledgeAuditRecord
 {
@@ -42,8 +42,11 @@ internal sealed record KnowledgeAuditRecord
     public string? Failure { get; init; }
 
     /// <summary>Builds the record of one retrieval.</summary>
+    /// <remarks>
+    /// <see cref="TurnId"/> stays empty: the provider that writes this record can reach no conversation
+    /// id and no turn index, and a synthesised one would read as real to whoever greps for it.
+    /// </remarks>
     public static KnowledgeAuditRecord For(
-        string? turnId,
         string agent,
         KnowledgeMode mode,
         string query,
@@ -58,7 +61,6 @@ internal sealed record KnowledgeAuditRecord
 
         return new KnowledgeAuditRecord
         {
-            TurnId = turnId,
             Agent = agent,
             Mode = mode,
             Query = query,

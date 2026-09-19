@@ -42,7 +42,7 @@ public sealed class PostgresAuditSinkTests : PostgresDatabaseTest
         await sink.AppendManyAsync(run, Token);
 
         // Assert — write_position is insertion order, and it lines up with the sequence the store
-        // assigned because a single-call batch is numbered in submission order.
+        // assigned because a single-conversation batch is numbered in submission order.
         var sequences = await ReadSequencesAsync();
         Assert.Equal([0L, 1L, 2L], sequences);
     }
@@ -92,7 +92,7 @@ public sealed class PostgresAuditSinkTests : PostgresDatabaseTest
     }
 
     [PostgresFact]
-    public async Task AppendAsync_ConcurrentWritersOnSeparateCalls_WriteEveryRow()
+    public async Task AppendAsync_ConcurrentWritersOnSeparateConversations_WriteEveryRow()
     {
         // Arrange — four hosts on one table. Nothing serialises them: there is no head to claim.
         var connectionString = Database.ConnectionString;
@@ -130,15 +130,15 @@ public sealed class PostgresAuditSinkTests : PostgresDatabaseTest
 
         await sink.AppendManyAsync(
         [
-            Event("C1", AuditEventKind.CallStarted),
+            Event("C1", AuditEventKind.ConversationStarted),
             Event("C1", AuditEventKind.TurnCompleted),
-            Event("C1", AuditEventKind.CallEnded),
+            Event("C1", AuditEventKind.ConversationEnded),
         ], Token);
 
         var sequences = await SequencesOfAsync("C1");
         var kinds = await KindsOfAsync("C1");
         Assert.Equal([0L, 1L, 2L], sequences);
-        Assert.Equal(["call.started", "turn.completed", "call.ended"], kinds);
+        Assert.Equal(["conversation.started", "turn.completed", "conversation.ended"], kinds);
     }
 
     [PostgresFact]
@@ -146,7 +146,7 @@ public sealed class PostgresAuditSinkTests : PostgresDatabaseTest
     {
         PostgresAuditSink sink = new(DataSource);
 
-        await sink.AppendManyAsync([Event("C1", AuditEventKind.CallStarted)], Token);
+        await sink.AppendManyAsync([Event("C1", AuditEventKind.ConversationStarted)], Token);
         await sink.AppendManyAsync([Event("C1", AuditEventKind.TurnCompleted)], Token);
 
         var sequences = await SequencesOfAsync("C1");
@@ -160,8 +160,8 @@ public sealed class PostgresAuditSinkTests : PostgresDatabaseTest
 
         await sink.AppendManyAsync(
         [
-            Event("C1", AuditEventKind.CallStarted),
-            Event("C2", AuditEventKind.CallStarted),
+            Event("C1", AuditEventKind.ConversationStarted),
+            Event("C2", AuditEventKind.ConversationStarted),
             Event("C1", AuditEventKind.TurnCompleted),
         ], Token);
 
@@ -175,7 +175,7 @@ public sealed class PostgresAuditSinkTests : PostgresDatabaseTest
     public async Task AReplayedBatchWritesNothingTwice()
     {
         PostgresAuditSink sink = new(DataSource);
-        AuditEvent[] run = [Event("C1", AuditEventKind.CallStarted)];
+        AuditEvent[] run = [Event("C1", AuditEventKind.ConversationStarted)];
 
         await sink.AppendManyAsync(run, Token);
         await sink.AppendManyAsync(run, Token);
@@ -192,9 +192,9 @@ public sealed class PostgresAuditSinkTests : PostgresDatabaseTest
         // numbering them would reserve a sequence — here, 2 and 3 — that no row ever lands on, and c
         // would land at 4 instead of 2. The NOT EXISTS filter is what keeps this dense.
         PostgresAuditSink sink = new(DataSource);
-        AuditEvent a = Event("C1", AuditEventKind.CallStarted);
+        AuditEvent a = Event("C1", AuditEventKind.ConversationStarted);
         AuditEvent b = Event("C1", AuditEventKind.TurnCompleted);
-        AuditEvent c = Event("C1", AuditEventKind.CallEnded);
+        AuditEvent c = Event("C1", AuditEventKind.ConversationEnded);
 
         await sink.AppendManyAsync([a, b], Token);
 
@@ -207,9 +207,9 @@ public sealed class PostgresAuditSinkTests : PostgresDatabaseTest
     }
 
     [PostgresFact]
-    public async Task ConcurrentWritersOnTheSameCall_NumberDenselyWithNoGapOrDuplicate()
+    public async Task ConcurrentWritersOnTheSameConversation_NumberDenselyWithNoGapOrDuplicate()
     {
-        // Arrange — one call id, several writers. Without the advisory lock two writers can both
+        // Arrange — one conversation id, several writers. Without the advisory lock two writers can both
         // read the same max(sequence) and both compute the same numbers; one of them then loses a
         // unique-violation race that QueuedAuditSink would swallow as a dropped batch. The lock is
         // what makes that race impossible instead of merely unlikely.
@@ -237,7 +237,7 @@ public sealed class PostgresAuditSinkTests : PostgresDatabaseTest
 
         // Assert — dense from zero with no gap and no duplicate. A gap or a short count means a
         // writer's row was silently dropped; a duplicate cannot reach the table at all, because
-        // audit_event_call_sequence_unique refuses it, so either failure mode shows up here as the
+        // audit_event_conversation_sequence_unique refuses it, so either failure mode shows up here as the
         // read sequences failing to equal the full contiguous range.
         var sequences = await SequencesOfAsync("C1");
         Assert.Equal(
@@ -245,17 +245,17 @@ public sealed class PostgresAuditSinkTests : PostgresDatabaseTest
             sequences);
     }
 
-    private static AuditEvent Started(string callId) => new()
+    private static AuditEvent Started(string conversationId) => new()
     {
-        CallId = callId,
+        ConversationId = conversationId,
         EventId = Guid.CreateVersion7(),
-        Kind = AuditEventKind.CallStarted,
+        Kind = AuditEventKind.ConversationStarted,
         OccurredAt = new DateTimeOffset(2026, 8, 19, 9, 0, 0, TimeSpan.Zero),
     };
 
-    private static AuditEvent TurnCompleted(string callId, int turnIndex) => new()
+    private static AuditEvent TurnCompleted(string conversationId, int turnIndex) => new()
     {
-        CallId = callId,
+        ConversationId = conversationId,
         EventId = Guid.CreateVersion7(),
         Kind = AuditEventKind.TurnCompleted,
         OccurredAt = new DateTimeOffset(2026, 8, 19, 9, 0, 1, TimeSpan.Zero),
@@ -266,28 +266,28 @@ public sealed class PostgresAuditSinkTests : PostgresDatabaseTest
         },
     };
 
-    private static AuditEvent Ended(string callId) => new()
+    private static AuditEvent Ended(string conversationId) => new()
     {
-        CallId = callId,
+        ConversationId = conversationId,
         EventId = Guid.CreateVersion7(),
-        Kind = AuditEventKind.CallEnded,
+        Kind = AuditEventKind.ConversationEnded,
         OccurredAt = new DateTimeOffset(2026, 8, 19, 9, 0, 2, TimeSpan.Zero),
         Payload = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            [AuditPayloadKeys.EndReason] = CallEndReasons.ToToken(CallEndReason.CallerHungUp),
+            [AuditPayloadKeys.EndReason] = ConversationEndReasons.ToToken(ConversationEndReason.CallerHungUp),
         },
     };
 
-    private static AuditEvent Event(string callId, AuditEventKind kind) => new()
+    private static AuditEvent Event(string conversationId, AuditEventKind kind) => new()
     {
-        CallId = callId,
+        ConversationId = conversationId,
         EventId = Guid.CreateVersion7(),
         Kind = kind,
         OccurredAt = DateTimeOffset.UnixEpoch,
-        Payload = kind == AuditEventKind.CallEnded
+        Payload = kind == AuditEventKind.ConversationEnded
             ? new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                [AuditPayloadKeys.EndReason] = CallEndReasons.ToToken(CallEndReason.AgentCompleted),
+                [AuditPayloadKeys.EndReason] = ConversationEndReasons.ToToken(ConversationEndReason.AgentCompleted),
             }
             : new Dictionary<string, string>(StringComparer.Ordinal),
     };
@@ -309,11 +309,11 @@ public sealed class PostgresAuditSinkTests : PostgresDatabaseTest
         return sequences;
     }
 
-    private async Task<long[]> SequencesOfAsync(string callId)
+    private async Task<long[]> SequencesOfAsync(string conversationId)
     {
         await using var command = DataSource.CreateCommand(
-            "SELECT sequence FROM agentcore.audit_event WHERE call_id = $1 ORDER BY sequence");
-        command.Parameters.Add(new NpgsqlParameter { Value = callId });
+            "SELECT sequence FROM agentcore.audit_event WHERE conversation_id = $1 ORDER BY sequence");
+        command.Parameters.Add(new NpgsqlParameter { Value = conversationId });
 
         List<long> sequences = [];
         await using var reader = await command.ExecuteReaderAsync(Token);
@@ -326,11 +326,11 @@ public sealed class PostgresAuditSinkTests : PostgresDatabaseTest
     }
 
     /// <summary>Reads the kinds back in sequence order, so a test can pin which fact landed where.</summary>
-    private async Task<string[]> KindsOfAsync(string callId)
+    private async Task<string[]> KindsOfAsync(string conversationId)
     {
         await using var command = DataSource.CreateCommand(
-            "SELECT kind FROM agentcore.audit_event WHERE call_id = $1 ORDER BY sequence");
-        command.Parameters.Add(new NpgsqlParameter { Value = callId });
+            "SELECT kind FROM agentcore.audit_event WHERE conversation_id = $1 ORDER BY sequence");
+        command.Parameters.Add(new NpgsqlParameter { Value = conversationId });
 
         List<string> kinds = [];
         await using var reader = await command.ExecuteReaderAsync(Token);

@@ -11,12 +11,22 @@ internal static class EmbeddingStartup
     /// <param name="configuration">The loaded document. It carries <c>providers.embeddings</c>.</param>
     /// <param name="options">The options the host filled. It carries the registered vendors.</param>
     /// <param name="cancellationToken">Cancels the adapter build.</param>
-    internal static ValueTask<IEmbeddingGenerator<string, Embedding<float>>?> OpenAsync(
+    internal static async ValueTask<IEmbeddingGenerator<string, Embedding<float>>?> OpenAsync(
         AgentCoreConfiguration configuration,
         AgentCoreOptions options,
         CancellationToken cancellationToken)
-        => options.Embeddings is { } adapters
-            ? CompositeEmbeddingGeneratorFactory.CreateAsync(
-                configuration, options.SecretResolver, adapters, cancellationToken)
-            : ValueTask.FromResult<IEmbeddingGenerator<string, Embedding<float>>?>(null);
+    {
+        if (options.Embeddings is not { } adapters)
+        {
+            return null;
+        }
+
+        var generator = await CompositeEmbeddingGeneratorFactory
+            .CreateAsync(configuration, options.SecretResolver, adapters, cancellationToken)
+            .ConfigureAwait(false);
+
+        return generator is null || options.Cache is not { } cache
+            ? generator
+            : new HybridCachingEmbeddingGenerator(generator, cache);
+    }
 }

@@ -60,7 +60,7 @@ public static class AuditPayloadKeys
     public const string ModerationCategories = "moderationCategories";
 
     /// <summary>
-    /// Why the call ended.
+    /// Why the conversation ended.
     /// </summary>
     public const string EndReason = "endReason";
 

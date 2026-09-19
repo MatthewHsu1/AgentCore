@@ -27,7 +27,7 @@ namespace AgentCore.Hosting.Tests;
 /// unrelated host settings, and the environment provider that <c>WebApplicationBuilder</c> already
 /// installs would make this link answer for variables the first link owns.
 /// </para>
-/// <para>Every test here runs offline. There is no network call and no API key in this file.</para>
+/// <para>Every test here runs offline. There is no network conversation and no API key in this file.</para>
 /// </remarks>
 public sealed class ConfigurationSecretResolverTests
 {
@@ -124,7 +124,7 @@ public sealed class ConfigurationSecretResolverTests
           main:
             agent: only
         providers:
-          call:   { kind: telnyx-relay }
+          conversation:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }

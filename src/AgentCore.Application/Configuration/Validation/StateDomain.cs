@@ -62,14 +62,14 @@ internal static class StateDomain
         ArgumentNullException.ThrowIfNull(domains);
 
         var total = 1L;
-        foreach (var domain in domains)
+        foreach (var count in domains.Select(domain => domain.Points.Count))
         {
-            if (domain.Points.Count == 0)
+            if (count == 0)
             {
                 return 0;
             }
 
-            total *= domain.Points.Count;
+            total *= count;
             if (total > MaximumPoints)
             {
                 return long.MaxValue;
@@ -215,7 +215,7 @@ internal static class StateDomain
             List<JsonNode?> points = [.. members.Select(static member => (JsonNode?)member.DeepClone())];
 
             // A slot with no default reads as null until a writer fills it, and that is a state the
-            // guards run in. Without this point check 5 analyses a domain the call never starts in.
+            // guards run in. Without this point check 5 analyses a domain the conversation never starts in.
             if (slot.Default is null)
             {
                 points.Add(null);
@@ -241,7 +241,7 @@ internal static class StateDomain
                 Writer = StateWriter.Const,
                 Default = JsonValue.Create(0),
             },
-            ReservedStateSlots.CallDurationSeconds => new StateSlotConfiguration
+            ReservedStateSlots.ConversationDurationSeconds => new StateSlotConfiguration
             {
                 Type = StateSlotType.Number,
                 Writer = StateWriter.Const,

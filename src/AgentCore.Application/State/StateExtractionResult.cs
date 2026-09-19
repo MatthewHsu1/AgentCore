@@ -4,7 +4,7 @@ namespace AgentCore.Application.State;
 /// What one extractor call did to the state.
 /// </summary>
 /// <remarks>
-/// Section 8.7: the extractor never drops a call. A reply that does not deserialize leaves every
+/// Section 8.7: the extractor never drops a conversation. A reply that does not deserialize leaves every
 /// slot unchanged, and the turn loop logs it once and continues.
 /// </remarks>
 /// <param name="Deserialized">Whether the reply parsed into the object the schema describes.</param>
@@ -19,7 +19,7 @@ public sealed record StateExtractionResult(
     int Rejected,
     string? Failure)
 {
-    /// <summary>Gets the result of a call that produced nothing usable.</summary>
+    /// <summary>Gets the result of a conversation that produced nothing usable.</summary>
     /// <param name="failure">The reason.</param>
     /// <returns>A result that changed no slot.</returns>
     public static StateExtractionResult Failed(string failure) => new(false, 0, 0, 0, failure);

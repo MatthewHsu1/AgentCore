@@ -5,6 +5,6 @@ namespace AgentCore.Application.Ports;
 /// </summary>
 public interface IRenderPort
 {
-    /// <summary>Sends one thing to be shown to the caller of the running call.</summary>
+    /// <summary>Sends one thing to be shown to the caller of the running conversation.</summary>
     void Publish(string name, string renderId, object data, bool transient = false);
 }

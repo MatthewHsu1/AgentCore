@@ -6,15 +6,15 @@ using Xunit;
 namespace AgentCore.Application.Tests.Configuration.Compilation;
 
 /// <summary>
-/// Rule 16 of section 11, and T44. A fan-out of 26 simultaneous calls against one compiled agent is
-/// clean, and no code path compiles an agent for each call.
+/// Rule 16 of section 11, and T44. A fan-out of 26 simultaneous conversations against one compiled agent is
+/// clean, and no code path compiles an agent for each conversation.
 /// </summary>
 public sealed class CompiledAgentConcurrencyTests
 {
     private const int FanOut = 26;
 
     [Fact]
-    public async Task Rule16_TwentySixSimultaneousCalls_ShareOneCompiledAgent()
+    public async Task Rule16_TwentySixSimultaneousConversations_ShareOneCompiledAgent()
     {
         using ScriptedChatClient client = new("Hello", " from", " one", " agent.");
         var document = ConfigurationLoader.LoadYaml(CompileTableTests.OneAgentYaml);
@@ -27,13 +27,13 @@ public sealed class CompiledAgentConcurrencyTests
         var runs = Enumerable.Range(0, FanOut).Select(index => Task.Run(
             async () =>
             {
-                // Every call asks the registry for the agent, exactly as the turn loop does.
+                // Every conversation asks the registry for the agent, exactly as the turn loop does.
                 var compiled = registry.GetOrCompile(document, "main", context);
 
                 // Nothing starts until all 26 are ready, so the fan-out is really simultaneous.
                 gate.SignalAndWait(token);
 
-                var reply = await compiled.Agent.RunAsync($"call {index}", cancellationToken: token)
+                var reply = await compiled.Agent.RunAsync($"conversation {index}", cancellationToken: token)
                     .ConfigureAwait(false);
                 return (compiled, reply.Text);
             },
@@ -41,7 +41,7 @@ public sealed class CompiledAgentConcurrencyTests
 
         var results = await Task.WhenAll(runs);
 
-        // No code path compiles an agent for each call. The compiled agent is a process singleton.
+        // No code path compiles an agent for each conversation. The compiled agent is a process singleton.
         Assert.Equal(1, registry.CompileCount);
         Assert.All(results, result => Assert.Same(results[0].compiled, result.compiled));
         Assert.All(results, result => Assert.Equal(client.FullText, result.Text));
@@ -49,7 +49,7 @@ public sealed class CompiledAgentConcurrencyTests
     }
 
     [Fact]
-    public async Task Rule16_TwentySixSimultaneousCalls_AreCleanAgainstOneGraphWrapper()
+    public async Task Rule16_TwentySixSimultaneousConversations_AreCleanAgainstOneGraphWrapper()
     {
         using ScriptedChatClient client = new("Hello", " from", " the", " graph.");
         var document = ConfigurationLoader.LoadYaml(CompileTableTests.ExplicitGraphYaml);
@@ -64,7 +64,7 @@ public sealed class CompiledAgentConcurrencyTests
             async () =>
             {
                 gate.SignalAndWait(token);
-                var reply = await compiled.Agent.RunAsync($"call {index}", cancellationToken: token)
+                var reply = await compiled.Agent.RunAsync($"conversation {index}", cancellationToken: token)
                     .ConfigureAwait(false);
                 return reply.Text;
             },
@@ -72,7 +72,7 @@ public sealed class CompiledAgentConcurrencyTests
 
         var texts = await Task.WhenAll(runs);
 
-        // T44: nothing serializes inside the AsAIAgent() wrapper, so one wrapper serves every call.
+        // T44: nothing serializes inside the AsAIAgent() wrapper, so one wrapper serves every conversation.
         Assert.Equal(1, registry.CompileCount);
         Assert.All(texts, text => Assert.Contains("graph.", text, StringComparison.Ordinal));
     }

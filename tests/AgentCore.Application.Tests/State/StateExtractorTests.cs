@@ -137,7 +137,7 @@ public sealed class StateExtractorTests
 
         var result = extractor.Write(state, "I am sorry, I cannot do that.");
 
-        // Section 8.7: the extractor has no retry, and a failed extraction never drops a call.
+        // Section 8.7: the extractor has no retry, and a failed extraction never drops a conversation.
         Assert.False(result.Deserialized);
         Assert.NotNull(result.Failure);
         Assert.Equal(0, result.Filled);
@@ -178,7 +178,7 @@ public sealed class StateExtractorTests
             [new ChatMessage(ChatRole.User, "goodbye")],
             TestContext.Current.CancellationToken);
 
-        // The extractor has no retry: one call, and one only.
+        // The extractor has no retry: one conversation, and one only.
         Assert.Equal(1, client.Calls);
         Assert.True(result.Deserialized);
         Assert.True(state.Read("callerSaidGoodbye")!.GetValue<bool>());

@@ -278,17 +278,18 @@ public sealed class FacetFilterTests
                     ["key"] = filter.Key,
                     ["value"] = filter.Value,
                 })),
-            [TurnInvocation.ArgumentsKey] = new TurnInvocation
-            {
-                CallId = "call",
-                TurnIndex = 0,
-                Stage = "",
-                Knowledge = new KnowledgeScope { Facets = new Dictionary<string, string>(StringComparer.Ordinal) },
-            },
+        };
+
+        TurnInvocation turn = new()
+        {
+            ConversationId = "conversation",
+            TurnIndex = 0,
+            Stage = "",
+            Knowledge = new KnowledgeScope { Facets = new Dictionary<string, string>(StringComparer.Ordinal) },
         };
 
         var results = await tool.InvokeAsync(
-            new AIFunctionArguments(arguments), TestContext.Current.CancellationToken)
+            turn.FileIn(new AIFunctionArguments(arguments)), TestContext.Current.CancellationToken)
             as IReadOnlyList<TextSearchProvider.TextSearchResult>;
 
         return results is null ? string.Empty : string.Join("\n", results.Select(result => result.Text));

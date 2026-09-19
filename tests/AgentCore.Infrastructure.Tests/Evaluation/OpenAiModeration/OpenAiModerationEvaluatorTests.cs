@@ -404,7 +404,7 @@ public sealed class OpenAiModerationEvaluatorTests
     /// The build opens the named client on the pipeline of the host, and reads the shared OpenAI key.
     /// </summary>
     /// <remarks>
-    /// D13 says one key serves all four OpenAI calls, so this adapter declares no name of its own and
+    /// D13 says one key serves all four OpenAI conversations, so this adapter declares no name of its own and
     /// asks for the constant <c>OpenAiChatClientAdapter</c> owns.
     /// </remarks>
     [Fact]
@@ -492,7 +492,7 @@ public sealed class OpenAiModerationEvaluatorTests
     }
 
     /// <summary>
-    /// The moderation call gives the turn back, rather than holding it for the default 100 seconds.
+    /// The moderation conversation gives the turn back, rather than holding it for the default 100 seconds.
     /// </summary>
     [Fact]
     public async Task TheDeadlineIsShorterThanTheShippedDefault()

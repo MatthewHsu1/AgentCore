@@ -297,7 +297,7 @@ public sealed class AgentToolTests
       }
 
       [Fact]
-      public async Task Rule16_TwentySixSimultaneousCalls_ShareOneDelegatingAgent()
+      public async Task Rule16_TwentySixSimultaneousConversations_ShareOneDelegatingAgent()
       {
           const int fanOut = 26;
 
@@ -315,7 +315,7 @@ public sealed class AgentToolTests
                   var compiled = registry.GetOrCompile(document, "main", context);
                   gate.SignalAndWait(token);
 
-                  var reply = await compiled.Agent.RunAsync($"call {index}", cancellationToken: token)
+                  var reply = await compiled.Agent.RunAsync($"conversation {index}", cancellationToken: token)
                       .ConfigureAwait(false);
                   return (compiled, reply.Text);
               },

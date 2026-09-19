@@ -265,7 +265,7 @@
     },
     "titler": {
       "type": "object",
-      "description": "The model that names a call from its first few messages. The key is optional, and a document that omits it leaves the titler on the default providers.llm entry.",
+      "description": "The model that names a conversation from its first few messages. The key is optional, and a document that omits it leaves the titler on the default providers.llm entry.",
       "required": [
         "model"
       ],
@@ -660,6 +660,14 @@
               "type": "boolean",
               "description": "Whether agents inherit the mode tools."
             },
+            "clock": {
+              "type": "boolean",
+              "description": "Whether agents are told the current date and time each turn. Defaults to true."
+            },
+            "baseInstructions": {
+              "type": "boolean",
+              "description": "Whether the framework's base instructions sit above instructions. Defaults to true."
+            },
             "approval": {
               "$ref": "#/$defs/approval",
               "description": "The standing approval rules every agent inherits."
@@ -733,6 +741,14 @@
           "type": "boolean",
           "description": "The agent gets the mode tools (AgentModeProvider)."
         },
+        "clock": {
+          "type": "boolean",
+          "description": "The agent is told the current date and time each turn (ClockContextProvider). Defaults to true."
+        },
+        "baseInstructions": {
+          "type": "boolean",
+          "description": "The framework's base instructions sit above this agent's own. Defaults to true."
+        },
         "memory": {
           "$ref": "#/$defs/memory",
           "description": "The file-memory tools over a store."
@@ -743,7 +759,7 @@
         },
         "shell": {
           "$ref": "#/$defs/shell",
-          "description": "One shell executor per call."
+          "description": "One shell executor per conversation."
         },
         "approval": {
           "$ref": "#/$defs/approval",
@@ -768,12 +784,19 @@
           "items": {
             "$ref": "#/$defs/skillName"
           }
+        },
+        "pinned": {
+          "type": "array",
+          "description": "Skills whose body sits in the system prompt on every turn, with no load_skill call. A name here cannot also be in skills.",
+          "items": {
+            "$ref": "#/$defs/skillName"
+          }
         }
       }
     },
     "compaction": {
       "type": ["object", "null"],
-      "description": "Decision 3: no strategy here calls a model. A resumed call rebuilds a new session and re-derives from the replayed words, so a strategy that called a model would give one call two histories.",
+      "description": "Decision 3: no strategy here calls a model. A resumed conversation rebuilds a new session and re-derives from the replayed words, so a strategy that called a model would give one conversation two histories.",
       "additionalProperties": false,
       "properties": {
         "strategy": {
@@ -802,7 +825,7 @@
       "enum": [
         "workspace"
       ],
-      "description": "The host-created per-call directory, deleted with the call. The only store today."
+      "description": "The host-created per-conversation directory, deleted with the conversation. The only store today."
     },
     "approval": {
       "type": "object",
@@ -904,6 +927,33 @@
         "timeoutSeconds": {
           "type": "integer",
           "minimum": 1
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "The environment passed to the executor, on top of what the executor kind already supplies. A value may hold ${secret:name}."
+        },
+        "maxOutputKb": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The per-stream output cap, in KiB."
+        },
+        "image": {
+          "type": "string",
+          "minLength": 1,
+          "description": "kind: docker. The container image."
+        },
+        "network": {
+          "type": "string",
+          "minLength": 1,
+          "description": "kind: docker. The Docker network mode."
+        },
+        "memoryMb": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "kind: docker. The container memory limit, in MB."
         }
       }
     },
@@ -913,7 +963,7 @@
         "docker",
         "local"
       ],
-      "description": "Where a shell runs is the consumer's call, so the document names one: there is no default."
+      "description": "Where a shell runs is the consumer's conversation, so the document names one: there is no default."
     },
     "shellPattern": {
       "type": "string",
@@ -1162,7 +1212,7 @@
     "providers": {
       "type": "object",
       "required": [
-        "call",
+        "conversation",
         "speech"
       ],
       "additionalProperties": false,
@@ -1174,8 +1224,8 @@
             "$ref": "#/$defs/llmProvider"
           }
         },
-        "call": {
-          "$ref": "#/$defs/callProvider"
+        "conversation": {
+          "$ref": "#/$defs/conversationProvider"
         },
         "speech": {
           "$ref": "#/$defs/speechProvider"
@@ -1202,9 +1252,41 @@
           "$ref": "#/$defs/vendorProvider",
           "description": "Where the D23 audit chain is written, such as memory. A document that names none uses the in-process memory sink, which is not durable."
         },
-        "calls": {
+        "conversations": {
           "$ref": "#/$defs/vendorProvider",
-          "description": "Where a call is kept: its row, and the words of it. A document that names none uses the in-process memory store, which is not durable and holds no retention window."
+          "description": "Where a conversation is kept: its row, and the words of it. A document that names none uses the in-process memory store, which is not durable and holds no retention window."
+        },
+        "blobs": {
+          "$ref": "#/$defs/blobProvider",
+          "description": "Where a file the agent produces is kept after the run, such as s3. A document that names none keeps no such file."
+        }
+      }
+    },
+    "blobProvider": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "endpoint": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The service URL, such as https://s3.us-west-004.backblazeb2.com."
+        },
+        "bucket": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The bucket every blob is written into."
+        },
+        "region": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The region the request signature names. Omit it to read the region off the endpoint host."
         }
       }
     },
@@ -1243,10 +1325,6 @@
         "webSearch": {
           "type": "boolean",
           "description": "Whether this entry may run a hosted web search. An opt-out: omitted or true lets the vendor's adapter decide, false vetoes it even on a model the adapter thinks is capable."
-        },
-        "codeExecute": {
-          "type": "boolean",
-          "description": "Whether this entry may run hosted code execution. An opt-out: omitted or true lets the vendor's adapter decide, false vetoes it even on a model the adapter thinks is capable."
         }
       }
     },
@@ -1280,9 +1358,9 @@
         }
       }
     },
-    "callProvider": {
+    "conversationProvider": {
       "type": "object",
-      "description": "The media plane: who carries the call and owns its inbound route. Not providers.speech, which is recognition and synthesis, and not providers.telephony, which is call control.",
+      "description": "The media plane: who carries the conversation and owns its inbound route. Not providers.speech, which is recognition and synthesis, and not providers.telephony, which is conversation control.",
       "required": [
         "kind"
       ],
@@ -1296,7 +1374,7 @@
           "type": "integer",
           "minimum": -1,
           "maximum": 4294967,
-          "description": "How long the socket waits with no inbound frame before ending the call. -1 means never."
+          "description": "How long the socket waits with no inbound frame before ending the conversation. -1 means never."
         },
         "closeTimeoutSeconds": {
           "type": "integer",

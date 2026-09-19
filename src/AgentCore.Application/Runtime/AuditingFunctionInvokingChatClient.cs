@@ -38,7 +38,14 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
     private readonly ConcurrentDictionary<string, Drain> _drains = new(StringComparer.Ordinal);
 
     private sealed record Drain(
-        TurnRenders? Renders, TurnSources? Sources, Action<ToolFailure>? OnToolFailure, bool Nested);
+        IReadOnlyList<ITurnAttachments> Attachments,
+        Action<ToolFailure>? OnToolFailure,
+        bool Nested)
+    {
+        /// <summary>Takes what one call produced, kind by kind, in the turn's own order.</summary>
+        public IEnumerable<AIContent> TakeFor(string callId)
+            => Attachments.SelectMany(kind => kind.TakeFor(callId));
+    }
 
     /// <summary>Creates the client.</summary>
     /// <param name="innerClient">The model this loop sends its rounds to.</param>
@@ -88,19 +95,15 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
 
         if (invocation is not null)
         {
-            // Snapshot the turn once per tool call and file it in the call's arguments, so tools
+            // Snapshot the turn once per tool call and file it beside the call's arguments, so tools
             // declare what they need as parameters.
-            context.Arguments[TurnInvocation.ArgumentsKey] = invocation;
-            _drains[callId] = new Drain(invocation.Renders, invocation.Sources, invocation.OnToolFailure, nested);
+            invocation.FileIn(context.Arguments);
+            _drains[callId] = new Drain(invocation.Attachments(), invocation.OnToolFailure, nested);
             invocation.Results?.NoteCall(callId, Release);
         }
 
-        using var outerCall = invocation?.Renders is { } renders && !nested
-            ? renders.BeginOuterCall(invocation.OuterCallId ?? callId)
-            : null;
-            
-        using var outerSources = invocation?.Sources is { } sources && !nested
-            ? sources.BeginOuterCall(invocation.OuterCallId ?? callId)
+        using var outerCall = invocation is not null && !nested
+            ? OuterCall.Open(_drains[callId].Attachments, invocation.OuterCallId ?? callId)
             : null;
 
         try
@@ -130,13 +133,6 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
             });
 
             throw;
-        }
-        finally
-        {
-            // Filed for the tool alone: the workflow checkpoint persists arguments at turn end,
-            // and a live turn does not survive JSON. The tool already ran, and nothing downstream
-            // reads the key back.
-            context.Arguments.Remove(TurnInvocation.ArgumentsKey);
         }
     }
 
@@ -179,7 +175,7 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
 
     /// <summary>
     /// Builds the messages the model reads, reports every tool it could not find, and attaches
-    /// whatever this turn drew or cited to the tool-result message it belongs to.
+    /// whatever this turn drew, cited, or published to the tool-result message it belongs to.
     /// </summary>
     protected override IList<ChatMessage> CreateResponseMessages(ReadOnlySpan<FunctionInvocationResult> results)
     {
@@ -187,30 +183,31 @@ internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatC
 
         foreach (var message in messages)
         {
-            // Materialised before the loop below adds to the very list this reads: Contents is a
-            // List<AIContent> underneath, and its enumerator throws on the next MoveNext once
-            // anything has been appended, even where nothing further was left to enumerate.
-            foreach (var callId in message.Contents.OfType<FunctionResultContent>().Select(r => r.CallId).ToList())
-            {
-                // A nested loop's calls drain nothing: their ids were registered under the
-                // stripped copy, so removing the entry without draining keeps the outer drain
-                // from attaching a nested drawing to a message that never reaches the caller.
-                // Only the outermost loop's own calls attach what they drew or cited.
-                if (_drains.TryRemove(callId, out var drain) && !drain.Nested)
-                {
-                    foreach (var drawn in drain.Renders?.TakeFor(callId) ?? [])
-                    {
-                        message.Contents.Add(drawn);
-                    }
-
-                    foreach (var cited in drain.Sources?.TakeFor(callId) ?? [])
-                    {
-                        message.Contents.Add(cited);
-                    }
-                }
-            }
+            Attach(message.Contents);
         }
 
         return messages;
+    }
+
+    /// <summary>Appends what each tool result in one message drew, cited, or published.</summary>
+    private void Attach(IList<AIContent> contents)
+    {
+        // Materialised before the loop below adds to the very list this reads: Contents is a
+        // List<AIContent> underneath, and its enumerator throws on the next MoveNext once
+        // anything has been appended, even where nothing further was left to enumerate.
+        foreach (var callId in contents.OfType<FunctionResultContent>().Select(r => r.CallId).ToList())
+        {
+            // A nested loop's calls drain nothing: their ids were registered under the
+            // stripped copy, so removing the entry without draining keeps the outer drain
+            // from attaching a nested drawing to a message that never reaches the caller.
+            // Only the outermost loop's own calls attach what they drew or cited.
+            if (_drains.TryRemove(callId, out var drain) && !drain.Nested)
+            {
+                foreach (var attached in drain.TakeFor(callId))
+                {
+                    contents.Add(attached);
+                }
+            }
+        }
     }
 }

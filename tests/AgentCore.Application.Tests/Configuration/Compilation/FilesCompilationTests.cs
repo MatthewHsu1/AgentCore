@@ -16,7 +16,7 @@ namespace AgentCore.Application.Tests.Configuration.Compilation;
 
 /// <summary>
 /// The <c>files:</c> block reaching a compiled agent as a <see cref="FileAccessProvider"/>, the
-/// <c>file_access_*</c> tools it puts in front of the model, and the call folder it scopes to.
+/// <c>file_access_*</c> tools it puts in front of the model, and the conversation folder it scopes to.
 /// </summary>
 #pragma warning disable MAAI001 // File-store types are evaluation-only in Microsoft.Agents.AI 1.21.0.
 public sealed class FilesCompilationTests : IDisposable
@@ -90,10 +90,10 @@ public sealed class FilesCompilationTests : IDisposable
     {
         using SequencedChatClient reply = new("hello there.");
         var agent = CompileOne(FilesYaml, reply, _root);
-        Assert.Contains(Providers(agent), provider => provider is CallFilesProvider);
+        Assert.Contains(Providers(agent), provider => provider is ConversationFilesProvider);
 
         var factory = BuildFactory(FilesYaml, _root, reply);
-        var session = factory.Create("call-1");
+        var session = factory.Create("conversation-1");
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
         var tools = reply.Options[^1]?.Tools?.OfType<AITool>().ToArray() ?? [];
@@ -108,11 +108,11 @@ public sealed class FilesCompilationTests : IDisposable
     {
         using SequencedChatClient reply = new("hello there.");
         var factory = BuildFactory(FilesYaml, _root, reply);
-        var session = factory.Create("call-1");
+        var session = factory.Create("conversation-1");
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
         var instructions = reply.Options[^1]?.Instructions ?? string.Empty;
-        Assert.Contains("deleted when the call ends", instructions, StringComparison.Ordinal);
+        Assert.Contains("deleted when the conversation ends", instructions, StringComparison.Ordinal);
         Assert.DoesNotContain("persist beyond", instructions, StringComparison.Ordinal);
     }
 
@@ -121,7 +121,7 @@ public sealed class FilesCompilationTests : IDisposable
     {
         using SequencedChatClient reply = new("hello there.");
         var factory = BuildFactory(ReadOnlyFilesYaml, _root, reply);
-        var session = factory.Create("call-1");
+        var session = factory.Create("conversation-1");
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
         var toolNames = reply.Options[^1]?.Tools?.Select(tool => tool.Name).ToArray() ?? [];
@@ -158,7 +158,7 @@ public sealed class FilesCompilationTests : IDisposable
     }
 
     [Fact]
-    public async Task EndToEnd_WriteReadLsGrep_ThenEndCallDeletesTheFolder()
+    public async Task EndToEnd_WriteReadLsGrep_ThenEndConversationDeletesTheFolder()
     {
         var client = new SequencedToolCallClient(
             (FileAccessProvider.WriteToolName, Args(("fileName", "out.txt"), ("content", "hello"))),
@@ -167,35 +167,35 @@ public sealed class FilesCompilationTests : IDisposable
             (FileAccessProvider.GrepToolName, Args(("regexPattern", "hell"))));
 
         var factory = BuildFactory(FilesYaml, _root, client);
-        var session = factory.Create("call-1");
-        var callFolder = session.Workspace!;
+        var session = factory.Create("conversation-1");
+        var conversationFolder = session.Workspace!;
 
         await session.RunTurnAsync("write hello to out.txt", TestContext.Current.CancellationToken);
         Assert.Equal("hello", await File.ReadAllTextAsync(
-            Path.Combine(callFolder, "out.txt"), TestContext.Current.CancellationToken));
+            Path.Combine(conversationFolder, "out.txt"), TestContext.Current.CancellationToken));
 
         await session.RunTurnAsync("read out.txt", TestContext.Current.CancellationToken);
         Assert.Contains("hello", client.ToolResults[1]);
 
         await session.RunTurnAsync("list the folder", TestContext.Current.CancellationToken);
         Assert.Contains("out.txt", client.ToolResults[2]);
-        Assert.DoesNotContain("call-1", client.ToolResults[2], StringComparison.Ordinal);
+        Assert.DoesNotContain("conversation-1", client.ToolResults[2], StringComparison.Ordinal);
 
         await session.RunTurnAsync("grep for hell", TestContext.Current.CancellationToken);
         Assert.Contains("out.txt", client.ToolResults[3]);
 
-        session.EndCall(CallEndReason.CallerHungUp);
-        Assert.False(Directory.Exists(callFolder));
+        session.EndConversation(ConversationEndReason.CallerHungUp);
+        Assert.False(Directory.Exists(conversationFolder));
     }
 
     [Fact]
-    public async Task Escape_WriteOutsideTheCallFolder_CreatesNothingOutsideItAndDoesNotThrow()
+    public async Task Escape_WriteOutsideTheConversationFolder_CreatesNothingOutsideItAndDoesNotThrow()
     {
         var client = new SequencedToolCallClient(
             (FileAccessProvider.WriteToolName, Args(("fileName", "../escape.txt"), ("content", "leaked"))));
 
         var factory = BuildFactory(FilesYaml, _root, client);
-        var session = factory.Create("call-1");
+        var session = factory.Create("conversation-1");
 
         // The point of the assertion is that this completes at all: an escape attempt must not
         // throw out of RunTurnAsync.
@@ -214,7 +214,7 @@ public sealed class FilesCompilationTests : IDisposable
     }
 
     [Fact]
-    public async Task TwoSessions_DifferentCallIds_SeeOnlyTheirOwnFile()
+    public async Task TwoSessions_DifferentConversationIds_SeeOnlyTheirOwnFile()
     {
         var clientA = new SequencedToolCallClient(
             (FileAccessProvider.WriteToolName, Args(("fileName", "out.txt"), ("content", "A"))));
@@ -222,11 +222,11 @@ public sealed class FilesCompilationTests : IDisposable
             (FileAccessProvider.WriteToolName, Args(("fileName", "out.txt"), ("content", "B"))));
 
         var factoryA = BuildFactory(FilesYaml, _root, clientA);
-        var sessionA = factoryA.Create("call-a");
+        var sessionA = factoryA.Create("conversation-a");
         await sessionA.RunTurnAsync("write A", TestContext.Current.CancellationToken);
 
         var factoryB = BuildFactory(FilesYaml, _root, clientB);
-        var sessionB = factoryB.Create("call-b");
+        var sessionB = factoryB.Create("conversation-b");
         await sessionB.RunTurnAsync("write B", TestContext.Current.CancellationToken);
 
         var pathA = Path.Combine(sessionA.Workspace!, "out.txt");
@@ -254,7 +254,7 @@ public sealed class FilesCompilationTests : IDisposable
         return args;
     }
 
-    private static CallSessionFactory BuildFactory(string yaml, string root, IChatClient? client = null)
+    private static ConversationSessionFactory BuildFactory(string yaml, string root, IChatClient? client = null)
     {
         var document = ConfigurationLoader.LoadYaml(yaml);
         var chatClients = new RoutingChatClientFactory(client ?? new SequencedChatClient("done"));
@@ -263,7 +263,7 @@ public sealed class FilesCompilationTests : IDisposable
             document,
             new AgentCompilationContext(chatClients) { WorkspaceRoot = root })["main"];
 
-        return new CallSessionFactory(
+        return new ConversationSessionFactory(
             compiled,
             new GuardEvaluator(compiled.Configuration.Guards),
             workspaceRoot: root);
@@ -329,7 +329,7 @@ public sealed class FilesCompilationTests : IDisposable
 
                 yield return new ChatResponseUpdate(
                     ChatRole.Assistant,
-                    [new FunctionCallContent("call_" + Guid.NewGuid().ToString("N"), name, args)])
+                    [new FunctionCallContent("conversation_" + Guid.NewGuid().ToString("N"), name, args)])
                 {
                     ResponseId = responseId,
                     MessageId = responseId,

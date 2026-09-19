@@ -80,8 +80,9 @@ public sealed class ConfigurationLoaderTests
 
         Assert.Equal(ToolKind.Builtin, Example.Tools[2].Kind);
         Assert.Equal("web.search", Example.Tools[2].Uses);
+
         Assert.Equal(ToolKind.Builtin, Example.Tools[3].Kind);
-        Assert.Equal("code.execute", Example.Tools[3].Uses);
+        Assert.Equal("file.publish", Example.Tools[3].Uses);
     }
 
     [Fact]
@@ -153,7 +154,6 @@ public sealed class ConfigurationLoaderTests
         Assert.Equal("judge", Example.Providers.Llm[2].As);
         Assert.Equal("cheap", Example.Providers.Llm[3].As);
         Assert.Equal(false, Example.Providers.Llm[3].WebSearch);
-        Assert.Equal(false, Example.Providers.Llm[3].CodeExecute);
         Assert.Equal("telnyx-relay", Example.Providers.Speech!.Stt.Kind);
         Assert.Equal("telnyx", Example.Providers.Telephony!.Kind);
         Assert.Equal("qdrant", Example.Providers.Knowledge!.Kind);
@@ -169,7 +169,7 @@ public sealed class ConfigurationLoaderTests
         const string document = """
             apiVersion: agentcore/v1
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
@@ -190,7 +190,7 @@ public sealed class ConfigurationLoaderTests
         const string document = """
             apiVersion: agentcore/v1
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
@@ -223,7 +223,7 @@ public sealed class ConfigurationLoaderTests
         const string document = """
             apiVersion: agentcore/v1
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
@@ -246,7 +246,7 @@ public sealed class ConfigurationLoaderTests
         const string document = """
             apiVersion: agentcore/v1
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
@@ -276,7 +276,7 @@ public sealed class ConfigurationLoaderTests
         const string document = """
             apiVersion: agentcore/v1
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
@@ -300,7 +300,7 @@ public sealed class ConfigurationLoaderTests
         const string document = """
             apiVersion: agentcore/v1
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
@@ -697,7 +697,7 @@ public sealed class ConfigurationLoaderTests
         const string document = """
             apiVersion: agentcore/v1
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
@@ -720,7 +720,7 @@ public sealed class ConfigurationLoaderTests
         const string document = """
             apiVersion: agentcore/v1
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }

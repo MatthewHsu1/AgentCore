@@ -61,7 +61,7 @@ public sealed class ReasoningTemperatureCheckTests
               main:
                 agent: only
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
@@ -88,7 +88,7 @@ public sealed class ReasoningTemperatureCheckTests
             titler:
               model: { ref: reply, temperature: 0.2 }
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
@@ -133,7 +133,7 @@ public sealed class ReasoningTemperatureCheckTests
               main:
                 agent: greeter
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }

@@ -31,7 +31,7 @@ internal static class AgentApproval
     /// <param name="toolName">The called tool's name.</param>
     /// <returns>
     /// An ordinal prefix match for a trailing-<c>*</c> pattern, else an ordinal exact match. A
-    /// <c>*</c> anywhere else is literal, so it matches nothing a document can call.
+    /// <c>*</c> anywhere else is literal, so it matches nothing a document can conversation.
     /// </returns>
     public static bool Matches(string pattern, string toolName)
     {

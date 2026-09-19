@@ -28,13 +28,13 @@ namespace AgentCore.Application.Configuration.Validation;
 /// A guard is static configuration, so each rule of the <c>guards:</c> table deserializes exactly
 /// once, when this type is constructed. A rule that arrives inline deserializes once for each node,
 /// and the result is held by node identity. That removes the per-turn parse, which matters because a
-/// guard runs on every turn of every call.
+/// guard runs on every turn of every conversation.
 /// </para>
 /// <para>
 /// Section 8.7 fixes the failure behaviour: <c>JsonLogic</c> throws when a value cannot convert, and
 /// check 4 cannot see every such case. This type catches the failure, reports it once for each guard,
 /// treats the guard as false, and continues. It never propagates, because a failed guard must not
-/// drop a call. A rule that fails to deserialize follows the same path: the constructor holds the
+/// drop a conversation. A rule that fails to deserialize follows the same path: the constructor holds the
 /// cause, names the guard, and reports it once, so a malformed rule never kills the process at
 /// startup and never hides which guard is at fault.
 /// </para>
@@ -66,7 +66,7 @@ public sealed class GuardEvaluator : IGuardEvaluator
     /// <param name="logger">The logger the failure of each distinct guard is written to.</param>
     /// <remarks>
     /// This is the binding section 8.7 asks for: a guard that throws is logged once, treated as
-    /// false, and the call continues. The composition root uses it, so the report reaches a host
+    /// false, and the conversation continues. The composition root uses it, so the report reaches a host
     /// without the host writing the handler.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="logger"/> is <see langword="null"/>.</exception>
@@ -188,7 +188,7 @@ public sealed class GuardEvaluator : IGuardEvaluator
         return data;
     }
 
-    /// <summary>Turns one logger into the handler the failure path calls.</summary>
+    /// <summary>Turns one logger into the handler the failure path conversations.</summary>
     /// <param name="logger">The logger.</param>
     /// <returns>The handler.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="logger"/> is <see langword="null"/>.</exception>
@@ -229,7 +229,7 @@ public sealed class GuardEvaluator : IGuardEvaluator
         {
             return new CompiledGuard(JsonSerializer.Deserialize<Rule>(rule), null);
         }
-#pragma warning disable CA1031 // Section 8.7: a rule that will not parse is false, and the call continues.
+#pragma warning disable CA1031 // Section 8.7: a rule that will not parse is false, and the conversation continues.
         catch (Exception exception)
 #pragma warning restore CA1031
         {
@@ -250,7 +250,7 @@ public sealed class GuardEvaluator : IGuardEvaluator
             var result = compiled.Parsed?.Apply(BuildData(state));
             return result is not null && result.IsTruthy();
         }
-#pragma warning disable CA1031 // Section 8.7: a guard that throws is not a defect. It is false, and the call continues.
+#pragma warning disable CA1031 // Section 8.7: a guard that throws is not a defect. It is false, and the conversation continues.
         catch (Exception exception)
 #pragma warning restore CA1031
         {

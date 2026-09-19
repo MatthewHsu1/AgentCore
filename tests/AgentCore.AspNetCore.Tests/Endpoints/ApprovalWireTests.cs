@@ -34,7 +34,7 @@ public sealed class ApprovalWireTests
           items:
             - { id: greeter, instructions: "send the mail", tools: [ send_email ] }
         providers:
-          call:   { kind: telnyx-relay }
+          conversation:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
@@ -46,7 +46,7 @@ public sealed class ApprovalWireTests
         """;
 
     [Fact]
-    public async Task AGatedToolCall_StreamsAnApprovalEventWithTheCallFacts()
+    public async Task AGatedToolCall_StreamsAnApprovalEventWithTheConversationFacts()
     {
         int sent = 0;
         await using var host = await ResponsesHost.StartAsync(
@@ -132,7 +132,7 @@ public sealed class ApprovalWireTests
     }
 
     [Fact]
-    public async Task AnApprovalAnswerForAnUnknownCall_IsNotFound()
+    public async Task AnApprovalAnswerForAnUnknownConversation_IsNotFound()
     {
         await using var host = await ResponsesHost.StartAsync(
             ApprovalYaml,
@@ -145,7 +145,7 @@ public sealed class ApprovalWireTests
     }
 
     [Fact]
-    public async Task AnApprovalAnswerWithNoCall_IsBadRequest()
+    public async Task AnApprovalAnswerWithNoConversation_IsBadRequest()
     {
         await using var host = await ResponsesHost.StartAsync(
             ApprovalYaml,
@@ -246,7 +246,7 @@ public sealed class ApprovalWireTests
                 yield return new ChatResponseUpdate(
                     ChatRole.Assistant,
                     [new FunctionCallContent(
-                        "call_1",
+                        "conversation_1",
                         tool.Name,
                         new Dictionary<string, object?>(StringComparer.Ordinal) { ["to"] = "a@b.com" })]);
                 yield break;

@@ -60,7 +60,7 @@ public sealed class HttpToolSourceTests
     }
 
     // ---------------------------------------------------------------------------------------------
-    // The call.
+    // The conversation.
     // ---------------------------------------------------------------------------------------------
     [Fact]
     public async Task ThePlaceholderTakesItsValueFromTheArguments()

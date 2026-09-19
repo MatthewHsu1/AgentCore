@@ -59,7 +59,7 @@ public sealed class VendorAdapterSelectorTests
     }
 
     [Fact]
-    public void AHostThatRegisteredNothingIsToldWhichCallToMake()
+    public void AHostThatRegisteredNothingIsToldWhichConversationToMake()
     {
         var failure = Assert.Throws<ConfigurationLoadException>(
             // The type argument is written out because an empty list infers no adapter type.

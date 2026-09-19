@@ -189,7 +189,7 @@ public sealed class TelemetrySeamTests
     /// <remarks>
     /// The raw string in <c>ExampleDocument</c> strips its common indentation, so inside
     /// <c>providers:</c> a key sits at two spaces and its own keys at four. Every line is written
-    /// here rather than by the caller, because YAML indentation written by hand at a call site is
+    /// here rather than by the caller, because YAML indentation written by hand at a conversation site is
     /// how the first draft of these tests failed.
     /// </remarks>
     private static string Document(params string[] entries)

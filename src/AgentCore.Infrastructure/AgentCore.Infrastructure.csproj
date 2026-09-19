@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <IsPackable>true</IsPackable>
-    <Description>Outbound adapters: OpenAI, Qdrant, Telnyx call control, Postgres, B2.</Description>
+    <Description>Outbound adapters: OpenAI, Qdrant, Telnyx conversation control, Postgres, B2.</Description>
     <PackageTags>agent;ai;openai;telnyx;qdrant;postgres</PackageTags>
   </PropertyGroup>
 

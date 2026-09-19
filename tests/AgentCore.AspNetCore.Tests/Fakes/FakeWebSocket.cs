@@ -3,6 +3,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Threading.Channels;
 using AgentCore.Application.Configuration.Parsing;
+using AgentCore.AspNetCore.Conversation;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
 using Microsoft.AspNetCore.Http;
@@ -221,7 +222,7 @@ internal sealed class FakeWebSocket : WebSocket
     /// <inheritdoc />
     /// <remarks>
     /// The connection never calls this: <c>CloseAsync</c> waits for the peer's close frame, and a
-    /// call that already dropped never sends one. A call that reaches here is a defect worth a red
+    /// conversation that already dropped never sends one. A conversation that reaches here is a defect worth a red
     /// test rather than a silent pass.
     /// </remarks>
     public override Task CloseAsync(
@@ -294,7 +295,7 @@ internal sealed class TestHostLifetime : IHostApplicationLifetime, IDisposable
 /// <remarks>
 /// <c>RunAsync</c> takes the abstract <see cref="WebSocket"/>, so nothing here needs Kestrel, a
 /// port, or a client socket. The service provider is the real one <c>AddAgentCore</c> builds, so
-/// the session factory, the store, and the clock behave exactly as they do on a live call.
+/// the session factory, the store, and the clock behave exactly as they do on a live conversation.
 /// </remarks>
 internal sealed class RelayConnectionHarness : IAsyncDisposable
 {
@@ -335,10 +336,10 @@ internal sealed class RelayConnectionHarness : IAsyncDisposable
     /// <param name="relay">Anything a test binds on the relay endpoint's own options.</param>
     /// <param name="configure">
     /// Anything else the test binds on the container's own options, for example the clock every
-    /// call and every connection then runs on.
+    /// conversation and every connection then runs on.
     /// </param>
     /// <param name="services">
-    /// Anything a test registers over what <c>AddAgentCore</c> registered. It runs after that call,
+    /// Anything a test registers over what <c>AddAgentCore</c> registered. It runs after that conversation,
     /// so a registration here is the last one and the connection resolves it.
     /// </param>
     /// <returns>The running harness.</returns>
@@ -379,8 +380,9 @@ internal sealed class RelayConnectionHarness : IAsyncDisposable
         }
 
         DefaultHttpContext http = new() { RequestServices = provider };
+        http.Request.RouteValues[ConversationEndpointRouteBuilderExtensions.EntryRouteParameter] = "main";
 
-        TelnyxRelayOptions options = new() { EntryName = "main" };
+        TelnyxRelayOptions options = new();
         relay?.Invoke(options);
 
         FakeWebSocket socket = new();

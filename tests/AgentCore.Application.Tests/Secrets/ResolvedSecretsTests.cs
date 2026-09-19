@@ -42,6 +42,34 @@ public sealed class ResolvedSecretsTests
     }
 
     [Fact]
+    public async Task AShellEnvValue_IsResolved_LikeAnMcpEnvValue()
+    {
+        const string document = """
+            apiVersion: agentcore/v1
+            agents:
+              items:
+                - id: worker
+                  instructions: "ok"
+                  shell:
+                    kind: local
+                    env: { DB_PASSWORD: "${secret:db-password}", DB_HOST: "localhost" }
+            entries:
+              main:
+                agent: worker
+            """;
+
+        MapSecretResolver resolver = new MapSecretResolver().With("db-password", "hunter2");
+
+        var secrets = await ResolvedSecrets.ResolveAsync(
+            ConfigurationLoader.LoadYaml(document),
+            resolver,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(["db-password"], secrets.Names);
+        Assert.Equal(["db-password"], resolver.Asked);
+    }
+
+    [Fact]
     public async Task OneName_ReadsTheResolverOnce_HoweverManyToolsReferenceIt()
     {
         const string document = """
@@ -74,7 +102,7 @@ public sealed class ResolvedSecretsTests
             resolver,
             TestContext.Current.CancellationToken);
 
-        // Three references, one name, one read. Startup pays for the read, and no call does.
+        // Three references, one name, one read. Startup pays for the read, and no conversation does.
         Assert.Equal([ApiKeyName], resolver.Asked);
         Assert.Equal(1, secrets.Count);
     }
@@ -111,7 +139,7 @@ public sealed class ResolvedSecretsTests
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Failing at startup, and never in the middle of a call.
+    // Failing at startup, and never in the middle of a conversation.
     // ---------------------------------------------------------------------------------------------
     [Fact]
     public async Task AnUnresolvableName_FailsAtStartupAndNamesThePointer()

@@ -25,7 +25,7 @@ internal static class PostgresDataSourceFactory
     /// <exception cref="SecretResolutionException">The connection string resolves to nothing.</exception>
     /// <remarks>
     /// This runs once, while the host starts, so a missing credential or an unreachable database stops
-    /// the host and never a call.
+    /// the host and never a conversation.
     /// </remarks>
     internal static async ValueTask<NpgsqlDataSource> OpenMigratedAsync(
         ISecretResolverPort? secrets,

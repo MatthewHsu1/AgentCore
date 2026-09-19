@@ -4,7 +4,7 @@ using Microsoft.Extensions.AI.Evaluation;
 namespace AgentCore.Application.Tests.Evaluation.Fakes;
 
 /// <summary>
-/// An evaluator that answers with one fixed metric and counts its calls.
+/// An evaluator that answers with one fixed metric and counts its conversations.
 /// </summary>
 /// <remarks>
 /// The registry and the publisher hold evaluators and scores. Neither reads a real metric, so the

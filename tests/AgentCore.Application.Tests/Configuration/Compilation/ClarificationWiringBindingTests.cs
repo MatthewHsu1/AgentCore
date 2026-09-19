@@ -36,7 +36,7 @@ public sealed class ClarificationWiringBindingTests
             value: everyone
             enum: [everyone]
         providers:
-          call:   { kind: telnyx-relay }
+          conversation:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
@@ -68,7 +68,7 @@ public sealed class ClarificationWiringBindingTests
         var port = new ScopedFakePort();
         var turn = new TurnInvocation
         {
-            CallId = "call",
+            ConversationId = "conversation",
             TurnIndex = 0,
             Stage = "",
             Knowledge = Scope(model: "*", audience: "everyone"),
@@ -89,7 +89,7 @@ public sealed class ClarificationWiringBindingTests
         var port = new ScopedFakePort();
         var turn = new TurnInvocation
         {
-            CallId = "call",
+            ConversationId = "conversation",
             TurnIndex = 0,
             Stage = "",
             Knowledge = Scope(model: "*", audience: "everyone"),
@@ -139,11 +139,10 @@ public sealed class ClarificationWiringBindingTests
             Invoking("hello", session), TestContext.Current.CancellationToken).ConfigureAwait(false);
         var search = Assert.Single(context.Tools!, tool => tool.Name == "Search");
         var results = await ((AIFunction)search).InvokeAsync(
-            new AIFunctionArguments(new Dictionary<string, object?>(StringComparer.Ordinal)
+            turn.FileIn(new AIFunctionArguments(new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 ["userQuestion"] = query,
-                [TurnInvocation.ArgumentsKey] = turn,
-            }),
+            })),
             TestContext.Current.CancellationToken).ConfigureAwait(false)
             as IReadOnlyList<TextSearchProvider.TextSearchResult>;
         return Assert.Single(results!).Text;

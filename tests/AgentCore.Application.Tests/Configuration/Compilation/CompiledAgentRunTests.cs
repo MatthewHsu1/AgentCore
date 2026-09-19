@@ -12,7 +12,7 @@ namespace AgentCore.Application.Tests.Configuration.Compilation;
 /// <c>AsAIAgent()</c> and yields its first non-empty delta before the model finishes.
 /// </summary>
 /// <remarks>
-/// Every test here uses an offline <see cref="ScriptedChatClient"/>. There is no network call and no
+/// Every test here uses an offline <see cref="ScriptedChatClient"/>. There is no network conversation and no
 /// API key anywhere in this file.
 /// </remarks>
 public sealed class CompiledAgentRunTests

@@ -9,9 +9,9 @@ public static class AuditEventVocabulary
     /// <summary>Refuses an event the vocabulary does not permit.</summary>
     public static void Validate(AuditEvent auditEvent)
     {
-        if (string.IsNullOrEmpty(auditEvent.CallId))
+        if (string.IsNullOrEmpty(auditEvent.ConversationId))
         {
-            throw new ArgumentException("An audit event carries a call id.", nameof(auditEvent));
+            throw new ArgumentException("An audit event carries a conversation id.", nameof(auditEvent));
         }
 
         if (auditEvent.EventId == Guid.Empty)
@@ -39,12 +39,12 @@ public static class AuditEventVocabulary
             // An empty value here is the one thing that cannot be true: every text hashes to 64
             // characters, the empty string included, so an empty hash proves nothing and would leave
             // the row unverifiable against store 1 forever.
-            RequireHash(auditEvent, AuditPayloadKeys.ReplyTextSha256, replyText);
+            RequireHash(AuditPayloadKeys.ReplyTextSha256, replyText, nameof(auditEvent));
         }
 
         RequirePromptFlagged(auditEvent);
 
-        RequireCallEnded(auditEvent);
+        RequireConversationEnded(auditEvent);
 
         foreach (KeyValuePair<string, string> entry in auditEvent.Payload)
         {
@@ -86,7 +86,7 @@ public static class AuditEventVocabulary
                     nameof(auditEvent));
             }
 
-            RequireHash(auditEvent, AuditPayloadKeys.UtteranceUntilInterruptSha256, utterance);
+            RequireHash(AuditPayloadKeys.UtteranceUntilInterruptSha256, utterance, nameof(auditEvent));
         }
     }
 
@@ -111,18 +111,18 @@ public static class AuditEventVocabulary
     }
 
 
-    /// <summary>Refuses a call end that carries no reason from the closed set.</summary>
-    private static void RequireCallEnded(AuditEvent auditEvent)
+    /// <summary>Refuses a conversation end that carries no reason from the closed set.</summary>
+    private static void RequireConversationEnded(AuditEvent auditEvent)
     {
         // The reason is countable, so the chain refuses free text here. §9 makes this table the
         // only long-term record, and a report that counts the endings of one year reads the
-        // token. Detail belongs under another key. See CallEndReason.
-        if (auditEvent.Kind == AuditEventKind.CallEnded
+        // token. Detail belongs under another key. See ConversationEndReason.
+        if (auditEvent.Kind == AuditEventKind.ConversationEnded
             && (!auditEvent.Payload.TryGetValue(AuditPayloadKeys.EndReason, out string? endReason)
-                || !CallEndReasons.TryParse(endReason, out _)))
+                || !ConversationEndReasons.TryParse(endReason, out _)))
         {
             throw new ArgumentException(
-                $"A call.ended event carries '{AuditPayloadKeys.EndReason}', and the value is one token of the closed set. See CallEndReason.",
+                $"A conversation.ended event carries '{AuditPayloadKeys.EndReason}', and the value is one token of the closed set. See ConversationEndReason.",
                 nameof(auditEvent));
         }
     }
@@ -147,17 +147,16 @@ public static class AuditEventVocabulary
         return true;
     }
 
-
     /// <summary>
     /// Refuses a payload value that is not a SHA-256 digest.
     /// </summary>
-    private static void RequireHash(AuditEvent auditEvent, string key, string? value)
+    private static void RequireHash(string key, string? value, string paramName)
     {
         if (!AuditHash.TryParse(value, out _))
         {
             throw new ArgumentException(
                 $"The audit payload value of '{key}' is {AuditHash.Length} lowercase hexadecimal characters. This one is '{value}'.",
-                nameof(auditEvent));
+                paramName);
         }
     }
 }

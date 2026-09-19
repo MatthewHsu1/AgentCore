@@ -10,18 +10,18 @@ using Xunit;
 namespace AgentCore.Application.Tests.Runtime;
 
 /// <summary>
-/// Tools that belong to one call, offered to the runs that call delegates and to nothing else.
+/// Tools that belong to one conversation, offered to the runs that call delegates and to nothing else.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The compiled agent is a process singleton, so a tool that belongs to one call cannot be compiled
+/// The compiled agent is a process singleton, so a tool that belongs to one conversation cannot be compiled
 /// onto it. It travels on the turn instead, and the gate is the id of the delegating tool the run
 /// sits under. A gate on the agent NAME would be wrong: <c>CompiledAgentRegistry</c> makes compiled
 /// agents singletons, so two <c>kind: agent</c> declarations can name one agent and both would be
 /// handed the tool.
 /// </para>
 /// <para>
-/// Every test here runs offline: no network call and no API key.
+/// Every test here runs offline: no network conversation and no API key.
 /// </para>
 /// </remarks>
 public sealed class DelegatedToolsTests
@@ -51,7 +51,7 @@ public sealed class DelegatedToolsTests
       [Fact]
       public async Task AToolSetForADelegation_ReachesTheRunThatDelegationMakes()
       {
-          var (session, greeter, specialist) = NewCall();
+          var (session, greeter, specialist) = NewConversation();
           session.SetDelegatedTools("ask_specialist", [DrawTool]);
 
           await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
@@ -66,7 +66,7 @@ public sealed class DelegatedToolsTests
           // The framework streams the tool-call update BEFORE it invokes the function, so the first
           // yield restores the caller's execution context while the delegation is still pending. Only
           // the per-round re-entry in RunTurnStreamingAsync keeps the turn's tools alive across it.
-          var (session, _, specialist) = NewCall();
+          var (session, _, specialist) = NewConversation();
           session.SetDelegatedTools("ask_specialist", [DrawTool]);
 
           await foreach (var _ in session.RunTurnStreamingAsync("hi", TestContext.Current.CancellationToken))
@@ -79,7 +79,7 @@ public sealed class DelegatedToolsTests
       [Fact]
       public async Task AToolSetForAnotherDelegation_ReachesNobody()
       {
-          var (session, greeter, specialist) = NewCall();
+          var (session, greeter, specialist) = NewConversation();
           session.SetDelegatedTools("some_other_tool", [DrawTool]);
 
           await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
@@ -89,9 +89,9 @@ public sealed class DelegatedToolsTests
       }
 
       [Fact]
-      public async Task ACallThatSetsNoTools_OffersTheSameToolsItAlwaysDid()
+      public async Task AConversationThatSetsNoTools_OffersTheSameToolsItAlwaysDid()
       {
-          var (session, _, specialist) = NewCall();
+          var (session, _, specialist) = NewConversation();
 
           await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
@@ -103,7 +103,7 @@ public sealed class DelegatedToolsTests
       public async Task TheSecondCallOfSetDelegatedTools_ReplacesTheFirst()
       {
           var replacement = AIFunctionFactory.Create(() => "drawn.", "draw_later", "The one that wins.");
-          var (session, _, specialist) = NewCall();
+          var (session, _, specialist) = NewConversation();
 
           session.SetDelegatedTools("ask_specialist", [DrawTool]);
           session.SetDelegatedTools("ask_specialist", [replacement]);
@@ -117,14 +117,14 @@ public sealed class DelegatedToolsTests
       [Fact]
       public void SetDelegatedTools_RefusesNulls()
       {
-          var (session, _, _) = NewCall();
+          var (session, _, _) = NewConversation();
 
           Assert.Throws<ArgumentNullException>(() => session.SetDelegatedTools(null!, [DrawTool]));
           Assert.Throws<ArgumentNullException>(() => session.SetDelegatedTools("ask_specialist", null!));
       }
 
-      /// <summary>Opens a call whose greeter delegates once, over two scripted models.</summary>
-      private static (CallSession Session, ToolCallingChatClient Greeter, ToolCallingChatClient Specialist) NewCall()
+      /// <summary>Opens a conversation whose greeter delegates once, over two scripted models.</summary>
+      private static (ConversationSession Session, ToolCallingChatClient Greeter, ToolCallingChatClient Specialist) NewConversation()
       {
           ToolCallingChatClient greeter = new(
               "hello there.",
@@ -138,7 +138,7 @@ public sealed class DelegatedToolsTests
           var compiled = ConfigurationCompiler.CompileAll(
               ConfigurationLoader.LoadYaml(DelegationYaml), new AgentCompilationContext(chatClients))["main"];
 
-          var session = new CallSessionFactory(
+          var session = new ConversationSessionFactory(
               compiled,
               new GuardEvaluator(compiled.Configuration.Guards),
               extractor: null).Create();

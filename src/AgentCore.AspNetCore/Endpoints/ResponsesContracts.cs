@@ -57,21 +57,21 @@ internal static class ResponsesAgentCore
     }
 
     /// <summary>Builds the <c>metadata</c> one finished turn files onto its answer.</summary>
-    /// <param name="call">The call the turn ran on.</param>
+    /// <param name="conversation">The conversation the turn ran on.</param>
     /// <param name="turn">The finished turn.</param>
     /// <returns>String pairs: the protocol's metadata holds strings only, and at most 16.</returns>
-    internal static IDictionary<string, string> TurnMetadata(CallSession call, TurnResult turn)
+    internal static IDictionary<string, string> TurnMetadata(ConversationSession conversation, TurnResult turn)
     {
         Dictionary<string, string> metadata = new(StringComparer.Ordinal)
         {
-            ["call_id"] = call.CallId,
+            ["call_id"] = conversation.ConversationId,
             ["turn_index"] = turn.TurnIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ["stage_before"] = turn.StageBefore,
             ["stage_after"] = turn.StageAfter,
             ["is_terminal"] = turn.IsTerminal ? "true" : "false",
         };
 
-        if (call.LastReplyMessageId is { } messageId)
+        if (conversation.LastReplyMessageId is { } messageId)
         {
             metadata["message_id"] = messageId;
         }
@@ -92,8 +92,8 @@ internal static class ResponsesAgentCore
     /// <summary>Answers where one turn hangs, in the shape the turn loop reads.</summary>
     /// <param name="info">What the client said, or <see langword="null"/> for a plain turn.</param>
     /// <returns>The origin, or <see langword="null"/> when the turn appends.</returns>
-    internal static CallTurnOrigin? OriginOf(ResponsesRequestInfo? info)
-        => info is null ? null : new CallTurnOrigin(info.MessageId, info.ParentId) { NamesParent = info.NamesParent };
+    internal static ConversationTurnOrigin? OriginOf(ResponsesRequestInfo? info)
+        => info is null ? null : new ConversationTurnOrigin(info.MessageId, info.ParentId) { NamesParent = info.NamesParent };
 
     private static string ApprovalsJson(TurnResult turn)
     {
@@ -114,7 +114,7 @@ internal static class ResponsesAgentCore
 
 /// <summary>Where the client says its turn belongs and what it answers, beside the OpenAI shape.</summary>
 /// <param name="MessageId">What the client calls the message it is sending.</param>
-/// <param name="ParentId">What the client calls the message this one hangs off. Null starts the call afresh.</param>
+/// <param name="ParentId">What the client calls the message this one hangs off. Null starts the conversation afresh.</param>
 /// <param name="NamesParent">Whether the body carried <c>parent_id</c> at all.</param>
 /// <param name="Approval">The approval answer this turn carries, or <see langword="null"/> when it holds words.</param>
 internal sealed record ResponsesRequestInfo(
@@ -203,6 +203,25 @@ internal sealed record SourcePayload
 
     /// <summary>Gets what produced this source, such as <c>knowledge</c>.</summary>
     public required string Origin { get; init; }
+}
+
+/// <summary>One file the model published from the workspace and the store kept, as the browser reads it.</summary>
+internal sealed record FilePayload
+{
+    /// <summary>Gets the file name the store keeps it under.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the label the model gave it for the person, or <see langword="null"/>.</summary>
+    public string? Title { get; init; }
+
+    /// <summary>Gets the IANA media type, such as <c>image/png</c>.</summary>
+    public required string MediaType { get; init; }
+
+    /// <summary>Gets how many bytes it holds.</summary>
+    public required long Length { get; init; }
+
+    /// <summary>Gets the link to fetch it from, or <see langword="null"/> when the store has no web door.</summary>
+    public string? Url { get; init; }
 }
 
 /// <summary>One thing a stream asks the browser to draw.</summary>

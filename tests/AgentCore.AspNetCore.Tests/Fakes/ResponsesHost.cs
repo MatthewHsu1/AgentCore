@@ -37,6 +37,9 @@ internal sealed class ResponsesHost : IAsyncDisposable
     /// <summary>Gets the client that speaks to the host.</summary>
     public HttpClient Client { get; }
 
+    /// <summary>Gets the started host's services, for a test that reads what a turn stored.</summary>
+    public IServiceProvider Services => _app.Services;
+
     /// <summary>Starts one host over one document.</summary>
     /// <param name="yaml">The document, as YAML.</param>
     /// <param name="reply">The model behind every name the routing factory does not hold.</param>
@@ -57,7 +60,7 @@ internal sealed class ResponsesHost : IAsyncDisposable
         });
 
         var app = builder.Build();
-        app.MapResponses("main");
+        app.MapResponses();
         await app.StartAsync();
 
         var address = app.Services
@@ -73,12 +76,21 @@ internal sealed class ResponsesHost : IAsyncDisposable
 
     /// <summary>Sends one Responses request body.</summary>
     /// <param name="json">The request body.</param>
+    /// <param name="headers">Request headers to send beside the body, or none.</param>
     /// <returns>The answer.</returns>
-    public async Task<HttpResponseMessage> PostAsync(string json)
+    public async Task<HttpResponseMessage> PostAsync(string json, IReadOnlyDictionary<string, string>? headers = null)
     {
-        using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        return await Client.PostAsync(
-            ResponsesEndpointRouteBuilderExtensions.DefaultPattern, content, TestContext.Current.CancellationToken);
+        using HttpRequestMessage request = new(HttpMethod.Post, "/v1/main/responses")
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json"),
+        };
+
+        foreach (var (name, value) in headers ?? new Dictionary<string, string>())
+        {
+            request.Headers.TryAddWithoutValidation(name, value);
+        }
+
+        return await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, TestContext.Current.CancellationToken);
     }
 
     /// <summary>Reads every server-sent event of one answer.</summary>

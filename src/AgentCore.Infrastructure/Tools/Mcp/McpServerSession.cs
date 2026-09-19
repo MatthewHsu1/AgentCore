@@ -127,15 +127,15 @@ internal sealed class McpServerSession : IAsyncDisposable
         throw last!;
     }
 
-    /// <summary>Calls one tool, reconnecting once if the connection has died since the last call.</summary>
+    /// <summary>Calls one tool, reconnecting once if the connection has died since the last conversation.</summary>
     /// <param name="toolName">The name the server offers the tool under, never the served id.</param>
     /// <param name="arguments">The arguments the model filled.</param>
-    /// <param name="cancellationToken">Cancels the call.</param>
+    /// <param name="cancellationToken">Cancels the conversation.</param>
     /// <returns>Whatever the server answered, error results included.</returns>
     /// <exception cref="McpToolGoneException">The server has stopped offering the tool.</exception>
     /// <exception cref="ObjectDisposedException">The session is closed.</exception>
     /// <remarks>
-    /// One reconnect and one repeat, so a server that died between two turns of a telephone call
+    /// One reconnect and one repeat, so a server that died between two turns of a telephone conversation
     /// costs the caller a pause rather than the turn. A second failure is the caller's answer: a
     /// server that is down stays down, and repeating past that only spends the call timeout.
     /// </remarks>
@@ -168,7 +168,7 @@ internal sealed class McpServerSession : IAsyncDisposable
             died = ex;
         }
 
-        McpLog.CallFailedReconnecting(_log, _server.Id, toolName, died);
+        McpLog.ConversationFailedReconnecting(_log, _server.Id, toolName, died);
 
         var reopened = await ReconnectAsync(client, cancellationToken).ConfigureAwait(false);
 
@@ -189,18 +189,18 @@ internal sealed class McpServerSession : IAsyncDisposable
         IReadOnlyDictionary<string, object?> arguments,
         CancellationToken cancellationToken)
     {
-        var call = client.CallToolAsync(toolName, arguments, cancellationToken: cancellationToken).AsTask();
-        var finished = await Task.WhenAny(call, client.Completion).ConfigureAwait(false);
+        var conversation = client.CallToolAsync(toolName, arguments, cancellationToken: cancellationToken).AsTask();
+        var finished = await Task.WhenAny(conversation, client.Completion).ConfigureAwait(false);
 
-        if (ReferenceEquals(finished, call))
+        if (ReferenceEquals(finished, conversation))
         {
-            return await call.ConfigureAwait(false);
+            return await conversation.ConfigureAwait(false);
         }
 
-        // The call is never going to be answered now, but it is still a live task holding an
+        // The conversation is never going to be answered now, but it is still a live task holding an
         // exception nobody has looked at. Observing it keeps that from surfacing later as an
         // unhandled fault on a finalizer thread, with no context left to say where it came from.
-        Observe(call);
+        Observe(conversation);
 
         throw Ended(await client.Completion.ConfigureAwait(false));
     }
@@ -213,7 +213,7 @@ internal sealed class McpServerSession : IAsyncDisposable
             TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
 
-    /// <summary>Turns a finished session into the exception the call itself never threw.</summary>
+    /// <summary>Turns a finished session into the exception the conversation itself never threw.</summary>
     private static IOException Ended(ClientCompletionDetails details)
     {
         var why = details.Exception?.Message ?? "it closed the connection";
@@ -342,7 +342,7 @@ internal sealed class McpServerSession : IAsyncDisposable
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
-            // Two calls can fail against one dead client at once. The first through here replaces it;
+            // Two conversations can fail against one dead client at once. The first through here replaces it;
             // the second must use that replacement rather than open a third connection.
             if (!ReferenceEquals(_client, dead))
             {
@@ -350,7 +350,7 @@ internal sealed class McpServerSession : IAsyncDisposable
             }
 
             await ConnectAndListAsync(cancellationToken).ConfigureAwait(false);
-            return _client!;
+            return _client;
         }
         finally
         {
@@ -361,8 +361,8 @@ internal sealed class McpServerSession : IAsyncDisposable
     /// <summary>Returns the live connection, opening one if the session has none.</summary>
     /// <remarks>
     /// A client whose <see cref="McpClient.Completion"/> has already finished is replaced before it
-    /// is handed out, rather than after a call has been spent discovering it. That is the ordinary
-    /// case for a stdio server whose child crashed between two turns of a call.
+    /// is handed out, rather than after a conversation has been spent discovering it. That is the ordinary
+    /// case for a stdio server whose child crashed between two turns of a conversation.
     /// </remarks>
     private async ValueTask<McpClient> CurrentAsync(CancellationToken cancellationToken)
     {

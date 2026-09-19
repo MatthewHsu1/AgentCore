@@ -15,7 +15,7 @@ public sealed class KnowledgeAuditRecordTests
     {
         // `via` is the mechanism the probes proved is required for correctness, three times over.
         // It is therefore the thing that will need debugging.
-        var record = KnowledgeAuditRecord.For("turn", "resolver", KnowledgeMode.Prefetch, "e33", Scope(),
+        var record = KnowledgeAuditRecord.For("resolver", KnowledgeMode.Prefetch, "e33", Scope(),
             [Ranked("a", 0.87), Linked("b")], latencyMs: 106, failure: null);
 
         Assert.Equal("ranked", record.Cards[0].Via);
@@ -32,7 +32,7 @@ public sealed class KnowledgeAuditRecordTests
     {
         // Ruling 19: IKnowledgeRetrievalPort is one atomic method, so embed time and search time
         // are not separately observable above it. There is one field, not two.
-        var record = KnowledgeAuditRecord.For("turn", "resolver", KnowledgeMode.Prefetch, "e33", Scope(),
+        var record = KnowledgeAuditRecord.For("resolver", KnowledgeMode.Prefetch, "e33", Scope(),
             [], latencyMs: 106, failure: null);
 
         Assert.Equal(106, record.LatencyMs);
@@ -42,7 +42,7 @@ public sealed class KnowledgeAuditRecordTests
     public void For_AFailedRetrieval_KeepsTheRealCause()
     {
         // In tool mode the framework discards the exception message. This is the only place it survives.
-        var record = KnowledgeAuditRecord.For("turn", "resolver", KnowledgeMode.Tool, "e33", Scope(),
+        var record = KnowledgeAuditRecord.For("resolver", KnowledgeMode.Tool, "e33", Scope(),
             [], latencyMs: 92, failure: new InvalidOperationException("qdrant is down"));
 
         Assert.Contains("qdrant is down", record.Failure, StringComparison.Ordinal);
@@ -54,7 +54,7 @@ public sealed class KnowledgeAuditRecordTests
         // Only Via and Score were checked before, so a mapping mistake in the other four would
         // survive: an engineer reading the record would be shown the wrong manual, at the wrong page,
         // for the wrong card, with nothing looking broken.
-        var record = KnowledgeAuditRecord.For("turn", "resolver", KnowledgeMode.Prefetch, "e33", Scope(),
+        var record = KnowledgeAuditRecord.For("resolver", KnowledgeMode.Prefetch, "e33", Scope(),
             [Ranked("ct900-e33-incline-err", 0.87)], latencyMs: 106, failure: null);
 
         var card = Assert.Single(record.Cards);
@@ -68,8 +68,8 @@ public sealed class KnowledgeAuditRecordTests
     [Fact]
     public void For_CarriesEveryFieldTheOutageIsDiagnosedFrom()
     {
-        var record = KnowledgeAuditRecord.For("turn-7", "analyst", KnowledgeMode.Tool, "belt slipping", Scope(),
-            [], latencyMs: 106, failure: null);
+        var record = KnowledgeAuditRecord.For("analyst", KnowledgeMode.Tool, "belt slipping", Scope(),
+            [], latencyMs: 106, failure: null) with { TurnId = "turn-7" };
 
         Assert.Equal("turn-7", record.TurnId);
         Assert.Equal("analyst", record.Agent);
@@ -81,9 +81,9 @@ public sealed class KnowledgeAuditRecordTests
     [Fact]
     public void For_NoTurnIdIsReachable_LeavesTheFieldEmptyRatherThanInventingOne()
     {
-        // Ruling 19, then Ruling 21. The provider that writes this record can reach no call id and no
+        // Ruling 19, then Ruling 21. The provider that writes this record can reach no conversation id and no
         // turn index, so it passes null. A synthesised id would read as real to whoever greps for it.
-        var record = KnowledgeAuditRecord.For(turnId: null, "analyst", KnowledgeMode.Tool, "e33", scope: null,
+        var record = KnowledgeAuditRecord.For("analyst", KnowledgeMode.Tool, "e33", scope: null,
             [], latencyMs: 106, failure: null);
 
         Assert.Null(record.TurnId);
@@ -117,7 +117,7 @@ public sealed class KnowledgeAuditRecordTests
         };
 
         var record = KnowledgeAuditRecord.For(
-            null, "agent", KnowledgeMode.Tool, "q", scope, [], 1.0, null);
+            "agent", KnowledgeMode.Tool, "q", scope, [], 1.0, null);
 
         Assert.Equal(KnowledgeFacetOrigin.Wildcard, record.ScopeOrigins["brand"]);
     }
@@ -142,7 +142,7 @@ public sealed class KnowledgeAuditRecordTests
             },
         };
 
-        var view = KnowledgeAuditRecord.For(null, "agent", KnowledgeMode.Tool, "q", scope, [], 1.0, null)
+        var view = KnowledgeAuditRecord.For("agent", KnowledgeMode.Tool, "q", scope, [], 1.0, null)
             .ForLog();
 
         Assert.Equal("code=* (Wildcard), model=f85-2019 (Tool)", view.Scope);
@@ -151,7 +151,7 @@ public sealed class KnowledgeAuditRecordTests
     [Fact]
     public void ForLog_FacetWithNoRecordedOrigin_WritesTheValueAlone()
     {
-        var view = KnowledgeAuditRecord.For(null, "agent", KnowledgeMode.Tool, "q", Scope(), [], 1.0, null)
+        var view = KnowledgeAuditRecord.For("agent", KnowledgeMode.Tool, "q", Scope(), [], 1.0, null)
             .ForLog();
 
         Assert.Equal("model=ct900", view.Scope);
@@ -160,7 +160,7 @@ public sealed class KnowledgeAuditRecordTests
     [Fact]
     public void ForLog_NoScopeWasOpen_WritesAnEmptyString()
     {
-        var view = KnowledgeAuditRecord.For(null, "agent", KnowledgeMode.Tool, "q", scope: null, [], 1.0, null)
+        var view = KnowledgeAuditRecord.For("agent", KnowledgeMode.Tool, "q", scope: null, [], 1.0, null)
             .ForLog();
 
         Assert.Equal(string.Empty, view.Scope);

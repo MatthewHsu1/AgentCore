@@ -16,7 +16,7 @@ namespace AgentCore.Application.Evaluation;
 /// <para>
 /// It lives in <c>Application/Evaluation/</c> and not beside the adapter, for two reasons. D3 forbids
 /// <c>AgentCore.Application</c> from referencing <c>AgentCore.Infrastructure</c>, and the code that
-/// records a flagged turn sits in <see cref="Runtime.CallSession"/>, which is in Application. And
+/// records a flagged turn sits in <see cref="Runtime.ConversationSession"/>, which is in Application. And
 /// D13 promises that replacing OpenAI with a self-hosted classifier behind the same
 /// <see cref="IEvaluator"/> is a one-file change, which holds only while this type names no vendor.
 /// </para>

@@ -26,7 +26,7 @@ internal abstract class CompileTableRow
     /// <param name="context">The seams the document names.</param>
     /// <returns>The agent a turn runs, and the agent id each <c>policy.stages</c> entry names.</returns>
     /// <exception cref="ConfigurationLoadException">The entry does not compile through this row.</exception>
-    internal abstract (AIAgent Entry, Dictionary<string, string> Stages) BuildEntry(
+    internal abstract EntryBuild BuildEntry(
         AgentCoreConfiguration configuration,
         string entryName,
         EntryConfiguration entry,

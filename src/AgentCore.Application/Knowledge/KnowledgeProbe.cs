@@ -18,44 +18,25 @@ namespace AgentCore.Application.Knowledge;
 internal static class KnowledgeProbe
 {
     /// <summary>Runs the probe.</summary>
-    /// <param name="port">The store the probe's own second search reads.</param>
-    /// <param name="knowledge">The agent's resolved <c>knowledge:</c> block.</param>
+    /// <param name="binding">The agent's port, wiring and logger. The probe's own second search reads the same port.</param>
     /// <param name="scope">The live scope the main search just ran under.</param>
-    /// <param name="agent">The id of the agent that asked, for the log line.</param>
     /// <param name="query">The search text the framework composed.</param>
-    /// <param name="clarifications">The call's ambiguity holder, or <see langword="null"/> inside a nested tool call.</param>
+    /// <param name="clarifications">The conversation's ambiguity holder, or <see langword="null"/> inside a nested tool call.</param>
     /// <param name="carriesHistory">Whether this row's session carries the caller's own history.</param>
-    /// <param name="logger">Where the probe's own log events go.</param>
     /// <param name="cancellationToken">The caller's own token — cancelling this is the caller hanging up, not a timeout.</param>
     /// <returns>What the probe found: its note, or the "holds nothing" notice.</returns>
     internal static async Task<IReadOnlyList<TextSearchProvider.TextSearchResult>> RunAsync(
-        IKnowledgeRetrievalPort port,
-        ResolvedKnowledge knowledge,
+        KnowledgeBinding binding,
         KnowledgeScope scope,
-        string agent,
         string query,
         Clarifications? clarifications,
         bool carriesHistory,
-        ILogger logger,
         CancellationToken cancellationToken)
     {
         // K42: a nested tool call runs with the holder stripped from its invocation, so a delegated
         // run's own search cannot latch, count or record — but a scoped run still owes the caller
         // the notice.
-        if (clarifications is null)
-        {
-            return [KnowledgeNotices.Of(KnowledgeNotices.Empty)];
-        }
-
-        var wiring = knowledge.Clarification;
-
-        // K19: with no ambiguity: configured (and so no wildcard, since the validator requires one
-        // alongside the other) there is nothing for the probe to drop, and behaviour stays
-        // byte-identical to the wildcard plan's own "holds nothing" notice.
-        if (wiring.Ambiguity is not { } ambiguity
-            || wiring.WildcardValue is not { } wildcardValue
-            || wiring.WildcardFacets is not { Count: > 0 } wildcardFacets
-            || wiring.Template is not { } template)
+        if (clarifications is null || ProbeWiring.From(binding.Knowledge.Clarification) is not { } wiring)
         {
             return [KnowledgeNotices.Of(KnowledgeNotices.Empty)];
         }
@@ -64,8 +45,7 @@ internal static class KnowledgeProbe
         // turn's probe has already run — so it must stay cheap, deterministic and repeatable rather
         // than mutate anything. Nothing is latched by this exit: a second call that also finds no
         // droppable facet simply reaches this same conclusion again.
-        if (DroppableFacet(wiring.FromState, wildcardValue, wildcardFacets, scope, ambiguity, clarifications)
-            is not { } facet)
+        if (DroppableFacet(wiring, scope, clarifications) is not { } facet)
         {
             return [KnowledgeNotices.Of(KnowledgeNotices.Empty)];
         }
@@ -73,8 +53,10 @@ internal static class KnowledgeProbe
         var probe = clarifications.ClaimProbe();
         if (!probe.Won)
         {
-            return await ReplayAsync(probe, ambiguity, cancellationToken).ConfigureAwait(false);
+            return await ReplayAsync(probe, wiring.Ambiguity, cancellationToken).ConfigureAwait(false);
         }
+
+        ClaimedProbe claimed = new(clarifications, probe, facet);
 
         // Every way out of the winner's path has to resolve the latch. Fail() is the catch-all: it
         // does nothing once an outcome has been published, and where nothing was published it wakes
@@ -88,7 +70,7 @@ internal static class KnowledgeProbe
             // in the same turn would re-run the search and advance probeAsks a second time.
             clarifications.Update(facet, s => s.ProbeAsks++);
 
-            using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(ambiguity.ProbeDeadlineSeconds));
+            using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(wiring.Ambiguity.ProbeDeadlineSeconds));
 
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
 
@@ -96,24 +78,7 @@ internal static class KnowledgeProbe
 
             try
             {
-                var narrowedScope = WithoutFacet(scope, facet);
-                var started = Stopwatch.GetTimestamp();
-
-                probeCards = await port.SearchAsync(query, narrowedScope, deadline.Token).ConfigureAwait(false);
-
-                if (logger.IsEnabled(LogLevel.Debug))
-                {
-                    var record = KnowledgeSearchRecord.Of(
-                        agent,
-                        knowledge,
-                        query,
-                        narrowedScope,
-                        probeCards,
-                        Stopwatch.GetElapsedTime(started).TotalMilliseconds,
-                        failure: null).ForLog();
-
-                    Log.KnowledgeRetrieved(logger, agent, probeCards.Count, record);
-                }
+                probeCards = await SearchAsync(binding, WithoutFacet(scope, facet), query, deadline.Token).ConfigureAwait(false);
             }
             catch (Exception failure) when (KnowledgeCancellation.ByCaller(failure, timeout, cancellationToken))
             {
@@ -129,17 +94,45 @@ internal static class KnowledgeProbe
             {
                 // A throw or a timeout that is not caller cancellation: the main search already
                 // answered for reachability, so this says "holds nothing", never "unreachable".
-                Log.KnowledgeProbeFailed(logger, agent, facet, failure);
+                Log.KnowledgeProbeFailed(binding.Logger, binding.Agent, facet, failure);
 
                 return Publish(probe, KnowledgeNotices.Empty);
             }
 
-            return Name(probeCards, template, ambiguity, wiring, wildcardValue, facet, agent, logger, clarifications, carriesHistory, probe);
+            return Name(binding, wiring, claimed, probeCards, carriesHistory);
         }
         finally
         {
             probe.Fail();
         }
+    }
+
+    /// <summary>§8 step 4: the probe's own second search, under the narrowed scope, logged like the main one.</summary>
+    private static async Task<IReadOnlyList<KnowledgeCard>> SearchAsync(
+        KnowledgeBinding binding,
+        KnowledgeScope narrowedScope,
+        string query,
+        CancellationToken deadline)
+    {
+        var started = Stopwatch.GetTimestamp();
+
+        var probeCards = await binding.Port.SearchAsync(query, narrowedScope, deadline).ConfigureAwait(false);
+
+        if (binding.Logger.IsEnabled(LogLevel.Debug))
+        {
+            var record = KnowledgeSearchRecord.Of(
+                binding.Agent,
+                binding.Knowledge,
+                query,
+                narrowedScope,
+                probeCards,
+                Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+                failure: null).ForLog();
+
+            Log.KnowledgeRetrieved(binding.Logger, binding.Agent, probeCards.Count, record);
+        }
+
+        return probeCards;
     }
 
     /// <summary>K43: replays the outcome of the one probe this turn already claimed.</summary>
@@ -165,29 +158,25 @@ internal static class KnowledgeProbe
 
     /// <summary>§8 steps 5-6: reads the candidates out of the probe's cards and decides what to say.</summary>
     private static IReadOnlyList<TextSearchProvider.TextSearchResult> Name(
+        KnowledgeBinding binding,
+        ProbeWiring wiring,
+        ClaimedProbe claimed,
         IReadOnlyList<KnowledgeCard> probeCards,
-        ScopeTemplate template,
-        KnowledgeAmbiguityConfiguration ambiguity,
-        ResolvedClarification wiring,
-        string wildcardValue,
-        string facet,
-        string agent,
-        ILogger logger,
-        Clarifications clarifications,
-        bool carriesHistory,
-        Clarifications.Probe probe)
+        bool carriesHistory)
     {
+        var (clarifications, probe, facet) = claimed;
+
         // §8 step 5: the value at the facet's payload path is a string or a list of strings alike —
         // the real corpus stores arrays, and a cast straight to string would silently return null for
         // every card on a multi-model collection.
-        var path = template.Resolve(facet);
+        var path = wiring.Template.Resolve(facet);
         SortedSet<string> union = new(StringComparer.Ordinal);
 
         union.UnionWith(probeCards
             .SelectMany(card => FacetValues(card, path))
-            .Where(value => !string.Equals(value, wildcardValue, StringComparison.Ordinal)));
+            .Where(value => !string.Equals(value, wiring.WildcardValue, StringComparison.Ordinal)));
 
-        Log.KnowledgeProbeRan(logger, agent, facet, union.Count);
+        Log.KnowledgeProbeRan(binding.Logger, binding.Agent, facet, union.Count);
 
         if (union.Count == 0)
         {
@@ -196,9 +185,9 @@ internal static class KnowledgeProbe
 
         // §8 step 6. probeAsks was already advanced in step 4; nothing below chooses anything but the
         // message.
-        var wouldName = Clarifications.LastNamed.For(union, ambiguity.MaxCandidates);
+        var wouldName = Clarifications.LastNamed.For(union, wiring.Ambiguity.MaxCandidates);
         var candidates = union.ToList();
-        
+
         // K39, drawn for the record rather than for the message: on a graph row AgentCore cannot know
         // whether the participant's own tool result ever reached the caller, so the note still goes
         // out, but the record of what was named — which arms K21's tie-break — does not. The flag
@@ -207,7 +196,7 @@ internal static class KnowledgeProbe
 
         // Whether the note repeats what was last named, and the record that follows from it, are one
         // transition under one lock acquisition. Deciding from an earlier Read() and writing after
-        // would let a concurrent participant on the same call slip between the two.
+        // would let a concurrent participant on the same conversation slip between the two.
         var repeats = false;
 
         clarifications.Update(facet, s =>
@@ -227,7 +216,7 @@ internal static class KnowledgeProbe
 
         var description = ClarificationText.DescriptionOf(facet, wiring.SlotDescriptions);
 
-        return Publish(probe, ClarificationText.Note(description, candidates, ambiguity.MaxCandidates));
+        return Publish(probe, ClarificationText.Note(description, candidates, wiring.Ambiguity.MaxCandidates));
     }
 
     /// <summary>Hands one notice to this caller and to every other search in the turn alike.</summary>
@@ -243,13 +232,7 @@ internal static class KnowledgeProbe
     /// §8 step 3: the first facet, in <c>fromState</c> declaration order, the wildcard filled and that
     /// dropping would not empty the scope or skip a slot at its ask cap.
     /// </summary>
-    private static string? DroppableFacet(
-        IReadOnlyList<string> fromState,
-        string wildcardValue,
-        IReadOnlyList<string> wildcardFacets,
-        KnowledgeScope scope,
-        KnowledgeAmbiguityConfiguration ambiguity,
-        Clarifications clarifications)
+    private static string? DroppableFacet(ProbeWiring wiring, KnowledgeScope scope, Clarifications clarifications)
     {
         // K33: the scope's only facet is undroppable — opening it empty is what a scoped store
         // refuses. This holds for every candidate alike, so no candidate can be droppable at all.
@@ -258,7 +241,7 @@ internal static class KnowledgeProbe
             return null;
         }
 
-        foreach (var name in fromState)
+        foreach (var name in wiring.FromState)
         {
             // K14: the wildcard filled it — its value is the wildcard's own, and the facet is named
             // among the ones the wildcard is allowed to widen. Origins overrules the value where it
@@ -266,9 +249,9 @@ internal static class KnowledgeProbe
             // it", and widening that facet would overrule an instruction rather than recover a lost
             // one. A scope composed without origins carries none, so an absent entry falls back to
             // the value alone.
-            if (!wildcardFacets.Contains(name, StringComparer.Ordinal)
+            if (!wiring.WildcardFacets.Contains(name, StringComparer.Ordinal)
                 || !scope.Facets.TryGetValue(name, out var value)
-                || !string.Equals(value, wildcardValue, StringComparison.Ordinal)
+                || !string.Equals(value, wiring.WildcardValue, StringComparison.Ordinal)
                 || (scope.Origins.TryGetValue(name, out var origin)
                     && origin != KnowledgeFacetOrigin.Wildcard))
             {
@@ -276,7 +259,7 @@ internal static class KnowledgeProbe
             }
 
             // K22: the probe's own counter is monotone and capped at maxAsks.
-            if (clarifications.Read(name).ProbeAsks >= ambiguity.MaxAsks)
+            if (clarifications.Read(name).ProbeAsks >= wiring.Ambiguity.MaxAsks)
             {
                 continue;
             }

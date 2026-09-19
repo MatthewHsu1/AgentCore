@@ -149,7 +149,7 @@ public sealed class ConfigurationSchemaValidatorTests
     [InlineData("\"   \"")]
     public void AFallbackReplyWithNoWords_FailsWithThePointerOfTheField(string written)
     {
-        // Section 8.7 asks for a spoken fallback, and a line with no words is silence on a call.
+        // Section 8.7 asks for a spoken fallback, and a line with no words is silence on a conversation.
         var failure = Assert.Throws<ConfigurationLoadException>(
             () => ConfigurationLoader.LoadYaml($"apiVersion: agentcore/v1\nfallbackReply: {written}\n"));
 
@@ -162,7 +162,7 @@ public sealed class ConfigurationSchemaValidatorTests
     [InlineData("\"   \"")]
     public void ARefusalReplyWithNoWords_FailsWithThePointerOfTheField(string written)
     {
-        // The refusal is spoken too, and a line with no words is silence on a call.
+        // The refusal is spoken too, and a line with no words is silence on a conversation.
         var failure = Assert.Throws<ConfigurationLoadException>(
             () => ConfigurationLoader.LoadYaml($"apiVersion: agentcore/v1\nrefusalReply: {written}\n"));
 
@@ -245,7 +245,7 @@ public sealed class ConfigurationSchemaValidatorTests
         const string document = """
             apiVersion: agentcore/v1
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
@@ -266,7 +266,7 @@ public sealed class ConfigurationSchemaValidatorTests
         const string document = """
             apiVersion: agentcore/v1
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
@@ -291,7 +291,7 @@ public sealed class ConfigurationSchemaValidatorTests
         const string document = """
             apiVersion: agentcore/v1
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }

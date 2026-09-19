@@ -22,7 +22,7 @@ public static class UnfilledSlotReminder
     /// <summary>
     /// Lists the slots the current stage waits on and that still read as null.
     /// </summary>
-    /// <param name="state">The state of one call.</param>
+    /// <param name="state">The state of one conversation.</param>
     /// <param name="stage">The stage the machine holds.</param>
     /// <returns>The unfilled slot names, in document order.</returns>
     public static IReadOnlyList<string> UnfilledSlots(StateDocument state, StageConfiguration stage)
@@ -77,7 +77,7 @@ public static class UnfilledSlotReminder
     }
 
     /// <summary>Builds the reminder for the stage the machine holds.</summary>
-    /// <param name="state">The state of one call.</param>
+    /// <param name="state">The state of one conversation.</param>
     /// <param name="stage">The stage the machine holds.</param>
     /// <returns>The reminder text, or <see langword="null"/> when no slot is unfilled.</returns>
     public static string? Build(StateDocument state, StageConfiguration stage)
@@ -105,17 +105,17 @@ public static class UnfilledSlotReminder
     /// </remarks>
     private static void CollectStageExits(AgentCoreConfiguration configuration, StageConfiguration stage, HashSet<string> names)
     {
-        foreach (var exit in stage.To)
+        foreach (var when in stage.To.Select(exit => exit.When))
         {
-            if (exit.When is null)
+            if (when is null)
             {
                 // An unconditional exit waits on no slots, so it adds nothing to read.
                 continue;
             }
 
-            var rule = exit.When.Rule;
+            var rule = when.Rule;
             if (rule is null
-                && exit.When.Name is { } guardName
+                && when.Name is { } guardName
                 && configuration.Guards.TryGetValue(guardName, out var named))
             {
                 rule = named;

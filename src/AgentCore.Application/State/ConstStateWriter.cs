@@ -6,12 +6,12 @@ namespace AgentCore.Application.State;
 /// Writer 4 of section 8.3. It fills a slot from a fixed value.
 /// </summary>
 /// <remarks>
-/// A constant never changes, so this writer runs once, when the call starts.
+/// A constant never changes, so this writer runs once, when the conversation starts.
 /// </remarks>
 public static class ConstStateWriter
 {
     /// <summary>Fills every <c>writer: const</c> slot from its <c>value:</c>.</summary>
-    /// <param name="state">The state of one call.</param>
+    /// <param name="state">The state of one conversation.</param>
     /// <returns>The number of slots this writer filled.</returns>
     public static int Apply(StateDocument state)
     {

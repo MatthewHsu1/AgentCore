@@ -15,7 +15,7 @@ public sealed class QueuedAuditSink : IAuditSinkPort, IAsyncDisposable, IDisposa
     /// <summary>The number of events the queue holds before it starts dropping.</summary>
     public const int DefaultCapacity = 10_000;
 
-    /// <summary>The most events the writer hands the store in one call.</summary>
+    /// <summary>The most events the writer hands the store in one conversation.</summary>
     public const int DefaultBatchSize = 100;
 
     /// <summary>How long <see cref="Dispose"/> waits for the drain before it gives up.</summary>
@@ -199,7 +199,7 @@ public sealed class QueuedAuditSink : IAuditSinkPort, IAsyncDisposable, IDisposa
         {
             await _inner.AppendManyAsync([.. batch], _stopping.Token).ConfigureAwait(false);
         }
-#pragma warning disable CA1031 // The store is a record of the call and never a part of it.
+#pragma warning disable CA1031 // The store is a record of the conversation and never a part of it.
         catch (Exception exception)
 #pragma warning restore CA1031
         {
@@ -219,9 +219,9 @@ public sealed class QueuedAuditSink : IAuditSinkPort, IAsyncDisposable, IDisposa
     {
         try
         {
-            Log.AuditQueueFull(_logger, auditEvent.CallId, auditEvent.EventId);
+            Log.AuditQueueFull(_logger, auditEvent.ConversationId, auditEvent.EventId);
         }
-#pragma warning disable CA1031 // A logger that refuses the report is still not a part of the call.
+#pragma warning disable CA1031 // A logger that refuses the report is still not a part of the conversation.
         catch (Exception)
 #pragma warning restore CA1031
         {
@@ -236,15 +236,15 @@ public sealed class QueuedAuditSink : IAuditSinkPort, IAsyncDisposable, IDisposa
     {
         try
         {
-            // One line for the batch and not one for each event. The store refused the call, so the
-            // fault is one fault, and the first event names the call an operator goes looking at.
+            // One line for the batch and not one for each event. The store refused the conversation, so the
+            // fault is one fault, and the first event names the conversation an operator goes looking at.
             Log.AuditAppendFailed(
                 _logger,
-                batch[0].CallId,
+                batch[0].ConversationId,
                 AuditEventKinds.ToToken(batch[0].Kind),
                 exception);
         }
-#pragma warning disable CA1031 // A logger that refuses the report is still not a part of the call.
+#pragma warning disable CA1031 // A logger that refuses the report is still not a part of the conversation.
         catch (Exception)
 #pragma warning restore CA1031
         {

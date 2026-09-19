@@ -19,7 +19,7 @@ using Xunit;
 namespace AgentCore.Infrastructure.Tests;
 
 /// <summary>
-/// The whole seam, from the document to the call: secrets, then tools, then the compile table.
+/// The whole seam, from the document to the conversation: secrets, then tools, then the compile table.
 /// </summary>
 /// <remarks>
 /// The worked example of section 8.1 declares all four tool kinds. This test walks the three that
@@ -65,7 +65,7 @@ public sealed class ToolSeamTests
                   - { id: resolve,  agent: resolver,   to: [ { stage: escalate } ] }
                   - { id: escalate, agent: escalator,  terminal: true }
           providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }

@@ -16,7 +16,7 @@ namespace AgentCore.Application.Tests.Configuration.Compilation;
 /// <summary>
 /// The <c>memory:</c> block reaching a compiled agent as a <see cref="FileMemoryProvider"/>, the
 /// seven <c>file_memory_*</c> tools it puts in front of the model, and the working folder it binds
-/// to the running call.
+/// to the running conversation.
 /// </summary>
 public sealed class MemoryCompilationTests : IDisposable
 {
@@ -104,12 +104,12 @@ public sealed class MemoryCompilationTests : IDisposable
           var agent = Assert.Single(compiled.Agents.Values);
           Assert.Contains(Providers(agent), provider => provider is FileMemoryProvider);
 
-          var factory = new CallSessionFactory(
+          var factory = new ConversationSessionFactory(
               compiled, new GuardEvaluator(compiled.Configuration.Guards), workspaceRoot: _root);
-          var session = factory.Create("call-1");
+          var session = factory.Create("conversation-1");
 
-          // A turn must be open for the FileMemoryProvider's state initializer to read the call id off
-          // the session, so the tool list is read through a real call rather than agent.RunAsync
+          // A turn must be open for the FileMemoryProvider's state initializer to read the conversation id off
+          // the session, so the tool list is read through a real conversation rather than agent.RunAsync
           // directly, unlike the todos/mode providers in HarnessCompilationTests.
           await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
@@ -127,14 +127,14 @@ public sealed class MemoryCompilationTests : IDisposable
           var compiled = ConfigurationCompiler.CompileAll(
               document,
               new AgentCompilationContext(chatClients) { WorkspaceRoot = _root })["main"];
-          var factory = new CallSessionFactory(
+          var factory = new ConversationSessionFactory(
               compiled, new GuardEvaluator(compiled.Configuration.Guards), workspaceRoot: _root);
-          var session = factory.Create("call-1");
+          var session = factory.Create("conversation-1");
 
           await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
           var instructions = reply.Options[^1]?.Instructions ?? string.Empty;
-          Assert.Contains("deleted when the call ends", instructions, StringComparison.Ordinal);
+          Assert.Contains("deleted when the conversation ends", instructions, StringComparison.Ordinal);
           Assert.DoesNotContain("persist beyond", instructions, StringComparison.Ordinal);
       }
 
@@ -169,32 +169,32 @@ public sealed class MemoryCompilationTests : IDisposable
       }
 
       [Fact]
-      public async Task EndToEnd_TheModelWritesAFile_ItLandsUnderTheCallsFolder_AndIsGoneWhenTheCallEnds()
+      public async Task EndToEnd_TheModelWritesAFile_ItLandsUnderTheConversationsFolder_AndIsGoneWhenTheConversationEnds()
       {
           var factory = BuildFactory(MemoryYaml, _root);
-          var session = factory.Create("call-1");
-          var callFolder = session.Workspace!;
+          var session = factory.Create("conversation-1");
+          var conversationFolder = session.Workspace!;
 
           await session.RunTurnAsync("please remember this", TestContext.Current.CancellationToken);
 
-          var notes = FindRecursive(callFolder, "notes.md");
+          var notes = FindRecursive(conversationFolder, "notes.md");
           Assert.NotEmpty(notes);
           Assert.Contains("hello", await File.ReadAllTextAsync(notes[0], TestContext.Current.CancellationToken));
 
-          session.EndCall(CallEndReason.CallerHungUp);
+          session.EndConversation(ConversationEndReason.CallerHungUp);
 
-          Assert.False(Directory.Exists(callFolder));
+          Assert.False(Directory.Exists(conversationFolder));
       }
 
       [Fact]
-      public async Task TwoSessions_DifferentCallIds_WriteToDifferentFolders()
+      public async Task TwoSessions_DifferentConversationIds_WriteToDifferentFolders()
       {
           var factory = BuildFactory(MemoryYaml, _root);
 
-          var first = factory.Create("call-a");
+          var first = factory.Create("conversation-a");
           await first.RunTurnAsync("please remember this", TestContext.Current.CancellationToken);
 
-          var second = factory.Create("call-b");
+          var second = factory.Create("conversation-b");
           await second.RunTurnAsync("please remember this", TestContext.Current.CancellationToken);
 
           var firstNotes = FindRecursive(first.Workspace!, "notes.md");
@@ -206,10 +206,10 @@ public sealed class MemoryCompilationTests : IDisposable
       }
 
       [Fact]
-      public async Task MidTurnEndCall_DuringAFileMemoryWrite_StillDeletesTheFolder_EvenWhenThePolicyIsNotTerminal()
+      public async Task MidTurnEndConversation_DuringAFileMemoryWrite_StillDeletesTheFolder_EvenWhenThePolicyIsNotTerminal()
       {
           var document = ConfigurationLoader.LoadYaml(MemoryPolicyYaml);
-          EndCallDuringToolChatClient chatClient = new(
+          EndConversationDuringToolChatClient chatClient = new(
               "hello there.",
               new Dictionary<string, object?>(StringComparer.Ordinal)
               {
@@ -220,22 +220,22 @@ public sealed class MemoryCompilationTests : IDisposable
 
           var compiled = ConfigurationCompiler.CompileAll(
               document, new AgentCompilationContext(chatClients) { WorkspaceRoot = _root })["main"];
-          var factory = new CallSessionFactory(
+          var factory = new ConversationSessionFactory(
               compiled, new GuardEvaluator(compiled.Configuration.Guards), workspaceRoot: _root);
-          var session = factory.Create("call-1");
-          var callFolder = session.Workspace!;
+          var session = factory.Create("conversation-1");
+          var conversationFolder = session.Workspace!;
 
           // The callback fires from inside the model's response, before the framework runs the tool
-          // it just asked for — mid-turn, exactly where a mid-turn EndCall would land in production.
-          chatClient.BeforeToolCall = () => session.EndCall(CallEndReason.CallerHungUp);
+          // it just asked for — mid-turn, exactly where a mid-turn EndConversation would land in production.
+          chatClient.BeforeToolCall = () => session.EndConversation(ConversationEndReason.CallerHungUp);
 
           var turn = await session.RunTurnAsync("please remember this", TestContext.Current.CancellationToken);
 
           Assert.False(turn.IsTerminal);
-          Assert.False(Directory.Exists(callFolder));
+          Assert.False(Directory.Exists(conversationFolder));
       }
 
-      private static CallSessionFactory BuildFactory(string yaml, string root)
+      private static ConversationSessionFactory BuildFactory(string yaml, string root)
       {
           var document = ConfigurationLoader.LoadYaml(yaml);
           var chatClients = new RoutingChatClientFactory(new ToolCallingChatClient(
@@ -250,7 +250,7 @@ public sealed class MemoryCompilationTests : IDisposable
               document,
               new AgentCompilationContext(chatClients) { WorkspaceRoot = root })["main"];
 
-          return new CallSessionFactory(
+          return new ConversationSessionFactory(
               compiled,
               new GuardEvaluator(compiled.Configuration.Guards),
               workspaceRoot: root);
@@ -280,17 +280,17 @@ public sealed class MemoryCompilationTests : IDisposable
       /// <summary>
       /// Like <see cref="ToolCallingChatClient"/>, but runs <see cref="BeforeToolCall"/> immediately
       /// before it emits the one tool call it makes — the model-side moment a mid-turn
-      /// <c>EndCall</c> lands at, before the framework has actually run the tool.
+      /// <c>EndConversation</c> lands at, before the framework has actually run the tool.
       /// </summary>
-      private sealed class EndCallDuringToolChatClient : IChatClient
+      private sealed class EndConversationDuringToolChatClient : IChatClient
       {
-          private const string CallId = "call_1";
+          private const string ConversationId = "conversation_1";
 
           private readonly string _reply;
           private readonly Dictionary<string, object?> _arguments;
           private bool _answered;
 
-          public EndCallDuringToolChatClient(string reply, Dictionary<string, object?> arguments)
+          public EndConversationDuringToolChatClient(string reply, Dictionary<string, object?> arguments)
           {
               _reply = reply;
               _arguments = arguments;
@@ -318,7 +318,7 @@ public sealed class MemoryCompilationTests : IDisposable
 
                   yield return new ChatResponseUpdate(
                       ChatRole.Assistant,
-                      [new FunctionCallContent(CallId, tool.Name, _arguments)])
+                      [new FunctionCallContent(ConversationId, tool.Name, _arguments)])
                   {
                       ResponseId = responseId,
                       MessageId = responseId,

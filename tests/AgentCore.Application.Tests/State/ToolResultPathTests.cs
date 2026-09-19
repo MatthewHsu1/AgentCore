@@ -163,7 +163,7 @@ public sealed class ToolResultPathTests
     {
         // Owner ruling, fix round 1: ACCEPTED as a deliberate tightening. "~2" is not a valid RFC
         // 6901 escape (only ~0 and ~1 are defined). The pre-swap hand-rolled resolver's Replace
-        // calls simply didn't match "~2", so the segment survived as the literal text "a~2b" and
+        // conversations simply didn't match "~2", so the segment survived as the literal text "a~2b" and
         // resolved whatever property happened to have that exact (unusual) name. Json.Pointer.
         // JsonPointer validates every escape up front and rejects the whole pointer as malformed, so
         // this now resolves to nothing even though the document does hold a property named "a~2b".

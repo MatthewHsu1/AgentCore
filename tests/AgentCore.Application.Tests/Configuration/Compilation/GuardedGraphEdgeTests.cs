@@ -16,28 +16,28 @@ namespace AgentCore.Application.Tests.Configuration.Compilation;
 /// <remarks>
 /// <para>
 /// Two rules pull apart here. T44 makes the compiled agent a process singleton, so one graph serves
-/// every call and no code path compiles one for each call. A guarded edge reads the state of one
-/// call, and each call owns its own state document. The graph-state wrapper files the turn's
+/// every conversation and no code path compiles one for each conversation. A guarded edge reads the state of one
+/// conversation, and each conversation owns its own state document. The graph-state wrapper files the turn's
 /// snapshot on the run and a gate executor reads it back, so the compiled graph captures nothing
-/// per call and concurrent calls never share it.
+/// per conversation and concurrent conversations never share it.
 /// </para>
 /// <para>
-/// Every test here runs offline. There is no network call and no API key in this file.
+/// Every test here runs offline. There is no network conversation and no API key in this file.
 /// </para>
 /// </remarks>
 public sealed class GuardedGraphEdgeTests
 {
     private const int FanOut = 26;
 
-    /// <summary>The text of the node a call reaches when the guard <c>wants_human</c> holds.</summary>
+    /// <summary>The text of the node a conversation reaches when the guard <c>wants_human</c> holds.</summary>
     private const string EscalatedReply = "ESCALATED";
 
-    /// <summary>The text of the node a call reaches when the guard <c>stays_with_bot</c> holds.</summary>
+    /// <summary>The text of the node a conversation reaches when the guard <c>stays_with_bot</c> holds.</summary>
     private const string HandledReply = "HANDLED";
 
     /// <summary>
     /// One start node and two guarded exits. Check 5 of section 8.5 proves the two guards exclusive
-    /// over the state domain, so exactly one edge fires for each call.
+    /// over the state domain, so exactly one edge fires for each conversation.
     /// </summary>
     internal const string GuardedGraphYaml =
         """
@@ -63,7 +63,7 @@ public sealed class GuardedGraphEdgeTests
                   - { from: route, to: escalated, when: wants_human }
                   - { from: route, to: handled, when: stays_with_bot }
           providers:
-            call:   { kind: telnyx-relay }
+            conversation:   { kind: telnyx-relay }
             speech:
               stt: { kind: telnyx-relay }
               tts: { kind: telnyx-relay }
@@ -132,13 +132,13 @@ public sealed class GuardedGraphEdgeTests
       }
 
       [Fact]
-      public async Task Rule16_TwentySixSimultaneousCalls_EachTakeTheirOwnEdgeThroughOneCompiledGraph()
+      public async Task Rule16_TwentySixSimultaneousConversations_EachTakeTheirOwnEdgeThroughOneCompiledGraph()
       {
           using Harness harness = new();
           var token = TestContext.Current.CancellationToken;
           using Barrier gate = new(FanOut);
 
-          var calls = Enumerable.Range(0, FanOut).Select(index => Task.Run(
+          var conversations = Enumerable.Range(0, FanOut).Select(index => Task.Run(
               async () =>
               {
                   var escalate = index % 2 == 0;
@@ -148,17 +148,17 @@ public sealed class GuardedGraphEdgeTests
                   // Nothing starts until all 26 are ready, so the fan-out is really simultaneous.
                   gate.SignalAndWait(token);
 
-                  var turn = await session.RunTurnAsync($"call {index}", token).ConfigureAwait(false);
+                  var turn = await session.RunTurnAsync($"conversation {index}", token).ConfigureAwait(false);
                   return (Escalate: escalate, turn.ReplyText);
               },
               token));
 
-          var results = await Task.WhenAll(calls);
+          var results = await Task.WhenAll(conversations);
 
-          // Rule 16: one compiled agent, and no code path compiles one for each call.
+          // Rule 16: one compiled agent, and no code path compiles one for each conversation.
           Assert.Equal(1, harness.CompileCount);
 
-          // No call read the state of another one. Thirteen went each way, and none went both.
+          // No conversation read the state of another one. Thirteen went each way, and none went both.
           Assert.All(results, result => Assert.Contains(
               result.Escalate ? EscalatedReply : HandledReply, result.ReplyText, StringComparison.Ordinal));
           Assert.All(results, result => Assert.DoesNotContain(
@@ -263,7 +263,7 @@ public sealed class GuardedGraphEdgeTests
       /// One compiled graph, wired the way the composition root wires it.
       /// </summary>
       /// <remarks>
-      /// The seam is the one <c>AddAgentCore</c> bind: the shared guard evaluator. Nothing per call
+      /// The seam is the one <c>AddAgentCore</c> bind: the shared guard evaluator. Nothing per conversation
       /// is captured: the turn's snapshot rides each run.
       /// </remarks>
       private sealed class Harness : IDisposable
@@ -272,7 +272,7 @@ public sealed class GuardedGraphEdgeTests
           private readonly ScriptedChatClient _human;
           private readonly ScriptedChatClient _bot = new(HandledReply);
           private readonly CompiledAgentRegistry _registry = new();
-          private readonly CallSessionFactory _sessions;
+          private readonly ConversationSessionFactory _sessions;
 
           /// <summary>Compiles the guarded graph once, over three offline models.</summary>
           /// <param name="holdEscalatedReply">
@@ -299,18 +299,18 @@ public sealed class GuardedGraphEdgeTests
                 Guards = guards,
             });
 
-              _sessions = new CallSessionFactory(Compiled, guards);
+              _sessions = new ConversationSessionFactory(Compiled, guards);
           }
 
-          /// <summary>Gets the one compiled agent every call shares.</summary>
+          /// <summary>Gets the one compiled agent every conversation shares.</summary>
           public CompiledAgent Compiled { get; }
 
           /// <summary>Gets how many times the registry ran the compile table.</summary>
           public int CompileCount => _registry.CompileCount;
 
-          /// <summary>Builds the session of one more call.</summary>
+          /// <summary>Builds the session of one more conversation.</summary>
           /// <returns>The session.</returns>
-          public CallSession NewSession() => _sessions.Create();
+          public ConversationSession NewSession() => _sessions.Create();
 
           /// <summary>Lets the rest of the escalated reply flow.</summary>
           public void ReleaseEscalatedReply() => _human.OpenGate();

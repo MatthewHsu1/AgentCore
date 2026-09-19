@@ -180,7 +180,7 @@ public sealed class McpConfigurationTests
     /// A null <c>allow:</c> entry is check 1's job, and check 1 already refuses it (see
     /// <see cref="AnAllowEntryMapWithTwoKeys_FailsTheLoad"/> and its neighbours). This test bypasses
     /// check 1 and binds a hand-built tree directly, the route <see cref="McpAllowEntryConverter"/>'s
-    /// own failure branches exist for: without <c>HandleNull</c>, <c>JsonSerializer</c> never calls
+    /// own failure branches exist for: without <c>HandleNull</c>, <c>JsonSerializer</c> never conversations
     /// <c>Read</c> for a null token and simply stores a null reference in the list.
     /// </summary>
     [Fact]

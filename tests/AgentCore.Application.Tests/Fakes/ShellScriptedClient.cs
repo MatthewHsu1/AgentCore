@@ -52,7 +52,7 @@ internal sealed class ShellScriptedClient : IChatClient
             yield return new ChatResponseUpdate(
                 ChatRole.Assistant,
                 [new FunctionCallContent(
-                    "call_" + Guid.NewGuid().ToString("N"),
+                    "conversation_" + Guid.NewGuid().ToString("N"),
                     _toolName,
                     new Dictionary<string, object?>(StringComparer.Ordinal) { ["command"] = _commands.Dequeue() })])
             {

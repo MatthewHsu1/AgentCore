@@ -8,7 +8,7 @@ using Xunit;
 namespace AgentCore.AspNetCore.Tests.Endpoints;
 
 /// <summary>
-/// The wire a tool call travels: one SSE field that names the call, and a second that answers it.
+/// The wire a tool call travels: one SSE field that names the conversation, and a second that answers it.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -38,7 +38,7 @@ public sealed class ToolWireTests
               model: { ref: reply }
             items:
               - { id: greeter, instructions: "greet the caller", tools: [ look_it_up ] }
-              - { id: closer,  instructions: "close the call",   tools: [ look_it_up ] }
+              - { id: closer,  instructions: "close the conversation",   tools: [ look_it_up ] }
           entries:
             main:
               policy:
@@ -47,7 +47,7 @@ public sealed class ToolWireTests
                   - { id: greeting, agent: greeter, to: [ { stage: close } ] }
                   - { id: close,    agent: closer,  to: [ { stage: greeting } ] }
           providers:
-            call:   { kind: telnyx-relay }
+            conversation:   { kind: telnyx-relay }
             speech:
               stt: { kind: telnyx-relay }
               tts: { kind: telnyx-relay }
@@ -69,7 +69,7 @@ public sealed class ToolWireTests
 
           var call = Assert.Single(tools, tool => tool.GetProperty("phase").GetString() == "call");
 
-          Assert.Equal("call_1", call.GetProperty("call_id").GetString());
+          Assert.Equal("conversation_1", call.GetProperty("call_id").GetString());
           Assert.Equal("look_it_up", call.GetProperty("name").GetString());
           Assert.Equal("a card", call.GetProperty("arguments").GetProperty("what").GetString());
       }
@@ -88,9 +88,9 @@ public sealed class ToolWireTests
 
           var result = Assert.Single(tools, tool => tool.GetProperty("phase").GetString() == "result");
 
-          // The id is what pairs the two halves in the browser, so the result carries the call's id
+          // The id is what pairs the two halves in the browser, so the result carries the conversation's id
           // and not one of its own.
-          Assert.Equal("call_1", result.GetProperty("call_id").GetString());
+          Assert.Equal("conversation_1", result.GetProperty("call_id").GetString());
           Assert.Equal("look_it_up", result.GetProperty("name").GetString());
           Assert.False(result.GetProperty("failed").GetBoolean());
           Assert.Contains("42 rows", result.GetProperty("result").GetString(), StringComparison.Ordinal);
@@ -182,8 +182,8 @@ public sealed class ToolWireTests
           // it whatever the shape it sits in, and the browser turns it back on parse.
           var events = await ResponsesHost.ReadEventsAsync(response);
 
-          // The framework's own function-call frames carry the model's raw argument string with its
-          // quotes escaped — that is the protocol's shape for a call. The complaint was ever about
+          // The framework's own function-conversation frames carry the model's raw argument string with its
+          // quotes escaped — that is the protocol's shape for a conversation. The complaint was ever about
           // the answer, so the assertion reads the result line alone: on our field it travels as
           // itself, not as escaped text.
           var line = Assert.Single(events, text => JsonDocument.Parse(text).RootElement
@@ -276,7 +276,7 @@ public sealed class ToolWireTests
                   yield return new ChatResponseUpdate(
                       ChatRole.Assistant,
                       [new FunctionCallContent(
-                          "call_1",
+                          "conversation_1",
                           tool.Name,
                           new Dictionary<string, object?>(StringComparer.Ordinal) { ["what"] = "a card" })]);
                   yield break;

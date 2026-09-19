@@ -1,10 +1,10 @@
-using AgentCore.Application.Calls;
+using AgentCore.Application.Conversation;
 using Microsoft.Agents.AI;
 
 namespace AgentCore.Application.Runtime;
 
 /// <summary>
-/// One call's memory of what the knowledge probe has asked and named, and the per-turn latch that
+/// One conversation's memory of what the knowledge probe has asked and named, and the per-turn latch that
 /// lets several search-tool calls in one turn share a single probe (K36, K43).
 /// </summary>
 internal sealed class Clarifications
@@ -57,13 +57,13 @@ internal sealed class Clarifications
 
     /// <summary>
     /// Claims this turn's one probe search. Several search-tool calls in one turn, or several graph
-    /// participants sharing this call, race here, and exactly one wins.
+    /// participants sharing this conversation, race here, and exactly one wins.
     /// </summary>
     /// <returns>
     /// The turn's probe. <see cref="Probe.Won"/> is true for the one caller that must run the search
     /// and then report through <see cref="Probe.Publish"/> or <see cref="Probe.Fail"/>, and false for
     /// every other caller this turn, which replays the winner's outcome through
-    /// <see cref="Probe.WaitAsync"/> instead. The handle names the turn's own payload, so a call
+    /// <see cref="Probe.WaitAsync"/> instead. The handle names the turn's own payload, so a conversation
     /// that outlives its turn publishes to a latch nothing is waiting on rather than to the next
     /// turn's. A winner must resolve the latch on every path out, including a throw, or the turn's
     /// other callers wait out their full margin for an outcome that is never coming.
@@ -91,7 +91,7 @@ internal sealed class Clarifications
     /// probe rather than the turn before it.
     /// </summary>
     /// <remarks>
-    /// Must run exactly once per turn, from <c>CallTurnRunner.BeginTurn</c> and nowhere else.
+    /// Must run exactly once per turn, from <c>ConversationTurnRunner.BeginTurn</c> and nowhere else.
     /// </remarks>
     internal void BeginTurn()
     {
@@ -117,16 +117,16 @@ internal sealed class Clarifications
         }
     }
 
-    /// <summary>Reads what every slot has spent of its ask budget, for the call's stored state.</summary>
+    /// <summary>Reads what every slot has spent of its ask budget, for the conversation's stored state.</summary>
     /// <returns>
     /// One entry per slot that has spent anything. A slot that has never been asked about is left
-    /// out, so a call that reached no ambiguity stores nothing.
+    /// out, so a conversation that reached no ambiguity stores nothing.
     /// </returns>
-    internal IReadOnlyDictionary<string, CallClarificationState> Spent()
+    internal IReadOnlyDictionary<string, ConversationClarificationState> Spent()
     {
         lock (_gate)
         {
-            Dictionary<string, CallClarificationState> spent = new(StringComparer.Ordinal);
+            Dictionary<string, ConversationClarificationState> spent = new(StringComparer.Ordinal);
 
             foreach (var (name, state) in _slots)
             {
@@ -135,14 +135,14 @@ internal sealed class Clarifications
                     continue;
                 }
 
-                spent[name] = new CallClarificationState { ProbeAsks = state.ProbeAsks };
+                spent[name] = new ConversationClarificationState { ProbeAsks = state.ProbeAsks };
             }
 
             return spent;
         }
     }
 
-    /// <summary>Puts back what an earlier session of this call spent of its ask budget.</summary>
+    /// <summary>Puts back what an earlier session of this conversation spent of its ask budget.</summary>
     /// <param name="spent">What <see cref="Spent"/> read from that session.</param>
     /// <remarks>
     /// The record of what was last named is deliberately not restored: it belongs to a turn the
@@ -150,7 +150,7 @@ internal sealed class Clarifications
     /// <see cref="Withdraw"/> gives — a caller who drops and comes back must not buy a fresh
     /// <c>maxAsks</c> and hear the same question all over again.
     /// </remarks>
-    internal void RestoreSpent(IReadOnlyDictionary<string, CallClarificationState> spent)
+    internal void RestoreSpent(IReadOnlyDictionary<string, ConversationClarificationState> spent)
     {
         ArgumentNullException.ThrowIfNull(spent);
 

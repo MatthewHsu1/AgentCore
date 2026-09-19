@@ -10,10 +10,10 @@ namespace AgentCore.Application.Knowledge;
 /// </summary>
 internal static class StateKnowledgeScope
 {
-    /// <summary>Composes the turn's scope from the host's scope and the call's state.</summary>
-    /// <param name="state">The state of the call, as it stands at the start of this turn.</param>
+    /// <summary>Composes the turn's scope from the host's scope and the conversation's state.</summary>
+    /// <param name="state">The state of the conversation, as it stands at the start of this turn.</param>
     /// <param name="scope">The document's <c>providers.knowledge.scope</c> block, or null.</param>
-    /// <param name="hostScope">What the host set for this call, or null when it set nothing.</param>
+    /// <param name="hostScope">What the host set for this conversation, or null when it set nothing.</param>
     /// <returns>The scope, or <paramref name="hostScope"/> unchanged when this document composes none.</returns>
     internal static KnowledgeScope? Compose(
         StateDocument state, KnowledgeScopeConfiguration? scope, KnowledgeScope? hostScope)

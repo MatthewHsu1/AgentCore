@@ -8,7 +8,7 @@ internal sealed class AgentCoreBootService(AgentCoreBoot boot) : IHostedLifecycl
 {
     /// <summary>Loads the document and opens everything it names.</summary>
     /// <param name="cancellationToken">Cancels the secret reads and the adapter builds.</param>
-    /// <returns>A task that completes when the graph is ready to take a call.</returns>
+    /// <returns>A task that completes when the graph is ready to take a conversation.</returns>
     public Task StartingAsync(CancellationToken cancellationToken)
         => boot.BootAsync(cancellationToken).AsTask();
 

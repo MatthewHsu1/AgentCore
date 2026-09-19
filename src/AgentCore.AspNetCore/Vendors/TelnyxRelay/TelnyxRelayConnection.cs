@@ -2,10 +2,10 @@ using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading.Channels;
-using AgentCore.Application.Calls;
+using AgentCore.Application.Conversation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
-using AgentCore.AspNetCore.Call;
+using AgentCore.AspNetCore.Conversation;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.Domain.Audit;
 using Microsoft.AspNetCore.Http;
@@ -16,7 +16,7 @@ using Microsoft.Extensions.Logging;
 namespace AgentCore.AspNetCore.Vendors.TelnyxRelay;
 
 /// <summary>
-/// One socket, one call.
+/// One socket, one conversation.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -39,11 +39,11 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay;
 /// frames onto <see cref="IConversationPort"/> and nothing else.
 /// </para>
 /// <para>
-/// One object fills both halves of the call's <see cref="CallChannel"/>, because one socket
+/// One object fills both halves of the conversation's <see cref="ConversationChannel"/>, because one socket
 /// carries both directions for this vendor. Nothing above the ports can tell, and nothing may ask.
-/// The speaking side is <see cref="ICallOutputPort"/> below: every reply reaches the write loop
+/// The speaking side is <see cref="IConversationOutputPort"/> below: every reply reaches the write loop
 /// through <see cref="SpeakAsync"/>. The last of the two barge-in gates is this class's business
-/// and nobody else's — <see cref="CallTurnArbiter"/> speaks in turn ids and never hands one over,
+/// and nobody else's — <see cref="ConversationTurnArbiter"/> speaks in turn ids and never hands one over,
 /// so this class keeps a monotonic reply generation instead, stamps every item it queues with the
 /// generation it was queued under, and raises that generation in <see cref="StopAsync"/>. The write
 /// loop then drops any item at or below the raised one, which is the same comparison the turn ids
@@ -54,15 +54,17 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay;
 /// arbiter had already decided to speak, but which only reaches <see cref="SpeakAsync"/> after
 /// <see cref="StopAsync"/> raised the generation, is stamped with the new one and reaches the
 /// caller. A port carries no reply identity to tell that fragment from the first fragment of the
-/// next reply, and the window is the few instructions between the arbiter's own check and that call.
+/// next reply, and the window is the few instructions between the arbiter's own check and that conversation.
 /// </para>
 /// </remarks>
-internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
+internal sealed class TelnyxRelayConnection : IConversationInputPort, IConversationOutputPort
 {
-    private readonly HttpContext _http;
     private readonly TelnyxRelayOptions _options;
+
     private readonly ILogger _logger;
+
     private readonly Channel<OutboundItem> _outbound;
+
     private readonly CancellationTokenSource _cancellation;
 
     // The same token every loop reads, captured once. Read off the field and never off
@@ -70,8 +72,11 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
     // its way out, and a disposed source's Token getter throws, while the struct captured here goes
     // on answering "already cancelled" for as long as anyone holds it.
     private readonly CancellationToken _connectionToken;
+
     private readonly IHostApplicationLifetime _lifetime;
+
     private readonly ConnectionTaskObserver _observer;
+
     private readonly JsonWebSocketPump _pump;
 
     // The last of the two barge-in gates, in this connection's own vocabulary. SpeakAsync stamps
@@ -85,46 +90,50 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
     // promises one consumer for the life of the port, and this is what a second call trips over.
     private int _listening;
 
-    private volatile CallSession? _session;
+    private volatile ConversationSession? _session;
 
     // Resolved once per socket from the stamped entry, then cached: every session open, touch,
     // and close on this connection answers on the same entry.
-    private volatile ICallSessions? _entrySessions;
+    private volatile IConversationSessions? _entrySessions;
 
-    private const string BeforeSetupCallId = "(before setup)";
+    private const string BeforeSetupConversationId = "(before setup)";
 
     // volatile for the same reason _session is: the read loop assigns it when the setup frame
     // arrives, and teardown reads it from another task to find the last turn.
-    private volatile CallTurnArbiter? _arbiter;
+    private volatile ConversationTurnArbiter? _arbiter;
+
     private bool _loggedPromptBeforeSetup;
+
     private bool _loggedMalformedInterrupt;
+
     private bool _loggedSecondSetup;
 
-    /// <summary>Reads this socket's entry session store, resolving it once from the registry.</summary>
-    /// <returns>The store for the entry the handler stamped into the options.</returns>
-    private ICallSessions EntrySessions()
+    /// <summary>Reads this socket's entry session store, resolved once from the URL's entry.</summary>
+    /// <returns>The store for the entry the URL named.</returns>
+    private IConversationSessions EntrySessions()
         => _entrySessions
-            ?? throw new InvalidOperationException(
-                $"The entry '{_options.EntryName}' is not declared, so this socket names no session store.");
+            ?? throw new InvalidOperationException("This socket resolved no session store.");
 
     private TelnyxRelayConnection(HttpContext http, WebSocket socket, TelnyxRelayOptions options, ILogger logger)
     {
-        _http = http;
         _options = options;
+
         _logger = logger;
 
-        // A dropped socket ends this call, and so does the host shutting down. Both stop the read
+        // A dropped socket ends this conversation, and so does the host shutting down. Both stop the read
         // loop, the write loop, and any turn the same way, through the one token everything below
         // reads. IHostApplicationLifetime is resolved here, from the request's own provider, and
-        // never at MapTelnyxRelay time: nothing is bound to it until a call actually arrives.
+        // never at MapTelnyxRelay time: nothing is bound to it until a conversation actually arrives.
         _lifetime = http.RequestServices.GetRequiredService<IHostApplicationLifetime>();
+
         _cancellation = CancellationTokenSource.CreateLinkedTokenSource(
             http.RequestAborted,
             _lifetime.ApplicationStopping);
+            
         _connectionToken = _cancellation.Token;
 
         // AddAgentCore registers this from options.TimeProvider, or TimeProvider.System when the
-        // host bound none — the same clock CallSessionFactory already reads for callDurationSeconds.
+        // host bound none — the same clock ConversationSessionFactory already reads for conversationDurationSeconds.
         // Resolving it here, rather than reading TimeProvider.System directly, is what lets a test
         // own the idle deadline below by binding that one option.
         var timeProvider = http.RequestServices.GetRequiredService<TimeProvider>();
@@ -138,13 +147,13 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
         });
 
         // The observer is vendor-free, so the two faults that are the relay's own doing reach it
-        // through ClassifyTelnyxFault rather than through a catch clause of its own. The call id is
+        // through ClassifyTelnyxFault rather than through a catch clause of its own. The conversation id is
         // a function because the session only exists once the setup frame has arrived, which is
         // after this constructor and after some of the lines the observer logs.
         _observer = new ConnectionTaskObserver(
-            () => _session?.CallId ?? BeforeSetupCallId,
-            (callId, taskName) => TelnyxRelayLog.TeardownTimedOut(_logger, callId, taskName),
-            (kind, callId, fault) => LogFault(kind, callId, fault),
+            () => _session?.ConversationId ?? BeforeSetupConversationId,
+            (conversationId, taskName) => TelnyxRelayLog.TeardownTimedOut(_logger, conversationId, taskName),
+            (kind, conversationId, fault) => LogFault(kind, conversationId, fault),
             ClassifyTelnyxFault);
 
         // The pump owns the socket from here on: the read loop, the write loop, and the one close
@@ -152,7 +161,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
         // that would have are the delegates below — the exception the pump raises when the relay
         // breaks the contract, so DetermineCloseStatus still recognises it off the read loop's own
         // task, and the three log lines that name the relay by name. Each log callback closes over
-        // _session for the same reason the observer's own callId does: the id only exists once the
+        // _session for the same reason the observer's own conversationId does: the id only exists once the
         // setup frame has arrived, which is after this constructor.
         _pump = new JsonWebSocketPump(
             socket,
@@ -161,14 +170,14 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
                 _options.IdleTimeout,
                 _options.CloseTimeout,
                 (status, message) => new RelayProtocolException(status, message),
-                frameType => TelnyxRelayLog.UnknownFrameType(_logger, frameType, _session?.CallId ?? BeforeSetupCallId),
-                frameType => TelnyxRelayLog.FrameBodyRefused(_logger, frameType, _session?.CallId ?? BeforeSetupCallId),
-                () => TelnyxRelayLog.IdleTimeoutReached(_logger, _session?.CallId ?? BeforeSetupCallId)),
+                frameType => TelnyxRelayLog.UnknownFrameType(_logger, frameType, _session?.ConversationId ?? BeforeSetupConversationId),
+                frameType => TelnyxRelayLog.FrameBodyRefused(_logger, frameType, _session?.ConversationId ?? BeforeSetupConversationId),
+                () => TelnyxRelayLog.IdleTimeoutReached(_logger, _session?.ConversationId ?? BeforeSetupConversationId)),
             timeProvider,
             _connectionToken);
     }
 
-    /// <summary>Runs one call to its end.</summary>
+    /// <summary>Runs one conversation to its end.</summary>
     /// <param name="http">The request that carried the handshake.</param>
     /// <param name="socket">The accepted socket.</param>
     /// <param name="options">What the endpoint may do.</param>
@@ -186,7 +195,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
         TelnyxRelayConnection connection = new(http, socket, options, logger);
         connection._entrySessions = http.RequestServices
             .GetRequiredService<AgentCoreBoot>()
-            .Entries.ForSessions(options.EntryName);
+            .Entries.ForSessions(ConversationEndpointRouteBuilderExtensions.EntryOf(http));
 
         return connection.RunAsync();
     }
@@ -195,7 +204,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
     {
         // Both loops belong to the pump, and both seams into this class are named methods rather
         // than bodies: ParseFrame is the vendor's own reader, and DispatchAsync is what one parsed
-        // frame means to this call. The cast is safe because ParseFrame is the only thing that ever
+        // frame means to this conversation. The cast is safe because ParseFrame is the only thing that ever
         // puts a frame into a FrameOutcome, and it only ever puts a RelayFrame there.
         var reading = _pump.ReadLoopAsync(ParseFrame, frame => DispatchAsync((RelayFrame)frame));
         var writing = _pump.WriteLoopAsync(_outbound.Reader, EncodeOutbound);
@@ -207,7 +216,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
         finally
         {
             // The disposal below must run on every exit from here down, including a throw out of
-            // Cancel() itself or ICallSessions.CloseAsync: _cancellation links to ApplicationStopping,
+            // Cancel() itself or IConversationSessions.CloseAsync: _cancellation links to ApplicationStopping,
             // which lives for the whole process, and only Dispose() releases that registration.
             try
             {
@@ -217,7 +226,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
                 // method returns. Cancel() itself is guarded: it runs with throwOnFirstException:
                 // false, so every callback still runs and both loops are already cancelled before a
                 // callback fault can reach this catch, and losing the rest of teardown below would
-                // otherwise strand this call in the store for the life of the process.
+                // otherwise strand this conversation in the store for the life of the process.
                 try
                 {
                     await _cancellation.CancelAsync().ConfigureAwait(false);
@@ -226,7 +235,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
                 {
                     ConnectionTaskObserver.SafeLog(() => TelnyxRelayLog.CancellationFaulted(
                         _logger,
-                        _session?.CallId ?? BeforeSetupCallId,
+                        _session?.ConversationId ?? BeforeSetupConversationId,
                         fault));
                 }
 
@@ -243,7 +252,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
                 // chat client that ignores its token altogether, such as BlockingChatClient in the test
                 // fakes — must not be able to wedge teardown forever.
                 //
-                // The last turn is read through CallTurnArbiter.CurrentTurn, which takes the same
+                // The last turn is read through ConversationTurnArbiter.CurrentTurn, which takes the same
                 // lock every writer of it takes, and never off a field directly: the arbiter's own
                 // RunPendingPrompt can reassign it from a turn's own task, off the read loop, so
                 // teardown here is no longer the only writer's own reader. That property's remarks
@@ -283,7 +292,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
                 {
                     ConnectionTaskObserver.SafeLog(() => TelnyxRelayLog.CloseFaulted(
                         _logger,
-                        _session?.CallId ?? BeforeSetupCallId,
+                        _session?.ConversationId ?? BeforeSetupConversationId,
                         fault));
                 }
 
@@ -292,13 +301,13 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
                 if (_session is { } session)
                 {
                     // The chain closes before the session leaves the store, and never after: §11
-                    // item 6 makes call.ended the last event of every call, and the session is what
+                    // item 6 makes conversation.ended the last event of every conversation, and the session is what
                     // writes it. The reason comes from the status just decided rather than from a
                     // second reading of the same tasks, so the vendor's close frame and the audit
-                    // row can never disagree about how this call ended. A call that already closed
+                    // row can never disagree about how this conversation ended. A conversation that already closed
                     // its own chain from a terminal stage answers false here and keeps the
-                    // agent.completed it wrote: EndCall is idempotent, and nothing on this path may
-                    // give one call two endings.
+                    // agent.completed it wrote: EndConversation is idempotent, and nothing on this path may
+                    // give one conversation two endings.
                     //
                     // Guarded for the same reason CloseAsync above is. §7.1 forbids teardown
                     // throwing out of the request handler, and the close below must run whatever
@@ -307,28 +316,28 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
                     // handed to observers that swallow their own faults and the reason is a member
                     // of a closed set this class picks itself, so the only cause left is the clock
                     // the session reads; a missing last event is a gap in one chain, and losing the
-                    // rest of teardown would be a leak in every call after it.
+                    // rest of teardown would be a leak in every conversation after it.
                     try
                     {
-                        _ = session.EndCall(EndReasonOf(status));
+                        _ = session.EndConversation(EndReasonOf(status));
                     }
                     catch (Exception fault)
                     {
-                        ConnectionTaskObserver.SafeLog(() => TelnyxRelayLog.CallEndFaulted(
+                        ConnectionTaskObserver.SafeLog(() => TelnyxRelayLog.ConversationEndFaulted(
                             _logger,
-                            session.CallId,
+                            session.ConversationId,
                             fault));
                     }
 
-                    // Closing waits for the words this call still owes store 1 and only then drops
-                    // the session; ICallSessions.CloseAsync owns that order.
+                    // Closing waits for the words this conversation still owes store 1 and only then drops
+                    // the session; IConversationSessions.CloseAsync owns that order.
                     //
                     // Bounded and swallowed for the same reason the close above is: a store that
-                    // stops answering must cost this call its last rows, not wedge teardown and
+                    // stops answering must cost this conversation its last rows, not wedge teardown and
                     // strand the session in the store for the life of the process.
                     await _observer
                         .ObserveAsync(
-                            CloseSessionAsync(session.CallId),
+                            CloseSessionAsync(session.ConversationId),
                             ConnectionTaskKind.SessionClose,
                             _options.CloseTimeout)
                         .ConfigureAwait(false);
@@ -341,12 +350,12 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
         }
     }
 
-    /// <summary>Ends one call, as a task the observer can bound and watch.</summary>
-    /// <param name="callId">The call that ended.</param>
+    /// <summary>Ends one conversation, as a task the observer can bound and watch.</summary>
+    /// <param name="conversationId">The conversation that ended.</param>
     /// <returns>A task that completes once the words are written and the session is gone.</returns>
-    private async Task CloseSessionAsync(string callId)
+    private async Task CloseSessionAsync(string conversationId)
     {
-        await EntrySessions().CloseAsync(callId, CancellationToken.None).ConfigureAwait(false);
+        await EntrySessions().CloseAsync(conversationId, CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <summary>Works out the status and the description the vendor sees on the close frame.</summary>
@@ -374,7 +383,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
     /// </para>
     /// <para>
     /// The checks are ordered by how specific each cause is. A <see cref="RelayProtocolException"/>
-    /// names exactly why the endpoint refused the call, so it wins over everything else. A turn or
+    /// names exactly why the endpoint refused the conversation, so it wins over everything else. A turn or
     /// the write loop faulting with anything other than its own cancellation is this connection's
     /// own defect, not the caller's or the vendor's, so either counts before the host-stopping check
     /// below even notices that <see cref="_cancellation"/> is, by this point in teardown, always
@@ -386,7 +395,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
     /// this cancelled too." A dropped socket with no close frame —
     /// <see cref="WebSocketError.ConnectionClosedPrematurely"/> — and a read loop that simply
     /// returned once it saw the relay's own close frame both fall through to the same default: an
-    /// ordinary end of call.
+    /// ordinary end of conversation.
     /// </para>
     /// <para>
     /// The <paramref name="writing"/> check only catches a write loop that has already faulted at
@@ -403,7 +412,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
         Task lastTurn,
         Task writing)
     {
-        if (reading.IsFaulted && reading.Exception!.GetBaseException() is RelayProtocolException protocol)
+        if (reading.IsFaulted && reading.Exception.GetBaseException() is RelayProtocolException protocol)
         {
             return (protocol.Status, protocol.Message);
         }
@@ -419,7 +428,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
         }
 
         if (reading.IsFaulted
-            && reading.Exception!.GetBaseException() is not WebSocketException
+            && reading.Exception.GetBaseException() is not WebSocketException
             {
                 WebSocketErrorCode: WebSocketError.ConnectionClosedPrematurely,
             })
@@ -431,14 +440,14 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
     }
 
     /// <summary>Reads the ending one close status reports, as one member of the closed set.</summary>
-    /// <param name="status">What <see cref="DetermineCloseStatus"/> already decided this call closes with.</param>
+    /// <param name="status">What <see cref="DetermineCloseStatus"/> already decided this conversation closes with.</param>
     /// <returns>The reason the last event of the chain carries.</returns>
     /// <remarks>
     /// <para>
-    /// §11 item 6 and T55/T56 ask every call to end its chain in <c>call.ended</c> with a reason from
+    /// §11 item 6 and T55/T56 ask every call to end its chain in <c>conversation.ended</c> with a reason from
     /// the closed set of four, and only this adapter can supply two of them: the turn loop closes its
-    /// own chain with <see cref="CallEndReason.AgentCompleted"/> when the stage machine reaches a
-    /// terminal stage, and <see cref="CallEndReason.TransferredToHuman"/> belongs to the Call Control
+    /// own chain with <see cref="ConversationEndReason.AgentCompleted"/> when the stage machine reaches a
+    /// terminal stage, and <see cref="ConversationEndReason.TransferredToHuman"/> belongs to the Conversation Control
     /// path of §4.3 that voice slice 2 adds and this build does not have. What is left for a socket
     /// that ended is the caller, or a fault.
     /// </para>
@@ -451,15 +460,15 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
     /// <b><see cref="WebSocketError.ConnectionClosedPrematurely"/> is a hang-up, not a fault, and that
     /// is the load-bearing decision here.</b> A socket that stopped with no close frame is what
     /// <see cref="DetermineCloseStatus"/> already folds into <see cref="WebSocketCloseStatus.NormalClosure"/>
-    /// alongside a read loop that saw the relay's own close frame — its remarks call both "an ordinary
-    /// end of call" — and what <see cref="ClassifyTelnyxFault"/> already logs through
-    /// <see cref="TelnyxRelayLog.CallDroppedWithNoCloseFrame"/> at Information rather than as a defect.
+    /// alongside a read loop that saw the relay's own close frame — its remarks conversation both "an ordinary
+    /// end of conversation" — and what <see cref="ClassifyTelnyxFault"/> already logs through
+    /// <see cref="TelnyxRelayLog.ConversationDroppedWithNoCloseFrame"/> at Information rather than as a defect.
     /// This method agrees with both, and it has to: a caller who hangs up and a caller whose phone
     /// loses signal look identical on this socket, the vendor never reconnects either of them, and
-    /// the audit table would be worth very little if the ordinary way a call ends were counted as a
-    /// system fault. §7.1's rule that a bad frame must never drop a call points the same way — the
-    /// adapter's default reading of an ended socket is the call ending, not the endpoint failing.
-    /// The one place this reading is contradicted is the remark on <see cref="CallEndReason.Faulted"/>
+    /// the audit table would be worth very little if the ordinary way a conversation ends were counted as a
+    /// system fault. §7.1's rule that a bad frame must never drop a conversation points the same way — the
+    /// adapter's default reading of an ended socket is the conversation ending, not the endpoint failing.
+    /// The one place this reading is contradicted is the remark on <see cref="ConversationEndReason.Faulted"/>
     /// itself, which lists "a dropped relay socket" among its causes; that sentence predates the
     /// close-status reasoning above, and it is left alone here rather than edited, because the enum is
     /// the core's and this decision is the adapter's.
@@ -469,38 +478,38 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
     /// <c>IdleTimeout</c> returns rather than throwing, so it reaches
     /// <see cref="WebSocketCloseStatus.NormalClosure"/> and is recorded as a hang-up — which is
     /// exactly what <see cref="TelnyxRelayLog.IdleTimeoutReached"/> already says a silent socket is:
-    /// a call that is already over.
+    /// a conversation that is already over.
     /// </para>
     /// <para>
-    /// Everything else is <see cref="CallEndReason.Faulted"/>, and that includes two endings worth
+    /// Everything else is <see cref="ConversationEndReason.Faulted"/>, and that includes two endings worth
     /// naming. A protocol violation closes with the status <see cref="RelayProtocolException"/>
-    /// carries: the relay broke the contract and this endpoint refused the call, which no caller
+    /// carries: the relay broke the contract and this endpoint refused the conversation, which no caller
     /// chose. A host that stops closes with <see cref="WebSocketCloseStatus.EndpointUnavailable"/>:
-    /// the process went away underneath a live call, which no caller chose either. Neither is a
+    /// the process went away underneath a live conversation, which no caller chose either. Neither is a
     /// hang-up, neither is the agent finishing, and neither is a transfer, so within a set of four
     /// the honest answer is the fault — recorded as one rather than quietly counted as a caller who
     /// decided to leave.
     /// </para>
     /// </remarks>
-    private static CallEndReason EndReasonOf(WebSocketCloseStatus status)
+    private static ConversationEndReason EndReasonOf(WebSocketCloseStatus status)
         => status is WebSocketCloseStatus.NormalClosure
-            ? CallEndReason.CallerHungUp
-            : CallEndReason.Faulted;
+            ? ConversationEndReason.CallerHungUp
+            : ConversationEndReason.Faulted;
 
     /// <summary>Logs the two faults that are the vendor's doing rather than this endpoint's defect.</summary>
     /// <param name="fault">The exception a loop or a turn ended with.</param>
     /// <param name="kind">Which task faulted.</param>
-    /// <param name="callId">The id of the call, or a placeholder before setup.</param>
+    /// <param name="conversationId">The id of the conversation, or a placeholder before setup.</param>
     /// <returns>
     /// <see langword="true"/> when this method logged <paramref name="fault"/> itself, and
     /// <see langword="false"/> to leave it to <see cref="LogFault"/>.
     /// </returns>
     /// <remarks>
-    /// The classify hook <see cref="ConnectionTaskObserver"/> calls before its own general clause.
+    /// The classify hook <see cref="ConnectionTaskObserver"/> conversations before its own general clause.
     /// Both causes below name a vendor type, which is why they stay here rather than moving into
     /// that observer with the rest of the teardown machinery.
     /// </remarks>
-    private bool ClassifyTelnyxFault(Exception fault, ConnectionTaskKind kind, string callId)
+    private bool ClassifyTelnyxFault(Exception fault, ConnectionTaskKind kind, string conversationId)
     {
         switch (fault)
         {
@@ -511,14 +520,14 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
                 // other malformed-input line in this file (PromptBeforeSetup, FrameRefused,
                 // MalformedInterruptFrame) already logs at Warning, and LogFault's generic path
                 // would otherwise report this at Error, the same level as an unhandled bug.
-                TelnyxRelayLog.RelayProtocolViolation(_logger, callId, protocol.Message);
+                TelnyxRelayLog.RelayProtocolViolation(_logger, conversationId, protocol.Message);
                 return true;
 
             case WebSocketException { WebSocketErrorCode: WebSocketError.ConnectionClosedPrematurely }
                 when kind == ConnectionTaskKind.ReadLoop:
-                // The call dropped with no close frame. Section "close statuses" of task 7: that is
-                // an ordinary end of a call, not a fault, so it is worth a line but not an error one.
-                TelnyxRelayLog.CallDroppedWithNoCloseFrame(_logger, callId);
+                // The conversation dropped with no close frame. Section "close statuses" of task 7: that is
+                // an ordinary end of a conversation, not a fault, so it is worth a line but not an error one.
+                TelnyxRelayLog.ConversationDroppedWithNoCloseFrame(_logger, conversationId);
                 return true;
 
             default:
@@ -528,7 +537,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
 
     /// <summary>Logs the fault of a read loop, a turn, or a write loop, whichever <paramref name="kind"/> names.</summary>
     /// <param name="kind">Which task faulted.</param>
-    /// <param name="callId">The id of the call, or a placeholder before setup.</param>
+    /// <param name="conversationId">The id of the conversation, or a placeholder before setup.</param>
     /// <param name="fault">The cause.</param>
     /// <remarks>
     /// The <c>logFault</c> hook of <see cref="ConnectionTaskObserver"/>, which calls it from
@@ -537,24 +546,24 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
     /// to catch a throw, so the observer wraps every call to this method in
     /// <see cref="ConnectionTaskObserver.SafeLog"/>; nothing here has to guard itself again.
     /// </remarks>
-    private void LogFault(ConnectionTaskKind kind, string callId, Exception fault)
+    private void LogFault(ConnectionTaskKind kind, string conversationId, Exception fault)
     {
         switch (kind)
         {
             case ConnectionTaskKind.Turn:
-                TelnyxRelayLog.TurnFaulted(_logger, callId, fault);
+                TelnyxRelayLog.TurnFaulted(_logger, conversationId, fault);
                 break;
 
             case ConnectionTaskKind.WriteLoop:
-                TelnyxRelayLog.WriteLoopFaulted(_logger, callId, fault);
+                TelnyxRelayLog.WriteLoopFaulted(_logger, conversationId, fault);
                 break;
 
             case ConnectionTaskKind.SessionClose:
-                TelnyxRelayLog.CallCloseFaulted(_logger, callId, fault);
+                TelnyxRelayLog.ConversationCloseFaulted(_logger, conversationId, fault);
                 break;
 
             default:
-                TelnyxRelayLog.ReadLoopFaulted(_logger, callId, fault);
+                TelnyxRelayLog.ReadLoopFaulted(_logger, conversationId, fault);
                 break;
         }
     }
@@ -585,13 +594,13 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
     /// The <c>encode</c> seam of <see cref="JsonWebSocketPump"/>, which runs it immediately before
     /// its one send. The gate below stays here, on this side of that seam, because a stale item is
     /// stale in this connection's own vocabulary and in no transport's. The writer belongs to that
-    /// loop and is reused for every frame of the call, so nothing here keeps it, flushes it, or
+    /// loop and is reused for every frame of the conversation, so nothing here keeps it, flushes it, or
     /// holds what it wrote: the bytes are the loop's to send and the loop's to overwrite.
     /// </remarks>
     private bool EncodeOutbound(OutboundItem item, Utf8JsonWriter writer)
     {
         // The write loop is the last gate, immediately before the one SendAsync call the pump
-        // makes for this connection. CallTurnArbiter's own check only narrows the race — it cannot
+        // makes for this connection. ConversationTurnArbiter's own check only narrows the race — it cannot
         // stop a token already past it at the moment a barge-in raises the reply generation:
         // one already queued, one a bounded channel's backpressure was about to release into the gap
         // StopAsync's own drain just made, or one this loop had already dequeued and was about to
@@ -604,7 +613,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
         //
         // >=, not ==. _replyGeneration and every item's own Generation both only ever increase,
         // so "the highest generation a barge-in has cut off is at or above this item's own" is
-        // the question that actually matches a call across two barge-ins: with == alone, an item of
+        // the question that actually matches a conversation across two barge-ins: with == alone, an item of
         // generation N already dequeued here, then gated after a second, later barge-in raises
         // the mark to N+1, would compare N+1 != N, pass, and reach the caller — exactly the
         // straggler this gate exists to stop. With no interrupt at all _replyGeneration stays
@@ -621,7 +630,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
 
         // The same options SerializeToUtf8Bytes was given, and the same bytes: TelnyxRelayJson sets
         // no encoder and no indentation, so a default Utf8JsonWriter escapes and lays out this frame
-        // exactly as the writer JsonSerializer used to build per call did.
+        // exactly as the writer JsonSerializer used to build per conversation did.
         JsonSerializer.Serialize(writer, item.Frame, item.Frame.GetType(), TelnyxRelayJson.Options);
         return true;
     }
@@ -631,7 +640,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
         switch (frame)
         {
             case RelayFrame.Setup setup:
-                await StartCallAsync(setup).ConfigureAwait(false);
+                await StartConversationAsync(setup).ConfigureAwait(false);
                 break;
 
             case RelayFrame.Prompt { Last: true } prompt:
@@ -654,21 +663,21 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
 
             case RelayFrame.Error error:
                 // The vendor refused a frame this endpoint sent. That is our defect.
-                TelnyxRelayLog.FrameRefused(_logger, _session?.CallId ?? BeforeSetupCallId, error.Description);
+                TelnyxRelayLog.FrameRefused(_logger, _session?.ConversationId ?? BeforeSetupConversationId, error.Description);
                 break;
         }
     }
 
-    private async Task StartCallAsync(RelayFrame.Setup setup)
+    private async Task StartConversationAsync(RelayFrame.Setup setup)
     {
         var sessions = EntrySessions();
 
-        // One socket carries one call, and the vendor sends one setup frame. A second one replaces
-        // the session rather than refusing the socket, because section 7.1 forbids dropping a call
-        // over a frame the vendor got wrong, and because the vendor's latest word about the call is
+        // One socket carries one conversation, and the vendor sends one setup frame. A second one replaces
+        // the session rather than refusing the socket, because section 7.1 forbids dropping a conversation
+        // over a frame the vendor got wrong, and because the vendor's latest word about the conversation is
         // the one to answer. The first session is closed here and not left behind: teardown only
         // ever closes the session this connection currently holds, so this is the last moment
-        // anything waits for the words the replaced call still owed store 1.
+        // anything waits for the words the replaced conversation still owed store 1.
         // CancellationToken.None, because the close must still run while the connection is
         // tearing down.
         if (_session is { } replaced)
@@ -676,29 +685,29 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
             if (!_loggedSecondSetup)
             {
                 _loggedSecondSetup = true;
-                TelnyxRelayLog.SecondSetupFrame(_logger, replaced.CallId);
+                TelnyxRelayLog.SecondSetupFrame(_logger, replaced.ConversationId);
             }
 
             // Teardown will later close the session that replaced this one and never this one, so
             // this is the last moment anything can wait for the writes it queued. Bounded and
-            // swallowed by the observer, so a store that stopped answering costs the replaced call
+            // swallowed by the observer, so a store that stopped answering costs the replaced conversation
             // its last rows rather than stalling the read loop for the rest of the connection.
             // Through CloseSessionAsync, and never CloseAsync(...).AsTask(): a store that throws
             // synchronously throws before AsTask() is ever reached, so the observer would not see
-            // it and §7.1's rule against dropping a call over a bad frame would be broken by the
+            // it and §7.1's rule against dropping a conversation over a bad frame would be broken by the
             // very frame that rule is about. An async method turns that throw into the task the
             // observer bounds.
             await _observer
                 .ObserveAsync(
-                    CloseSessionAsync(replaced.CallId),
+                    CloseSessionAsync(replaced.ConversationId),
                     ConnectionTaskKind.SessionClose,
                     _options.CloseTimeout)
                 .ConfigureAwait(false);
         }
 
-        // callSessionId groups the legs of one logical call, so the id survives the warm transfer
+        // conversationSessionId groups the legs of one logical conversation, so the id survives the warm transfer
         // that slice 2 adds. A leg id would break there.
-        _session = await sessions.OpenAsync(setup.CallSessionId, _cancellation.Token).ConfigureAwait(false);
+        _session = await sessions.OpenAsync(setup.ConversationSessionId, _cancellation.Token).ConfigureAwait(false);
 
         // Built on the first setup frame and never again: a later one only tells the arbiter which
         // call to answer from now on. One socket runs one turn at a time, and that promise belongs
@@ -719,12 +728,12 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
         // port belonging to a separate synthesizer, which is the whole of D8.
         // The two log callbacks are this vendor's own lines, bound here: the arbiter decides when a
         // prompt is held and when a further one is dropped, and names no log event of its own.
-        _arbiter = new CallTurnArbiter(
+        _arbiter = new ConversationTurnArbiter(
             _session,
             this,
             _observer,
-            callId => TelnyxRelayLog.PromptHeld(_logger, callId),
-            callId => TelnyxRelayLog.PendingPromptDropped(_logger, callId),
+            conversationId => TelnyxRelayLog.PromptHeld(_logger, conversationId),
+            conversationId => TelnyxRelayLog.PendingPromptDropped(_logger, conversationId),
             _connectionToken);
     }
 
@@ -732,7 +741,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
     {
         if (_arbiter is not { } arbiter)
         {
-            // Log once for the call, not once for the frame. Same rule as the unknown-frame line.
+            // Log once for the conversation, not once for the frame. Same rule as the unknown-frame line.
             if (!_loggedPromptBeforeSetup)
             {
                 _loggedPromptBeforeSetup = true;
@@ -751,14 +760,14 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
         _ = arbiter.StartTurnAsync(text);
     }
 
-    /// <summary>Tells the store this call is still being had.</summary>
+    /// <summary>Tells the store this conversation is still being had.</summary>
     /// <returns>A task that completes once the store has been read.</returns>
     /// <remarks>
-    /// This connection opens its session once and holds it for the whole call, so nothing else ever
-    /// reads it back. A store that expires an idle session counts a read as the one sign the call is
-    /// still live, so without this a call longer than that timeout is swept out from under the turn
+    /// This connection opens its session once and holds it for the whole conversation, so nothing else ever
+    /// reads it back. A store that expires an idle session counts a read as the one sign the conversation is
+    /// still live, so without this a conversation longer than that timeout is swept out from under the turn
     /// about to run: its words are flushed, its session is dropped, and every turn after it runs on
-    /// an object no close can reach. A call nobody speaks on is ended by this socket's own
+    /// an object no close can reach. A conversation nobody speaks on is ended by this socket's own
     /// <c>IdleTimeout</c> instead, which is a real end and closes the chain.
     /// The result is not used. It is the read itself that matters, and the session this connection
     /// holds is the one the arbiter must keep running whatever the store answers.
@@ -770,16 +779,16 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
             return;
         }
 
-        // §7.1 forbids dropping a call over one frame, and this runs on the read loop. A store that
-        // throws costs this call its place in the sweep, never the call itself.
+        // §7.1 forbids dropping a conversation over one frame, and this runs on the read loop. A store that
+        // throws costs this conversation its place in the sweep, never the conversation itself.
         try
         {
-            _ = await EntrySessions().TryGetAsync(session.CallId, _connectionToken).ConfigureAwait(false);
+            _ = await EntrySessions().TryGetAsync(session.ConversationId, _connectionToken).ConfigureAwait(false);
         }
         catch (Exception fault) when (fault is not OperationCanceledException)
         {
             ConnectionTaskObserver.SafeLog(() => TelnyxRelayLog.SessionTouchFaulted(
-                _logger, session.CallId, fault));
+                _logger, session.ConversationId, fault));
         }
     }
 
@@ -791,10 +800,10 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
         }
 
         // Section 7.1's rule for an unknown frame type and for a prompt before setup applies here
-        // too: a frame the vendor got wrong must not drop the call. System.Text.Json enforces
+        // too: a frame the vendor got wrong must not drop the conversation. System.Text.Json enforces
         // neither a missing property nor a negative number at run time, so a frame missing
         // utteranceUntilInterrupt, or carrying a negative durationUntilInterruptMs, would otherwise
-        // reach CallSession.Interrupt's own ArgumentNullException or ArgumentOutOfRangeException
+        // reach ConversationSession.Interrupt's own ArgumentNullException or ArgumentOutOfRangeException
         // uncaught and take the read loop down with it. Nothing here clamps the duration — a clamp
         // is an estimate, and D28 exists to keep estimates out of this path. This guard stays here,
         // and never moves into the arbiter: validating these two values is reading a vendor frame.
@@ -803,7 +812,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
             if (!_loggedMalformedInterrupt)
             {
                 _loggedMalformedInterrupt = true;
-                TelnyxRelayLog.MalformedInterruptFrame(_logger, session.CallId);
+                TelnyxRelayLog.MalformedInterruptFrame(_logger, session.ConversationId);
             }
 
             return;
@@ -815,10 +824,10 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
             interrupt.UtteranceUntilInterrupt,
             TimeSpan.FromMilliseconds(interrupt.DurationUntilInterruptMs));
 
-        // Logged last, once the raised id, the call to Interrupt, and the drain behind
-        // ICallOutputPort.StopAsync have all already happened, so this line is proof the whole
+        // Logged last, once the raised id, the conversation to Interrupt, and the drain behind
+        // IConversationOutputPort.StopAsync have all already happened, so this line is proof the whole
         // guard is in place — never the words the caller said or heard.
-        TelnyxRelayLog.InterruptReceived(_logger, session.CallId);
+        TelnyxRelayLog.InterruptReceived(_logger, session.ConversationId);
     }
 
     /// <inheritdoc />
@@ -856,13 +865,13 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
     /// <remarks>
     /// <para>
     /// <b>This stream yields nothing today, and that is deliberate rather than a defect.</b> The
-    /// read loop still drives <c>DispatchAsync</c> directly, so every inbound frame of this call
+    /// read loop still drives <c>DispatchAsync</c> directly, so every inbound frame of this conversation
     /// already reaches the arbiter by that path; rerouting it through this stream is a later change
     /// that no current caller needs. Until then this half of the channel exists so the shape is
     /// honest — one object really does fill both slots — and it completes when the connection does,
-    /// so an <c>await foreach</c> over it ends with the call rather than at once. A consumer that
+    /// so an <c>await foreach</c> over it ends with the conversation rather than at once. A consumer that
     /// cancels its own read gets <see cref="OperationCanceledException"/> instead, which is the rule
-    /// <see cref="ICallInputPort.ListenAsync"/> sets for every implementation of this port.
+    /// <see cref="IConversationInputPort.ListenAsync"/> sets for every implementation of this port.
     /// </para>
     /// <para>
     /// One consumer for the life of the port, and the guard is here rather than inside the iterator
@@ -870,7 +879,7 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
     /// otherwise hand back a stream that throws late, or never at all if nobody enumerates it.
     /// </para>
     /// </remarks>
-    public IAsyncEnumerable<CallInput> ListenAsync(CancellationToken cancellationToken = default)
+    public IAsyncEnumerable<ConversationInput> ListenAsync(CancellationToken cancellationToken = default)
     {
         if (Interlocked.CompareExchange(ref _listening, 1, 0) != 0)
         {
@@ -885,15 +894,15 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
     /// Nothing to release here, and disposing a port must not tear this connection down. The
     /// channel, the linked cancellation source, and the socket all belong to <c>RunAsync</c>, which
     /// releases them in its own teardown once the last turn has stopped writing — and for this
-    /// vendor the call ends when that method returns, not when whoever holds the
-    /// <see cref="CallChannel"/> lets go of it.
+    /// vendor the conversation ends when that method returns, not when whoever holds the
+    /// <see cref="ConversationChannel"/> lets go of it.
     /// </remarks>
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
     /// <summary>Yields nothing, and completes when this connection ends.</summary>
     /// <param name="cancellationToken">Ends the stream early, ahead of the connection itself.</param>
     /// <returns>An empty stream, deliberately. <see cref="ListenAsync"/>'s remarks say why.</returns>
-    private async IAsyncEnumerable<CallInput> ListenCoreAsync(
+    private async IAsyncEnumerable<ConversationInput> ListenCoreAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         // Linked, so the caller's own token ends the stream too, and built from the captured
@@ -906,8 +915,8 @@ internal sealed class TelnyxRelayConnection : ICallInputPort, ICallOutputPort
         }
         catch (OperationCanceledException)
         {
-            // Which token fired is the whole difference, and ICallInputPort.ListenAsync settles
-            // it: the connection ending is the ordinary end of the call and completes this stream,
+            // Which token fired is the whole difference, and IConversationInputPort.ListenAsync settles
+            // it: the connection ending is the ordinary end of the conversation and completes this stream,
             // while the consumer's own cancellation throws, as any cancelled await does. Rethrown
             // through the caller's token rather than by letting the linked one out, so the exception
             // names the token the caller actually cancelled. Both fired at once counts as

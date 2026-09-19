@@ -18,14 +18,14 @@ internal interface IQdrantSearchChannel
 {
     /// <summary>Sends one fused query.</summary>
     /// <param name="query">The query.</param>
-    /// <param name="cancellationToken">Cancels the call. The store links its deadline into this.</param>
+    /// <param name="cancellationToken">Cancels the conversation. The store links its deadline into this.</param>
     /// <returns>The scored points, best first.</returns>
     Task<IReadOnlyList<ScoredPoint>> QueryAsync(SearchQuery query, CancellationToken cancellationToken);
 
     /// <summary>Fetches whole points by key, in one call.</summary>
     /// <param name="collection">The collection.</param>
     /// <param name="ids">The keys.</param>
-    /// <param name="cancellationToken">Cancels the call.</param>
+    /// <param name="cancellationToken">Cancels the conversation.</param>
     /// <returns>The points that exist. An unknown key is left out; it does not throw.</returns>
     Task<IReadOnlyList<RetrievedPoint>> RetrieveAsync(
         string collection, IReadOnlyList<Guid> ids, CancellationToken cancellationToken);
@@ -34,7 +34,7 @@ internal interface IQdrantSearchChannel
     /// <param name="collection">The collection.</param>
     /// <param name="filter">What the points must match.</param>
     /// <param name="limit">The most points to return.</param>
-    /// <param name="cancellationToken">Cancels the call.</param>
+    /// <param name="cancellationToken">Cancels the conversation.</param>
     /// <returns>The points that matched. An empty result is not an error.</returns>
     Task<IReadOnlyList<RetrievedPoint>> ScrollAsync(
         string collection, Filter filter, uint limit, CancellationToken cancellationToken);

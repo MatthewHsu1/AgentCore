@@ -53,9 +53,7 @@ internal sealed class FacetFilteredSearch : DelegatingAIFunction
             ? FacetFilterReader.Read(arguments, _facets)
             : null;
 
-        var turn = arguments.TryGetValue(TurnInvocation.ArgumentsKey, out var filed) && filed is TurnInvocation invocation
-            ? invocation
-            : null;
+        var turn = TurnInvocation.FiledIn(arguments);
 
         // The donor's own declaration names the question: the model was built against it.
         var question = FirstQueryArgument(InnerFunction.JsonSchema) is { } name

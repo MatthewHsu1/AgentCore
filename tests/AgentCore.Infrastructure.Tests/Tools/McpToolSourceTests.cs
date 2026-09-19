@@ -137,7 +137,7 @@ public sealed class McpToolSourceTests
     public async Task DisposeAsync_AfterProvide_ClosesTheClient()
     {
         // Measured against the real SDK: disposing McpClient does not complete the streams a
-        // StreamClientTransport was given, and a call made on a disposed client hangs forever rather
+        // StreamClientTransport was given, and a conversation made on a disposed client hangs forever rather
         // than failing — neither signal is observable here.
         await using InProcessMcpServer fake = new("create_issue");
         DisposalObservingTransport transport = new(fake.ClientTransport);

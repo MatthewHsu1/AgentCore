@@ -56,17 +56,17 @@ public sealed class ResolvedSecrets
         Dictionary<string, string> values = new(StringComparer.Ordinal);
         foreach (var (template, pointer) in Templates(configuration))
         {
-            foreach (var reference in template.References)
+            foreach (var name in template.References.Select(reference => reference.Name))
             {
-                if (values.ContainsKey(reference.Name))
+                if (values.ContainsKey(name))
                 {
                     // One name costs one read, however many strings reference it.
                     continue;
                 }
 
-                var value = await resolver.TryResolveAsync(reference.Name, cancellationToken).ConfigureAwait(false);
-                values[reference.Name] = value
-                    ?? throw SecretResolutionException.Unresolved(reference.Name, pointer);
+                var value = await resolver.TryResolveAsync(name, cancellationToken).ConfigureAwait(false);
+                values[name] = value
+                    ?? throw SecretResolutionException.Unresolved(name, pointer);
             }
         }
 
@@ -135,6 +135,24 @@ public sealed class ResolvedSecrets
             }
 
             foreach (var reference in In(server.Env, ConfigurationError.AppendPointer(pointer, "env")))
+            {
+                yield return reference;
+            }
+        }
+
+        for (var index = 0; index < configuration.Agents.Items.Count; index++)
+        {
+            if (configuration.Agents.Items[index].Shell is not { } shell)
+            {
+                continue;
+            }
+
+            var env = ConfigurationError.AppendPointer(
+                ConfigurationError.AppendPointer(
+                    ConfigurationError.AppendPointer("/agents/items", index), "shell"),
+                "env");
+
+            foreach (var reference in In(shell.Env, env))
             {
                 yield return reference;
             }

@@ -4,8 +4,8 @@
 # underscore is what separates the two halves.
 dotnet_diagnostic.CA1707.severity = none
 
-# CA1716: "Rename namespace AgentCore.AspNetCore.Tests.Call so that it no longer conflicts with
-# the reserved language keyword 'Call'." This assembly does not target VB.NET or other languages
-# that reserve the word, and the namespace mirrors src/AgentCore.AspNetCore/Call, which task 0 of
-# the call-transport-seam plan named deliberately.
+# CA1716: "Rename namespace AgentCore.AspNetCore.Tests.Conversation so that it no longer conflicts with
+# the reserved language keyword 'Conversation'." This assembly does not target VB.NET or other languages
+# that reserve the word, and the namespace mirrors src/AgentCore.AspNetCore/Conversation, which task 0 of
+# the conversation-transport-seam plan named deliberately.
 dotnet_diagnostic.CA1716.severity = none

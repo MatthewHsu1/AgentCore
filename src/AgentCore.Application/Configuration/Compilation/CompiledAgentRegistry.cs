@@ -86,16 +86,7 @@ public sealed class CompiledAgentRegistry
 
     private void CacheAllLocked(AgentCoreConfiguration configuration, AgentCompilationContext context)
     {
-        var missing = false;
-        foreach (var name in configuration.Entries.Keys)
-        {
-            if (!_compiled.ContainsKey(new EntryKey(configuration, name)))
-            {
-                missing = true;
-                break;
-            }
-        }
-
+        var missing = configuration.Entries.Keys.Any(name => !_compiled.ContainsKey(new EntryKey(configuration, name)));
         if (!missing)
         {
             return;

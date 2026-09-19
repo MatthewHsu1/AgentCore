@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace AgentCore.Application.Secrets;
 
 /// <summary>
@@ -27,10 +29,10 @@ namespace AgentCore.Application.Secrets;
 public sealed record SecretName(string Name, string VariableName)
 {
     /// <summary>Gets the name the resolver chain is asked for.</summary>
-    public string Name { get; } = Required(Name, nameof(Name));
+    public string Name { get; } = Required(Name);
 
     /// <summary>Gets the environment variable read when the chain holds nothing.</summary>
-    public string VariableName { get; } = Required(VariableName, nameof(VariableName));
+    public string VariableName { get; } = Required(VariableName);
 
     /// <summary>Writes both names, because neither one is a value.</summary>
     /// <returns>The text <c>name (VARIABLE)</c>.</returns>
@@ -38,10 +40,10 @@ public sealed record SecretName(string Name, string VariableName)
 
     /// <summary>Refuses a half that names nothing.</summary>
     /// <param name="value">The name given.</param>
-    /// <param name="parameter">Which half it is, for the exception to report.</param>
+    /// <param name="parameter">Which half it is, for the exception to report. Filled in by the compiler.</param>
     /// <returns>The name.</returns>
     /// <exception cref="ArgumentException">The name is null, empty, or blank.</exception>
-    private static string Required(string value, string parameter)
+    private static string Required(string value, [CallerArgumentExpression(nameof(value))] string parameter = "")
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value, parameter);
         return value;

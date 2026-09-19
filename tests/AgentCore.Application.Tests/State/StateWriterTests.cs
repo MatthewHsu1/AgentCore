@@ -141,13 +141,13 @@ public sealed class StateWriterTests
     [Fact]
     public void TheThreeReservedSlots_AreAlwaysPresentAndReadOnly()
     {
-        StateDocument state = new(Document) { Stage = "resolve", TurnIndex = 7, CallDurationSeconds = 42.5 };
+        StateDocument state = new(Document) { Stage = "resolve", TurnIndex = 7, ConversationDurationSeconds = 42.5 };
 
         var snapshot = state.Snapshot();
 
         Assert.Equal("resolve", snapshot[ReservedStateSlots.Stage]!.GetValue<string>());
         Assert.Equal(7, snapshot[ReservedStateSlots.TurnIndex]!.GetValue<int>());
-        Assert.Equal(42.5, snapshot[ReservedStateSlots.CallDurationSeconds]!.GetValue<double>());
+        Assert.Equal(42.5, snapshot[ReservedStateSlots.ConversationDurationSeconds]!.GetValue<double>());
 
         foreach (var reserved in ReservedStateSlots.All)
         {

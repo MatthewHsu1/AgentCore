@@ -7,7 +7,7 @@ using ModelContextProtocol.Protocol;
 // Only the server's declared properties cross the wire (see _declared). The invoking client files
 // the turn into every call's arguments and the turn carries delegates, which the MCP SDK's argument
 // serializer cannot hold — forwarding everything faulted every call. Revisit if the SDK ever lets a
-// call exclude entries, or if the turn stops riding along in tool arguments.
+// conversation exclude entries, or if the turn stops riding along in tool arguments.
 
 namespace AgentCore.Infrastructure.Tools.Mcp;
 
@@ -84,7 +84,7 @@ internal sealed class McpTool : AIFunction
             var outgoing = arguments;
             if (_declared is { } declared)
             {
-                outgoing = new AIFunctionArguments();
+                outgoing = [];
                 foreach (var entry in arguments.Where(candidate => declared.Contains(candidate.Key)))
                 {
                     outgoing[entry.Key] = entry.Value;

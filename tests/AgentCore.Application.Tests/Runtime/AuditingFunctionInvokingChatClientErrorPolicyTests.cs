@@ -19,7 +19,7 @@ namespace AgentCore.Application.Tests.Runtime;
 /// </summary>
 /// <remarks>
 /// Every test drives <see cref="AuditingFunctionInvokingChatClient"/> directly against a fake inner
-/// <see cref="IChatClient"/>, with no YAML document and no <c>CallSession</c>, so a failure here
+/// <see cref="IChatClient"/>, with no YAML document and no <c>ConversationSession</c>, so a failure here
 /// isolates the seam itself rather than the turn loop built on top of it.
 /// </remarks>
 public sealed class AuditingFunctionInvokingChatClientErrorPolicyTests
@@ -58,7 +58,7 @@ public sealed class AuditingFunctionInvokingChatClientErrorPolicyTests
     public async Task AFaultTheModelCanAnswer_IsNeverReported()
     {
         List<object> reported = [];
-        var turn = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", OnToolFailure = failure => reported.Add(failure) };
+        var turn = new TurnInvocation { ConversationId = "conversation", TurnIndex = 0, Stage = "", OnToolFailure = failure => reported.Add(failure) };
 
         var tool = new ThrowingDeclaredTool(LookupOrder, new InvalidOperationException("the order is already closed."));
         await RunSingleRoundAsync(tool, TestContext.Current.CancellationToken, turn: turn);
@@ -109,7 +109,7 @@ public sealed class AuditingFunctionInvokingChatClientErrorPolicyTests
     public async Task AFaultTheModelCannotAnswer_IsReportedOnceForEveryPropagatingRound()
     {
         List<object> reported = [];
-        var turn = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", OnToolFailure = failure => reported.Add(failure) };
+        var turn = new TurnInvocation { ConversationId = "conversation", TurnIndex = 0, Stage = "", OnToolFailure = failure => reported.Add(failure) };
 
         var failure = new TimeoutException("the endpoint did not answer.");
         var tool = new ThrowingDeclaredTool(LookupOrder, failure);
@@ -128,7 +128,7 @@ public sealed class AuditingFunctionInvokingChatClientErrorPolicyTests
     public async Task ACallerThatHungUp_PassesTheCancellationThroughUnreported()
     {
         List<object> reported = [];
-        var turn = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", OnToolFailure = failure => reported.Add(failure) };
+        var turn = new TurnInvocation { ConversationId = "conversation", TurnIndex = 0, Stage = "", OnToolFailure = failure => reported.Add(failure) };
         using CancellationTokenSource source = new();
 
         // The tool cancels the very token the call was made with and then throws, exactly as a
@@ -204,7 +204,7 @@ public sealed class AuditingFunctionInvokingChatClientErrorPolicyTests
 
     /// <summary>Runs one request/response round and returns the JSON the tool result carried.</summary>
     /// <param name="tool">The tool the fake model calls.</param>
-    /// <param name="cancellationToken">Cancels the call.</param>
+    /// <param name="cancellationToken">Cancels the conversation.</param>
     /// <param name="arguments">
     /// The arguments the fake model fills, or <see langword="null"/> for none — enough for a tool
     /// that validates its own arguments before it ever reaches its adapter.

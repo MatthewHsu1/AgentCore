@@ -12,7 +12,7 @@ namespace AgentCore.Application.Embeddings;
 /// </summary>
 public static class CompositeEmbeddingGeneratorFactory
 {
-    /// <summary>What the embeddings field calls itself, so the shared selector writes its failures.</summary>
+    /// <summary>What the embeddings field conversations itself, so the shared selector writes its failures.</summary>
     private static readonly VendorSeam EmbeddingSeam =
         new("providers.embeddings.kind", "/providers/embeddings/kind", "options.UseEmbeddings(...)", "generators");
 

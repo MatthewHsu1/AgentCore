@@ -19,7 +19,7 @@ public sealed class ConfigurationBinderTests
 
     private const string Providers = """
         providers:
-          call:   { kind: telnyx-relay }
+          conversation:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
@@ -43,10 +43,10 @@ public sealed class ConfigurationBinderTests
     {
         var failure = Assert.Throws<ConfigurationLoadException>(
             () => ConfigurationLoader.LoadYaml(
-                Header + "providers:\n  call:   { kind: telnyx-relay, maxFrameBytes: 4294967296 }\n"
+                Header + "providers:\n  conversation:   { kind: telnyx-relay, maxFrameBytes: 4294967296 }\n"
                 + "  speech:\n    stt: { kind: telnyx-relay }\n    tts: { kind: telnyx-relay }\n"));
 
-        Assert.Contains(failure.Errors, error => error.Pointer == "/providers/call/maxFrameBytes");
+        Assert.Contains(failure.Errors, error => error.Pointer == "/providers/conversation/maxFrameBytes");
     }
 
     /// <summary>The export interval becomes a period in milliseconds, and the same bound applies.</summary>
@@ -140,13 +140,13 @@ public sealed class ConfigurationBinderTests
                   "agents": { "items": [{ "id": "only" }] },
                   "entries": { "main": { "agent": "only" } },
                   "providers": {
-                    "call": { "kind": "telnyx-relay", "idleTimeoutSeconds": {{written}} },
+                    "conversation": { "kind": "telnyx-relay", "idleTimeoutSeconds": {{written}} },
                     "speech": { "stt": { "kind": "telnyx-relay" }, "tts": { "kind": "telnyx-relay" } }
                   }
                 }
                 """));
 
-        Assert.Contains(failure.Errors, error => error.Pointer == "/providers/call/idleTimeoutSeconds");
+        Assert.Contains(failure.Errors, error => error.Pointer == "/providers/conversation/idleTimeoutSeconds");
         Assert.DoesNotContain("System.", failure.Message, StringComparison.Ordinal);
     }
 
@@ -242,7 +242,7 @@ public sealed class ConfigurationBinderTests
               main:
                 agent: only
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
@@ -278,7 +278,7 @@ public sealed class ConfigurationBinderTests
               main:
                 agent: only
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
@@ -311,7 +311,7 @@ public sealed class ConfigurationBinderTests
               main:
                 agent: only
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
@@ -343,7 +343,7 @@ public sealed class ConfigurationBinderTests
               main:
                 agent: only
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }

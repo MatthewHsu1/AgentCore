@@ -25,7 +25,7 @@ public sealed class CounterStateWriter
     }
 
     /// <summary>Increments every <c>writer: counter</c> slot whose rule is true.</summary>
-    /// <param name="state">The state of one call.</param>
+    /// <param name="state">The state of one conversation.</param>
     /// <returns>The number of slots this writer incremented.</returns>
     public int Apply(StateDocument state)
     {

@@ -7,9 +7,9 @@ namespace AgentCore.Application.Knowledge;
 // The prefetch half of one agent's knowledge block: runs the framework's own search provider
 // per invocation, bound to that invocation's turn. A shared provider cannot serve prefetch —
 // the framework invokes its search as (query, cancellation) with no turn — so this builds a
-// provider per call around the same options, closing over the turn the session filed. State
+// provider per conversation around the same options, closing over the turn the session filed. State
 // keys and post-invocation storage forward to the shared template: accumulation lives in
-// the session store, not on any instance, so a fresh provider per call loses nothing.
+// the session store, not on any instance, so a fresh provider per conversation loses nothing.
 internal sealed class KnowledgePrefetchProvider(
     AIContextProvider template,
     TextSearchProviderOptions options,

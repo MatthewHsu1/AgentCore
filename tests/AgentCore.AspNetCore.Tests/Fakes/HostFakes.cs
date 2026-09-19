@@ -22,7 +22,7 @@ internal sealed class FragmentingChatClient : IChatClient
     /// <summary>Gets how many requests this client answered.</summary>
     public int Calls => Volatile.Read(ref _calls);
 
-    /// <summary>Gets the messages of the most recent request, oldest first, or null before any call.</summary>
+    /// <summary>Gets the messages of the most recent request, oldest first, or null before any conversation.</summary>
     /// <remarks>
     /// A test reads this to prove which text actually reached the model — for example that an
     /// interim transcript never substitutes for the final one, rather than only counting how many
@@ -205,7 +205,7 @@ internal sealed class BlockingChatClient : IChatClient
 /// before it says a word.
 /// </summary>
 /// <remarks>
-/// This is the shape a held prompt produces on a real call. Turn one pauses long enough for a
+/// This is the shape a held prompt produces on a real conversation. Turn one pauses long enough for a
 /// second final prompt to be held, then finishes streaming; <c>RunPendingPrompt</c> starts turn two
 /// inside turn one's own <c>finally</c>; and the vendor is still speaking turn one while turn two
 /// has produced nothing at all. No other fake here can hold the second turn apart from the first.
@@ -231,7 +231,7 @@ internal sealed class HeldPromptChatClient : IChatClient
     /// <summary>Gets whether the second turn opens with one update the relay can never speak.</summary>
     /// <remarks>
     /// <para>
-    /// <c>CallSession</c> calls a run audible at its first piece of <i>content</i>, and content is not
+    /// <c>ConversationSession</c> calls a run audible at its first piece of <i>content</i>, and content is not
     /// the same thing as a word. A tool call, a tool result, and a line of reasoning all count, and
     /// none of them carries text, so none of them ever reaches the vendor as a <c>text</c> frame. Set
     /// this, and turn two yields exactly one such update — a <see cref="TextReasoningContent"/>, the
@@ -272,7 +272,7 @@ internal sealed class HeldPromptChatClient : IChatClient
             {
                 // Yielded before SecondTurnStarted is set, and the line after a yield only runs once
                 // the consumer comes back for the next update. Waiting on that signal therefore
-                // proves this update has already travelled the whole way through CallSession — which
+                // proves this update has already travelled the whole way through ConversationSession — which
                 // is where it raises the audible flag this fake exists to raise — and through the
                 // connection's own update loop, which reads no text on it and so leaves
                 // _spokenTurnId naming turn one.

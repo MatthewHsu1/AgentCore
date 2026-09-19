@@ -16,7 +16,7 @@ namespace AgentCore.Application.Ports;
 /// <para>
 /// D13 makes <see cref="IEvaluator"/> the moderation port and refuses a second one, so this
 /// interface builds an <see cref="IEvaluator"/> rather than wrapping it. It is a factory, and never
-/// a port that a turn calls. D13 also promises that replacing OpenAI with a self-hosted classifier
+/// a port that a turn conversations. D13 also promises that replacing OpenAI with a self-hosted classifier
 /// is a one-file change: that file is the adapter, and this is the seam it plugs into.
 /// </para>
 /// <para>
@@ -40,7 +40,7 @@ public interface IModerationAdapter : IVendorAdapter
     /// <returns>The evaluator. The host owns it for the life of the process.</returns>
     /// <remarks>
     /// This runs once, while the host starts. A missing credential therefore stops the host and never
-    /// a call, which is what item 9 of section 11 asks for. It opens no socket, so a host with no
+    /// a conversation, which is what item 9 of section 11 asks for. It opens no socket, so a host with no
     /// route to the vendor still starts.
     /// </remarks>
     ValueTask<IEvaluator> CreateAsync(

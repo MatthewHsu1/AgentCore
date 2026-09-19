@@ -23,7 +23,7 @@ internal sealed class GraphStateEntry : ChatProtocolExecutor
         List<ChatMessage> messages,
         IWorkflowContext context,
         bool? emitEvents,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(messages);
         ArgumentNullException.ThrowIfNull(context);

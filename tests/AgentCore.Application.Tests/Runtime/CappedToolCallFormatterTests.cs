@@ -47,15 +47,15 @@ public sealed class CappedToolCallFormatterTests
     }
 
     [Fact]
-    public void Create_TwoResultsShareOneCallId_RendersTheLastOneWithoutThrowing()
+    public void Create_TwoResultsShareOneConversationId_RendersTheLastOneWithoutThrowing()
     {
         var group = Group(
             CompactionGroupKind.ToolCall,
             [
                 new ChatMessage(ChatRole.Assistant,
-                    [new FunctionCallContent("call-1", "lookup", new Dictionary<string, object?>())]),
-                new ChatMessage(ChatRole.Tool, [new FunctionResultContent("call-1", "first")]),
-                new ChatMessage(ChatRole.Tool, [new FunctionResultContent("call-1", "last")]),
+                    [new FunctionCallContent("conversation-1", "lookup", new Dictionary<string, object?>())]),
+                new ChatMessage(ChatRole.Tool, [new FunctionResultContent("conversation-1", "first")]),
+                new ChatMessage(ChatRole.Tool, [new FunctionResultContent("conversation-1", "last")]),
             ]);
 
         var written = CappedToolCallFormatter.Create(50)(group);
@@ -75,8 +75,8 @@ public sealed class CappedToolCallFormatterTests
         CompactionGroupKind.ToolCall,
         [
             new ChatMessage(ChatRole.Assistant,
-                [new FunctionCallContent("call-1", tool, new Dictionary<string, object?>())]),
-            new ChatMessage(ChatRole.Tool, [new FunctionResultContent("call-1", result)]),
+                [new FunctionCallContent("conversation-1", tool, new Dictionary<string, object?>())]),
+            new ChatMessage(ChatRole.Tool, [new FunctionResultContent("conversation-1", result)]),
         ]);
 }
 #pragma warning restore MAAI001

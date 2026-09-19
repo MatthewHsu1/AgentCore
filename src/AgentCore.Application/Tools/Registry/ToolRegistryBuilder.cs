@@ -81,9 +81,9 @@ public static class ToolRegistryBuilder
         }
 
         // A source that asked for a deadline and quietly did not get one is the worst of both: the
-        // document says the call is bounded and nothing bounds it. Only an AIFunction has a call to
+        // document says the conversation is bounded and nothing bounds it. Only an AIFunction has a conversation to
         // put a deadline around, so a source that names one for anything else is wrong about its own
-        // tool, and says so at boot rather than on a live call.
+        // tool, and says so at boot rather than on a live conversation.
         return tool is AIFunction function
             ? new TimeLimitedTool(function, limit)
             : throw ToolSourceError.Fail(

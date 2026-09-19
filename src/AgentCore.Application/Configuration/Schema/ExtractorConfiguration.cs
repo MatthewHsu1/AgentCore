@@ -8,7 +8,7 @@ public enum ExtractorTrigger
 }
 
 /// <summary>
-/// A pointer to one entry of <c>providers.llm</c>, with the call settings that go with it.
+/// A pointer to one entry of <c>providers.llm</c>, with the conversation settings that go with it.
 /// </summary>
 public sealed record ModelReference
 {

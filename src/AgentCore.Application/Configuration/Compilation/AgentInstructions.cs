@@ -3,44 +3,65 @@ using AgentCore.Application.Configuration.Schema;
 namespace AgentCore.Application.Configuration.Compilation;
 
 /// <summary>
-/// Composes the instructions of one agent from the shared prefix and the stage delta.
+/// Composes the instructions of one agent from the framework's base, the shared prefix, and the
+/// stage delta.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Section 8.1 states one caching rule, and it is a cost rule only.
-/// <c>agents.defaults.instructions</c> is the stable cached prefix, and each stage appends a delta
-/// below it. Anything that changes per turn must sit below the prefix, or it defeats the cache for
-/// every later turn.
-/// </para>
-/// <para>
-/// OpenAI caches automatically with no marker, at a 1,024-token minimum prefix, and a cached prompt
-/// still counts in full against the rate limit. Breaking the prefix is therefore a billing bug and
-/// never a capacity one.
-/// </para>
-/// </remarks>
 public static class AgentInstructions
 {
-    /// <summary>The separator between the cached prefix and the stage delta.</summary>
+    /// <summary>The separator between the base, the cached prefix, and the stage delta.</summary>
     public const string Separator = "\n\n";
 
-    /// <summary>Puts the shared prefix above the delta of one agent.</summary>
+    /// <summary>
+    /// The posture every agent starts from.
+    /// </summary>
+    public static string Base { get; } =
+        "You are a helpful AI assistant that uses tools to complete tasks.\n"
+        + "\n"
+        + "## General guidelines\n"
+        + "\n"
+        + "- Think through the task before acting. Break complex work into clear steps.\n"
+        + "- Use the tools available to you to gather information, perform actions, and verify results.\n"
+        + "- Explain your reasoning and thought process as you work through tasks.\n"
+        + "- Explain what you learned and what you are going to do next between tool calls, so the user can follow along with your thought process.\n"
+        + "- Avoid making more than 4 tool calls in a row without explaining what you are doing.\n"
+        + "- If a tool call fails or returns unexpected results, adapt your approach rather than repeating the same conversation.\n"
+        + "- When you have completed the task, present a clear and concise summary of what you did and what you found.\n"
+        + "\n"
+        + "Resolve what you can from what you know and what you are given. Ask only for what you "
+        + "cannot resolve, and ask for one thing at a time.\n"
+        + "If the request needs something you cannot do, say so in one sentence and offer the "
+        + "nearest thing you can do.\n"
+        + "Never invent a fact, a value, or a source.\n"
+        + "Finish the task. Do not stop at the easy part.\n"
+        + "The instructions below take priority over these.";
+
+    /// <summary>Puts the base and the shared prefix above the delta of one agent.</summary>
     /// <param name="defaults">The <c>agents.defaults</c> section, or <see langword="null"/>.</param>
     /// <param name="agent">The agent whose delta goes below the prefix.</param>
-    /// <returns>The composed instructions, or <see langword="null"/> when neither part exists.</returns>
+    /// <returns>The composed instructions, or <see langword="null"/> when no part exists.</returns>
     public static string? Compose(AgentDefaults? defaults, AgentConfiguration agent)
     {
         ArgumentNullException.ThrowIfNull(agent);
 
-        var prefix = Trim(defaults?.Instructions);
-        var delta = Trim(agent.Instructions);
+        var parts = new List<string>(3);
 
-        if (prefix is null)
+        if (AgentHarness.Compose(defaults, agent).BaseInstructions)
         {
-            return delta;
+            parts.Add(Base);
         }
 
-        // The prefix always comes first. Nothing above it, and nothing per-turn inside it.
-        return delta is null ? prefix : prefix + Separator + delta;
+        // The prefix always comes before the delta. Nothing per-turn inside either.
+        if (Trim(defaults?.Instructions) is { } prefix)
+        {
+            parts.Add(prefix);
+        }
+
+        if (Trim(agent.Instructions) is { } delta)
+        {
+            parts.Add(delta);
+        }
+
+        return parts.Count == 0 ? null : string.Join(Separator, parts);
     }
 
     private static string? Trim(string? text)

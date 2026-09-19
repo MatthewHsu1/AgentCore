@@ -40,7 +40,7 @@ public abstract class DeclaredTool : AIFunction
 
     /// <summary>The <see cref="AIFunction"/> entry point. Delegates straight to <see cref="CallAsync"/>.</summary>
     /// <param name="arguments">The arguments the model filled.</param>
-    /// <param name="cancellationToken">Cancels the call.</param>
+    /// <param name="cancellationToken">Cancels the conversation.</param>
     /// <returns>Exactly what <see cref="CallAsync"/> returned.</returns>
     protected sealed override async ValueTask<object?> InvokeCoreAsync(
         AIFunctionArguments arguments,
@@ -53,7 +53,7 @@ public abstract class DeclaredTool : AIFunction
 
     /// <summary>Runs the tool.</summary>
     /// <param name="arguments">The arguments the model filled.</param>
-    /// <param name="cancellationToken">Cancels the call.</param>
+    /// <param name="cancellationToken">Cancels the conversation.</param>
     /// <returns>The result the model reads.</returns>
     protected abstract ValueTask<object?> CallAsync(AIFunctionArguments arguments, CancellationToken cancellationToken);
 

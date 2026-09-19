@@ -8,7 +8,7 @@ namespace AgentCore.Application.Tests.Runtime.Harness;
 
 /// <summary>
 /// <see cref="HarnessSessionState.Capture"/> and <see cref="HarnessSessionState.Wrap"/> — the two
-/// halves of moving MAF's per-provider state bag beside <c>CallSessionState</c>.
+/// halves of moving MAF's per-provider state bag beside <c>ConversationSessionState</c>.
 /// </summary>
 public sealed class HarnessSessionStateTests
 {

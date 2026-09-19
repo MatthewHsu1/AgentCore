@@ -9,9 +9,9 @@ internal static class GraphGuardGate
 {
     /// <summary>The reason a gate reports when the run carries no state.</summary>
     internal const string NoStateMessage =
-        "A guarded graph edge asked for the state of the running call, and the run carries none. "
-        + "Row 4 of the section 8.2 compile table reads the state of one call, and the graph-state "
-        + "wrapper files it from the turn before the run starts. Run the graph through a CallSession, "
+        "A guarded graph edge asked for the state of the running conversation, and the run carries none. "
+        + "Row 4 of the section 8.2 compile table reads the state of one conversation, and the graph-state "
+        + "wrapper files it from the turn before the run starts. Run the graph through a ConversationSession, "
         + "which files the turn on the run's session. This throws and does not answer false, because "
         + "a guarded edge that quietly became unconditional is the silent graph failure section 8.2 "
         + "refuses to ship.";

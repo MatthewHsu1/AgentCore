@@ -14,7 +14,7 @@ namespace AgentCore.Application.State;
 public static class ToolStateWriter
 {
     /// <summary>Fills every slot that reads the result of one tool.</summary>
-    /// <param name="state">The state of one call.</param>
+    /// <param name="state">The state of one conversation.</param>
     /// <param name="toolId">The id of the tool that just returned.</param>
     /// <param name="result">The tool result, as a node tree.</param>
     /// <returns>The number of slots this writer filled.</returns>

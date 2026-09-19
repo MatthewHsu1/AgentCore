@@ -1,4 +1,4 @@
-using AgentCore.Application.Calls.Memory;
+using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Transcript;
 using Microsoft.Extensions.AI;
 using Xunit;
@@ -16,7 +16,7 @@ public sealed class AgentCoreChatHistoryProviderTruncateTests
     public async Task TruncateLastReply_LastAssistantMessage_RewritesOnlyThatMessage()
     {
         // Arrange
-        var (provider, store, session) = await NewCall();
+        var (provider, store, session) = await NewConversation();
         AppendTurn(provider, session, turnIndex: 0, "hello", "hi there");
         AppendTurn(provider, session, turnIndex: 1, "order 41?", "it ships Friday from the depot");
 
@@ -37,7 +37,7 @@ public sealed class AgentCoreChatHistoryProviderTruncateTests
     public async Task ProvideChatHistory_AfterTruncate_ReturnsHeardTextNotProducedText()
     {
         // Arrange
-        var (provider, _, session) = await NewCall();
+        var (provider, _, session) = await NewConversation();
         AppendTurn(provider, session, turnIndex: 0, "order 41?", "it ships Friday from the depot");
 
         // Act
@@ -57,11 +57,11 @@ public sealed class AgentCoreChatHistoryProviderTruncateTests
     public async Task TruncateLastReply_WhileTheAppendIsStillWriting_ReachesTheStoreAfterIt()
     {
         // Arrange
-        var store = new BlockingCallStore();
-        await store.CreateAsync(CallId, TestContext.Current.CancellationToken);
+        var store = new BlockingConversationStore();
+        await store.CreateAsync(ConversationId, TestContext.Current.CancellationToken);
         var provider = new AgentCoreChatHistoryProvider(store);
         var session = new StubSession();
-        provider.BeginCall(session, CallId, []);
+        provider.BeginConversation(session, ConversationId, []);
         AppendTurn(provider, session, turnIndex: 0, "hello", "hi there");
         await provider.DrainAsync(session);
         store.BlockNextAppend();
@@ -77,19 +77,19 @@ public sealed class AgentCoreChatHistoryProviderTruncateTests
         Assert.True(cut);
         Assert.Equal(
             ["hello", "hi there", "order 41?", "it ships"],
-            (await store.ReadAsync(CallId, TestContext.Current.CancellationToken)).Select(row => row.Content.Text));
+            (await store.ReadAsync(ConversationId, TestContext.Current.CancellationToken)).Select(row => row.Content.Text));
     }
 
     /// <summary>
     /// The held prompt of item 6a: the vendor is still speaking turn 0 when turn 1 begins, so the
-    /// reply the caller was hearing belongs to the turn before the one now open. CallSession decides
+    /// reply the caller was hearing belongs to the turn before the one now open. ConversationSession decides
     /// that a barge-in reaches it; the provider must not refuse because the turn moved on.
     /// </summary>
     [Fact]
     public async Task TruncateLastReply_AfterTheNextTurnOpened_CutsTheReplyTheCallerWasHearing()
     {
         // Arrange
-        var (provider, _, session) = await NewCall();
+        var (provider, _, session) = await NewConversation();
         AppendTurn(provider, session, turnIndex: 0, "hello", "hi there caller");
         provider.BeginTurn(session, turnIndex: 1);
 
@@ -112,17 +112,17 @@ public sealed class AgentCoreChatHistoryProviderTruncateTests
     public async Task TruncateLastReply_TurnWithProseBesideAToolCall_DropsEveryWordButTheHeardOnes()
     {
         // Arrange
-        var (provider, store, session) = await NewCall();
+        var (provider, store, session) = await NewConversation();
         provider.BeginTurn(session, turnIndex: 0);
         ChatMessage announced = new(
             ChatRole.Assistant,
-            [new TextContent("Let me check that for you"), new FunctionCallContent("call-1", "lookup")]);
+            [new TextContent("Let me check that for you"), new FunctionCallContent("conversation-1", "lookup")]);
         provider.AppendTurn(
             session,
             [
                 new ChatMessage(ChatRole.User, "how much?"),
                 announced,
-                new ChatMessage(ChatRole.Tool, [new FunctionResultContent("call-1", "50")]),
+                new ChatMessage(ChatRole.Tool, [new FunctionResultContent("conversation-1", "50")]),
                 new ChatMessage(ChatRole.Assistant, "the price is fifty"),
             ]);
 
@@ -146,7 +146,7 @@ public sealed class AgentCoreChatHistoryProviderTruncateTests
     public async Task TruncateLastReply_BeforeAnyReplyExists_NoOps()
     {
         // Arrange
-        var (provider, store, session) = await NewCall();
+        var (provider, store, session) = await NewConversation();
         provider.BeginTurn(session, turnIndex: 0);
 
         // Act
@@ -162,11 +162,11 @@ public sealed class AgentCoreChatHistoryProviderTruncateTests
     public async Task InMemoryStore_AfterTurnAndBargeIn_HoldsTheHeardTextInOrder()
     {
         // Arrange
-        var store = new InMemoryCallStore();
-        await store.CreateAsync(CallId, TestContext.Current.CancellationToken);
+        var store = new InMemoryConversationStore();
+        await store.CreateAsync(ConversationId, TestContext.Current.CancellationToken);
         var provider = new AgentCoreChatHistoryProvider(store);
         var session = new StubSession();
-        provider.BeginCall(session, CallId, []);
+        provider.BeginConversation(session, ConversationId, []);
         AppendTurn(provider, session, turnIndex: 0, "order 41?", "it ships Friday from the depot");
 
         // Act
@@ -176,6 +176,6 @@ public sealed class AgentCoreChatHistoryProviderTruncateTests
         await provider.DrainAsync(session);
         Assert.Equal(
             ["order 41?", "it ships"],
-            (await store.ReadAsync(CallId, TestContext.Current.CancellationToken)).Select(row => row.Content.Text));
+            (await store.ReadAsync(ConversationId, TestContext.Current.CancellationToken)).Select(row => row.Content.Text));
     }
 }

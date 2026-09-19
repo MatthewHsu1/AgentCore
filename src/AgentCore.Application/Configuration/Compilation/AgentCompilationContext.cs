@@ -2,6 +2,7 @@ using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Secrets;
 using AgentCore.Application.Skills;
 using AgentCore.Application.Tools.Registry;
 using Microsoft.Extensions.Logging;
@@ -34,7 +35,7 @@ public sealed class AgentCompilationContext
     public ToolRegistry? Tools { get; init; }
 
     /// <summary>
-    /// Gets or sets the evaluator a guarded graph edge calls.
+    /// Gets or sets the evaluator a guarded graph edge conversations.
     /// </summary>
     public IGuardEvaluator? Guards { get; init; }
 
@@ -46,7 +47,7 @@ public sealed class AgentCompilationContext
     /// <summary>
     /// Gets or sets the backing store of store 1, or <see langword="null"/> for memory.
     /// </summary>
-    public ICallStore? CallStore { get; init; }
+    public IConversationStore? ConversationStore { get; init; }
 
     /// <summary>
     /// Gets or sets the store every agent's <c>knowledge:</c> block reads through.
@@ -70,8 +71,20 @@ public sealed class AgentCompilationContext
     public ILoggerFactory? Loggers { get; init; }
 
     /// <summary>
+    /// Gets or sets the clock a <c>clock:</c> agent reads the date from, or <see langword="null"/>
+    /// for <see cref="TimeProvider.System"/>.
+    /// </summary>
+    public TimeProvider? Clock { get; init; }
+
+    /// <summary>
     /// Gets or sets the root a <c>memory:</c> block's files are kept under, or <see langword="null"/>
     /// when the host bound no workspace root.
     /// </summary>
     public string? WorkspaceRoot { get; init; }
+
+    /// <summary>
+    /// Gets or sets the set a <c>shell:</c> block's <c>env:</c> resolves its <c>${secret:name}</c>
+    /// references against, or <see langword="null"/> to treat every such reference as unresolved.
+    /// </summary>
+    public ResolvedSecrets? Secrets { get; init; }
 }

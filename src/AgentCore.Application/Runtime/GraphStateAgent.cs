@@ -47,7 +47,7 @@ internal sealed class GraphStateAgent : DelegatingAIAgent
     {
         ArgumentNullException.ThrowIfNull(messages);
 
-        var invocation = TurnRegistry.For(session) ?? FromOptions(options);
+        var invocation = TurnRegistry.For(session) ?? TurnInvocation.From(options);
         var snapshot = invocation?.State?.Snapshot();
         
         if (snapshot is null)
@@ -59,10 +59,4 @@ internal sealed class GraphStateAgent : DelegatingAIAgent
 
         return [GraphStateCarrier.Build(snapshot), .. messages];
     }
-
-    private static TurnInvocation? FromOptions(AgentRunOptions? options)
-        => options is ChatClientAgentRunOptions run
-            && run.ChatOptions?.AdditionalProperties?.TryGetValue(TurnInvocation.ArgumentsKey, out var filed) == true
-            ? filed as TurnInvocation
-            : null;
 }

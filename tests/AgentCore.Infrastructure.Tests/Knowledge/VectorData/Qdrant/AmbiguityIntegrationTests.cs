@@ -23,12 +23,12 @@ namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant;
 /// are internal to <c>AgentCore.Application</c>, and this project carries no grant to reach them. Every
 /// row here is instead driven through the same seam a production host uses: a real YAML document
 /// compiled by <see cref="ConfigurationCompiler"/> with a real <see cref="QdrantKnowledgeStore"/> handed
-/// in as <see cref="AgentCompilationContext.Knowledge"/>, and a real <see cref="CallSession"/> turn. The
+/// in as <see cref="AgentCompilationContext.Knowledge"/>, and a real <see cref="ConversationSession"/> turn. The
 /// turn's own "reply" model is a fake that calls the compiled agent's own <c>Search</c> tool with the
 /// row's question, the way a model that needs the cards would; the framework's own tool-calling loop
 /// then runs the real search with the running turn. Reading the tool's answer back off the transcript
 /// is what keeps every row on the production path: the loop's own flow is only entered around
-/// <c>CallSession</c>'s call into the reply model.
+/// <c>ConversationSession</c>'s call into the reply model.
 /// </para>
 /// <para>
 /// The store fuses a plain dense leg with a required-term leg by RRF (K49's amendment): a card the
@@ -72,7 +72,7 @@ public sealed class AmbiguityCorpusFixture : IAsyncLifetime
 
         Client = QdrantServer.CreateClient();
 
-        // The 30-card synthetic corpus, unmodified, plus the multi-machine card the brief calls for.
+        // The 30-card synthetic corpus, unmodified, plus the multi-machine card the brief conversations for.
         // Composing with KbShapedCorpus rather than inventing a second one: A4's own facet-read tests
         // already proved this corpus's payload shape works, and a wrong facet path is this design's
         // own central failure mode (section 12), so reusing the shape that is already proven is the
@@ -91,7 +91,7 @@ public sealed class AmbiguityCorpusFixture : IAsyncLifetime
         };
         await Client.UpsertAsync(Name, added, cancellationToken: TestContext.Current.CancellationToken);
 
-        // One call sets facets.audience on every point already in the collection -- the 30 base cards
+        // One conversation sets facets.audience on every point already in the collection -- the 30 base cards
         // and the two just added -- rather than 32 individual patches. The all-points overload sends
         // no points_selector at all, which this server version refuses ("points_selector is
         // expected"); an empty filter is what Qdrant treats as "every point", and this client always
@@ -198,7 +198,7 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
         extractor:
           model: { ref: fill }
         providers:
-          call:   { kind: telnyx-relay }
+          conversation:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
@@ -232,7 +232,7 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
         extractor:
           model: { ref: fill }
         providers:
-          call:   { kind: telnyx-relay }
+          conversation:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
@@ -382,7 +382,7 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
     }
 
     /// <summary>
-    /// A probe spread publishes no sources. <c>TurnSources</c> is internal to <c>CallSession</c> and
+    /// A probe spread publishes no sources. <c>TurnSources</c> is internal to <c>ConversationSession</c> and
     /// unreachable without a grant this project does not have, so this reads the same fact at its
     /// outer edge instead: nothing card-shaped reached the model at all, only the notice -- which is
     /// exactly what "published no sources" requires, since only a card-shaped result is ever cited.
@@ -504,10 +504,10 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
                 Loggers = loggers,
             })["main"];
 
-        var extractor = CallSessionFactory.CreateExtractor(compiled, chatClients);
-        var session = new CallSessionFactory(
+        var extractor = ConversationSessionFactory.CreateExtractor(compiled, chatClients);
+        var session = new ConversationSessionFactory(
             compiled, new GuardEvaluator(compiled.Configuration.Guards), extractor)
-            .Create($"call-{Guid.NewGuid():N}");
+            .Create($"conversation-{Guid.NewGuid():N}");
 
         await session.RunTurnAsync(callerQuestion, TestContext.Current.CancellationToken);
 
@@ -545,7 +545,7 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
     /// The caller generates <paramref name="collection"/> and opens its own <c>try</c> **before**
     /// calling this -- never the reverse. Collection creation, every index, and the upsert can each
     /// throw against a live, sometimes-contended server, and if that happened inside an un-tried
-    /// helper the collection this call already created on the server would be orphaned with nothing
+    /// helper the collection this conversation already created on the server would be orphaned with nothing
     /// left to drop it. Creation, indexing and upsert all sit inside one <c>try</c>, with one
     /// unconditional <c>DeleteCollectionAsync</c> in the caller's own <c>finally</c>.
     /// </remarks>
@@ -609,8 +609,8 @@ public sealed class AmbiguityIntegrationTests : IClassFixture<AmbiguityCorpusFix
     /// Stands in for the turn's reply model. Rather than answer, its first round calls the compiled
     /// agent's own <c>Search</c> tool with the row's question, the way a model that needs the cards
     /// would; the framework's own tool-calling loop then invokes the real search with the running
-    /// turn filed in its arguments, from inside the same flow scope <see cref="CallSession"/> opened
-    /// around this call. Its second round reads the tool's own answer back off the transcript and
+    /// turn filed in its arguments, from inside the same flow scope <see cref="ConversationSession"/> opened
+    /// around this conversation. Its second round reads the tool's own answer back off the transcript and
     /// keeps it, so every row asserts on what the production search actually returned.
     /// </summary>
     private sealed class SearchCapturingChatClient : IChatClient

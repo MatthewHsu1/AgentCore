@@ -120,70 +120,73 @@ internal sealed class GuardRuleFacts
 
     private void RecordComparison(string name, List<JsonNode?> operands)
     {
-        var isComparison = GuardOperators.IsNumericComparison(name)
-                           || string.Equals(name, "===", StringComparison.Ordinal)
-                           || string.Equals(name, "!==", StringComparison.Ordinal)
-                           || string.Equals(name, "in", StringComparison.Ordinal);
-
-        if (!isComparison)
+        if (!IsComparison(name))
         {
             return;
         }
 
+        var (slots, literals) = SplitOperands(operands);
+        var numeric = GuardOperators.IsNumericComparison(name);
+
+        foreach (var slot in slots)
+        {
+            if (numeric)
+            {
+                NumericComparisons.Add(new KeyValuePair<string, string>(name, slot));
+            }
+
+            if (literals.Count > 0)
+            {
+                Bucket(slot).AddRange(literals);
+            }
+        }
+    }
+
+    private static bool IsComparison(string name)
+        => GuardOperators.IsNumericComparison(name)
+           || string.Equals(name, "===", StringComparison.Ordinal)
+           || string.Equals(name, "!==", StringComparison.Ordinal)
+           || string.Equals(name, "in", StringComparison.Ordinal);
+
+    /// <summary>Sorts the operands of one comparison into the slots it reads and the literals it compares them with.</summary>
+    private static (List<string> Slots, List<JsonNode> Literals) SplitOperands(List<JsonNode?> operands)
+    {
         var slots = new List<string>();
         var literals = new List<JsonNode>();
 
         foreach (var operand in operands)
         {
-            var slot = TryReadVariable(operand);
-            if (slot is not null)
+            if (TryReadVariable(operand) is { } slot)
             {
                 slots.Add(slot);
-                continue;
             }
-
-            switch (operand)
+            else
             {
-                case JsonValue value:
-                    literals.Add(value);
-                    break;
-
-                case JsonArray members:
-                    foreach (var member in members)
-                    {
-                        if (member is JsonValue memberValue)
-                        {
-                            literals.Add(memberValue);
-                        }
-                    }
-
-                    break;
-
-                default:
-                    break;
+                literals.AddRange(ScalarsOf(operand));
             }
         }
 
-        foreach (var slot in slots)
+        return (slots, literals);
+    }
+
+    /// <summary>Reads the scalars an operand holds: the value itself, or the scalar members of a list.</summary>
+    private static IEnumerable<JsonValue> ScalarsOf(JsonNode? operand)
+        => operand switch
         {
-            if (GuardOperators.IsNumericComparison(name))
-            {
-                NumericComparisons.Add(new KeyValuePair<string, string>(name, slot));
-            }
+            JsonValue value => [value],
+            JsonArray members => members.OfType<JsonValue>(),
+            _ => [],
+        };
 
-            if (literals.Count == 0)
-            {
-                continue;
-            }
-
-            if (!Literals.TryGetValue(slot, out var bucket))
-            {
-                bucket = [];
-                Literals[slot] = bucket;
-            }
-
-            bucket.AddRange(literals);
+    private List<JsonNode> Bucket(string slot)
+    {
+        if (!Literals.TryGetValue(slot, out var bucket))
+        {
+            bucket = [];
+            Literals[slot] = bucket;
         }
+
+        return bucket;
     }
 
     private void AddVariable(string? name)

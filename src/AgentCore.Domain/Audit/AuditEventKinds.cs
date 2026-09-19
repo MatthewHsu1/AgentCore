@@ -11,11 +11,11 @@ public static class AuditEventKinds
     /// <exception cref="ArgumentOutOfRangeException">The value is not a member of the closed set.</exception>
     public static string ToToken(AuditEventKind kind) => kind switch
     {
-        AuditEventKind.CallStarted => "call.started",
+        AuditEventKind.ConversationStarted => "conversation.started",
         AuditEventKind.TurnCompleted => "turn.completed",
         AuditEventKind.ReplyInterrupted => "reply.interrupted",
         AuditEventKind.ToolFailed => "tool.failed",
-        AuditEventKind.CallEnded => "call.ended",
+        AuditEventKind.ConversationEnded => "conversation.ended",
         AuditEventKind.PromptFlagged => "prompt.flagged",
         AuditEventKind.TurnSuperseded => "turn.superseded",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "The audit event vocabulary is closed, and this value is not in it."),
@@ -29,11 +29,11 @@ public static class AuditEventKinds
     {
         switch (token)
         {
-            case "call.started": kind = AuditEventKind.CallStarted; return true;
+            case "conversation.started": kind = AuditEventKind.ConversationStarted; return true;
             case "turn.completed": kind = AuditEventKind.TurnCompleted; return true;
             case "reply.interrupted": kind = AuditEventKind.ReplyInterrupted; return true;
             case "tool.failed": kind = AuditEventKind.ToolFailed; return true;
-            case "call.ended": kind = AuditEventKind.CallEnded; return true;
+            case "conversation.ended": kind = AuditEventKind.ConversationEnded; return true;
             case "prompt.flagged": kind = AuditEventKind.PromptFlagged; return true;
             case "turn.superseded": kind = AuditEventKind.TurnSuperseded; return true;
             default: kind = default; return false;

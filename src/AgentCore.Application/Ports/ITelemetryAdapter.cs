@@ -35,7 +35,7 @@ public interface ITelemetryAdapter : IVendorAdapter
     /// <returns>The running session. The host owns it for the life of the process.</returns>
     /// <remarks>
     /// This runs once, while the host starts. A missing credential therefore stops the host and never
-    /// a call, which is what item 9 of section 11 asks for. It opens no socket: an exporter connects
+    /// a conversation, which is what item 9 of section 11 asks for. It opens no socket: an exporter connects
     /// when it first has something to send, so a host with no route to the collector still starts.
     /// </remarks>
     ValueTask<ITelemetrySession> StartAsync(

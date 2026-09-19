@@ -6,7 +6,7 @@ namespace AgentCore.Application.Runtime.Harness;
 
 /// <summary>
 /// The framework's pending approval queue, read off a session's state bag. The queue is a JSON
-/// array of <c>{toolCall: {name, arguments, callId}, requiresConfirmation, requestId}</c> under
+/// array of <c>{toolCall: {name, arguments, conversationId}, requiresConfirmation, requestId}</c> under
 /// <see cref="PendingStateKey"/> — a MAF-internal shape pinned by probe
 /// <c>docs/probes/harness-agentic/approval-roundtrip/</c>, not a contract. Every read here is
 /// lenient: an entry that lost its shape is skipped, never thrown, because the turn must end
@@ -37,16 +37,16 @@ internal static class PendingApprovalQueue
             if (entry.ValueKind != JsonValueKind.Object
                 || !entry.TryGetProperty("requestId", out var id)
                 || id.ValueKind != JsonValueKind.String
-                || !entry.TryGetProperty("toolCall", out var call)
-                || call.ValueKind != JsonValueKind.Object
-                || !call.TryGetProperty("name", out var name)
+                || !entry.TryGetProperty("toolCall", out var conversation)
+                || conversation.ValueKind != JsonValueKind.Object
+                || !conversation.TryGetProperty("name", out var name)
                 || name.ValueKind != JsonValueKind.String)
             {
                 continue;
             }
 
             using var empty = JsonDocument.Parse("{}");
-            var arguments = call.TryGetProperty("arguments", out var args) && args.ValueKind == JsonValueKind.Object
+            var arguments = conversation.TryGetProperty("arguments", out var args) && args.ValueKind == JsonValueKind.Object
                 ? args.Clone()
                 : empty.RootElement.Clone();
 
@@ -77,18 +77,18 @@ internal static class PendingApprovalQueue
             if (entry.ValueKind != JsonValueKind.Object
                 || !entry.TryGetProperty("requestId", out var id)
                 || id.GetString() != requestId
-                || !entry.TryGetProperty("toolCall", out var call)
-                || call.ValueKind != JsonValueKind.Object
-                || !call.TryGetProperty("name", out var name)
+                || !entry.TryGetProperty("toolCall", out var conversation)
+                || conversation.ValueKind != JsonValueKind.Object
+                || !conversation.TryGetProperty("name", out var name)
                 || name.ValueKind != JsonValueKind.String
-                || !call.TryGetProperty("callId", out var callId)
-                || callId.ValueKind != JsonValueKind.String)
+                || !conversation.TryGetProperty("callId", out var conversationId)
+                || conversationId.ValueKind != JsonValueKind.String)
             {
                 continue;
             }
 
             Dictionary<string, object?> arguments = new(StringComparer.Ordinal);
-            if (call.TryGetProperty("arguments", out var args) && args.ValueKind == JsonValueKind.Object)
+            if (conversation.TryGetProperty("arguments", out var args) && args.ValueKind == JsonValueKind.Object)
             {
                 foreach (var argument in args.EnumerateObject())
                 {
@@ -96,7 +96,7 @@ internal static class PendingApprovalQueue
                 }
             }
 
-            var toolCall = new FunctionCallContent(callId.GetString()!, name.GetString()!, arguments);
+            var toolCall = new FunctionCallContent(conversationId.GetString()!, name.GetString()!, arguments);
             return new ChatMessage(ChatRole.User, [new ToolApprovalResponseContent(requestId, approved, toolCall)]);
         }
 

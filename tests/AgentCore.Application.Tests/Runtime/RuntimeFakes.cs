@@ -8,7 +8,7 @@ using Microsoft.Extensions.AI;
 namespace AgentCore.Application.Tests.Runtime;
 
 /// <summary>
-/// A clock a test owns. The turn loop reads <c>callDurationSeconds</c> from a
+/// A clock a test owns. The turn loop reads <c>conversationDurationSeconds</c> from a
 /// <see cref="TimeProvider"/>, so no test needs a stopwatch.
 /// </summary>
 internal sealed class TestTimeProvider : TimeProvider
@@ -199,7 +199,7 @@ internal sealed class LifecycleChatClient : IChatClient
 /// A model that calls the first tool it is offered on every request, and never answers with text.
 /// </summary>
 /// <remarks>
-/// <see cref="ToolCallingChatClient"/> calls one tool once, which keeps a healthy run finite. Section
+/// <see cref="ToolCallingChatClient"/> conversations one tool once, which keeps a healthy run finite. Section
 /// 8.7 needs the other case: a tool that keeps failing. This client never stops calling, so the run
 /// spends the error budget of <c>MaximumConsecutiveErrorsPerRequest</c> and the 4th failure throws.
 /// </remarks>
@@ -234,7 +234,7 @@ internal sealed class LoopingToolCallingChatClient : IChatClient
 
         yield return new ChatResponseUpdate(
             ChatRole.Assistant,
-            [new FunctionCallContent($"call_{index}", tool.Name, new Dictionary<string, object?>(StringComparer.Ordinal))])
+            [new FunctionCallContent($"conversation_{index}", tool.Name, new Dictionary<string, object?>(StringComparer.Ordinal))])
         {
             ResponseId = responseId,
             MessageId = responseId,
@@ -402,7 +402,7 @@ internal sealed class NamedToolCallingChatClient : IChatClient
     /// <param name="reply">What it says once the tool round is over.</param>
     /// <param name="callsPerTurn">
     /// How many calls to that one name it emits in a single assistant message. Two reproduces the
-    /// parallel-call case, where the name alone no longer identifies the call.
+    /// parallel-conversation case, where the name alone no longer identifies the conversation.
     /// </param>
     public NamedToolCallingChatClient(string toolName, string reply, int callsPerTurn = 1)
     {
@@ -438,21 +438,21 @@ internal sealed class NamedToolCallingChatClient : IChatClient
         }
 
         var round = Interlocked.Increment(ref _calls);
-        List<AIContent> calls = [];
+        List<AIContent> conversations = [];
         for (var index = 0; index < _callsPerTurn; index++)
         {
             // Every call of one message carries its own id, exactly as a vendor emits them. This is
             // the only thing that tells two calls to the same tool apart.
-            var callId = $"call_{round}_{index}";
+            var conversationId = $"conversation_{round}_{index}";
             lock (CallIds)
             {
-                CallIds.Add(callId);
+                CallIds.Add(conversationId);
             }
 
-            calls.Add(new FunctionCallContent(callId, _toolName, new Dictionary<string, object?>(StringComparer.Ordinal)));
+            conversations.Add(new FunctionCallContent(conversationId, _toolName, new Dictionary<string, object?>(StringComparer.Ordinal)));
         }
 
-        yield return new ChatResponseUpdate(ChatRole.Assistant, calls)
+        yield return new ChatResponseUpdate(ChatRole.Assistant, conversations)
         {
             ResponseId = responseId,
             MessageId = responseId,
@@ -655,7 +655,7 @@ internal sealed class ScriptedToolCallingChatClient : IChatClient
         var responseId = Guid.NewGuid().ToString("N");
 
         // Past the end of the script, or offered no tool at all on the cap's last request, it
-        // answers in words. Answering with a call it cannot make would hang the loop.
+        // answers in words. Answering with a conversation it cannot make would hang the loop.
         if (index >= _script.Length || options?.Tools is not { Count: > 0 })
         {
             yield return new ChatResponseUpdate(ChatRole.Assistant, FinalText ?? string.Empty)
@@ -678,7 +678,7 @@ internal sealed class ScriptedToolCallingChatClient : IChatClient
 
         yield return new ChatResponseUpdate(
             ChatRole.Assistant,
-            [new FunctionCallContent($"call_{index}", tool, callArguments)])
+            [new FunctionCallContent($"conversation_{index}", tool, callArguments)])
         {
             ResponseId = responseId,
             MessageId = responseId,

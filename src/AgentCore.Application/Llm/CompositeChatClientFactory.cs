@@ -99,7 +99,7 @@ public sealed class CompositeChatClientFactory : IChatClientFactory, IDisposable
             return _vendor[entry.As];
         }
 
-        // The vendor client stays one for each 'as' name. Only the call settings differ, so the
+        // The vendor client stays one for each 'as' name. Only the conversation settings differ, so the
         // wrapper sits above the shared client rather than beside it. ConfigureOptions clones the
         // caller's ChatOptions (or starts a new one) and never mutates them, which is the same
         // semantic a hand-rolled wrapper used to reimplement.
@@ -118,9 +118,16 @@ public sealed class CompositeChatClientFactory : IChatClientFactory, IDisposable
         ArgumentNullException.ThrowIfNull(marker);
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) == 1, this);
 
-        var entry = model is null
-            ? _default
-            : _entries.TryGetValue(model.Ref, out var named) ? named : null;
+        LlmProviderConfiguration? entry;
+        if (model is null)
+        {
+            entry = _default;
+        }
+        else
+        {
+            _entries.TryGetValue(model.Ref, out entry);
+        }
+
         if (entry is null || !_adapters.TryGetValue(entry.As, out var adapter))
         {
             return null;

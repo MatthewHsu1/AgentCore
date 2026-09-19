@@ -2,7 +2,7 @@ using AgentCore.TestSupport;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
-using AgentCore.AspNetCore.Call;
+using AgentCore.AspNetCore.Conversation;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
@@ -28,6 +28,12 @@ namespace AgentCore.AspNetCore.Tests.Fakes;
 /// </remarks>
 internal sealed class TelnyxRelayHost : IAsyncDisposable
 {
+    /// <summary>The vendor-neutral conversation route, with the document's one entry filled in.</summary>
+    public const string MainConversation = "/v1/main/call";
+
+    /// <summary>The relay's own route, with the document's one entry filled in.</summary>
+    public const string MainRelay = "/v1/main/telnyx/relay";
+
     private readonly WebApplication _app;
     private readonly Uri _socketAddress;
     private readonly HttpClient _client;
@@ -42,7 +48,7 @@ internal sealed class TelnyxRelayHost : IAsyncDisposable
     }
 
     /// <summary>Gets the sessions the host resolved, so a test reads the live ones.</summary>
-    public ICallSessions Sessions => _app.Services.GetRequiredService<EntryRegistry>().ForSessions("main");
+    public IConversationSessions Sessions => _app.Services.GetRequiredService<EntryRegistry>().ForSessions("main");
 
     /// <summary>Gets the <c>ws://</c> address of the relay route.</summary>
     /// <remarks>
@@ -81,30 +87,30 @@ internal sealed class TelnyxRelayHost : IAsyncDisposable
         Action<AgentCoreOptions>? configure = null,
         Action<ILoggingBuilder>? logging = null,
         Action<TelnyxRelayOptions>? relay = null)
-        => StartCoreAsync(yaml, reply, configure, logging, relay, useWebSockets: true, useCallSeam: false);
+        => StartCoreAsync(yaml, reply, configure, logging, relay, useWebSockets: true, useConversationSeam: false);
 
     /// <summary>Starts one host that maps its route through <c>app.MapCall()</c> rather than the vendor extension.</summary>
-    /// <param name="yaml">The document, as YAML. It must name <c>providers.call</c> and <c>providers.speech</c>.</param>
+    /// <param name="yaml">The document, as YAML. It must name <c>providers.conversation</c> and <c>providers.speech</c>.</param>
     /// <param name="reply">The model behind every agent.</param>
     /// <param name="configure">
-    /// Anything else the test binds on the options. A test using this overload calls
-    /// <c>options.UseCall(new TelnyxRelayCallAdapter())</c> here, because nothing else registers the
+    /// Anything else the test binds on the options. A test using this overload conversations
+    /// <c>options.UseConversation(new TelnyxRelayConversationAdapter())</c> here, because nothing else registers the
     /// transport the seam is meant to pick.
     /// </param>
     /// <param name="logging">Anything a test adds to the logging pipeline.</param>
-    /// <returns>The started host, answering on <c>CallEndpointRouteBuilderExtensions.DefaultPattern</c>.</returns>
+    /// <returns>The started host, answering on <see cref="MainConversation"/>.</returns>
     /// <remarks>
     /// <see cref="StartAsync"/> maps the relay through the internal <c>MapTelnyxRelay</c> and so
     /// bypasses the seam entirely, which is right for the several dozen frame-level tests that use
     /// it and wrong for proving that the shipped vendor is reachable from the vendor-neutral route.
     /// This overload is the one that joins the two.
     /// </remarks>
-    public static Task<TelnyxRelayHost> StartThroughCallSeamAsync(
+    public static Task<TelnyxRelayHost> StartThroughConversationSeamAsync(
         string yaml,
         IChatClient reply,
         Action<AgentCoreOptions>? configure = null,
         Action<ILoggingBuilder>? logging = null)
-        => StartCoreAsync(yaml, reply, configure, logging, relay: null, useWebSockets: true, useCallSeam: true);
+        => StartCoreAsync(yaml, reply, configure, logging, relay: null, useWebSockets: true, useConversationSeam: true);
 
     /// <summary>Starts one host the same way <see cref="StartAsync"/> does, but never calls <c>app.UseWebSockets()</c>.</summary>
     /// <param name="yaml">The document, as YAML.</param>
@@ -121,7 +127,7 @@ internal sealed class TelnyxRelayHost : IAsyncDisposable
         IChatClient reply,
         Action<AgentCoreOptions>? configure = null,
         Action<ILoggingBuilder>? logging = null)
-        => StartCoreAsync(yaml, reply, configure, logging, relay: null, useWebSockets: false, useCallSeam: false);
+        => StartCoreAsync(yaml, reply, configure, logging, relay: null, useWebSockets: false, useConversationSeam: false);
 
     private static async Task<TelnyxRelayHost> StartCoreAsync(
         string yaml,
@@ -130,7 +136,7 @@ internal sealed class TelnyxRelayHost : IAsyncDisposable
         Action<ILoggingBuilder>? logging,
         Action<TelnyxRelayOptions>? relay,
         bool useWebSockets,
-        bool useCallSeam)
+        bool useConversationSeam)
     {
         var builder = WebApplication.CreateSlimBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
@@ -163,19 +169,19 @@ internal sealed class TelnyxRelayHost : IAsyncDisposable
         }
 
         string route;
-        if (useCallSeam)
+        if (useConversationSeam)
         {
-            // The vendor-neutral seam picks the transport out of providers.call and the adapter the
+            // The vendor-neutral seam picks the transport out of providers.conversation and the adapter the
             // test registered. Nothing here names a route or a vendor.
-            route = CallEndpointRouteBuilderExtensions.DefaultPattern;
-            app.MapCall("main");
+            route = MainConversation;
+            app.MapCall();
         }
         else
         {
-            route = TelnyxRelayEndpointRouteBuilderExtensions.DefaultPattern;
+            route = MainRelay;
             var relayOptions = new TelnyxRelayOptions();
             relay?.Invoke(relayOptions);
-            app.MapTelnyxRelay(route, relayOptions, "main");
+            app.MapTelnyxRelay(TelnyxRelayEndpointRouteBuilderExtensions.DefaultPattern, relayOptions);
         }
 
         await app.StartAsync();
@@ -206,21 +212,21 @@ internal sealed class TelnyxRelayHost : IAsyncDisposable
     public Task<HttpResponseMessage> GetAsync(string pattern)
         => _client.GetAsync(pattern, TestContext.Current.CancellationToken);
 
-    /// <summary>Reads the session of one call, or null when the store dropped it.</summary>
-    /// <param name="callId">The call id, which is the <c>callSessionId</c> of the setup frame.</param>
+    /// <summary>Reads the session of one conversation, or null when the store dropped it.</summary>
+    /// <param name="conversationId">The conversation id, which is the <c>conversationSessionId</c> of the setup frame.</param>
     /// <returns>The session, or null.</returns>
-    public async Task<CallSession?> FindSessionAsync(string callId)
-        => await Sessions.TryGetAsync(callId, TestContext.Current.CancellationToken);
+    public async Task<ConversationSession?> FindSessionAsync(string conversationId)
+        => await Sessions.TryGetAsync(conversationId, TestContext.Current.CancellationToken);
 
-    /// <summary>Waits until the store no longer holds one call.</summary>
-    /// <param name="callId">The call id.</param>
+    /// <summary>Waits until the store no longer holds one conversation.</summary>
+    /// <param name="conversationId">The conversation id.</param>
     /// <returns>A task that completes when the session is gone.</returns>
     /// <exception cref="TimeoutException">The session was still there after two seconds.</exception>
-    public async Task WaitForCallEndAsync(string callId)
+    public async Task WaitForConversationEndAsync(string conversationId)
     {
         for (var attempt = 0; attempt < 200; attempt++)
         {
-            if (await FindSessionAsync(callId) is null)
+            if (await FindSessionAsync(conversationId) is null)
             {
                 return;
             }
@@ -228,11 +234,11 @@ internal sealed class TelnyxRelayHost : IAsyncDisposable
             await Task.Delay(10, TestContext.Current.CancellationToken);
         }
 
-        throw new TimeoutException($"the session of call '{callId}' outlived its socket.");
+        throw new TimeoutException($"the session of conversation '{conversationId}' outlived its socket.");
     }
 
-    /// <summary>Waits until the store holds one call.</summary>
-    /// <param name="callId">The call id.</param>
+    /// <summary>Waits until the store holds one conversation.</summary>
+    /// <param name="conversationId">The conversation id.</param>
     /// <returns>A task that completes once the session appears.</returns>
     /// <remarks>
     /// A setup frame's <c>SendAsync</c> completing on the client only means the bytes left the
@@ -241,11 +247,11 @@ internal sealed class TelnyxRelayHost : IAsyncDisposable
     /// creation, and a pass would not prove the removal it meant to prove.
     /// </remarks>
     /// <exception cref="TimeoutException">The session never appeared within two seconds.</exception>
-    public async Task WaitForSessionAsync(string callId)
+    public async Task WaitForSessionAsync(string conversationId)
     {
         for (var attempt = 0; attempt < 200; attempt++)
         {
-            if (await FindSessionAsync(callId) is not null)
+            if (await FindSessionAsync(conversationId) is not null)
             {
                 return;
             }
@@ -253,7 +259,7 @@ internal sealed class TelnyxRelayHost : IAsyncDisposable
             await Task.Delay(10, TestContext.Current.CancellationToken);
         }
 
-        throw new TimeoutException($"the session of call '{callId}' never appeared.");
+        throw new TimeoutException($"the session of conversation '{conversationId}' never appeared.");
     }
 
     /// <summary>Stops the host and releases the socket.</summary>

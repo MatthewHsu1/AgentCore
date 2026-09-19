@@ -3,7 +3,8 @@ using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
 using AgentCore.Hosting.Secrets;
 using AgentCore.Infrastructure.Audit.Postgres;
-using AgentCore.Infrastructure.Calls.Postgres;
+using AgentCore.Infrastructure.Blobs.S3;
+using AgentCore.Infrastructure.Conversation.Postgres;
 using AgentCore.Infrastructure.Embeddings.OpenAI;
 using AgentCore.Infrastructure.Evaluation.OpenAiModeration;
 using AgentCore.Infrastructure.Knowledge.VectorData.Qdrant;
@@ -19,7 +20,7 @@ using Microsoft.Extensions.Logging;
 namespace AgentCore.Hosting;
 
 /// <summary>
-/// Registers everything AgentCore needs to run, in one call.
+/// Registers everything AgentCore needs to run, in one conversation.
 /// </summary>
 public static class AgentCoreHostBuilderExtensions
 {
@@ -43,7 +44,7 @@ public static class AgentCoreHostBuilderExtensions
     /// this library does not name, or to replace the document, the secret resolver, the logger
     /// factory, or any vendor seam.
     /// </param>
-    /// <returns>The same builder, so a host chains its calls.</returns>
+    /// <returns>The same builder, so a host chains its conversations.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="builder"/> is <see langword="null"/>.</exception>
     public static WebApplicationBuilder AddAgentCoreHost(
         this WebApplicationBuilder builder,
@@ -112,8 +113,8 @@ public static class AgentCoreHostBuilderExtensions
         // providers.telemetry.kind picks the adapter.
         options.UseTelemetry(new GrafanaOtlpTelemetryAdapter());
 
-        // providers.call.kind picks one.
-        options.UseCall(new TelnyxRelayCallAdapter());
+        // providers.conversation.kind picks one.
+        options.UseConversation(new TelnyxRelayConversationAdapter());
 
         // The speech vendor.
         options.UseSpeech(new TelnyxRelaySpeechAdapter());
@@ -129,8 +130,11 @@ public static class AgentCoreHostBuilderExtensions
         // providers.audit.kind picks the adapter.
         options.UseAuditSinks(new PostgresAuditSinkAdapter());
 
-        // providers.calls.kind picks the adapter.
-        options.UseCallStores(new PostgresCallStoreAdapter());
+        // providers.conversations.kind picks the adapter.
+        options.UseConversationStores(new PostgresConversationStoreAdapter());
+
+        // providers.blobs.kind picks the adapter.
+        options.UseBlobStores(new S3BlobStoreAdapter());
     }
 
     /// <summary>Opens the client a <c>transport: http</c> MCP server is reached on.</summary>

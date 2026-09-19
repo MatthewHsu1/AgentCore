@@ -1,5 +1,6 @@
+using AgentCore.Application.Cache;
 using AgentCore.Application.Audit;
-using AgentCore.Application.Calls;
+using AgentCore.Application.Conversation;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Ports;
@@ -20,10 +21,10 @@ namespace AgentCore.AspNetCore.DependencyInjection;
 /// </summary>
 public static class AgentCoreServiceCollectionExtensions
 {
-    /// <summary>Registers everything a call needs, and loads the document when the host starts.</summary>
+    /// <summary>Registers everything a conversation needs, and loads the document when the host starts.</summary>
     /// <param name="services">The service collection of the host.</param>
     /// <param name="configure">Binds the document and the adapters the document names.</param>
-    /// <returns>The same collection, so a host chains its calls.</returns>
+    /// <returns>The same collection, so a host chains its conversations.</returns>
     public static IServiceCollection AddAgentCore(
         this IServiceCollection services,
         Action<AgentCoreOptions> configure)
@@ -45,13 +46,15 @@ public static class AgentCoreServiceCollectionExtensions
         services.AddSingleton(Boot(boot => boot.ChatClients));
         services.AddSingleton(Boot(boot => boot.Guards));
         services.AddSingleton(Boot(boot => boot.Tools));
-        services.AddSingleton(Boot(boot => boot.Calls));
+        services.AddSingleton(Boot(boot => boot.Conversations));
+        services.AddSingleton<IConversations>(provider => provider.GetRequiredService<Conversations>());
+        services.AddSingleton<IConversationStore>(provider => provider.GetRequiredService<Conversations>());
         services.AddSingleton(Boot(boot => boot.Entries));
-        services.AddSingleton<ICallSessionRegistry>(provider => provider.GetRequiredService<EntryRegistry>());
+        services.AddSingleton<IConversationSessionRegistry>(provider => provider.GetRequiredService<EntryRegistry>());
         services.AddSingleton(Boot(boot => boot.AuditQueue));
 
         services.TryAddSingleton(provider =>
-            new AgentCoreAgentSessionStore(provider.GetRequiredService<ICallStore>()));
+            new AgentCoreAgentSessionStore(provider.GetRequiredService<IConversationStore>()));
 
         services.TryAddSingleton<AgentSessionStore>(provider =>
             provider.GetRequiredService<AgentCoreAgentSessionStore>());
@@ -61,21 +64,26 @@ public static class AgentCoreServiceCollectionExtensions
 
         services.AddSingleton(Boot(boot => boot.Telemetry!));
         services.AddSingleton(Boot(boot => boot.Knowledge!));
-        services.AddSingleton(Boot(boot => boot.CallAdapters!));
+        services.AddSingleton(Boot(boot => boot.Blobs!));
+        services.AddSingleton(Boot(boot => boot.ConversationAdapters!));
         services.AddSingleton(Boot(boot => boot.SpeechAdapters!));
 
         services.TryAddSingleton(provider =>
             provider.GetRequiredService<IOptions<AgentCoreOptions>>().Value.TimeProvider
             ?? TimeProvider.System);
 
-        services.AddHostedService(provider => new CallSessionSweeper(
+        services.TryAddSingleton(provider =>
+            provider.GetRequiredService<IOptions<AgentCoreOptions>>().Value.Cache
+            ?? PassThroughHybridCache.Instance);
+
+        services.AddHostedService(provider => new ConversationSessionSweeper(
             provider,
             provider.GetRequiredService<TimeProvider>(),
-            provider.GetService<ILoggerFactory>()?.CreateLogger<CallSessionSweeper>()
-                ?? NullLogger<CallSessionSweeper>.Instance));
+            provider.GetService<ILoggerFactory>()?.CreateLogger<ConversationSessionSweeper>()
+                ?? NullLogger<ConversationSessionSweeper>.Instance));
 
-        services.TryAddSingleton<ICallTitler>(provider => new ChatCallTitler(
-            provider.GetRequiredService<ICallStore>(),
+        services.TryAddSingleton<IConversationTitler>(provider => new ChatConversationTitler(
+            provider.GetRequiredService<IConversationStore>(),
             provider.GetRequiredService<IChatClientFactory>()
                 .GetChatClient(provider.GetRequiredService<AgentCoreConfiguration>().Titler?.Model)));
 
@@ -90,9 +98,9 @@ public static class AgentCoreServiceCollectionExtensions
         return services;
     }
 
-    /// <summary>Registers WebSocket options that suit a phone call rather than a browser tab.</summary>
+    /// <summary>Registers WebSocket options that suit a phone conversation rather than a browser tab.</summary>
     /// <param name="services">The service collection of the host.</param>
-    /// <returns>The same collection, so a host chains its calls.</returns>
+    /// <returns>The same collection, so a host chains its conversations.</returns>
     public static IServiceCollection AddAgentCoreWebSockets(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -107,7 +115,7 @@ public static class AgentCoreServiceCollectionExtensions
     /// <summary>Reads one thing out of the boot, once the host has started it.</summary>
     /// <typeparam name="T">What the caller is registering.</typeparam>
     /// <param name="read">Picks it off the started boot.</param>
-    /// <returns>A factory the container calls on first resolve.</returns>
+    /// <returns>A factory the container conversations on first resolve.</returns>
     private static Func<IServiceProvider, T> Boot<T>(Func<AgentCoreBoot, T> read)
         where T : class
         => provider =>

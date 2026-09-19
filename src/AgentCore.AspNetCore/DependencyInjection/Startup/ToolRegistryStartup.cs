@@ -26,8 +26,11 @@ internal static class ToolRegistryStartup
     /// <param name="boot">The owner every source is tracked against, the moment it is built.</param>
     /// <param name="options">The options the host filled.</param>
     /// <param name="startup">The loaded document and the resolved secrets.</param>
-    /// <param name="chatClients">The factory a shipped agent runs on. Step 3c fails the boot rather than returning none.</param>
-    /// <param name="configuration">The loaded document.</param>
+    /// <param name="ports">
+    /// What a shipped built-in runs on: the chat client factory step 3c built (it fails the boot rather
+    /// than returning none), the blob store step 4d opened or <see langword="null"/>, the workspace
+    /// root, and the logger factory.
+    /// </param>
     /// <param name="cancellationToken">Cancels the discovery.</param>
     /// <returns>The registry, and the served-ids union decision 15's reference pass reads.</returns>
     /// <exception cref="Application.Configuration.Parsing.ConfigurationLoadException">
@@ -39,13 +42,14 @@ internal static class ToolRegistryStartup
         AgentCoreBoot boot,
         AgentCoreOptions options,
         AgentCoreStartup startup,
-        IChatClientFactory chatClients,
-        AgentCoreConfiguration configuration,
+        BuiltinToolPorts ports,
         CancellationToken cancellationToken)
     {
+        var configuration = startup.Configuration;
+
         List<IToolSource> sources =
         [
-            new BuiltinToolSource(new BuiltinToolPorts(chatClients)),
+            new BuiltinToolSource(ports),
             new BindingToolSource(options.Bindings),
         ];
 
@@ -57,7 +61,7 @@ internal static class ToolRegistryStartup
         if (configuration.Mcp.Count > 0 && options.ToolSources.Count == 0)
         {
             throw ToolSourceError.Fail(
-                "the document declares mcp:, and nothing registered a tool source to connect to it. Call "
+                "the document declares mcp:, and nothing registered a tool source to connect to it. Conversation "
                 + "AddAgentCoreHost (AgentCore.Hosting), or register one yourself with "
                 + "options.AddToolSource(...).");
         }

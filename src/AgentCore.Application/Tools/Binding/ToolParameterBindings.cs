@@ -5,7 +5,7 @@ using Microsoft.Extensions.AI;
 namespace AgentCore.Application.Tools.Binding;
 
 // The runtime-filled parameters a bound tool declares. The model never sees them: they bind
-// from the turn the invoking client filed in the call's arguments.
+// from the turn the invoking client filed beside the call's arguments.
 internal static class ToolParameterBindings
 {
     /// <summary>Binds one runtime-filled parameter, or answers <see langword="default"/> for the model's own.</summary>
@@ -21,9 +21,7 @@ internal static class ToolParameterBindings
 
     private static object? Bind(Type type, AIFunctionArguments? args)
     {
-        var invocation = args is not null && args.TryGetValue(TurnInvocation.ArgumentsKey, out var filed)
-            ? filed as TurnInvocation
-            : null;
+        var invocation = TurnInvocation.FiledIn(args);
 
         if (type == typeof(TurnInvocation))
         {

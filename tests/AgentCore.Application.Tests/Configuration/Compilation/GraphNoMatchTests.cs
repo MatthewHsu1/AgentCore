@@ -24,7 +24,7 @@ namespace AgentCore.Application.Tests.Configuration.Compilation;
 /// section 8.2 refuses to ship.
 /// </para>
 /// <para>
-/// Every test here runs offline. There is no network call and no API key in this file.
+/// Every test here runs offline. There is no network conversation and no API key in this file.
 /// </para>
 /// </remarks>
 public sealed class GraphNoMatchTests
@@ -56,7 +56,7 @@ public sealed class GraphNoMatchTests
                 edges:
                   - { from: route, to: escalated, when: wants_human }
           providers:
-            call:   { kind: telnyx-relay }
+            conversation:   { kind: telnyx-relay }
             speech:
               stt: { kind: telnyx-relay }
               tts: { kind: telnyx-relay }
@@ -130,7 +130,7 @@ public sealed class GraphNoMatchTests
       }
 
       [Fact]
-      public async Task Row4_ANoMatchInsideACall_SpeaksTheFallbackAndTheCallLives()
+      public async Task Row4_ANoMatchInsideAConversation_SpeaksTheFallbackAndTheConversationLives()
       {
           using Harness harness = new();
           var session = harness.NewSession();
@@ -138,16 +138,16 @@ public sealed class GraphNoMatchTests
 
           var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
 
-          // Section 8.7, sixth row. The run throws, the turn speaks the fallback, and the call lives.
-          // A live call therefore does not change: only a host that runs the compiled agent itself
+          // Section 8.7, sixth row. The run throws, the turn speaks the fallback, and the conversation lives.
+          // A live conversation therefore does not change: only a host that runs the compiled agent itself
           // reads the exception.
-          Assert.Equal(CallSession.FallbackReply, turn.ReplyText);
+          Assert.Equal(ConversationSession.FallbackReply, turn.ReplyText);
           Assert.NotNull(turn.Failure);
           Assert.False(session.IsComplete);
       }
 
       [Fact]
-      public async Task Row4_ANoMatchInsideAStreamingCall_SpeaksTheFallbackAndTheCallLives()
+      public async Task Row4_ANoMatchInsideAStreamingConversation_SpeaksTheFallbackAndTheConversationLives()
       {
           using Harness harness = new();
           var session = harness.NewSession();
@@ -160,7 +160,7 @@ public sealed class GraphNoMatchTests
           }
 
           Assert.NotNull(session.LastTurn);
-          Assert.Equal(CallSession.FallbackReply, session.LastTurn!.ReplyText);
+          Assert.Equal(ConversationSession.FallbackReply, session.LastTurn!.ReplyText);
           Assert.NotNull(session.LastTurn.Failure);
           Assert.False(session.IsComplete);
       }
@@ -176,7 +176,7 @@ public sealed class GraphNoMatchTests
           private readonly ScriptedChatClient _router = new(string.Empty);
           private readonly ScriptedChatClient _human = new(EscalatedReply);
           private readonly AgentCoreConfiguration _document;
-          private readonly CallSessionFactory _sessions;
+          private readonly ConversationSessionFactory _sessions;
 
           /// <summary>Compiles the no-match graph once, over two offline models.</summary>
           public Harness()
@@ -195,13 +195,13 @@ public sealed class GraphNoMatchTests
                       Guards = guards,
                   })["main"];
 
-              _sessions = new CallSessionFactory(Compiled, guards);
+              _sessions = new ConversationSessionFactory(Compiled, guards);
           }
 
-          /// <summary>Gets the one compiled agent every call shares.</summary>
+          /// <summary>Gets the one compiled agent every conversation shares.</summary>
           public CompiledAgent Compiled { get; }
 
-          /// <summary>Builds the state of one call, with the slot the guard reads set.</summary>
+          /// <summary>Builds the state of one conversation, with the slot the guard reads set.</summary>
           /// <param name="escalate">What the guard <c>wants_human</c> reads.</param>
           /// <returns>The state document.</returns>
           public StateDocument NewState(bool escalate)
@@ -211,14 +211,14 @@ public sealed class GraphNoMatchTests
               return state;
           }
 
-          /// <summary>Files one call's state on a bare run's options, the way the turn loop files it.</summary>
+          /// <summary>Files one conversation's state on a bare run's options, the way the turn loop files it.</summary>
           /// <param name="escalate">What the guard <c>wants_human</c> reads.</param>
           /// <returns>Run options carrying the turn the graph-state wrapper reads.</returns>
           public ChatClientAgentRunOptions StateOptions(bool escalate)
           {
               TurnInvocation invocation = new()
               {
-                  CallId = "test-call",
+                  ConversationId = "test-conversation",
                   TurnIndex = 0,
                   Stage = string.Empty,
                   State = NewState(escalate),
@@ -233,9 +233,9 @@ public sealed class GraphNoMatchTests
               });
           }
 
-          /// <summary>Builds the session of one more call.</summary>
+          /// <summary>Builds the session of one more conversation.</summary>
           /// <returns>The session.</returns>
-          public CallSession NewSession() => _sessions.Create();
+          public ConversationSession NewSession() => _sessions.Create();
 
           public void Dispose()
           {

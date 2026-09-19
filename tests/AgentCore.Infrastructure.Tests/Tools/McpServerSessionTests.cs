@@ -150,7 +150,7 @@ public sealed class McpServerSessionTests
         var result = await tool.InvokeAsync([], Token);
 
         Assert.Equal(2, fake.ConnectionsOpened);
-        Assert.False(IsError(result), $"the call returned an error result: {result}");
+        Assert.False(IsError(result), $"the conversation returned an error result: {result}");
 
         // The CallToolResult envelope is protocol and not answer, so what comes back is the text the
         // server put in it and never the box it arrived in.
@@ -249,9 +249,9 @@ public sealed class McpServerSessionTests
         fake.Withdraw("close_issue");
         await fake.KillNewestConnectionAsync();
 
-        // Closing the pipes is not instant, so a call made in the moment after the kill can still be
+        // Closing the pipes is not instant, so a conversation made in the moment after the kill can still be
         // answered by the connection that is on its way out. Calling until one of them reaches the
-        // dead connection is what puts the reconnect under test; every call after that must land on
+        // dead connection is what puts the reconnect under test; every conversation after that must land on
         // the same answer, which is what the assertion below checks.
         object? result = null;
         await WaitForAsync(async () =>
@@ -267,7 +267,7 @@ public sealed class McpServerSessionTests
             error[ToolErrorResult.MessageProperty]!.GetValue<string>(),
             StringComparison.Ordinal);
 
-        // It stays gone: the guard is on the call, not on one unlucky moment.
+        // It stays gone: the guard is on the conversation, not on one unlucky moment.
         Assert.True(IsError(await tool.InvokeAsync([], Token)));
     }
 
@@ -319,7 +319,7 @@ public sealed class McpServerSessionTests
             Token);
 
         // Assert
-        Assert.False(IsError(result), "the call failed instead of reaching the server.");
+        Assert.False(IsError(result), "the conversation failed instead of reaching the server.");
         Assert.Equal([Declared], fake.LastArgumentNames);
     }
 

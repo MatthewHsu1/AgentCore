@@ -16,25 +16,25 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay;
 /// </remarks>
 internal abstract record RelayFrame
 {
-    /// <summary>The first frame of a call. It names every id the call will need.</summary>
+    /// <summary>The first frame of a conversation. It names every id the conversation will need.</summary>
     /// <param name="SessionId">The relay session.</param>
-    /// <param name="CallSid">The call, in the vendor vocabulary.</param>
+    /// <param name="CallSid">The conversation, in the vendor vocabulary.</param>
     /// <param name="CallControlId">
-    /// The handle the Call Control API accepts. Slice 2 needs it for the conference warm transfer
+    /// The handle the Conversation Control API accepts. Slice 2 needs it for the conference warm transfer
     /// of section 4.3, and this frame is the only place it reaches the socket.
     /// </param>
-    /// <param name="CallSessionId">
-    /// The group of legs that belong to one logical call. It becomes the AgentCore call id,
+    /// <param name="ConversationSessionId">
+    /// The group of legs that belong to one logical conversation. It becomes the AgentCore conversation id,
     /// because it survives a transfer and a single leg id does not.
     /// </param>
     /// <param name="From">The caller number.</param>
     /// <param name="To">The number the caller dialled.</param>
-    /// <param name="CustomParameters">Per-call values the host attached, or null.</param>
+    /// <param name="CustomParameters">Per-conversation values the host attached, or null.</param>
     internal sealed record Setup(
         string SessionId,
         string CallSid,
         string CallControlId,
-        string CallSessionId,
+        string ConversationSessionId,
         string From,
         string To,
         IReadOnlyDictionary<string, string>? CustomParameters) : RelayFrame;
@@ -62,7 +62,7 @@ internal abstract record RelayFrame
     internal sealed record Dtmf(string Digit) : RelayFrame;
 
     /// <summary>The vendor refused a frame this application sent.</summary>
-    /// <param name="Description">Why it refused. This reports our defect, not a call fault.</param>
+    /// <param name="Description">Why it refused. This reports our defect, not a conversation fault.</param>
     internal sealed record Error(string Description) : RelayFrame;
 }
 
@@ -80,7 +80,7 @@ internal sealed record RelayToken(string Token, bool Last)
     public string Type { get; } = "text";
 }
 
-/// <summary>Hands the call back to the vendor, outbound.</summary>
+/// <summary>Hands the conversation back to the vendor, outbound.</summary>
 /// <param name="HandoffData">Anything the next step should read, or null.</param>
 internal sealed record RelayEnd(string? HandoffData)
 {

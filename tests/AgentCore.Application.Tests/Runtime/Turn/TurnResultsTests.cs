@@ -56,7 +56,7 @@ public sealed class TurnResultsTests
     }
 
     [Theory]
-    [MemberData(nameof(StructuredResults))]
+    [MemberData(nameof(StructuredResults), DisableDiscoveryEnumeration = true)]
     public void AStructuredResult_IsRecorded_WhateverShapeTheToolAnsweredIn(object result, string expected)
     {
         TurnResults results = new();
@@ -75,7 +75,7 @@ public sealed class TurnResultsTests
     };
 
     [Theory]
-    [MemberData(nameof(UnstructuredResults))]
+    [MemberData(nameof(UnstructuredResults), DisableDiscoveryEnumeration = true)]
     public void AnUnstructuredResult_IsNotRecorded(object? result)
     {
         TurnResults results = new();
@@ -98,7 +98,7 @@ public sealed class TurnResultsTests
     public async Task AnOutermostToolCall_IsRecordedUnderTheToolsName()
     {
         TurnResults results = new();
-        var turn = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", Results = results };
+        var turn = new TurnInvocation { ConversationId = "conversation", TurnIndex = 0, Stage = "", Results = results };
         var tool = AIFunctionFactory.Create(() => Orders, "lookup_orders");
 
         await Run(tool, turn);
@@ -112,7 +112,7 @@ public sealed class TurnResultsTests
     {
         // The outer model never saw a nested result, so it cannot ask to draw it.
         TurnResults results = new();
-        var turn = new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", Results = results };
+        var turn = new TurnInvocation { ConversationId = "conversation", TurnIndex = 0, Stage = "", Results = results };
         var inner = AIFunctionFactory.Create(() => Orders, "inner_lookup");
         var outer = AIFunctionFactory.Create(
             async () =>

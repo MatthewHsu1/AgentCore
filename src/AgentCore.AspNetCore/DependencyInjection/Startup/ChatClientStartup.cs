@@ -6,7 +6,7 @@ namespace AgentCore.AspNetCore.DependencyInjection;
 /// <remarks>
 /// It is built from the document and the resolved secrets and from nothing else, so it can be built
 /// before the tools. That ordering is what lets a shipped agent hold its own model rather than
-/// looking one up at call time.
+/// looking one up at conversation time.
 /// </remarks>
 internal static class ChatClientStartup
 {

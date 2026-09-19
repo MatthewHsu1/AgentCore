@@ -8,7 +8,7 @@ using Xunit;
 namespace AgentCore.AspNetCore.Tests.Endpoints;
 
 /// <summary>
-/// The Responses path: one request runs one turn, and the continuation carries the call.
+/// The Responses path: one request runs one turn, and the continuation carries the conversation.
 /// </summary>
 /// <remarks>
 /// Every test here runs offline against a fake model. The two-stage document names the
@@ -37,7 +37,7 @@ public sealed class ResponsesTests
                   - { id: talking, agent: solo, to: [ { stage: followup, when: second } ] }
                   - { id: followup, agent: duo, to: [ { stage: talking, when: third } ] }
           providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
@@ -120,7 +120,7 @@ public sealed class ResponsesTests
       }
 
       [Fact]
-      public async Task UnknownConversation_StartsTheCallUnderThatId()
+      public async Task UnknownConversation_StartsTheConversationUnderThatId()
       {
           using FragmentingChatClient reply = new("answer one", "answer two");
           await using var host = await ResponsesHost.StartAsync(TwoStagesYaml, reply);
@@ -398,7 +398,7 @@ public sealed class ResponsesTests
                 stages:
                   - { id: done, agent: solo, terminal: true }
           providers:
-            call:   { kind: telnyx-relay }
+            conversation:   { kind: telnyx-relay }
             speech:
               stt: { kind: telnyx-relay }
               tts: { kind: telnyx-relay }
@@ -415,7 +415,7 @@ public sealed class ResponsesTests
           items:
             - { id: greeter, instructions: "send the mail", tools: [ send_email ] }
         providers:
-          call:   { kind: telnyx-relay }
+          conversation:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
@@ -439,7 +439,7 @@ public sealed class ResponsesTests
               model: { ref: reply }
             items:
               - { id: greeter, instructions: "greet the caller", tools: [ draw_it ] }
-              - { id: closer,  instructions: "close the call",   tools: [ draw_it ] }
+              - { id: closer,  instructions: "close the conversation",   tools: [ draw_it ] }
           entries:
             main:
               policy:
@@ -448,7 +448,7 @@ public sealed class ResponsesTests
                   - { id: greeting, agent: greeter, to: [ { stage: close } ] }
                   - { id: close,    agent: closer,  to: [ { stage: greeting } ] }
           providers:
-            call:   { kind: telnyx-relay }
+            conversation:   { kind: telnyx-relay }
             speech:
               stt: { kind: telnyx-relay }
               tts: { kind: telnyx-relay }
@@ -493,7 +493,7 @@ public sealed class ResponsesTests
                   yield return new Microsoft.Extensions.AI.ChatResponseUpdate(
                       Microsoft.Extensions.AI.ChatRole.Assistant,
                       [new Microsoft.Extensions.AI.FunctionCallContent(
-                          "call_1",
+                          "conversation_1",
                           tool.Name,
                           new Dictionary<string, object?>(StringComparer.Ordinal) { ["to"] = "a@b.com" })]);
                   yield break;
@@ -542,7 +542,7 @@ public sealed class ResponsesTests
                   yield return new Microsoft.Extensions.AI.ChatResponseUpdate(
                       Microsoft.Extensions.AI.ChatRole.Assistant,
                       [new Microsoft.Extensions.AI.FunctionCallContent(
-                          "call_1",
+                          "conversation_1",
                           tool.Name,
                           new Dictionary<string, object?>(StringComparer.Ordinal) { ["what"] = "a card" })]);
                   yield break;

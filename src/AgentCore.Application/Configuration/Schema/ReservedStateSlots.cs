@@ -14,11 +14,11 @@ public static class ReservedStateSlots
     /// <summary>The zero-based index of the current turn.</summary>
     public const string TurnIndex = "turnIndex";
 
-    /// <summary>The seconds the call has run.</summary>
-    public const string CallDurationSeconds = "callDurationSeconds";
+    /// <summary>The seconds the conversation has run.</summary>
+    public const string ConversationDurationSeconds = "conversationDurationSeconds";
 
     /// <summary>Gets every reserved slot name.</summary>
-    public static IReadOnlyList<string> All { get; } = [Stage, TurnIndex, CallDurationSeconds];
+    public static IReadOnlyList<string> All { get; } = [Stage, TurnIndex, ConversationDurationSeconds];
 
     /// <summary>Reports whether a name is reserved.</summary>
     /// <param name="name">The slot name to test.</param>
@@ -26,5 +26,5 @@ public static class ReservedStateSlots
     public static bool Contains(string name)
         => string.Equals(name, Stage, StringComparison.Ordinal)
            || string.Equals(name, TurnIndex, StringComparison.Ordinal)
-           || string.Equals(name, CallDurationSeconds, StringComparison.Ordinal);
+           || string.Equals(name, ConversationDurationSeconds, StringComparison.Ordinal);
 }

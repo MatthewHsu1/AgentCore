@@ -6,7 +6,7 @@ namespace AgentCore.Evals;
 /// Builds the golden-set harness once for a test class.
 /// </summary>
 /// <remarks>
-/// Opening the knowledge base costs a socket, a secret read, and an embedding call, and every row of
+/// Opening the knowledge base costs a socket, a secret read, and an embedding conversation, and every row of
 /// a suite reads the same one. The fixture builds it once and holds it for the class.
 /// </remarks>
 public sealed class DatasetFixture : IAsyncLifetime

@@ -21,7 +21,7 @@ internal static class KnowledgeProviderFactory
     /// <param name="loggers">
     /// Where the retrieval record and the framework's own provider log go, or <see langword="null"/>
     /// when the host wired none. Ruling 21: this is the one reachable observability seam — the audit
-    /// sink is not, because <c>AuditEvent</c> requires a call id and a sequence number that this
+    /// sink is not, because <c>AuditEvent</c> requires a conversation id and a sequence number that this
     /// seam doesn't carry down here.
     /// </param>
     /// <param name="scope">The document's <c>providers.knowledge.scope</c> block, or <see langword="null"/>.</param>
@@ -55,7 +55,7 @@ internal static class KnowledgeProviderFactory
             RecentMessageMemoryLimit = 4,
         };
 
-        KnowledgeSearch.Core core = KnowledgeSearch.Bind(port, knowledge, agent, citations, logger);
+        KnowledgeSearch.Core core = KnowledgeSearch.Bind(new KnowledgeBinding(port, knowledge, agent, citations, logger));
 
         // The template's own delegate never runs: tool-mode searches go through the
         // invocation-bound wrapper, prefetch through per-invocation providers. It fails

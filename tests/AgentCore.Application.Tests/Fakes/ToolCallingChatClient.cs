@@ -21,7 +21,7 @@ namespace AgentCore.Application.Tests.Fakes;
 /// </remarks>
 internal sealed class ToolCallingChatClient : IChatClient
 {
-    private const string CallId = "call_1";
+    private const string ConversationId = "conversation_1";
 
     private readonly string _reply;
     private readonly Dictionary<string, object?> _arguments;
@@ -96,7 +96,7 @@ internal sealed class ToolCallingChatClient : IChatClient
 
             yield return new ChatResponseUpdate(
                 ChatRole.Assistant,
-                [new FunctionCallContent(CallId, tool.Name, _arguments)])
+                [new FunctionCallContent(ConversationId, tool.Name, _arguments)])
             {
                 ResponseId = responseId,
                 MessageId = responseId,

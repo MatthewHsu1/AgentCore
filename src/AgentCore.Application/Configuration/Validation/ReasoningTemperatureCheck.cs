@@ -16,7 +16,7 @@ namespace AgentCore.Application.Configuration.Validation;
 /// pointer at the key the author has to change.
 /// </para>
 /// <para>
-/// The check reads the document only. A caller that sets a temperature on its own call options in
+/// The check reads the document only. A caller that sets a temperature on its own conversation options in
 /// code can still send one the entry forbids, because no configuration check can see that.
 /// </para>
 /// </remarks>

@@ -19,7 +19,7 @@ namespace AgentCore.Application.Tests.Audit;
 /// </remarks>
 public sealed class QueuedAuditSinkTests
 {
-    private const string CallId = "call-1";
+    private const string ConversationId = "conversation-1";
 
     /// <summary>The id <c>Log.AuditQueueFull</c> carries.</summary>
     private const int AuditQueueFullEventId = 8;
@@ -59,7 +59,7 @@ public sealed class QueuedAuditSinkTests
 
         await sink.FlushAsync(TestContext.Current.CancellationToken);
 
-        // One reader drains the channel, so the chain of D23 reaches the store in the order the call
+        // One reader drains the channel, so the chain of D23 reaches the store in the order the conversation
         // produced it. That ordering is now a property of this class and not of each adapter.
         Assert.Equal(ids, inner.Events.Select(item => item.EventId).ToArray());
     }
@@ -126,7 +126,7 @@ public sealed class QueuedAuditSinkTests
         await sink.AppendAsync(Event(1), TestContext.Current.CancellationToken);
         await sink.DisposeAsync();
 
-        // Audit is a record of the call and never a part of it. The store refused, the line says so,
+        // Audit is a record of the conversation and never a part of it. The store refused, the line says so,
         // and nothing was thrown at anyone.
         LogLine line = Assert.Single(logger.Of(AuditAppendFailedEventId));
         Assert.Equal(ThrowingAuditSink.Message, line.Exception?.Message);
@@ -167,7 +167,7 @@ public sealed class QueuedAuditSinkTests
 
     private static AuditEvent Event(long sequence, Guid? eventId = null) => new()
     {
-        CallId = CallId,
+        ConversationId = ConversationId,
         EventId = eventId ?? Guid.CreateVersion7(),
         Kind = AuditEventKind.TurnCompleted,
         OccurredAt = DateTimeOffset.UnixEpoch.AddSeconds(sequence),

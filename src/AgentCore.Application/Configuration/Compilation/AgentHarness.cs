@@ -5,11 +5,15 @@ namespace AgentCore.Application.Configuration.Compilation;
 /// <summary>One agent's harness switches, fully resolved.</summary>
 /// <param name="Todos">Whether the agent gets the todo tools.</param>
 /// <param name="Mode">Whether the agent gets the mode tools.</param>
-public sealed record ResolvedHarness(bool Todos, bool Mode);
+/// <param name="Clock">Whether the agent is told the current date and time each turn.</param>
+/// <param name="BaseInstructions">Whether the framework's base instructions sit above the document's own.</param>
+public sealed record ResolvedHarness(bool Todos, bool Mode, bool Clock, bool BaseInstructions);
 
 /// <summary>
-/// Composes one agent's harness switches (<c>todos:</c>, <c>mode:</c>) from
-/// <c>agents.defaults</c> and the agent's own keys, key by key.
+/// Composes one agent's harness switches (<c>todos:</c>, <c>mode:</c>, <c>clock:</c>,
+/// <c>baseInstructions:</c>) from <c>agents.defaults</c> and the agent's own keys, key by key.
+/// The tool switches are off until named; the two posture switches are on until named, so an
+/// agent has to opt out of knowing the date or of the base instructions rather than opt in.
 /// </summary>
 public static class AgentHarness
 {
@@ -22,6 +26,8 @@ public static class AgentHarness
 
         return new ResolvedHarness(
             agent.Todos ?? defaults?.Todos ?? false,
-            agent.Mode ?? defaults?.Mode ?? false);
+            agent.Mode ?? defaults?.Mode ?? false,
+            agent.Clock ?? defaults?.Clock ?? true,
+            agent.BaseInstructions ?? defaults?.BaseInstructions ?? true);
     }
 }

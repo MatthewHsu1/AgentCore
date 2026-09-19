@@ -7,7 +7,7 @@ namespace AgentCore.Domain.Audit;
 /// <para>
 /// The <c>tool.failed</c> payload holds this token under <see cref="AuditPayloadKeys.ToolFailureKind"/>,
 /// and never the .NET member name, and never the numeric value of the enum. This is the treatment
-/// <see cref="CallEndReasons"/> already gives an end reason, and it is the same argument: a rename of a
+/// <see cref="ConversationEndReasons"/> already gives an end reason, and it is the same argument: a rename of a
 /// C# member must not change a hash PostgreSQL already stored, and the <c>CHECK</c> constraint of D23
 /// recomputes the same SHA-256 inside the engine, where no enum exists.
 /// </para>
@@ -16,7 +16,7 @@ namespace AgentCore.Domain.Audit;
 /// </para>
 /// <para>
 /// A token reads <c>tool.&lt;what happened to it&gt;</c>, which is the
-/// <c>&lt;subject&gt;.&lt;what happened&gt;</c> shape <see cref="CallEndReasons"/> uses. The tokens are
+/// <c>&lt;subject&gt;.&lt;what happened&gt;</c> shape <see cref="ConversationEndReasons"/> uses. The tokens are
 /// deliberately NOT the framework's <c>NotFound</c> and <c>Exception</c>: those name a C# enum whose
 /// stability Microsoft does not promise, and a stored row must not depend on it.
 /// </para>

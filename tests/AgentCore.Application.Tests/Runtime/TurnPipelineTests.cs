@@ -27,7 +27,7 @@ namespace AgentCore.Application.Tests.Runtime;
 /// <c>FallbackChatClient</c> answers a run that threw or produced no text. Both report what they did
 /// on a <c>TurnDisposition</c>, and the turn loop reads it to raise the rows it always raised.
 /// </para>
-/// <para>Every test here runs offline. There is no network call and no API key in this file.</para>
+/// <para>Every test here runs offline. There is no network conversation and no API key in this file.</para>
 /// </remarks>
 public sealed class TurnPipelineTests
 {
@@ -72,7 +72,7 @@ public sealed class TurnPipelineTests
         // Arrange.
         using SequencedChatClient model = new("never spoken");
         var session = Build(PlainYaml, model, moderation: ScriptedModerationEvaluator.Flagging("hate"))
-            .Create("call-1");
+            .Create("conversation-1");
 
         // Act.
         var turn = await session.RunTurnAsync("...", TestContext.Current.CancellationToken);
@@ -89,7 +89,7 @@ public sealed class TurnPipelineTests
         // Arrange.
         using SequencedChatClient model = new("never spoken");
         var session = Build(PlainYaml, model, moderation: ScriptedModerationEvaluator.Flagging("hate"))
-            .Create("call-1");
+            .Create("conversation-1");
 
         // Act. The refusal arrives on the ordinary stream path, not on a branch of its own.
         List<string> spoken = [];
@@ -110,7 +110,7 @@ public sealed class TurnPipelineTests
         using ToolCallingChatClient model = new("never spoken");
         StubToolBuilder tools = new("""{ "status": "shipped" }""");
         var session = Build(ToolYaml, model, tools: tools.Create, moderation: ScriptedModerationEvaluator.Flagging("hate"))
-            .Create("call-1");
+            .Create("conversation-1");
 
         // Act.
         await session.RunTurnAsync("...", TestContext.Current.CancellationToken);
@@ -127,13 +127,13 @@ public sealed class TurnPipelineTests
     {
         // Arrange.
         using ThrowingChatClient model = new(new InvalidOperationException("the vendor is down"));
-        var session = Build(PlainYaml, model).Create("call-1");
+        var session = Build(PlainYaml, model).Create("conversation-1");
 
         // Act. Nothing escapes: the layer below the agent caught it.
         var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
 
         // Assert.
-        Assert.Equal(CallSession.FallbackReply, turn.ReplyText);
+        Assert.Equal(ConversationSession.FallbackReply, turn.ReplyText);
         Assert.NotNull(turn.Failure);
         Assert.Contains("the vendor is down", turn.Failure, StringComparison.Ordinal);
         Assert.False(session.IsComplete);
@@ -144,14 +144,14 @@ public sealed class TurnPipelineTests
     {
         // Arrange. Request 41 goes out with no tools and returns quietly.
         using SequencedChatClient model = new("   ");
-        var session = Build(PlainYaml, model).Create("call-1");
+        var session = Build(PlainYaml, model).Create("conversation-1");
 
         // Act.
         var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
 
         // Assert.
-        Assert.Equal(CallSession.FallbackReply, turn.ReplyText);
-        Assert.Equal(CallSession.EmptyReplyReason, turn.Failure);
+        Assert.Equal(ConversationSession.FallbackReply, turn.ReplyText);
+        Assert.Equal(ConversationSession.EmptyReplyReason, turn.Failure);
     }
 
     [Fact]
@@ -165,7 +165,7 @@ public sealed class TurnPipelineTests
                 model,
                 sink: sink,
                 moderation: ScriptedModerationEvaluator.Throwing(new InvalidOperationException("boom")))
-            .Create("call-1");
+            .Create("conversation-1");
 
         // Act.
         var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
@@ -173,7 +173,7 @@ public sealed class TurnPipelineTests
         // Assert. The turn ran unchecked rather than being refused.
         Assert.Equal("the ordinary reply", turn.ReplyText);
         Assert.Equal(1, model.Calls);
-        Assert.DoesNotContain(sink.EventsOf("call-1"), entry => entry.Kind == AuditEventKind.PromptFlagged);
+        Assert.DoesNotContain(sink.EventsOf("conversation-1"), entry => entry.Kind == AuditEventKind.PromptFlagged);
     }
 
     // -------------------------------------------------------------------------------------------
@@ -185,16 +185,16 @@ public sealed class TurnPipelineTests
         // Arrange.
         InMemoryAuditSink sink = new();
         var session = Build(PlainYaml, new SequencedChatClient("never spoken"), sink: sink,
-            moderation: ScriptedModerationEvaluator.Flagging("violence", "harassment")).Create("call-1");
+            moderation: ScriptedModerationEvaluator.Flagging("violence", "harassment")).Create("conversation-1");
 
         // Act.
         await session.RunTurnAsync("...", TestContext.Current.CancellationToken);
 
-        // Assert. call.started, prompt.flagged, turn.completed — the flag still precedes the turn
+        // Assert. conversation.started, prompt.flagged, turn.completed — the flag still precedes the turn
         // event, because the verdict is known before the model runs.
-        var events = sink.EventsOf("call-1");
+        var events = sink.EventsOf("conversation-1");
         Assert.Equal(
-            [AuditEventKind.CallStarted, AuditEventKind.PromptFlagged, AuditEventKind.TurnCompleted],
+            [AuditEventKind.ConversationStarted, AuditEventKind.PromptFlagged, AuditEventKind.TurnCompleted],
             events.Select(entry => entry.Kind));
         Assert.Equal("violence,harassment", events[1].Payload[AuditPayloadKeys.ModerationCategories]);
     }
@@ -205,16 +205,16 @@ public sealed class TurnPipelineTests
         // Arrange.
         InMemoryAuditSink sink = new();
         using ThrowingChatClient model = new(new InvalidOperationException("the vendor is down"));
-        var session = Build(PlainYaml, model, sink: sink).Create("call-1");
+        var session = Build(PlainYaml, model, sink: sink).Create("conversation-1");
 
         // Act.
         await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
 
         // Assert. The turn-altitude tool.failed row still names the fault, and still precedes the
         // turn.completed of the same turn.
-        var events = sink.EventsOf("call-1");
+        var events = sink.EventsOf("conversation-1");
         Assert.Equal(
-            [AuditEventKind.CallStarted, AuditEventKind.ToolFailed, AuditEventKind.TurnCompleted],
+            [AuditEventKind.ConversationStarted, AuditEventKind.ToolFailed, AuditEventKind.TurnCompleted],
             events.Select(entry => entry.Kind));
         Assert.Contains("the vendor is down", events[1].Payload[AuditPayloadKeys.ToolError], StringComparison.Ordinal);
     }
@@ -273,7 +273,7 @@ public sealed class TurnPipelineTests
         using SequencedChatClient researcher = new("Let me check the order system.");
         using SequencedChatClient responder = new("Order 41 ships Friday.");
         var endpoint = ScriptedModerationEvaluator.Clean();
-        var session = BuildGraph(researcher, responder, endpoint).Create("call-1");
+        var session = BuildGraph(researcher, responder, endpoint).Create("conversation-1");
 
         // Act.
         await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
@@ -290,15 +290,15 @@ public sealed class TurnPipelineTests
         // Arrange. Every node runs and none of them produces a word.
         using SequencedChatClient researcher = new("   ");
         using SequencedChatClient responder = new("   ");
-        var session = BuildGraph(researcher, responder, moderation: null).Create("call-1");
+        var session = BuildGraph(researcher, responder, moderation: null).Create("conversation-1");
 
         // Act.
         var turn = await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
 
         // Assert. R2 is a rule about a turn: one fallback is spoken to the caller, and none of it is
         // fed back into the graph as a node reply.
-        Assert.Equal(CallSession.FallbackReply, turn.ReplyText);
-        Assert.Equal(CallSession.EmptyReplyReason, turn.Failure);
+        Assert.Equal(ConversationSession.FallbackReply, turn.ReplyText);
+        Assert.Equal(ConversationSession.EmptyReplyReason, turn.Failure);
         Assert.Equal(1, researcher.Calls);
         Assert.Equal(1, responder.Calls);
     }
@@ -320,7 +320,7 @@ public sealed class TurnPipelineTests
                 agents: [ researcher, responder ]
           """;
 
-      private static CallSessionFactory BuildGraph(
+      private static ConversationSessionFactory BuildGraph(
           IChatClient researcher,
           IChatClient responder,
           ScriptedModerationEvaluator? moderation)
@@ -335,10 +335,10 @@ public sealed class TurnPipelineTests
                   Moderation = moderation is null ? null : new PromptModerator(moderation),
               })["main"];
 
-          return new CallSessionFactory(
+          return new ConversationSessionFactory(
               compiled,
               new GuardEvaluator(compiled.Configuration.Guards),
-              observers: CallObservers.Standard(new InMemoryAuditSink(), logger: null));
+              observers: ConversationObservers.Standard(new InMemoryAuditSink(), logger: null));
       }
 
       private static CompiledAgent Compile(
@@ -360,7 +360,7 @@ public sealed class TurnPipelineTests
               })["main"];
       }
 
-      private static CallSessionFactory Build(
+      private static ConversationSessionFactory Build(
           string yaml,
           IChatClient reply,
           IAuditSinkPort? sink = null,
@@ -369,9 +369,9 @@ public sealed class TurnPipelineTests
       {
           var compiled = Compile(yaml, reply, out _, tools, moderation);
 
-          return new CallSessionFactory(
+          return new ConversationSessionFactory(
               compiled,
               new GuardEvaluator(compiled.Configuration.Guards),
-              observers: CallObservers.Standard(sink ?? new InMemoryAuditSink(), logger: null));
+              observers: ConversationObservers.Standard(sink ?? new InMemoryAuditSink(), logger: null));
       }
   }

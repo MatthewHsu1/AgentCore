@@ -49,7 +49,7 @@ public static class PostgresSchema
     /// <summary>Applies every migration the database has not seen yet.</summary>
     /// <param name="dataSource">A data source whose role may create the <c>agentcore</c> schema and tables in it.</param>
     /// <param name="cancellationToken">Cancels the work.</param>
-    /// <returns>The versions this call applied, oldest first. Empty when the schema was current.</returns>
+    /// <returns>The versions this conversation applied, oldest first. Empty when the schema was current.</returns>
     /// <remarks>
     /// The connecting role also needs <c>CREATEROLE</c> the first time, because migration 001 creates
     /// <c>agentcore_writer</c>. The running system connects as a member of that role, not as this one.

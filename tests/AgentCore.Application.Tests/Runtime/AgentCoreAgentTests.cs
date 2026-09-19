@@ -8,12 +8,12 @@ namespace AgentCore.Application.Tests.Runtime;
 
 /// <summary>
 /// The <see cref="AgentCoreAgent"/> shim: the whole turn loop behind the framework's own
-/// <see cref="AIAgent"/> seam. One session is one call, one run is one turn.
+/// <see cref="AIAgent"/> seam. One session is one conversation, one run is one turn.
 /// </summary>
 public sealed class AgentCoreAgentTests
 {
     [Fact]
-    public async Task RunAsync_WithOneSession_RunsTurnsOfOneCall()
+    public async Task RunAsync_WithOneSession_RunsTurnsOfOneConversation()
     {
         var reply = new SequencedChatClient("first reply", "second reply");
         var agent = BuildAgent(reply, out _);
@@ -26,7 +26,7 @@ public sealed class AgentCoreAgentTests
         Assert.Equal("first reply", first.Text);
         Assert.Equal("second reply", second.Text);
 
-        // The second run carried the whole call: turn one's exchange sits in front of turn two.
+        // The second run carried the whole conversation: turn one's exchange sits in front of turn two.
         var request = reply.Requests[1];
         Assert.Contains(request, message => message.Role == ChatRole.User && message.Text == "hello");
         Assert.Contains(request, message => message.Role == ChatRole.Assistant && message.Text == "first reply");
@@ -50,10 +50,10 @@ public sealed class AgentCoreAgentTests
         Assert.NotEmpty(updates);
         Assert.Equal("streamed reply", string.Concat(updates.Select(update => update.Text)));
 
-        // The turn committed: the session's call holds the finished turn.
-        var call = session.GetService<CallSession>();
-        Assert.NotNull(call);
-        Assert.Equal("streamed reply", call.LastTurn?.ReplyText);
+        // The turn committed: the session's conversation holds the finished turn.
+        var conversation = session.GetService<ConversationSession>();
+        Assert.NotNull(conversation);
+        Assert.Equal("streamed reply", conversation.LastTurn?.ReplyText);
     }
 
     [Fact]
@@ -92,7 +92,7 @@ public sealed class AgentCoreAgentTests
     }
 
     [Fact]
-    public async Task RunAsync_WithNoSession_RunsOneShotCalls()
+    public async Task RunAsync_WithNoSession_RunsOneShotConversations()
     {
         var reply = new SequencedChatClient("one", "two");
         var agent = BuildAgent(reply, out _);
@@ -100,7 +100,7 @@ public sealed class AgentCoreAgentTests
         _ = await agent.RunAsync("first", cancellationToken: TestContext.Current.CancellationToken);
         _ = await agent.RunAsync("second", cancellationToken: TestContext.Current.CancellationToken);
 
-        // No session, no continuity: the second run is a new call and saw nothing of the first.
+        // No session, no continuity: the second run is a new conversation and saw nothing of the first.
         Assert.DoesNotContain(reply.Requests[1], message => message.Text == "first");
         Assert.DoesNotContain(reply.Requests[1], message => message.Text == "one");
     }
@@ -121,25 +121,25 @@ public sealed class AgentCoreAgentTests
     }
 
     [Fact]
-    public async Task CreateSessionAsync_WithACallId_NamesTheCall()
+    public async Task CreateSessionAsync_WithAConversationId_NamesTheConversation()
     {
         var agent = BuildAgent(new SequencedChatClient("unused"), out _);
 
-        var session = await agent.CreateSessionAsync("call-42", TestContext.Current.CancellationToken);
+        var session = await agent.CreateSessionAsync("conversation-42", TestContext.Current.CancellationToken);
 
-        Assert.Equal("call-42", session.GetService<CallSession>()?.CallId);
+        Assert.Equal("conversation-42", session.GetService<ConversationSession>()?.ConversationId);
     }
 
     [Fact]
-    public async Task GetService_OnTheSession_AnswersTheCallSession()
+    public async Task GetService_OnTheSession_AnswersTheConversationSession()
     {
         var agent = BuildAgent(new SequencedChatClient("unused"), out _);
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
 
-        var call = session.GetService<CallSession>();
+        var conversation = session.GetService<ConversationSession>();
 
-        Assert.NotNull(call);
-        Assert.Same(call, session.GetService<Application.Ports.IConversationPort>());
+        Assert.NotNull(conversation);
+        Assert.Same(conversation, session.GetService<Application.Ports.IConversationPort>());
     }
 
     [Fact]

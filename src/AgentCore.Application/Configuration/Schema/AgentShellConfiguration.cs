@@ -1,3 +1,6 @@
+using System.Collections.ObjectModel;
+using AgentCore.Application.Configuration.Parsing;
+
 namespace AgentCore.Application.Configuration.Schema;
 
 /// <summary>The executors a <c>shell:</c> block may name.</summary>
@@ -23,11 +26,11 @@ public sealed record ShellPolicyConfiguration
     public IReadOnlyList<string> Allow { get; init; } = [];
 }
 
-/// <summary>One agent's <c>shell:</c> block: one executor per call, removed with it (§4.4).</summary>
+/// <summary>One agent's <c>shell:</c> block: one executor per conversation, removed with it (§4.4).</summary>
 public sealed record ShellConfiguration
 {
     /// <summary>
-    /// Gets the executor kind. Deliberately required: where a shell runs is the consumer's call, so
+    /// Gets the executor kind. Deliberately required: where a shell runs is the consumer's conversation, so
     /// no default exists here (§4.5.1).
     /// </summary>
     public required ShellKind Kind { get; init; }
@@ -37,4 +40,23 @@ public sealed record ShellConfiguration
 
     /// <summary>Gets how long one command may run, or <see langword="null"/> for the executor default.</summary>
     public int? TimeoutSeconds { get; init; }
+
+    /// <summary>
+    /// Gets the environment passed to the executor, on top of the one the executor kind already
+    /// supplies. A value may hold <c>${secret:name}</c> references.
+    /// </summary>
+    public IReadOnlyDictionary<string, SecretTemplate> Env { get; init; }
+        = ReadOnlyDictionary<string, SecretTemplate>.Empty;
+
+    /// <summary>Gets the per-stream output cap, in KiB, or <see langword="null"/> for the executor default.</summary>
+    public int? MaxOutputKb { get; init; }
+
+    /// <summary>Gets the container image. <see cref="ShellKind.Docker"/> only.</summary>
+    public string? Image { get; init; }
+
+    /// <summary>Gets the Docker network mode. <see cref="ShellKind.Docker"/> only.</summary>
+    public string? Network { get; init; }
+
+    /// <summary>Gets the container memory limit, in MB. <see cref="ShellKind.Docker"/> only.</summary>
+    public int? MemoryMb { get; init; }
 }

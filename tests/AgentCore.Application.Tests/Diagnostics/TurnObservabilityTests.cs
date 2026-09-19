@@ -21,7 +21,7 @@ namespace AgentCore.Application.Tests.Diagnostics;
 /// What a turn reports: one span, three metrics, and the three "log once" rows of section 8.7.
 /// </summary>
 /// <remarks>
-/// Every test here runs offline. There is no collector, no exporter, and no network call.
+/// Every test here runs offline. There is no collector, no exporter, and no network conversation.
 /// </remarks>
 public sealed class TurnObservabilityTests
 {
@@ -33,7 +33,7 @@ public sealed class TurnObservabilityTests
         "agentcore.audit.kind",
 
         // Three values: clean, flagged, unavailable. Three series for each replica, against the
-        // 10,000 ceiling of item 12. No call id rides on it, so T61 holds.
+        // 10,000 ceiling of item 12. No conversation id rides on it, so T61 holds.
         "agentcore.moderation.outcome",
     ];
 
@@ -52,7 +52,7 @@ public sealed class TurnObservabilityTests
               model: { ref: reply }
             items:
               - { id: greeter, instructions: "greet the caller" }
-              - { id: closer,  instructions: "close the call" }
+              - { id: closer,  instructions: "close the conversation" }
           entries:
             main:
               policy:
@@ -83,23 +83,23 @@ public sealed class TurnObservabilityTests
     // T61: the metric attributes, and what may never appear on one.
     // -------------------------------------------------------------------------------------------
     [Fact]
-    public async Task NoMetricAttribute_EverCarriesTheCallId()
+    public async Task NoMetricAttribute_EverCarriesTheConversationId()
     {
-        // A value nothing else in the process can produce, so a hit is this call and not another.
-        var callId = "call-" + Guid.NewGuid().ToString("N");
+        // A value nothing else in the process can produce, so a hit is this conversation and not another.
+        var conversationId = "conversation-" + Guid.NewGuid().ToString("N");
 
-        var tags = await MeasureAsync(callId);
+        var tags = await MeasureAsync(conversationId);
 
-        // The .NET default is cumulative temporality, so one call id on a metric attribute is one
-        // permanent series. A day of calls would then be a day of permanent series, and the free
+        // The .NET default is cumulative temporality, so one conversation id on a metric attribute is one
+        // permanent series. A day of conversations would then be a day of permanent series, and the free
         // tier binds at 10,000. See D26 and T61.
-        Assert.DoesNotContain(tags, tag => string.Equals(tag.Value as string, callId, StringComparison.Ordinal));
+        Assert.DoesNotContain(tags, tag => string.Equals(tag.Value as string, conversationId, StringComparison.Ordinal));
     }
 
     [Fact]
     public async Task EveryMetricAttribute_ComesFromAClosedSet()
     {
-        var tags = await MeasureAsync("call-" + Guid.NewGuid().ToString("N"));
+        var tags = await MeasureAsync("conversation-" + Guid.NewGuid().ToString("N"));
 
         // The listener really saw the instruments of this library.
         Assert.NotEmpty(tags);
@@ -151,19 +151,19 @@ public sealed class TurnObservabilityTests
     // The span. A high-cardinality value belongs here and nowhere else.
     // -------------------------------------------------------------------------------------------
     [Fact]
-    public async Task ATurn_IsOneSpanThatCarriesTheCallIdAsAGenAiAttribute()
+    public async Task ATurn_IsOneSpanThatCarriesTheConversationIdAsAGenAiAttribute()
     {
-        var callId = "call-" + Guid.NewGuid().ToString("N");
-        var spans = await RecordSpansAsync(callId);
+        var conversationId = "conversation-" + Guid.NewGuid().ToString("N");
+        var spans = await RecordSpansAsync(conversationId);
 
         var span = Assert.Single(spans);
 
         Assert.Equal(AgentCoreTelemetry.TurnActivityName, span.OperationName);
 
         // Item 7 asks for gen_ai.* attributes on the trace, and gen_ai.conversation.id is the
-        // convention's own name for the conversation a request belongs to. A call is that
+        // convention's own name for the conversation a request belongs to. A conversation is that
         // conversation, and a span attribute costs no series.
-        Assert.Equal(callId, span.GetTagItem("gen_ai.conversation.id"));
+        Assert.Equal(conversationId, span.GetTagItem("gen_ai.conversation.id"));
         Assert.Equal(0, span.GetTagItem("agentcore.turn.index"));
         Assert.Equal("greeting", span.GetTagItem("agentcore.stage.before"));
         Assert.Equal("greeting", span.GetTagItem("agentcore.stage.after"));
@@ -179,16 +179,16 @@ public sealed class TurnObservabilityTests
 
         using SequencedChatClient reply = new("   ");
         using SequencedChatClient fill = new(StayingNull);
-        var session = Build(PolicyYaml, reply, fill).Create("call-" + Guid.NewGuid().ToString("N"));
+        var session = Build(PolicyYaml, reply, fill).Create("conversation-" + Guid.NewGuid().ToString("N"));
 
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
         var span = Assert.Single(Snapshot(spans), item => string.Equals(
-            item.GetTagItem("gen_ai.conversation.id") as string, session.CallId, StringComparison.Ordinal));
+            item.GetTagItem("gen_ai.conversation.id") as string, session.ConversationId, StringComparison.Ordinal));
 
         Assert.Equal("failed", span.GetTagItem("agentcore.turn.outcome"));
         Assert.Equal(ActivityStatusCode.Error, span.Status);
-        Assert.Equal(CallSession.EmptyReplyReason, span.StatusDescription);
+        Assert.Equal(ConversationSession.EmptyReplyReason, span.StatusDescription);
     }
 
     [Fact]
@@ -199,7 +199,7 @@ public sealed class TurnObservabilityTests
 
         using SequencedChatClient reply = new("hello there.");
         using SequencedChatClient fill = new(StayingNull);
-        var session = Build(PolicyYaml, reply, fill).Create("call-" + Guid.NewGuid().ToString("N"));
+        var session = Build(PolicyYaml, reply, fill).Create("conversation-" + Guid.NewGuid().ToString("N"));
 
         await foreach (var update in session.RunTurnStreamingAsync("hi", TestContext.Current.CancellationToken))
         {
@@ -209,7 +209,7 @@ public sealed class TurnObservabilityTests
         // The span travels on the turn record and not on Activity.Current, because an async iterator
         // restores the execution context of its caller at every yield.
         var span = Assert.Single(Snapshot(spans), item => string.Equals(
-            item.GetTagItem("gen_ai.conversation.id") as string, session.CallId, StringComparison.Ordinal));
+            item.GetTagItem("gen_ai.conversation.id") as string, session.ConversationId, StringComparison.Ordinal));
 
         Assert.Equal("completed", span.GetTagItem("agentcore.turn.outcome"));
     }
@@ -218,19 +218,19 @@ public sealed class TurnObservabilityTests
     // Section 8.7: three rows say "log once".
     // -------------------------------------------------------------------------------------------
     [Fact]
-    public async Task AFailedExtraction_IsLoggedOnceForTheTurnAndTheCallContinues()
+    public async Task AFailedExtraction_IsLoggedOnceForTheTurnAndTheConversationContinues()
     {
         RecordingLogger logger = new();
         using SequencedChatClient reply = new("hello there.");
         using SequencedChatClient fill = new("I am sorry, I cannot do that.");
-        var session = Build(PolicyYaml, reply, fill, logger: logger).Create("call-x");
+        var session = Build(PolicyYaml, reply, fill, logger: logger).Create("conversation-x");
 
         var turn = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
         // Row two of section 8.7: leave the slots unchanged, log once for the turn, and continue.
         var line = Assert.Single(logger.Of(1));
         Assert.Equal(LogLevel.Warning, line.Level);
-        Assert.Contains("call-x", line.Message, StringComparison.Ordinal);
+        Assert.Contains("conversation-x", line.Message, StringComparison.Ordinal);
         Assert.NotNull(turn.ExtractionFailure);
         Assert.Equal("hello there.", turn.ReplyText);
     }
@@ -241,7 +241,7 @@ public sealed class TurnObservabilityTests
         RecordingLogger logger = new();
         using SequencedChatClient reply = new("   ");
         using SequencedChatClient fill = new(StayingNull);
-        var session = Build(PolicyYaml, reply, fill, logger: logger).Create("call-x");
+        var session = Build(PolicyYaml, reply, fill, logger: logger).Create("conversation-x");
 
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
@@ -257,14 +257,14 @@ public sealed class TurnObservabilityTests
     {
         RecordingLogger logger = new();
         using LoopingToolCallingChatClient reply = new();
-        var session = Build(ToolYaml, reply, null, new ThrowingToolBuilder().Create, logger: logger).Create("call-x");
+        var session = Build(ToolYaml, reply, null, new ThrowingToolBuilder().Create, logger: logger).Create("conversation-x");
 
         await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
 
-        // Row six of section 8.7. The turn spoke the fallback, and the call is still alive.
+        // Row six of section 8.7. The turn spoke the fallback, and the conversation is still alive.
         //
         // ONE line, and the turn spent four tool calls to get here. Each of those four is a row in
-        // the chain of D23, which is where a record of a call belongs; the log gets the turn-level
+        // the chain of D23, which is where a record of a conversation belongs; the log gets the turn-level
         // fact alone, so the volume an operator pays Grafana Cloud for did not move.
         var line = Assert.Single(logger.Of(2));
         Assert.Equal(LogLevel.Error, line.Level);
@@ -285,7 +285,7 @@ public sealed class TurnObservabilityTests
         // Two of the three "log once" rows fire in this one turn, and neither has anywhere to write.
         var turn = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
-        Assert.Equal(CallSession.FallbackReply, turn.ReplyText);
+        Assert.Equal(ConversationSession.FallbackReply, turn.ReplyText);
         Assert.NotNull(turn.ExtractionFailure);
     }
 
@@ -320,14 +320,14 @@ public sealed class TurnObservabilityTests
     // -------------------------------------------------------------------------------------------
     // Helpers.
     // -------------------------------------------------------------------------------------------
-    /// <summary>Runs three turns of one call and collects every metric attribute the library wrote.</summary>
-    /// <param name="callId">The id of the call.</param>
+    /// <summary>Runs three turns of one conversation and collects every metric attribute the library wrote.</summary>
+    /// <param name="conversationId">The id of the conversation.</param>
     /// <returns>Every attribute of every measurement, flattened.</returns>
     /// <remarks>
     /// The three turns cover the three outcomes: one answers, one meets a section 8.7 row, and one
-    /// ends the call. That reaches every instrument the library owns.
+    /// ends the conversation. That reaches every instrument the library owns.
     /// </remarks>
-    private static async Task<List<KeyValuePair<string, object?>>> MeasureAsync(string callId)
+    private static async Task<List<KeyValuePair<string, object?>>> MeasureAsync(string conversationId)
     {
         List<KeyValuePair<string, object?>> tags = [];
         using MeterListener listener = new();
@@ -347,7 +347,7 @@ public sealed class TurnObservabilityTests
         using SequencedChatClient reply = new("hello there.", "   ", "goodbye.");
         using SequencedChatClient fill = new(StayingNull, StayingNull, """{ "callerSaidGoodbye": true }""");
         var session = Build(PolicyYaml, reply, fill, auditSink: new Application.Audit.Memory.InMemoryAuditSink())
-            .Create(callId);
+            .Create(conversationId);
 
         var token = TestContext.Current.CancellationToken;
         await session.RunTurnAsync("hi", token);
@@ -371,19 +371,19 @@ public sealed class TurnObservabilityTests
     }
 
     /// <summary>Runs one turn and collects the spans of this library.</summary>
-    private static async Task<List<Activity>> RecordSpansAsync(string callId)
+    private static async Task<List<Activity>> RecordSpansAsync(string conversationId)
     {
         List<Activity> spans = [];
         using var listener = ListenTo(spans);
 
         using SequencedChatClient reply = new("hello there.");
         using SequencedChatClient fill = new(StayingNull);
-        var session = Build(PolicyYaml, reply, fill).Create(callId);
+        var session = Build(PolicyYaml, reply, fill).Create(conversationId);
 
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
         return [.. Snapshot(spans).Where(span => string.Equals(
-            span.GetTagItem("gen_ai.conversation.id") as string, callId, StringComparison.Ordinal))];
+            span.GetTagItem("gen_ai.conversation.id") as string, conversationId, StringComparison.Ordinal))];
     }
 
     /// <summary>Copies what the listener has collected so far.</summary>
@@ -424,7 +424,7 @@ public sealed class TurnObservabilityTests
         return listener;
     }
 
-    private static CallSessionFactory Build(
+    private static ConversationSessionFactory Build(
         string yaml,
         IChatClient reply,
         IChatClient? fill,
@@ -433,7 +433,7 @@ public sealed class TurnObservabilityTests
         IAuditSinkPort? auditSink = null,
         ILogger? logger = null)
     {
-        // There is always a sink now: CallObservers.Standard takes a required one, because the
+        // There is always a sink now: ConversationObservers.Standard takes a required one, because the
         // composition root resolves providers.audit for every host and falls back to the in-process
         // memory kind. An optional parameter has to be a compile-time constant, so the default is
         // spelled here instead — a fact that does not care where its events land gets a fresh
@@ -454,12 +454,12 @@ public sealed class TurnObservabilityTests
                 Tools = TestToolRegistry.From(document, tools, TestContext.Current.CancellationToken),
             })["main"];
 
-        return new CallSessionFactory(
+        return new ConversationSessionFactory(
             compiled,
             new GuardEvaluator(compiled.Configuration.Guards),
-            CallSessionFactory.CreateExtractor(compiled, chatClients),
+            ConversationSessionFactory.CreateExtractor(compiled, chatClients),
             timeProvider,
             logger,
-            CallObservers.Standard(sink, logger));
+            ConversationObservers.Standard(sink, logger));
     }
 }

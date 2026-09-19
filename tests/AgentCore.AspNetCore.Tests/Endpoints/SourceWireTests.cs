@@ -9,7 +9,7 @@ using Xunit;
 namespace AgentCore.AspNetCore.Tests.Endpoints;
 
 /// <summary>
-/// The whole wire a source travels: a producer, the call's sources, and one extra SSE field.
+/// The whole wire a source travels: a producer, the conversation's sources, and one extra SSE field.
 /// </summary>
 /// <remarks>
 /// Retrieval is the first producer of a source and this test deliberately does not use it. The
@@ -31,7 +31,7 @@ public sealed class SourceWireTests
               model: { ref: reply }
             items:
               - { id: greeter, instructions: "greet the caller", tools: [ look_it_up ] }
-              - { id: closer,  instructions: "close the call",   tools: [ look_it_up ] }
+              - { id: closer,  instructions: "close the conversation",   tools: [ look_it_up ] }
           entries:
             main:
               policy:
@@ -40,7 +40,7 @@ public sealed class SourceWireTests
                   - { id: greeting, agent: greeter, to: [ { stage: close } ] }
                   - { id: close,    agent: closer,  to: [ { stage: greeting } ] }
           providers:
-            call:   { kind: telnyx-relay }
+            conversation:   { kind: telnyx-relay }
             speech:
               stt: { kind: telnyx-relay }
               tts: { kind: telnyx-relay }
@@ -113,11 +113,11 @@ public sealed class SourceWireTests
           // FunctionInvokingChatClient batches every parallel call's results of one round onto ONE
           // message (and this endpoint turns that message into ONE update), so a fix that reads the
           // call id off "the first FunctionResultContent on the update" rather than off the source
-          // itself would silently stamp the second source with the first call's id. This is the
+          // itself would silently stamp the second source with the first conversation's id. This is the
           // regression test for exactly that.
           await using var host = await ResponsesHost.StartAsync(
               SourceYaml,
-              new TwoParallelCallsChatClient(),
+              new TwoParallelConversationsChatClient(),
               configure: options => options.Bind("LookItUp", (string? what, TurnInvocation? turn) =>
               {
                   turn?.Sources?.Publish(new SourceReference
@@ -146,8 +146,8 @@ public sealed class SourceWireTests
           var left = Assert.Single(cited, source => source.GetProperty("id").GetString() == "card-left");
           var right = Assert.Single(cited, source => source.GetProperty("id").GetString() == "card-right");
 
-          Assert.Equal("call_1", left.GetProperty("call_id").GetString());
-          Assert.Equal("call_2", right.GetProperty("call_id").GetString());
+          Assert.Equal("conversation_1", left.GetProperty("call_id").GetString());
+          Assert.Equal("conversation_2", right.GetProperty("call_id").GetString());
       }
 
       /// <summary>Sends one turn of words and reads the answer as it arrives.</summary>
@@ -181,7 +181,7 @@ public sealed class SourceWireTests
                   yield return new ChatResponseUpdate(
                       ChatRole.Assistant,
                       [new FunctionCallContent(
-                          "call_1",
+                          "conversation_1",
                           tool.Name,
                           new Dictionary<string, object?>(StringComparer.Ordinal) { ["what"] = "E03" })]);
                   yield break;
@@ -215,11 +215,11 @@ public sealed class SourceWireTests
 
       /// <summary>Calls the tool it is offered twice in one round — two parallel calls — then answers in words.</summary>
       /// <remarks>
-      /// This is the shape a real model routinely produces and the single-call fakes above cannot
+      /// This is the shape a real model routinely produces and the single-conversation fakes above cannot
       /// exercise: <c>FunctionInvokingChatClient</c> batches both tool results of one round onto ONE
       /// message before this endpoint ever sees it.
       /// </remarks>
-      private sealed class TwoParallelCallsChatClient : IChatClient
+      private sealed class TwoParallelConversationsChatClient : IChatClient
       {
           public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
               IEnumerable<ChatMessage> messages,
@@ -236,11 +236,11 @@ public sealed class SourceWireTests
                       ChatRole.Assistant,
                       [
                           new FunctionCallContent(
-                              "call_1",
+                              "conversation_1",
                               tool.Name,
                               new Dictionary<string, object?>(StringComparer.Ordinal) { ["what"] = "left" }),
                           new FunctionCallContent(
-                              "call_2",
+                              "conversation_2",
                               tool.Name,
                               new Dictionary<string, object?>(StringComparer.Ordinal) { ["what"] = "right" }),
                       ]);

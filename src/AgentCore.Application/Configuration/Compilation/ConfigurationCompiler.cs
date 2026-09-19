@@ -1,7 +1,6 @@
-using AgentCore.Application.Calls.Memory;
+using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Evaluation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Transcript;
@@ -68,34 +67,14 @@ public static class ConfigurationCompiler
             throw Fail(
                 entryPointer,
                 "the entry holds two of agent:, policy:, and graph:. The section 8.2 compile table "
-                + "takes exactly one: agent: for one agent answering directly, policy: for a call that "
+                + "takes exactly one: agent: for one agent answering directly, policy: for a conversation that "
                 + "walks stages, and graph: for a run that needs checkpointing, a request port, or a "
                 + "parallel fan-out with a join.");
         }
 
         if (hasGraph)
         {
-            var graph = entry.Graph!;
-            var graphPointer = ConfigurationError.AppendPointer(entryPointer, "graph");
-            var hasPattern = graph.Pattern is not null;
-            var hasNodes = graph.Nodes.Count > 0 || graph.Edges.Count > 0;
-
-            if (hasPattern && hasNodes)
-            {
-                throw Fail(graphPointer, "the graph holds both pattern: and nodes:. It holds one or the other.");
-            }
-
-            if (hasPattern)
-            {
-                return PatternGraphRow.Instance;
-            }
-
-            if (hasNodes)
-            {
-                return ExplicitGraphRow.Instance;
-            }
-
-            throw Fail(graphPointer, "the graph declares neither pattern: nor nodes: and edges:.");
+            return SelectGraphRow(entry.Graph!, ConfigurationError.AppendPointer(entryPointer, "graph"));
         }
 
         if (hasPolicy)
@@ -105,14 +84,7 @@ public static class ConfigurationCompiler
 
         if (hasAgent)
         {
-            if (entry.Agent!.Length == 0)
-            {
-                throw Fail(
-                    ConfigurationError.AppendPointer(entryPointer, "agent"),
-                    "the entry holds an empty agent:. It names one agents.items id.");
-            }
-
-            return SingleAgentRow.Instance;
+            return SelectSingleAgentRow(entry.Agent!, ConfigurationError.AppendPointer(entryPointer, "agent"));
         }
 
         throw Fail(
@@ -120,12 +92,46 @@ public static class ConfigurationCompiler
             "the entry holds none of agent:, policy:, and graph:, so it compiles to nothing.");
     }
 
+    /// <summary>Picks the graph row: <c>pattern:</c> or <c>nodes:</c> and <c>edges:</c>, never both, never neither.</summary>
+    private static CompileTableRow SelectGraphRow(GraphConfiguration graph, string graphPointer)
+    {
+        var hasPattern = graph.Pattern is not null;
+        var hasNodes = graph.Nodes.Count > 0 || graph.Edges.Count > 0;
+
+        if (hasPattern && hasNodes)
+        {
+            throw Fail(graphPointer, "the graph holds both pattern: and nodes:. It holds one or the other.");
+        }
+
+        if (hasPattern)
+        {
+            return PatternGraphRow.Instance;
+        }
+
+        if (hasNodes)
+        {
+            return ExplicitGraphRow.Instance;
+        }
+
+        throw Fail(graphPointer, "the graph declares neither pattern: nor nodes: and edges:.");
+    }
+
+    /// <summary>Picks the single-agent row, once <c>agent:</c> names an id.</summary>
+    private static SingleAgentRow SelectSingleAgentRow(string agentId, string agentPointer)
+    {
+        if (agentId.Length == 0)
+        {
+            throw Fail(agentPointer, "the entry holds an empty agent:. It names one agents.items id.");
+        }
+
+        return SingleAgentRow.Instance;
+    }
+
     /// <summary>Compiles one document into one agent per entry.</summary>
     /// <param name="configuration">The loaded document.</param>
     /// <param name="context">The seams the document names.</param>
     /// <returns>The compiled agents, keyed by entry name. Each is a process singleton: see T44.</returns>
     /// <exception cref="ConfigurationLoadException">An entry does not compile.</exception>
-#pragma warning disable MAAI001 // BackgroundAgentsProvider is evaluation-only in Microsoft.Agents.AI 1.21.0.
     public static IReadOnlyDictionary<string, CompiledAgent> CompileAll(
         AgentCoreConfiguration configuration,
         AgentCompilationContext context)
@@ -133,12 +139,10 @@ public static class ConfigurationCompiler
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(context);
 
-        ICallStore calls = context.CallStore ?? new InMemoryCallStore();
+        IConversationStore conversations = context.ConversationStore ?? new InMemoryConversationStore();
+        CompiledDocument document = new(configuration, conversations, new AgentCoreChatHistoryProvider(conversations));
 
-        AgentCoreChatHistoryProvider history = new(calls);
-
-        Dictionary<string, (Dictionary<string, AIAgent> Agents, IReadOnlySet<string> HarnessStateKeys, List<BackgroundAgentsProvider> BackgroundProviders)> built = new(StringComparer.Ordinal);
-
+        Dictionary<string, CompiledAgentSet> built = new(StringComparer.Ordinal);
         Dictionary<string, CompiledAgent> compiled = new(StringComparer.Ordinal);
 
         foreach (var (entryName, entry) in configuration.Entries)
@@ -150,58 +154,31 @@ public static class ConfigurationCompiler
             var key = shape == CompiledAgentShape.SingleAgent || shape == CompiledAgentShape.Policy ? "session" : shape.ToString();
             if (!built.TryGetValue(key, out var shared))
             {
-                shared = BuildAgents(configuration, context, row.SessionCarriesHistory ? history : null);
+                shared = BuildAgents(configuration, context, row.SessionCarriesHistory ? document.History : null);
                 built[key] = shared;
             }
 
-            var (entryAgent, stages) = row.BuildEntry(configuration, entryName, entry, entryPointer, shared.Agents, context);
+            var build = row.BuildEntry(configuration, entryName, entry, entryPointer, shared.Agents, context);
 
-            var spokenBy = row.SpokenAuthors(configuration, entry);
+            TurnLayers layers = new(
+                entry.FallbackReply ?? configuration.FallbackReply,
+                entry.RefusalReply ?? configuration.RefusalReply,
+                context.Moderation,
+                row.SpokenAuthors(configuration, entry));
 
-            var fallbackReply = entry.FallbackReply ?? configuration.FallbackReply;
-            var refusalReply = entry.RefusalReply ?? configuration.RefusalReply;
-
-            compiled[entryName] = new CompiledAgent(
-                configuration,
-                entryName,
-                entry.Policy,
-                fallbackReply,
-                refusalReply,
-                row,
-                calls,
-                entryAgent,
-                shared.Agents,
-                stages,
-                spokenBy,
-                history,
-                shared.HarnessStateKeys,
-                shared.BackgroundProviders,
-                inner => WithTurnDisposition(inner, fallbackReply, refusalReply, context.Moderation, spokenBy));
+            compiled[entryName] = new CompiledAgentBuilder
+            {
+                Document = document,
+                EntryName = entryName,
+                Policy = entry.Policy,
+                Row = row,
+                Entry = build,
+                Agents = shared,
+                Layers = layers,
+            }.Build();
         }
 
         return compiled;
-    }
-#pragma warning restore MAAI001
-
-    /// <summary>Puts the two turn-disposition layers on one agent a turn runs.</summary>
-    /// <param name="agent">The compiled agent of one entry, or of one <c>policy:</c> stage.</param>
-    /// <param name="fallbackReply">The resolved line the caller hears when a turn fails.</param>
-    /// <param name="refusalReply">The resolved line the caller hears when the agent refuses to answer.</param>
-    /// <param name="moderation">The endpoint seam, or <see langword="null"/> to moderate nothing.</param>
-    /// <param name="spokenBy">The agents whose reply the caller hears, or <see langword="null"/> for all.</param>
-    /// <returns>The agent the turn loop runs.</returns>
-    private static AIAgent WithTurnDisposition(
-        AIAgent agent,
-        string fallbackReply,
-        string refusalReply,
-        PromptModerator? moderation,
-        IReadOnlySet<string>? spokenBy)
-    {
-        AIAgent layered = new FallbackAgent(agent, fallbackReply, spokenBy);
-
-        return moderation is null
-            ? layered
-            : new ModerationAgent(layered, moderation, refusalReply, ModerationAgent.DefaultTimeout);
     }
 
 #pragma warning disable MAAI001 // BackgroundAgentsProvider is evaluation-only in Microsoft.Agents.AI 1.21.0.
@@ -209,8 +186,8 @@ public static class ConfigurationCompiler
     /// <param name="configuration">The loaded document.</param>
     /// <param name="context">The seams the document names.</param>
     /// <param name="history">Store 1, or <see langword="null"/> to leave the framework default in place.</param>
-    /// <returns>The agents keyed by id, the union of every harness provider's state keys, and every background provider for the call-end release.</returns>
-    private static (Dictionary<string, AIAgent> Agents, IReadOnlySet<string> HarnessStateKeys, List<BackgroundAgentsProvider> BackgroundProviders) BuildAgents(
+    /// <returns>The agents keyed by id, with what every one of them declared.</returns>
+    private static CompiledAgentSet BuildAgents(
         AgentCoreConfiguration configuration,
         AgentCompilationContext context,
         AgentCoreChatHistoryProvider? history)
@@ -220,10 +197,8 @@ public static class ConfigurationCompiler
         List<BackgroundAgentsProvider> backgroundProviders = [];
         if (configuration.Agents is not { } section)
         {
-            return (agents, harnessStateKeys, backgroundProviders);
+            return new CompiledAgentSet(agents, harnessStateKeys, backgroundProviders);
         }
-
-        var clarification = ResolvedClarification.From(configuration);
 
         Dictionary<string, ToolConfiguration> tools = new(StringComparer.Ordinal);
         foreach (var tool in configuration.Tools)
@@ -248,12 +223,18 @@ public static class ConfigurationCompiler
         // compile error rather than a stack overflow.
         List<string> path = [];
 
+        AgentsWalk walk = new(
+            section.Defaults,
+            ResolvedClarification.From(configuration),
+            configuration.Providers?.Knowledge?.Scope,
+            backgroundProviders);
+
         foreach (var item in section.Items)
         {
             Resolve(item.Id);
         }
 
-        return (agents, harnessStateKeys, backgroundProviders);
+        return new CompiledAgentSet(agents, harnessStateKeys, backgroundProviders);
 
         AIAgent? Resolve(string id)
         {
@@ -278,7 +259,7 @@ public static class ConfigurationCompiler
                     pointer,
                     $"the agent '{id}' delegates back to itself through a kind: agent tool: "
                     + $"{string.Join(" -> ", path)} -> {id}. Check 8 of section 8.5 rejects a delegation "
-                    + "cycle, because the call would never return.");
+                    + "cycle, because the conversation would never return.");
             }
 
             path.Add(id);
@@ -286,15 +267,7 @@ public static class ConfigurationCompiler
             var compiledTools = AgentToolCompiler.Build(
                 item, item.Model ?? section.Defaults?.Model, tools, context, pointer, Resolve);
 
-            var providers = AgentContextProviderCompiler.Build(
-                section.Defaults,
-                item,
-                context,
-                pointer,
-                clarification,
-                configuration.Providers?.Knowledge?.Scope,
-                Resolve,
-                backgroundProviders);
+            var providers = AgentContextProviderCompiler.Build(walk, item, context, pointer, Resolve);
             harnessStateKeys.UnionWith(AgentHarnessProviders.StateKeysOf(providers));
             harnessStateKeys.UnionWith(AgentApproval.StateKeysFor(section.Defaults, item, compiledTools));
 

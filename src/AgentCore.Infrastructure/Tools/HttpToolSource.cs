@@ -99,7 +99,7 @@ internal sealed class HttpTool : DeclaredTool
     {
         if (!TryFillUrl(arguments, out var url, out var missing))
         {
-            return Failed($"the call filled no '{missing}', and the URL needs it.");
+            return Failed($"the conversation filled no '{missing}', and the URL needs it.");
         }
 
         using HttpRequestMessage message = new(new HttpMethod(_request.Method), url);

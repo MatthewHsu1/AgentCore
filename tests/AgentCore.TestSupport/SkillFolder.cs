@@ -32,7 +32,7 @@ public sealed class SkillFolder : IDisposable
     /// <param name="relativePath">Where to put it, relative to the root. May contain one '/'.</param>
     /// <param name="frontmatterName">The name to write in the frontmatter, or null to use the directory name.</param>
     /// <param name="description">The description the prompt advertises.</param>
-    /// <returns>This folder, so a test chains its calls.</returns>
+    /// <returns>This folder, so a test chains its conversations.</returns>
     public SkillFolder WithSkill(
         string relativePath,
         string? frontmatterName = null,
@@ -52,7 +52,7 @@ public sealed class SkillFolder : IDisposable
     /// <summary>Adds a script to a skill written earlier, so a test can prove scripts stay hidden.</summary>
     /// <param name="relativePath">The skill's path, relative to the root.</param>
     /// <param name="fileName">The script file name.</param>
-    /// <returns>This folder, so a test chains its calls.</returns>
+    /// <returns>This folder, so a test chains its conversations.</returns>
     public SkillFolder WithScript(string relativePath, string fileName = "hello.py")
     {
         var scripts = Path.Combine(Root, relativePath.Replace('/', Path.DirectorySeparatorChar), "scripts");
@@ -65,7 +65,7 @@ public sealed class SkillFolder : IDisposable
     /// <summary>Adds a reference document to a skill written earlier.</summary>
     /// <param name="relativePath">The skill's path, relative to the root.</param>
     /// <param name="fileName">The file name.</param>
-    /// <returns>This folder, so a test chains its calls.</returns>
+    /// <returns>This folder, so a test chains its conversations.</returns>
     public SkillFolder WithReference(string relativePath, string fileName = "notes.md")
     {
         var references = Path.Combine(Root, relativePath.Replace('/', Path.DirectorySeparatorChar), "references");

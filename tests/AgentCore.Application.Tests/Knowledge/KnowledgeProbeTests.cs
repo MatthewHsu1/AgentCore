@@ -24,11 +24,11 @@ namespace AgentCore.Application.Tests.Knowledge;
 /// </summary>
 /// <remarks>
 /// Every test drives the search tool <c>KnowledgeProviderFactory</c> offers, the same way
-/// <c>KnowledgeProviderFactoryTests</c> does, rather than through <c>CallSession</c>: the probe reads
+/// <c>KnowledgeProviderFactoryTests</c> does, rather than through <c>ConversationSession</c>: the probe reads
 /// only the turn (<see cref="Clarifications"/>, the knowledge scope, the history flag) and the
 /// resolved <c>knowledge:</c> block, so filing exactly those by hand proves the same mechanism a
-/// real call would exercise, at a fraction of the setup. The genuinely two-turn and
-/// delegation-shaped cases live in <c>CallSessionProbeTests</c>.
+/// real conversation would exercise, at a fraction of the setup. The genuinely two-turn and
+/// delegation-shaped cases live in <c>ConversationSessionProbeTests</c>.
 /// </remarks>
 public sealed class KnowledgeProbeTests
 {
@@ -394,12 +394,12 @@ public sealed class KnowledgeProbeTests
         TurnSources sources = new();
 
         var turn = TurnOf(FullScope("applies_to", "other"), new Clarifications(), sources: sources);
-        using (sources.BeginOuterCall("call-1"))
+        using (sources.BeginOuterCall("conversation-1"))
         {
             await InvokeSearchAsync(provider, "e33", turn);
         }
 
-        Assert.Empty(sources.TakeFor("call-1"));
+        Assert.Empty(sources.TakeFor("conversation-1"));
     }
 
     // K32: the probe's own try, its own budget, its own log events.
@@ -465,7 +465,7 @@ public sealed class KnowledgeProbeTests
     // K43: at most once per turn -- the latch, the replay, and cancellation.
 
     [Fact]
-    public async Task K43_ThreeSearchCallsInOneTurn_RunOneProbe_AndIncrementOnce()
+    public async Task K43_ThreeSearchConversationsInOneTurn_RunOneProbe_AndIncrementOnce()
     {
         var port = new ProbeFakePort((facets, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>(
             facets.ContainsKey("applies_to") ? [] : [CardWithFacet("a", "applies_to", "ct900")]));
@@ -482,13 +482,13 @@ public sealed class KnowledgeProbeTests
         Assert.Same(first[0], third[0]);
 
         // Every call's own main search runs (three), and only the winner's search reached the
-        // narrowed scope (one): four port calls, one probe.
+        // narrowed scope (one): four port conversations, one probe.
         Assert.Equal(4, port.Calls);
         Assert.Equal(1, clarificationsObject.Read("applies_to").ProbeAsks);
     }
 
     [Fact]
-    public async Task K43_TwoCalls_TheFirstEmittedHoldsNothing_TheSecondReplaysTheSameBytes()
+    public async Task K43_TwoConversations_TheFirstEmittedHoldsNothing_TheSecondReplaysTheSameBytes()
     {
         var port = new ProbeFakePort((_, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>([]));
         var provider = Provider(port, Resolved(["applies_to"]));
@@ -503,7 +503,7 @@ public sealed class KnowledgeProbeTests
     }
 
     [Fact]
-    public async Task K43_TwoCalls_TheFirstProbeThrows_TheSecondReplaysHoldsNothing()
+    public async Task K43_TwoConversations_TheFirstProbeThrows_TheSecondReplaysHoldsNothing()
     {
         var thrown = 0;
         var port = new ProbeFakePort((facets, _) =>
@@ -574,11 +574,11 @@ public sealed class KnowledgeProbeTests
         // elapsed time tells correct from broken.
         //
         // The loser's own token is never cancelled -- deliberately unrelated to the winner's
-        // caller.Token, unlike a same-turn call that would share it. A shared token was tried first
+        // caller.Token, unlike a same-turn conversation that would share it. A shared token was tried first
         // and measured to make this row untestable: Task.WaitAsync(timeout, token) reacts to a
         // cancelled TOKEN exactly as fast as it reacts to the awaited TASK being cancelled, so with
         // one shared token the loser wakes just as quickly whether or not Probe.Fail() ever
-        // runs -- removing the call and re-running this same test with a shared token still passed,
+        // runs -- removing the conversation and re-running this same test with a shared token still passed,
         // in under 150 ms. An unrelated token closes that hole: the loser's own wait then has exactly
         // one way to end early -- the shared payload being failed -- and otherwise runs out its own
         // two-second clock (ProbeDeadlineSeconds + ProbeWaitMarginSeconds), which is what the timing
@@ -642,7 +642,7 @@ public sealed class KnowledgeProbeTests
     public async Task K43_ProbeThatThrowsEveryTurn_StillAdvancesProbeAsks()
     {
         // Acceptance: "a probe that throws every turn still advances probeAsks." Two turns,
-        // simulated with the same BeginTurn a real CallSession calls: the latch and the per-turn mark
+        // simulated with the same BeginTurn a real ConversationSession conversations: the latch and the per-turn mark
         // reset, the counter does not.
         var attempts = 0;
         var port = new ProbeFakePort((facets, _) =>
@@ -857,7 +857,7 @@ public sealed class KnowledgeProbeTests
         Assert.Contains("unreachable", results[0].Text, StringComparison.Ordinal);
 
         // The latch stays claimed, so the turn cannot probe again -- but it is resolved, so a second
-        // call replays at once rather than running out its own clock.
+        // conversation replays at once rather than running out its own clock.
         var loser = clarificationsObject.ClaimProbe();
         Assert.False(loser.Won);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
@@ -1011,7 +1011,7 @@ public sealed class KnowledgeProbeTests
         bool carriesHistory = false,
         TurnSources? sources = null) => new()
     {
-        CallId = "call",
+        ConversationId = "conversation",
         TurnIndex = 0,
         Stage = "",
         Knowledge = scope,
@@ -1112,7 +1112,7 @@ public sealed class KnowledgeProbeTests
     /// SIMULATED CALLER's own token (K43's cancellation row), never the test host's — see
     /// <see cref="K43_ACancelledProbe_RollsBackTheIncrement_FailsThePayload_AndKeepsTheLatch"/>, its
     /// only caller. Named apart from <see cref="InvokeSearchAsync(AIContextProvider, string, TurnInvocation)"/>
-    /// so a deliberately non-<c>TestContext</c> token at this one call site does not read as a mistake.
+    /// so a deliberately non-<c>TestContext</c> token at this one conversation site does not read as a mistake.
     /// </summary>
     private static async Task<IReadOnlyList<TextSearchProvider.TextSearchResult>> InvokeSearchWithCallerTokenAsync(
         AIContextProvider provider, string query, TurnInvocation turn, CancellationToken callerToken)
@@ -1122,11 +1122,10 @@ public sealed class KnowledgeProbeTests
             Invoking("hello", session), TestContext.Current.CancellationToken).ConfigureAwait(false);
         var search = Assert.Single(context.Tools!, tool => tool.Name == "Search");
         var results = await ((AIFunction)search).InvokeAsync(
-            new AIFunctionArguments(new Dictionary<string, object?>(StringComparer.Ordinal)
+            turn.FileIn(new AIFunctionArguments(new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 ["userQuestion"] = query,
-                [TurnInvocation.ArgumentsKey] = turn,
-            }),
+            })),
             callerToken).ConfigureAwait(false)
             as IReadOnlyList<TextSearchProvider.TextSearchResult>;
         return results!;

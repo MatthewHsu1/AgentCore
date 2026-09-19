@@ -107,7 +107,7 @@ public sealed class AgentCoreHttpClientsTests
     /// </summary>
     /// <remarks>
     /// Guessing shorter than the endpoint asked for gets the next attempt refused as well, and
-    /// guessing longer holds the call for no reason.
+    /// guessing longer holds the conversation for no reason.
     /// </remarks>
     [Fact]
     public void ItWaitsTheRetryAfterAnEndpointAsksFor()

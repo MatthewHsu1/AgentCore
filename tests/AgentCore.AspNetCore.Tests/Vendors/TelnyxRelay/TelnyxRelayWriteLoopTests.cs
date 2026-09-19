@@ -39,7 +39,7 @@ public sealed class TelnyxRelayWriteLoopTests
         // Armed before the first frame, because the write loop reads State for the first time only
         // once a turn has actually queued something.
         harness.Socket.ParkNextStateRead();
-        harness.Socket.Queue(RelayFrames.Setup(callSessionId: "call-gate"));
+        harness.Socket.Queue(RelayFrames.Setup(conversationSessionId: "conversation-gate"));
         harness.Socket.Queue(RelayFrames.Prompt("hi", last: true));
 
         try
@@ -98,7 +98,7 @@ public sealed class TelnyxRelayWriteLoopTests
         using var bounded = CancellationTokenSource.CreateLinkedTokenSource(
             deadline.Token, TestContext.Current.CancellationToken);
 
-        harness.Socket.Queue(RelayFrames.Setup(callSessionId: "call-stopping"));
+        harness.Socket.Queue(RelayFrames.Setup(conversationSessionId: "conversation-stopping"));
         harness.StopApplication();
 
         try
@@ -119,7 +119,7 @@ public sealed class TelnyxRelayWriteLoopTests
     public async Task AWriteLoopThatFaults_ClosesWithInternalServerError()
     {
         // Nothing on a healthy loopback socket makes a send throw, so the fault is injected here.
-        // The status is this endpoint's own report of its own defect, and a real call would see it.
+        // The status is this endpoint's own report of its own defect, and a real conversation would see it.
         using FragmentingChatClient reply = new("hello there caller");
         await using var harness = await RelayConnectionHarness.StartAsync(TelnyxRelayTurnTests.PolicyYaml, reply);
 
@@ -128,7 +128,7 @@ public sealed class TelnyxRelayWriteLoopTests
             deadline.Token, TestContext.Current.CancellationToken);
 
         harness.Socket.FailEverySend(new InvalidOperationException("the send failed."));
-        harness.Socket.Queue(RelayFrames.Setup(callSessionId: "call-write-fault"));
+        harness.Socket.Queue(RelayFrames.Setup(conversationSessionId: "conversation-write-fault"));
         harness.Socket.Queue(RelayFrames.Prompt("hi", last: true));
 
         try
@@ -162,7 +162,7 @@ public sealed class TelnyxRelayWriteLoopTests
         using var bounded = CancellationTokenSource.CreateLinkedTokenSource(
             deadline.Token, TestContext.Current.CancellationToken);
 
-        harness.Socket.Queue(RelayFrames.Setup(callSessionId: "call-reused-writer"));
+        harness.Socket.Queue(RelayFrames.Setup(conversationSessionId: "conversation-reused-writer"));
         harness.Socket.Queue(RelayFrames.Prompt("hi", last: true));
 
         try

@@ -73,9 +73,9 @@ public sealed class PostgresAuditSinkAdapterTests : PostgresDatabaseTest
         await sink.AppendAsync(
             new()
             {
-                CallId = "C1",
+                ConversationId = "C1",
                 EventId = Guid.CreateVersion7(),
-                Kind = AgentCore.Domain.Audit.AuditEventKind.CallStarted,
+                Kind = AgentCore.Domain.Audit.AuditEventKind.ConversationStarted,
                 OccurredAt = new DateTimeOffset(2026, 8, 19, 9, 0, 0, TimeSpan.Zero),
             },
             Token);

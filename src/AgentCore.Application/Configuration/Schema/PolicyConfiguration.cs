@@ -33,7 +33,7 @@ public sealed record StageConfiguration
     /// <summary>Gets the id of the agent that speaks in this stage, or <see langword="null"/>.</summary>
     public string? Agent { get; init; }
 
-    /// <summary>Gets whether the stage ends the call. A terminal stage needs no exit.</summary>
+    /// <summary>Gets whether the stage ends the conversation. A terminal stage needs no exit.</summary>
     public bool Terminal { get; init; }
 
     /// <summary>Gets what the stage does when no exit guard is true.</summary>
@@ -48,7 +48,7 @@ public sealed record StageConfiguration
 /// </summary>
 public sealed record PolicyConfiguration
 {
-    /// <summary>Gets the id of the stage the call starts in.</summary>
+    /// <summary>Gets the id of the stage the conversation starts in.</summary>
     public required string Initial { get; init; }
 
     /// <summary>Gets the declared stages, in document order.</summary>

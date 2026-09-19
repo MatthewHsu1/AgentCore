@@ -15,7 +15,7 @@ namespace AgentCore.Application.Configuration.Validation;
 /// <para>
 /// Section 8.7 fixes the run-time failure behaviour: a guard that throws is possible and is not a
 /// defect. An implementation logs the failure once and returns <see langword="false"/>. It never
-/// propagates the exception, because a failed guard must not drop a call.
+/// propagates the exception, because a failed guard must not drop a conversation.
 /// </para>
 /// <para>
 /// An implementation resolves a named guard through the <c>guards:</c> table that it receives when it
