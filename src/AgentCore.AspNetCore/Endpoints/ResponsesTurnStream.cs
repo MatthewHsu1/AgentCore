@@ -1,9 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Conversation;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tools;
-using AgentCore.AspNetCore.Sessions;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Hosting.OpenAI;
 using Microsoft.AspNetCore.Http;
@@ -28,14 +26,7 @@ internal static class ResponsesTurnStream
     /// </remarks>
     internal static async Task WriteAsync(
         HttpContext http,
-        AgentCoreAgent agent,
-        AgentCoreAgentSessionStore sessions,
-        AgentSession session,
-        ConversationSession conversation,
-        ChatMessage input,
-        ConversationTurnOrigin? origin,
-        string responseId,
-        string? conversationId,
+        ResponsesTurn turn,
         bool dialect,
         CancellationToken cancellationToken)
     {
@@ -44,15 +35,15 @@ internal static class ResponsesTurnStream
         http.Response.Headers.CacheControl = "no-cache";
 
         // The headers leave before the turn ends, so this one names the stage the turn speaks in.
-        http.Response.Headers[ResponsesEndpointRouteBuilderExtensions.StageHeaderName] = conversation.Stage;
+        http.Response.Headers[ResponsesEndpointRouteBuilderExtensions.StageHeaderName] = turn.Conversation.Stage;
 
         // One turn's worth of ids: the pairing dies with the stream.
         ToolCallNames toolNames = new();
 
-        var updates = StreamAgentUpdatesAsync(http, agent, conversation, input, origin, dialect, toolNames, cancellationToken);
-        
+        var updates = StreamAgentUpdatesAsync(http, turn, dialect, toolNames, cancellationToken);
+
         await foreach (var frame in OpenAIResponses
-            .WriteResponseStreamAsync(updates, responseId, conversationId, cancellationToken)
+            .WriteResponseStreamAsync(updates, turn.ResponseId, turn.ConversationId, cancellationToken)
             .ConfigureAwait(false))
         {
             await http.Response.WriteAsync(frame, cancellationToken).ConfigureAwait(false);
@@ -61,8 +52,7 @@ internal static class ResponsesTurnStream
             await http.Response.Body.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        await ResponsesSessionFiling.SaveAsync(sessions, agent, session, responseId, conversationId, cancellationToken)
-            .ConfigureAwait(false);
+        await turn.FileAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Runs one streaming turn on the conversation, wrapping each update with the agent's id.</summary>
@@ -72,18 +62,15 @@ internal static class ResponsesTurnStream
     /// </remarks>
     private static async IAsyncEnumerable<AgentResponseUpdate> StreamAgentUpdatesAsync(
         HttpContext http,
-        AgentCoreAgent agent,
-        ConversationSession conversation,
-        ChatMessage input,
-        ConversationTurnOrigin? origin,
+        ResponsesTurn turn,
         bool dialect,
         ToolCallNames toolNames,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
     {
         TurnStreamFiles files = new();
 
-        await foreach (var update in conversation
-            .RunTurnMessageStreamingAtOriginAsync(input, origin, cancellationToken)
+        await foreach (var update in turn.Conversation
+            .RunTurnMessageStreamingAtOriginAsync(turn.Input, turn.Origin, cancellationToken)
             .ConfigureAwait(false))
         {
             if (dialect)
@@ -96,7 +83,7 @@ internal static class ResponsesTurnStream
                 files.Note(update);
             }
 
-            yield return new AgentResponseUpdate(update) { AgentId = agent.Id };
+            yield return new AgentResponseUpdate(update) { AgentId = turn.Agent.Id };
         }
 
         if (dialect)
@@ -105,7 +92,7 @@ internal static class ResponsesTurnStream
             // inside it: by here the bytes are in the store or never will be.
             var conversations = http.RequestServices.GetRequiredService<Conversations>();
 
-            await foreach (var part in files.ResolveAsync(conversations, conversation.ConversationId, cancellationToken).ConfigureAwait(false))
+            await foreach (var part in files.ResolveAsync(conversations, turn.Conversation.ConversationId, cancellationToken).ConfigureAwait(false))
             {
                 await WritePartLineAsync(http, part, cancellationToken).ConfigureAwait(false);
             }

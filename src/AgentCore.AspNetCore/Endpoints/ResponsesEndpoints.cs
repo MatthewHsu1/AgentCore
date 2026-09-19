@@ -35,9 +35,6 @@ public static class ResponsesEndpointRouteBuilderExtensions
     /// </summary>
     public const string TimeZoneHeaderName = "X-AgentCore-Time-Zone";
 
-    /// <summary>The OpenAI error type every refused request reports.</summary>
-    private const string InvalidRequestError = "invalid_request_error";
-
     /// <summary>Maps every entry on <see cref="DefaultPattern"/>, with the URL naming the entry.</summary>
     /// <param name="endpoints">The route builder of the host.</param>
     /// <returns>The mapped endpoint, so a host adds its own conventions.</returns>
@@ -66,64 +63,30 @@ public static class ResponsesEndpointRouteBuilderExtensions
     }
 
     /// <summary>Runs one turn of one conversation, and files the session under the ids the answer carries.</summary>
+    /// <remarks>
+    /// Every step answers its own refusal and returns <see langword="null"/>, so this reads as
+    /// the happy path alone.
+    /// </remarks>
     private static async Task HandleAsync(HttpContext http)
     {
         var cancellationToken = http.RequestAborted;
         var entry = http.Request.RouteValues[EntryRouteParameter] as string ?? string.Empty;
 
-        JsonElement body;
-        try
+        if (await ResponsesRequestReader.ReadBodyAsync(http, cancellationToken).ConfigureAwait(false) is not { } body)
         {
-            body = await JsonSerializer
-                .DeserializeAsync<JsonElement>(http.Request.Body, cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (JsonException exception)
-        {
-            await ResponsesRequestReader.WriteErrorAsync(
-                http,
-                StatusCodes.Status400BadRequest,
-                "the request body is not well-formed JSON: " + exception.Message,
-                InvalidRequestError,
-                "malformed_body",
-                cancellationToken).ConfigureAwait(false);
             return;
         }
 
         var agentcore = ResponsesAgentCore.ReadRequest(body);
+        var approval = agentcore?.Approval;
 
-        OpenAIResponsesRunRequest? runRequest;
+        var run = await ResponsesRequestReader
+            .ReadRunInputAsync(http, body, approving: approval is not null, cancellationToken)
+            .ConfigureAwait(false);
 
-        string? conversationId;
-
-        IReadOnlyList<ChatMessage> messages;
-
-        try
+        if (run is null)
         {
-            runRequest = OpenAIResponses.ToAgentRunRequest(body);
-            conversationId = runRequest.ConversationId;
-            messages = [.. runRequest.Messages];
-        }
-        catch (ArgumentException exception)
-        {
-            // An approval answer carries no words, only the request it answers — and the
-            // protocol parse refuses a turn with no input. The continuation still names the
-            // conversation, so read it off the body and run the answer alone.
-            if (agentcore?.Approval is null)
-            {
-                await ResponsesRequestReader.WriteErrorAsync(
-                    http,
-                    StatusCodes.Status400BadRequest,
-                    "the request is not a Responses request: " + exception.Message,
-                    InvalidRequestError,
-                    "invalid_body",
-                    cancellationToken).ConfigureAwait(false);
-                return;
-            }
-
-            runRequest = null;
-            messages = [];
-            conversationId = ResponsesRequestReader.ReadConversationId(body);
+            return;
         }
 
         var entries = http.RequestServices.GetRequiredService<AgentCoreBoot>().Entries;
@@ -133,7 +96,6 @@ public static class ResponsesEndpointRouteBuilderExtensions
                 http,
                 StatusCodes.Status404NotFound,
                 EntryRegistry.UnknownEntryMessage(entry, entries.Entries),
-                InvalidRequestError,
                 "unknown_entry",
                 cancellationToken).ConfigureAwait(false);
             return;
@@ -141,24 +103,61 @@ public static class ResponsesEndpointRouteBuilderExtensions
 
         var sessions = http.RequestServices.GetRequiredService<AgentCoreAgentSessionStore>();
 
-        // The continuation this turn hangs off, or null for the first turn of a conversation.
-        // A conversation id names the conversation itself; a response id names one past turn of it.
-        // The helper prefers the response chain over the conversation, exactly as the
-        // protocol treats them as mutually exclusive; the refused-parse fallback reads
-        // the same precedence off the body.
-        var key = runRequest is not null
-            ? OpenAIResponses.GetSessionStoreId(runRequest)
-            : ResponsesRequestReader.ReadContinuationId(body);
+        var opened = await OpenSessionAsync(http, agent, sessions, run, approving: approval is not null, cancellationToken)
+            .ConfigureAwait(false);
 
-        if (string.IsNullOrWhiteSpace(key))
+        if (opened is null)
         {
-            key = null;
+            return;
         }
 
-        if (string.IsNullOrWhiteSpace(conversationId))
+        var (session, conversationId) = opened.Value;
+
+        if (session.GetService<ConversationSession>() is not { } conversation)
         {
-            conversationId = null;
+            throw new InvalidOperationException(
+                "The session is not one this agent created, so it names no call to run.");
         }
+
+        var input = await ReadInputAsync(http, conversation, approval, run.Messages, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (input is null)
+        {
+            return;
+        }
+
+        // A conversation the request named stays the conversation; a keyless first turn minted
+        // one alongside the session above. A response id is minted every turn either way, so a
+        // chain can start from any answer.
+        ResponsesTurn turn = new(
+            agent,
+            sessions,
+            session,
+            conversation,
+            input,
+            ResponsesAgentCore.OriginOf(agentcore),
+            OpenAIResponses.CreateResponseId(),
+            conversationId);
+
+        await RunTurnAsync(http, body, turn, dialect: agentcore is not null, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Opens the session the turn runs on: a new one, or the one the continuation names.</summary>
+    /// <returns>
+    /// The session and the conversation id it runs under, or <see langword="null"/> once a
+    /// refusal has been answered.
+    /// </returns>
+    private static async Task<(AgentSession Session, string? ConversationId)?> OpenSessionAsync(
+        HttpContext http,
+        AgentCoreAgent agent,
+        AgentCoreAgentSessionStore sessions,
+        ResponsesRunInput run,
+        bool approving,
+        CancellationToken cancellationToken)
+    {
+        var key = run.ContinuationKey;
+        var conversationId = run.ConversationId;
 
         var known = key is not null
             && await sessions.ContainsAsync(key, cancellationToken).ConfigureAwait(false);
@@ -167,54 +166,35 @@ public static class ResponsesEndpointRouteBuilderExtensions
             && !known
             && string.Equals(key, conversationId, StringComparison.Ordinal)
             && conversationId is not null
-            && agentcore?.Approval is null;
+            && !approving;
 
-        AgentSession session;
         if (key is null)
         {
-            if (agentcore?.Approval is not null)
+            if (approving)
             {
                 await ResponsesRequestReader.WriteErrorAsync(
                     http,
                     StatusCodes.Status400BadRequest,
                     "an approval answer names the conversation it resumes. Send it with the conversation "
                     + "or previous response id the asking turn answered with.",
-                    InvalidRequestError,
                     "missing_session",
                     cancellationToken).ConfigureAwait(false);
-                return;
+                return null;
             }
 
             conversationId = ResponsesRequestReader.NewConversationId();
-            session = await agent.CreateSessionAsync(conversationId, cancellationToken).ConfigureAwait(false);
+            return (await agent.CreateSessionAsync(conversationId, cancellationToken).ConfigureAwait(false), conversationId);
         }
-        else if (namesNewConversation)
+
+        if (namesNewConversation)
         {
-            // Unknown conversation with words: start the conversation under that id, so the conversation,
-            // the conversation, and the continuation key are one id. Unknown response ids stay 404 below:
-            // they name a turn, not a conversation.
-            session = await agent.CreateSessionAsync(key, cancellationToken).ConfigureAwait(false);
+            // Unknown conversation with words: start the conversation under that id, so the conversation
+            // and the continuation key are one id. Unknown response ids stay 404 below: they name
+            // a turn, not a conversation.
+            return (await agent.CreateSessionAsync(key, cancellationToken).ConfigureAwait(false), conversationId);
         }
-        else if (known)
-        {
-            try
-            {
-                session = await sessions.GetSessionAsync(agent, key, cancellationToken).ConfigureAwait(false);
-            }
-            catch (InvalidOperationException failure)
-            {
-                // A key minted by another entry is unknown to this one, never a cross-entry read.
-                await ResponsesRequestReader.WriteErrorAsync(
-                    http,
-                    StatusCodes.Status404NotFound,
-                    failure.Message,
-                    InvalidRequestError,
-                    "continuation_not_found",
-                    cancellationToken).ConfigureAwait(false);
-                return;
-            }
-        }
-        else
+
+        if (!known)
         {
             // Either an unknown response id — a turn no answer ever carried — or an unknown
             // conversation beside an approval-only body the parse refused. A conversation with words
@@ -224,86 +204,101 @@ public static class ResponsesEndpointRouteBuilderExtensions
                 StatusCodes.Status404NotFound,
                 $"no conversation opens under '{key}'. Send the request with neither a conversation nor a "
                 + "previous response id to start one.",
-                InvalidRequestError,
                 "continuation_not_found",
                 cancellationToken).ConfigureAwait(false);
-
-            return;
+            return null;
         }
 
-        if (session.GetService<ConversationSession>() is not { } conversation)
+        try
         {
-            throw new InvalidOperationException(
-                "The session is not one this agent created, so it names no call to run.");
+            return (await sessions.GetSessionAsync(agent, key, cancellationToken).ConfigureAwait(false), conversationId);
         }
-
-        ChatMessage input;
-        if (agentcore?.Approval is { } approval)
+        catch (InvalidOperationException failure)
         {
-            if (ResponsesRequestReader.LastUserText(messages) is { Length: > 0 })
+            // A key minted by another entry is unknown to this one, never a cross-entry read.
+            await ResponsesRequestReader.WriteErrorAsync(
+                http,
+                StatusCodes.Status404NotFound,
+                failure.Message,
+                "continuation_not_found",
+                cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+    }
+
+    /// <summary>Picks what the turn runs on: the approval answer, or the last user message with words.</summary>
+    /// <returns>The input, or <see langword="null"/> once a refusal has been answered.</returns>
+    private static async Task<ChatMessage?> ReadInputAsync(
+        HttpContext http,
+        ConversationSession conversation,
+        ResponsesApprovalAnswer? approval,
+        IReadOnlyList<ChatMessage> messages,
+        CancellationToken cancellationToken)
+    {
+        if (approval is null)
+        {
+            if (ResponsesRequestReader.LastUserMessage(messages) is { } user)
             {
-                await ResponsesRequestReader.WriteErrorAsync(
-                    http,
-                    StatusCodes.Status400BadRequest,
-                    "the request carries both a user message and an approval answer. One turn carries "
-                    + "either words or an answer, never both.",
-                    InvalidRequestError,
-                    "mixed_turn",
-                    cancellationToken).ConfigureAwait(false);
-                return;
+                return user;
             }
 
-            // Async: a resumed conversation has run no turn in this process, so its ledger session —
-            // and the queue the suspending turn filed — is still closed. This opens it first.
-            if (await conversation.TryCreateApprovalAnswerAsync(approval.RequestId, approval.Approved, cancellationToken).ConfigureAwait(false) is not { } answer)
-            {
-                await ResponsesRequestReader.WriteErrorAsync(
-                    http,
-                    StatusCodes.Status409Conflict,
-                    $"the conversation queues no approval under id '{approval.RequestId}'. It was "
-                    + "answered already, belongs to another conversation, or was never asked.",
-                    InvalidRequestError,
-                    "no_pending_approval",
-                    cancellationToken).ConfigureAwait(false);
-                return;
-            }
-
-            input = answer;
-        }
-        else if (ResponsesRequestReader.LastUserMessage(messages) is not { } user)
-        {
             await ResponsesRequestReader.WriteErrorAsync(
                 http,
                 StatusCodes.Status400BadRequest,
                 "the request carries no user message with text, so there is no turn to run.",
-                InvalidRequestError,
                 "no_user_message",
                 cancellationToken).ConfigureAwait(false);
-            return;
+            return null;
         }
-        else
+
+        if (ResponsesRequestReader.LastUserText(messages) is { Length: > 0 })
         {
-            input = user;
+            await ResponsesRequestReader.WriteErrorAsync(
+                http,
+                StatusCodes.Status400BadRequest,
+                "the request carries both a user message and an approval answer. One turn carries "
+                + "either words or an answer, never both.",
+                "mixed_turn",
+                cancellationToken).ConfigureAwait(false);
+            return null;
         }
 
-        var origin = ResponsesAgentCore.OriginOf(agentcore);
+        // Async: a resumed conversation has run no turn in this process, so its ledger session —
+        // and the queue the suspending turn filed — is still closed. This opens it first.
+        if (await conversation.TryCreateApprovalAnswerAsync(approval.RequestId, approval.Approved, cancellationToken).ConfigureAwait(false) is { } answer)
+        {
+            return answer;
+        }
 
+        await ResponsesRequestReader.WriteErrorAsync(
+            http,
+            StatusCodes.Status409Conflict,
+            $"the conversation queues no approval under id '{approval.RequestId}'. It was "
+            + "answered already, belongs to another conversation, or was never asked.",
+            "no_pending_approval",
+            cancellationToken).ConfigureAwait(false);
+        return null;
+    }
+
+    /// <summary>Runs the turn on the branch the body asked for, and answers a refused turn as 409.</summary>
+    private static async Task RunTurnAsync(
+        HttpContext http,
+        JsonElement body,
+        ResponsesTurn turn,
+        bool dialect,
+        CancellationToken cancellationToken)
+    {
         var streaming = body.TryGetProperty("stream", out var streamFlag)
             && streamFlag.ValueKind == JsonValueKind.True;
-
-        // A conversation the request named stays the conversation; a keyless first turn minted
-        // one alongside the session above. A response id is minted every turn either way, so a
-        // chain can start from any answer.
-        var responseId = OpenAIResponses.CreateResponseId();
 
         // Only the stream has a frame to carry a drawing, so only the stream gets a screen. Binding
         // one on the whole-reply branch would let the tool report a picture the caller never sees.
         // Set per request, not once: the session outlives a request and the branch can differ per turn.
-        conversation.SetHasScreen(streaming);
+        turn.Conversation.SetHasScreen(streaming);
 
         if (CallerTimeZone.Parse(http.Request.Headers[TimeZoneHeaderName]) is { } zone)
         {
-            CallerTimeZone.Set(session, zone);
+            CallerTimeZone.Set(turn.Session, zone);
         }
 
         try
@@ -312,13 +307,11 @@ public static class ResponsesEndpointRouteBuilderExtensions
             {
                 // The dialect is opt-in by the member only our clients send: an OpenAI SDK
                 // never carries agentcore, so its stream stays the framework's pure shapes.
-                await ResponsesTurnStream.WriteAsync(http, agent, sessions, session, conversation, input, origin, responseId, conversationId, agentcore is not null, cancellationToken)
-                    .ConfigureAwait(false);
+                await ResponsesTurnStream.WriteAsync(http, turn, dialect, cancellationToken).ConfigureAwait(false);
             }
             else
             {
-                await ResponsesTurnReply.WriteAsync(http, agent, sessions, session, conversation, input, origin, responseId, conversationId, cancellationToken)
-                    .ConfigureAwait(false);
+                await ResponsesTurnReply.WriteAsync(http, turn, cancellationToken).ConfigureAwait(false);
             }
         }
         catch (InvalidOperationException exception)
@@ -329,7 +322,6 @@ public static class ResponsesEndpointRouteBuilderExtensions
                 http,
                 StatusCodes.Status409Conflict,
                 exception.Message,
-                InvalidRequestError,
                 "turn_refused",
                 cancellationToken).ConfigureAwait(false);
         }
