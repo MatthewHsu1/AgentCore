@@ -342,8 +342,8 @@ public sealed record ProvidersConfiguration
     /// <summary>Gets the language models, in document order.</summary>
     public IReadOnlyList<LlmProviderConfiguration> Llm { get; init; } = [];
 
-    /// <summary>Gets the vendor that carries the call and owns its inbound route, or <see langword="null"/>.</summary>
-    public CallProviderConfiguration? Call { get; init; }
+    /// <summary>Gets the vendor that carries the conversation and owns its inbound route, or <see langword="null"/>.</summary>
+    public ConversationProviderConfiguration? Conversation { get; init; }
 
     /// <summary>Gets the two speech roles, or <see langword="null"/>.</summary>
     public SpeechProviderConfiguration? Speech { get; init; }
@@ -366,8 +366,8 @@ public sealed record ProvidersConfiguration
     /// <summary>Gets the audit sink provider, or <see langword="null"/> for the in-process default.</summary>
     public VendorProviderConfiguration? Audit { get; init; }
 
-    /// <summary>Gets the call store provider, or <see langword="null"/> for the in-process default.</summary>
-    public VendorProviderConfiguration? Calls { get; init; }
+    /// <summary>Gets the conversation store provider, or <see langword="null"/> for the in-process default.</summary>
+    public VendorProviderConfiguration? Conversations { get; init; }
 
     /// <summary>
     /// Gets the blob store provider, or <see langword="null"/> when a sandbox file is never kept.

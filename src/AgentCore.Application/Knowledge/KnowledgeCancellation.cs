@@ -5,7 +5,7 @@ namespace AgentCore.Application.Knowledge;
 /// </summary>
 /// <remarks>
 /// The two are answered differently everywhere in this folder: a hang-up is rethrown and charges the
-/// call nothing, while a failure is reported to the model and logged.
+/// conversation nothing, while a failure is reported to the model and logged.
 /// </remarks>
 internal static class KnowledgeCancellation
 {

@@ -9,11 +9,11 @@ using Xunit;
 namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay;
 
 /// <summary>
-/// How the route behaves before a call, and how the socket ends.
+/// How the route behaves before a conversation, and how the socket ends.
 /// </summary>
 /// <remarks>
 /// Every test here runs offline against a fake model and a fake relay. There is no Telnyx account,
-/// no network call, and no API key anywhere in this file.
+/// no network conversation, and no API key anywhere in this file.
 /// </remarks>
 public sealed class TelnyxRelayEndpointTests
 {
@@ -48,8 +48,8 @@ public sealed class TelnyxRelayEndpointTests
 
     // ---------------------------------------------------------------------------------------------
     // The three option-range facts that stood here are now in
-    // AgentCore.AspNetCore.Tests/Call/CallOptionsFromDocumentTests. The limits come out of
-    // providers.call rather than out of a C# argument, so the same three ranges are refused by a
+    // AgentCore.AspNetCore.Tests/Conversation/ConversationOptionsFromDocumentTests. The limits come out of
+    // providers.conversation rather than out of a C# argument, so the same three ranges are refused by a
     // ConfigurationLoadException carrying the pointer of the offending field, and there is no
     // longer a map-time ArgumentOutOfRangeException for this file to assert. Spec §12.
     // ---------------------------------------------------------------------------------------------
@@ -120,24 +120,24 @@ public sealed class TelnyxRelayEndpointTests
     [Fact(Timeout = 30_000)]
     public async Task AClientThatVanishesWithNoCloseFrame_ReleasesTheSession()
     {
-        // The vendor never reconnects, so a dead socket is a finished call.
+        // The vendor never reconnects, so a dead socket is a finished conversation.
         using FragmentingChatClient reply = new("hello");
         await using var host = await TelnyxRelayHost.StartAsync(TelnyxRelayTurnTests.PolicyYaml, reply);
 
         var relay = await host.ConnectAsync();
-        await relay.SendAsync(RelayFrames.Setup(callSessionId: "call-dropped"));
-        await host.WaitForSessionAsync("call-dropped");
+        await relay.SendAsync(RelayFrames.Setup(conversationSessionId: "conversation-dropped"));
+        await host.WaitForSessionAsync("conversation-dropped");
 
         relay.Abort();
 
-        await host.WaitForCallEndAsync("call-dropped");
-        Assert.Null(await host.FindSessionAsync("call-dropped"));
+        await host.WaitForConversationEndAsync("conversation-dropped");
+        Assert.Null(await host.FindSessionAsync("conversation-dropped"));
     }
 
     [Fact(Timeout = 30_000)]
-    public async Task ASocketThatGoesSilent_EndsTheCallAtTheIdleDeadline()
+    public async Task ASocketThatGoesSilent_EndsTheConversationAtTheIdleDeadline()
     {
-        // The vendor never reconnects, so a silent socket is a call that already ended. Nothing
+        // The vendor never reconnects, so a silent socket is a conversation that already ended. Nothing
         // else notices it: the keep-alive ping only catches a peer the network itself stopped
         // answering. The clock is a FakeTimeProvider, moved forward below with no real sleep at
         // all, so this test proves the idle deadline fires rather than passing because the
@@ -154,8 +154,8 @@ public sealed class TelnyxRelayEndpointTests
             relay: options => options.IdleTimeout = TimeSpan.FromSeconds(30));
         await using var relay = await host.ConnectAsync();
 
-        await relay.SendAsync(RelayFrames.Setup(callSessionId: "call-silent"));
-        await host.WaitForSessionAsync("call-silent");
+        await relay.SendAsync(RelayFrames.Setup(conversationSessionId: "conversation-silent"));
+        await host.WaitForSessionAsync("conversation-silent");
 
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
         using var bounded = CancellationTokenSource.CreateLinkedTokenSource(
@@ -169,8 +169,8 @@ public sealed class TelnyxRelayEndpointTests
             // about whether the read loop has already armed its next idle deadline against this
             // clock by the time this runs. Advancing once could land before that deadline exists
             // and move nothing that matters. Advancing repeatedly instead closes that race:
-            // whichever call lands after the deadline is armed pushes the clock straight past its
-            // due time, however many earlier calls landed too early to move anything.
+            // whichever conversation lands after the deadline is armed pushes the clock straight past its
+            // due time, however many earlier conversations landed too early to move anything.
             while (!closing.IsCompleted)
             {
                 clock.Advance(TimeSpan.FromSeconds(31));
@@ -189,16 +189,16 @@ public sealed class TelnyxRelayEndpointTests
         Assert.True(capture.Observed.IsCompletedSuccessfully, "the idle deadline closed the socket without logging IdleTimeoutReached.");
         Assert.Equal(LogLevel.Information, capture.Level);
 
-        await host.WaitForCallEndAsync("call-silent");
+        await host.WaitForConversationEndAsync("conversation-silent");
     }
 
     [Fact(Timeout = 30_000)]
-    public async Task ABusyCall_NeverTimesOutBetweenMessages()
+    public async Task ABusyConversation_NeverTimesOutBetweenMessages()
     {
         // Task 8: each inbound frame resets the idle clock. Proven here by advancing the fake
         // clock five times, each step under IdleTimeout on its own but well over it summed — a
         // clock that failed to reset on every dtmf frame between the steps would have closed this
-        // call by the second step at the latest. Dtmf is the frame to drive this with because
+        // conversation by the second step at the latest. Dtmf is the frame to drive this with because
         // TelnyxRelayLog.DtmfReceived logs no argument at all, so counting it never risks logging
         // the digit itself.
         const int steps = 5;
@@ -213,8 +213,8 @@ public sealed class TelnyxRelayEndpointTests
             relay: options => options.IdleTimeout = TimeSpan.FromSeconds(2));
         await using var relay = await host.ConnectAsync();
 
-        await relay.SendAsync(RelayFrames.Setup(callSessionId: "call-busy"));
-        await host.WaitForSessionAsync("call-busy");
+        await relay.SendAsync(RelayFrames.Setup(conversationSessionId: "conversation-busy"));
+        await host.WaitForSessionAsync("conversation-busy");
 
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
         using var bounded = CancellationTokenSource.CreateLinkedTokenSource(
@@ -236,7 +236,7 @@ public sealed class TelnyxRelayEndpointTests
                 // before the server had a chance to rearm it for the next one — a false close that
                 // would have nothing to do with whether resets actually work. Watching the count
                 // reach this step, the same way the interrupt tests wait on a log line rather than
-                // sleeping, is what keeps every Advance call behind the message it depends on.
+                // sleeping, is what keeps every Advance conversation behind the message it depends on.
                 var expected = step + 1;
                 while (dtmf.Count < expected)
                 {
@@ -246,10 +246,10 @@ public sealed class TelnyxRelayEndpointTests
         }
         catch (OperationCanceledException) when (deadline.IsCancellationRequested)
         {
-            Assert.Fail($"only {dtmf.Count} of {steps} dtmf frames were processed within ten seconds; the call likely closed early.");
+            Assert.Fail($"only {dtmf.Count} of {steps} dtmf frames were processed within ten seconds; the conversation likely closed early.");
             return;
         }
 
-        Assert.NotNull(await host.FindSessionAsync("call-busy"));
+        Assert.NotNull(await host.FindSessionAsync("conversation-busy"));
     }
 }

@@ -141,7 +141,7 @@ public sealed class StagePolicyTests
     }
 
     [Fact]
-    public void AGuardThatThrows_IsFalseAndTheCallContinues()
+    public void AGuardThatThrows_IsFalseAndTheConversationContinues()
     {
         var (policy, guards) = Build(
             """

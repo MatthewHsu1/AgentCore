@@ -38,7 +38,7 @@ public sealed class TurnScreenTests
       [Fact]
       public async Task ATurnThatDoesNotStream_ShowsItsToolsTheScreen()
       {
-          var (session, probe) = NewCall();
+          var (session, probe) = NewConversation();
 
           await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
@@ -56,7 +56,7 @@ public sealed class TurnScreenTests
           // yield, and the framework streams the tool-call update BEFORE it invokes the function, so a
           // scope opened once reaches no round at all. Only the per-round re-entry in
           // RunTurnStreamingAsync keeps the screen alive across it.
-          var (session, probe) = NewCall();
+          var (session, probe) = NewConversation();
 
           await foreach (var _ in session.RunTurnStreamingAsync("hi", TestContext.Current.CancellationToken))
           {
@@ -67,11 +67,11 @@ public sealed class TurnScreenTests
       }
 
       [Fact]
-      public async Task ACallThatWasGivenNoScreen_ShowsItsToolsNone()
+      public async Task AConversationThatWasGivenNoScreen_ShowsItsToolsNone()
       {
           // The voice path. The tool reads the null and tells the model it cannot show anything,
           // rather than claiming a picture a telephone caller will never see.
-          var (session, probe) = NewCall(withScreen: false);
+          var (session, probe) = NewConversation(withScreen: false);
 
           await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
@@ -85,7 +85,7 @@ public sealed class TurnScreenTests
           // A host sets this per request, and the whole-reply branch of the chat endpoint sets none.
           // Taking it back has to reach the tool, or a session that streamed once keeps a screen the
           // next answer has nowhere to write.
-          var (session, probe) = NewCall();
+          var (session, probe) = NewConversation();
 
           session.SetHasScreen(false);
 
@@ -95,8 +95,8 @@ public sealed class TurnScreenTests
           Assert.Null(probe.Seen);
       }
 
-      /// <summary>Opens a call whose specialist is handed one tool that reports the screen it found.</summary>
-      private static (CallSession Session, ScreenProbe Probe) NewCall(bool withScreen = true)
+      /// <summary>Opens a conversation whose specialist is handed one tool that reports the screen it found.</summary>
+      private static (ConversationSession Session, ScreenProbe Probe) NewConversation(bool withScreen = true)
       {
           ToolCallingChatClient greeter = new(
               "hello there.",
@@ -110,7 +110,7 @@ public sealed class TurnScreenTests
           var compiled = ConfigurationCompiler.CompileAll(
               ConfigurationLoader.LoadYaml(DelegationYaml), new AgentCompilationContext(chatClients))["main"];
 
-          var session = new CallSessionFactory(
+          var session = new ConversationSessionFactory(
               compiled,
               new GuardEvaluator(compiled.Configuration.Guards),
               extractor: null).Create();

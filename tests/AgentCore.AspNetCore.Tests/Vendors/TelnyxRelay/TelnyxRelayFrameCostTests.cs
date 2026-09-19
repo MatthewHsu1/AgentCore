@@ -17,15 +17,15 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay;
 /// anywhere in this solution — item 6c holds "no audio buffer, codec, sample rate, or playback
 /// clock" by construction, and the Conversation Relay carries text frames over a WebSocket instead —
 /// so the frame is what that rule is actually about. It is the thing that arrives many times a
-/// second on a live call, and it is the thing that must not cost a log line or a metric point.
+/// second on a live conversation, and it is the thing that must not cost a log line or a metric point.
 /// </para>
 /// <para>
 /// The proof is a comparison rather than a threshold, because a threshold would have to guess how
-/// many lines a call is allowed. One connection is driven twice, once with a few frames and once
+/// many lines a conversation is allowed. One connection is driven twice, once with a few frames and once
 /// with ten times as many, and the two runs must leave exactly the same number of log records and
 /// exactly the same number of metric measurements behind. A signal that fires once for each frame
-/// grows with the frame count and fails here; a signal that fires once for the call or once for the
-/// turn does not, because both runs run one call and no turn at all.
+/// grows with the frame count and fails here; a signal that fires once for the conversation or once for the
+/// turn does not, because both runs run one conversation and no turn at all.
 /// </para>
 /// <para>
 /// The frames are interim transcripts — <c>prompt</c> with <c>last: false</c> — which T70 drops
@@ -36,7 +36,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay;
 /// </para>
 /// <para>
 /// Every test here runs offline against a fake model and a fake relay. There is no Telnyx account,
-/// no network call, and no API key anywhere in this file.
+/// no network conversation, and no API key anywhere in this file.
 /// </para>
 /// </remarks>
 [Collection(TelnyxRelayFrameCostSuite.Name)]
@@ -51,8 +51,8 @@ public sealed class TelnyxRelayFrameCostTests
     [Fact(Timeout = 60_000)]
     public async Task TenTimesTheInboundFrames_CostNoMoreLogRecordsAndNoMoreMetricMeasurements()
     {
-        var few = await MeasureAsync(FewFrames, "call-frame-cost-few");
-        var many = await MeasureAsync(ManyFrames, "call-frame-cost-many");
+        var few = await MeasureAsync(FewFrames, "conversation-frame-cost-few");
+        var many = await MeasureAsync(ManyFrames, "conversation-frame-cost-many");
 
         // The listener really found this library's meter. Without this the measurement assertion
         // below could pass on two empty subscriptions and prove nothing at all.
@@ -63,7 +63,7 @@ public sealed class TelnyxRelayFrameCostTests
         Assert.NotEqual(0, few.Records);
 
         // Section 3.1, both halves of it. Ten times the frames, and not one line and not one
-        // measurement more. The counts are not zero — a call still logs what a call costs, and the
+        // measurement more. The counts are not zero — a conversation still logs what a conversation costs, and the
         // one dtmf frame each run ends with is one line in both — but nothing here is charged to a
         // frame, so nothing here moves when the frame count does.
         Assert.Equal(few.Records, many.Records);
@@ -72,9 +72,9 @@ public sealed class TelnyxRelayFrameCostTests
 
     /// <summary>Drives one connection over <paramref name="frames"/> interim prompts and counts what it cost.</summary>
     /// <param name="frames">How many <c>prompt</c> frames with <c>last: false</c> to send.</param>
-    /// <param name="callId">The <c>callSessionId</c> of this run's setup frame.</param>
+    /// <param name="conversationId">The <c>conversationSessionId</c> of this run's setup frame.</param>
     /// <returns>What the run wrote, metered, and subscribed to.</returns>
-    private static async Task<FrameCost> MeasureAsync(int frames, string callId)
+    private static async Task<FrameCost> MeasureAsync(int frames, string conversationId)
     {
         // The instruments are static fields of AgentCoreTelemetry, and a const never touches a type
         // initializer, so nothing this file references would otherwise create the meter. Forcing
@@ -97,8 +97,8 @@ public sealed class TelnyxRelayFrameCostTests
         using MeterListener listener = new();
         listener.InstrumentPublished = (instrument, active) =>
         {
-            // Meter name and nothing else. T61 forbids a call id on a metric attribute, so there is
-            // deliberately no tag on any of these instruments that could narrow this to one call —
+            // Meter name and nothing else. T61 forbids a conversation id on a metric attribute, so there is
+            // deliberately no tag on any of these instruments that could narrow this to one conversation —
             // which is why this collection runs alone, below.
             if (!string.Equals(instrument.Meter.Name, AgentCoreTelemetry.MeterName, StringComparison.Ordinal))
             {
@@ -148,8 +148,8 @@ public sealed class TelnyxRelayFrameCostTests
         {
             await using var relay = await host.ConnectAsync();
 
-            await relay.SendAsync(RelayFrames.Setup(callSessionId: callId));
-            await host.WaitForSessionAsync(callId);
+            await relay.SendAsync(RelayFrames.Setup(conversationSessionId: conversationId));
+            await host.WaitForSessionAsync(conversationId);
 
             for (var frame = 0; frame < frames; frame++)
             {
@@ -173,12 +173,12 @@ public sealed class TelnyxRelayFrameCostTests
                 Assert.Fail($"the connection never read past the {frames} interim prompts within twenty seconds.");
             }
 
-            // Counted here, with the call still up, rather than after the socket and the host are
-            // torn down. Teardown is once for a call and never once for a frame, so it is not what
+            // Counted here, with the conversation still up, rather than after the socket and the host are
+            // torn down. Teardown is once for a conversation and never once for a frame, so it is not what
             // this test is about, and it is the one part of a run that is not reproducible line for
             // line: FakeRelayClient.DisposeAsync cancels its own pending receive, which — as that
             // class documents — leaves the socket Aborted rather than closed, so the connection
-            // sometimes reaches CallDroppedWithNoCloseFrame before the host stops and sometimes does
+            // sometimes reaches ConversationDroppedWithNoCloseFrame before the host stops and sometimes does
             // not, and the host's own shutdown lines interleave with Kestrel's either way. Every
             // line up to and including the one the sentinel just waited for is fixed.
             listener.Dispose();
@@ -202,9 +202,9 @@ public sealed class TelnyxRelayFrameCostTests
 /// </summary>
 /// <remarks>
 /// A <see cref="MeterListener"/> subscribes to a meter for the whole process, and T61 is the reason
-/// it cannot narrow that to one call: no instrument of this library carries a call id, a session id,
+/// it cannot narrow that to one conversation: no instrument of this library carries a conversation id, a session id,
 /// or a turn id, because one such attribute is one permanent series. A turn running in another test
-/// class at the same moment would therefore land on this listener and be counted as this call's
+/// class at the same moment would therefore land on this listener and be counted as this conversation's
 /// cost. Parallelisation is switched off for this collection so that never happens; xUnit runs a
 /// collection marked this way apart from every other collection in the assembly.
 /// </remarks>

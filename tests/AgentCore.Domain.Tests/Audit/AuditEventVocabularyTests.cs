@@ -18,12 +18,12 @@ public sealed class AuditEventVocabularyTests
     private static readonly DateTimeOffset Start = DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_000_000);
 
     [Theory]
-    [InlineData(AuditEventKind.CallStarted, "call.started")]
+    [InlineData(AuditEventKind.ConversationStarted, "conversation.started")]
     [InlineData(AuditEventKind.TurnCompleted, "turn.completed")]
     [InlineData(AuditEventKind.ReplyInterrupted, "reply.interrupted")]
     [InlineData(AuditEventKind.ToolFailed, "tool.failed")]
     [InlineData(AuditEventKind.PromptFlagged, "prompt.flagged")]
-    [InlineData(AuditEventKind.CallEnded, "call.ended")]
+    [InlineData(AuditEventKind.ConversationEnded, "conversation.ended")]
     public void EachKind_HasItsToken(AuditEventKind kind, string token)
     {
         // The token is stable forever. A C# rename must not change a hash PostgreSQL already stored.
@@ -48,40 +48,40 @@ public sealed class AuditEventVocabularyTests
         }
 
         Assert.Throws<ArgumentOutOfRangeException>(() => AuditEventKinds.ToToken((AuditEventKind)99));
-        Assert.False(AuditEventKinds.TryParse("call.transferred", out _));
+        Assert.False(AuditEventKinds.TryParse("conversation.transferred", out _));
     }
 
     [Theory]
-    [InlineData(CallEndReason.CallerHungUp, "caller.hangup")]
-    [InlineData(CallEndReason.AgentCompleted, "agent.completed")]
-    [InlineData(CallEndReason.TransferredToHuman, "agent.transferred")]
-    [InlineData(CallEndReason.Faulted, "call.faulted")]
-    public void EachEndReason_HasItsToken(CallEndReason reason, string token)
+    [InlineData(ConversationEndReason.CallerHungUp, "caller.hangup")]
+    [InlineData(ConversationEndReason.AgentCompleted, "agent.completed")]
+    [InlineData(ConversationEndReason.TransferredToHuman, "agent.transferred")]
+    [InlineData(ConversationEndReason.Faulted, "conversation.faulted")]
+    public void EachEndReason_HasItsToken(ConversationEndReason reason, string token)
     {
         // The token is stable forever, for the reason a kind token is. A report counts these years
-        // after the call, and the count breaks when a token moves.
-        Assert.Equal(token, CallEndReasons.ToToken(reason));
-        Assert.True(CallEndReasons.TryParse(token, out CallEndReason parsed));
+        // after the conversation, and the count breaks when a token moves.
+        Assert.Equal(token, ConversationEndReasons.ToToken(reason));
+        Assert.True(ConversationEndReasons.TryParse(token, out ConversationEndReason parsed));
         Assert.Equal(reason, parsed);
     }
 
     [Fact]
     public void TheEndReasons_AreClosed()
     {
-        CallEndReason[] declared = Enum.GetValues<CallEndReason>();
+        ConversationEndReason[] declared = Enum.GetValues<ConversationEndReason>();
 
-        // Section 4 names four ways a call ends, and the set holds those four and no more.
+        // Section 4 names four ways a conversation ends, and the set holds those four and no more.
         Assert.Equal(4, declared.Length);
-        foreach (CallEndReason reason in declared)
+        foreach (ConversationEndReason reason in declared)
         {
-            Assert.NotEmpty(CallEndReasons.ToToken(reason));
+            Assert.NotEmpty(ConversationEndReasons.ToToken(reason));
         }
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => CallEndReasons.ToToken((CallEndReason)99));
-        Assert.False(CallEndReasons.TryParse("hangup", out _));
-        Assert.False(CallEndReasons.TryParse("caller hung up", out _));
-        Assert.False(CallEndReasons.TryParse("CallerHungUp", out _));
-        Assert.False(CallEndReasons.TryParse("0", out _));
+        Assert.Throws<ArgumentOutOfRangeException>(() => ConversationEndReasons.ToToken((ConversationEndReason)99));
+        Assert.False(ConversationEndReasons.TryParse("hangup", out _));
+        Assert.False(ConversationEndReasons.TryParse("caller hung up", out _));
+        Assert.False(ConversationEndReasons.TryParse("CallerHungUp", out _));
+        Assert.False(ConversationEndReasons.TryParse("0", out _));
     }
 
     [Theory]
@@ -90,7 +90,7 @@ public sealed class AuditEventVocabularyTests
     public void EachToolFailureKind_HasItsToken(ToolFailureKind kind, string token)
     {
         // The token is stable forever, for the reason an end reason's is. A report that counts how
-        // often the model invented a tool name reads this token years after the call.
+        // often the model invented a tool name reads this token years after the conversation.
         Assert.Equal(token, ToolFailureKinds.ToToken(kind));
         Assert.True(ToolFailureKinds.TryParse(token, out ToolFailureKind parsed));
         Assert.Equal(kind, parsed);
@@ -117,7 +117,7 @@ public sealed class AuditEventVocabularyTests
 
     /// <summary>The reason is counted, so the chain refuses free text under it.</summary>
     [Fact]
-    public void ACallEndedEventWithAFreeTextReason_IsRefused()
+    public void AConversationEndedEventWithAFreeTextReason_IsRefused()
     {
         AuditEvent free = Ended() with
         {
@@ -134,7 +134,7 @@ public sealed class AuditEventVocabularyTests
     }
 
     [Fact]
-    public void ACallEndedEventWithoutAReason_IsRefused()
+    public void AConversationEndedEventWithoutAReason_IsRefused()
     {
         AuditEvent silent = Ended() with
         {
@@ -157,7 +157,7 @@ public sealed class AuditEventVocabularyTests
 
         Assert.All(run, AuditEventVocabulary.Validate);
         Assert.Equal(turn.EventId, interruption.AmendsEventId);
-        Assert.Equal(turn.CallId, interruption.CallId);
+        Assert.Equal(turn.ConversationId, interruption.ConversationId);
         Assert.Equal(turn.TurnIndex, interruption.TurnIndex);
 
         // The first event is untouched. Nothing rewrote the turn, and both events stand.
@@ -284,9 +284,9 @@ public sealed class AuditEventVocabularyTests
     }
 
     [Fact]
-    public void AnEventWithoutACallId_IsRefused()
+    public void AnEventWithoutAConversationId_IsRefused()
     {
-        AuditEvent nameless = Turn(eventId: Guid.CreateVersion7(), turnIndex: 0) with { CallId = string.Empty };
+        AuditEvent nameless = Turn(eventId: Guid.CreateVersion7(), turnIndex: 0) with { ConversationId = string.Empty };
 
         Assert.Throws<ArgumentException>(() => AuditEventVocabulary.Validate(nameless));
     }
@@ -382,7 +382,7 @@ public sealed class AuditEventVocabularyTests
 
     /// <summary>
     /// The taxonomy belongs to the moderation endpoint and it is open, unlike
-    /// <see cref="CallEndReason"/>. A closed set would make <see cref="AuditEventVocabulary.Validate"/> throw on a
+    /// <see cref="ConversationEndReason"/>. A closed set would make <see cref="AuditEventVocabulary.Validate"/> throw on a
     /// category OpenAI added, and destroy the record the chain exists to protect.
     /// </summary>
     [Fact]
@@ -415,7 +415,7 @@ public sealed class AuditEventVocabularyTests
 
     private static AuditEvent Turn(Guid eventId, int turnIndex) => new()
     {
-        CallId = "call-1",
+        ConversationId = "conversation-1",
         EventId = eventId,
         Kind = AuditEventKind.TurnCompleted,
         OccurredAt = Start,
@@ -430,7 +430,7 @@ public sealed class AuditEventVocabularyTests
 
     private static AuditEvent Interruption(Guid eventId, Guid amends, int turnIndex) => new()
     {
-        CallId = "call-1",
+        ConversationId = "conversation-1",
         EventId = eventId,
         Kind = AuditEventKind.ReplyInterrupted,
         OccurredAt = Start.AddMilliseconds(1_820),
@@ -445,7 +445,7 @@ public sealed class AuditEventVocabularyTests
 
     private static AuditEvent FlaggedPrompt(Guid eventId, int turnIndex, string categories = "harassment") => new()
     {
-        CallId = "call-1",
+        ConversationId = "conversation-1",
         EventId = eventId,
         Kind = AuditEventKind.PromptFlagged,
         OccurredAt = Start.AddMilliseconds(2_400),
@@ -458,13 +458,13 @@ public sealed class AuditEventVocabularyTests
 
     private static AuditEvent Ended() => new()
     {
-        CallId = "call-1",
+        ConversationId = "conversation-1",
         EventId = Guid.CreateVersion7(),
-        Kind = AuditEventKind.CallEnded,
+        Kind = AuditEventKind.ConversationEnded,
         OccurredAt = Start.AddMilliseconds(9_000),
         Payload = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            [AuditPayloadKeys.EndReason] = CallEndReasons.ToToken(CallEndReason.CallerHungUp),
+            [AuditPayloadKeys.EndReason] = ConversationEndReasons.ToToken(ConversationEndReason.CallerHungUp),
         },
     };
 }

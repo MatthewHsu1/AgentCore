@@ -18,8 +18,8 @@ internal sealed record TurnInvocation
     /// argument will never be called this, and the binder intercepts the type before JSON binding.</summary>
     internal const string ArgumentsKey = "urn:agentcore:turn";
 
-    /// <summary>Gets the id of the call the turn belongs to.</summary>
-    public required string CallId { get; init; }
+    /// <summary>Gets the id of the conversation the turn belongs to.</summary>
+    public required string ConversationId { get; init; }
 
     /// <summary>Gets the zero-based index of the turn now running.</summary>
     public required int TurnIndex { get; init; }
@@ -27,28 +27,28 @@ internal sealed record TurnInvocation
     /// <summary>Gets the stage the machine holds. Empty when the entry declares no policy.</summary>
     public required string Stage { get; init; }
 
-    /// <summary>Gets the folder this call owns on disk, or <see langword="null"/>.</summary>
+    /// <summary>Gets the folder this conversation owns on disk, or <see langword="null"/>.</summary>
     public string? Workspace { get; init; }
 
-    /// <summary>Gets this call's shell executors, or <see langword="null"/>.</summary>
-    public CallShells? Shells { get; init; }
+    /// <summary>Gets this conversation's shell executors, or <see langword="null"/>.</summary>
+    public ConversationShells? Shells { get; init; }
 
     /// <summary>Gets what the turn may see of the knowledge base, or <see langword="null"/>.</summary>
     public KnowledgeScope? Knowledge { get; init; }
 
-    /// <summary>Gets the call's ambiguity holder, or <see langword="null"/> inside a nested tool call.</summary>
+    /// <summary>Gets the conversation's ambiguity holder, or <see langword="null"/> inside a nested tool call.</summary>
     public Clarifications? Clarifications { get; init; }
 
     /// <summary>Gets the instructions for this one invocation, or <see langword="null"/> for none.</summary>
     public string? Instructions { get; init; }
 
-    /// <summary>Gets the zone the person on the call is in, or <see langword="null"/> when the host named none.</summary>
+    /// <summary>Gets the zone the person on the conversation is in, or <see langword="null"/> when the host named none.</summary>
     public TimeZoneInfo? TimeZone { get; init; }
 
     /// <summary>Gets whether this row's session carries the caller's own history.</summary>
     public bool CarriesHistory { get; init; }
 
-    /// <summary>Gets the screen this call draws on, or <see langword="null"/> when it has none.</summary>
+    /// <summary>Gets the screen this conversation draws on, or <see langword="null"/> when it has none.</summary>
     public IRenderPort? Screen { get; init; }
 
     /// <summary>Gets what the turn cites into. Never <see langword="null"/> on a loop-built turn.</summary>
@@ -63,7 +63,7 @@ internal sealed record TurnInvocation
     /// <summary>Gets what the turn publishes files into. Never <see langword="null"/> on a loop-built turn.</summary>
     public TurnFiles? Files { get; init; }
 
-    /// <summary>Gets the tools a delegated run of this call is offered, or <see langword="null"/> for none.</summary>
+    /// <summary>Gets the tools a delegated run of this conversation is offered, or <see langword="null"/> for none.</summary>
     public IReadOnlyList<AITool>? Tools { get; init; }
 
     /// <summary>Gets the id of the delegating tool <see cref="Tools"/> are meant for.</summary>
@@ -80,7 +80,7 @@ internal sealed record TurnInvocation
     public bool Nested { get; init; }
 
     /// <summary>
-    /// Gets the live state document of the call running this turn, or <see langword="null"/>
+    /// Gets the live state document of the conversation running this turn, or <see langword="null"/>
     /// outside a turn. The graph-state wrapper snapshots it into the run just before the run starts;
     /// nothing writes the document mid-run (writers and the extractor commit after), so the snapshot
     /// reads what the old ambient read at edge time.

@@ -27,7 +27,7 @@ public sealed class OpenAiEmbeddingGeneratorAdapterTests
           items:
             - { id: only, instructions: "I answer everything" }
         providers:
-          call:   { kind: telnyx-relay }
+          conversation:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }

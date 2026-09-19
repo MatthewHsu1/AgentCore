@@ -28,7 +28,7 @@ internal enum FallbackCause
     EmptyReply,
 }
 
-/// <summary>What the pipeline layers report back to <see cref="CallSession"/> about a turn.</summary>
+/// <summary>What the pipeline layers report back to <see cref="ConversationSession"/> about a turn.</summary>
 /// <param name="Moderation">
 /// What the endpoint decided, or that it could not, or <see langword="null"/> when the pipeline
 /// carries no <see cref="ModerationAgent"/> at all because the host moderates nothing.

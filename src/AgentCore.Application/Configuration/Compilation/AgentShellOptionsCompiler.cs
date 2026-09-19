@@ -7,7 +7,7 @@ using Microsoft.Agents.AI.Tools.Shell;
 
 namespace AgentCore.Application.Configuration.Compilation;
 
-/// <summary>Compiles one agent's <c>shell:</c> block into <see cref="CallShellOptions"/>.</summary>
+/// <summary>Compiles one agent's <c>shell:</c> block into <see cref="ConversationShellOptions"/>.</summary>
 internal static class AgentShellOptionsCompiler
 {
     /// <summary>Builds this agent's shell options from its declared <c>shell:</c> block.</summary>
@@ -19,7 +19,7 @@ internal static class AgentShellOptionsCompiler
     /// The block names no workspace root, a Docker-only key under <c>kind: local</c>, or a policy
     /// pattern that is not a valid regex.
     /// </exception>
-    internal static CallShellOptions Build(
+    internal static ConversationShellOptions Build(
         AgentConfiguration item,
         ShellConfiguration shell,
         AgentCompilationContext context,
@@ -57,7 +57,7 @@ internal static class AgentShellOptionsCompiler
 
         var memoryBytes = shell.MemoryMb is { } memoryMb ? (long)memoryMb * 1024 * 1024 : (long?)null;
 
-        return new CallShellOptions(
+        return new ConversationShellOptions(
             shell.Kind,
             policy,
             timeout,

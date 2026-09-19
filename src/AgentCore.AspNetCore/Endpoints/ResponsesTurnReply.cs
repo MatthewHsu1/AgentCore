@@ -17,14 +17,14 @@ internal static class ResponsesTurnReply
         AgentCoreAgent agent,
         AgentCoreAgentSessionStore sessions,
         AgentSession session,
-        CallSession call,
+        ConversationSession conversation,
         ChatMessage input,
-        CallTurnOrigin? origin,
+        ConversationTurnOrigin? origin,
         string responseId,
         string? conversationId,
         CancellationToken cancellationToken)
     {
-        var turn = await call
+        var turn = await conversation
             .RunTurnMessageAtOriginAsync(input, origin, cancellationToken)
             .ConfigureAwait(false);
 
@@ -46,7 +46,7 @@ internal static class ResponsesTurnReply
         var node = JsonNode.Parse(rendered.GetRawText())!.AsObject();
         JsonObject metadata = node["metadata"]?.AsObject() ?? [];
 
-        foreach (var (name, value) in ResponsesAgentCore.TurnMetadata(call, turn))
+        foreach (var (name, value) in ResponsesAgentCore.TurnMetadata(conversation, turn))
         {
             metadata[name] = value;
         }

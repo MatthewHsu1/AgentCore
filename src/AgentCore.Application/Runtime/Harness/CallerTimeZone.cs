@@ -3,7 +3,7 @@ using Microsoft.Agents.AI;
 namespace AgentCore.Application.Runtime.Harness;
 
 /// <summary>
-/// The time zone the person on a call is in, as the host learned it — from the browser, on the
+/// The time zone the person on a conversation is in, as the host learned it — from the browser, on the
 /// request. The clock line reads the date in it instead of the server's zone. It is set per
 /// request, not once: a person who travels moves the clock with them, and a request that names
 /// no zone leaves the last one in place.
@@ -26,22 +26,22 @@ public static class CallerTimeZone
         return TimeZoneInfo.TryFindSystemTimeZoneById(id.Trim(), out var zone) ? zone : null;
     }
 
-    /// <summary>Puts the caller's zone on the call a session carries, replacing what was there.</summary>
-    /// <param name="session">A session this framework created: it names the call.</param>
+    /// <summary>Puts the caller's zone on the conversation a session carries, replacing what was there.</summary>
+    /// <param name="session">A session this framework created: it names the conversation.</param>
     /// <param name="zone">The zone the caller is in.</param>
-    /// <exception cref="InvalidOperationException">The session names no call.</exception>
+    /// <exception cref="InvalidOperationException">The session names no conversation.</exception>
     public static void Set(AgentSession session, TimeZoneInfo zone)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(zone);
 
-        if (session.GetService<CallSession>() is not { } call)
+        if (session.GetService<ConversationSession>() is not { } conversation)
         {
             throw new InvalidOperationException(
                 "The session is not one this agent created, so it names no call to put the zone on.");
         }
 
-        call.Runner.SetTimeZone(zone);
+        conversation.Runner.SetTimeZone(zone);
     }
 
     /// <summary>Stamps the zone onto a child session, so a run on it reads the caller's date.</summary>

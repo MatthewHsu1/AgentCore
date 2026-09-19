@@ -1,4 +1,4 @@
-using AgentCore.AspNetCore.Call;
+using AgentCore.AspNetCore.Conversation;
 using AgentCore.AspNetCore.Endpoints;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -6,28 +6,28 @@ using Microsoft.AspNetCore.Http;
 namespace AgentCore.Hosting;
 
 /// <summary>
-/// Maps every route AgentCore answers on, in one call.
+/// Maps every route AgentCore answers on, in one conversation.
 /// </summary>
 public static class AgentCoreHostEndpointExtensions
 {
     /// <summary>The route the liveness check answers on.</summary>
     public const string HealthPattern = "/health";
 
-    /// <summary>Installs the WebSocket middleware and maps health, the Responses endpoint, and the call socket.</summary>
+    /// <summary>Installs the WebSocket middleware and maps health, the Responses endpoint, and the conversation socket.</summary>
     /// <param name="app">The application to map on.</param>
     /// <param name="responsesPattern">
     /// The route the OpenAI-compatible Responses endpoint answers on, with <c>{entry}</c> naming
     /// the entry, or <see langword="null"/> for
     /// <see cref="ResponsesEndpointRouteBuilderExtensions.DefaultPattern"/>.
     /// </param>
-    /// <param name="callPattern">
-    /// The route the call socket answers on, with <c>{entry}</c> naming the entry, or
-    /// <see langword="null"/> for <see cref="CallEndpointRouteBuilderExtensions.DefaultPattern"/>.
+    /// <param name="conversationPattern">
+    /// The route the conversation socket answers on, with <c>{entry}</c> naming the entry, or
+    /// <see langword="null"/> for <see cref="ConversationEndpointRouteBuilderExtensions.DefaultPattern"/>.
     /// </param>
-    /// <returns>The same application, so a host chains its calls.</returns>
+    /// <returns>The same application, so a host chains its conversations.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="app"/> is <see langword="null"/>.</exception>
     public static WebApplication MapAgentCoreHost(
-        this WebApplication app, string? responsesPattern = null, string? callPattern = null)
+        this WebApplication app, string? responsesPattern = null, string? conversationPattern = null)
     {
         ArgumentNullException.ThrowIfNull(app);
 
@@ -37,7 +37,7 @@ public static class AgentCoreHostEndpointExtensions
 
         app.MapResponses(responsesPattern ?? ResponsesEndpointRouteBuilderExtensions.DefaultPattern);
 
-        app.MapCall(callPattern ?? CallEndpointRouteBuilderExtensions.DefaultPattern);
+        app.MapCall(conversationPattern ?? ConversationEndpointRouteBuilderExtensions.DefaultPattern);
 
         return app;
     }

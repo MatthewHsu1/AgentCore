@@ -16,16 +16,16 @@ internal sealed class PostgresAuditSink : IAuditSinkPort, IAsyncDisposable
 {
     private const string Schema = PostgresSchema.SchemaName;
 
-    /// <summary>Serialises the writers of one call so two of them cannot pick the same sequence.</summary>
+    /// <summary>Serialises the writers of one conversation so two of them cannot pick the same sequence.</summary>
     internal const string LockSql = "SELECT pg_advisory_xact_lock(hashtext($1))";
 
-    /// <summary>Appends one call's run, numbering only the rows that will actually survive.</summary>
+    /// <summary>Appends one conversation's run, numbering only the rows that will actually survive.</summary>
     internal const string AppendSql = $"""
         INSERT INTO {Schema}.audit_event (
-            call_id, event_id, sequence, kind, occurred_at, turn_index, amends_event_id, payload)
+            conversation_id, event_id, sequence, kind, occurred_at, turn_index, amends_event_id, payload)
         SELECT $1,
                d.event_id,
-               coalesce((SELECT max(sequence) FROM {Schema}.audit_event WHERE call_id = $1), -1)
+               coalesce((SELECT max(sequence) FROM {Schema}.audit_event WHERE conversation_id = $1), -1)
                    + row_number() OVER (ORDER BY d.position),
                d.kind, d.occurred_at, d.turn_index, d.amends_event_id, d.payload
           FROM unnest($2::uuid[], $3::text[], $4::timestamptz[],
@@ -33,8 +33,8 @@ internal sealed class PostgresAuditSink : IAuditSinkPort, IAsyncDisposable
                WITH ORDINALITY
                AS d(event_id, kind, occurred_at, turn_index, amends_event_id, payload, position)
          WHERE NOT EXISTS (
-             SELECT 1 FROM {Schema}.audit_event e WHERE e.call_id = $1 AND e.event_id = d.event_id)
-        ON CONFLICT (call_id, event_id) DO NOTHING
+             SELECT 1 FROM {Schema}.audit_event e WHERE e.conversation_id = $1 AND e.event_id = d.event_id)
+        ON CONFLICT (conversation_id, event_id) DO NOTHING
         """;
 
     private readonly NpgsqlDataSource _dataSource;
@@ -78,21 +78,21 @@ internal sealed class PostgresAuditSink : IAuditSinkPort, IAsyncDisposable
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await using NpgsqlBatch batch = new(connection, transaction);
 
-        // Grouped, because the queue in front of this sink batches across calls, and a call is the
-        // unit the sequence counts within. Ordered by call id, because two transactions that each
-        // hold two calls would otherwise be able to take the two locks in opposite orders and wait
-        // on each other forever. Best effort, and only that: the lock is on hashtext(call_id), so a
+        // Grouped, because the queue in front of this sink batches across conversations, and a conversation is the
+        // unit the sequence counts within. Ordered by conversation id, because two transactions that each
+        // hold two conversations would otherwise be able to take the two locks in opposite orders and wait
+        // on each other forever. Best effort, and only that: the lock is on hashtext(conversation_id), so a
         // consistent order on ids is a consistent order on locks only while the hash is injective
         // over the ids in play. See the remarks on LockSql for what a collision costs.
-        foreach (var call in auditEvents
-            .GroupBy(item => item.CallId, StringComparer.Ordinal)
+        foreach (var conversation in auditEvents
+            .GroupBy(item => item.ConversationId, StringComparer.Ordinal)
             .OrderBy(group => group.Key, StringComparer.Ordinal))
         {
             NpgsqlBatchCommand lockCommand = new(LockSql);
-            lockCommand.Parameters.Add(new NpgsqlParameter { Value = call.Key });
+            lockCommand.Parameters.Add(new NpgsqlParameter { Value = conversation.Key });
             batch.BatchCommands.Add(lockCommand);
 
-            batch.BatchCommands.Add(AppendCommand(call.Key, [.. call]));
+            batch.BatchCommands.Add(AppendCommand(conversation.Key, [.. conversation]));
         }
 
         // One round trip for the run. A durable insert is ~13 ms, so twenty apart cost 260 ms and
@@ -111,7 +111,7 @@ internal sealed class PostgresAuditSink : IAuditSinkPort, IAsyncDisposable
         "csharpsquid",
         "S3265",
         Justification = "Npgsql documents Array combined with an element type via bit OR, and the enum omits Flags only upstream.")]
-    private static NpgsqlBatchCommand AppendCommand(string callId, IReadOnlyList<AuditEvent> run)
+    private static NpgsqlBatchCommand AppendCommand(string conversationId, IReadOnlyList<AuditEvent> run)
     {
         NpgsqlBatchCommand command = new(AppendSql);
 
@@ -121,7 +121,7 @@ internal sealed class PostgresAuditSink : IAuditSinkPort, IAsyncDisposable
         // One survivor per EventId keeps the numbering dense.
         AuditEvent[] distinct = [.. run.DistinctBy(item => item.EventId)];
 
-        command.Parameters.Add(new NpgsqlParameter { Value = callId });
+        command.Parameters.Add(new NpgsqlParameter { Value = conversationId });
         command.Parameters.Add(new NpgsqlParameter<Guid[]>
         {
             TypedValue = [.. distinct.Select(item => item.EventId)],

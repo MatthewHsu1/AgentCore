@@ -106,17 +106,17 @@ public sealed class QdrantKnowledgeAdapterTests : IClassFixture<KbShapedCorpusFi
                 entry, secrets: null, embeddings: null, requireScope: true, TestContext.Current.CancellationToken);
 
             Assert.NotNull(captured);
-            var isDisposedBeforeCall = typeof(QdrantClient)
+            var isDisposedBeforeConversation = typeof(QdrantClient)
                 .GetField("_isDisposed", BindingFlags.NonPublic | BindingFlags.Instance)!
                 .GetValue(captured);
-            Assert.False((bool)isDisposedBeforeCall!);
+            Assert.False((bool)isDisposedBeforeConversation!);
 
             ((IDisposable)port).Dispose();
 
-            var isDisposedAfterCall = typeof(QdrantClient)
+            var isDisposedAfterConversation = typeof(QdrantClient)
                 .GetField("_isDisposed", BindingFlags.NonPublic | BindingFlags.Instance)!
                 .GetValue(captured);
-            Assert.True((bool)isDisposedAfterCall!);
+            Assert.True((bool)isDisposedAfterConversation!);
         }
         finally
         {

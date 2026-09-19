@@ -8,7 +8,7 @@ namespace AgentCore.Application.Runtime.Harness;
 /// <summary>
 /// Moves the harness providers' MAF state — <c>todos:</c>, <c>mode:</c>, <c>memory:</c>,
 /// <c>files:</c>, <c>background:</c> — and the approval queue and standing rules between a live
-/// <see cref="AgentSession"/>'s state bag and <see cref="Calls.CallSessionState.Providers"/>.
+/// <see cref="AgentSession"/>'s state bag and <see cref="Conversation.ConversationSessionState.Providers"/>.
 /// </summary>
 internal static class HarnessSessionState
 {

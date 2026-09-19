@@ -3,10 +3,10 @@ AgentCore.Infrastructure.Audit.Postgres.PostgresAuditSinkAdapter
 AgentCore.Infrastructure.Audit.Postgres.PostgresAuditSinkAdapter.Kind.get -> string!
 AgentCore.Infrastructure.Audit.Postgres.PostgresAuditSinkAdapter.OpenAsync(AgentCore.Application.Configuration.Schema.VendorProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IAuditSinkPort!>
 AgentCore.Infrastructure.Audit.Postgres.PostgresAuditSinkAdapter.PostgresAuditSinkAdapter() -> void
-AgentCore.Infrastructure.Calls.Postgres.PostgresCallStoreAdapter
-AgentCore.Infrastructure.Calls.Postgres.PostgresCallStoreAdapter.Kind.get -> string!
-AgentCore.Infrastructure.Calls.Postgres.PostgresCallStoreAdapter.OpenAsync(AgentCore.Application.Configuration.Schema.VendorProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.ICallStore!>
-AgentCore.Infrastructure.Calls.Postgres.PostgresCallStoreAdapter.PostgresCallStoreAdapter() -> void
+AgentCore.Infrastructure.Conversation.Postgres.PostgresConversationStoreAdapter
+AgentCore.Infrastructure.Conversation.Postgres.PostgresConversationStoreAdapter.Kind.get -> string!
+AgentCore.Infrastructure.Conversation.Postgres.PostgresConversationStoreAdapter.OpenAsync(AgentCore.Application.Configuration.Schema.VendorProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IConversationStore!>
+AgentCore.Infrastructure.Conversation.Postgres.PostgresConversationStoreAdapter.PostgresConversationStoreAdapter() -> void
 AgentCore.Infrastructure.Database.Postgres.PostgresSchema
 AgentCore.Infrastructure.Embeddings.OpenAI.OpenAiEmbeddingGeneratorAdapter
 AgentCore.Infrastructure.Embeddings.OpenAI.OpenAiEmbeddingGeneratorAdapter.CreateGeneratorAsync(AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.IEmbeddingGenerator<string!, Microsoft.Extensions.AI.Embedding<float>!>!>
@@ -61,7 +61,7 @@ AgentCore.Infrastructure.Tools.McpToolSource.DisposeAsync() -> System.Threading.
 AgentCore.Infrastructure.Tools.McpToolSource.McpToolSource(AgentCore.Application.Secrets.ResolvedSecrets! secrets, System.Func<System.Net.Http.HttpClient!>? httpClients = null, Microsoft.Extensions.Logging.ILoggerFactory? loggers = null) -> void
 AgentCore.Infrastructure.Tools.McpToolSource.ProvideAsync(AgentCore.Application.Tools.Registry.ToolSourceContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Application.Tools.Registry.ToolRegistration!>!>
 const AgentCore.Infrastructure.Audit.Postgres.PostgresAuditSinkAdapter.ProviderKind = "postgres" -> string!
-const AgentCore.Infrastructure.Calls.Postgres.PostgresCallStoreAdapter.ProviderKind = "postgres" -> string!
+const AgentCore.Infrastructure.Conversation.Postgres.PostgresConversationStoreAdapter.ProviderKind = "postgres" -> string!
 const AgentCore.Infrastructure.Embeddings.OpenAI.OpenAiEmbeddingGeneratorAdapter.ApiKeySecretName = "openai-api-key" -> string!
 const AgentCore.Infrastructure.Embeddings.OpenAI.OpenAiEmbeddingGeneratorAdapter.ApiKeyVariableName = "OPENAI_API_KEY" -> string!
 const AgentCore.Infrastructure.Embeddings.OpenAI.OpenAiEmbeddingGeneratorAdapter.ProviderKind = "openai" -> string!

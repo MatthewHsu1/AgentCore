@@ -16,21 +16,21 @@ namespace AgentCore.AspNetCore.DependencyInjection;
 /// <param name="ChatClients">The factory the compile table asks for every agent and for the extractor.</param>
 /// <param name="Guards">The shared evaluator. It holds no state of its own.</param>
 /// <param name="Registry">The registry that compiled the document, and would compile it again.</param>
-/// <param name="Entries">The compiled entries, keyed by entry name. Every call shares them.</param>
+/// <param name="Entries">The compiled entries, keyed by entry name. Every conversation shares them.</param>
 internal readonly record struct CompiledGraph(
     IChatClientFactory ChatClients,
     GuardEvaluator Guards,
     CompiledAgentRegistry Registry,
     IReadOnlyDictionary<string, CompiledAgent> Entries);
 
-/// <summary>Step 5: compile the document once, so every call shares the result.</summary>
+/// <summary>Step 5: compile the document once, so every conversation shares the result.</summary>
 internal static class CompilationStartup
 {
     /// <summary>Compiles every entry of the document against the tools and the chat clients already built.</summary>
     /// <param name="configuration">The loaded document.</param>
     /// <param name="chatClients">The factory step 3c built, which the compile table asks for every agent and for the extractor.</param>
     /// <param name="tools">The registry step 4 built.</param>
-    /// <param name="calls">The store every call's row and every word of it is kept in.</param>
+    /// <param name="conversations">The store every conversation's row and every word of it is kept in.</param>
     /// <param name="evaluators">
     /// The registry the moderator comes out of. R3 puts moderation in the chat pipeline of every
     /// compiled agent, so it is bound here rather than on the session factory.
@@ -48,7 +48,7 @@ internal static class CompilationStartup
         AgentCoreConfiguration configuration,
         IChatClientFactory chatClients,
         ToolRegistry tools,
-        ICallStore calls,
+        IConversationStore conversations,
         EvaluatorRegistry evaluators,
         IKnowledgeRetrievalPort? knowledge,
         SkillCatalog? skills,
@@ -68,7 +68,7 @@ internal static class CompilationStartup
                 Tools = tools,
                 Guards = guards,
                 Moderation = PromptModerator.FromRegistry(evaluators),
-                CallStore = calls,
+                ConversationStore = conversations,
                 Knowledge = knowledge,
                 Skills = skills,
                 Citations = citations,

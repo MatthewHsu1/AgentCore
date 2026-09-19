@@ -8,7 +8,7 @@ namespace AgentCore.Application.Tools.Registry;
 /// <param name="Id">The name the model calls. It is unique across every source.</param>
 /// <param name="Description">The sentence the model reads to decide when to call it.</param>
 /// <param name="Materialise">
-/// Builds the tool. It runs at most once, on the first resolve, and never during a call.
+/// Builds the tool. It runs at most once, on the first resolve, and never during a conversation.
 /// </param>
 /// <param name="CallTimeout">
 /// How long one call may take, or <see langword="null"/> for no deadline of its own. A source sets

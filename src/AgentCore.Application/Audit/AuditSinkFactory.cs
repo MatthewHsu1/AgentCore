@@ -14,7 +14,7 @@ public static class AuditSinkFactory
     /// <summary>The built-in kind, and the one a document that names no provider gets.</summary>
     public const string MemoryKind = "memory";
 
-    /// <summary>What this seam calls itself, so the shared selector writes its failures.</summary>
+    /// <summary>What this seam conversations itself, so the shared selector writes its failures.</summary>
     private static readonly VendorSeam Seam =
         new("providers.audit", "/providers/audit/kind", "options.UseAuditSinks(...)", "sinks");
 

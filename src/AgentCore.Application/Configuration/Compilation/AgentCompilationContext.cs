@@ -35,7 +35,7 @@ public sealed class AgentCompilationContext
     public ToolRegistry? Tools { get; init; }
 
     /// <summary>
-    /// Gets or sets the evaluator a guarded graph edge calls.
+    /// Gets or sets the evaluator a guarded graph edge conversations.
     /// </summary>
     public IGuardEvaluator? Guards { get; init; }
 
@@ -47,7 +47,7 @@ public sealed class AgentCompilationContext
     /// <summary>
     /// Gets or sets the backing store of store 1, or <see langword="null"/> for memory.
     /// </summary>
-    public ICallStore? CallStore { get; init; }
+    public IConversationStore? ConversationStore { get; init; }
 
     /// <summary>
     /// Gets or sets the store every agent's <c>knowledge:</c> block reads through.

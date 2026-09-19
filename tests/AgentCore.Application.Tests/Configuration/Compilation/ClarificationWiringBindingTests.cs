@@ -36,7 +36,7 @@ public sealed class ClarificationWiringBindingTests
             value: everyone
             enum: [everyone]
         providers:
-          call:   { kind: telnyx-relay }
+          conversation:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
@@ -68,7 +68,7 @@ public sealed class ClarificationWiringBindingTests
         var port = new ScopedFakePort();
         var turn = new TurnInvocation
         {
-            CallId = "call",
+            ConversationId = "conversation",
             TurnIndex = 0,
             Stage = "",
             Knowledge = Scope(model: "*", audience: "everyone"),
@@ -89,7 +89,7 @@ public sealed class ClarificationWiringBindingTests
         var port = new ScopedFakePort();
         var turn = new TurnInvocation
         {
-            CallId = "call",
+            ConversationId = "conversation",
             TurnIndex = 0,
             Stage = "",
             Knowledge = Scope(model: "*", audience: "everyone"),

@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
-using AgentCore.Application.Calls;
-using AgentCore.Application.Calls.Memory;
+using AgentCore.Application.Conversation;
+using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Ports;
 using Microsoft.Agents.AI;
@@ -11,70 +11,70 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace AgentCore.Application.Transcript;
 
 /// <summary>
-/// Reports one store 1 write that was dropped, so the call can raise a diagnostic for it.
+/// Reports one store 1 write that was dropped, so the conversation can raise a diagnostic for it.
 /// </summary>
 internal delegate void TranscriptWriteDropped(int turnIndex, Exception exception);
 
 /// <summary>
-/// Store 1: the words of a call, held for the session by the provider and written through to a backing store.
+/// Store 1: the words of a conversation, held for the session by the provider and written through to a backing store.
 /// </summary>
 internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
 {
-    private readonly ConditionalWeakTable<AgentSession, CallGate> _gates = [];
+    private readonly ConditionalWeakTable<AgentSession, ConversationGate> _gates = [];
 
-    private readonly ICallStore _store;
+    private readonly IConversationStore _store;
 
     private readonly ILogger _logger;
 
     /// <summary>Creates the provider over a backing store.</summary>
-    public AgentCoreChatHistoryProvider(ICallStore? store = null, ILogger? logger = null)
+    public AgentCoreChatHistoryProvider(IConversationStore? store = null, ILogger? logger = null)
     {
-        _store = store ?? new InMemoryCallStore();
+        _store = store ?? new InMemoryConversationStore();
 
         _logger = logger ?? NullLogger.Instance;
 
     }
 
     /// <summary>
-    /// Opens a call on one session: names it, reads back what it already said, and says where a
+    /// Opens a conversation on one session: names it, reads back what it already said, and says where a
     /// dropped write is reported.
     /// </summary>
-    /// <param name="session">The session this call runs on.</param>
-    /// <param name="callId">The call being opened.</param>
+    /// <param name="session">The session this conversation runs on.</param>
+    /// <param name="conversationId">The conversation being opened.</param>
     /// <param name="spoken">
-    /// What store 1 already holds for this call, which is empty for a call that is new. A second
-    /// session of one call is handed the first session's words here, and nowhere else.
+    /// What store 1 already holds for this conversation, which is empty for a conversation that is new. A second
+    /// session of one conversation is handed the first session's words here, and nowhere else.
     /// </param>
     /// <param name="report">Where a dropped store 1 write is reported, if anywhere.</param>
     /// <param name="marks">
-    /// How far the call had got, from store 0's own counters — or the zero marks of a call that has
+    /// How far the conversation had got, from store 0's own counters — or the zero marks of a conversation that has
     /// never spoken. The words cannot say this on their own, because an edit deletes the rows that
     /// would otherwise answer for it.
     /// </param>
-    /// <returns>The index the next turn of this call takes.</returns>
-    public int BeginCall(
+    /// <returns>The index the next turn of this conversation takes.</returns>
+    public int BeginConversation(
         AgentSession session,
-        string callId,
-        IReadOnlyList<CallMessage> spoken,
+        string conversationId,
+        IReadOnlyList<ConversationMessage> spoken,
         TranscriptWriteDropped? report = null,
         TranscriptMarks marks = default)
     {
         ArgumentNullException.ThrowIfNull(session);
-        ArgumentException.ThrowIfNullOrEmpty(callId);
+        ArgumentException.ThrowIfNullOrEmpty(conversationId);
         ArgumentNullException.ThrowIfNull(spoken);
 
         return UnderLock(
             session,
             (transcript, gate) =>
             {
-                transcript.CallId = callId;
+                transcript.ConversationId = conversationId;
                 gate.Dropped = report;
                 return transcript.Resume(spoken, marks);
             });
     }
 
-    /// <summary>Reads the ordinal the session expects the call's next row to take.</summary>
-    /// <param name="session">The session this call runs on.</param>
+    /// <summary>Reads the ordinal the session expects the conversation's next row to take.</summary>
+    /// <param name="session">The session this conversation runs on.</param>
     /// <returns>
     /// The next free ordinal as the session counts it. Equal to store 0's own counter unless a row was
     /// written by someone else, or one of this session's own writes was dropped.
@@ -87,13 +87,13 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
     }
 
     /// <summary>
-    /// Replaces the call's live history with what store 1 now holds, so a later turn sees a row a
+    /// Replaces the conversation's live history with what store 1 now holds, so a later turn sees a row a
     /// host appended from outside any turn.
     /// </summary>
-    /// <param name="session">The session this call runs on.</param>
-    /// <param name="rows">Every stored message of the call, as store 1 now holds it.</param>
-    /// <param name="nextOrdinal">The next free ordinal of the call, from store 0's own counter.</param>
-    public void Resync(AgentSession session, IReadOnlyList<CallMessage> rows, int nextOrdinal)
+    /// <param name="session">The session this conversation runs on.</param>
+    /// <param name="rows">Every stored message of the conversation, as store 1 now holds it.</param>
+    /// <param name="nextOrdinal">The next free ordinal of the conversation, from store 0's own counter.</param>
+    public void Resync(AgentSession session, IReadOnlyList<ConversationMessage> rows, int nextOrdinal)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(rows);
@@ -124,7 +124,7 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
     }
 
     /// <summary>
-    /// Reads the whole call, oldest message first.
+    /// Reads the whole conversation, oldest message first.
     /// </summary>
     public IReadOnlyList<ChatMessage> Read(AgentSession session)
     {
@@ -133,19 +133,19 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
         return UnderLock(session, static transcript => transcript.Read());
     }
 
-    /// <summary>Adds one finished turn's messages to the call, and the state that follows them.</summary>
-    /// <param name="session">The session this call runs on.</param>
+    /// <summary>Adds one finished turn's messages to the conversation, and the state that follows them.</summary>
+    /// <param name="session">The session this conversation runs on.</param>
     /// <param name="messages">The messages the turn produced.</param>
     /// <param name="state">
     /// The state to store beside the words, or <see langword="null"/> to store none. A value, read
-    /// by the caller before it calls: everything the turn writes to the state document — the clock
+    /// by the caller before it conversations: everything the turn writes to the state document — the clock
     /// fields, the counters, the stage and whether the machine finished — is already final when the
-    /// caller enters its commit lock, and the late barge-in path that runs after this call amends
+    /// caller enters its commit lock, and the late barge-in path that runs after this conversation amends
     /// the record of the turn without touching any of it. So there is nothing later to wait for.
     /// </param>
     /// <param name="firstMessageId">
     /// What the caller calls the first of these messages, or <see langword="null"/> to name it in the
-    /// append. Only the first: the rest are this call's own words, which no caller had a name for.
+    /// append. Only the first: the rest are this conversation's own words, which no caller had a name for.
     /// </param>
     /// <returns>
     /// The name the last of these messages was written under, so the caller can be told what to hang
@@ -154,7 +154,7 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
     public string? AppendTurn(
         AgentSession session,
         IReadOnlyList<ChatMessage> messages,
-        CallSessionState? state = null,
+        ConversationSessionState? state = null,
         string? firstMessageId = null)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -172,28 +172,28 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
                 var rows = transcript.Append(messages, firstMessageId);
 
                 var drafts = rows
-                    .Select(row => new CallMessageDraft(row.TurnIndex, row.Content, row.MessageId))
+                    .Select(row => new ConversationMessageDraft(row.TurnIndex, row.Content, row.MessageId))
                     .ToArray();
 
                 Enqueue(
                     gate,
                     () => new ValueTask(_store.AppendAsync(
-                        transcript.CallId, drafts, state, CancellationToken.None).AsTask()),
+                        transcript.ConversationId, drafts, state, CancellationToken.None).AsTask()),
                     transcript);
                 return rows[^1].MessageId;
             });
     }
 
-    /// <summary>Withdraws everything the call said after one message, because a caller replaced it.</summary>
-    /// <param name="session">The session this call runs on.</param>
+    /// <summary>Withdraws everything the conversation said after one message, because a caller replaced it.</summary>
+    /// <param name="session">The session this conversation runs on.</param>
     /// <param name="parentMessageId">
     /// The message the caller's new words hang off. Everything after it goes. Pass
-    /// <see langword="null"/> to withdraw the whole call, which is what an edit of its first message
+    /// <see langword="null"/> to withdraw the whole conversation, which is what an edit of its first message
     /// asks for.
     /// </param>
     /// <returns>
     /// The turns the withdrawal took, or <see langword="null"/> when nothing went. Nothing goes when
-    /// the call holds no message of that name — a caller naming a message this host never stored —
+    /// the conversation holds no message of that name — a caller naming a message this host never stored —
     /// and the turn then runs as a plain new turn.
     /// </returns>
     public WithdrawnTurns? TruncateFrom(AgentSession session, string? parentMessageId)
@@ -223,12 +223,12 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
                     return null;
                 }
 
-                Log.CallTruncated(_logger, transcript.CallId, from, transcript.TurnIndex);
+                Log.ConversationTruncated(_logger, transcript.ConversationId, from, transcript.TurnIndex);
 
                 Enqueue(
                     gate,
                     () => new ValueTask(
-                        _store.TruncateAsync(transcript.CallId, from, CancellationToken.None).AsTask()),
+                        _store.TruncateAsync(transcript.ConversationId, from, CancellationToken.None).AsTask()),
                     transcript);
 
                 return withdrawn;
@@ -236,20 +236,20 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
     }
 
     /// <summary>Adds the caller-facing turn of a graph row: what the caller said, and what it heard.</summary>
-    /// <param name="session">The session this call runs on.</param>
+    /// <param name="session">The session this conversation runs on.</param>
     /// <param name="spoken">What the caller said.</param>
     /// <param name="heard">What the caller heard, or <see langword="null"/> when it heard nothing.</param>
     /// <param name="state">
     /// The state to store beside the words, on the same terms as
-    /// <see cref="AppendTurn(AgentSession, IReadOnlyList{ChatMessage}, CallSessionState?, string?)"/>.
+    /// <see cref="AppendTurn(AgentSession, IReadOnlyList{ChatMessage}, ConversationSessionState?, string?)"/>.
     /// </param>
     /// <param name="firstMessageId">What the caller calls the message it sent, if it named one.</param>
-    /// <inheritdoc cref="AppendTurn(AgentSession, IReadOnlyList{ChatMessage}, CallSessionState?, string?)" path="/returns"/>
+    /// <inheritdoc cref="AppendTurn(AgentSession, IReadOnlyList{ChatMessage}, ConversationSessionState?, string?)" path="/returns"/>
     public string? AppendCallerFacingTurn(
         AgentSession session,
         ChatMessage spoken,
         ChatMessage? heard,
-        CallSessionState? state = null,
+        ConversationSessionState? state = null,
         string? firstMessageId = null)
     {
         ArgumentNullException.ThrowIfNull(spoken);
@@ -275,13 +275,13 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
                     return false;
                 }
 
-                Log.ReplyTruncated(_logger, rows[0].CallId, rows[0].TurnIndex, played.TotalMilliseconds);
+                Log.ReplyTruncated(_logger, rows[0].ConversationId, rows[0].TurnIndex, played.TotalMilliseconds);
 
                 foreach (var row in rows)
                 {
                     Enqueue(
                         gate,
-                        () => _store.RewriteAsync(row.CallId, row.MessageId, row.Content, CancellationToken.None),
+                        () => _store.RewriteAsync(row.ConversationId, row.MessageId, row.Content, CancellationToken.None),
                         transcript);
                 }
 
@@ -290,7 +290,7 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
     }
 
     /// <summary>
-    /// Waits for every write this call has queued to reach the store.
+    /// Waits for every write this conversation has queued to reach the store.
     /// </summary>
     public Task DrainAsync(AgentSession session)
     {
@@ -316,13 +316,13 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
     protected override ValueTask StoreChatHistoryAsync(
         InvokedContext context, CancellationToken cancellationToken = default) => default;
 
-    /// <summary>Queues one store write behind everything this call has already queued.</summary>
-    private void Enqueue(CallGate gate, Func<ValueTask> write, CallTranscript transcript)
-        => gate.Writes = WriteAfterAsync(gate.Writes, gate, write, transcript.CallId, transcript.TurnIndex);
+    /// <summary>Queues one store write behind everything this conversation has already queued.</summary>
+    private void Enqueue(ConversationGate gate, Func<ValueTask> write, ConversationTranscript transcript)
+        => gate.Writes = WriteAfterAsync(gate.Writes, gate, write, transcript.ConversationId, transcript.TurnIndex);
 
-    /// <summary>Writes to the store, and lets the call outlive a store that refuses.</summary>
+    /// <summary>Writes to the store, and lets the conversation outlive a store that refuses.</summary>
     private async Task WriteAfterAsync(
-        Task previous, CallGate gate, Func<ValueTask> write, string callId, int turnIndex)
+        Task previous, ConversationGate gate, Func<ValueTask> write, string conversationId, int turnIndex)
     {
         await previous.ConfigureAwait(false);
 
@@ -330,21 +330,21 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
         {
             await write().ConfigureAwait(false);
         }
-#pragma warning disable CA1031 // A store 1 write failure never ends a call, and never breaks the chain behind it.
+#pragma warning disable CA1031 // A store 1 write failure never ends a conversation, and never breaks the chain behind it.
         catch (Exception exception)
 #pragma warning restore CA1031
         {
-            Log.TranscriptWriteFailed(_logger, callId, turnIndex, exception);
+            Log.TranscriptWriteFailed(_logger, conversationId, turnIndex, exception);
 
-            // The words are lost and the call is not. The report is what turns that into a fact the
+            // The words are lost and the conversation is not. The report is what turns that into a fact the
             // host can count; the contract of TranscriptWriteDropped is that it cannot throw, which
             // is what keeps this chain from ever faulting.
             gate.Dropped?.Invoke(turnIndex, exception);
         }
     }
 
-    /// <summary>Runs one piece of work against the call's transcript, alone.</summary>
-    private TResult UnderLock<TResult>(AgentSession session, Func<CallTranscript, CallGate, TResult> work)
+    /// <summary>Runs one piece of work against the conversation's transcript, alone.</summary>
+    private TResult UnderLock<TResult>(AgentSession session, Func<ConversationTranscript, ConversationGate, TResult> work)
     {
         var gate = GateFor(session);
 
@@ -354,24 +354,24 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
         }
     }
 
-    private TResult UnderLock<TResult>(AgentSession session, Func<CallTranscript, TResult> work)
+    private TResult UnderLock<TResult>(AgentSession session, Func<ConversationTranscript, TResult> work)
         => UnderLock(session, (transcript, _) => work(transcript));
 
-    private CallGate GateFor(AgentSession session) => _gates.GetValue(session, static _ => new CallGate());
+    private ConversationGate GateFor(AgentSession session) => _gates.GetValue(session, static _ => new ConversationGate());
 
-    /// <summary>What one call holds outside its state bag: its lock, its transcript, and its queue of store writes.</summary>
-    private sealed class CallGate
+    /// <summary>What one conversation holds outside its state bag: its lock, its transcript, and its queue of store writes.</summary>
+    private sealed class ConversationGate
     {
-        /// <summary>Gets the lock every read and every change of this call's transcript takes.</summary>
+        /// <summary>Gets the lock every read and every change of this conversation's transcript takes.</summary>
         public Lock Sync { get; } = new();
 
-        /// <summary>Gets the call's live transcript. It never enters the state bag, so serializing the bag stays small.</summary>
-        public CallTranscript Transcript { get; } = new();
+        /// <summary>Gets the conversation's live transcript. It never enters the state bag, so serializing the bag stays small.</summary>
+        public ConversationTranscript Transcript { get; } = new();
 
-        /// <summary>Gets or sets the tail of this call's store writes. It never faults.</summary>
+        /// <summary>Gets or sets the tail of this conversation's store writes. It never faults.</summary>
         public Task Writes { get; set; } = Task.CompletedTask;
 
-        /// <summary>Gets or sets where a dropped write of this call is reported, if anywhere.</summary>
+        /// <summary>Gets or sets where a dropped write of this conversation is reported, if anywhere.</summary>
         public TranscriptWriteDropped? Dropped { get; set; }
     }
 }

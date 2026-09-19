@@ -6,11 +6,11 @@ using Xunit;
 namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay;
 
 /// <summary>
-/// One relay socket runs one call, and one final prompt runs one turn.
+/// One relay socket runs one conversation, and one final prompt runs one turn.
 /// </summary>
 /// <remarks>
 /// Every test here runs offline against a fake model and a fake relay. There is no Telnyx account,
-/// no network call, and no API key anywhere in this file.
+/// no network conversation, and no API key anywhere in this file.
 /// </remarks>
 public sealed class TelnyxRelayTurnTests
 {
@@ -23,7 +23,7 @@ public sealed class TelnyxRelayTurnTests
           items:
             - { id: greeter, instructions: "greet the caller" }
         providers:
-          call:   { kind: telnyx-relay }
+          conversation:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
@@ -55,21 +55,21 @@ public sealed class TelnyxRelayTurnTests
     }
 
     [Fact]
-    public async Task ASetupFrame_NamesTheCallAfterTheCallSessionId()
+    public async Task ASetupFrame_NamesTheConversationAfterTheConversationSessionId()
     {
-        // callSessionId groups the legs of one logical call, so it survives the warm transfer of
+        // conversationSessionId groups the legs of one logical conversation, so it survives the warm transfer of
         // slice 2. A leg id would not.
         using FragmentingChatClient reply = new("hello");
         await using var host = await TelnyxRelayHost.StartAsync(PolicyYaml, reply);
         await using var relay = await host.ConnectAsync();
 
-        await relay.SendAsync(RelayFrames.Setup(callSessionId: "logical-call-7"));
+        await relay.SendAsync(RelayFrames.Setup(conversationSessionId: "logical-conversation-7"));
         await relay.SendAsync(RelayFrames.Prompt("hi", last: true));
         await relay.ReadTextFramesUntilLastAsync();
 
-        var session = await host.FindSessionAsync("logical-call-7");
+        var session = await host.FindSessionAsync("logical-conversation-7");
         Assert.NotNull(session);
-        Assert.Equal("logical-call-7", session.CallId);
+        Assert.Equal("logical-conversation-7", session.ConversationId);
     }
 
     // -------------------------------------------------------------------------------------------
@@ -151,7 +151,7 @@ public sealed class TelnyxRelayTurnTests
         // The relay sends many interim transcripts per turn. One turn per partial word would run
         // the model many times over and speak nonsense.
         //
-        // Calls == 1 alone would not catch a reader that started a turn on every prompt frame: the
+        // Conversations == 1 alone would not catch a reader that started a turn on every prompt frame: the
         // later interim prompts would then hit the in-flight guard and be dropped for the wrong
         // reason, and Calls would still read 1. Asserting on the text the model actually saw is
         // what tells the two apart — the model must see the final transcript, never an interim one.
@@ -186,7 +186,7 @@ public sealed class TelnyxRelayTurnTests
     }
 
     [Fact]
-    public async Task AnUnknownFrameType_IsIgnoredAndTheCallGoesOn()
+    public async Task AnUnknownFrameType_IsIgnoredAndTheConversationGoesOn()
     {
         using FragmentingChatClient reply = new("hello");
         await using var host = await TelnyxRelayHost.StartAsync(PolicyYaml, reply);
@@ -200,11 +200,11 @@ public sealed class TelnyxRelayTurnTests
     }
 
     [Fact(Timeout = 30_000)]
-    public async Task ADecimalDurationOnAnInterruptFrame_IsRefusedAndTheCallGoesOn()
+    public async Task ADecimalDurationOnAnInterruptFrame_IsRefusedAndTheConversationGoesOn()
     {
-        // Section 7.1: a vendor that changes a frame must not be able to drop a call. The type is
+        // Section 7.1: a vendor that changes a frame must not be able to drop a conversation. The type is
         // known and only one field will not bind, so the frame is refused and the socket lives.
-        // A decimal here would otherwise end a live call at the exact moment of a barge-in.
+        // A decimal here would otherwise end a live conversation at the exact moment of a barge-in.
         using FragmentingChatClient reply = new("hello");
         EventObservedLoggerProvider capture = new("FrameBodyRefused");
         await using var host = await TelnyxRelayHost.StartAsync(
@@ -245,11 +245,11 @@ public sealed class TelnyxRelayTurnTests
     }
 
     [Fact(Timeout = 30_000)]
-    public async Task ANonStringCustomParameterOnASetupFrame_IsRefusedAndTheCallGoesOn()
+    public async Task ANonStringCustomParameterOnASetupFrame_IsRefusedAndTheConversationGoesOn()
     {
-        // The same rule, on the one frame that starts a call. customParameters binds to a
+        // The same rule, on the one frame that starts a conversation. customParameters binds to a
         // dictionary of strings, so a number in it will not bind, and refusing the whole socket
-        // would kill the call before it ever began.
+        // would kill the conversation before it ever began.
         using FragmentingChatClient reply = new("hello");
         EventObservedLoggerProvider capture = new("FrameBodyRefused");
         await using var host = await TelnyxRelayHost.StartAsync(
@@ -265,9 +265,9 @@ public sealed class TelnyxRelayTurnTests
         await relay.SendRawAsync(
             """
             {"type":"setup","sessionId":"session-one","callSid":"v2:leg-one",
-             "callControlId":"v2:leg-one","callSessionId":"call-bad-parameters","callLegId":"leg-one",
+             "callControlId":"v2:leg-one","conversationSessionId":"conversation-bad-parameters","callLegId":"leg-one",
              "from":"+13122010094","to":"+13122123456","direction":"inbound",
-             "customParameters":{"a":7},"callStatus":"active"}
+             "customParameters":{"a":7},"conversationStatus":"active"}
             """);
 
         try
@@ -280,7 +280,7 @@ public sealed class TelnyxRelayTurnTests
         }
 
         // The socket is still usable, which is the whole point: the vendor gets another chance.
-        await relay.SendAsync(RelayFrames.Setup(callSessionId: "call-after-bad-setup"));
+        await relay.SendAsync(RelayFrames.Setup(conversationSessionId: "conversation-after-bad-setup"));
         await relay.SendAsync(RelayFrames.Prompt("hi", last: true));
 
         try
@@ -296,7 +296,7 @@ public sealed class TelnyxRelayTurnTests
     [Fact]
     public async Task AnErrorFrame_KeepsTheSocketOpen()
     {
-        // This frame reports our defect, not a call fault. Dropping the call would be worse.
+        // This frame reports our defect, not a conversation fault. Dropping the conversation would be worse.
         using FragmentingChatClient reply = new("hello");
         await using var host = await TelnyxRelayHost.StartAsync(PolicyYaml, reply);
         await using var relay = await host.ConnectAsync();
@@ -311,8 +311,8 @@ public sealed class TelnyxRelayTurnTests
     [Fact(Timeout = 30_000)]
     public async Task ASecondSetupFrame_ReplacesTheFirstSessionAndReleasesIt()
     {
-        // One socket carries one call, so a second setup frame is the vendor's defect. Section 7.1
-        // still forbids dropping a call over one, so it replaces rather than refuses. Teardown only
+        // One socket carries one conversation, so a second setup frame is the vendor's defect. Section 7.1
+        // still forbids dropping a conversation over one, so it replaces rather than refuses. Teardown only
         // ever closes the session the connection currently holds, so a first session left behind
         // would never have anything wait for the words it still owed store 1.
         using FragmentingChatClient reply = new("hello");
@@ -327,10 +327,10 @@ public sealed class TelnyxRelayTurnTests
         using var bounded = CancellationTokenSource.CreateLinkedTokenSource(
             deadline.Token, TestContext.Current.CancellationToken);
 
-        await relay.SendAsync(RelayFrames.Setup(callSessionId: "call-first"));
-        await host.WaitForSessionAsync("call-first");
+        await relay.SendAsync(RelayFrames.Setup(conversationSessionId: "conversation-first"));
+        await host.WaitForSessionAsync("conversation-first");
 
-        await relay.SendAsync(RelayFrames.Setup(callSessionId: "call-second"));
+        await relay.SendAsync(RelayFrames.Setup(conversationSessionId: "conversation-second"));
 
         try
         {
@@ -341,10 +341,10 @@ public sealed class TelnyxRelayTurnTests
             Assert.Fail("the connection never reported the second setup frame within ten seconds.");
         }
 
-        await host.WaitForSessionAsync("call-second");
-        Assert.Null(await host.FindSessionAsync("call-first"));
+        await host.WaitForSessionAsync("conversation-second");
+        Assert.Null(await host.FindSessionAsync("conversation-first"));
 
-        // The call itself goes on, on the session the vendor's latest word named.
+        // The conversation itself goes on, on the session the vendor's latest word named.
         await relay.SendAsync(RelayFrames.Prompt("hi", last: true));
 
         try
@@ -364,7 +364,7 @@ public sealed class TelnyxRelayTurnTests
     [Fact(Timeout = 30_000)]
     public async Task ARelayThatVanishesWithNoCloseFrame_ReleasesTheSession()
     {
-        // The vendor never reconnects, so a dead socket is a finished call. Abort sends no close
+        // The vendor never reconnects, so a dead socket is a finished conversation. Abort sends no close
         // frame at all, so this is what proves the read loop unblocks on the connection's own
         // cancellation rather than on the close handshake, and that the session store drops the
         // call once it does. WaitForSessionAsync first makes sure the server actually created the
@@ -374,13 +374,13 @@ public sealed class TelnyxRelayTurnTests
         await using var host = await TelnyxRelayHost.StartAsync(PolicyYaml, reply);
         await using var relay = await host.ConnectAsync();
 
-        await relay.SendAsync(RelayFrames.Setup(callSessionId: "call-dropped"));
-        await host.WaitForSessionAsync("call-dropped");
+        await relay.SendAsync(RelayFrames.Setup(conversationSessionId: "conversation-dropped"));
+        await host.WaitForSessionAsync("conversation-dropped");
 
         relay.Abort();
 
-        await host.WaitForCallEndAsync("call-dropped");
-        Assert.Null(await host.FindSessionAsync("call-dropped"));
+        await host.WaitForConversationEndAsync("conversation-dropped");
+        Assert.Null(await host.FindSessionAsync("conversation-dropped"));
     }
 }
 

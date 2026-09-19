@@ -10,7 +10,7 @@ using Xunit;
 namespace AgentCore.Application.Tests.Runtime.Harness;
 
 /// <summary>
-/// A child session created inside the parent's run carries the parent's call id; one created
+/// A child session created inside the parent's run carries the parent's conversation id; one created
 /// outside any run carries nothing.
 /// </summary>
 /// <remarks>
@@ -21,14 +21,14 @@ namespace AgentCore.Application.Tests.Runtime.Harness;
 public sealed class BackgroundChildAgentTests
 {
     [Fact]
-    public async Task CreateSessionAsync_InsideTheParentsRun_StampsTheParentsCallId()
+    public async Task CreateSessionAsync_InsideTheParentsRun_StampsTheParentsConversationId()
     {
         // Arrange
         var token = TestContext.Current.CancellationToken;
         BackgroundChildAgent child = new(new ChatClientAgent(new ScriptedChatClient("child")));
         SessionCreatingProvider creating = new(child);
         ChatClientAgent parent = new(new ScriptedChatClient("parent"), new ChatClientAgentOptions { AIContextProviders = [creating] });
-        var turn = new TurnInvocation { CallId = "call-9", TurnIndex = 0, Stage = "s" };
+        var turn = new TurnInvocation { ConversationId = "conversation-9", TurnIndex = 0, Stage = "s" };
 
         // Act
         await parent.RunAsync("go", await parent.CreateSessionAsync(token), turn.RunOptions(), token);
@@ -36,7 +36,7 @@ public sealed class BackgroundChildAgentTests
         // Assert
         Assert.NotNull(creating.Created);
         Assert.True(creating.Created.StateBag.TryGetValue<string>(BlobOwnerKey.Value, out var stamped));
-        Assert.Equal("call-9", stamped);
+        Assert.Equal("conversation-9", stamped);
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public sealed class BackgroundChildAgentTests
         SessionCreatingProvider creating = new(child);
         ChatClientAgent parent = new(new ScriptedChatClient("parent"), new ChatClientAgentOptions { AIContextProviders = [creating] });
         var zone = TimeZoneInfo.CreateCustomTimeZone("Asia/Taipei", TimeSpan.FromHours(8), "Taipei", "Taipei");
-        var turn = new TurnInvocation { CallId = "call-9", TurnIndex = 0, Stage = "s", TimeZone = zone };
+        var turn = new TurnInvocation { ConversationId = "conversation-9", TurnIndex = 0, Stage = "s", TimeZone = zone };
 
         // Act
         await parent.RunAsync("go", await parent.CreateSessionAsync(token), turn.RunOptions(), token);
@@ -70,10 +70,10 @@ public sealed class BackgroundChildAgentTests
         var renders = new TurnRenders();
         var turn = new TurnInvocation
         {
-            CallId = "call-9",
+            ConversationId = "conversation-9",
             TurnIndex = 0,
             Stage = "s",
-            Workspace = "/work/call-9",
+            Workspace = "/work/conversation-9",
             Renders = renders,
         };
 
@@ -84,8 +84,8 @@ public sealed class BackgroundChildAgentTests
         Assert.NotNull(creating.Created);
         var filed = TurnRegistry.For(creating.Created);
         Assert.NotNull(filed);
-        Assert.Equal("/work/call-9", filed.Workspace);
-        Assert.Equal("call-9", filed.CallId);
+        Assert.Equal("/work/conversation-9", filed.Workspace);
+        Assert.Equal("conversation-9", filed.ConversationId);
         Assert.True(filed.Nested);
         Assert.Null(filed.Renders);
     }

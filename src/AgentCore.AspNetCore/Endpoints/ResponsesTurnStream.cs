@@ -1,6 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using AgentCore.Application.Calls;
+using AgentCore.Application.Conversation;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tools;
 using AgentCore.AspNetCore.Sessions;
@@ -31,9 +31,9 @@ internal static class ResponsesTurnStream
         AgentCoreAgent agent,
         AgentCoreAgentSessionStore sessions,
         AgentSession session,
-        CallSession call,
+        ConversationSession conversation,
         ChatMessage input,
-        CallTurnOrigin? origin,
+        ConversationTurnOrigin? origin,
         string responseId,
         string? conversationId,
         bool dialect,
@@ -44,12 +44,12 @@ internal static class ResponsesTurnStream
         http.Response.Headers.CacheControl = "no-cache";
 
         // The headers leave before the turn ends, so this one names the stage the turn speaks in.
-        http.Response.Headers[ResponsesEndpointRouteBuilderExtensions.StageHeaderName] = call.Stage;
+        http.Response.Headers[ResponsesEndpointRouteBuilderExtensions.StageHeaderName] = conversation.Stage;
 
         // One turn's worth of ids: the pairing dies with the stream.
         ToolCallNames toolNames = new();
 
-        var updates = StreamAgentUpdatesAsync(http, agent, call, input, origin, dialect, toolNames, cancellationToken);
+        var updates = StreamAgentUpdatesAsync(http, agent, conversation, input, origin, dialect, toolNames, cancellationToken);
         
         await foreach (var frame in OpenAIResponses
             .WriteResponseStreamAsync(updates, responseId, conversationId, cancellationToken)
@@ -65,7 +65,7 @@ internal static class ResponsesTurnStream
             .ConfigureAwait(false);
     }
 
-    /// <summary>Runs one streaming turn on the call, wrapping each update with the agent's id.</summary>
+    /// <summary>Runs one streaming turn on the conversation, wrapping each update with the agent's id.</summary>
     /// <remarks>
     /// The framework converter sees every update untouched: it ignores the contents it
     /// knows nothing of, so dialect lines duplicate nothing and pure streams lose nothing.
@@ -73,16 +73,16 @@ internal static class ResponsesTurnStream
     private static async IAsyncEnumerable<AgentResponseUpdate> StreamAgentUpdatesAsync(
         HttpContext http,
         AgentCoreAgent agent,
-        CallSession call,
+        ConversationSession conversation,
         ChatMessage input,
-        CallTurnOrigin? origin,
+        ConversationTurnOrigin? origin,
         bool dialect,
         ToolCallNames toolNames,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
     {
         TurnStreamFiles files = new();
 
-        await foreach (var update in call
+        await foreach (var update in conversation
             .RunTurnMessageStreamingAtOriginAsync(input, origin, cancellationToken)
             .ConfigureAwait(false))
         {
@@ -103,9 +103,9 @@ internal static class ResponsesTurnStream
         {
             // The enumeration above ends only after the run has finished, and the publish tool ran
             // inside it: by here the bytes are in the store or never will be.
-            var calls = http.RequestServices.GetRequiredService<CallRepository>();
+            var conversations = http.RequestServices.GetRequiredService<Conversations>();
 
-            await foreach (var part in files.ResolveAsync(calls, call.CallId, cancellationToken).ConfigureAwait(false))
+            await foreach (var part in files.ResolveAsync(conversations, conversation.ConversationId, cancellationToken).ConfigureAwait(false))
             {
                 await WritePartLineAsync(http, part, cancellationToken).ConfigureAwait(false);
             }

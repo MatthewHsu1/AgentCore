@@ -58,8 +58,8 @@ public sealed class CompactionStrategyFactoryTests
     [Fact]
     public async Task Create_SameWordsTwiceFromEmptyState_Agrees()
     {
-        // The claim the resume design rests on: a resumed call builds a new session, so the provider
-        // starts empty and re-derives. If two passes disagreed, a resumed call would not match the
+        // The claim the resume design rests on: a resumed conversation builds a new session, so the provider
+        // starts empty and re-derives. If two passes disagreed, a resumed conversation would not match the
         // call it resumed, and compaction state would have to be persisted.
         var history = HistoryWithToolResults(6, resultChars: 4000);
         var settings = Resolved(CompactionStrategyKind.ToolResult, messages: 8);
@@ -101,9 +101,9 @@ public sealed class CompactionStrategyFactoryTests
         {
             messages.Add(new ChatMessage(ChatRole.User, $"question {index}"));
             messages.Add(new ChatMessage(ChatRole.Assistant,
-                [new FunctionCallContent($"call-{index}", "lookup", new Dictionary<string, object?>())]));
+                [new FunctionCallContent($"conversation-{index}", "lookup", new Dictionary<string, object?>())]));
             messages.Add(new ChatMessage(ChatRole.Tool,
-                [new FunctionResultContent($"call-{index}", new string('x', resultChars))]));
+                [new FunctionResultContent($"conversation-{index}", new string('x', resultChars))]));
             messages.Add(new ChatMessage(ChatRole.Assistant, $"answer {index}"));
         }
 

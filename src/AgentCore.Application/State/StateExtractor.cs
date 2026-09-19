@@ -21,7 +21,7 @@ namespace AgentCore.Application.State;
 /// <c>null</c> answer means the model did not answer, and it leaves the slot at its previous value.
 /// </para>
 /// <para>
-/// The extractor has no retry. One call runs, and a reply that does not deserialize leaves the slots
+/// The extractor has no retry. One conversation runs, and a reply that does not deserialize leaves the slots
 /// unchanged. The stage machine stays where it is and the agent tries again next turn.
 /// </para>
 /// </remarks>
@@ -31,7 +31,7 @@ public sealed class StateExtractor
     public const string SchemaName = "agentcore_state";
 
     private const string SystemPrompt =
-        "You read one finished turn of a phone call and report typed state. "
+        "You read one finished turn of a phone conversation and report typed state. "
         + "Answer with one JSON object that matches the schema. "
         + "Set a field only when this turn shows the answer. "
         + "Leave every other field null. Null means you did not answer, and it keeps the earlier value. "
@@ -144,10 +144,10 @@ public sealed class StateExtractor
     /// <summary>
     /// Runs one extractor call against the finished turn, then writes what it answered.
     /// </summary>
-    /// <param name="state">The state of one call.</param>
+    /// <param name="state">The state of one conversation.</param>
     /// <param name="transcript">The finished turn, newest last.</param>
     /// <param name="cancellationToken">Cancels the model call.</param>
-    /// <returns>What the call did to the state.</returns>
+    /// <returns>What the conversation did to the state.</returns>
     public Task<StateExtractionResult> ExtractAsync(
         StateDocument state,
         IEnumerable<ChatMessage> transcript,
@@ -160,11 +160,11 @@ public sealed class StateExtractor
     }
 
     /// <summary>Runs one extractor call against the finished turn, then writes what it answered.</summary>
-    /// <param name="state">The state of one call.</param>
+    /// <param name="state">The state of one conversation.</param>
     /// <param name="transcript">The finished turn, newest last.</param>
-    /// <param name="clarifications">The call's ambiguity holder. <see cref="Write(StateDocument,string?,Clarifications)"/> reads and writes it.</param>
+    /// <param name="clarifications">The conversation's ambiguity holder. <see cref="Write(StateDocument,string?,Clarifications)"/> reads and writes it.</param>
     /// <param name="cancellationToken">Cancels the model call.</param>
-    /// <returns>What the call did to the state.</returns>
+    /// <returns>What the conversation did to the state.</returns>
     internal async Task<StateExtractionResult> ExtractAsync(
         StateDocument state,
         IEnumerable<ChatMessage> transcript,
@@ -189,7 +189,7 @@ public sealed class StateExtractor
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            // State extraction must never drop a call. Section 8.7.
+            // State extraction must never drop a conversation. Section 8.7.
             return StateExtractionResult.Failed($"the extractor call failed: {exception.Message}");
         }
 
@@ -197,7 +197,7 @@ public sealed class StateExtractor
     }
 
     /// <summary>Writes one extractor reply into the state.</summary>
-    /// <param name="state">The state of one call.</param>
+    /// <param name="state">The state of one conversation.</param>
     /// <param name="replyText">The raw JSON the model returned.</param>
     /// <returns>What the reply did to the state.</returns>
     public StateExtractionResult Write(StateDocument state, string? replyText)
@@ -208,10 +208,10 @@ public sealed class StateExtractor
     }
 
     /// <summary>Writes one extractor reply into the state.</summary>
-    /// <param name="state">The state of one call.</param>
+    /// <param name="state">The state of one conversation.</param>
     /// <param name="replyText">The raw JSON the model returned.</param>
     /// <param name="clarifications">
-    /// The call's ambiguity holder (K36). A write that lands clears the slot's <c>lastNamed</c>
+    /// The conversation's ambiguity holder (K36). A write that lands clears the slot's <c>lastNamed</c>
     /// record (K30); a refused write leaves it alone.
     /// </param>
     /// <returns>What the reply did to the state.</returns>

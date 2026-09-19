@@ -11,8 +11,8 @@ using Xunit;
 namespace AgentCore.Application.Tests.Tools;
 
 /// <summary>
-/// A background child runs with no turn, so <c>file.publish</c> finds the owning call on the stamp
-/// its session carries and stores the file under the parent call.
+/// A background child runs with no turn, so <c>file.publish</c> finds the owning conversation on the stamp
+/// its session carries and stores the file under the parent conversation.
 /// </summary>
 /// <remarks>
 /// The child session is created inside the parent's run, the way <c>BackgroundAgentsProvider</c>
@@ -23,16 +23,16 @@ public sealed class FilePublishBackgroundChildTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "agentcore-publish-child-" + Guid.NewGuid().ToString("N"));
 
-    public FilePublishBackgroundChildTests() => Directory.CreateDirectory(Path.Combine(_root, "call-9"));
+    public FilePublishBackgroundChildTests() => Directory.CreateDirectory(Path.Combine(_root, "conversation-9"));
 
     public void Dispose() => Directory.Delete(_root, recursive: true);
 
     [Fact]
-    public async Task AChildThatPublishes_StoresTheFileUnderTheParentCall()
+    public async Task AChildThatPublishes_StoresTheFileUnderTheParentConversation()
     {
         // Arrange
         var token = TestContext.Current.CancellationToken;
-        File.WriteAllText(Path.Combine(_root, "call-9", "rows.csv"), "a,b");
+        File.WriteAllText(Path.Combine(_root, "conversation-9", "rows.csv"), "a,b");
         RecordingBlobStore blobs = new();
 
         var publish = new FilePublishToolDefinition().Build(
@@ -46,7 +46,7 @@ public sealed class FilePublishBackgroundChildTests : IDisposable
         BackgroundChildAgent child = new(new ChatClientAgent(childModel, new ChatClientAgentOptions { ChatOptions = new ChatOptions { Tools = [publish] } }));
         SessionCreatingProvider creating = new(child);
         ChatClientAgent parent = new(new ScriptedChatClient("parent"), new ChatClientAgentOptions { AIContextProviders = [creating] });
-        var turn = new TurnInvocation { CallId = "call-9", TurnIndex = 0, Stage = "s", Workspace = Path.Combine(_root, "call-9") };
+        var turn = new TurnInvocation { ConversationId = "conversation-9", TurnIndex = 0, Stage = "s", Workspace = Path.Combine(_root, "conversation-9") };
 
         await parent.RunAsync("go", await parent.CreateSessionAsync(token), turn.RunOptions(), token);
 
@@ -56,9 +56,9 @@ public sealed class FilePublishBackgroundChildTests : IDisposable
         // Assert
         Assert.Equal(["publish"], childModel.Called);
         var result = Assert.Single(childModel.ToolResults);
-        Assert.Contains("https://blobs.test/call-9/rows.csv", result, StringComparison.Ordinal);
+        Assert.Contains("https://blobs.test/conversation-9/rows.csv", result, StringComparison.Ordinal);
         Assert.DoesNotContain(ToolErrorResult.ErrorProperty + "\":true", result, StringComparison.Ordinal);
-        Assert.Single(blobs.Blobs.Keys, key => key == ("call-9", "rows.csv"));
+        Assert.Single(blobs.Blobs.Keys, key => key == ("conversation-9", "rows.csv"));
     }
 
     private sealed class SessionCreatingProvider(AIAgent child) : AIContextProvider

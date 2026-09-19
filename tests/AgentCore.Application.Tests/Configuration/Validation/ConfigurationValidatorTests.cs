@@ -21,7 +21,7 @@ public sealed class ConfigurationValidatorTests
     private const string MinimalProviders =
         """
         providers:
-          call:   { kind: telnyx-relay }
+          conversation:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
@@ -33,7 +33,7 @@ public sealed class ConfigurationValidatorTests
     private const string SpeechOnlyProviders =
         """
         providers:
-          call:   { kind: telnyx-relay }
+          conversation:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
@@ -335,7 +335,7 @@ public sealed class ConfigurationValidatorTests
         const string document = """
             apiVersion: agentcore/v1
             tools:
-              - { id: call_ghost, kind: agent, agent: ghost }
+              - { id: conversation_ghost, kind: agent, agent: ghost }
             agents:
               items:
                 - { id: planner }
@@ -391,7 +391,7 @@ public sealed class ConfigurationValidatorTests
     // Check 2, knowledge scope: a state-built scope must not produce a filter nobody meant.
     // ---------------------------------------------------------------------------------------------
     // KnowledgeStartup skips the store factory for a host-supplied port, and returns null when
-    // KnowledgeStores is unset, but CallSession composes the scope regardless — so these are document
+    // KnowledgeStores is unset, but ConversationSession composes the scope regardless — so these are document
     // checks, not store checks.
     private static AgentCoreConfiguration Scoped(
         IReadOnlyList<string> fromState,
@@ -734,7 +734,7 @@ public sealed class ConfigurationValidatorTests
     [Fact]
     public void Evaluate_AmbiguityProbeDeadlineSecondsAboveTheTimerCeiling_Fails()
     {
-        // CancelAfter throws above int.MaxValue milliseconds, from a call site with no pointer.
+        // CancelAfter throws above int.MaxValue milliseconds, from a conversation site with no pointer.
         var ambiguity = new KnowledgeAmbiguityConfiguration { ProbeDeadlineSeconds = 3_000_000 };
 
         var result = ConfigurationValidator.EvaluateStructure(OneFacetScope(ambiguity));
@@ -1029,7 +1029,7 @@ public sealed class ConfigurationValidatorTests
             apiVersion: agentcore/v1
             guards:
               inResolve: { "===": [ { var: stage }, "resolve" ] }
-              longCall:  { ">=": [ { var: callDurationSeconds }, 90 ] }
+              longConversation:  { ">=": [ { var: conversationDurationSeconds }, 90 ] }
               lateTurn:  { ">":  [ { var: turnIndex }, 4 ] }
             agents:
               items:
@@ -1388,7 +1388,7 @@ public sealed class ConfigurationValidatorTests
         Assert.Equal("/agents/items/1/tools/0", error.Pointer);
         Assert.Equal(
             "this tool runs the agent 'planner', and that closes the delegation cycle "
-            + "planner -> writer -> planner. The call would never return.",
+            + "planner -> writer -> planner. The conversation would never return.",
             error.Message);
     }
 

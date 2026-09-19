@@ -24,7 +24,7 @@ namespace AgentCore.Application.Diagnostics;
 /// </remarks>
 public static class TelemetrySessionFactory
 {
-    /// <summary>What this seam calls itself, so the shared selector writes its failures.</summary>
+    /// <summary>What this seam conversations itself, so the shared selector writes its failures.</summary>
     private static readonly VendorSeam Seam =
         new("providers.telemetry", "/providers/telemetry/kind", "options.UseTelemetry(...)", "collectors");
 

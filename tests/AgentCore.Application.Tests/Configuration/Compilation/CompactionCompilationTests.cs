@@ -111,7 +111,7 @@ public sealed class CompactionCompilationTests
         // AgentCoreChatHistoryProvider (this agent's ChatHistoryProvider, because SingleAgentRow sets
         // SessionCarriesHistory) reads store 1, which nothing here writes to, so it always hands back an
         // empty history and never grows the request on its own. The conversation this test measures is
-        // instead built by hand and re-sent whole on every turn — exactly the shape a resumed call
+        // instead built by hand and re-sent whole on every turn — exactly the shape a resumed conversation
         // replays, which is the case CompactionProvider's incremental path exists for.
         List<ChatMessage> conversation = [];
         var sizeBeforeTheLastCompaction = 0;

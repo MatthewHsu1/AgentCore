@@ -155,7 +155,7 @@ public sealed class BindingToolTests
     // classification that makes that true off DeclaredTool and into
     // AuditingFunctionInvokingChatClient, so calling the bare tool directly now sees the exception
     // the host delegate threw. See AuditingFunctionInvokingChatClientErrorPolicyTests and
-    // CallSessionTests for the end-to-end guarantee.
+    // ConversationSessionTests for the end-to-end guarantee.
     // ---------------------------------------------------------------------------------------------
     [Fact]
     public async Task AHostDelegateThatThrows_PropagatesForTheMiddlewareToClassify()

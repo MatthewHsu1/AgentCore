@@ -8,7 +8,7 @@ using static AgentCore.Application.Tests.Transcript.AgentCoreChatHistoryProvider
 namespace AgentCore.Application.Tests.Transcript;
 
 /// <summary>
-/// Pins what the provider adds to <see cref="CallTranscript"/>: the lock, the write chain, and the
+/// Pins what the provider adds to <see cref="ConversationTranscript"/>: the lock, the write chain, and the
 /// rule that a store failure never reaches the turn.
 /// </summary>
 public sealed class AgentCoreChatHistoryProviderTests
@@ -17,7 +17,7 @@ public sealed class AgentCoreChatHistoryProviderTests
     public async Task ProvideChatHistory_AfterAppend_ReturnsMessagesInOrder()
     {
         // Arrange
-        var (provider, _, session) = await NewCall();
+        var (provider, _, session) = await NewConversation();
         AppendTurn(provider, session, turnIndex: 0, "hello", "hi there");
         AppendTurn(provider, session, turnIndex: 1, "order 41?", "it ships Friday");
 
@@ -34,7 +34,7 @@ public sealed class AgentCoreChatHistoryProviderTests
     public async Task AppendTurn_MultipleTurns_OrdinalsAreDenseAndUnique()
     {
         // Arrange
-        var (provider, store, session) = await NewCall();
+        var (provider, store, session) = await NewConversation();
         AppendTurn(provider, session, turnIndex: 0, "hello", "hi there");
 
         // Act
@@ -44,14 +44,14 @@ public sealed class AgentCoreChatHistoryProviderTests
         await provider.DrainAsync(session);
         Assert.Equal([0, 1, 2, 3], store.Rows.Select(row => row.Ordinal));
         Assert.Equal([0, 0, 1, 1], store.Rows.Select(row => row.TurnIndex));
-        Assert.All(store.Rows, row => Assert.Equal(CallId, row.CallId));
+        Assert.All(store.Rows, row => Assert.Equal(ConversationId, row.ConversationId));
     }
 
     [Fact]
     public async Task AppendTurn_RefusedTurn_IsStored()
     {
         // Arrange
-        var (provider, store, session) = await NewCall();
+        var (provider, store, session) = await NewConversation();
 
         // Act
         AppendTurn(provider, session, turnIndex: 0, "something flagged", "I can't help with that.");
@@ -67,7 +67,7 @@ public sealed class AgentCoreChatHistoryProviderTests
     public async Task AppendTurn_FailedTurn_IsStored()
     {
         // Arrange
-        var (provider, store, session) = await NewCall();
+        var (provider, store, session) = await NewConversation();
 
         // Act
         AppendTurn(provider, session, turnIndex: 0, "check my order", "Sorry, I had trouble with that.");
@@ -82,14 +82,14 @@ public sealed class AgentCoreChatHistoryProviderTests
     /// <summary>
     /// The framework offers to store a finished run, and this provider declines. Measured on
     /// Microsoft.Agents.AI 1.17.0, that hook stores the request verbatim — reminder and all — and is
-    /// never called at all for a run the caller cut short, which is every barge-in. CallSession
+    /// never called at all for a run the caller cut short, which is every barge-in. ConversationSession
     /// writes the turn it shaped instead.
     /// </summary>
     [Fact]
     public async Task StoreChatHistory_FinishedRun_StoresNothing()
     {
         // Arrange
-        var (provider, store, session) = await NewCall();
+        var (provider, store, session) = await NewConversation();
         provider.BeginTurn(session, turnIndex: 0);
 
         // Act
@@ -113,7 +113,7 @@ public sealed class AgentCoreChatHistoryProviderTests
     public async Task AppendTurn_ConcurrentAppends_LosesNoMessage()
     {
         // Arrange
-        var (provider, store, session) = await NewCall();
+        var (provider, store, session) = await NewConversation();
         provider.BeginTurn(session, turnIndex: 0);
         var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var turns = Enumerable.Range(0, 20)
@@ -145,11 +145,11 @@ public sealed class AgentCoreChatHistoryProviderTests
     public async Task ProvideChatHistory_TwoConcurrentSessions_DoNotMix()
     {
         // Arrange
-        var provider = new AgentCoreChatHistoryProvider(new RecordingCallStore());
+        var provider = new AgentCoreChatHistoryProvider(new RecordingConversationStore());
         var first = new StubSession();
         var second = new StubSession();
-        provider.BeginCall(first, "call-a", []);
-        provider.BeginCall(second, "call-b", []);
+        provider.BeginConversation(first, "conversation-a", []);
+        provider.BeginConversation(second, "conversation-b", []);
         AppendTurn(provider, first, turnIndex: 0, "a said", "a heard");
 
         // Act
@@ -180,7 +180,7 @@ public sealed class AgentCoreChatHistoryProviderTests
     public async Task AppendTurn_LeavesTheSessionStateBagEmpty()
     {
         // Arrange
-        var (provider, _, session) = await NewCall();
+        var (provider, _, session) = await NewConversation();
 
         // Act
         AppendTurn(provider, session, turnIndex: 0, "order 41?", "it ships Friday");
@@ -191,18 +191,18 @@ public sealed class AgentCoreChatHistoryProviderTests
     }
 
     /// <summary>
-    /// The provider is one object shared by every call, so two sessions must still reach two
+    /// The provider is one object shared by every conversation, so two sessions must still reach two
     /// transcripts. State held against the provider rather than the session would merge them.
     /// </summary>
     [Fact]
     public void AppendTurn_TwoSessions_EachHoldsItsOwnTranscript()
     {
         // Arrange
-        var provider = new AgentCoreChatHistoryProvider(new RecordingCallStore());
+        var provider = new AgentCoreChatHistoryProvider(new RecordingConversationStore());
         var first = new StubSession();
         var second = new StubSession();
-        provider.BeginCall(first, "call-a", []);
-        provider.BeginCall(second, "call-b", []);
+        provider.BeginConversation(first, "conversation-a", []);
+        provider.BeginConversation(second, "conversation-b", []);
 
         // Act
         AppendTurn(provider, first, turnIndex: 0, "a said", "a heard");
@@ -217,9 +217,9 @@ public sealed class AgentCoreChatHistoryProviderTests
     public async Task AppendTurn_BackingStoreThrows_DoesNotFailTheTurn()
     {
         // Arrange
-        var provider = new AgentCoreChatHistoryProvider(new ThrowingCallStore());
+        var provider = new AgentCoreChatHistoryProvider(new ThrowingConversationStore());
         var session = new StubSession();
-        provider.BeginCall(session, CallId, []);
+        provider.BeginConversation(session, ConversationId, []);
 
         // Act
         AppendTurn(provider, session, turnIndex: 0, "hello", "hi there");
@@ -230,13 +230,13 @@ public sealed class AgentCoreChatHistoryProviderTests
     }
 
     [Fact]
-    public async Task BeginCall_BackingStoreThrows_TellsTheReporterWhichTurnWasLost()
+    public async Task BeginConversation_BackingStoreThrows_TellsTheReporterWhichTurnWasLost()
     {
         // Arrange
-        var provider = new AgentCoreChatHistoryProvider(new ThrowingCallStore());
+        var provider = new AgentCoreChatHistoryProvider(new ThrowingConversationStore());
         var session = new StubSession();
         List<int> dropped = [];
-        provider.BeginCall(session, CallId, [], (turnIndex, _) => dropped.Add(turnIndex));
+        provider.BeginConversation(session, ConversationId, [], (turnIndex, _) => dropped.Add(turnIndex));
 
         // Act
         AppendTurn(provider, session, turnIndex: 3, "hello", "hi there");

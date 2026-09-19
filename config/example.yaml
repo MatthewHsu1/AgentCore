@@ -21,7 +21,7 @@
 #   5. tools        what an agent may call
 #   6. agents       models, prompts, knowledge, compaction
 #   7. entries      what a caller reaches: a stage machine or one agent
-#   8. providers    adapters: llm, call, speech, telephony, moderation, embeddings, knowledge,
+#   8. providers    adapters: llm, conversation, speech, telephony, moderation, embeddings, knowledge,
 #                   telemetry
 #   9. evaluation   the judge that scores finished turns
 
@@ -36,7 +36,7 @@ apiVersion: agentcore/v1
 # What the caller hears when a turn fails. Two failures reach it: a run that returns no text
 # after 40 tool rounds, and a tool that fails four times in a row. Every entry speaks this line.
 # An entry may override it with its own fallbackReply: (see 7. entries).
-# Optional. Default: the value shown. Blank is a load error, because blank is silence on a call.
+# Optional. Default: the value shown. Blank is a load error, because blank is silence on a conversation.
 fallbackReply: "I am sorry. I could not finish that. Please say it again."
 
 # What the caller hears when moderation flags their input and the agent refuses the turn.
@@ -56,7 +56,7 @@ refusalReply: "I am sorry. I cannot help with that request."
 #   counter     it adds one whenever its increment: rule is true
 #
 # Three slots are reserved, always present, and read-only: stage, turnIndex, and
-# callDurationSeconds. A rule may read them. Do not declare them here.
+# conversationDurationSeconds. A rule may read them. Do not declare them here.
 state:
   # writer: extractor. Nullable on the wire. A null leaves the slot at its previous value.
   callerAskedForHuman: { type: boolean, default: false, writer: extractor }
@@ -193,9 +193,9 @@ tools:
   # never a boot failure.
   - { id: search, kind: builtin, uses: web.search }
 
-  # kind: builtin, a plain function. The model calls it when a file in the call's workspace is a
-  # deliverable: the file is copied into providers.blobs (see 8. providers), owned by the call,
-  # and the person gets a link. Files not published are lost when the call ends. Needs
+  # kind: builtin, a plain function. The model calls it when a file in the conversation's workspace is a
+  # deliverable: the file is copied into providers.blobs (see 8. providers), owned by the conversation,
+  # and the person gets a link. Files not published are lost when the conversation ends. Needs
   # providers.blobs and options.UseWorkspace(...) on the host; missing either fails the boot.
   - { id: publish, kind: builtin, uses: file.publish }
 
@@ -270,8 +270,8 @@ agents:
     knowledge: { mode: prefetch, limit: 5, citations: false }
 
     # Bounds the conversation an agent carries. Every strategy is deterministic: the same messages
-    # give the same result. There is no summarization on purpose. A resumed call rebuilds from
-    # the replayed words, and a model-written summary would give one call two histories.
+    # give the same result. There is no summarization on purpose. A resumed conversation rebuilds from
+    # the replayed words, and a model-written summary would give one conversation two histories.
     #   strategy          truncate | sliding_window | tool_result | context_window
     #                     tool_result folds old function-tool groups into one short line each.
     #                     context_window folds first, then truncates whole groups.
@@ -378,14 +378,14 @@ providers:
     - { kind: openai, model: gpt-4.1-nano, as: cheap, webSearch: false }
 
   # Three voice planes. They are not duplicates.
-  #   call        the media pipe. It carries the audio and owns the route /v1/{entry}/call.
+  #   conversation the media pipe. It carries the audio and owns the route /v1/{entry}/call.
   #   speech      recognition (stt) and synthesis (tts), one role at a time.
   #   telephony   call control: dial, transfer, hang up. It must outlive any one media leg,
   #               because a warm transfer creates a second leg.
-  call:      { kind: telnyx-relay }
+  conversation:      { kind: telnyx-relay }
   speech:
-    stt: { kind: telnyx-relay }            # bundled with the relay, so it matches call
-    tts: { kind: telnyx-relay }            # bundled with the relay, so it matches call
+    stt: { kind: telnyx-relay }            # bundled with the relay, so it matches conversation
+    tts: { kind: telnyx-relay }            # bundled with the relay, so it matches conversation
   telephony: { kind: telnyx }
 
   # Reads what the CALLER said, before the model runs. A flagged turn never reaches the model and
@@ -399,7 +399,7 @@ providers:
   # model's own width.
   embeddings: { kind: openai, model: text-embedding-3-small }
 
-  # Where a file the model publishes (file.publish) is kept after the call, owned by the call id.
+  # Where a file the model publishes (file.publish) is kept after the conversation, owned by the conversation id.
   # Any S3-compatible store. Reads the s3-access-key and s3-secret-key secrets.
   blobs: { kind: s3, endpoint: https://s3.us-east-005.backblazeb2.com, bucket: agentcore-files, region: us-east-005 }
 

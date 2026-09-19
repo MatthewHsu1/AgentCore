@@ -7,7 +7,7 @@ using Xunit;
 namespace AgentCore.Application.Tests.State;
 
 /// <summary>
-/// <see cref="StateDocument.WrittenSlots"/>: the durable-blob view of a call's declared state.
+/// <see cref="StateDocument.WrittenSlots"/>: the durable-blob view of a conversation's declared state.
 /// </summary>
 public sealed class StateDocumentTests
 {
@@ -93,7 +93,7 @@ public sealed class StateDocumentTests
     }
 
     [Fact]
-    public void WrittenSlots_HandsOutAFreshCopyEveryCall()
+    public void WrittenSlots_HandsOutAFreshCopyEveryConversation()
     {
         StateDocument state = new(Document);
         var result = JsonNode.Parse("""{ "model": "F63" }""");
@@ -105,8 +105,8 @@ public sealed class StateDocumentTests
         // The declared state schema only ever writes scalars (section 8.3's four writers coerce
         // to boolean/integer/number/string), so a scalar JsonValue is the only value shape this
         // slot can hold today, and a scalar exposes no public mutator. The clone's contract is
-        // still checked the way a caller could actually break it without one: two calls must not
-        // hand back the same node instance, because a caller free to reparent or wrap one call's
+        // still checked the way a caller could actually break it without one: two conversations must not
+        // hand back the same node instance, because a caller free to reparent or wrap one conversation's
         // node (e.g. into a JsonObject of its own) would otherwise reach into the live document,
         // or into the copy a different caller was given.
         Assert.NotSame(first["model"], second["model"]);
@@ -134,8 +134,8 @@ public sealed class StateDocumentTests
     public async Task WrittenSlots_ReadWhileTheTurnLoopIsStillWriting_AnswersInsteadOfThrowing()
     {
         // The turn loop is this document's only WRITER, but it is not its only toucher.
-        // CallSession.Snapshot reads it off the turn, and AgentCoreAgent.SerializeSessionCoreAsync is
-        // a framework seam any host thread may call while a turn is running — an exposure this branch
+        // ConversationSession.Snapshot reads it off the turn, and AgentCoreAgent.SerializeSessionCoreAsync is
+        // a framework seam any host thread may conversation while a turn is running — an exposure this branch
         // created, because that seam used to throw NotSupportedException instead of answering.
         // Enumerating a plain Dictionary mid-write is an InvalidOperationException, and it would
         // surface out of the framework's own serialization API.

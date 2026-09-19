@@ -46,7 +46,7 @@ public sealed class PromptModeratorTests
     public async Task AnEndpointThatDidNotAnswer_ReadsAsNothingFlagged()
     {
         // Fail open. A vendor outage must not refuse every caller, so an evaluation carrying no
-        // verdict reads the same as a clean one here. CallSession tells the two apart on a metric.
+        // verdict reads the same as a clean one here. ConversationSession tells the two apart on a metric.
         PromptModerator moderator = new(ScriptedModerationEvaluator.Unanswered());
 
         var categories = await moderator.FlaggedCategoriesAsync("...", TestContext.Current.CancellationToken);
@@ -57,7 +57,7 @@ public sealed class PromptModeratorTests
     [Fact]
     public async Task AnEndpointThatThrows_Propagates()
     {
-        // The moderator does not swallow. CallSession owns the catch, because it owns the log line
+        // The moderator does not swallow. ConversationSession owns the catch, because it owns the log line
         // and the metric that report a turn went unchecked.
         PromptModerator moderator = new(ScriptedModerationEvaluator.Throwing(new InvalidOperationException("boom")));
 

@@ -5,21 +5,21 @@ using Microsoft.Extensions.AI;
 namespace AgentCore.Application.Ports;
 
 /// <summary>
-/// The inbound seam of one call: start or continue a turn, stream the reply, cancel it.
+/// The inbound seam of one conversation: start or continue a turn, stream the reply, cancel it.
 /// </summary>
 public interface IConversationPort
 {
-    /// <summary>Gets the id of the call.</summary>
-    string CallId { get; }
+    /// <summary>Gets the id of the conversation.</summary>
+    string ConversationId { get; }
 
     /// <summary>Gets the stage the machine holds. It is empty when the document declares no policy.</summary>
     string Stage { get; }
 
-    /// <summary>Gets whether the call reached a terminal stage. A document with no policy never does.</summary>
+    /// <summary>Gets whether the conversation reached a terminal stage. A document with no policy never does.</summary>
     bool IsComplete { get; }
 
-    /// <summary>Gets or sets the knowledge scope the host opened for this call, or null for none.</summary>
-    /// <remarks>Set it before the run: every turn composes its own scope from it. It outlives turns by construction — one call hears one customer.</remarks>
+    /// <summary>Gets or sets the knowledge scope the host opened for this conversation, or null for none.</summary>
+    /// <remarks>Set it before the run: every turn composes its own scope from it. It outlives turns by construction — one conversation hears one customer.</remarks>
     KnowledgeScope? Scope { get; set; }
 
     /// <summary>Gets the turn that finished last, or <see langword="null"/> before the first turn ends.</summary>
@@ -30,7 +30,7 @@ public interface IConversationPort
     /// <param name="cancellationToken">Cancels the model calls.</param>
     /// <returns>The finished turn. It always carries a spoken line.</returns>
     /// <exception cref="InvalidOperationException">
-    /// The call already ended, or another turn of this call is still running.
+    /// The conversation already ended, or another turn of this conversation is still running.
     /// </exception>
     Task<TurnResult> RunTurnAsync(string userInput, CancellationToken cancellationToken = default);
 
@@ -39,7 +39,7 @@ public interface IConversationPort
     /// <param name="cancellationToken">Cancels the model calls.</param>
     /// <returns>The finished turn. Its reply is empty while approval requests are pending.</returns>
     /// <exception cref="InvalidOperationException">
-    /// The call already ended, or another turn of this call is still running.
+    /// The conversation already ended, or another turn of this conversation is still running.
     /// </exception>
     Task<TurnResult> RunTurnMessageAsync(ChatMessage userInput, CancellationToken cancellationToken);
 
@@ -53,7 +53,7 @@ public interface IConversationPort
     /// 40-fragment reply, and an adapter must not have to filter them again.
     /// </remarks>
     /// <exception cref="InvalidOperationException">
-    /// The call already ended, or another turn of this call is still running.
+    /// The conversation already ended, or another turn of this conversation is still running.
     /// </exception>
     IAsyncEnumerable<ChatResponseUpdate> RunTurnStreamingAsync(
         string userInput,
@@ -64,7 +64,7 @@ public interface IConversationPort
     /// <param name="cancellationToken">Cancels the model calls.</param>
     /// <returns>The reply, one update at a time. Every update carries content.</returns>
     /// <exception cref="InvalidOperationException">
-    /// The call already ended, or another turn of this call is still running.
+    /// The conversation already ended, or another turn of this conversation is still running.
     /// </exception>
     IAsyncEnumerable<ChatResponseUpdate> RunTurnMessageStreamingAsync(
         ChatMessage userInput,

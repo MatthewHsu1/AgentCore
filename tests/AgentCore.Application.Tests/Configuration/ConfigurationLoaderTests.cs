@@ -169,7 +169,7 @@ public sealed class ConfigurationLoaderTests
         const string document = """
             apiVersion: agentcore/v1
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
@@ -190,7 +190,7 @@ public sealed class ConfigurationLoaderTests
         const string document = """
             apiVersion: agentcore/v1
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
@@ -223,7 +223,7 @@ public sealed class ConfigurationLoaderTests
         const string document = """
             apiVersion: agentcore/v1
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
@@ -246,7 +246,7 @@ public sealed class ConfigurationLoaderTests
         const string document = """
             apiVersion: agentcore/v1
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
@@ -276,7 +276,7 @@ public sealed class ConfigurationLoaderTests
         const string document = """
             apiVersion: agentcore/v1
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
@@ -300,7 +300,7 @@ public sealed class ConfigurationLoaderTests
         const string document = """
             apiVersion: agentcore/v1
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
@@ -697,7 +697,7 @@ public sealed class ConfigurationLoaderTests
         const string document = """
             apiVersion: agentcore/v1
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
@@ -720,7 +720,7 @@ public sealed class ConfigurationLoaderTests
         const string document = """
             apiVersion: agentcore/v1
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }

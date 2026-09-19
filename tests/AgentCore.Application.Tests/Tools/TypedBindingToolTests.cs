@@ -18,7 +18,7 @@ namespace AgentCore.Application.Tests.Tools;
 /// </summary>
 /// <remarks>
 /// The document writes <c>binds: CreateCase</c> and no <c>parameters:</c>. Everything the model
-/// needs to fill the call comes off the method, so the two can never drift apart.
+/// needs to fill the conversation comes off the method, so the two can never drift apart.
 /// </remarks>
 public sealed class TypedBindingToolTests
 {
@@ -107,7 +107,7 @@ public sealed class TypedBindingToolTests
         Assert.Equal("Open a service case for a human agent.", tool.Description);
     }
 
-    /// <summary>The model never sees the scope parameter: it names the running call, not an argument the model fills.</summary>
+    /// <summary>The model never sees the scope parameter: it names the running conversation, not an argument the model fills.</summary>
     [Fact]
     public async Task AToolCallScopeParameter_IsLeftOutOfTheSchema()
     {
@@ -116,7 +116,7 @@ public sealed class TypedBindingToolTests
         var properties = tool.JsonSchema.GetProperty("properties");
         Assert.True(properties.TryGetProperty("reason", out _));
         Assert.False(properties.TryGetProperty("scope", out _));
-        Assert.DoesNotContain("CallId", tool.JsonSchema.GetRawText(), StringComparison.Ordinal);
+        Assert.DoesNotContain("ConversationId", tool.JsonSchema.GetRawText(), StringComparison.Ordinal);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -189,7 +189,7 @@ public sealed class TypedBindingToolTests
     }
 
     /// <summary>
-    /// A binding declares a <see cref="ToolCallScope"/> parameter to read the call it runs in, but a
+    /// A binding declares a <see cref="ToolCallScope"/> parameter to read the conversation it runs in, but a
     /// call to the tool with no turn open on this flow has no call to report.
     /// </summary>
     [Fact]
@@ -223,7 +223,7 @@ public sealed class TypedBindingToolTests
                 ["reason"] = "the caller wants a person",
                 [TurnInvocation.ArgumentsKey] = new TurnInvocation
                 {
-                    CallId = "call-9",
+                    ConversationId = "conversation-9",
                     TurnIndex = 4,
                     Stage = "handling",
                     Workspace = "ws",
@@ -232,7 +232,7 @@ public sealed class TypedBindingToolTests
             TestContext.Current.CancellationToken);
 
         Assert.Equal("the caller wants a person", $"{result}");
-        Assert.Equal("call-9", captured!.CallId);
+        Assert.Equal("conversation-9", captured!.ConversationId);
         Assert.Equal(4, captured.TurnIndex);
         Assert.Equal("handling", captured.Stage);
         Assert.Equal("ws", captured.Workspace);

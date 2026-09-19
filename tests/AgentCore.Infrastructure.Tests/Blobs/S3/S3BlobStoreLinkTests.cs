@@ -33,7 +33,7 @@ public sealed class S3BlobStoreLinkTests
         using var store = Open("http://localhost:59000");
 
         // Act
-        var url = await store.LinkAsync(new BlobRef("call-1", "rows.csv", "text/csv", 8), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
+        var url = await store.LinkAsync(new BlobRef("conversation-1", "rows.csv", "text/csv", 8), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(url);
@@ -47,7 +47,7 @@ public sealed class S3BlobStoreLinkTests
     {
         // Arrange
         using var store = Open();
-        BlobRef blob = new("call-1", "chart.png", "image/png", 48213);
+        BlobRef blob = new("conversation-1", "chart.png", "image/png", 48213);
 
         // Act
         var url = await store.LinkAsync(blob, TimeSpan.FromMinutes(15), TestContext.Current.CancellationToken);
@@ -56,7 +56,7 @@ public sealed class S3BlobStoreLinkTests
         Assert.NotNull(url);
         Assert.Equal("https", url.Scheme);
         Assert.Equal("s3.us-east-005.backblazeb2.com", url.Host);
-        Assert.Equal("/SpiritAI/call-1/chart.png", url.AbsolutePath);
+        Assert.Equal("/SpiritAI/conversation-1/chart.png", url.AbsolutePath);
 
         var query = HttpUtility.ParseQueryString(url.Query);
         Assert.Equal("host", query["X-Amz-SignedHeaders"]);
@@ -74,7 +74,7 @@ public sealed class S3BlobStoreLinkTests
         using var store = Open();
 
         // Act
-        var url = await store.LinkAsync(new BlobRef("call-1", "rows.csv", "text/csv", 8), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
+        var url = await store.LinkAsync(new BlobRef("conversation-1", "rows.csv", "text/csv", 8), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
 
         // Assert
         var query = HttpUtility.ParseQueryString(url!.Query);
@@ -90,6 +90,6 @@ public sealed class S3BlobStoreLinkTests
 
         // Act + Assert
         await Assert.ThrowsAsync<ArgumentException>(async () =>
-            await store.LinkAsync(new BlobRef("call-1", "../x.png", "image/png", 1), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken));
+            await store.LinkAsync(new BlobRef("conversation-1", "../x.png", "image/png", 1), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken));
     }
 }

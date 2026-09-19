@@ -1,7 +1,7 @@
 using AgentCore.Application.Transcript;
 using AgentCore.Application.Blobs;
-using AgentCore.Application.Calls;
-using AgentCore.Application.Calls.Memory;
+using AgentCore.Application.Conversation;
+using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Ports;
 using AgentCore.AspNetCore.Endpoints;
 using Microsoft.Extensions.AI;
@@ -23,7 +23,7 @@ public sealed class TurnStreamFilesTests
     public async Task ResolveAsync_NotedFileTheCaptureKept_YieldsOnePartWithTheLink()
     {
         // Arrange: the same content passes twice, as a re-yielded update would; a refused one passes too.
-        CallRepository calls = new(new InMemoryCallStore(), new StubBlobStore());
+        Conversations conversations = new(new InMemoryConversationStore(), new StubBlobStore());
         TurnStreamFiles files = new();
         var chart = Kept("chart.png", "image/png", 48213);
         FileContent refused = new() { Name = "refused.png", FileId = "cfile_2" };
@@ -32,26 +32,26 @@ public sealed class TurnStreamFilesTests
         files.Note(UpdateWith(refused));
 
         // Act
-        var parts = await files.ResolveAsync(calls, "call-1", TestContext.Current.CancellationToken).ToListAsync(TestContext.Current.CancellationToken);
+        var parts = await files.ResolveAsync(conversations, "conversation-1", TestContext.Current.CancellationToken).ToListAsync(TestContext.Current.CancellationToken);
 
         // Assert: once, linked, and the refused file is not there.
         var part = Assert.Single(parts);
         Assert.Equal("chart.png", part.Payload.Name);
         Assert.Equal("image/png", part.Payload.MediaType);
         Assert.Equal(48213, part.Payload.Length);
-        Assert.Equal("https://blobs.test/call-1/chart.png?ttl=900", part.Payload.Url);
+        Assert.Equal("https://blobs.test/conversation-1/chart.png?ttl=900", part.Payload.Url);
     }
 
     [Fact]
     public async Task ResolveAsync_StoreWithNoWebDoor_YieldsThePartWithoutAUrl()
     {
         // Arrange
-        CallRepository calls = new(new InMemoryCallStore(), new StubBlobStore { Links = false });
+        Conversations conversations = new(new InMemoryConversationStore(), new StubBlobStore { Links = false });
         TurnStreamFiles files = new();
         files.Note(UpdateWith(Kept("rows.csv", "text/csv", 8)));
 
         // Act
-        var parts = await files.ResolveAsync(calls, "call-1", TestContext.Current.CancellationToken).ToListAsync(TestContext.Current.CancellationToken);
+        var parts = await files.ResolveAsync(conversations, "conversation-1", TestContext.Current.CancellationToken).ToListAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(Assert.Single(parts).Payload.Url);
@@ -61,10 +61,10 @@ public sealed class TurnStreamFilesTests
     public async Task ResolveAsync_NothingNoted_YieldsNothing()
     {
         // Arrange
-        CallRepository calls = new(new InMemoryCallStore(), blobs: null);
+        Conversations conversations = new(new InMemoryConversationStore(), blobs: null);
 
         // Act
-        var parts = await new TurnStreamFiles().ResolveAsync(calls, "call-1", TestContext.Current.CancellationToken).ToListAsync(TestContext.Current.CancellationToken);
+        var parts = await new TurnStreamFiles().ResolveAsync(conversations, "conversation-1", TestContext.Current.CancellationToken).ToListAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Empty(parts);

@@ -22,12 +22,12 @@ namespace AgentCore.Application.Tests.Transcript;
 /// which is what lets <c>ThrowOnChatHistoryProviderConflict</c> stay at the framework default.
 /// </para>
 /// <para>
-/// Rows 3 and 4 must stay unbound. A node is handed the call in the request messages the turn loop
-/// renders, and it runs on a session the workflow made rather than the call's, so store 1 on a node
+/// Rows 3 and 4 must stay unbound. A node is handed the conversation in the request messages the turn loop
+/// renders, and it runs on a session the workflow made rather than the conversation's, so store 1 on a node
 /// is a second history source keyed on a session it does not know.
 /// </para>
 /// <para>
-/// Every test here runs offline: no network call and no API key.
+/// Every test here runs offline: no network conversation and no API key.
 /// </para>
 /// </remarks>
 public sealed class CompiledHistoryProviderTests
@@ -152,7 +152,7 @@ public sealed class CompiledHistoryProviderTests
       {
           // A response that carries a conversation id is how a service says it keeps the history itself.
           // That and store 1 are two answers to one question, and the framework refuses both at once.
-          // Switching this check off to buy something else — a telemetry attribute, say — leaves a call
+          // Switching this check off to buy something else — a telemetry attribute, say — leaves a conversation
           // whose model silently sees one message and no history.
           ServerSideHistoryChatClient client = new("hello");
           var compiled = Compile(SingleAgentYaml, client);
@@ -171,7 +171,7 @@ public sealed class CompiledHistoryProviderTests
       [Theory]
       [InlineData(PatternGraphYaml)]
       [InlineData(ExplicitGraphYaml)]
-      public async Task AGraphRow_ReplaysTheCallToItsNodesExactlyOnce(string yaml)
+      public async Task AGraphRow_ReplaysTheConversationToItsNodesExactlyOnce(string yaml)
       {
           RecordingChatClient researcher = new("looking into it");
           RecordingChatClient responder = new("it ships Friday");
@@ -180,7 +180,7 @@ public sealed class CompiledHistoryProviderTests
           _ = await session.RunTurnAsync(FirstUtterance, TestContext.Current.CancellationToken);
           _ = await session.RunTurnAsync(SecondUtterance, TestContext.Current.CancellationToken);
 
-          // One system message carries the whole call to a graph row, and it is the only way the call
+          // One system message carries the whole call to a graph row, and it is the only way the conversation
           // reaches a node. Two copies of the caller's words in one request is what a second history
           // source on that node would look like.
           Assert.Equal(1, Mentions(researcher.Requests[1], FirstUtterance));
@@ -230,8 +230,8 @@ public sealed class CompiledHistoryProviderTests
               ConfigurationLoader.LoadYaml(yaml),
               new AgentCompilationContext(new FakeChatClientFactory(client)))["main"];
 
-      /// <summary>Compiles one document over two named models and opens a call on it.</summary>
-      private static CallSession CreateSession(string yaml, IChatClient first, IChatClient second)
+      /// <summary>Compiles one document over two named models and opens a conversation on it.</summary>
+      private static ConversationSession CreateSession(string yaml, IChatClient first, IChatClient second)
       {
           RoutingChatClientFactory chatClients = new(first);
           chatClients.Route("researcher", first);
@@ -242,7 +242,7 @@ public sealed class CompiledHistoryProviderTests
           var compiled = ConfigurationCompiler.CompileAll(
               ConfigurationLoader.LoadYaml(yaml), new AgentCompilationContext(chatClients))["main"];
 
-          return new CallSessionFactory(
+          return new ConversationSessionFactory(
               compiled,
               new GuardEvaluator(compiled.Configuration.Guards),
               extractor: null).Create();
@@ -349,7 +349,7 @@ public sealed class CompiledHistoryProviderTests
       /// </remarks>
       private sealed class DelegatingChatClient : IChatClient
       {
-          private const string CallId = "call_1";
+          private const string ConversationId = "conversation_1";
 
           /// <summary>The one argument <c>AsAIFunction()</c> generates for an agent that declares no schema.</summary>
           private static readonly Dictionary<string, object?> Arguments =
@@ -377,7 +377,7 @@ public sealed class CompiledHistoryProviderTests
               {
                   yield return new ChatResponseUpdate(
                       ChatRole.Assistant,
-                      [new FunctionCallContent(CallId, tool.Name, Arguments)])
+                      [new FunctionCallContent(ConversationId, tool.Name, Arguments)])
                   {
                       ResponseId = responseId,
                       MessageId = responseId,

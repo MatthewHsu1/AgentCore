@@ -87,7 +87,7 @@ public sealed record AgentConfiguration
     /// <summary>Gets the model of this agent, or <see langword="null"/> to inherit the default.</summary>
     public ModelReference? Model { get; init; }
 
-    /// <summary>Gets the ids of the tools this agent may call.</summary>
+    /// <summary>Gets the ids of the tools this agent may conversation.</summary>
     public IReadOnlyList<string> Tools { get; init; } = [];
 
     /// <summary>Gets the names of the skills this agent may load.</summary>
@@ -119,7 +119,7 @@ public sealed record AgentConfiguration
 
     /// <summary>
     /// Gets this agent's <c>shell:</c> block, or <see langword="null"/> for none. One executor per
-    /// call, never a process singleton.
+    /// conversation, never a process singleton.
     /// </summary>
     public ShellConfiguration? Shell { get; init; }
 

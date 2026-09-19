@@ -10,8 +10,8 @@ namespace AgentCore.Application.Runtime;
 /// <remarks>
 /// <para>
 /// R1: a tool that fails four times in a row throws out of the run, and section 8.7 says that must
-/// never kill the call. R2: at 40 tool rounds the framework sends request 41 with no tools and
-/// returns quietly, with no exception — on a voice call that silence is the failure, so an empty
+/// never kill the conversation. R2: at 40 tool rounds the framework sends request 41 with no tools and
+/// returns quietly, with no exception — on a voice conversation that silence is the failure, so an empty
 /// reply is read rather than trusting the absence of an error. Both end here, and both leave the
 /// turn an ordinary successful run.
 /// </para>
@@ -37,7 +37,7 @@ namespace AgentCore.Application.Runtime;
 /// reply the caller hears, so a quiet output node reads as the silence it is.
 /// </para>
 /// <para>
-/// It holds no per-call state: one instance is compiled once and shared by every call under T44 and
+/// It holds no per-call state: one instance is compiled once and shared by every conversation under T44 and
 /// R7.
 /// </para>
 /// </remarks>
@@ -75,7 +75,7 @@ internal sealed class FallbackAgent : DelegatingAIAgent
             response = await base.RunCoreAsync(messages, session, options, cancellationToken)
                 .ConfigureAwait(false);
         }
-#pragma warning disable CA1031 // Section 8.7, row six: the run throws, the turn ends, and the call lives.
+#pragma warning disable CA1031 // Section 8.7, row six: the run throws, the turn ends, and the conversation lives.
         catch (Exception exception) when (exception is not OperationCanceledException)
 #pragma warning restore CA1031
         {

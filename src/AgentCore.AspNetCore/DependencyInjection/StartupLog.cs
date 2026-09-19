@@ -17,14 +17,14 @@ internal static partial class StartupLog
             + "providers.audit.kind, or write kind: memory to say this was meant.")]
     public static partial void AuditSinkDefaulted(ILogger logger);
 
-    /// <summary>The document named no <c>providers.calls</c>, so the in-process store was opened.</summary>
+    /// <summary>The document named no <c>providers.conversations</c>, so the in-process store was opened.</summary>
     /// <param name="logger">The factory's logger for the in-process store.</param>
     [LoggerMessage(
         EventId = 3,
         Level = LogLevel.Warning,
-        Message = "the document names no providers.calls, so a call's row and the words of every "
-            + "call are kept in this process. That store is not durable, it grows without a bound, "
-            + "and no retention window applies to it. Name a durable providers.calls.kind, or write "
+        Message = "the document names no providers.conversations, so a conversation's row and the words of every "
+            + "conversation are kept in this process. That store is not durable, it grows without a bound, "
+            + "and no retention window applies to it. Name a durable providers.conversations.kind, or write "
             + "kind: memory to say this was meant.")]
-    public static partial void CallStoreDefaulted(ILogger logger);
+    public static partial void ConversationStoreDefaulted(ILogger logger);
 }

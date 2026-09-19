@@ -102,7 +102,7 @@ internal static class DelegationCycleCheck
             // The compiler prints the same chain in the same 'first -> second -> first' form, and
             // gives the same reason. The two messages agree rather than compete.
             Message = $"this tool runs the agent '{edge.Target}', and that closes the delegation cycle "
-                      + $"{cycle}. The call would never return.",
+                      + $"{cycle}. The conversation would never return.",
             Check = ConfigurationCheck.DelegationCycles,
         };
 }

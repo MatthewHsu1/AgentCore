@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using AgentCore.Application.Calls;
+using AgentCore.Application.Conversation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.AspNetCore.Tests.Fakes;
 using Microsoft.Extensions.AI;
@@ -11,12 +11,12 @@ namespace AgentCore.AspNetCore.Tests.Endpoints;
 
 /// <summary>
 /// The whole wire a published file travels: the model calls <c>file.publish</c> on a file in the
-/// call's workspace, the blob store keeps it under the call, the browser gets one
+/// conversation's workspace, the blob store keeps it under the conversation, the browser gets one
 /// <c>agentcore_file</c> part with the link, and the transcript links the same file on a later read.
 /// </summary>
 public sealed class FileWireTests : IDisposable
 {
-    private const string CallId = "call-pub-1";
+    private const string ConversationId = "conversation-pub-1";
 
     private const string Yaml =
         """
@@ -32,7 +32,7 @@ public sealed class FileWireTests : IDisposable
             main:
               agent: analyst
           providers:
-            call:   { kind: telnyx-relay }
+            conversation:   { kind: telnyx-relay }
             speech:
               stt: { kind: telnyx-relay }
               tts: { kind: telnyx-relay }
@@ -43,7 +43,7 @@ public sealed class FileWireTests : IDisposable
 
     private readonly string _root = Path.Combine(Path.GetTempPath(), "agentcore-filewire-" + Guid.NewGuid().ToString("N"));
 
-    public FileWireTests() => Directory.CreateDirectory(Path.Combine(_root, CallId));
+    public FileWireTests() => Directory.CreateDirectory(Path.Combine(_root, ConversationId));
 
     public void Dispose()
     {
@@ -56,7 +56,7 @@ public sealed class FileWireTests : IDisposable
     [Fact]
     public async Task AToolThatPublishes_ReachesTheBrowserAsAFilePartAndTheTranscriptLinksItLater()
     {
-        File.WriteAllText(Path.Combine(_root, CallId, "report.csv"), "month,sales\njan,10\n");
+        File.WriteAllText(Path.Combine(_root, ConversationId, "report.csv"), "month,sales\njan,10\n");
         FakeBlobStoreAdapter blobs = new();
 
         await using var host = await ResponsesHost.StartAsync(
@@ -65,7 +65,7 @@ public sealed class FileWireTests : IDisposable
             configure: options => options.UseWorkspace(_root).UseBlobStores(blobs));
 
         using var response = await host.PostAsync(
-            $$"""{ "stream": true, "conversation": "{{CallId}}", "input": "send me the report", "agentcore": { "message_id": "m1" } }""");
+            $$"""{ "stream": true, "conversation": "{{ConversationId}}", "input": "send me the report", "agentcore": { "message_id": "m1" } }""");
         var events = await ResponsesHost.ReadEventsAsync(response);
 
         var files = events
@@ -79,10 +79,10 @@ public sealed class FileWireTests : IDisposable
         Assert.Equal("Quarterly report", file.GetProperty("title").GetString());
         Assert.Equal("text/csv", file.GetProperty("media_type").GetString());
         Assert.Equal(19, file.GetProperty("length").GetInt64());
-        Assert.Equal($"https://blobs.test/{CallId}/report.csv?ttl=900", file.GetProperty("url").GetString());
+        Assert.Equal($"https://blobs.test/{ConversationId}/report.csv?ttl=900", file.GetProperty("url").GetString());
 
-        // The bytes are in the store, owned by the call.
-        var (mediaType, bytes) = blobs.Store.Blobs[(CallId, "report.csv")];
+        // The bytes are in the store, owned by the conversation.
+        var (mediaType, bytes) = blobs.Store.Blobs[(ConversationId, "report.csv")];
         Assert.Equal("text/csv", mediaType);
         Assert.Equal("month,sales\njan,10\n", System.Text.Encoding.UTF8.GetString(bytes));
 
@@ -94,16 +94,16 @@ public sealed class FileWireTests : IDisposable
             .Select(chunk => chunk.GetProperty("agentcore_tool"))
             .Single();
         Assert.False(toolResult.GetProperty("failed").GetBoolean());
-        Assert.Equal($"https://blobs.test/{CallId}/report.csv?ttl=900", toolResult.GetProperty("result").GetProperty("url").GetString());
+        Assert.Equal($"https://blobs.test/{ConversationId}/report.csv?ttl=900", toolResult.GetProperty("result").GetProperty("url").GetString());
 
         // And a later read of the transcript links the same file again.
-        var calls = host.Services.GetRequiredService<CallRepository>();
-        var stored = await calls.ReadAsync(CallId, TestContext.Current.CancellationToken);
-        var links = await calls.LinkFilesAsync(CallId, stored.Select(row => row.Content), TestContext.Current.CancellationToken);
+        var conversations = host.Services.GetRequiredService<Conversations>();
+        var stored = await conversations.ReadAsync(ConversationId, TestContext.Current.CancellationToken);
+        var links = await conversations.LinkFilesAsync(ConversationId, stored.Select(row => row.Content), TestContext.Current.CancellationToken);
 
         var link = Assert.Single(links);
-        Assert.Equal((CallId, "report.csv", "text/csv", 19L), (link.Blob.OwnerId, link.Blob.Name, link.Blob.MediaType, link.Blob.Length));
-        Assert.Equal($"https://blobs.test/{CallId}/report.csv?ttl=900", link.Url?.ToString());
+        Assert.Equal((ConversationId, "report.csv", "text/csv", 19L), (link.Blob.OwnerId, link.Blob.Name, link.Blob.MediaType, link.Blob.Length));
+        Assert.Equal($"https://blobs.test/{ConversationId}/report.csv?ttl=900", link.Url?.ToString());
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public sealed class FileWireTests : IDisposable
             configure: options => options.UseWorkspace(_root).UseBlobStores(blobs));
 
         using var response = await host.PostAsync(
-            $$"""{ "stream": true, "conversation": "{{CallId}}", "input": "send me the report", "agentcore": { "message_id": "m1" } }""");
+            $$"""{ "stream": true, "conversation": "{{ConversationId}}", "input": "send me the report", "agentcore": { "message_id": "m1" } }""");
         var events = await ResponsesHost.ReadEventsAsync(response);
 
         Assert.DoesNotContain(events, text => text.Contains("agentcore_file", StringComparison.Ordinal));
@@ -164,7 +164,7 @@ public sealed class FileWireTests : IDisposable
                 yield return new ChatResponseUpdate(
                     ChatRole.Assistant,
                     [new FunctionCallContent(
-                        "call_1",
+                        "conversation_1",
                         publish.Name,
                         new Dictionary<string, object?>(StringComparer.Ordinal)
                         {

@@ -1,4 +1,4 @@
-using AgentCore.Application.Calls.Memory;
+using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Evaluation;
@@ -68,7 +68,7 @@ public static class ConfigurationCompiler
             throw Fail(
                 entryPointer,
                 "the entry holds two of agent:, policy:, and graph:. The section 8.2 compile table "
-                + "takes exactly one: agent: for one agent answering directly, policy: for a call that "
+                + "takes exactly one: agent: for one agent answering directly, policy: for a conversation that "
                 + "walks stages, and graph: for a run that needs checkpointing, a request port, or a "
                 + "parallel fan-out with a join.");
         }
@@ -133,9 +133,9 @@ public static class ConfigurationCompiler
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(context);
 
-        ICallStore calls = context.CallStore ?? new InMemoryCallStore();
+        IConversationStore conversations = context.ConversationStore ?? new InMemoryConversationStore();
 
-        AgentCoreChatHistoryProvider history = new(calls);
+        AgentCoreChatHistoryProvider history = new(conversations);
 
         Dictionary<string, (Dictionary<string, AIAgent> Agents, IReadOnlySet<string> HarnessStateKeys, List<BackgroundAgentsProvider> BackgroundProviders)> built = new(StringComparer.Ordinal);
 
@@ -168,7 +168,7 @@ public static class ConfigurationCompiler
                 fallbackReply,
                 refusalReply,
                 row,
-                calls,
+                conversations,
                 entryAgent,
                 shared.Agents,
                 stages,
@@ -209,7 +209,7 @@ public static class ConfigurationCompiler
     /// <param name="configuration">The loaded document.</param>
     /// <param name="context">The seams the document names.</param>
     /// <param name="history">Store 1, or <see langword="null"/> to leave the framework default in place.</param>
-    /// <returns>The agents keyed by id, the union of every harness provider's state keys, and every background provider for the call-end release.</returns>
+    /// <returns>The agents keyed by id, the union of every harness provider's state keys, and every background provider for the conversation-end release.</returns>
     private static (Dictionary<string, AIAgent> Agents, IReadOnlySet<string> HarnessStateKeys, List<BackgroundAgentsProvider> BackgroundProviders) BuildAgents(
         AgentCoreConfiguration configuration,
         AgentCompilationContext context,
@@ -278,7 +278,7 @@ public static class ConfigurationCompiler
                     pointer,
                     $"the agent '{id}' delegates back to itself through a kind: agent tool: "
                     + $"{string.Join(" -> ", path)} -> {id}. Check 8 of section 8.5 rejects a delegation "
-                    + "cycle, because the call would never return.");
+                    + "cycle, because the conversation would never return.");
             }
 
             path.Add(id);

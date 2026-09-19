@@ -5,14 +5,14 @@ using Xunit;
 namespace AgentCore.Application.Tests.Runtime;
 
 /// <summary>
-/// <see cref="Clarifications"/>: the per-call holder K36 describes, K41's per-turn mark, and K43's
+/// <see cref="Clarifications"/>: the per-conversation holder K36 describes, K41's per-turn mark, and K43's
 /// probe latch and replay payload.
 /// </summary>
 public sealed class ClarificationsTests
 {
     // -----------------------------------------------------------------------------------------
     // K43: the probe latch is a compare-and-set. Several search-tool calls in one turn, or several
-    // graph participants sharing this call, must cost exactly one probe.
+    // graph participants sharing this conversation, must cost exactly one probe.
     // -----------------------------------------------------------------------------------------
     [Fact]
     public void ClaimProbe_ManyConcurrentCallers_ExactlyOneClaimsEachTrial()
@@ -124,7 +124,7 @@ public sealed class ClarificationsTests
 
     // -----------------------------------------------------------------------------------------
     // K43: BeginTurn opens a fresh turn. It clears the probe latch and its payload together, and
-    // never the counter — that is per-call, not per-turn.
+    // never the counter — that is per-conversation, not per-turn.
     // -----------------------------------------------------------------------------------------
     [Fact]
     public void BeginTurn_ClearsTheLatch_AndLeavesTheCounter()
@@ -185,8 +185,8 @@ public sealed class ClarificationsTests
     }
 
     // -----------------------------------------------------------------------------------------
-    // Reconnect: the ask budget is per call, not per session, so what one session spent must reach
-    // the next one through the call's stored state.
+    // Reconnect: the ask budget is per conversation, not per session, so what one session spent must reach
+    // the next one through the conversation's stored state.
     // -----------------------------------------------------------------------------------------
     [Fact]
     public void SpentAndRestoreSpent_CarryTheBudget_AndNotWhatWasNamed()

@@ -27,7 +27,7 @@ public sealed class FilePublishToolDefinitionTests : IDisposable
 
     private readonly RecordingBlobStore _blobs = new();
 
-    public FilePublishToolDefinitionTests() => Directory.CreateDirectory(Path.Combine(_root, "call-1"));
+    public FilePublishToolDefinitionTests() => Directory.CreateDirectory(Path.Combine(_root, "conversation-1"));
 
     public void Dispose() => Directory.Delete(_root, recursive: true);
 
@@ -100,7 +100,7 @@ public sealed class FilePublishToolDefinitionTests : IDisposable
     [Fact]
     public async Task Publish_AnExtensionThePolicyRefuses_IsRefusedWithTheReason()
     {
-        File.WriteAllText(Path.Combine(_root, "call-1", "notes.exe"), "x");
+        File.WriteAllText(Path.Combine(_root, "conversation-1", "notes.exe"), "x");
 
         var result = await PublishAsync("notes.exe");
 
@@ -112,7 +112,7 @@ public sealed class FilePublishToolDefinitionTests : IDisposable
     [Fact]
     public async Task Publish_AFileOverTheCap_IsRefusedWithTheReason()
     {
-        File.WriteAllBytes(Path.Combine(_root, "call-1", "big.csv"), new byte[64]);
+        File.WriteAllBytes(Path.Combine(_root, "conversation-1", "big.csv"), new byte[64]);
 
         var result = await PublishAsync("big.csv", policy: new BlobPolicy(32, ["csv"]));
 
@@ -121,9 +121,9 @@ public sealed class FilePublishToolDefinitionTests : IDisposable
     }
 
     [Fact]
-    public async Task Publish_AGoodFile_StoresItUnderTheCallLinksItAndFilesTheCardOnTheTurn()
+    public async Task Publish_AGoodFile_StoresItUnderTheConversationLinksItAndFilesTheCardOnTheTurn()
     {
-        File.WriteAllText(Path.Combine(_root, "call-1", "rows.csv"), "a,b\n1,2\n");
+        File.WriteAllText(Path.Combine(_root, "conversation-1", "rows.csv"), "a,b\n1,2\n");
         TurnFiles files = new();
         using var outer = files.BeginOuterCall("tc_1");
 
@@ -133,9 +133,9 @@ public sealed class FilePublishToolDefinitionTests : IDisposable
         Assert.Equal("rows.csv", result["name"]!.GetValue<string>());
         Assert.Equal("text/csv", result["mediaType"]!.GetValue<string>());
         Assert.Equal(8, result["length"]!.GetValue<long>());
-        Assert.Equal("https://blobs.test/call-1/rows.csv?ttl=900", result["url"]!.GetValue<string>());
+        Assert.Equal("https://blobs.test/conversation-1/rows.csv?ttl=900", result["url"]!.GetValue<string>());
 
-        var (mediaType, bytes) = _blobs.Blobs[("call-1", "rows.csv")];
+        var (mediaType, bytes) = _blobs.Blobs[("conversation-1", "rows.csv")];
         Assert.Equal("text/csv", mediaType);
         Assert.Equal("a,b\n1,2\n", System.Text.Encoding.UTF8.GetString(bytes));
 
@@ -151,25 +151,25 @@ public sealed class FilePublishToolDefinitionTests : IDisposable
     [Fact]
     public async Task Publish_AFileInASubfolder_IsStoredUnderItsOwnName()
     {
-        Directory.CreateDirectory(Path.Combine(_root, "call-1", "out"));
-        File.WriteAllBytes(Path.Combine(_root, "call-1", "out", "chart.png"), [1, 2, 3]);
+        Directory.CreateDirectory(Path.Combine(_root, "conversation-1", "out"));
+        File.WriteAllBytes(Path.Combine(_root, "conversation-1", "out", "chart.png"), [1, 2, 3]);
 
         var result = await PublishAsync("out/chart.png");
 
         Assert.Equal("chart.png", result["name"]!.GetValue<string>());
         Assert.Equal("image/png", result["mediaType"]!.GetValue<string>());
-        Assert.True(_blobs.Blobs.ContainsKey(("call-1", "chart.png")));
+        Assert.True(_blobs.Blobs.ContainsKey(("conversation-1", "chart.png")));
     }
 
     [Fact]
     public async Task Publish_OutsideAnyTurn_IsRefusedWithAToolError()
     {
-        File.WriteAllText(Path.Combine(_root, "call-1", "rows.csv"), "a");
+        File.WriteAllText(Path.Combine(_root, "conversation-1", "rows.csv"), "a");
 
         var result = await PublishAsync("rows.csv", turn: false);
 
         Assert.True(ToolErrorResult.IsError(result));
-        Assert.Contains("no call is running", result["message"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains("no conversation is running", result["message"]!.GetValue<string>(), StringComparison.Ordinal);
     }
 
     private AITool Build(BlobPolicy? policy = null)
@@ -187,10 +187,10 @@ public sealed class FilePublishToolDefinitionTests : IDisposable
         {
             arguments[TurnInvocation.ArgumentsKey] = new TurnInvocation
             {
-                CallId = "call-1",
+                ConversationId = "conversation-1",
                 TurnIndex = 0,
                 Stage = string.Empty,
-                Workspace = Path.Combine(_root, "call-1"),
+                Workspace = Path.Combine(_root, "conversation-1"),
                 Files = files,
             };
         }

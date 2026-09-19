@@ -103,7 +103,7 @@ internal sealed class BlockingAuditSink : IAuditSinkPort
 /// A sink that refuses every event.
 /// </summary>
 /// <remarks>
-/// Audit is a record of the call and never a part of it, so a sink that fails must be reported and
+/// Audit is a record of the conversation and never a part of it, so a sink that fails must be reported and
 /// the turn must go on.
 /// </remarks>
 internal sealed class ThrowingAuditSink : IAuditSinkPort

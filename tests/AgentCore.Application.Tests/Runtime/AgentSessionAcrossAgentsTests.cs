@@ -5,12 +5,12 @@ using Xunit;
 namespace AgentCore.Application.Tests.Runtime;
 
 /// <summary>
-/// Pins the library fact the transcript paragraph of <see cref="Application.Runtime.CallSession"/>
-/// stands on: one <see cref="AgentSession"/> carries a call that changes agent.
+/// Pins the library fact the transcript paragraph of <see cref="Application.Runtime.ConversationSession"/>
+/// stands on: one <see cref="AgentSession"/> carries a conversation that changes agent.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The paragraph used to claim the opposite — "a conversation bound to one agent cannot carry a call
+/// The paragraph used to claim the opposite — "a conversation bound to one agent cannot carry a conversation
 /// that changes agent" — and this test is the disproof, kept so a library upgrade that breaks the
 /// corrected claim fails here instead of silently re-validating the old design reason. Each agent
 /// holds its own <see cref="InMemoryChatHistoryProvider"/>; sharing the
@@ -28,7 +28,7 @@ public sealed class AgentSessionAcrossAgentsTests
     private const string SharedKey = "agentcore.test.transcript";
 
     [Fact]
-    public async Task OneSession_CarriesACall_AcrossTwoAgents()
+    public async Task OneSession_CarriesAConversation_AcrossTwoAgents()
     {
         var clientA = new EchoingChatClient("A");
         var clientB = new EchoingChatClient("B");
@@ -67,7 +67,7 @@ public sealed class AgentSessionAcrossAgentsTests
             ],
             clientA.Requests[1]);
 
-        // The session's own record holds the one whole call, in order.
+        // The session's own record holds the one whole conversation, in order.
         Assert.True(session.TryGetInMemoryChatHistory(out var history, SharedKey));
         Assert.Equal(
             [

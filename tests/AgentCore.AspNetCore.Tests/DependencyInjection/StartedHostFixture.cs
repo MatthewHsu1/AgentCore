@@ -11,7 +11,7 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection;
 /// <summary>Builds a host over one document, which is where the whole boot happens.</summary>
 /// <remarks>
 /// Shared by every DI test that only needs a booted host and nothing document-specific — the
-/// tests that need their own document still write their own YAML and call
+/// tests that need their own document still write their own YAML and conversation
 /// <see cref="ConfigureServices"/> or <see cref="BuildAsync"/> directly.
 /// </remarks>
 internal static class StartedHostFixture
@@ -24,7 +24,7 @@ internal static class StartedHostFixture
           items:
             - { id: only, instructions: "I answer everything" }
         providers:
-          call:   { kind: telnyx-relay }
+          conversation:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }

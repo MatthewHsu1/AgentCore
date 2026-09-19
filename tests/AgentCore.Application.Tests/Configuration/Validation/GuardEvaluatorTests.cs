@@ -216,7 +216,7 @@ public sealed class GuardEvaluatorTests
             (description, _) => failures.Add(description));
 
         // 'and' is on the allow-list, so check 4 passes the rule. Its argument is not an array, and
-        // JsonLogic throws while it reads it. Section 8.7 calls that possible and not a defect.
+        // JsonLogic throws while it reads it. Section 8.7 conversations that possible and not a defect.
         var rule = JsonNode.Parse("""{ "and": 5 }""")!;
 
         Assert.False(evaluator.Evaluate(rule, State));

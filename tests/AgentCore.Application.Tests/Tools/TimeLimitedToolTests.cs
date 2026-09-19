@@ -12,7 +12,7 @@ namespace AgentCore.Application.Tests.Tools;
 /// The deadline any tool kind can carry.
 /// </summary>
 /// <remarks>
-/// A tool the model calls on a live telephone call can otherwise take as long as the far side feels
+/// A tool the model calls on a live telephone conversation can otherwise take as long as the far side feels
 /// like taking. The deadline wraps a tool rather than living inside one, so one implementation and
 /// one message cover every kind rather than each kind growing its own.
 /// </remarks>

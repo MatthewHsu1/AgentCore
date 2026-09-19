@@ -12,7 +12,7 @@ namespace AgentCore.Application.Knowledge;
 /// </summary>
 public static class CompositeKnowledgeStoreFactory
 {
-    /// <summary>What the knowledge field calls itself, so the shared selector writes its failures.</summary>
+    /// <summary>What the knowledge field conversations itself, so the shared selector writes its failures.</summary>
     private static readonly VendorSeam KnowledgeSeam =
         new("providers.knowledge.kind", "/providers/knowledge/kind", "options.UseKnowledgeStores(...)", "stores");
 

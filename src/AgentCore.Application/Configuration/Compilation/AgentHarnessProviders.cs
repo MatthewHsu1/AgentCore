@@ -17,14 +17,14 @@ internal static class AgentHarnessProviders
     /// <summary>
     /// MAF's default <see cref="FileMemoryProviderOptions.Instructions"/>, with its persistence claim
     /// replaced: the default tells the model these files "persist beyond the current conversation",
-    /// which is false here — <c>FileMemoryProvider</c>'s working folder is the call's workspace,
-    /// deleted at <c>EndCall</c>. Every other sentence, including how to use the tools, is unchanged.
+    /// which is false here — <c>FileMemoryProvider</c>'s working folder is the conversation's workspace,
+    /// deleted at <c>EndConversation</c>. Every other sentence, including how to use the tools, is unchanged.
     /// </summary>
     private const string MemoryInstructions =
         "## File Based Memory\n"
         + "You have access to a file-based memory system via the `file_memory_*` tools for storing and retrieving information across interactions.\n"
-        + "These files act as your working memory for this call: they live in this call's workspace and are deleted when the call ends,\n"
-        + "so anything you write now stays available for the rest of this call, but not after it ends.\n"
+        + "These files act as your working memory for this conversation: they live in this conversation's workspace and are deleted when the conversation ends,\n"
+        + "so anything you write now stays available for the rest of this conversation, but not after it ends.\n"
         + "Use these tools to store plans, memories, processing results, or downloaded data.\n\n"
         + "- Use descriptive file names (e.g., \"projectarchitecture.md\", \"userpreferences.md\").\n"
         + "- Include a description when writing a file to help with future discovery.\n"
@@ -37,14 +37,14 @@ internal static class AgentHarnessProviders
     /// <summary>
     /// MAF's default <see cref="FileAccessProviderOptions.Instructions"/>, with its persistence claim
     /// replaced: the default tells the model these files "persist beyond the current session" and
-    /// "may be shared across sessions or agents", which is false here — <c>CallFilesProvider</c>
-    /// resolves to the call's workspace, deleted at <c>EndCall</c>. Every other sentence, including
+    /// "may be shared across sessions or agents", which is false here — <c>ConversationFilesProvider</c>
+    /// resolves to the conversation's workspace, deleted at <c>EndConversation</c>. Every other sentence, including
     /// how to use the tools, is unchanged.
     /// </summary>
     private const string FilesInstructions =
         "## File Access\n"
         + "You have access to a shared file storage area via the `file_access_*` tools for reading, writing, and managing files.\n"
-        + "These files live in this call's workspace: they exist only for the duration of this call and are deleted when the call ends.\n"
+        + "These files live in this conversation's workspace: they exist only for the duration of this conversation and are deleted when the conversation ends.\n"
         + "Use these tools to read input data provided by the user, write output artifacts, and manage any files the user has asked you to work with.\n\n"
         + "- Never delete or overwrite existing files unless the user has explicitly asked you to do so.\n"
         + "- Files may be organized into subdirectories. Use `file_access_ls` to explore the tree level by level,\n"
@@ -64,7 +64,7 @@ internal static class AgentHarnessProviders
     /// <param name="context">The compile-time seams, including the bound workspace root.</param>
     /// <param name="pointer">This agent's JSON pointer, for a <c>memory:</c>, <c>files:</c>, <c>shell:</c>, or <c>background:</c> failure.</param>
     /// <param name="resolve">Resolves an <c>agents.items</c> id to its compiled agent, or <see langword="null"/> when undeclared.</param>
-    /// <param name="background">Collects the built background providers, so the call can release their sessions when it ends.</param>
+    /// <param name="background">Collects the built background providers, so the conversation can release their sessions when it ends.</param>
     public static void Add(
         List<AIContextProvider> providers,
         AgentDefaults? defaults,
@@ -104,8 +104,8 @@ internal static class AgentHarnessProviders
         if (item.Shell is { } shell)
         {
             var options = AgentShellOptionsCompiler.Build(item, shell, context, pointer);
-            providers.Add(new CallShellProvider(options));
-            providers.Add(new CallShellEnvironmentProvider(options));
+            providers.Add(new ConversationShellProvider(options));
+            providers.Add(new ConversationShellEnvironmentProvider(options));
         }
 
         if (item.Background.Count > 0)
@@ -246,7 +246,7 @@ internal static class AgentHarnessProviders
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             // FileSystemAgentFileStore's constructor creates the root eagerly, and this compiles
-            // before CallSessionStartup's own guarded create — so a bad root fails here first, and
+            // before ConversationSessionStartup's own guarded create — so a bad root fails here first, and
             // must fail with the same named cause an operator gets from that later guard.
             throw ConfigurationCompiler.Fail(
                 ConfigurationError.AppendPointer(pointer, "memory"),
@@ -258,7 +258,7 @@ internal static class AgentHarnessProviders
 
 #pragma warning disable MAAI001 // File-store types are evaluation-only in Microsoft.Agents.AI 1.21.0.
 
-    private static CallFilesProvider BuildFilesProvider(
+    private static ConversationFilesProvider BuildFilesProvider(
         AgentConfiguration item,
         AgentFilesConfiguration files,
         AgentCompilationContext context,
@@ -273,7 +273,7 @@ internal static class AgentHarnessProviders
                 + "the folder, or remove the files: block.");
         }
 
-        return new CallFilesProvider(
+        return new ConversationFilesProvider(
             context.WorkspaceRoot,
             new FileAccessProviderOptions
             {
@@ -290,20 +290,20 @@ internal static class AgentHarnessProviders
 
     /// <summary>
     /// Builds the state a new <see cref="FileMemoryProvider"/> session starts with: its working
-    /// folder set to the id of the call running the turn, so it reads and writes under
-    /// <c>&lt;root&gt;/&lt;callId&gt;/</c> — the folder the host creates and deletes with the call.
+    /// folder set to the id of the conversation running the turn, so it reads and writes under
+    /// <c>&lt;root&gt;/&lt;conversationId&gt;/</c> — the folder the host creates and deletes with the conversation.
     /// </summary>
     private static FileMemoryState InitializeWorkingFolder(AgentSession? session)
     {
-        if (TurnRegistry.For(session)?.CallId is not { } callId)
+        if (TurnRegistry.For(session)?.ConversationId is not { } conversationId)
         {
             throw new InvalidOperationException(
-                "A memory: block's FileMemoryProvider needs the running call's id, and no turn is "
+                "A memory: block's FileMemoryProvider needs the running conversation's id, and no turn is "
                 + "filed for this session. The provider's working folder is bound only while "
-                + "a turn runs through a CallSession. Run the agent through a CallSession.");
+                + "a turn runs through a ConversationSession. Run the agent through a ConversationSession.");
         }
 
-        return new FileMemoryState { WorkingFolder = callId };
+        return new FileMemoryState { WorkingFolder = conversationId };
     }
 
 #pragma warning restore MAAI001

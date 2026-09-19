@@ -123,13 +123,13 @@ internal sealed class ModerationAgent : DelegatingAIAgent
             {
                 // The deadline passed, and not the caller's own token. A cancel the host asked for
                 // still propagates, because that is the host ending the turn and not a slow vendor.
-                return Unavailable(CallSession.ModerationTimedOutReason);
+                return Unavailable(ConversationSession.ModerationTimedOutReason);
             }
 #pragma warning disable CA1031 // Moderation guards the turn. It must never be the thing that drops it.
             catch (Exception exception) when (exception is not OperationCanceledException)
 #pragma warning restore CA1031
             {
-                return Unavailable(CallSession.ModerationFaultedReason);
+                return Unavailable(ConversationSession.ModerationFaultedReason);
             }
         }
 

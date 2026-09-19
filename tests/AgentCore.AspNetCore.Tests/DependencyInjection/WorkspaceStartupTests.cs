@@ -10,8 +10,8 @@ using static AgentCore.AspNetCore.Tests.DependencyInjection.StartedHostFixture;
 namespace AgentCore.AspNetCore.Tests.DependencyInjection;
 
 /// <summary>
-/// <see cref="AgentCoreOptions.UseWorkspace(string)"/> and the folder it binds a call's
-/// <see cref="CallSession.Workspace"/> to.
+/// <see cref="AgentCoreOptions.UseWorkspace(string)"/> and the folder it binds a conversation's
+/// <see cref="ConversationSession.Workspace"/> to.
 /// </summary>
 public sealed class WorkspaceStartupTests : IDisposable
 {
@@ -27,15 +27,15 @@ public sealed class WorkspaceStartupTests : IDisposable
     }
 
     [Fact]
-    public async Task AHostBoundToAWorkspaceRoot_CreatesTheCallsFolderWhenACallOpens()
+    public async Task AHostBoundToAWorkspaceRoot_CreatesTheConversationsFolderWhenAConversationOpens()
     {
         using var provider = await BuildAsync(OneAgentYaml, options => options.UseWorkspace(_tempRoot));
 
         var sessions = provider.GetRequiredService<EntryRegistry>().ForSessions("main");
-        var session = await sessions.OpenAsync("call-1", TestContext.Current.CancellationToken);
+        var session = await sessions.OpenAsync("conversation-1", TestContext.Current.CancellationToken);
 
-        Assert.Equal(Path.Combine(_tempRoot, "call-1"), session.Workspace);
-        Assert.True(Directory.Exists(Path.Combine(_tempRoot, "call-1")));
+        Assert.Equal(Path.Combine(_tempRoot, "conversation-1"), session.Workspace);
+        Assert.True(Directory.Exists(Path.Combine(_tempRoot, "conversation-1")));
     }
 
     [Fact]
@@ -44,7 +44,7 @@ public sealed class WorkspaceStartupTests : IDisposable
         using var provider = await BuildAsync(OneAgentYaml);
 
         var sessions = provider.GetRequiredService<EntryRegistry>().ForSessions("main");
-        var session = await sessions.OpenAsync("call-1", TestContext.Current.CancellationToken);
+        var session = await sessions.OpenAsync("conversation-1", TestContext.Current.CancellationToken);
 
         Assert.Null(session.Workspace);
     }
@@ -70,7 +70,7 @@ public sealed class WorkspaceStartupTests : IDisposable
         using var provider = await BuildAsync(MemoryAgentYaml, options => options.UseWorkspace(_tempRoot));
 
         var sessions = provider.GetRequiredService<EntryRegistry>().ForSessions("main");
-        var session = await sessions.OpenAsync("call-1", TestContext.Current.CancellationToken);
+        var session = await sessions.OpenAsync("conversation-1", TestContext.Current.CancellationToken);
 
         Assert.StartsWith(_tempRoot, session.Workspace, StringComparison.Ordinal);
     }
@@ -105,7 +105,7 @@ public sealed class WorkspaceStartupTests : IDisposable
         using var provider = await BuildAsync(FilesAgentYaml, options => options.UseWorkspace(_tempRoot));
 
         var sessions = provider.GetRequiredService<EntryRegistry>().ForSessions("main");
-        var session = await sessions.OpenAsync("call-1", TestContext.Current.CancellationToken);
+        var session = await sessions.OpenAsync("conversation-1", TestContext.Current.CancellationToken);
 
         Assert.StartsWith(_tempRoot, session.Workspace, StringComparison.Ordinal);
     }
@@ -134,7 +134,7 @@ public sealed class WorkspaceStartupTests : IDisposable
           items:
             - { id: only, instructions: "I answer everything", memory: { store: workspace } }
         providers:
-          call:   { kind: telnyx-relay }
+          conversation:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
@@ -152,7 +152,7 @@ public sealed class WorkspaceStartupTests : IDisposable
           items:
             - { id: only, instructions: "I answer everything", files: { store: workspace } }
         providers:
-          call:   { kind: telnyx-relay }
+          conversation:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }

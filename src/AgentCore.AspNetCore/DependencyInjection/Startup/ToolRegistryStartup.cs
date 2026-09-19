@@ -66,7 +66,7 @@ internal static class ToolRegistryStartup
         if (configuration.Mcp.Count > 0 && options.ToolSources.Count == 0)
         {
             throw ToolSourceError.Fail(
-                "the document declares mcp:, and nothing registered a tool source to connect to it. Call "
+                "the document declares mcp:, and nothing registered a tool source to connect to it. Conversation "
                 + "AddAgentCoreHost (AgentCore.Hosting), or register one yourself with "
                 + "options.AddToolSource(...).");
         }

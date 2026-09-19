@@ -37,7 +37,7 @@ public sealed class ShellOptionsCompilerTests
     }
 
     [Fact]
-    public void Build_ShellEnvAndMaxOutputKb_ResolveIntoTheCallShellOptions()
+    public void Build_ShellEnvAndMaxOutputKb_ResolveIntoTheConversationShellOptions()
     {
         var root = Path.Combine(Path.GetTempPath(), "agentcore-shell-env-secret-" + Guid.NewGuid().ToString("N"));
         var item = new AgentConfiguration { Id = "only" };

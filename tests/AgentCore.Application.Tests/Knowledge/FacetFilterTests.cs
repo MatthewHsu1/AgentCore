@@ -280,7 +280,7 @@ public sealed class FacetFilterTests
                 })),
             [TurnInvocation.ArgumentsKey] = new TurnInvocation
             {
-                CallId = "call",
+                ConversationId = "conversation",
                 TurnIndex = 0,
                 Stage = "",
                 Knowledge = new KnowledgeScope { Facets = new Dictionary<string, string>(StringComparer.Ordinal) },

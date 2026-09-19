@@ -10,7 +10,7 @@ namespace AgentCore.Application.Tests.Blobs;
 /// The blob vendor seam: <c>providers.blobs</c>, and what a document that names none gets.
 /// </summary>
 /// <remarks>
-/// Unlike the call store, there is no built-in kind. A document that names none gets
+/// Unlike the conversation store, there is no built-in kind. A document that names none gets
 /// <see langword="null"/>, and that null is what switches the capture provider off.
 /// </remarks>
 public sealed class BlobStoreFactoryTests

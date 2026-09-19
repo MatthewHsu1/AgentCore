@@ -11,23 +11,23 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay;
 /// <remarks>
 /// <para>
 /// This is the second inbound adapter onto <see cref="Application.Ports.IConversationPort"/>, and
-/// the first one that carries a call. The <c>/v1/responses</c> endpoint is the other. Both
+/// the first one that carries a conversation. The <c>/v1/responses</c> endpoint is the other. Both
 /// read the same contract, so D8 holds and the core never learns a vendor frame schema.
 /// </para>
 /// <para>
 /// <b>Nothing here decides whether this transport is in use.</b> The composition root reads
-/// <c>providers.call</c> while the host starts, picks the one transport it names, and asks it for a
-/// handler through <see cref="TelnyxRelayCallAdapter.CreateHandler"/>;
-/// <see cref="Call.CallEndpointRouteBuilderExtensions.MapCall(IEndpointRouteBuilder, string)"/>
+/// <c>providers.conversation</c> while the host starts, picks the one transport it names, and asks it for a
+/// handler through <see cref="TelnyxRelayConversationAdapter.CreateHandler"/>;
+/// <see cref="Conversation.ConversationEndpointRouteBuilderExtensions.MapCall(IEndpointRouteBuilder, string)"/>
 /// owns only the route string. This type maps whatever it is handed, and it is
-/// <see langword="internal"/> so that <see cref="TelnyxRelayCallAdapter"/> is the only thing that
+/// <see langword="internal"/> so that <see cref="TelnyxRelayConversationAdapter"/> is the only thing that
 /// hands it anything, apart from the test host, through <c>InternalsVisibleTo</c>: a host names its
 /// route once and changes vendors in the document.
 /// </para>
 /// <para>
-/// The host owns the WebSocket middleware, and its defaults suit a browser rather than a call.
-/// Call <c>app.UseWebSockets</c> with a <c>KeepAliveInterval</c> and a <c>KeepAliveTimeout</c> of
-/// about 20 seconds. The shipped default is two minutes with no timeout, which lets a dead call
+/// The host owns the WebSocket middleware, and its defaults suit a browser rather than a conversation.
+/// Conversation <c>app.UseWebSockets</c> with a <c>KeepAliveInterval</c> and a <c>KeepAliveTimeout</c> of
+/// about 20 seconds. The shipped default is two minutes with no timeout, which lets a dead conversation
 /// hold a session for two minutes.
 /// </para>
 /// </remarks>
@@ -39,7 +39,7 @@ internal static class TelnyxRelayEndpointRouteBuilderExtensions
     /// reaches this value. It is kept because the relay suite maps its host through
     /// <see cref="MapTelnyxRelay"/> directly and needs one route string both sides agree on.
     /// </remarks>
-    public const string DefaultPattern = "/v1/{" + Call.CallEndpointRouteBuilderExtensions.EntryRouteParameter + "}/telnyx/relay";
+    public const string DefaultPattern = "/v1/{" + Conversation.ConversationEndpointRouteBuilderExtensions.EntryRouteParameter + "}/telnyx/relay";
 
     /// <summary>Maps the socket on one route, with the limits the host chose.</summary>
     /// <param name="endpoints">The route builder of the host.</param>
@@ -47,8 +47,8 @@ internal static class TelnyxRelayEndpointRouteBuilderExtensions
     /// <param name="options">What the endpoint may do, and for how long.</param>
     /// <returns>The mapped endpoint, so a host adds its own conventions.</returns>
     /// <remarks>
-    /// The options are not checked here. <see cref="TelnyxRelayCallAdapter.BuildOptions"/> is what
-    /// builds them out of <c>providers.call</c>, and it refuses a value <c>Task.Delay</c>,
+    /// The options are not checked here. <see cref="TelnyxRelayConversationAdapter.BuildOptions"/> is what
+    /// builds them out of <c>providers.conversation</c>, and it refuses a value <c>Task.Delay</c>,
     /// <c>CancelAfter</c>, or <c>Task.WaitAsync</c> would reject before that value is ever written
     /// into a <see cref="TelnyxRelayOptions"/> — with a
     /// <see cref="Application.Configuration.Parsing.ConfigurationLoadException"/> naming the field of

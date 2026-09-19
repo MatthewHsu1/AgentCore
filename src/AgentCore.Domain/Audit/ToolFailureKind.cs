@@ -5,8 +5,8 @@ namespace AgentCore.Domain.Audit;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The set is closed for the reason <see cref="CallEndReason"/> gives. D23 makes the audit table the
-/// record of the call and §9 makes it the only long-term record, so a report written years later
+/// The set is closed for the reason <see cref="ConversationEndReason"/> gives. D23 makes the audit table the
+/// record of the conversation and §9 makes it the only long-term record, so a report written years later
 /// counts these two facts apart and reads nothing else. Free text cannot be counted.
 /// </para>
 /// <para>

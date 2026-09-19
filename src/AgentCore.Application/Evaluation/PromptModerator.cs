@@ -18,17 +18,17 @@ namespace AgentCore.Application.Evaluation;
 /// <para>
 /// D13 makes <see cref="IEvaluator"/> the moderation port and refuses a second one, so this type is
 /// not a port. It is the one place that turns an <see cref="EvaluationResult"/> into the fact the
-/// audit chain records, and it exists so that <see cref="Runtime.CallSession"/> holds no registry
+/// audit chain records, and it exists so that <see cref="Runtime.ConversationSession"/> holds no registry
 /// key, no metric name, and no decode.
 /// </para>
 /// <para>
 /// D13 also says moderation checks EVERY turn, because the endpoint is free at any volume and counts
-/// against no usage limit: "Sampling buys nothing when the call is free." Nothing here reads
+/// against no usage limit: "Sampling buys nothing when the conversation is free." Nothing here reads
 /// <see cref="EvaluationSampler"/>, and nothing should.
 /// </para>
 /// <para>
 /// <b>Nothing here catches.</b> A timeout, a log line, and the decision to answer anyway all belong
-/// to <see cref="Runtime.CallSession"/>, which owns the turn and the clock. This type calls the
+/// to <see cref="Runtime.ConversationSession"/>, which owns the turn and the clock. This type calls the
 /// evaluator and reads the answer.
 /// </para>
 /// </remarks>
@@ -59,7 +59,7 @@ public sealed class PromptModerator
     /// <exception cref="ArgumentNullException">The registry is <see langword="null"/>.</exception>
     /// <remarks>
     /// A host that registers no moderation evaluator runs every turn and refuses none, exactly as a
-    /// host that binds no audit sink still answers a call. Moderation needs a vendor account, and a
+    /// host that binds no audit sink still answers a conversation. Moderation needs a vendor account, and a
     /// library that refused to run without one would be unusable in a test.
     /// </remarks>
     public static PromptModerator? FromRegistry(EvaluatorRegistry registry)
@@ -73,7 +73,7 @@ public sealed class PromptModerator
 
     /// <summary>Reads which categories flagged what the caller said.</summary>
     /// <param name="callerText">The words the caller spoke this turn.</param>
-    /// <param name="cancellationToken">Cancels the endpoint call.</param>
+    /// <param name="cancellationToken">Cancels the endpoint conversation.</param>
     /// <returns>
     /// The categories, in the order the endpoint returned them, or an empty list when the endpoint
     /// flagged nothing.
@@ -84,7 +84,7 @@ public sealed class PromptModerator
     /// is the fail-open rule, and it is deliberate: a vendor outage must not refuse every caller on
     /// a support line. <see cref="ModerationVerdict.TryRead"/> answers <see langword="false"/> for a
     /// failed evaluation, so the two cases meet here and the caller of this method cannot tell them
-    /// apart. <see cref="Runtime.CallSession"/> counts them apart on a metric instead.
+    /// apart. <see cref="Runtime.ConversationSession"/> counts them apart on a metric instead.
     /// </remarks>
     public async ValueTask<IReadOnlyList<string>> FlaggedCategoriesAsync(
         string callerText,

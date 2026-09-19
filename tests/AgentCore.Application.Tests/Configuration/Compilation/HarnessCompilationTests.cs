@@ -265,8 +265,8 @@ public sealed class HarnessCompilationTests
 
             var providers = Providers(Assert.Single(compiled.Agents.Values));
 
-            Assert.Contains(providers, provider => provider is CallShellProvider);
-            Assert.Contains(providers, provider => provider is CallShellEnvironmentProvider);
+            Assert.Contains(providers, provider => provider is ConversationShellProvider);
+            Assert.Contains(providers, provider => provider is ConversationShellEnvironmentProvider);
         }
         finally
         {

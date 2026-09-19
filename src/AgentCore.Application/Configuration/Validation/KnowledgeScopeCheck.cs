@@ -26,7 +26,7 @@ internal static class KnowledgeScopeCheck
         }
 
         // A wildcard without fromState is a supported shape: the deployment resolves its own facets
-        // and passes them as the call's scope, which the store still widens. See
+        // and passes them as the conversation's scope, which the store still widens. See
         // StateKnowledgeScope.Compose and KnowledgeStartup's K19 branch. Only the reverse is refused.
         if (scope.FromState.Count == 0)
         {
@@ -40,7 +40,7 @@ internal static class KnowledgeScopeCheck
             errors.Add(Reference(
                 "/extractor",
                 "fromState names extractor slots and this document declares no extractor, so no slot "
-                + "is ever filled and every call searches only what the wildcard admits."));
+                + "is ever filled and every conversation searches only what the wildcard admits."));
         }
 
         foreach (var name in scope.FromState)
@@ -117,7 +117,7 @@ internal static class KnowledgeScopeCheck
             errors.Add(Reference(
                 ConfigurationError.AppendPointer(pointer, "default"),
                 $"the facet slot '{name}' declares a default. An unfilled slot reads as its "
-                + "default, so every call before the caller says otherwise would be scoped to a "
+                + "default, so every conversation before the caller says otherwise would be scoped to a "
                 + "guess, with no error."));
         }
 
@@ -134,7 +134,7 @@ internal static class KnowledgeScopeCheck
                 ConfigurationError.AppendPointer(pointer, "writer"),
                 $"the facet slot '{name}' is not written by the extractor. A const slot is filled "
                 + "before turn 1 and would scope every call to it; a tool slot could change the "
-                + "scope mid-call."));
+                + "scope mid-conversation."));
         }
 
         if (slot.EnumValues is not { Count: > 0 })

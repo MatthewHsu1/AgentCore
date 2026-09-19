@@ -17,7 +17,7 @@ namespace AgentCore.Application.Tests.Tools;
 /// <remarks>
 /// The shipped example holds two built-ins: <c>web.search</c>, a marker that builds one
 /// <c>HostedWebSearchTool</c> and runs no code of its own — see <c>HostedWebSearchDropTests</c> for
-/// what reaches a compiled agent — and <c>file.publish</c>, a plain function whose call path is
+/// what reaches a compiled agent — and <c>file.publish</c>, a plain function whose conversation path is
 /// covered in <c>FilePublishToolDefinitionTests</c>.
 /// </remarks>
 public sealed class BuiltinToolTests

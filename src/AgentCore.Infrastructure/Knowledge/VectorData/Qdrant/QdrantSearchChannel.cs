@@ -75,11 +75,11 @@ internal sealed class QdrantSearchChannel : IQdrantSearchChannel, IDisposable
     /// <summary>
     /// Runs one gRPC call and converts a client-side cancellation into <see cref="OperationCanceledException"/>.
     /// </summary>
-    private static async Task<T> RunAsync<T>(Func<Task<T>> call, CancellationToken cancellationToken)
+    private static async Task<T> RunAsync<T>(Func<Task<T>> conversation, CancellationToken cancellationToken)
     {
         try
         {
-            return await call().ConfigureAwait(false);
+            return await conversation().ConfigureAwait(false);
         }
         catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled && cancellationToken.IsCancellationRequested)
         {

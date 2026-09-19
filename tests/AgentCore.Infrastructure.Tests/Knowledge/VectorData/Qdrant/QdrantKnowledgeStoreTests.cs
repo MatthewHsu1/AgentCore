@@ -291,7 +291,7 @@ public sealed class QdrantKnowledgeStoreTests : IClassFixture<KbShapedCorpusFixt
                 Fields = KbShapedCorpus.Fields,
 
                 // Longer than the channel hangs for, so nothing but the caller's own token can end
-                // this call. At the default 10 s the store's deadline ends it instead and the test
+                // this conversation. At the default 10 s the store's deadline ends it instead and the test
                 // passes whether or not the caller's token was ever linked in.
                 Deadline = TimeSpan.FromMinutes(5),
             });

@@ -13,9 +13,9 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
     protected override bool Migrated => false;
 
     [PostgresTheory]
-    [InlineData("agentcore.call")]
-    [InlineData("agentcore.call_principal")]
-    [InlineData("agentcore.call_message")]
+    [InlineData("agentcore.conversation")]
+    [InlineData("agentcore.conversation_principal")]
+    [InlineData("agentcore.conversation_message")]
     [InlineData("agentcore.audit_event")]
     [InlineData("agentcore.schema_migration")]
     public async Task ApplyAsync_FreshDatabase_CreatesTheTable(string table)
@@ -31,7 +31,7 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
     }
 
     [PostgresFact]
-    public async Task ApplyAsync_FreshDatabase_GivesCallANextOrdinalColumn()
+    public async Task ApplyAsync_FreshDatabase_GivesConversationANextOrdinalColumn()
     {
         // Arrange
         await PostgresSchema.ApplyAsync(DataSource, Token);
@@ -41,7 +41,7 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
             """
             SELECT is_nullable || ',' || column_default
               FROM information_schema.columns
-             WHERE table_schema = 'agentcore' AND table_name = 'call' AND column_name = 'next_ordinal'
+             WHERE table_schema = 'agentcore' AND table_name = 'conversation' AND column_name = 'next_ordinal'
             """);
 
         // Assert
@@ -149,8 +149,8 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
         // Act
         var refusal = await Record.ExceptionAsync(() => ExecuteAsync(
             """
-            INSERT INTO agentcore.audit_event (write_position, call_id, event_id, sequence, kind, occurred_at)
-            VALUES (1, 'C1', gen_random_uuid(), 1, 'call.started', now())
+            INSERT INTO agentcore.audit_event (write_position, conversation_id, event_id, sequence, kind, occurred_at)
+            VALUES (1, 'C1', gen_random_uuid(), 1, 'conversation.started', now())
             """));
 
         // Assert
@@ -158,18 +158,18 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
     }
 
     [PostgresFact]
-    public async Task AuditEvent_SecondRowOnTheSameCallAndSequence_IsRefused()
+    public async Task AuditEvent_SecondRowOnTheSameConversationAndSequence_IsRefused()
     {
         // Arrange — raw SQL stands in for the store here, so the table itself is what catches two
-        // rows landing on the same call and sequence.
+        // rows landing on the same conversation and sequence.
         await PostgresSchema.ApplyAsync(DataSource, Token);
         await InsertOneEventAsync();
 
         // Act
         var refusal = await Record.ExceptionAsync(() => ExecuteAsync(
             """
-            INSERT INTO agentcore.audit_event (call_id, event_id, sequence, kind, occurred_at)
-            VALUES ('C1', gen_random_uuid(), 1, 'call.ended', now())
+            INSERT INTO agentcore.audit_event (conversation_id, event_id, sequence, kind, occurred_at)
+            VALUES ('C1', gen_random_uuid(), 1, 'conversation.ended', now())
             """));
 
         // Assert
@@ -184,34 +184,34 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
         await PostgresSchema.ApplyAsync(DataSource, Token);
         await ExecuteAsync(
             """
-            INSERT INTO agentcore.audit_event (call_id, event_id, sequence, kind, occurred_at)
-            VALUES ('C1', gen_random_uuid(), 0, 'call.started', now())
+            INSERT INTO agentcore.audit_event (conversation_id, event_id, sequence, kind, occurred_at)
+            VALUES ('C1', gen_random_uuid(), 0, 'conversation.started', now())
             """);
 
         // Act
         await ExecuteAsync(
             """
             SET session_replication_role = replica;
-            UPDATE agentcore.audit_event SET kind = 'call.ended' WHERE sequence = 0;
+            UPDATE agentcore.audit_event SET kind = 'conversation.ended' WHERE sequence = 0;
             SET session_replication_role = origin;
             """);
 
         // Assert
-        Assert.Equal("call.ended", await ScalarAsync<string>("SELECT kind FROM agentcore.audit_event WHERE sequence = 0"));
+        Assert.Equal("conversation.ended", await ScalarAsync<string>("SELECT kind FROM agentcore.audit_event WHERE sequence = 0"));
     }
 
     [PostgresFact]
-    public async Task CallMessage_SecondMessageOnTheSameOrdinal_IsRefused()
+    public async Task ConversationMessage_SecondMessageOnTheSameOrdinal_IsRefused()
     {
         // Arrange
         await PostgresSchema.ApplyAsync(DataSource, Token);
-        await ExecuteAsync("INSERT INTO agentcore.call (call_id) VALUES ('C1')");
+        await ExecuteAsync("INSERT INTO agentcore.conversation (conversation_id) VALUES ('C1')");
         await ExecuteAsync(
-            "INSERT INTO agentcore.call_message (call_id, ordinal, turn_index, role, content, message_id) VALUES ('C1', 0, 0, 'user', '{}', 'm0')");
+            "INSERT INTO agentcore.conversation_message (conversation_id, ordinal, turn_index, role, content, message_id) VALUES ('C1', 0, 0, 'user', '{}', 'm0')");
 
         // Act
         var refusal = await Record.ExceptionAsync(() => ExecuteAsync(
-            "INSERT INTO agentcore.call_message (call_id, ordinal, turn_index, role, content, message_id) VALUES ('C1', 0, 0, 'assistant', '{}', 'm1')"));
+            "INSERT INTO agentcore.conversation_message (conversation_id, ordinal, turn_index, role, content, message_id) VALUES ('C1', 0, 0, 'assistant', '{}', 'm1')"));
 
         // Assert
         Assert.Equal("23505", Assert.IsType<PostgresException>(refusal).SqlState);
@@ -222,50 +222,50 @@ public sealed class PostgresSchemaTests : PostgresDatabaseTest
         => Assert.Equal(["001_agentcore"], PostgresSchema.Versions);
 
     [PostgresFact]
-    public async Task CallMessage_WithNoCallRow_IsRefused()
+    public async Task ConversationMessage_WithNoConversationRow_IsRefused()
     {
         // Arrange
         await PostgresSchema.ApplyAsync(DataSource, Token);
-        await ExecuteAsync("INSERT INTO agentcore.call (call_id) VALUES ('present')");
+        await ExecuteAsync("INSERT INTO agentcore.conversation (conversation_id) VALUES ('present')");
 
         // Act
         var refusal = await Record.ExceptionAsync(() => ExecuteAsync(
-            "INSERT INTO agentcore.call_message (call_id, ordinal, turn_index, role, content, message_id) VALUES ('absent', 0, 0, 'user', '{}', 'm0')"));
+            "INSERT INTO agentcore.conversation_message (conversation_id, ordinal, turn_index, role, content, message_id) VALUES ('absent', 0, 0, 'user', '{}', 'm0')"));
 
         // Assert
         Assert.Equal("23503", Assert.IsType<PostgresException>(refusal).SqlState);
     }
 
     /// <summary>
-    /// The cascade is the whole reason one store holds both. It reaches call_message and
-    /// call_principal, and it deliberately does not reach audit_event: a trigger refuses every
+    /// The cascade is the whole reason one store holds both. It reaches conversation_message and
+    /// conversation_principal, and it deliberately does not reach audit_event: a trigger refuses every
     /// DELETE there, and the trail outlives the conversation on purpose.
     /// </summary>
     [PostgresFact]
-    public async Task DeletingACall_TakesItsMessagesAndPrincipals_AndLeavesItsAuditEvents()
+    public async Task DeletingAConversation_TakesItsMessagesAndPrincipals_AndLeavesItsAuditEvents()
     {
         // Arrange
         await PostgresSchema.ApplyAsync(DataSource, Token);
-        await ExecuteAsync("INSERT INTO agentcore.call (call_id) VALUES ('C1')");
+        await ExecuteAsync("INSERT INTO agentcore.conversation (conversation_id) VALUES ('C1')");
         await ExecuteAsync(
-            "INSERT INTO agentcore.call_message (call_id, ordinal, turn_index, role, content, message_id) VALUES ('C1', 0, 0, 'user', '{}', 'm0')");
+            "INSERT INTO agentcore.conversation_message (conversation_id, ordinal, turn_index, role, content, message_id) VALUES ('C1', 0, 0, 'user', '{}', 'm0')");
         await ExecuteAsync(
-            "INSERT INTO agentcore.call_principal (call_id, principal_key, role) VALUES ('C1', 'p1', 'owner')");
+            "INSERT INTO agentcore.conversation_principal (conversation_id, principal_key, role) VALUES ('C1', 'p1', 'owner')");
         await InsertOneEventAsync();
 
         // Act
-        await ExecuteAsync("DELETE FROM agentcore.call WHERE call_id = 'C1'");
+        await ExecuteAsync("DELETE FROM agentcore.conversation WHERE conversation_id = 'C1'");
 
         // Assert
-        Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM agentcore.call_message"));
-        Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM agentcore.call_principal"));
+        Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM agentcore.conversation_message"));
+        Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM agentcore.conversation_principal"));
         Assert.Equal(1L, await ScalarAsync<long>("SELECT count(*) FROM agentcore.audit_event"));
     }
 
     private Task InsertOneEventAsync() => ExecuteAsync(
         """
-        INSERT INTO agentcore.audit_event (call_id, event_id, sequence, kind, occurred_at)
-        VALUES ('C1', gen_random_uuid(), 1, 'call.started', now())
+        INSERT INTO agentcore.audit_event (conversation_id, event_id, sequence, kind, occurred_at)
+        VALUES ('C1', gen_random_uuid(), 1, 'conversation.started', now())
         """);
 
     /// <summary>Opens a pool that logs in as an ordinary member of <c>agentcore_writer</c>.</summary>

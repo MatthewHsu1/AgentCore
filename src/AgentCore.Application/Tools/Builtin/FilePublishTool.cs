@@ -14,12 +14,12 @@ using Microsoft.Extensions.Logging;
 namespace AgentCore.Application.Tools.Builtin;
 
 /// <summary>
-/// Copies one file out of the running call's workspace into the blob store, owned by the call, and
+/// Copies one file out of the running conversation's workspace into the blob store, owned by the conversation, and
 /// files a <see cref="FileContent"/> on the turn so the card reaches the person.
 /// </summary>
 /// <remarks>
 /// A background child runs with no turn, so it has no drain to file the card on: its blob is still
-/// stored under the parent call, and the link goes back to the child in the result alone.
+/// stored under the parent conversation, and the link goes back to the child in the result alone.
 /// </remarks>
 internal sealed class FilePublishTool
 {
@@ -37,7 +37,7 @@ internal sealed class FilePublishTool
     /// <param name="tool">The declaration the document holds. Its id is the name the model calls.</param>
     /// <param name="blobs">The store <c>providers.blobs</c> opened.</param>
     /// <param name="policy">The cap and the allowlist.</param>
-    /// <param name="workspaceRoot">The root every call's folder sits under.</param>
+    /// <param name="workspaceRoot">The root every conversation's folder sits under.</param>
     /// <param name="logger">Where a refused file is reported.</param>
     public FilePublishTool(ToolConfiguration tool, IBlobStore blobs, BlobPolicy policy, string workspaceRoot, ILogger logger)
     {
@@ -72,10 +72,10 @@ internal sealed class FilePublishTool
         if (OwnerOf(turn) is not { } owner)
         {
             Log.SandboxFileHasNoOwner(_logger, _tool.Id);
-            return Failed("no call is running, so there is nobody to hand the file to.");
+            return Failed("no conversation is running, so there is nobody to hand the file to.");
         }
 
-        var (callId, workspace) = owner;
+        var (conversationId, workspace) = owner;
 
         if (ResolveInside(workspace, path) is not { } full)
         {
@@ -92,13 +92,13 @@ internal sealed class FilePublishTool
 
         if (!BlobName.IsSafe(name))
         {
-            Log.SandboxFileRefused(_logger, callId, name, "the name is not a plain file name");
+            Log.SandboxFileRefused(_logger, conversationId, name, "the name is not a plain file name");
             return Failed($"'{name}' is not a plain file name. Rename the file and publish it again.");
         }
 
         if (_policy.WhyRefused(name, length) is { } reason)
         {
-            Log.SandboxFileRefused(_logger, callId, name, reason);
+            Log.SandboxFileRefused(_logger, conversationId, name, reason);
             return Failed($"'{name}' was refused: {reason}. Allowed extensions: {string.Join(", ", _policy.AllowedExtensions)}; "
                 + $"largest file: {_policy.MaxBytes} bytes.");
         }
@@ -111,14 +111,14 @@ internal sealed class FilePublishTool
             await using var content = File.OpenRead(full);
 
             blob = await _blobs
-                .PutAsync(new BlobWrite(callId, name, BlobMediaTypes.Of(name), content, length), cancellationToken)
+                .PutAsync(new BlobWrite(conversationId, name, BlobMediaTypes.Of(name), content, length), cancellationToken)
                 .ConfigureAwait(false);
 
             url = await _blobs.LinkAsync(blob, BlobLink.Lifetime, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            Log.SandboxFileCaptureFailed(_logger, callId, name, exception);
+            Log.SandboxFileCaptureFailed(_logger, conversationId, name, exception);
             return Failed($"'{name}' could not be stored: {exception.Message}");
         }
 
@@ -142,12 +142,12 @@ internal sealed class FilePublishTool
     }
 
     /// <summary>
-    /// The call that owns the file and its folder: the filed turn, or for a background child the
+    /// The conversation that owns the file and its folder: the filed turn, or for a background child the
     /// stamp its session carries and the folder that call id names under the root.
     /// </summary>
-    private (string CallId, string Workspace)? OwnerOf(TurnInvocation? turn)
+    private (string ConversationId, string Workspace)? OwnerOf(TurnInvocation? turn)
     {
-        if (turn is { CallId: { } fromTurn })
+        if (turn is { ConversationId: { } fromTurn })
         {
             return turn.Workspace is { } workspace ? (fromTurn, workspace) : null;
         }

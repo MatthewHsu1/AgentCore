@@ -68,9 +68,9 @@ public sealed class KnowledgeScopeArgumentOrderTests
     /// The one document shape that can tell the two questions apart: one scoped agent, one not.
     /// </summary>
     /// <remarks>
-    /// Built as an object rather than parsed from YAML, so it needs no <c>providers.call</c> and no
+    /// Built as an object rather than parsed from YAML, so it needs no <c>providers.conversation</c> and no
     /// <c>providers.speech</c> — the schema requires both once a <c>providers:</c> block exists, and a
-    /// boot that had to register a call vendor and a speech vendor would be testing those instead.
+    /// boot that had to register a conversation vendor and a speech vendor would be testing those instead.
     /// </remarks>
     private static AgentCoreConfiguration MixedScoping()
         => new()

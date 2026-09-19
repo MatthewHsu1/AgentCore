@@ -11,8 +11,8 @@ public sealed class TurnResultTests
     [Fact]
     public void TwoResultsWithTheSameContent_AreEqual()
     {
-        TurnResult first = new("call-1", 0, "greeting", "identify", "hello", false, null);
-        TurnResult second = new("call-1", 0, "greeting", "identify", "hello", false, null);
+        TurnResult first = new("conversation-1", 0, "greeting", "identify", "hello", false, null);
+        TurnResult second = new("conversation-1", 0, "greeting", "identify", "hello", false, null);
 
         Assert.Equal(first, second);
         Assert.Equal(first.GetHashCode(), second.GetHashCode());
@@ -21,7 +21,7 @@ public sealed class TurnResultTests
     [Fact]
     public void AFailedExtraction_IsCarriedAndNotThrown()
     {
-        TurnResult result = new("call-1", 2, "resolve", "resolve", "one moment", false, "the extractor returned an empty reply");
+        TurnResult result = new("conversation-1", 2, "resolve", "resolve", "one moment", false, "the extractor returned an empty reply");
 
         Assert.Equal("the extractor returned an empty reply", result.ExtractionFailure);
         Assert.False(result.IsTerminal);
@@ -30,7 +30,7 @@ public sealed class TurnResultTests
     [Fact]
     public void ATerminalTurn_ReportsItself()
     {
-        TurnResult result = new("call-1", 4, "escalate", "close", "goodbye", true, null);
+        TurnResult result = new("conversation-1", 4, "escalate", "close", "goodbye", true, null);
 
         Assert.True(result.IsTerminal);
         Assert.Equal("close", result.StageAfter);

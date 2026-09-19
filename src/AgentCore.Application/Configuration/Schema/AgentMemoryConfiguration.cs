@@ -4,15 +4,15 @@ namespace AgentCore.Application.Configuration.Schema;
 public enum AgentFileStoreKind
 {
     /// <summary>
-    /// The host-created per-call directory: <c>AgentCoreOptions.WorkspaceRoot/&lt;callId&gt;/</c>,
-    /// created with the call and deleted with it. The one store no process decides for a caller.
+    /// The host-created per-conversation directory: <c>AgentCoreOptions.WorkspaceRoot/&lt;conversationId&gt;/</c>,
+    /// created with the conversation and deleted with it. The one store no process decides for a caller.
     /// </summary>
     Workspace,
 }
 
 /// <summary>
 /// One agent's <c>memory:</c> block: the <c>file_memory_*</c> tools over a store. The provider
-/// keeps its working folder in the session state (§3.5), so a resumed call reads the same files.
+/// keeps its working folder in the session state (§3.5), so a resumed conversation reads the same files.
 /// </summary>
 public sealed record AgentMemoryConfiguration
 {

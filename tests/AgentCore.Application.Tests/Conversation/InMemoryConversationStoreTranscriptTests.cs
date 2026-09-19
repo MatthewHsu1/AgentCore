@@ -1,0 +1,187 @@
+using AgentCore.Application.Conversation.Memory;
+using AgentCore.Application.Transcript;
+using Microsoft.Extensions.AI;
+using Xunit;
+
+namespace AgentCore.Application.Tests.Conversation;
+
+/// <summary>The words half of store 0, now that one store holds both halves.</summary>
+public sealed class InMemoryConversationStoreTranscriptTests
+{
+    private static CancellationToken Token => TestContext.Current.CancellationToken;
+
+    [Fact]
+    public async Task ReadAsync_AfterAppend_ReturnsTheRowsOldestFirst()
+    {
+        // Arrange
+        InMemoryConversationStore store = new();
+        await store.CreateAsync("c1", Token);
+
+        // Act
+        await store.AppendAsync(
+            "c1",
+            [
+                new ConversationMessageDraft(0, new ChatMessage(ChatRole.User, "hello"), "m0"),
+                new ConversationMessageDraft(0, new ChatMessage(ChatRole.Assistant, "hi"), "m1"),
+            ], cancellationToken: Token);
+
+        // Assert
+        var rows = await store.ReadAsync("c1", Token);
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(0, rows[0].Ordinal);
+        Assert.Equal("hello", rows[0].Content.Text);
+    }
+
+    [Fact]
+    public async Task RewriteAsync_AnExistingMessage_ReplacesItsContent()
+    {
+        // Arrange
+        InMemoryConversationStore store = new();
+        await store.CreateAsync("c1", Token);
+        await store.AppendAsync(
+            "c1",
+            [new ConversationMessageDraft(0, new ChatMessage(ChatRole.Assistant, "long reply"), "m0")],
+            cancellationToken: Token);
+
+        // Act
+        await store.RewriteAsync("c1", "m0", new ChatMessage(ChatRole.Assistant, "cut"), Token);
+
+        // Assert
+        var rows = await store.ReadAsync("c1", Token);
+        Assert.Equal("cut", Assert.Single(rows).Content.Text);
+    }
+
+    [Fact]
+    public async Task EraseAsync_AConversationWithWords_RemovesThemAndReportsTheCount()
+    {
+        // Arrange
+        InMemoryConversationStore store = new();
+        await store.CreateAsync("c1", Token);
+        await store.CreateAsync("c2", Token);
+        await store.AppendAsync(
+            "c1", [new ConversationMessageDraft(0, new ChatMessage(ChatRole.User, "a"), "m0")], cancellationToken: Token);
+        await store.AppendAsync(
+            "c2", [new ConversationMessageDraft(0, new ChatMessage(ChatRole.User, "b"), "m0")], cancellationToken: Token);
+
+        // Act
+        var erased = await store.EraseAsync("c1", Token);
+
+        // Assert
+        Assert.Equal(1, erased);
+        Assert.Empty(await store.ReadAsync("c1", Token));
+        Assert.Single(await store.ReadAsync("c2", Token));
+    }
+
+    [Fact]
+    public async Task GetAsync_AfterAppend_ReportsWhenTheConversationWasLastSpokenOn()
+    {
+        // Arrange
+        InMemoryConversationStore store = new();
+        await store.CreateAsync("c1", Token);
+
+        // Act
+        await store.AppendAsync(
+            "c1", [new ConversationMessageDraft(0, new ChatMessage(ChatRole.User, "hello"), "m0")], cancellationToken: Token);
+
+        // Assert
+        var conversation = await store.GetAsync("c1", Token);
+        Assert.NotNull(conversation);
+        Assert.NotNull(conversation.LastMessageAt);
+    }
+
+    [Fact]
+    public async Task ReadAsync_AConversationWithMessages_ReturnsThemOldestFirst()
+    {
+        // Arrange — the store numbers rows in draft order, so this pins the read order against the
+        // ordinal the store assigned rather than against the order the drafts happened to list.
+        InMemoryConversationStore store = new();
+        await store.CreateAsync("c1", Token);
+        await store.AppendAsync(
+            "c1",
+            [
+                new ConversationMessageDraft(0, new ChatMessage(ChatRole.User, "first"), "m0"),
+                new ConversationMessageDraft(0, new ChatMessage(ChatRole.User, "second"), "m1"),
+            ],
+            cancellationToken: Token);
+
+        // Act
+        var rows = await store.ReadAsync("c1", Token);
+
+        // Assert
+        Assert.Equal([0, 1], rows.Select(row => row.Ordinal));
+        Assert.Equal(["first", "second"], rows.Select(row => row.Content.Text));
+    }
+
+    [Fact]
+    public async Task ReadAsync_AConversationThatHoldsNothing_IsEmpty()
+    {
+        // Arrange
+        InMemoryConversationStore store = new();
+
+        // Act
+        var rows = await store.ReadAsync("missing", Token);
+
+        // Assert
+        Assert.Empty(rows);
+    }
+
+    [Fact]
+    public async Task ReadAsync_AnotherConversationsMessages_AreNotReturned()
+    {
+        // Arrange
+        InMemoryConversationStore store = new();
+        await store.CreateAsync("c1", Token);
+        await store.CreateAsync("c2", Token);
+        await store.AppendAsync(
+            "c1", [new ConversationMessageDraft(0, new ChatMessage(ChatRole.User, "mine"), "m0")], cancellationToken: Token);
+        await store.AppendAsync(
+            "c2", [new ConversationMessageDraft(0, new ChatMessage(ChatRole.User, "theirs"), "m0")], cancellationToken: Token);
+
+        // Act
+        var rows = await store.ReadAsync("c1", Token);
+
+        // Assert
+        Assert.Single(rows);
+    }
+
+    [Fact]
+    public async Task EraseAsync_AConversation_TakesEveryRowAndReportsHowMany()
+    {
+        // Arrange
+        InMemoryConversationStore store = new();
+        await store.CreateAsync("c1", Token);
+        await store.AppendAsync(
+            "c1",
+            [
+                new ConversationMessageDraft(0, new ChatMessage(ChatRole.User, "one"), "m0"),
+                new ConversationMessageDraft(0, new ChatMessage(ChatRole.Assistant, "two"), "m1"),
+            ],
+            cancellationToken: Token);
+
+        // Act
+        var erased = await store.EraseAsync("c1", Token);
+
+        // Assert
+        Assert.Equal(2, erased);
+        Assert.Empty(await store.ReadAsync("c1", Token));
+    }
+
+    [Fact]
+    public async Task EraseAsync_AConversation_LeavesEveryOtherConversationAlone()
+    {
+        // Arrange
+        InMemoryConversationStore store = new();
+        await store.CreateAsync("c1", Token);
+        await store.CreateAsync("c2", Token);
+        await store.AppendAsync(
+            "c1", [new ConversationMessageDraft(0, new ChatMessage(ChatRole.User, "mine"), "m0")], cancellationToken: Token);
+        await store.AppendAsync(
+            "c2", [new ConversationMessageDraft(0, new ChatMessage(ChatRole.User, "theirs"), "m0")], cancellationToken: Token);
+
+        // Act
+        await store.EraseAsync("c1", Token);
+
+        // Assert
+        Assert.Single(await store.ReadAsync("c2", Token));
+    }
+}

@@ -1,5 +1,5 @@
 using AgentCore.Application.Audit;
-using AgentCore.Application.Calls;
+using AgentCore.Application.Conversation;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
@@ -60,7 +60,7 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
     /// <summary>Gets the registry that compiled the document, and would compile it again.</summary>
     internal CompiledAgentRegistry CompiledRegistry => Started.Graph.Registry;
 
-    /// <summary>Gets the compiled entries, keyed by entry name. Every call shares them.</summary>
+    /// <summary>Gets the compiled entries, keyed by entry name. Every conversation shares them.</summary>
     internal IReadOnlyDictionary<string, CompiledAgent> CompiledEntries => Started.Graph.Entries;
 
     /// <summary>Gets the factory the compile table asks for every agent and for the extractor.</summary>
@@ -72,8 +72,8 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
     /// <summary>Gets the registry the compile table reads.</summary>
     internal ToolRegistry Tools => Started.Tools;
 
-    /// <summary>Gets the backing every call's row and every word of it is kept in.</summary>
-    internal CallRepository Calls => Started.Calls;
+    /// <summary>Gets the backing every conversation's row and every word of it is kept in.</summary>
+    internal Conversations Conversations => Started.Conversations;
 
     /// <summary>Gets the registry the turn loop reads, and the offline golden set alike.</summary>
     internal EvaluatorRegistry Evaluators => Started.Evaluators;
@@ -93,14 +93,14 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
     /// <summary>Gets the blob store, or <see langword="null"/> when the document names none.</summary>
     internal IBlobStore? Blobs => Started.Blobs;
 
-    /// <summary>Gets what the call route runs, or <see langword="null"/> when no call routes here.</summary>
-    internal RequestDelegate? CallHandler => Started.CallHandler;
+    /// <summary>Gets what the conversation route runs, or <see langword="null"/> when no conversation routes here.</summary>
+    internal RequestDelegate? ConversationHandler => Started.ConversationHandler;
 
-    /// <summary>Gets why no call routes here, or <see langword="null"/> when calls route.</summary>
-    internal string? CallUnroutable => Started.CallUnroutable;
+    /// <summary>Gets why no conversation routes here, or <see langword="null"/> when conversations route.</summary>
+    internal string? ConversationUnroutable => Started.ConversationUnroutable;
 
-    /// <summary>Gets the call transports the host registered, or <see langword="null"/> if it registered none.</summary>
-    internal IReadOnlyList<ICallAdapter>? CallAdapters => Started.CallAdapters;
+    /// <summary>Gets the conversation transports the host registered, or <see langword="null"/> if it registered none.</summary>
+    internal IReadOnlyList<IConversationAdapter>? ConversationAdapters => Started.ConversationAdapters;
 
     /// <summary>Gets the speech vendors the host registered, or <see langword="null"/> if it registered none.</summary>
     internal IReadOnlyList<ISpeechAdapter>? SpeechAdapters => Started.SpeechAdapters;
@@ -146,7 +146,7 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
 
     /// <summary>Loads the document, opens everything it names, and compiles it.</summary>
     /// <param name="cancellationToken">Cancels the secret reads and the adapter builds.</param>
-    /// <returns>A task that completes when the graph is ready to take a call.</returns>
+    /// <returns>A task that completes when the graph is ready to take a conversation.</returns>
     /// <exception cref="InvalidOperationException">
     /// The options name no document, name two, or bind no chat client adapter.
     /// </exception>
@@ -219,11 +219,11 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
 
         ConfigurationValidator.ValidateSkillToolNames(configuration);
 
-        var store = Track(await CallStartup
+        var store = Track(await ConversationStartup
             .OpenAsync(configuration, _options, _loggers, cancellationToken)
             .ConfigureAwait(false));
 
-        CallRepository calls = new(store, blobs);
+        Conversations conversations = new(store, blobs);
 
         var evaluators = await EvaluationStartup
             .CreateRegistryAsync(configuration, _options, cancellationToken)
@@ -234,7 +234,7 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
                 configuration,
                 chatClients,
                 tools.Registry,
-                calls,
+                conversations,
                 evaluators,
                 knowledge,
                 skills,
@@ -245,9 +245,9 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
                 secrets)
             .ConfigureAwait(false);
 
-        var seams = CallSeamStartup.Build(configuration, _options);
+        var seams = ConversationSeamStartup.Build(configuration, _options);
 
-        var call = await CallSessionStartup
+        var conversation = await ConversationSessionStartup
             .OpenAsync(this, configuration, _options, graph, _loggers, cancellationToken)
             .ConfigureAwait(false);
 
@@ -256,14 +256,14 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
             secrets,
             telemetry,
             tools.Registry,
-            calls,
+            conversations,
             blobs,
             evaluators,
             graph,
-            call.Entries,
-            call.Queue,
+            conversation.Entries,
+            conversation.Queue,
             knowledge,
-            seams.Call,
+            seams.Conversation,
             seams.Speech,
             seams.Handler,
             seams.Unroutable);
@@ -326,17 +326,17 @@ internal sealed class AgentCoreBoot : IAsyncDisposable, IDisposable
         ResolvedSecrets Secrets,
         ITelemetrySession? Telemetry,
         ToolRegistry Tools,
-        CallRepository Calls,
+        Conversations Conversations,
         IBlobStore? Blobs,
         EvaluatorRegistry Evaluators,
         CompiledGraph Graph,
         EntryRegistry Entries,
         QueuedAuditSink AuditQueue,
         IKnowledgeRetrievalPort? Knowledge,
-        IReadOnlyList<ICallAdapter>? CallAdapters,
+        IReadOnlyList<IConversationAdapter>? ConversationAdapters,
         IReadOnlyList<ISpeechAdapter>? SpeechAdapters,
-        RequestDelegate? CallHandler,
-        string? CallUnroutable);
+        RequestDelegate? ConversationHandler,
+        string? ConversationUnroutable);
 }
 
 /// <summary>Every line <see cref="AgentCoreBoot"/> writes itself, below what each startup step logs.</summary>

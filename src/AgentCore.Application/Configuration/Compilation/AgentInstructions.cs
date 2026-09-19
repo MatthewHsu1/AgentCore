@@ -24,7 +24,7 @@ public static class AgentInstructions
         + "- Explain your reasoning and thought process as you work through tasks.\n"
         + "- Explain what you learned and what you are going to do next between tool calls, so the user can follow along with your thought process.\n"
         + "- Avoid making more than 4 tool calls in a row without explaining what you are doing.\n"
-        + "- If a tool call fails or returns unexpected results, adapt your approach rather than repeating the same call.\n"
+        + "- If a tool call fails or returns unexpected results, adapt your approach rather than repeating the same conversation.\n"
         + "- When you have completed the task, present a clear and concise summary of what you did and what you found.\n"
         + "\n"
         + "Resolve what you can from what you know and what you are given. Ask only for what you "

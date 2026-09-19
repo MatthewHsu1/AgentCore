@@ -17,7 +17,7 @@ internal sealed class FilePublishToolDefinition : IBuiltinToolDefinition
     /// <inheritdoc />
     public string DefaultDescription =>
         "Hands one file from the workspace to the person and returns a link to it. "
-        + "A file that is not published is lost when the call ends.";
+        + "A file that is not published is lost when the conversation ends.";
 
     /// <inheritdoc />
     public AITool Build(ToolConfiguration tool, BuiltinToolPorts ports)

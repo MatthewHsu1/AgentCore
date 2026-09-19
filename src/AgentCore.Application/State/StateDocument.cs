@@ -5,15 +5,15 @@ using AgentCore.Application.Configuration.Schema;
 namespace AgentCore.Application.State;
 
 /// <summary>
-/// The declared state of one call, plus the three reserved slots.
+/// The declared state of one conversation, plus the three reserved slots.
 /// </summary>
 public sealed class StateDocument
 {
     private readonly ConcurrentDictionary<string, JsonNode?> _written = new(StringComparer.Ordinal);
 
-    /// <summary>Creates the state of one call from the declared slots.</summary>
+    /// <summary>Creates the state of one conversation from the declared slots.</summary>
     /// <param name="configuration">The loaded document.</param>
-    /// <param name="stage">The stage the call starts in, or <see langword="null"/> when there is no policy.</param>
+    /// <param name="stage">The stage the conversation starts in, or <see langword="null"/> when there is no policy.</param>
     public StateDocument(AgentCoreConfiguration configuration, string? stage = null)
     {
         ArgumentNullException.ThrowIfNull(configuration);
@@ -31,8 +31,8 @@ public sealed class StateDocument
     /// <summary>Gets or sets the reserved <c>turnIndex</c> slot. The turn loop owns it.</summary>
     public int TurnIndex { get; set; }
 
-    /// <summary>Gets or sets the reserved <c>callDurationSeconds</c> slot. The turn loop owns it.</summary>
-    public double CallDurationSeconds { get; set; }
+    /// <summary>Gets or sets the reserved <c>conversationDurationSeconds</c> slot. The turn loop owns it.</summary>
+    public double ConversationDurationSeconds { get; set; }
 
     /// <summary>Gets the names of the declared slots. The reserved slots are not declared.</summary>
     public IEnumerable<string> SlotNames => Configuration.State.Keys;
@@ -130,7 +130,7 @@ public sealed class StateDocument
 
         snapshot[ReservedStateSlots.Stage] = JsonValue.Create(Stage);
         snapshot[ReservedStateSlots.TurnIndex] = JsonValue.Create(TurnIndex);
-        snapshot[ReservedStateSlots.CallDurationSeconds] = JsonValue.Create(CallDurationSeconds);
+        snapshot[ReservedStateSlots.ConversationDurationSeconds] = JsonValue.Create(ConversationDurationSeconds);
         return snapshot;
     }
 
@@ -163,6 +163,6 @@ public sealed class StateDocument
 
         return string.Equals(slot, ReservedStateSlots.TurnIndex, StringComparison.Ordinal)
             ? JsonValue.Create(TurnIndex)
-            : JsonValue.Create(CallDurationSeconds);
+            : JsonValue.Create(ConversationDurationSeconds);
     }
 }

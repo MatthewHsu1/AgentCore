@@ -37,7 +37,7 @@ namespace AgentCore.Infrastructure.Telemetry.Grafana;
 /// adapter project for signals the framework already produces.
 /// </para>
 /// <para>
-/// <b>T61 is enforced twice, and this is the second place.</b> The library keeps no call id on a
+/// <b>T61 is enforced twice, and this is the second place.</b> The library keeps no conversation id on a
 /// metric attribute; this keeps the export interval at a minute or more, because Grafana Cloud bills
 /// the greater of active series and data points a minute. The floor lives on
 /// <see cref="TelemetryProviderConfiguration.ExportIntervalMilliseconds"/>, so a document cannot

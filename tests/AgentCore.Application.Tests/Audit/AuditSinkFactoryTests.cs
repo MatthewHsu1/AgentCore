@@ -42,7 +42,7 @@ public sealed class AuditSinkFactoryTests
             [adapter],
             TestContext.Current.CancellationToken);
 
-        // The whole point of the seam. A document that chose no store still records the call, so the
+        // The whole point of the seam. A document that chose no store still records the conversation, so the
         // events of D23 have somewhere to go and a host with no database still starts.
         Assert.IsType<InMemoryAuditSink>(sink);
         Assert.Equal(0, adapter.Opens);
@@ -137,7 +137,7 @@ public sealed class AuditSinkFactoryTests
                 TestContext.Current.CancellationToken));
 
         // A document that asked for something this host cannot give. The failure belongs to the
-        // start and never to a call, which is what item 9 of section 11 asks for.
+        // start and never to a conversation, which is what item 9 of section 11 asks for.
         Assert.Contains("postgres", failure.Message, StringComparison.Ordinal);
         Assert.Contains("'fake'", failure.Message, StringComparison.Ordinal);
         Assert.Equal("/providers/audit/kind", failure.Errors[0].Pointer);
@@ -176,7 +176,7 @@ public sealed class AuditSinkFactoryTests
     /// <remarks>
     /// The raw string in <c>ExampleDocument</c> strips its common indentation, so inside
     /// <c>providers:</c> a key sits at two spaces and its own keys at four. Every line is written here
-    /// rather than by the caller, because YAML indentation written by hand at a call site is how the
+    /// rather than by the caller, because YAML indentation written by hand at a conversation site is how the
     /// first draft of the telemetry tests failed.
     /// </remarks>
     private static string Document(params string[] entries)

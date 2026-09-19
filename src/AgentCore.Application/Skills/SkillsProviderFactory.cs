@@ -47,7 +47,7 @@ internal static class SkillsProviderFactory
 
         AgentSkillsProviderOptions options = new()
         {
-            // Nothing answers an approval request mid-call, so an approval-gated tool would stall
+            // Nothing answers an approval request mid-conversation, so an approval-gated tool would stall
             // the turn. The script tool keeps its approval, and the wrapper removes it entirely.
             DisableLoadSkillApproval = true,
             DisableReadSkillResourceApproval = true,

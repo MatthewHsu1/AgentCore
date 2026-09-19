@@ -9,7 +9,7 @@ namespace AgentCore.Application.Configuration.Compilation;
 
 /// <summary>
 /// The provider behind one agent's <c>background:</c> list: its children, each wrapped so a child
-/// session knows which call started it.
+/// session knows which conversation started it.
 /// </summary>
 internal static class AgentBackgroundCompiler
 {

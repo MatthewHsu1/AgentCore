@@ -93,7 +93,7 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
     /// A server cannot be reached within its own retry and timeout; an <c>allow:</c> entry names a
     /// tool the server does not offer, is empty, or writes <c>"*"</c> alongside another entry or with
     /// an <c>as:</c>; or a kept tool has no description. Every one of these names the server id, so a
-    /// deployer knows which <c>mcp:</c> entry is wrong. On any failure, every session this call
+    /// deployer knows which <c>mcp:</c> entry is wrong. On any failure, every session this conversation
     /// already opened is closed before the exception leaves — a partly-booted document leaves no
     /// child process behind.
     /// </exception>

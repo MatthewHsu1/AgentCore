@@ -28,7 +28,7 @@ public sealed class CompositeChatClientFactoryTests
           items:
             - { id: only, instructions: "I answer everything" }
         providers:
-          call:   { kind: telnyx-relay }
+          conversation:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
@@ -47,7 +47,7 @@ public sealed class CompositeChatClientFactoryTests
           items:
             - { id: only, instructions: "I answer everything" }
         providers:
-          call:   { kind: telnyx-relay }
+          conversation:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
@@ -66,7 +66,7 @@ public sealed class CompositeChatClientFactoryTests
           items:
             - { id: only, instructions: "I answer everything" }
         providers:
-          call:   { kind: telnyx-relay }
+          conversation:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
@@ -84,7 +84,7 @@ public sealed class CompositeChatClientFactoryTests
           items:
             - { id: only, instructions: "I answer everything" }
         providers:
-          call:   { kind: telnyx-relay }
+          conversation:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
@@ -142,7 +142,7 @@ public sealed class CompositeChatClientFactoryTests
         factory.GetChatClient(new ModelReference { Ref = "reply" });
         factory.GetChatClient(new ModelReference { Ref = "fill" });
 
-        // One build for each 'as' name, at startup. A call costs no build.
+        // One build for each 'as' name, at startup. A conversation costs no build.
         Assert.Equal(["reply", "fill"], openai.BuiltNames);
     }
 
@@ -197,7 +197,7 @@ public sealed class CompositeChatClientFactoryTests
     // The temperature wrapper: the document keeps its setting, the vendor client stays one.
     // ---------------------------------------------------------------------------------------------
     [Fact]
-    public async Task ATemperature_ReachesTheCallWithoutASecondVendorClient()
+    public async Task ATemperature_ReachesTheConversationWithoutASecondVendorClient()
     {
         RecordingChatClientAdapter openai = new("openai");
 
@@ -239,7 +239,7 @@ public sealed class CompositeChatClientFactoryTests
     }
 
     [Fact]
-    public async Task ACallWithNoOptions_StillGetsTheDocumentTemperature()
+    public async Task AConversationWithNoOptions_StillGetsTheDocumentTemperature()
     {
         RecordingChatClientAdapter openai = new("openai");
 
@@ -255,7 +255,7 @@ public sealed class CompositeChatClientFactoryTests
     }
 
     [Fact]
-    public async Task ATemperature_ReachesAStreamingCallToo()
+    public async Task ATemperature_ReachesAStreamingConversationToo()
     {
         RecordingChatClientAdapter openai = new("openai");
 

@@ -4,8 +4,8 @@ AgentCore.Domain.Audit.AuditEvent.<Clone>$() -> AgentCore.Domain.Audit.AuditEven
 AgentCore.Domain.Audit.AuditEvent.AmendsEventId.get -> System.Guid?
 AgentCore.Domain.Audit.AuditEvent.AmendsEventId.init -> void
 AgentCore.Domain.Audit.AuditEvent.AuditEvent() -> void
-AgentCore.Domain.Audit.AuditEvent.CallId.get -> string!
-AgentCore.Domain.Audit.AuditEvent.CallId.init -> void
+AgentCore.Domain.Audit.AuditEvent.ConversationId.get -> string!
+AgentCore.Domain.Audit.AuditEvent.ConversationId.init -> void
 AgentCore.Domain.Audit.AuditEvent.Equals(AgentCore.Domain.Audit.AuditEvent? other) -> bool
 AgentCore.Domain.Audit.AuditEvent.EventId.get -> System.Guid
 AgentCore.Domain.Audit.AuditEvent.EventId.init -> void
@@ -18,8 +18,8 @@ AgentCore.Domain.Audit.AuditEvent.Payload.init -> void
 AgentCore.Domain.Audit.AuditEvent.TurnIndex.get -> int?
 AgentCore.Domain.Audit.AuditEvent.TurnIndex.init -> void
 AgentCore.Domain.Audit.AuditEventKind
-AgentCore.Domain.Audit.AuditEventKind.CallEnded = 5 -> AgentCore.Domain.Audit.AuditEventKind
-AgentCore.Domain.Audit.AuditEventKind.CallStarted = 0 -> AgentCore.Domain.Audit.AuditEventKind
+AgentCore.Domain.Audit.AuditEventKind.ConversationEnded = 5 -> AgentCore.Domain.Audit.AuditEventKind
+AgentCore.Domain.Audit.AuditEventKind.ConversationStarted = 0 -> AgentCore.Domain.Audit.AuditEventKind
 AgentCore.Domain.Audit.AuditEventKind.PromptFlagged = 6 -> AgentCore.Domain.Audit.AuditEventKind
 AgentCore.Domain.Audit.AuditEventKind.ReplyInterrupted = 2 -> AgentCore.Domain.Audit.AuditEventKind
 AgentCore.Domain.Audit.AuditEventKind.ToolFailed = 3 -> AgentCore.Domain.Audit.AuditEventKind
@@ -32,12 +32,12 @@ AgentCore.Domain.Audit.AuditHash.<Clone>$() -> AgentCore.Domain.Audit.AuditHash!
 AgentCore.Domain.Audit.AuditHash.Equals(AgentCore.Domain.Audit.AuditHash? other) -> bool
 AgentCore.Domain.Audit.AuditHash.Value.get -> string!
 AgentCore.Domain.Audit.AuditPayloadKeys
-AgentCore.Domain.Audit.CallEndReason
-AgentCore.Domain.Audit.CallEndReason.AgentCompleted = 1 -> AgentCore.Domain.Audit.CallEndReason
-AgentCore.Domain.Audit.CallEndReason.CallerHungUp = 0 -> AgentCore.Domain.Audit.CallEndReason
-AgentCore.Domain.Audit.CallEndReason.Faulted = 3 -> AgentCore.Domain.Audit.CallEndReason
-AgentCore.Domain.Audit.CallEndReason.TransferredToHuman = 2 -> AgentCore.Domain.Audit.CallEndReason
-AgentCore.Domain.Audit.CallEndReasons
+AgentCore.Domain.Audit.ConversationEndReason
+AgentCore.Domain.Audit.ConversationEndReason.AgentCompleted = 1 -> AgentCore.Domain.Audit.ConversationEndReason
+AgentCore.Domain.Audit.ConversationEndReason.CallerHungUp = 0 -> AgentCore.Domain.Audit.ConversationEndReason
+AgentCore.Domain.Audit.ConversationEndReason.Faulted = 3 -> AgentCore.Domain.Audit.ConversationEndReason
+AgentCore.Domain.Audit.ConversationEndReason.TransferredToHuman = 2 -> AgentCore.Domain.Audit.ConversationEndReason
+AgentCore.Domain.Audit.ConversationEndReasons
 AgentCore.Domain.Audit.ToolFailureKind
 AgentCore.Domain.Audit.ToolFailureKind.Faulted = 1 -> AgentCore.Domain.Audit.ToolFailureKind
 AgentCore.Domain.Audit.ToolFailureKind.Undeclared = 0 -> AgentCore.Domain.Audit.ToolFailureKind
@@ -112,9 +112,9 @@ AgentCore.Domain.TurnResult
 AgentCore.Domain.TurnResult.<Clone>$() -> AgentCore.Domain.TurnResult!
 AgentCore.Domain.TurnResult.Approvals.get -> System.Collections.Generic.IReadOnlyList<AgentCore.Domain.PendingApproval!>!
 AgentCore.Domain.TurnResult.Approvals.init -> void
-AgentCore.Domain.TurnResult.CallId.get -> string!
-AgentCore.Domain.TurnResult.CallId.init -> void
-AgentCore.Domain.TurnResult.Deconstruct(out string! CallId, out int TurnIndex, out string! StageBefore, out string! StageAfter, out string! ReplyText, out bool IsTerminal, out string? ExtractionFailure, out string? Failure, out System.TimeSpan? InterruptedAfter, out System.DateTimeOffset EndedAt) -> void
+AgentCore.Domain.TurnResult.ConversationId.get -> string!
+AgentCore.Domain.TurnResult.ConversationId.init -> void
+AgentCore.Domain.TurnResult.Deconstruct(out string! ConversationId, out int TurnIndex, out string! StageBefore, out string! StageAfter, out string! ReplyText, out bool IsTerminal, out string? ExtractionFailure, out string? Failure, out System.TimeSpan? InterruptedAfter, out System.DateTimeOffset EndedAt) -> void
 AgentCore.Domain.TurnResult.EndedAt.get -> System.DateTimeOffset
 AgentCore.Domain.TurnResult.EndedAt.init -> void
 AgentCore.Domain.TurnResult.Equals(AgentCore.Domain.TurnResult? other) -> bool
@@ -134,7 +134,7 @@ AgentCore.Domain.TurnResult.StageBefore.get -> string!
 AgentCore.Domain.TurnResult.StageBefore.init -> void
 AgentCore.Domain.TurnResult.TurnIndex.get -> int
 AgentCore.Domain.TurnResult.TurnIndex.init -> void
-AgentCore.Domain.TurnResult.TurnResult(string! CallId, int TurnIndex, string! StageBefore, string! StageAfter, string! ReplyText, bool IsTerminal, string? ExtractionFailure, string? Failure = null, System.TimeSpan? InterruptedAfter = null, System.DateTimeOffset EndedAt = default(System.DateTimeOffset)) -> void
+AgentCore.Domain.TurnResult.TurnResult(string! ConversationId, int TurnIndex, string! StageBefore, string! StageAfter, string! ReplyText, bool IsTerminal, string? ExtractionFailure, string? Failure = null, System.TimeSpan? InterruptedAfter = null, System.DateTimeOffset EndedAt = default(System.DateTimeOffset)) -> void
 const AgentCore.Domain.Audit.AuditHash.Length = 64 -> int
 const AgentCore.Domain.Audit.AuditPayloadKeys.DurationUntilInterruptMs = "durationUntilInterruptMs" -> string!
 const AgentCore.Domain.Audit.AuditPayloadKeys.EndReason = "endReason" -> string!
@@ -181,8 +181,8 @@ static AgentCore.Domain.Audit.AuditHash.Parse(string! value) -> AgentCore.Domain
 static AgentCore.Domain.Audit.AuditHash.TryParse(string? value, out AgentCore.Domain.Audit.AuditHash? hash) -> bool
 static AgentCore.Domain.Audit.AuditHash.operator !=(AgentCore.Domain.Audit.AuditHash? left, AgentCore.Domain.Audit.AuditHash? right) -> bool
 static AgentCore.Domain.Audit.AuditHash.operator ==(AgentCore.Domain.Audit.AuditHash? left, AgentCore.Domain.Audit.AuditHash? right) -> bool
-static AgentCore.Domain.Audit.CallEndReasons.ToToken(AgentCore.Domain.Audit.CallEndReason reason) -> string!
-static AgentCore.Domain.Audit.CallEndReasons.TryParse(string? token, out AgentCore.Domain.Audit.CallEndReason reason) -> bool
+static AgentCore.Domain.Audit.ConversationEndReasons.ToToken(AgentCore.Domain.Audit.ConversationEndReason reason) -> string!
+static AgentCore.Domain.Audit.ConversationEndReasons.TryParse(string? token, out AgentCore.Domain.Audit.ConversationEndReason reason) -> bool
 static AgentCore.Domain.Audit.ToolFailureKinds.ToToken(AgentCore.Domain.Audit.ToolFailureKind kind) -> string!
 static AgentCore.Domain.Audit.ToolFailureKinds.TryParse(string? token, out AgentCore.Domain.Audit.ToolFailureKind kind) -> bool
 static AgentCore.Domain.Knowledge.KnowledgeCard.operator !=(AgentCore.Domain.Knowledge.KnowledgeCard? left, AgentCore.Domain.Knowledge.KnowledgeCard? right) -> bool

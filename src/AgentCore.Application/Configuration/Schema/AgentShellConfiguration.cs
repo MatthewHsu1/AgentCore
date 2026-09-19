@@ -26,11 +26,11 @@ public sealed record ShellPolicyConfiguration
     public IReadOnlyList<string> Allow { get; init; } = [];
 }
 
-/// <summary>One agent's <c>shell:</c> block: one executor per call, removed with it (§4.4).</summary>
+/// <summary>One agent's <c>shell:</c> block: one executor per conversation, removed with it (§4.4).</summary>
 public sealed record ShellConfiguration
 {
     /// <summary>
-    /// Gets the executor kind. Deliberately required: where a shell runs is the consumer's call, so
+    /// Gets the executor kind. Deliberately required: where a shell runs is the consumer's conversation, so
     /// no default exists here (§4.5.1).
     /// </summary>
     public required ShellKind Kind { get; init; }

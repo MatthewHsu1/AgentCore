@@ -168,11 +168,11 @@ internal static class ExampleDocument
             - { kind: openai, model: gpt-5.4-nano, as: fill }       # the extractor, chosen on null discipline
             - { kind: openai, model: gpt-4.1,      as: judge }      # evaluation only, chosen on judgement
             - { kind: openai, model: gpt-4.1-nano, as: cheap, webSearch: false }
-          call:      { kind: telnyx-relay }        # the pipe: who carries the call and owns /v1/{entry}/call
+          conversation:      { kind: telnyx-relay }        # the pipe: who carries the conversation and owns /v1/{entry}/call
           speech:                                  # the ears and the mouth, named one role at a time
-            stt: { kind: telnyx-relay }            # recognition. Bundled here, so it matches call
-            tts: { kind: telnyx-relay }            # synthesis. Bundled here, so it matches call
-          telephony: { kind: telnyx }              # dial, transfer, hang up. Not the pipe — that is call
+            stt: { kind: telnyx-relay }            # recognition. Bundled here, so it matches conversation
+            tts: { kind: telnyx-relay }            # synthesis. Bundled here, so it matches conversation
+          telephony: { kind: telnyx }              # dial, transfer, hang up. Not the pipe — that is conversation
           moderation: { kind: openai }             # reads what the CALLER said, before the model runs
           embeddings: { kind: openai, model: text-embedding-3-small }
           blobs: { kind: s3, endpoint: https://s3.us-east-005.backblazeb2.com, bucket: agentcore-files, region: us-east-005 }
@@ -601,7 +601,7 @@ internal static class ExampleDocument
                 "webSearch": false
               }
             ],
-            "call": {
+            "conversation": {
               "kind": "telnyx-relay"
             },
             "speech": {

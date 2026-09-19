@@ -102,7 +102,7 @@ public sealed class ResolvedSecretsTests
             resolver,
             TestContext.Current.CancellationToken);
 
-        // Three references, one name, one read. Startup pays for the read, and no call does.
+        // Three references, one name, one read. Startup pays for the read, and no conversation does.
         Assert.Equal([ApiKeyName], resolver.Asked);
         Assert.Equal(1, secrets.Count);
     }
@@ -139,7 +139,7 @@ public sealed class ResolvedSecretsTests
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Failing at startup, and never in the middle of a call.
+    // Failing at startup, and never in the middle of a conversation.
     // ---------------------------------------------------------------------------------------------
     [Fact]
     public async Task AnUnresolvableName_FailsAtStartupAndNamesThePointer()

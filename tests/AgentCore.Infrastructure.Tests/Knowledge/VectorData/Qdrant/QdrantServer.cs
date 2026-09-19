@@ -31,7 +31,7 @@ public static class QdrantServer
         var endpoint = Endpoint ?? throw new InvalidOperationException(SkipReason);
         var parts = endpoint.Split(':', 2);
 
-        // The timeout is per call and the connector never sets one. A schema call on a slow disk
+        // The timeout is per conversation and the connector never sets one. A schema conversation on a slow disk
         // can take 20 s; a query takes single-digit milliseconds.
         return new QdrantClient(parts[0], int.Parse(parts[1]), grpcTimeout: TimeSpan.FromSeconds(30));
     }

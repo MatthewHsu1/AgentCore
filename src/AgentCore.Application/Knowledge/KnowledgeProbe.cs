@@ -23,7 +23,7 @@ internal static class KnowledgeProbe
     /// <param name="scope">The live scope the main search just ran under.</param>
     /// <param name="agent">The id of the agent that asked, for the log line.</param>
     /// <param name="query">The search text the framework composed.</param>
-    /// <param name="clarifications">The call's ambiguity holder, or <see langword="null"/> inside a nested tool call.</param>
+    /// <param name="clarifications">The conversation's ambiguity holder, or <see langword="null"/> inside a nested tool call.</param>
     /// <param name="carriesHistory">Whether this row's session carries the caller's own history.</param>
     /// <param name="logger">Where the probe's own log events go.</param>
     /// <param name="cancellationToken">The caller's own token — cancelling this is the caller hanging up, not a timeout.</param>
@@ -207,7 +207,7 @@ internal static class KnowledgeProbe
 
         // Whether the note repeats what was last named, and the record that follows from it, are one
         // transition under one lock acquisition. Deciding from an earlier Read() and writing after
-        // would let a concurrent participant on the same call slip between the two.
+        // would let a concurrent participant on the same conversation slip between the two.
         var repeats = false;
 
         clarifications.Update(facet, s =>

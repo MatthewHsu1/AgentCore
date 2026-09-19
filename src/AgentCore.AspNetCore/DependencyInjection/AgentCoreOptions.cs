@@ -16,7 +16,7 @@ public sealed class AgentCoreOptions
 {
     private readonly List<Func<AgentCoreStartup, IToolSource>> _toolSources = [];
 
-    private readonly List<ICallObserver> _observers = [];
+    private readonly List<IConversationObserver> _observers = [];
 
     /// <summary>Gets the path of the configuration document, or <see langword="null"/>.</summary>
     public string? ConfigurationPath { get; set; }
@@ -66,8 +66,8 @@ public sealed class AgentCoreOptions
     /// <summary>Gets the audit sink vendors the host registered, or <see langword="null"/>.</summary>
     internal IReadOnlyList<IAuditSinkAdapter>? AuditSinks { get; private set; }
 
-    /// <summary>Gets the call store vendors the host registered, or <see langword="null"/>.</summary>
-    internal IReadOnlyList<ICallStoreAdapter>? CallStores { get; private set; }
+    /// <summary>Gets the conversation store vendors the host registered, or <see langword="null"/>.</summary>
+    internal IReadOnlyList<IConversationStoreAdapter>? ConversationStores { get; private set; }
 
     /// <summary>Gets the blob store vendors the host registered, or <see langword="null"/>.</summary>
     internal IReadOnlyList<IBlobStoreAdapter>? BlobStores { get; private set; }
@@ -81,39 +81,39 @@ public sealed class AgentCoreOptions
     /// <summary>Gets the skills source a host bound directly, or <see langword="null"/>.</summary>
     internal AgentSkillsSource? SkillsSource { get; private set; }
 
-    /// <summary>Gets the call transports this host supports, or <see langword="null"/>.</summary>
-    internal IReadOnlyList<ICallAdapter>? CallAdapters { get; private set; }
+    /// <summary>Gets the conversation transports this host supports, or <see langword="null"/>.</summary>
+    internal IReadOnlyList<IConversationAdapter>? ConversationAdapters { get; private set; }
 
-    /// <summary>Gets the folder under which every call gets its own workspace, or <see langword="null"/>.</summary>
+    /// <summary>Gets the folder under which every conversation gets its own workspace, or <see langword="null"/>.</summary>
     internal string? WorkspaceRoot { get; private set; }
 
     /// <summary>Gets the extra tool sources, in the order the registry asks them.</summary>
     internal IReadOnlyList<Func<AgentCoreStartup, IToolSource>> ToolSources => _toolSources;
 
     /// <summary>Gets the observers the host registered, in the order it registered them.</summary>
-    internal IReadOnlyList<ICallObserver> Observers => _observers;
+    internal IReadOnlyList<IConversationObserver> Observers => _observers;
 
     /// <summary>Gets the store opener the host bound, or <see langword="null"/> for the in-memory default.</summary>
-    internal Func<string, ICallSessionFactory, ICallSessions>? CallSessions { get; private set; }
+    internal Func<string, IConversationSessionFactory, IConversationSessions>? ConversationSessions { get; private set; }
 
     /// <summary>Binds the session store, one per entry.</summary>
     /// <param name="open">
     /// Opens the store for one entry. It takes the entry name and the factory that builds that
-    /// entry's sessions, and it runs once per entry the document declares. Each call must return a
+    /// entry's sessions, and it runs once per entry the document declares. Each conversation must return a
     /// distinct store: two entries that share one store let a vendor call id arriving on both
     /// entries read one call through two shapes.
     /// </param>
-    /// <returns>These options, so a host chains its calls.</returns>
-    public AgentCoreOptions UseCallSessions(Func<string, ICallSessionFactory, ICallSessions> open)
+    /// <returns>These options, so a host chains its conversations.</returns>
+    public AgentCoreOptions UseConversationSessions(Func<string, IConversationSessionFactory, IConversationSessions> open)
     {
         ArgumentNullException.ThrowIfNull(open);
-        CallSessions = open;
+        ConversationSessions = open;
         return this;
     }
 
     /// <summary>Binds the vendor adapters, and the document picks one by each entry's <c>kind</c>.</summary>
     /// <param name="adapters">One adapter for each vendor this host supports.</param>
-    /// <returns>These options, so a host chains its calls.</returns>
+    /// <returns>These options, so a host chains its conversations.</returns>
     public AgentCoreOptions UseChatClients(params IChatClientAdapter[] adapters)
     {
         ArgumentNullException.ThrowIfNull(adapters);
@@ -124,7 +124,7 @@ public sealed class AgentCoreOptions
 
     /// <summary>Binds the adapter that turns a model reference into a chat client.</summary>
     /// <param name="chatClients">Builds the adapter from the loaded document, without a wait.</param>
-    /// <returns>These options, so a host chains its calls.</returns>
+    /// <returns>These options, so a host chains its conversations.</returns>
     public AgentCoreOptions UseChatClients(Func<AgentCoreStartup, IChatClientFactory> chatClients)
     {
         ArgumentNullException.ThrowIfNull(chatClients);
@@ -133,7 +133,7 @@ public sealed class AgentCoreOptions
 
     /// <summary>Binds the adapter that turns a model reference into a chat client, with a wait.</summary>
     /// <param name="chatClients">Builds the adapter from the loaded document.</param>
-    /// <returns>These options, so a host chains its calls.</returns>
+    /// <returns>These options, so a host chains its conversations.</returns>
     public AgentCoreOptions UseChatClients(Func<AgentCoreStartup, CancellationToken, ValueTask<IChatClientFactory>> chatClients)
     {
         ArgumentNullException.ThrowIfNull(chatClients);
@@ -143,7 +143,7 @@ public sealed class AgentCoreOptions
 
     /// <summary>Binds the embedding vendors, and the document picks one by <c>providers.embeddings.kind</c>.</summary>
     /// <param name="adapters">One adapter for each embedding vendor this host supports.</param>
-    /// <returns>These options, so a host chains its calls.</returns>
+    /// <returns>These options, so a host chains its conversations.</returns>
     public AgentCoreOptions UseEmbeddings(params IEmbeddingGeneratorAdapter[] adapters)
     {
         ArgumentNullException.ThrowIfNull(adapters);
@@ -153,7 +153,7 @@ public sealed class AgentCoreOptions
 
     /// <summary>Binds the knowledge vendors, and the document picks one by <c>providers.knowledge.kind</c>.</summary>
     /// <param name="adapters">One adapter for each knowledge vendor this host supports.</param>
-    /// <returns>These options, so a host chains its calls.</returns>
+    /// <returns>These options, so a host chains its conversations.</returns>
     public AgentCoreOptions UseKnowledgeStores(params IKnowledgeStoreAdapter[] adapters)
     {
         ArgumentNullException.ThrowIfNull(adapters);
@@ -163,7 +163,7 @@ public sealed class AgentCoreOptions
 
     /// <summary>Binds the adapter that beats the <c>providers.knowledge.kind</c> registry.</summary>
     /// <param name="retrieval">Builds the adapter from the loaded document.</param>
-    /// <returns>These options, so a host chains its calls.</returns>
+    /// <returns>These options, so a host chains its conversations.</returns>
     public AgentCoreOptions UseKnowledgeRetrieval(Func<AgentCoreStartup, IKnowledgeRetrievalPort> retrieval)
     {
         ArgumentNullException.ThrowIfNull(retrieval);
@@ -200,7 +200,7 @@ public sealed class AgentCoreOptions
 
     /// <summary>Binds the moderation vendors, and the document picks one by <c>kind</c>.</summary>
     /// <param name="adapters">The vendors this host supports.</param>
-    /// <returns>These options, so a host chains its calls.</returns>
+    /// <returns>These options, so a host chains its conversations.</returns>
     public AgentCoreOptions UseModeration(params IModerationAdapter[] adapters)
     {
         ArgumentNullException.ThrowIfNull(adapters);
@@ -210,7 +210,7 @@ public sealed class AgentCoreOptions
 
     /// <summary>Binds the telemetry vendors, and the document picks one by <c>kind</c>.</summary>
     /// <param name="adapters">The vendors this host supports.</param>
-    /// <returns>These options, so a host chains its calls.</returns>
+    /// <returns>These options, so a host chains its conversations.</returns>
     public AgentCoreOptions UseTelemetry(params ITelemetryAdapter[] adapters)
     {
         ArgumentNullException.ThrowIfNull(adapters);
@@ -220,7 +220,7 @@ public sealed class AgentCoreOptions
 
     /// <summary>Binds the audit sink vendors, and the document picks one by <c>kind</c>.</summary>
     /// <param name="adapters">The vendors this host supports.</param>
-    /// <returns>These options, so a host chains its calls.</returns>
+    /// <returns>These options, so a host chains its conversations.</returns>
     public AgentCoreOptions UseAuditSinks(params IAuditSinkAdapter[] adapters)
     {
         ArgumentNullException.ThrowIfNull(adapters);
@@ -228,19 +228,19 @@ public sealed class AgentCoreOptions
         return this;
     }
 
-    /// <summary>Binds the call store vendors, and the document picks one by <c>kind</c>.</summary>
+    /// <summary>Binds the conversation store vendors, and the document picks one by <c>kind</c>.</summary>
     /// <param name="adapters">The vendors this host supports.</param>
-    /// <returns>These options, so a host chains its calls.</returns>
-    public AgentCoreOptions UseCallStores(params ICallStoreAdapter[] adapters)
+    /// <returns>These options, so a host chains its conversations.</returns>
+    public AgentCoreOptions UseConversationStores(params IConversationStoreAdapter[] adapters)
     {
         ArgumentNullException.ThrowIfNull(adapters);
-        CallStores = adapters;
+        ConversationStores = adapters;
         return this;
     }
 
     /// <summary>Binds the blob store vendors, and the document picks one by <c>providers.blobs.kind</c>.</summary>
     /// <param name="adapters">The vendors this host supports.</param>
-    /// <returns>These options, so a host chains its calls.</returns>
+    /// <returns>These options, so a host chains its conversations.</returns>
     public AgentCoreOptions UseBlobStores(params IBlobStoreAdapter[] adapters)
     {
         ArgumentNullException.ThrowIfNull(adapters);
@@ -248,13 +248,13 @@ public sealed class AgentCoreOptions
         return this;
     }
 
-    /// <summary>Binds the host's own readings of a call, beside the three this library keeps.</summary>
+    /// <summary>Binds the host's own readings of a conversation, beside the three this library keeps.</summary>
     /// <param name="observers">
-    /// What the host wants told about every call. Each one takes every fact, in the order the call
+    /// What the host wants told about every conversation. Each one takes every fact, in the order the conversation
     /// produced it. An empty set is legal and registers nothing.
     /// </param>
-    /// <returns>These options, so a host chains its calls.</returns>
-    public AgentCoreOptions UseObservers(params ICallObserver[] observers)
+    /// <returns>These options, so a host chains its conversations.</returns>
+    public AgentCoreOptions UseObservers(params IConversationObserver[] observers)
     {
         ArgumentNullException.ThrowIfNull(observers);
         _observers.AddRange(observers);
@@ -263,7 +263,7 @@ public sealed class AgentCoreOptions
 
     /// <summary>Binds the speech vendors, and the document picks one by <c>kind</c>.</summary>
     /// <param name="adapters">The vendors this host supports.</param>
-    /// <returns>These options, so a host chains its calls.</returns>
+    /// <returns>These options, so a host chains its conversations.</returns>
     public AgentCoreOptions UseSpeech(params ISpeechAdapter[] adapters)
     {
         ArgumentNullException.ThrowIfNull(adapters);
@@ -289,13 +289,13 @@ public sealed class AgentCoreOptions
         return this;
     }
 
-    /// <summary>Lists the vendors that may carry a call, so <c>providers.call.kind</c> can pick one.</summary>
+    /// <summary>Lists the vendors that may carry a conversation, so <c>providers.conversation.kind</c> can pick one.</summary>
     /// <param name="adapters">The transports this host supports.</param>
-    /// <returns>These options, so a host chains its calls.</returns>
-    public AgentCoreOptions UseCall(params ICallAdapter[] adapters)
+    /// <returns>These options, so a host chains its conversations.</returns>
+    public AgentCoreOptions UseConversation(params IConversationAdapter[] adapters)
     {
         ArgumentNullException.ThrowIfNull(adapters);
-        CallAdapters = adapters;
+        ConversationAdapters = adapters;
         return this;
     }
 
@@ -306,7 +306,7 @@ public sealed class AgentCoreOptions
     /// <see cref="IDisposable"/>, the composition root closes it when the host stops. Do not return an
     /// instance the host still needs after that.
     /// </param>
-    /// <returns>These options, so a host chains its calls.</returns>
+    /// <returns>These options, so a host chains its conversations.</returns>
     public AgentCoreOptions AddToolSource(Func<AgentCoreStartup, IToolSource> toolSource)
     {
         ArgumentNullException.ThrowIfNull(toolSource);
@@ -315,8 +315,8 @@ public sealed class AgentCoreOptions
     }
 
     /// <summary>
-    /// Binds the folder under which every call gets its own workspace directory,
-    /// <c>&lt;root&gt;/&lt;callId&gt;/</c>, created with the call and deleted when the call ends.
+    /// Binds the folder under which every conversation gets its own workspace directory,
+    /// <c>&lt;root&gt;/&lt;conversationId&gt;/</c>, created with the conversation and deleted when the conversation ends.
     /// </summary>
     public AgentCoreOptions UseWorkspace(string root)
     {
@@ -328,7 +328,7 @@ public sealed class AgentCoreOptions
     /// <summary>Registers one host delegate behind a <c>binds:</c> name.</summary>
     /// <param name="name">The name a <c>binds:</c> field writes, such as <c>CreateCase</c>.</param>
     /// <param name="binding">The delegate the tool calls.</param>
-    /// <returns>These options, so a host chains its calls.</returns>
+    /// <returns>These options, so a host chains its conversations.</returns>
     /// <exception cref="ArgumentException">The name is already registered.</exception>
     public AgentCoreOptions Bind(string name, ToolBinding binding)
     {
@@ -341,10 +341,10 @@ public sealed class AgentCoreOptions
     /// <param name="method">
     /// The method the tool calls. Its parameters are the arguments the model fills, and their JSON
     /// Schema, so the declaration writes no <c>parameters:</c>. A parameter of type
-    /// <see cref="ToolCallScope"/> is filled by the runtime with the call the turn belongs to, and
+    /// <see cref="ToolCallScope"/> is filled by the runtime with the conversation the turn belongs to, and
     /// is not exposed to the model.
     /// </param>
-    /// <returns>These options, so a host chains its calls.</returns>
+    /// <returns>These options, so a host chains its conversations.</returns>
     /// <exception cref="ArgumentException">The name is already registered.</exception>
     public AgentCoreOptions Bind(string name, Delegate method)
     {

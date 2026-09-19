@@ -12,7 +12,7 @@ namespace AgentCore.Application.Scripting;
 public sealed record ScriptRequest(string Code, JsonNode Data)
 {
     /// <summary>
-    /// The name of a function the script may call with its result instead of returning it, or
+    /// The name of a function the script may conversation with its result instead of returning it, or
     /// <see langword="null"/> when only <c>return</c> counts. A model that was told to call a tool
     /// named <c>present</c> will call <c>present(tree)</c> from inside its code about as often as it
     /// returns the tree.

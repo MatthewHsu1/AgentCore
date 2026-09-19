@@ -20,12 +20,12 @@ namespace AgentCore.Application.Tests.Runtime.Turn;
 /// <remarks>
 /// <para>
 /// The compiled agent is a process singleton, so the provider bound to it is one too and may hold
-/// nothing per call. It finds the turn in the session-keyed registry instead, and it applies what
+/// nothing per conversation. It finds the turn in the session-keyed registry instead, and it applies what
 /// it finds only to a run on the session that turn filed. That rule is what keeps a delegated
 /// run — which is call and return on a session of its own — out of the turn's context.
 /// </para>
 /// <para>
-/// Every test here runs offline: no network call and no API key.
+/// Every test here runs offline: no network conversation and no API key.
 /// </para>
 /// </remarks>
 public sealed class TurnContextProviderTests
@@ -88,10 +88,10 @@ public sealed class TurnContextProviderTests
           """;
 
       [Fact]
-      public async Task TheProvider_HandsTheTurnsInstructionsToARunOnTheCallsSession()
+      public async Task TheProvider_HandsTheTurnsInstructionsToARunOnTheConversationsSession()
       {
           StubSession session = new();
-          TurnRegistry.Set(session, new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", Instructions = "ask for the model" });
+          TurnRegistry.Set(session, new TurnInvocation { ConversationId = "conversation", TurnIndex = 0, Stage = "", Instructions = "ask for the model" });
 
           var context = await InvokeAsync(session);
 
@@ -107,9 +107,9 @@ public sealed class TurnContextProviderTests
       [Fact]
       public async Task TheProvider_HandsNothingToARunOnAnotherSession()
       {
-          StubSession call = new();
+          StubSession conversation = new();
           StubSession delegated = new();
-          TurnRegistry.Set(call, new TurnInvocation { CallId = "call", TurnIndex = 0, Stage = "", Instructions = "ask for the model" });
+          TurnRegistry.Set(conversation, new TurnInvocation { ConversationId = "conversation", TurnIndex = 0, Stage = "", Instructions = "ask for the model" });
 
           var context = await InvokeAsync(delegated);
 
@@ -208,8 +208,8 @@ public sealed class TurnContextProviderTests
           return inner;
       }
 
-      /// <summary>Compiles <see cref="ReminderYaml"/> over two named models and opens a call on it.</summary>
-      private static CallSession CreateSession(IChatClient reply, IChatClient specialist)
+      /// <summary>Compiles <see cref="ReminderYaml"/> over two named models and opens a conversation on it.</summary>
+      private static ConversationSession CreateSession(IChatClient reply, IChatClient specialist)
       {
           RoutingChatClientFactory chatClients = new(reply);
           chatClients.Route("reply", reply);
@@ -218,7 +218,7 @@ public sealed class TurnContextProviderTests
           var compiled = ConfigurationCompiler.CompileAll(
               ConfigurationLoader.LoadYaml(ReminderYaml), new AgentCompilationContext(chatClients))["main"];
 
-          return new CallSessionFactory(
+          return new ConversationSessionFactory(
               compiled,
               new GuardEvaluator(compiled.Configuration.Guards),
               extractor: null).Create();

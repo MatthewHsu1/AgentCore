@@ -22,7 +22,7 @@ internal static class KnowledgeNotices
     /// <summary>What the model is told when the search ran and matched nothing.</summary>
     /// <remarks>
     /// Tool mode only. Prefetch searches before every invocation on a query composed from recent
-    /// messages, so a greeting would otherwise open the call by announcing an empty knowledge base.
+    /// messages, so a greeting would otherwise open the conversation by announcing an empty knowledge base.
     /// </remarks>
     internal const string Empty =
         "The knowledge base holds nothing for this question. Say so, and do not answer from memory.";

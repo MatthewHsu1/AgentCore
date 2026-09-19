@@ -31,7 +31,7 @@ policy:
 providers:
   llm:
     - { kind: openai, model: gpt-5.6-luna, as: reply }
-  call: { kind: telnyx-relay }
+  conversation: { kind: telnyx-relay }
   speech:
     stt: { kind: telnyx-relay }
     tts: { kind: telnyx-relay }
@@ -54,8 +54,8 @@ app.MapAgentCoreHost();
 app.Run();
 ```
 
-`AddAgentCoreHost` loads the document (`config/example.yaml` unless `AgentCore__ConfigurationPath` names another) and binds every vendor seam. `MapAgentCoreHost` serves the health check, the OpenAI-compatible Responses endpoint, and the call socket.
-Every entry under `entries:` answers on `POST /v1/{entry}/responses` and on the call socket at `/v1/{entry}/call`.
+`AddAgentCoreHost` loads the document (`config/example.yaml` unless `AgentCore__ConfigurationPath` names another) and binds every vendor seam. `MapAgentCoreHost` serves the health check, the OpenAI-compatible Responses endpoint, and the conversation socket.
+Every entry under `entries:` answers on `POST /v1/{entry}/responses` and on the conversation socket at `/v1/{entry}/call`.
 An OpenAI SDK reaches one entry through its base URL alone: `base_url = https://host/v1/phone`.
 A document it cannot find is a startup failure, never a silent default.
 

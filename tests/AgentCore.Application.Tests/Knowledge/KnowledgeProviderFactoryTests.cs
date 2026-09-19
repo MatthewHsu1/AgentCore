@@ -214,7 +214,7 @@ public sealed class KnowledgeProviderFactoryTests
     public async Task Create_UnscopedAgentUnderAScopedHostAmbient_StillSearchesTheWholeCorpus()
     {
         // Ruling 20, and the defect it resolves. example.yaml ships a mixed deployment: the resolver
-        // requires a scope, so the host sets ct900 for the whole call, and the analyst -- which the
+        // requires a scope, so the host sets ct900 for the whole conversation, and the analyst -- which the
         // same document says "searches every product on purpose" -- was silently filtered to ct900
         // with it. The store folds whatever scope it is handed into the filter, so the turn's scope
         // has to stop here for an unscoped agent.
@@ -264,7 +264,7 @@ public sealed class KnowledgeProviderFactoryTests
     [Fact]
     public async Task Create_UnscopedAgent_PutsTheHostsScopeBackAfterTheSearch()
     {
-        // The empty scope covers one port call and nothing else. Leaking it would silently unscope the
+        // The empty scope covers one port conversation and nothing else. Leaking it would silently unscope the
         // scoped agent that runs next -- the very leak this whole design fails closed against,
         // arriving from the inside.
         var port = new StubKnowledgePort([Card("a")]);
@@ -309,7 +309,7 @@ public sealed class KnowledgeProviderFactoryTests
     {
         // In tool mode the framework replaces the message with "Error: Function failed.", and in
         // prefetch mode this delegate answers a notice rather than throwing. Neither channel carries
-        // the cause, so an outage during a live call turns on this one line existing.
+        // the cause, so an outage during a live conversation turns on this one line existing.
         RecordingLoggerFactory loggers = new();
         InvalidOperationException down = new("qdrant is down");
 
@@ -487,13 +487,13 @@ public sealed class KnowledgeProviderFactoryTests
 
         StubSession session = new();
         TurnRegistry.Set(session, PrefetchTurn(sources: sources));
-        using (sources.BeginOuterCall("call-1"))
+        using (sources.BeginOuterCall("conversation-1"))
         {
             await provider.InvokingAsync(
                 Invoking("the screen says e33", session), TestContext.Current.CancellationToken);
         }
 
-        var cited = sources.TakeFor("call-1");
+        var cited = sources.TakeFor("conversation-1");
         Assert.Equal(2, cited.Count);
         Assert.Equal(
             ["a", "b"], cited.Select(content => content.Source.SourceId).OrderBy(id => id));
@@ -514,13 +514,13 @@ public sealed class KnowledgeProviderFactoryTests
 
         StubSession session = new();
         TurnRegistry.Set(session, PrefetchTurn(sources: sources));
-        using (sources.BeginOuterCall("call-1"))
+        using (sources.BeginOuterCall("conversation-1"))
         {
             await provider.InvokingAsync(
                 Invoking("the screen says e33", session), TestContext.Current.CancellationToken);
         }
 
-        Assert.Empty(sources.TakeFor("call-1"));
+        Assert.Empty(sources.TakeFor("conversation-1"));
     }
 
     [Fact]
@@ -536,13 +536,13 @@ public sealed class KnowledgeProviderFactoryTests
 
         StubSession session = new();
         TurnRegistry.Set(session, PrefetchTurn(sources: sources));
-        using (sources.BeginOuterCall("call-1"))
+        using (sources.BeginOuterCall("conversation-1"))
         {
             await provider.InvokingAsync(
                 Invoking("the screen says e33", session), TestContext.Current.CancellationToken);
         }
 
-        var cited = sources.TakeFor("call-1");
+        var cited = sources.TakeFor("conversation-1");
         Assert.Equal(2, cited.Count);
         Assert.Equal(
             ["a", "b"], cited.Select(content => content.Source.SourceId).OrderBy(id => id));
@@ -677,7 +677,7 @@ public sealed class KnowledgeProviderFactoryTests
     /// <returns>The provider.</returns>
     private static TurnInvocation PrefetchTurn(KnowledgeScope? scope = null, TurnSources? sources = null) => new()
     {
-        CallId = "call",
+        ConversationId = "conversation",
         TurnIndex = 0,
         Stage = "",
         Knowledge = scope,
@@ -687,7 +687,7 @@ public sealed class KnowledgeProviderFactoryTests
     private static TurnInvocation ToolTurn(
         KnowledgeScope? scope = null, Clarifications? clarifications = null, TurnSources? sources = null) => new()
     {
-        CallId = "call",
+        ConversationId = "conversation",
         TurnIndex = 0,
         Stage = "",
         Knowledge = scope,

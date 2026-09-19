@@ -19,7 +19,7 @@ namespace AgentCore.Application.Tests.Runtime;
 /// <remarks>
 /// The first two facts drive <see cref="AuditingFunctionInvokingChatClient"/> directly, the same way
 /// <see cref="AuditingFunctionInvokingChatClientRenderTests"/> does, with the turn filed
-/// on the call's own options. The third drives a real <see cref="CallSession"/> turn,
+/// on the conversation's own options. The third drives a real <see cref="ConversationSession"/> turn,
 /// because that is the only place that proves the session actually threads its
 /// own <c>Clarifications</c> instance through — a fact the first two cannot see, since they file the
 /// turn by hand.
@@ -131,14 +131,14 @@ public sealed class AuditingFunctionInvokingChatClientStripTests
 
     private static TurnInvocation TurnOf(Clarifications clarifications) => new()
     {
-        CallId = "call",
+        ConversationId = "conversation",
         TurnIndex = 0,
         Stage = "",
         Clarifications = clarifications,
     };
 
     // -------------------------------------------------------------------------------------------
-    // The wiring fact: a real CallSession turn opens its own Clarifications and files it on the
+    // The wiring fact: a real ConversationSession turn opens its own Clarifications and files it on the
     // run, so the probe — not the store — sees it. The increment below proves both halves: no
     // holder, or no filing, and the probe's search never runs.
     // -------------------------------------------------------------------------------------------
@@ -162,7 +162,7 @@ public sealed class AuditingFunctionInvokingChatClientStripTests
               model: { ref: fill }
               when: after_reply
             providers:
-              call:   { kind: telnyx-relay }
+              conversation:   { kind: telnyx-relay }
               speech:
                 stt: { kind: telnyx-relay }
                 tts: { kind: telnyx-relay }
@@ -198,8 +198,8 @@ public sealed class AuditingFunctionInvokingChatClientStripTests
                 Knowledge = port,
             })["main"];
 
-        var factory = new CallSessionFactory(compiled, new GuardEvaluator(compiled.Configuration.Guards));
-        var session = factory.Create("call-strip-1");
+        var factory = new ConversationSessionFactory(compiled, new GuardEvaluator(compiled.Configuration.Guards));
+        var session = factory.Create("conversation-strip-1");
 
         await session.RunTurnAsync("what is it", TestContext.Current.CancellationToken);
 

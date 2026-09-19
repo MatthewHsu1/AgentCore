@@ -32,20 +32,20 @@ public sealed class InnerAgentTranscriptTests
           """;
 
       /// <summary>
-      /// The inner agent runs on a session of its own, which no <c>BeginCall</c> ever named, so store 1
+      /// The inner agent runs on a session of its own, which no <c>BeginConversation</c> ever named, so store 1
       /// never sees its rounds. Keeping them would cost tokens on every later turn and would put the
       /// inner agent's working-out into the audit record, which no consumer asked for.
       /// </summary>
       [Fact]
       public async Task ADelegatingTurn_WritesTheOuterRoundsOnly()
       {
-          RecordingCallStore store = new();
+          RecordingConversationStore store = new();
           using ToolCallingChatClient model = new("done");
           var compiled = ConfigurationCompiler.CompileAll(
               ConfigurationLoader.LoadYaml(DelegatingYaml),
-              new AgentCompilationContext(new FakeChatClientFactory(model)) { CallStore = store })["main"];
+              new AgentCompilationContext(new FakeChatClientFactory(model)) { ConversationStore = store })["main"];
 
-          var session = new CallSessionFactory(
+          var session = new ConversationSessionFactory(
               compiled, new GuardEvaluator(compiled.Configuration.Guards), extractor: null).Create();
 
           await foreach (var _ in session.RunTurnStreamingAsync("hi", TestContext.Current.CancellationToken))
@@ -62,6 +62,6 @@ public sealed class InnerAgentTranscriptTests
           Assert.Equal(
               ["user", "assistant", "tool", "assistant"],
               store.Rows.Select(row => row.Content.Role.Value));
-          Assert.All(store.Rows, row => Assert.Equal(session.CallId, row.CallId));
+          Assert.All(store.Rows, row => Assert.Equal(session.ConversationId, row.ConversationId));
       }
   }

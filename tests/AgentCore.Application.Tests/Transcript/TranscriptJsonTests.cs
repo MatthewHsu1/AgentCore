@@ -25,8 +25,8 @@ public sealed class TranscriptJsonTests
         var message = new ChatMessage(ChatRole.Assistant,
         [
             new TextContent("here's your order"),
-            new FunctionCallContent("call-1", "lookup_order", new Dictionary<string, object?> { ["orderId"] = "41" }),
-            new FunctionResultContent("call-1", new { status = "shipped" }),
+            new FunctionCallContent("conversation-1", "lookup_order", new Dictionary<string, object?> { ["orderId"] = "41" }),
+            new FunctionResultContent("conversation-1", new { status = "shipped" }),
             new UsageContent(new UsageDetails { InputTokenCount = 10, OutputTokenCount = 5 }),
             new RenderContent { Name = "order-card", RenderId = "order-41", Data = data },
         ]);

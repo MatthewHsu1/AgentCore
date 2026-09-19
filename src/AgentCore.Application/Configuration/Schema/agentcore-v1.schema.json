@@ -265,7 +265,7 @@
     },
     "titler": {
       "type": "object",
-      "description": "The model that names a call from its first few messages. The key is optional, and a document that omits it leaves the titler on the default providers.llm entry.",
+      "description": "The model that names a conversation from its first few messages. The key is optional, and a document that omits it leaves the titler on the default providers.llm entry.",
       "required": [
         "model"
       ],
@@ -759,7 +759,7 @@
         },
         "shell": {
           "$ref": "#/$defs/shell",
-          "description": "One shell executor per call."
+          "description": "One shell executor per conversation."
         },
         "approval": {
           "$ref": "#/$defs/approval",
@@ -789,7 +789,7 @@
     },
     "compaction": {
       "type": ["object", "null"],
-      "description": "Decision 3: no strategy here calls a model. A resumed call rebuilds a new session and re-derives from the replayed words, so a strategy that called a model would give one call two histories.",
+      "description": "Decision 3: no strategy here calls a model. A resumed conversation rebuilds a new session and re-derives from the replayed words, so a strategy that called a model would give one conversation two histories.",
       "additionalProperties": false,
       "properties": {
         "strategy": {
@@ -818,7 +818,7 @@
       "enum": [
         "workspace"
       ],
-      "description": "The host-created per-call directory, deleted with the call. The only store today."
+      "description": "The host-created per-conversation directory, deleted with the conversation. The only store today."
     },
     "approval": {
       "type": "object",
@@ -956,7 +956,7 @@
         "docker",
         "local"
       ],
-      "description": "Where a shell runs is the consumer's call, so the document names one: there is no default."
+      "description": "Where a shell runs is the consumer's conversation, so the document names one: there is no default."
     },
     "shellPattern": {
       "type": "string",
@@ -1205,7 +1205,7 @@
     "providers": {
       "type": "object",
       "required": [
-        "call",
+        "conversation",
         "speech"
       ],
       "additionalProperties": false,
@@ -1217,8 +1217,8 @@
             "$ref": "#/$defs/llmProvider"
           }
         },
-        "call": {
-          "$ref": "#/$defs/callProvider"
+        "conversation": {
+          "$ref": "#/$defs/conversationProvider"
         },
         "speech": {
           "$ref": "#/$defs/speechProvider"
@@ -1245,9 +1245,9 @@
           "$ref": "#/$defs/vendorProvider",
           "description": "Where the D23 audit chain is written, such as memory. A document that names none uses the in-process memory sink, which is not durable."
         },
-        "calls": {
+        "conversations": {
           "$ref": "#/$defs/vendorProvider",
-          "description": "Where a call is kept: its row, and the words of it. A document that names none uses the in-process memory store, which is not durable and holds no retention window."
+          "description": "Where a conversation is kept: its row, and the words of it. A document that names none uses the in-process memory store, which is not durable and holds no retention window."
         },
         "blobs": {
           "$ref": "#/$defs/blobProvider",
@@ -1351,9 +1351,9 @@
         }
       }
     },
-    "callProvider": {
+    "conversationProvider": {
       "type": "object",
-      "description": "The media plane: who carries the call and owns its inbound route. Not providers.speech, which is recognition and synthesis, and not providers.telephony, which is call control.",
+      "description": "The media plane: who carries the conversation and owns its inbound route. Not providers.speech, which is recognition and synthesis, and not providers.telephony, which is conversation control.",
       "required": [
         "kind"
       ],
@@ -1367,7 +1367,7 @@
           "type": "integer",
           "minimum": -1,
           "maximum": 4294967,
-          "description": "How long the socket waits with no inbound frame before ending the call. -1 means never."
+          "description": "How long the socket waits with no inbound frame before ending the conversation. -1 means never."
         },
         "closeTimeoutSeconds": {
           "type": "integer",

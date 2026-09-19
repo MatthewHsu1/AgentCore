@@ -76,7 +76,7 @@ public sealed class DeclaredToolTests
         using CancellationTokenSource source = new();
         await source.CancelAsync();
 
-        // Nobody reads this result, and swallowing it would keep a dead call running.
+        // Nobody reads this result, and swallowing it would keep a dead conversation running.
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             async () => await new ThrowingTool(new OperationCanceledException()).InvokeAsync(
                 [],

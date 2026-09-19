@@ -5,7 +5,7 @@ using Microsoft.Extensions.AI;
 namespace AgentCore.Application.Tools.Binding;
 
 // The runtime-filled parameters a bound tool declares. The model never sees them: they bind
-// from the turn the invoking client filed in the call's arguments.
+// from the turn the invoking client filed in the conversation's arguments.
 internal static class ToolParameterBindings
 {
     /// <summary>Binds one runtime-filled parameter, or answers <see langword="default"/> for the model's own.</summary>

@@ -24,7 +24,7 @@ namespace AgentCore.Application.Evaluation;
 /// </remarks>
 public static class ModerationEvaluatorFactory
 {
-    /// <summary>What this seam calls itself, so the shared selector writes its failures.</summary>
+    /// <summary>What this seam conversations itself, so the shared selector writes its failures.</summary>
     private static readonly VendorSeam Seam =
         new("providers.moderation", "/providers/moderation/kind", "options.UseModeration(...)", "endpoints");
 

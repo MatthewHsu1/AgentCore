@@ -14,8 +14,8 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Secrets;
 using AgentCore.Application.Tools;
-using AgentCore.Application.Calls;
-using AgentCore.Application.Calls.Memory;
+using AgentCore.Application.Conversation;
+using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Transcript;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Sessions;
@@ -40,25 +40,25 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection;
 /// The composition root. It loads, validates, resolves, compiles, and registers, in that order.
 /// </summary>
 /// <remarks>
-/// A configuration defect stops the host at start and never on the first call. Every test proves
+/// A configuration defect stops the host at start and never on the first conversation. Every test proves
 /// that by starting a host and nothing else, with no request anywhere.
 /// </remarks>
 public sealed class AddAgentCoreTests
 {
-    /// <summary>The call and speech providers every document below shares.</summary>
-    private const string SpeechAndCall =
+    /// <summary>The conversation and speech providers every document below shares.</summary>
+    private const string SpeechAndConversation =
         """
         providers:
-          call:   { kind: telnyx-relay }
+          conversation:   { kind: telnyx-relay }
           speech:
             stt: { kind: telnyx-relay }
             tts: { kind: telnyx-relay }
         """;
 
-    /// <summary><see cref="SpeechAndCall"/> plus the single reply model most documents declare.</summary>
+    /// <summary><see cref="SpeechAndConversation"/> plus the single reply model most documents declare.</summary>
     private const string MinimalProviders =
         $$"""
-        {{SpeechAndCall}}
+        {{SpeechAndConversation}}
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
         """;
@@ -113,7 +113,7 @@ public sealed class AddAgentCoreTests
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
-        {{SpeechAndCall}}
+        {{SpeechAndConversation}}
           llm:
             - { kind: anthropic, model: claude-sonnet-5, as: reply }
         entries:
@@ -183,7 +183,7 @@ public sealed class AddAgentCoreTests
         """;
 
     // Row 4 of the section 8.2 compile table, with a guarded edge on each exit of the start node.
-    // Check 5 proves the two guards exclusive, so exactly one edge fires for each call.
+    // Check 5 proves the two guards exclusive, so exactly one edge fires for each conversation.
     private const string GuardedGraphYaml =
         $$"""
           apiVersion: agentcore/v1
@@ -208,7 +208,7 @@ public sealed class AddAgentCoreTests
                   - { from: route, to: escalated, when: wants_human }
                   - { from: route, to: handled, when: stays_with_bot }
           providers:
-            call:   { kind: telnyx-relay }
+            conversation:   { kind: telnyx-relay }
             speech:
               stt: { kind: telnyx-relay }
               tts: { kind: telnyx-relay }
@@ -374,23 +374,23 @@ public sealed class AddAgentCoreTests
           Assert.Same(first, second);
           Assert.Equal("main", first.Name);
 
-          // The registry compiled once, and every call shares that one result.
+          // The registry compiled once, and every conversation shares that one result.
           Assert.Equal(1, provider.GetRequiredService<CompiledAgentRegistry>().CompileCount);
       }
 
       [Fact]
-      public async Task AddAgentCore_RegistersOneSessionFactoryThatBuildsANewSessionForEachCall()
+      public async Task AddAgentCore_RegistersOneSessionFactoryThatBuildsANewSessionForEachConversation()
       {
           using var provider = await BuildAsync(OneAgentYaml);
           var factory = provider.GetRequiredService<EntryRegistry>().ForFactory("main");
 
           Assert.Same(factory, provider.GetRequiredService<EntryRegistry>().ForFactory("main"));
 
-          // A CallSession belongs to one call, so it is not a singleton and the container holds none.
+          // A ConversationSession belongs to one conversation, so it is not a singleton and the container holds none.
           var first = factory.Create();
           var second = factory.Create();
           Assert.NotSame(first, second);
-          Assert.NotEqual(first.CallId, second.CallId);
+          Assert.NotEqual(first.ConversationId, second.ConversationId);
       }
 
       [Fact]
@@ -439,10 +439,10 @@ public sealed class AddAgentCoreTests
           Assert.Same(agent, provider.GetRequiredService<EntryRegistry>().ForAgent("main"));
           Assert.Equal("main", agent.Name);
 
-          // One session of the shim is one call, drawn from the same factory the rest of the host
-          // uses, so the two seams describe the same calls.
+          // One session of the shim is one conversation, drawn from the same factory the rest of the host
+          // uses, so the two seams describe the same conversations.
           var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
-          Assert.NotNull(session.GetService<CallSession>());
+          Assert.NotNull(session.GetService<ConversationSession>());
       }
 
       [Fact]
@@ -452,7 +452,7 @@ public sealed class AddAgentCoreTests
 
           var sessions = provider.GetRequiredService<EntryRegistry>().ForSessions("main");
 
-          Assert.IsType<InMemoryCallSessions>(sessions);
+          Assert.IsType<InMemoryConversationSessions>(sessions);
           Assert.Same(sessions, provider.GetRequiredService<EntryRegistry>().ForSessions("main"));
       }
 
@@ -460,12 +460,12 @@ public sealed class AddAgentCoreTests
       public async Task AddAgentCore_RunsTheIdleSweepForTheDefaultSessions()
       {
           // Expiry needs something to drive it. Without this the idle timeout never fires and the
-          // text path holds every call a caller walked away from for the life of the process.
+          // text path holds every conversation a caller walked away from for the life of the process.
           using var provider = await BuildAsync(OneAgentYaml);
 
           Assert.Contains(
               provider.GetServices<IHostedService>(),
-              service => service is CallSessionSweeper);
+              service => service is ConversationSessionSweeper);
       }
 
       /// <summary>
@@ -491,10 +491,10 @@ public sealed class AddAgentCoreTests
       [Fact]
       public async Task AddAgentCore_UsesTheSessionsTheHostBound()
       {
-          CountingCallSessions mine = new();
+          CountingConversationSessions mine = new();
 
           using var provider = await BuildAsync(
-              OneAgentYaml, options => options.UseCallSessions((_, _) => mine));
+              OneAgentYaml, options => options.UseConversationSessions((_, _) => mine));
 
           // A distributed store replaces the default one, and the default steps aside.
           Assert.Same(mine, provider.GetRequiredService<EntryRegistry>().ForSessions("main"));
@@ -503,19 +503,19 @@ public sealed class AddAgentCoreTests
       [Fact]
       public async Task AddAgentCore_OpensOneStorePerEntry()
       {
-          // A vendor call id arriving on two entries opens two isolated calls. That holds only when
+          // A vendor call id arriving on two entries opens two isolated conversations. That holds only when
           // each entry has its own store, so the host's opener runs once per entry and is told which.
           List<string> opened = [];
 
-          using var provider = await BuildAsync(TwoEntryYaml, options => options.UseCallSessions(
+          using var provider = await BuildAsync(TwoEntryYaml, options => options.UseConversationSessions(
               (entry, factory) =>
               {
                   opened.Add(entry);
-                  return new InMemoryCallSessions(
-                      factory, InMemoryCallSessions.DefaultIdleTimeout, TimeProvider.System);
+                  return new InMemoryConversationSessions(
+                      factory, InMemoryConversationSessions.DefaultIdleTimeout, TimeProvider.System);
               }));
 
-          var registry = provider.GetRequiredService<ICallSessionRegistry>();
+          var registry = provider.GetRequiredService<IConversationSessionRegistry>();
 
           Assert.Equal(["main", "other"], opened.Order(StringComparer.Ordinal));
           Assert.NotSame(registry.ForSessions("main"), registry.ForSessions("other"));
@@ -525,16 +525,16 @@ public sealed class AddAgentCoreTests
       public async Task AddAgentCore_RegistersTheSessionRegistryAsAPublicPort()
       {
           // A consumer reaches an entry's store through the port, never through the internal
-          // registry, and never through a bare ICallSessions: no store spans the whole host.
+          // registry, and never through a bare IConversationSessions: no store spans the whole host.
           using var provider = await BuildAsync(OneAgentYaml);
 
-          var registry = provider.GetRequiredService<ICallSessionRegistry>();
+          var registry = provider.GetRequiredService<IConversationSessionRegistry>();
 
           Assert.Equal(["main"], registry.Entries);
           Assert.Same(
               provider.GetRequiredService<EntryRegistry>().ForSessions("main"),
               registry.ForSessions("main"));
-          Assert.Null(provider.GetService<ICallSessions>());
+          Assert.Null(provider.GetService<IConversationSessions>());
 
           var failure = Assert.Throws<InvalidOperationException>(() => registry.ForSessions("missing"));
           Assert.Contains("main", failure.Message, StringComparison.Ordinal);
@@ -642,14 +642,14 @@ public sealed class AddAgentCoreTests
       }
 
       [Fact]
-      public async Task AddAgentCore_ClosesTheCallStoreWhenTheHostShutsDown()
+      public async Task AddAgentCore_ClosesTheConversationStoreWhenTheHostShutsDown()
       {
-          RecordingCallStore store = new();
+          RecordingConversationStore store = new();
           HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
           ConfigureServices(
               builder.Services,
               VendorTranscriptYaml,
-              options => options.UseCallStores(new TestCallStoreAdapter(store)));
+              options => options.UseConversationStores(new TestConversationStoreAdapter(store)));
 
           IHost host = builder.Build();
           await host.StartAsync(TestContext.Current.CancellationToken);
@@ -665,7 +665,7 @@ public sealed class AddAgentCoreTests
           // KnowledgeStartup.OpenAsync's result used to be discarded with `_ = await ...`, so a
           // successful open -- a QdrantClient in production -- was never tracked against the boot and
           // outlived host shutdown. This proves the port the adapter built is closed the same way the
-          // call store above is.
+          // conversation store above is.
           DisposeTrackingKnowledgeAdapter adapter = new();
           HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
           ConfigureServices(
@@ -863,7 +863,7 @@ public sealed class AddAgentCoreTests
       [Theory]
       [InlineData(true, "ESCALATED", "HANDLED")]
       [InlineData(false, "HANDLED", "ESCALATED")]
-      public async Task AGuardedGraph_TakesTheEdgeTheStateOfTheCallNames(bool escalate, string taken, string refused)
+      public async Task AGuardedGraph_TakesTheEdgeTheStateOfTheConversationNames(bool escalate, string taken, string refused)
       {
           using var provider = await BuildGuardedGraphAsync();
           var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create();
@@ -876,7 +876,7 @@ public sealed class AddAgentCoreTests
       }
 
       [Fact]
-      public async Task AGuardedGraph_KeepsTwoCallsApartWhenTheyRunAtTheSameTime()
+      public async Task AGuardedGraph_KeepsTwoConversationsApartWhenTheyRunAtTheSameTime()
       {
           using var provider = await BuildGuardedGraphAsync();
           var sessions = provider.GetRequiredService<EntryRegistry>().ForFactory("main");
@@ -887,7 +887,7 @@ public sealed class AddAgentCoreTests
           var handled = sessions.Create();
           handled.State.TryWrite("escalate", false);
 
-          // One compiled graph, two calls, two edges. Neither call reads the state of the other.
+          // One compiled graph, two conversations, two edges. Neither conversation reads the state of the other.
           var turns = await Task.WhenAll(
               escalated.RunTurnAsync("hello", token),
               handled.RunTurnAsync("hello", token));
@@ -913,7 +913,7 @@ public sealed class AddAgentCoreTests
           Assert.True(registry.Contains("fault_code"));
 
           // T18: a judge must never block a turn, and the offline gate has not proved the evaluators
-          // yet. A rate of 0 draws no number and calls nothing.
+          // yet. A rate of 0 draws no number and conversations nothing.
           Assert.Equal(0, sampler.Rate);
           Assert.False(sampler.ShouldSample());
 
@@ -1015,7 +1015,7 @@ public sealed class AddAgentCoreTests
               ModeratedYaml,
               options => options.UseModeration(new FakeModerationAdapter("test", new AlwaysFlagsEvaluator())));
 
-          var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("call-1");
+          var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("conversation-1");
           var result = await session.RunTurnAsync("...", TestContext.Current.CancellationToken);
 
           // The wiring reaches the turn loop, and not only the registry.
@@ -1047,7 +1047,7 @@ public sealed class AddAgentCoreTests
           var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
 
           Assert.Equal("One moment please. I will try that again.", turn.ReplyText);
-          Assert.NotEqual(CallSession.FallbackReply, turn.ReplyText);
+          Assert.NotEqual(ConversationSession.FallbackReply, turn.ReplyText);
       }
 
       [Fact]
@@ -1059,7 +1059,7 @@ public sealed class AddAgentCoreTests
 
           var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
 
-          Assert.Equal(CallSession.FallbackReply, turn.ReplyText);
+          Assert.Equal(ConversationSession.FallbackReply, turn.ReplyText);
       }
 
       [Fact]
@@ -1078,7 +1078,7 @@ public sealed class AddAgentCoreTests
       }
 
       // -------------------------------------------------------------------------------------------
-      // The call titler: one model, named by the document like every other model.
+      // The conversation titler: one model, named by the document like every other model.
       // -------------------------------------------------------------------------------------------
 
       // The same agent, and a document that gives the titler a model of its own.
@@ -1103,9 +1103,9 @@ public sealed class AddAgentCoreTests
         RecordingChatClientFactory factory = new();
         using var provider = await BuildAsync(TitlerYaml, options => options.UseChatClients(_ => factory));
 
-        var titler = provider.GetRequiredService<ICallTitler>();
+        var titler = provider.GetRequiredService<IConversationTitler>();
 
-        Assert.IsType<ChatCallTitler>(titler);
+        Assert.IsType<ChatConversationTitler>(titler);
         Assert.Equal("titles", factory.Asked?.Ref);
     }
 
@@ -1115,7 +1115,7 @@ public sealed class AddAgentCoreTests
         RecordingChatClientFactory factory = new();
         using var provider = await BuildAsync(OneAgentYaml, options => options.UseChatClients(_ => factory));
 
-        provider.GetRequiredService<ICallTitler>();
+        provider.GetRequiredService<IConversationTitler>();
 
         // A null reference is how the factory is asked for the first declared entry.
         Assert.Null(factory.Asked);
@@ -1124,21 +1124,21 @@ public sealed class AddAgentCoreTests
     [Fact]
     public async Task AddAgentCore_KeepsATitlerTheHostRegisteredFirst()
     {
-        SilentCallTitler mine = new();
+        SilentConversationTitler mine = new();
         HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
-        builder.Services.AddSingleton<ICallTitler>(mine);
+        builder.Services.AddSingleton<IConversationTitler>(mine);
         ConfigureServices(builder.Services, TitlerYaml, null);
 
         using var provider = await StartAsync(builder.Build());
 
-        Assert.Same(mine, provider.GetRequiredService<ICallTitler>());
+        Assert.Same(mine, provider.GetRequiredService<IConversationTitler>());
     }
 
     /// <summary>A titler that names nothing, for the test that only asks who won the registration.</summary>
-    private sealed class SilentCallTitler : ICallTitler
+    private sealed class SilentConversationTitler : IConversationTitler
     {
         public async IAsyncEnumerable<string> GenerateAsync(
-            string callId,
+            string conversationId,
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             await Task.CompletedTask;
@@ -1146,7 +1146,7 @@ public sealed class AddAgentCoreTests
         }
 
         public async IAsyncEnumerable<string> GenerateFromAsync(
-            string callId,
+            string conversationId,
             IReadOnlyList<ChatMessage> messages,
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
@@ -1192,16 +1192,16 @@ public sealed class AddAgentCoreTests
     {
         using var provider = await BuildAsync(OneAgentYaml);
 
-        var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("call-1");
+        var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("conversation-1");
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
         // The queue is what keeps the append off the turn, so the rows land on a thread of their own
         // and a reader that wants them now asks for them now.
         await Queue(provider).FlushAsync(TestContext.Current.CancellationToken);
 
-        var events = Sink(provider).EventsOf("call-1");
+        var events = Sink(provider).EventsOf("conversation-1");
         Assert.Equal(
-            [AuditEventKind.CallStarted, AuditEventKind.TurnCompleted],
+            [AuditEventKind.ConversationStarted, AuditEventKind.TurnCompleted],
             events.Select(item => item.Kind).ToArray());
         Assert.All(events, AuditEventVocabulary.Validate);
     }
@@ -1212,7 +1212,7 @@ public sealed class AddAgentCoreTests
         using var provider = await BuildAsync(OneAgentYaml);
 
         // The turn loop produces the events of D23 whatever a document says, so the seam that receives
-        // them has a working default rather than a null. That is what lets every reading of a call be
+        // them has a working default rather than a null. That is what lets every reading of a conversation be
         // unconditional, and what lets a first run and a test work with no database.
         Assert.NotNull(provider.GetService<IAuditSinkPort>());
         Assert.IsType<InMemoryAuditSink>(provider.GetRequiredService<QueuedAuditSink>().Store);
@@ -1236,7 +1236,7 @@ public sealed class AddAgentCoreTests
             VendorAuditYaml,
             options => options.UseAuditSinks(new TestAuditSinkAdapter(store)));
 
-        var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("call-1");
+        var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("conversation-1");
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
         await Queue(provider).FlushAsync(TestContext.Current.CancellationToken);
 
@@ -1244,7 +1244,7 @@ public sealed class AddAgentCoreTests
         // seams beside it. Nothing but the document decides which store the chain lands in.
         Assert.Same(store, provider.GetRequiredService<QueuedAuditSink>().Store);
         Assert.Equal(
-            [AuditEventKind.CallStarted, AuditEventKind.TurnCompleted],
+            [AuditEventKind.ConversationStarted, AuditEventKind.TurnCompleted],
             store.Events.Select(item => item.Kind).ToArray());
     }
 
@@ -1252,7 +1252,7 @@ public sealed class AddAgentCoreTests
     public async Task AnAuditKindThisHostDoesNotRegister_FailsTheStart()
     {
         // A document that asked for something this host cannot give fails while the host starts, and
-        // never on a call. The message names the kind, exactly as every other vendor seam.
+        // never on a conversation. The message names the kind, exactly as every other vendor seam.
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
             () => BuildAsync(VendorAuditYaml));
 
@@ -1277,17 +1277,17 @@ public sealed class AddAgentCoreTests
     /// <summary>Reads back the store itself, which is registered under its own concrete type.</summary>
     /// <remarks>
     /// The document builds the store now, not the host, so this is how a test that wants the events
-    /// of one call reaches the thing that holds them. Resolving <see cref="IAuditSinkPort"/> gives the
+    /// of one conversation reaches the thing that holds them. Resolving <see cref="IAuditSinkPort"/> gives the
     /// queue instead, because that is the only registration that honours the port's contract.
     /// </remarks>
     private static InMemoryAuditSink Sink(IServiceProvider provider)
         => Assert.IsType<InMemoryAuditSink>(provider.GetRequiredService<QueuedAuditSink>().Store);
 
     // -------------------------------------------------------------------------------------------
-    // The transcript store: named by providers.calls, and never absent.
+    // The transcript store: named by providers.conversations, and never absent.
     // -------------------------------------------------------------------------------------------
 
-    // The same agent, served by a call-store vendor the host registers itself.
+    // The same agent, served by a conversation-store vendor the host registers itself.
     private const string VendorTranscriptYaml =
         $$"""
         apiVersion: agentcore/v1
@@ -1295,7 +1295,7 @@ public sealed class AddAgentCoreTests
           items:
             - { id: only, instructions: "I answer everything" }
         {{MinimalProviders}}
-          calls: { kind: test }
+          conversations: { kind: test }
         entries:
           main:
             agent: only
@@ -1315,17 +1315,17 @@ public sealed class AddAgentCoreTests
             agent: only
         """;
 
-    // The call store opens at step 4c and the moderation vendor is built at step 4c, so a
+    // The conversation store opens at step 4c and the moderation vendor is built at step 4c, so a
     // document that names both puts a failure strictly after an open. Nothing else in the boot has
     // that shape.
-    private const string CallStoreThenModerationFailureYaml =
+    private const string ConversationStoreThenModerationFailureYaml =
         $$"""
         apiVersion: agentcore/v1
         agents:
           items:
             - { id: only, instructions: "I answer everything" }
         {{MinimalProviders}}
-          calls: { kind: test }
+          conversations: { kind: test }
           moderation: { kind: test }
         entries:
           main:
@@ -1333,65 +1333,65 @@ public sealed class AddAgentCoreTests
         """;
 
     [Fact]
-    public async Task ADocumentThatNamesNoCallStoreProvider_StillOpensTheMemoryStore()
+    public async Task ADocumentThatNamesNoConversationStoreProvider_StillOpensTheMemoryStore()
     {
         using var provider = await BuildAsync(OneAgentYaml);
 
-        // The turn loop writes the words of every call whatever a document says, so this seam has a
+        // The turn loop writes the words of every conversation whatever a document says, so this seam has a
         // working default rather than a null, and a first run needs no database.
-        Assert.NotNull(provider.GetService<ICallStore>());
-        Assert.IsType<InMemoryCallStore>(provider.GetRequiredService<CallRepository>().Store);
+        Assert.NotNull(provider.GetService<IConversationStore>());
+        Assert.IsType<InMemoryConversationStore>(provider.GetRequiredService<Conversations>().Store);
     }
 
     [Fact]
-    public async Task ACallStoreVendorTheDocumentNames_IsTheStoreTheTurnWritesTo()
+    public async Task AConversationStoreVendorTheDocumentNames_IsTheStoreTheTurnWritesTo()
     {
-        RecordingCallStore store = new();
+        RecordingConversationStore store = new();
         using var provider = await BuildAsync(
             VendorTranscriptYaml,
-            options => options.UseCallStores(new TestCallStoreAdapter(store)));
+            options => options.UseConversationStores(new TestConversationStoreAdapter(store)));
 
-        var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("call-1");
+        var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("conversation-1");
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
         await session.FlushTranscriptAsync();
 
-        // The host lists its vendors once and providers.calls.kind picks one. Nothing but the
-        // document decides where the words of a call land.
-        Assert.Same(store, provider.GetRequiredService<CallRepository>().Store);
+        // The host lists its vendors once and providers.conversations.kind picks one. Nothing but the
+        // document decides where the words of a conversation land.
+        Assert.Same(store, provider.GetRequiredService<Conversations>().Store);
         Assert.Equal(["user", "assistant"], store.Roles);
     }
 
     [Fact]
-    public async Task ACallStoreKindThisHostDoesNotRegister_FailsTheStart()
+    public async Task AConversationStoreKindThisHostDoesNotRegister_FailsTheStart()
     {
         // A document that asked for something this host cannot give fails while the host starts, and
-        // never on a call.
+        // never on a conversation.
         var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
             () => BuildAsync(VendorTranscriptYaml));
 
         Assert.Contains("test", failure.Message, StringComparison.Ordinal);
     }
 
-    /// <summary>A call-store vendor that hands over the store the test holds.</summary>
-    private sealed class TestCallStoreAdapter(RecordingCallStore store) : ICallStoreAdapter
+    /// <summary>A conversation-store vendor that hands over the store the test holds.</summary>
+    private sealed class TestConversationStoreAdapter(RecordingConversationStore store) : IConversationStoreAdapter
     {
         public string Kind => "test";
 
-        public ValueTask<ICallStore> OpenAsync(
+        public ValueTask<IConversationStore> OpenAsync(
             VendorProviderConfiguration entry,
             ISecretResolverPort? secrets,
             CancellationToken cancellationToken = default)
-            => ValueTask.FromResult<ICallStore>(store);
+            => ValueTask.FromResult<IConversationStore>(store);
     }
 
     /// <summary>A store 1 backing that keeps the role of every row it accepted.</summary>
     /// <remarks>
-    /// Keeps only <see cref="Roles"/>, with no <c>callId</c> or <c>ordinal</c>, so it cannot rebuild a
-    /// <see cref="CallMessage"/> to answer a read or an erase truthfully. <see cref="ReadAsync"/> and
+    /// Keeps only <see cref="Roles"/>, with no <c>conversationId</c> or <c>ordinal</c>, so it cannot rebuild a
+    /// <see cref="ConversationMessage"/> to answer a read or an erase truthfully. <see cref="ReadAsync"/> and
     /// <see cref="EraseAsync"/> report empty and 0 even after <see cref="AppendAsync"/> has recorded
     /// rows — a test that needs either should use a different double.
     /// </remarks>
-    private sealed class RecordingCallStore() : DelegatingCallStore(new InMemoryCallStore()), IAsyncDisposable
+    private sealed class RecordingConversationStore() : DelegatingConversationStore(new InMemoryConversationStore()), IAsyncDisposable
     {
         private readonly Lock _gate = new();
         private readonly List<string> _roles = [];
@@ -1411,10 +1411,10 @@ public sealed class AddAgentCoreTests
             }
         }
 
-        public override ValueTask<IReadOnlyList<CallMessage>> AppendAsync(
-            string callId,
-            IReadOnlyList<CallMessageDraft> messages,
-            CallSessionState? state = null,
+        public override ValueTask<IReadOnlyList<ConversationMessage>> AppendAsync(
+            string conversationId,
+            IReadOnlyList<ConversationMessageDraft> messages,
+            ConversationSessionState? state = null,
             CancellationToken cancellationToken = default)
         {
             lock (_gate)
@@ -1422,23 +1422,23 @@ public sealed class AddAgentCoreTests
                 _roles.AddRange(messages.Select(message => message.Content.Role.Value));
             }
 
-            IReadOnlyList<CallMessage> rows = [.. messages.Select(
-                (message, index) => new CallMessage(callId, index, message.TurnIndex ?? 0, message.Content, message.MessageId))];
+            IReadOnlyList<ConversationMessage> rows = [.. messages.Select(
+                (message, index) => new ConversationMessage(conversationId, index, message.TurnIndex ?? 0, message.Content, message.MessageId))];
             return ValueTask.FromResult(rows);
         }
 
         public override ValueTask RewriteAsync(
-            string callId, string messageId, ChatMessage content, CancellationToken cancellationToken = default)
+            string conversationId, string messageId, ChatMessage content, CancellationToken cancellationToken = default)
             => ValueTask.CompletedTask;
 
-        public override ValueTask<IReadOnlyList<CallMessage>> ReadAsync(
-            string callId, CancellationToken cancellationToken = default)
+        public override ValueTask<IReadOnlyList<ConversationMessage>> ReadAsync(
+            string conversationId, CancellationToken cancellationToken = default)
         {
-            IReadOnlyList<CallMessage> rows = [];
+            IReadOnlyList<ConversationMessage> rows = [];
             return ValueTask.FromResult(rows);
         }
 
-        public override ValueTask<int> EraseAsync(string callId, CancellationToken cancellationToken = default) =>
+        public override ValueTask<int> EraseAsync(string conversationId, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(0);
 
         public ValueTask DisposeAsync()
@@ -1509,22 +1509,22 @@ public sealed class AddAgentCoreTests
     }
 
     // -------------------------------------------------------------------------------------------
-    // The host's own observers: the socket behind ICallObserver.
+    // The host's own observers: the socket behind IConversationObserver.
     // -------------------------------------------------------------------------------------------
     [Fact]
     public async Task AHostObserver_ReadsTheFactsOfATurn()
     {
-        RecordingCallObserver first = new();
-        RecordingCallObserver second = new();
+        RecordingConversationObserver first = new();
+        RecordingConversationObserver second = new();
         using var provider = await BuildAsync(OneAgentYaml, options => options.UseObservers(first, second));
 
-        var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("call-1");
+        var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("conversation-1");
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
-        // The port is public, so a host writes one of these and binds it. Every observer of a call
+        // The port is public, so a host writes one of these and binds it. Every observer of a conversation
         // reads the same facts, and the library's own three are neither replaced nor bypassed.
-        Assert.Equal([CallEventKind.CallStarted, CallEventKind.TurnCompleted], first.Seen);
-        Assert.Equal([CallEventKind.CallStarted, CallEventKind.TurnCompleted], second.Seen);
+        Assert.Equal([ConversationEventKind.ConversationStarted, ConversationEventKind.TurnCompleted], first.Seen);
+        Assert.Equal([ConversationEventKind.ConversationStarted, ConversationEventKind.TurnCompleted], second.Seen);
     }
 
     [Fact]
@@ -1532,21 +1532,21 @@ public sealed class AddAgentCoreTests
     {
         using var provider = await BuildAsync(
             OneAgentYaml,
-            options => options.UseObservers(new ThrowingCallObserver()));
+            options => options.UseObservers(new ThrowingConversationObserver()));
 
-        var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("call-1");
+        var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("conversation-1");
         var turn = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
-        // An observer records the call and is never a part of it. That holds for the host's own, and
+        // An observer records the conversation and is never a part of it. That holds for the host's own, and
         // it holds for the readings registered beside it: a broken host observer does not cost the
         // chain of D23 a single row.
         Assert.Equal("hello", turn.ReplyText);
 
         await Queue(provider).FlushAsync(TestContext.Current.CancellationToken);
 
-        var events = Sink(provider).EventsOf("call-1");
+        var events = Sink(provider).EventsOf("conversation-1");
         Assert.Equal(
-            [AuditEventKind.CallStarted, AuditEventKind.TurnCompleted],
+            [AuditEventKind.ConversationStarted, AuditEventKind.TurnCompleted],
             events.Select(item => item.Kind).ToArray());
         Assert.All(events, AuditEventVocabulary.Validate);
     }
@@ -1554,13 +1554,13 @@ public sealed class AddAgentCoreTests
     [Fact]
     public async Task UseObserversTwice_KeepsBothRegistrations()
     {
-        RecordingCallObserver first = new();
-        RecordingCallObserver second = new();
+        RecordingConversationObserver first = new();
+        RecordingConversationObserver second = new();
         using var provider = await BuildAsync(
             OneAgentYaml,
             options => options.UseObservers(first).UseObservers(second));
 
-        var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("call-1");
+        var session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("conversation-1");
         await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
         // The seam adds rather than replaces, so a host composes its readings across whatever code
@@ -1630,19 +1630,19 @@ public sealed class AddAgentCoreTests
     }
 
     /// <summary>
-    /// The call store is opened at step 4c, and the moderation vendor is built after it. A
+    /// The conversation store is opened at step 4c, and the moderation vendor is built after it. A
     /// document that names a moderation kind this host does not register therefore fails with the
     /// store already open, and nothing between the two steps has taken ownership of it.
     /// </summary>
     [Fact]
-    public async Task AFailureAfterTheCallStoreOpens_StillClosesTheStore()
+    public async Task AFailureAfterTheConversationStoreOpens_StillClosesTheStore()
     {
-        RecordingCallStore store = new();
+        RecordingConversationStore store = new();
 
         await Assert.ThrowsAsync<ConfigurationLoadException>(() => BuildAsync(
-            CallStoreThenModerationFailureYaml,
+            ConversationStoreThenModerationFailureYaml,
             options => options
-                .UseCallStores(new TestCallStoreAdapter(store))
+                .UseConversationStores(new TestConversationStoreAdapter(store))
                 .UseModeration(new FakeModerationAdapter("other", new AlwaysFlagsEvaluator()))));
 
         Assert.True(store.Closed);
@@ -1962,7 +1962,7 @@ public sealed class AddAgentCoreTests
     /// <returns>The event.</returns>
     private static AuditEvent AuditRow(long secondsPastEpoch) => new()
     {
-        CallId = "call-1",
+        ConversationId = "conversation-1",
         EventId = Guid.CreateVersion7(),
         Kind = AuditEventKind.TurnCompleted,
         OccurredAt = DateTimeOffset.UnixEpoch.AddSeconds(secondsPastEpoch),
@@ -1997,13 +1997,13 @@ public sealed class AddAgentCoreTests
     }
 
     /// <summary>An observer a host binds, which keeps every fact it was offered, in order.</summary>
-    private sealed class RecordingCallObserver : ICallObserver
+    private sealed class RecordingConversationObserver : IConversationObserver
     {
         private readonly Lock _gate = new();
-        private readonly List<CallEventKind> _seen = [];
+        private readonly List<ConversationEventKind> _seen = [];
 
-        /// <summary>Gets what this observer read, in the order the call produced it.</summary>
-        public IReadOnlyList<CallEventKind> Seen
+        /// <summary>Gets what this observer read, in the order the conversation produced it.</summary>
+        public IReadOnlyList<ConversationEventKind> Seen
         {
             get
             {
@@ -2015,11 +2015,11 @@ public sealed class AddAgentCoreTests
             }
         }
 
-        public ValueTask OnCallEventAsync(CallEvent callEvent, CancellationToken cancellationToken)
+        public ValueTask OnConversationEventAsync(ConversationEvent conversationEvent, CancellationToken cancellationToken)
         {
             lock (_gate)
             {
-                _seen.Add(callEvent.Kind);
+                _seen.Add(conversationEvent.Kind);
             }
 
             return ValueTask.CompletedTask;
@@ -2027,9 +2027,9 @@ public sealed class AddAgentCoreTests
     }
 
     /// <summary>An observer that refuses every fact, so the isolation of the seam is observable.</summary>
-    private sealed class ThrowingCallObserver : ICallObserver
+    private sealed class ThrowingConversationObserver : IConversationObserver
     {
-        public ValueTask OnCallEventAsync(CallEvent callEvent, CancellationToken cancellationToken)
+        public ValueTask OnConversationEventAsync(ConversationEvent conversationEvent, CancellationToken cancellationToken)
             => throw new InvalidOperationException("the host's observer is broken");
     }
 
@@ -2149,15 +2149,15 @@ public sealed class AddAgentCoreTests
     }
 
     /// <summary>Sessions a host registers in place of the default ones.</summary>
-    private sealed class CountingCallSessions : ICallSessions
+    private sealed class CountingConversationSessions : IConversationSessions
     {
-        public ValueTask<CallSession> OpenAsync(string? callId, CancellationToken cancellationToken = default)
+        public ValueTask<ConversationSession> OpenAsync(string? conversationId, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
-        public ValueTask<CallSession?> TryGetAsync(string callId, CancellationToken cancellationToken = default)
-            => ValueTask.FromResult<CallSession?>(null);
+        public ValueTask<ConversationSession?> TryGetAsync(string conversationId, CancellationToken cancellationToken = default)
+            => ValueTask.FromResult<ConversationSession?>(null);
 
-        public ValueTask CloseAsync(string callId, CancellationToken cancellationToken = default)
+        public ValueTask CloseAsync(string conversationId, CancellationToken cancellationToken = default)
             => ValueTask.CompletedTask;
     }
 

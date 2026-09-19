@@ -10,7 +10,7 @@ namespace AgentCore.Application.Blobs;
 /// </summary>
 public static class BlobStoreFactory
 {
-    /// <summary>What this seam calls itself, so the shared selector writes its failures.</summary>
+    /// <summary>What this seam conversations itself, so the shared selector writes its failures.</summary>
     private static readonly VendorSeam Seam =
         new("providers.blobs", "/providers/blobs/kind", "options.UseBlobStores(...)", "stores");
 

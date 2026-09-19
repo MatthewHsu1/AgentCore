@@ -27,7 +27,7 @@ namespace AgentCore.Application.Secrets;
 /// </para>
 /// <para>
 /// The failure is <see cref="SecretResolutionException"/>, so a missing credential is a startup
-/// failure like every other configuration failure and a call never discovers one mid-turn. The
+/// failure like every other configuration failure and a conversation never discovers one mid-turn. The
 /// message names both halves, because the reader has two places to put a key and needs to be told
 /// both. It never holds the value of anything, resolved or not.
 /// </para>

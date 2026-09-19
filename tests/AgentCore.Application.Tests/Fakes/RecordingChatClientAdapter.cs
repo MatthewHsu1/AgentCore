@@ -26,7 +26,7 @@ internal sealed class RecordingChatClientAdapter : IChatClientAdapter
     /// <summary>Gets the client built for one <c>as</c> name.</summary>
     public IChatClient ClientOf(string asName) => _clients[asName];
 
-    /// <summary>Gets the same client, typed so a test reads what a call carried.</summary>
+    /// <summary>Gets the same client, typed so a test reads what a conversation carried.</summary>
     public RecordingChatClient RecorderOf(string asName) => _clients[asName];
 
     public ValueTask<IChatClient> CreateClientAsync(
@@ -46,11 +46,11 @@ internal sealed class RecordingChatClientAdapter : IChatClientAdapter
 }
 
 /// <summary>
-/// A chat client that keeps the options of its last call, so a test reads what the seam set.
+/// A chat client that keeps the options of its last conversation, so a test reads what the seam set.
 /// </summary>
 internal sealed class RecordingChatClient : IChatClient
 {
-    /// <summary>Gets the options of the last call, or <see langword="null"/> before one.</summary>
+    /// <summary>Gets the options of the last conversation, or <see langword="null"/> before one.</summary>
     public ChatOptions? LastOptions { get; private set; }
 
     /// <summary>Gets how many times <see cref="Dispose"/> ran, so a test can catch a double dispose.</summary>

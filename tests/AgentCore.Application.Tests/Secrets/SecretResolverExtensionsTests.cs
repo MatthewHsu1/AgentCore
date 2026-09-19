@@ -120,7 +120,7 @@ public sealed class SecretResolverExtensionsTests
         try
         {
             // A host that binds no resolver is an ordinary case, so the null is answered here rather
-            // than at every call site.
+            // than at every conversation site.
             var value = await SecretResolverExtensions.RequireAsync(
                 null,
                 secret,

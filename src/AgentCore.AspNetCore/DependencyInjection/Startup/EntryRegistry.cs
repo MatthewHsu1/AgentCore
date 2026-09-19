@@ -7,39 +7,39 @@ namespace AgentCore.AspNetCore.DependencyInjection.Startup;
 /// <remarks>
 /// Each entry compiles its own shape over the shared pool, so each entry gets its own
 /// session factory and its own store: a vendor call id arriving on two routes opens two
-/// isolated calls rather than one call read through two shapes. The audit chain, the
+/// isolated conversations rather than one conversation read through two shapes. The audit chain, the
 /// observers, and the workspace root are shared across entries, because they describe the
 /// deployment rather than the shape. Agents are named by entry key.
 /// </remarks>
-internal sealed class EntryRegistry : ICallSessionRegistry
+internal sealed class EntryRegistry : IConversationSessionRegistry
 {
     /// <summary>Creates the registry over the per-entry seams.</summary>
     /// <param name="factories">The session factories, keyed by entry name.</param>
     /// <param name="agents">The agent shims, keyed by entry name.</param>
-    /// <param name="callSessions">The session stores, keyed by entry name.</param>
+    /// <param name="conversationSessions">The session stores, keyed by entry name.</param>
     public EntryRegistry(
-        IReadOnlyDictionary<string, ICallSessionFactory> factories,
+        IReadOnlyDictionary<string, IConversationSessionFactory> factories,
         IReadOnlyDictionary<string, AgentCoreAgent> agents,
-        IReadOnlyDictionary<string, ICallSessions> callSessions)
+        IReadOnlyDictionary<string, IConversationSessions> conversationSessions)
     {
         ArgumentNullException.ThrowIfNull(factories);
         ArgumentNullException.ThrowIfNull(agents);
-        ArgumentNullException.ThrowIfNull(callSessions);
+        ArgumentNullException.ThrowIfNull(conversationSessions);
 
         Factories = factories;
         Agents = agents;
-        CallSessions = callSessions;
-        Entries = callSessions.Keys.ToArray();
+        ConversationSessions = conversationSessions;
+        Entries = conversationSessions.Keys.ToArray();
     }
 
     /// <summary>Gets the session factories, keyed by entry name.</summary>
-    public IReadOnlyDictionary<string, ICallSessionFactory> Factories { get; }
+    public IReadOnlyDictionary<string, IConversationSessionFactory> Factories { get; }
 
     /// <summary>Gets the agent shims, keyed by entry name.</summary>
     public IReadOnlyDictionary<string, AgentCoreAgent> Agents { get; }
 
     /// <summary>Gets the session stores, keyed by entry name.</summary>
-    public IReadOnlyDictionary<string, ICallSessions> CallSessions { get; }
+    public IReadOnlyDictionary<string, IConversationSessions> ConversationSessions { get; }
 
     /// <inheritdoc/>
     public IReadOnlyCollection<string> Entries { get; }
@@ -48,7 +48,7 @@ internal sealed class EntryRegistry : ICallSessionRegistry
     /// <param name="entry">The entry key a route named.</param>
     /// <returns>The factory for that entry.</returns>
     /// <exception cref="InvalidOperationException">The entry is not declared.</exception>
-    public ICallSessionFactory ForFactory(string entry)
+    public IConversationSessionFactory ForFactory(string entry)
         => For(Factories, entry);
 
     /// <summary>Reads one entry's agent shim.</summary>
@@ -59,8 +59,8 @@ internal sealed class EntryRegistry : ICallSessionRegistry
         => For(Agents, entry);
 
     /// <inheritdoc/>
-    public ICallSessions ForSessions(string entry)
-        => For(CallSessions, entry);
+    public IConversationSessions ForSessions(string entry)
+        => For(ConversationSessions, entry);
 
     /// <summary>Builds the failure text for an entry nothing declares, in one place.</summary>
     /// <param name="entry">The entry key a route named.</param>

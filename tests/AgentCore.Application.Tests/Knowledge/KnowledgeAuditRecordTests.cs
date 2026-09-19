@@ -81,7 +81,7 @@ public sealed class KnowledgeAuditRecordTests
     [Fact]
     public void For_NoTurnIdIsReachable_LeavesTheFieldEmptyRatherThanInventingOne()
     {
-        // Ruling 19, then Ruling 21. The provider that writes this record can reach no call id and no
+        // Ruling 19, then Ruling 21. The provider that writes this record can reach no conversation id and no
         // turn index, so it passes null. A synthesised id would read as real to whoever greps for it.
         var record = KnowledgeAuditRecord.For(turnId: null, "analyst", KnowledgeMode.Tool, "e33", scope: null,
             [], latencyMs: 106, failure: null);

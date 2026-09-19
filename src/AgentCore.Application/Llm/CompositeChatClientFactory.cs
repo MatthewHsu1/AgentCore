@@ -99,7 +99,7 @@ public sealed class CompositeChatClientFactory : IChatClientFactory, IDisposable
             return _vendor[entry.As];
         }
 
-        // The vendor client stays one for each 'as' name. Only the call settings differ, so the
+        // The vendor client stays one for each 'as' name. Only the conversation settings differ, so the
         // wrapper sits above the shared client rather than beside it. ConfigureOptions clones the
         // caller's ChatOptions (or starts a new one) and never mutates them, which is the same
         // semantic a hand-rolled wrapper used to reimplement.

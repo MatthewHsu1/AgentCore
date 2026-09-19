@@ -100,7 +100,7 @@ public sealed class LoopCompilationTests
           // messages plus the evaluator's feedback while only the provider session state carries
           // over, so the open todo list keeps every iteration going. Three iterations at the
           // maxRounds: 3 cap, then the loop stops rather than running on. Without the wrap the
-          // single run would spend two model calls and call todos_add once.
+          // single run would spend two model calls and conversation todos_add once.
           Assert.Equal(3, client.Called.Count(name => name == "todos_add"));
           Assert.Equal(6, client.Calls);
           Assert.Contains("added", response.Text, StringComparison.Ordinal);

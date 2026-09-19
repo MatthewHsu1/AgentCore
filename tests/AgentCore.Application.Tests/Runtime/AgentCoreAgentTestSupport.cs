@@ -1,4 +1,4 @@
-using AgentCore.Application.Calls;
+using AgentCore.Application.Conversation;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
@@ -45,7 +45,7 @@ internal static class AgentCoreAgentTestSupport
             agent: solo
         """;
 
-    // A policy that ends itself after one turn, so a call can be driven terminal and then round
+    // A policy that ends itself after one turn, so a conversation can be driven terminal and then round
     // tripped. The guard reads the reserved turnIndex slot, so no extractor and no tool is needed.
     internal const string TerminalAgentYaml =
         """
@@ -70,26 +70,26 @@ internal static class AgentCoreAgentTestSupport
         IChatClient reply,
         out CompiledAgent compiled,
         string yaml = SingleAgentYaml,
-        ICallStore? store = null,
+        IConversationStore? store = null,
         string entryName = "main")
     {
         var document = ConfigurationLoader.LoadYaml(yaml);
         compiled = ConfigurationCompiler.CompileAll(
             document,
-            new AgentCompilationContext(new RoutingChatClientFactory(reply)) { CallStore = store })[entryName];
+            new AgentCompilationContext(new RoutingChatClientFactory(reply)) { ConversationStore = store })[entryName];
 
-        CallSessionFactory sessions = new(compiled, new GuardEvaluator(compiled.Configuration.Guards));
+        ConversationSessionFactory sessions = new(compiled, new GuardEvaluator(compiled.Configuration.Guards));
         return new AgentCoreAgent(sessions, entryName);
     }
 
-    /// <summary>Writes what a host hands to <c>DeserializeSessionAsync</c>: a call id, its state, and its entry.</summary>
-    internal static JsonElement Envelope(string callId, CallSessionState state, string entryName = "main")
+    /// <summary>Writes what a host hands to <c>DeserializeSessionAsync</c>: a conversation id, its state, and its entry.</summary>
+    internal static JsonElement Envelope(string conversationId, ConversationSessionState state, string entryName = "main")
         => JsonSerializer.SerializeToElement(
             new Dictionary<string, JsonNode?>(StringComparer.Ordinal)
             {
-                ["callId"] = JsonValue.Create(callId),
-                ["state"] = JsonSerializer.SerializeToNode(state, CallStateJson.Options),
+                ["conversationId"] = JsonValue.Create(conversationId),
+                ["state"] = JsonSerializer.SerializeToNode(state, ConversationStateJson.Options),
                 ["entry"] = JsonValue.Create(entryName),
             },
-            CallStateJson.Options);
+            ConversationStateJson.Options);
 }

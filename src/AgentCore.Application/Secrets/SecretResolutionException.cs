@@ -4,7 +4,7 @@ namespace AgentCore.Application.Secrets;
 /// The one exception a secret reference raises when nothing resolves it.
 /// </summary>
 /// <remarks>
-/// It fails at startup, like every other configuration failure, so a call never discovers a missing
+/// It fails at startup, like every other configuration failure, so a conversation never discovers a missing
 /// credential in the middle of a turn. The message names the secret and the place the document
 /// wrote it. It never holds the value of any secret, resolved or not.
 /// </remarks>
@@ -50,7 +50,7 @@ public sealed class SecretResolutionException : Exception
             secretName,
             $"the secret '{secretName}' did not resolve.{where} No resolver in the chain holds that name. "
             + "AgentCore resolves every ${secret:name} reference at startup, so this fails before the "
-            + "first call rather than during one.",
+            + "first conversation rather than during one.",
             innerException);
     }
 }

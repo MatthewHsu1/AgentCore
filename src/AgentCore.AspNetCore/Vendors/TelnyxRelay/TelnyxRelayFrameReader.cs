@@ -13,16 +13,16 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay;
 /// and nothing in the vendor contract promises that.
 /// </para>
 /// <para>
-/// A vendor that adds a frame must not be able to drop a call, so an unmodelled type is refused
-/// and named rather than thrown. The caller logs the name once for the call, not once for the
+/// A vendor that adds a frame must not be able to drop a conversation, so an unmodelled type is refused
+/// and named rather than thrown. The caller logs the name once for the conversation, not once for the
 /// frame, per section 3.1.
 /// </para>
 /// <para>
 /// A vendor that <b>changes</b> a frame must not be able to drop one either, and section 7.1 draws
 /// no line between the two. A known <c>type</c> whose body will not bind is therefore a third
 /// answer, apart from both "here is your frame" and "these bytes are not readable at all": the
-/// frame is refused, the socket lives, and the call goes on. Two shapes reach it from the live
-/// wire — a decimal <c>durationUntilInterruptMs</c>, which would otherwise end a call at the exact
+/// frame is refused, the socket lives, and the conversation goes on. Two shapes reach it from the live
+/// wire — a decimal <c>durationUntilInterruptMs</c>, which would otherwise end a conversation at the exact
 /// moment of a barge-in, and a non-string value inside <c>customParameters</c>, which would
 /// otherwise end it on the <c>setup</c> frame before it began.
 /// </para>
@@ -95,7 +95,7 @@ internal static class TelnyxRelayFrameReader
             catch (JsonException)
             {
                 // The type is one this build knows, so the bytes are readable and only a field is
-                // wrong. Section 7.1: that is a refused frame, never a refused call.
+                // wrong. Section 7.1: that is a refused frame, never a refused conversation.
                 refusedType = name;
                 return false;
             }

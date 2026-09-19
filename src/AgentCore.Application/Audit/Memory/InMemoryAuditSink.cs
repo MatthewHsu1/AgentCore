@@ -25,18 +25,18 @@ public sealed class InMemoryAuditSink : IAuditSinkPort
     }
 
     /// <summary>
-    /// Reads back the events of one call, oldest first.
+    /// Reads back the events of one conversation, oldest first.
     /// </summary>
-    /// <param name="callId">The id of the call.</param>
-    /// <returns>The events of that call, in the order they arrived.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="callId"/> is <see langword="null"/>.</exception>
-    public IReadOnlyList<AuditEvent> EventsOf(string callId)
+    /// <param name="conversationId">The id of the conversation.</param>
+    /// <returns>The events of that conversation, in the order they arrived.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="conversationId"/> is <see langword="null"/>.</exception>
+    public IReadOnlyList<AuditEvent> EventsOf(string conversationId)
     {
-        ArgumentNullException.ThrowIfNull(callId);
+        ArgumentNullException.ThrowIfNull(conversationId);
 
         lock (_gate)
         {
-            return [.. _events.Where(item => string.Equals(item.CallId, callId, StringComparison.Ordinal))];
+            return [.. _events.Where(item => string.Equals(item.ConversationId, conversationId, StringComparison.Ordinal))];
         }
     }
 

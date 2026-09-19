@@ -9,7 +9,7 @@ internal static class ValidationErrors
     /// <summary>
     /// The longest interval, in seconds, that every timer these values reach will accept.
     /// <c>CancellationTokenSource.CancelAfter</c>, <c>Task.WaitAsync</c> and <c>PeriodicTimer</c> each
-    /// throw above <see cref="int.MaxValue"/> milliseconds, from a call site that carries no pointer
+    /// throw above <see cref="int.MaxValue"/> milliseconds, from a conversation site that carries no pointer
     /// into the document.
     /// </summary>
     public const int MaxIntervalSeconds = int.MaxValue / 1000;
@@ -41,7 +41,7 @@ internal static class ValidationErrors
     /// <param name="why">One or more sentences saying what the range protects.</param>
     /// <param name="errors">Collects the refusal.</param>
     /// <remarks>
-    /// Both bounds go through one call so a field cannot be given a floor and left without a ceiling:
+    /// Both bounds go through one conversation so a field cannot be given a floor and left without a ceiling:
     /// every ceiling here stands between a document and a raw throw out of a timer at boot or mid-turn.
     /// </remarks>
     public static void CheckRange(

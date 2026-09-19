@@ -6,7 +6,7 @@ namespace AgentCore.Application.Tools.Binding;
 /// One host delegate a <c>kind: binding</c> tool calls.
 /// </summary>
 /// <param name="arguments">The arguments the model filled, as one JSON object.</param>
-/// <param name="cancellationToken">Cancels the call.</param>
+/// <param name="cancellationToken">Cancels the conversation.</param>
 /// <returns>
 /// The result the model reads. A <see cref="JsonNode"/> reaches the model exactly as it is written.
 /// </returns>
@@ -42,7 +42,7 @@ public sealed class ToolBindingRegistry
     /// The method the tool calls. Its parameters are the arguments the model fills, and their JSON
     /// Schema, so the declaration this name serves must write no <c>parameters:</c>. A
     /// <see cref="System.ComponentModel.DescriptionAttribute"/> on a parameter reaches the model. A
-    /// parameter of type <see cref="ToolCallScope"/> is filled by the runtime with the call the turn
+    /// parameter of type <see cref="ToolCallScope"/> is filled by the runtime with the conversation the turn
     /// belongs to, and is not exposed to the model.
     /// </param>
     /// <returns>This registry, so a host chains its registrations.</returns>

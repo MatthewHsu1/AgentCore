@@ -65,7 +65,7 @@ public sealed partial class OpenAiReasoningEffortTests
     [Fact]
     public async Task RawOptionsTheCallerBuiltItself_KeepTheValuesTheyAlreadyHold()
     {
-        // A default for the entry, not an override of the call. The caller's own object is the one
+        // A default for the entry, not an override of the conversation. The caller's own object is the one
         // the vendor sees, and every value it already carries survives.
         CapturingChatClient inner = new();
         CreateResponseOptions mine = new()
@@ -93,7 +93,7 @@ public sealed partial class OpenAiReasoningEffortTests
     [InlineData(null)]
     public async Task EveryRequest_TellsTheVendorNotToStoreTheConversation(string? effort)
     {
-        // The call store owns the transcript. A stored response comes back with a conversation id,
+        // The conversation store owns the transcript. A stored response comes back with a conversation id,
         // and ChatClientAgent refuses that next to the ChatHistoryProvider every agent carries.
         CapturingChatClient inner = new();
 

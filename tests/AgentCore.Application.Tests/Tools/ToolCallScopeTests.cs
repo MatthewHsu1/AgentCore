@@ -13,7 +13,7 @@ using Xunit;
 namespace AgentCore.Application.Tests.Tools;
 
 /// <summary>
-/// Drives a real turn end to end through <see cref="CallSession"/>, with a bound tool that declares
+/// Drives a real turn end to end through <see cref="ConversationSession"/>, with a bound tool that declares
 /// a <see cref="ToolCallScope"/> parameter, and reads what the runtime actually filled it with.
 /// </summary>
 public sealed class ToolCallScopeTests
@@ -21,7 +21,7 @@ public sealed class ToolCallScopeTests
     private const string Yaml = """
           apiVersion: agentcore/v1
           tools:
-            - { id: request_human, kind: binding, binds: RequestHuman, description: "Ask a human to take the call." }
+            - { id: request_human, kind: binding, binds: RequestHuman, description: "Ask a human to take the conversation." }
           agents:
             items:
               - { id: only, instructions: "help the caller", tools: [ request_human ] }
@@ -35,7 +35,7 @@ public sealed class ToolCallScopeTests
           """;
 
       [Fact]
-      public async Task ABoundTool_ReceivesTheRunningCallsScope()
+      public async Task ABoundTool_ReceivesTheRunningConversationsScope()
       {
           List<ToolCallScope> captured = [];
           ToolBindingRegistry bindings = new();
@@ -53,14 +53,14 @@ public sealed class ToolCallScopeTests
                       TestContext.Current.CancellationToken),
               })["main"];
 
-          var factory = new CallSessionFactory(
+          var factory = new ConversationSessionFactory(
               compiled, new GuardEvaluator(compiled.Configuration.Guards));
-          var session = factory.Create("call-scope-1");
+          var session = factory.Create("conversation-scope-1");
 
           await session.RunTurnAsync("I need a person", TestContext.Current.CancellationToken);
 
           var first = Assert.Single(captured);
-          Assert.Equal(session.CallId, first.CallId);
+          Assert.Equal(session.ConversationId, first.ConversationId);
           Assert.Equal(0, first.TurnIndex);
           Assert.Equal("handling", first.Stage);
 
@@ -68,12 +68,12 @@ public sealed class ToolCallScopeTests
           await session.RunTurnAsync("still need a person", TestContext.Current.CancellationToken);
 
           var second = Assert.Single(captured);
-          Assert.Equal(session.CallId, second.CallId);
+          Assert.Equal(session.ConversationId, second.ConversationId);
           Assert.Equal(1, second.TurnIndex);
       }
 
       /// <summary>
-      /// Calls the one offered tool once per turn, rather than once per call: it looks only at what
+      /// Calls the one offered tool once per turn, rather than once per conversation: it looks only at what
       /// came after the caller's latest message, so a tool call answered in an earlier turn does not
       /// stop this one from calling the tool again.
       /// </summary>
@@ -106,7 +106,7 @@ public sealed class ToolCallScopeTests
                       ChatRole.Assistant,
                       [
                           new FunctionCallContent(
-                              $"call_{_nextCallId++}",
+                              $"conversation_{_nextCallId++}",
                               tool.Name,
                               new Dictionary<string, object?>(StringComparer.Ordinal)
                               {

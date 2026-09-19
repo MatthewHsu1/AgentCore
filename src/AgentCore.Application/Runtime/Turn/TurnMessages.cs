@@ -24,10 +24,10 @@ internal static class TurnMessages
     internal const string AgentLinePrefix = "You: ";
 
     /// <summary>
-    /// Renders the call so far into the one role a workflow node still recognises.
+    /// Renders the conversation so far into the one role a workflow node still recognises.
     /// </summary>
-    /// <param name="history">The caller-facing history of this call, oldest first.</param>
-    /// <returns>One <c>system</c> message, or <see langword="null"/> on the first turn of a call.</returns>
+    /// <param name="history">The caller-facing history of this conversation, oldest first.</param>
+    /// <returns>One <c>system</c> message, or <see langword="null"/> on the first turn of a conversation.</returns>
     internal static ChatMessage? GraphHistory(IReadOnlyList<ChatMessage> history)
     {
         StringBuilder rendered = new();

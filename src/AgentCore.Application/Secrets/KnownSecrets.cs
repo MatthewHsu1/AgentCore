@@ -50,7 +50,7 @@ public static class KnownSecrets
     /// <summary>The one OpenAI credential, which chat, embedding, and moderation all read.</summary>
     public static readonly SecretName OpenAi = new(OpenAiApiKeyName, OpenAiApiKeyVariable);
 
-    /// <summary> The Qdrant API key the vector store sends on every call. </summary>
+    /// <summary> The Qdrant API key the vector store sends on every conversation. </summary>
     public static readonly SecretName Qdrant = new(QdrantApiKeyName, QdrantApiKeyVariable);
 
     /// <summary>The PostgreSQL connection string the audit chain and the transcript are written through.</summary>

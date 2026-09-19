@@ -1,6 +1,6 @@
 using System.Text.Json;
-using AgentCore.Application.Calls;
-using AgentCore.Application.Calls.Memory;
+using AgentCore.Application.Conversation;
+using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Transcript;
 using AgentCore.TestSupport;
@@ -10,11 +10,11 @@ using Xunit;
 
 namespace AgentCore.Application.Tests.Transcript;
 
-/// <summary>What both halves of the provider's test suite share: the call id, the session state
-/// key, and the plumbing to open a call and read its history back.</summary>
+/// <summary>What both halves of the provider's test suite share: the conversation id, the session state
+/// key, and the plumbing to open a conversation and read its history back.</summary>
 internal static class AgentCoreChatHistoryProviderTestSupport
 {
-    internal const string CallId = "call-1";
+    internal const string ConversationId = "conversation-1";
 
     /// <summary>
     /// The provider's MAF-default state key: its own type name. The transcript no longer files
@@ -24,21 +24,21 @@ internal static class AgentCoreChatHistoryProviderTestSupport
     internal const string StateKey = "AgentCoreChatHistoryProvider";
 
     /// <summary>
-    /// Opens one call on a fresh session, the way <c>CallSession</c> does at call start: the row is
-    /// made before any turn can append against it, exactly as <c>CallSession.OpenSessionAsync</c>
+    /// Opens one conversation on a fresh session, the way <c>ConversationSession</c> does at conversation start: the row is
+    /// made before any turn can append against it, exactly as <c>ConversationSession.OpenSessionAsync</c>
     /// makes it before it ever reaches this provider.
     /// </summary>
-    internal static async Task<(AgentCoreChatHistoryProvider Provider, RecordingCallStore Store, StubSession Session)> NewCall()
+    internal static async Task<(AgentCoreChatHistoryProvider Provider, RecordingConversationStore Store, StubSession Session)> NewConversation()
     {
-        var store = new RecordingCallStore();
-        await store.CreateAsync(CallId, TestContext.Current.CancellationToken);
+        var store = new RecordingConversationStore();
+        await store.CreateAsync(ConversationId, TestContext.Current.CancellationToken);
         var provider = new AgentCoreChatHistoryProvider(store);
         var session = new StubSession();
-        provider.BeginCall(session, CallId, []);
+        provider.BeginConversation(session, ConversationId, []);
         return (provider, store, session);
     }
 
-    /// <summary>Writes one turn the way <c>CallSession</c> does: name the turn, then append it.</summary>
+    /// <summary>Writes one turn the way <c>ConversationSession</c> does: name the turn, then append it.</summary>
     internal static void AppendTurn(
         AgentCoreChatHistoryProvider provider,
         AgentSession session,
@@ -68,7 +68,7 @@ internal static class AgentCoreChatHistoryProviderTestSupport
 /// Holds one append open, so a barge-in can arrive while a turn is still writing. It keeps the
 /// real store's ordering rule: a rewrite of a row that is not there yet changes nothing.
 /// </summary>
-internal sealed class BlockingCallStore() : DelegatingCallStore(new InMemoryCallStore())
+internal sealed class BlockingConversationStore() : DelegatingConversationStore(new InMemoryConversationStore())
 {
     private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -80,10 +80,10 @@ internal sealed class BlockingCallStore() : DelegatingCallStore(new InMemoryCall
 
     public void Release() => _release.TrySetResult();
 
-    public override async ValueTask<IReadOnlyList<CallMessage>> AppendAsync(
-        string callId,
-        IReadOnlyList<CallMessageDraft> messages,
-        CallSessionState? state = null,
+    public override async ValueTask<IReadOnlyList<ConversationMessage>> AppendAsync(
+        string conversationId,
+        IReadOnlyList<ConversationMessageDraft> messages,
+        ConversationSessionState? state = null,
         CancellationToken cancellationToken = default)
     {
         if (_block)
@@ -93,12 +93,12 @@ internal sealed class BlockingCallStore() : DelegatingCallStore(new InMemoryCall
             await _release.Task.WaitAsync(cancellationToken);
         }
 
-        return await Inner.AppendAsync(callId, messages, state, cancellationToken);
+        return await Inner.AppendAsync(conversationId, messages, state, cancellationToken);
     }
 
     public override ValueTask RewriteAsync(
-        string callId, string messageId, ChatMessage content, CancellationToken cancellationToken = default)
-        => Inner.RewriteAsync(callId, messageId, content, cancellationToken);
+        string conversationId, string messageId, ChatMessage content, CancellationToken cancellationToken = default)
+        => Inner.RewriteAsync(conversationId, messageId, content, cancellationToken);
 }
 
 internal sealed class StubSession : AgentSession;

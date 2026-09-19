@@ -69,11 +69,11 @@ public static class AgentCoreTelemetry
         description: "Turns the moderation endpoint checked, by outcome.");
 
     /// <summary>Opens the span of one turn.</summary>
-    /// <param name="callId">The id of the call. It goes on the span, and never on a metric.</param>
+    /// <param name="conversationId">The id of the conversation. It goes on the span, and never on a metric.</param>
     /// <param name="turnIndex">The zero-based index of the turn.</param>
     /// <param name="stageBefore">The stage the turn speaks in.</param>
     /// <returns>The span, or <see langword="null"/> when nothing listens.</returns>
-    internal static Activity? StartTurn(string callId, int turnIndex, string stageBefore)
+    internal static Activity? StartTurn(string conversationId, int turnIndex, string stageBefore)
     {
         Activity? activity = Source.StartActivity(TurnActivityName, ActivityKind.Internal);
         if (activity is null)
@@ -81,7 +81,7 @@ public static class AgentCoreTelemetry
             return null;
         }
 
-        activity.SetTag("gen_ai.conversation.id", callId);
+        activity.SetTag("gen_ai.conversation.id", conversationId);
         activity.SetTag("agentcore.turn.index", turnIndex);
 
         if (stageBefore.Length > 0)
@@ -121,7 +121,7 @@ public static class AgentCoreTelemetry
 
         if (failure is not null)
         {
-            // A failed turn still speaks a line, so the call is alive. The span says the turn failed
+            // A failed turn still speaks a line, so the conversation is alive. The span says the turn failed
             // and the reason names the row of section 8.7 it met.
             activity.SetStatus(ActivityStatusCode.Error, failure);
         }

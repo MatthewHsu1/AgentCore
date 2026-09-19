@@ -12,7 +12,7 @@ public sealed class VendorAdapterTests
     [InlineData(typeof(IModerationAdapter))]
     [InlineData(typeof(ITelemetryAdapter))]
     [InlineData(typeof(ISpeechAdapter))]
-    [InlineData(typeof(ICallAdapter))]
+    [InlineData(typeof(IConversationAdapter))]
     public void EveryVendorSeamDerivesFromTheOneBase(Type seam)
     {
         Assert.True(

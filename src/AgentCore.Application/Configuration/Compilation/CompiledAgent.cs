@@ -26,7 +26,7 @@ public sealed class CompiledAgent
         string fallbackReply,
         string refusalReply,
         CompileTableRow row,
-        ICallStore calls,
+        IConversationStore conversations,
         AIAgent entry,
         Dictionary<string, AIAgent> byAgentId,
         Dictionary<string, string> agentIdByStage,
@@ -48,7 +48,7 @@ public sealed class CompiledAgent
         Shape = row.Shape;
         SessionCarriesHistory = row.SessionCarriesHistory;
         Agent = entry;
-        CallStore = calls;
+        ConversationStore = conversations;
         SpokenBy = spokenBy;
         History = history;
         HarnessStateKeys = harnessStateKeys;
@@ -104,22 +104,22 @@ public sealed class CompiledAgent
     internal IReadOnlySet<string>? SpokenBy { get; }
 
     /// <summary>
-    /// Gets store 1 of every call this agent answers.
+    /// Gets store 1 of every conversation this agent answers.
     /// </summary>
     internal AgentCoreChatHistoryProvider History { get; }
 
-    /// <summary>Gets the store this agent's calls and every word of them are kept in.</summary>
-    internal ICallStore CallStore { get; }
+    /// <summary>Gets the store this agent's conversations and every word of them are kept in.</summary>
+    internal IConversationStore ConversationStore { get; }
     /// <summary>
     /// Gets the union of every harness provider's state keys, over every agent this document
     /// compiled — never the history provider's key. Empty when the document names no harness
-    /// switch. This is what a call's <c>Providers</c> keeps beside its stage and its slots.
+    /// switch. This is what a conversation's <c>Providers</c> keeps beside its stage and its slots.
     /// </summary>
     internal IReadOnlySet<string> HarnessStateKeys { get; }
 
 #pragma warning disable MAAI001 // BackgroundAgentsProvider is evaluation-only in Microsoft.Agents.AI 1.21.0.
     /// <summary>
-    /// Gets every background provider this document compiled, over every agent. The call releases
+    /// Gets every background provider this document compiled, over every agent. The conversation releases
     /// each one's session when it ends, so children still running cannot outlive it.
     /// </summary>
     internal IReadOnlyList<BackgroundAgentsProvider> BackgroundProviders { get; }
@@ -167,7 +167,7 @@ public sealed class CompiledAgent
         return agentId.Length == 0 ? null : _turnByAgentId[agentId];
     }
 
-    /// <summary>Builds one stage machine for one call.</summary>
+    /// <summary>Builds one stage machine for one conversation.</summary>
     /// <param name="guards">The evaluator that runs each exit guard.</param>
     /// <returns>The machine, in the initial stage.</returns>
     public StagePolicy CreatePolicy(IGuardEvaluator guards)

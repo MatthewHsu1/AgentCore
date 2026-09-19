@@ -173,7 +173,7 @@ internal sealed class FakeRelayClient : IAsyncDisposable
         }
     }
 
-    /// <summary>Drops the socket with no close frame, exactly like a call that died.</summary>
+    /// <summary>Drops the socket with no close frame, exactly like a conversation that died.</summary>
     public void Abort() => _socket.Abort();
 
     /// <summary>Stops the pump and closes the socket.</summary>
@@ -207,7 +207,7 @@ internal sealed class FakeRelayClient : IAsyncDisposable
             }
             catch (WebSocketException)
             {
-                // The host already went away. That is the end of a call, not a test failure.
+                // The host already went away. That is the end of a conversation, not a test failure.
             }
         }
 

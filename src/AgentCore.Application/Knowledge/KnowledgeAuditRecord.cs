@@ -4,7 +4,7 @@ using AgentCore.Domain.Knowledge;
 namespace AgentCore.Application.Knowledge;
 
 /// <summary>
-/// What one retrieval actually did — the reader is the on-call engineer, and the model never sees it.
+/// What one retrieval actually did — the reader is the on-conversation engineer, and the model never sees it.
 /// </summary>
 internal sealed record KnowledgeAuditRecord
 {

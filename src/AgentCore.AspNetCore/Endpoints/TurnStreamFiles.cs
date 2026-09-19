@@ -1,6 +1,6 @@
 using AgentCore.Application.Transcript;
 using System.Runtime.CompilerServices;
-using AgentCore.Application.Calls;
+using AgentCore.Application.Conversation;
 using Microsoft.Extensions.AI;
 
 namespace AgentCore.AspNetCore.Endpoints;
@@ -20,13 +20,13 @@ internal sealed class TurnStreamFiles
     }
 
     /// <summary>Links every noted file the store kept, in the order they were noted.</summary>
-    /// <param name="calls">The door to the stored call.</param>
-    /// <param name="callId">The call that owns the files.</param>
+    /// <param name="conversations">The door to the stored conversation.</param>
+    /// <param name="conversationId">The conversation that owns the files.</param>
     /// <param name="cancellationToken">Cancels the lookups.</param>
     /// <returns>One part for each file the store holds.</returns>
     internal async IAsyncEnumerable<TurnStreamFile> ResolveAsync(
-        CallRepository calls,
-        string callId,
+        Conversations conversations,
+        string conversationId,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         if (_files.Count == 0)
@@ -34,8 +34,8 @@ internal sealed class TurnStreamFiles
             yield break;
         }
 
-        var links = await calls
-            .LinkFilesAsync(callId, [new ChatMessage(ChatRole.Assistant, [.. _files])], cancellationToken)
+        var links = await conversations
+            .LinkFilesAsync(conversationId, [new ChatMessage(ChatRole.Assistant, [.. _files])], cancellationToken)
             .ConfigureAwait(false);
 
         foreach (var (blob, url) in links)

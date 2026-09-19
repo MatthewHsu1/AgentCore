@@ -78,7 +78,7 @@ public sealed class StagePolicy
     /// <summary>Gets the stage the machine holds.</summary>
     public StageConfiguration CurrentStage => _stages[_machine.State];
 
-    /// <summary>Gets whether the stage the machine holds ends the call.</summary>
+    /// <summary>Gets whether the stage the machine holds ends the conversation.</summary>
     public bool IsTerminal => CurrentStage.Terminal;
 
     /// <summary>Gets the id of the agent that speaks in the stage the machine holds.</summary>
@@ -91,7 +91,7 @@ public sealed class StagePolicy
         return _stages.ContainsKey(stage);
     }
 
-    /// <summary>Puts the machine back in the stage a previous session of this call left it in.</summary>
+    /// <summary>Puts the machine back in the stage a previous session of this conversation left it in.</summary>
     internal void RestoreStage(string stage)
     {
         ArgumentNullException.ThrowIfNull(stage);

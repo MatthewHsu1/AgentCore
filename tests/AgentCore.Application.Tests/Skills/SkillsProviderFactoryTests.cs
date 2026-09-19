@@ -9,7 +9,7 @@ namespace AgentCore.Application.Tests.Skills;
 
 /// <summary>
 /// One agent must see its own skills and no others, must never be asked to approve a tool call
-/// mid-call, and must never be told a script tool exists.
+/// mid-conversation, and must never be told a script tool exists.
 /// </summary>
 public sealed class SkillsProviderFactoryTests
 {

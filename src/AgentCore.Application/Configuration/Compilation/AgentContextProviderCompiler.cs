@@ -85,7 +85,7 @@ internal static class AgentContextProviderCompiler
             throw ConfigurationCompiler.Fail(
                 ConfigurationError.AppendPointer(pointer, "knowledge"),
                 $"the agent '{item.Id}' declares a knowledge: block and this host registered no "
-                + "knowledge vendor, so there is no store to read. Call "
+                + "knowledge vendor, so there is no store to read. Conversation "
                 + "options.UseKnowledgeStores(...) with an adapter that serves "
                 + $"{nameof(IKnowledgeRetrievalPort)}, or remove the knowledge: block.");
         }

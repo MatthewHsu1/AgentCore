@@ -9,7 +9,7 @@ using Microsoft.Extensions.AI;
 namespace AgentCore.Application.Configuration.Compilation;
 
 /// <summary>
-/// Turns one <see cref="ToolKind.Agent"/> declaration into the function the outer agent calls.
+/// Turns one <see cref="ToolKind.Agent"/> declaration into the function the outer agent conversations.
 /// </summary>
 internal static class AgentDelegationTool
 {

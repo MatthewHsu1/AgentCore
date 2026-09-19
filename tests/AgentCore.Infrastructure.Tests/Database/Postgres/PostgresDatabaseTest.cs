@@ -19,7 +19,7 @@ public abstract class PostgresDatabaseTest : IAsyncLifetime
     /// <summary>Whether the schema is applied before the test body runs.</summary>
     protected abstract bool Migrated { get; }
 
-    /// <summary>The token every call in a test body carries.</summary>
+    /// <summary>The token every conversation in a test body carries.</summary>
     protected static CancellationToken Token => TestContext.Current.CancellationToken;
 
     /// <summary>The database this test owns.</summary>

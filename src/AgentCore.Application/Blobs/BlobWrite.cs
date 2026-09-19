@@ -1,7 +1,7 @@
 namespace AgentCore.Application.Blobs;
 
 /// <summary>One blob to store.</summary>
-/// <param name="OwnerId">Who writes it. The call id today.</param>
+/// <param name="OwnerId">Who writes it. The conversation id today.</param>
 /// <param name="Name">The name it is stored under. Must pass <see cref="BlobName.IsSafe"/>.</param>
 /// <param name="MediaType">The IANA media type, such as <c>image/png</c>.</param>
 /// <param name="Content">The bytes. Read once, from its current position. The caller disposes it.</param>
