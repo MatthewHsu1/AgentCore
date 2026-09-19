@@ -19,7 +19,7 @@ internal sealed class PolicyRow : CompileTableRow
 
     internal override bool SessionCarriesHistory => true;
 
-    internal override (AIAgent Entry, Dictionary<string, string> Stages) BuildEntry(
+    internal override EntryBuild BuildEntry(
         AgentCoreConfiguration configuration,
         string entryName,
         EntryConfiguration entry,
@@ -67,6 +67,6 @@ internal sealed class PolicyRow : CompileTableRow
                 $"the initial stage '{policy.Initial}' names no agent, so no turn can run.");
         }
 
-        return (agents[initialAgent], stages);
+        return new EntryBuild(agents[initialAgent], stages);
     }
 }

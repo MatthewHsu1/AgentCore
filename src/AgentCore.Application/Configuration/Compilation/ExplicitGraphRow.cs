@@ -17,7 +17,7 @@ internal sealed class ExplicitGraphRow : CompileTableRow
 
     internal override CompiledAgentShape Shape => CompiledAgentShape.ExplicitGraph;
 
-    internal override (AIAgent Entry, Dictionary<string, string> Stages) BuildEntry(
+    internal override EntryBuild BuildEntry(
         AgentCoreConfiguration configuration,
         string entryName,
         EntryConfiguration entry,
@@ -46,7 +46,7 @@ internal sealed class ExplicitGraphRow : CompileTableRow
 
         AIAgent withOutputCheck = new RequireOutputAgent(compiled, entryName);
 
-        return (
+        return new EntryBuild(
             guarded ? new GraphStateAgent(withOutputCheck, entryName) : withOutputCheck,
             NoStages());
     }

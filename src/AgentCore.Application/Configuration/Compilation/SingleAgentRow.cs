@@ -16,7 +16,7 @@ internal sealed class SingleAgentRow : CompileTableRow
 
     internal override bool SessionCarriesHistory => true;
 
-    internal override (AIAgent Entry, Dictionary<string, string> Stages) BuildEntry(
+    internal override EntryBuild BuildEntry(
         AgentCoreConfiguration configuration,
         string entryName,
         EntryConfiguration entry,
@@ -40,6 +40,6 @@ internal sealed class SingleAgentRow : CompileTableRow
                 $"the entry '{entryName}' names the agent '{agentId}', which agents.items does not declare.");
         }
 
-        return (agent, NoStages());
+        return new EntryBuild(agent, NoStages());
     }
 }

@@ -16,7 +16,7 @@ internal sealed class PatternGraphRow : CompileTableRow
 
     internal override CompiledAgentShape Shape => CompiledAgentShape.PatternGraph;
 
-    internal override (AIAgent Entry, Dictionary<string, string> Stages) BuildEntry(
+    internal override EntryBuild BuildEntry(
         AgentCoreConfiguration configuration,
         string entryName,
         EntryConfiguration entry,
@@ -55,7 +55,7 @@ internal sealed class PatternGraphRow : CompileTableRow
             _ => BuildGroupChat(entryName, participants),
         };
 
-        return (workflow.AsAIAgent(name: entryName), NoStages());
+        return new EntryBuild(workflow.AsAIAgent(name: entryName), NoStages());
     }
 
     /// <remarks>

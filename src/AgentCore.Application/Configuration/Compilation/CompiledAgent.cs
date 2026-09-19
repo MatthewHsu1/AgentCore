@@ -18,53 +18,49 @@ public sealed class CompiledAgent
 
     private readonly Dictionary<string, AIAgent> _turnByAgentId;
 
-#pragma warning disable MAAI001 // BackgroundAgentsProvider is evaluation-only in Microsoft.Agents.AI 1.21.0.
+    /// <summary>Compiles one entry: its row's build, with the turn layers on every agent a turn runs.</summary>
+    /// <param name="document">What every entry of the document shares.</param>
+    /// <param name="entryName">The entry key. It is the agent's name.</param>
+    /// <param name="policy">The entry's stage machine, or <see langword="null"/> when it holds none.</param>
+    /// <param name="row">The row of the compile table the entry selected.</param>
+    /// <param name="build">What the row built for the entry.</param>
+    /// <param name="agents">The <c>agents.items</c> entries the row built on.</param>
+    /// <param name="layers">The turn layers of the entry.</param>
     internal CompiledAgent(
-        AgentCoreConfiguration configuration,
+        CompiledDocument document,
         string entryName,
         PolicyConfiguration? policy,
-        string fallbackReply,
-        string refusalReply,
         CompileTableRow row,
-        IConversationStore conversations,
-        AIAgent entry,
-        Dictionary<string, AIAgent> byAgentId,
-        Dictionary<string, string> agentIdByStage,
-        IReadOnlySet<string>? spokenBy,
-        AgentCoreChatHistoryProvider history,
-        IReadOnlySet<string> harnessStateKeys,
-        IReadOnlyList<BackgroundAgentsProvider> backgroundProviders,
-        Func<AIAgent, AIAgent> turnLayers)
+        EntryBuild build,
+        CompiledAgentSet agents,
+        TurnLayers layers)
     {
         ArgumentException.ThrowIfNullOrEmpty(entryName);
-        ArgumentNullException.ThrowIfNull(fallbackReply);
-        ArgumentNullException.ThrowIfNull(refusalReply);
 
-        Configuration = configuration;
+        Configuration = document.Configuration;
         EntryName = entryName;
         Policy = policy;
-        FallbackReply = fallbackReply;
-        RefusalReply = refusalReply;
+        FallbackReply = layers.FallbackReply;
+        RefusalReply = layers.RefusalReply;
         Shape = row.Shape;
         SessionCarriesHistory = row.SessionCarriesHistory;
-        Agent = entry;
-        ConversationStore = conversations;
-        SpokenBy = spokenBy;
-        History = history;
-        HarnessStateKeys = harnessStateKeys;
-        BackgroundProviders = backgroundProviders;
-        _byAgentId = byAgentId;
-        _agentIdByStage = agentIdByStage;
+        Agent = build.Agent;
+        ConversationStore = document.Conversations;
+        SpokenBy = layers.SpokenBy;
+        History = document.History;
+        HarnessStateKeys = agents.HarnessStateKeys;
+        BackgroundProviders = agents.BackgroundProviders;
+        _byAgentId = agents.Agents;
+        _agentIdByStage = build.Stages;
 
-        TurnAgent = turnLayers(entry);
+        TurnAgent = layers.Apply(build.Agent);
         _turnByAgentId = new Dictionary<string, AIAgent>(StringComparer.Ordinal);
 
-        foreach (var (id, agent) in byAgentId)
+        foreach (var (id, agent) in agents.Agents)
         {
-            _turnByAgentId[id] = turnLayers(agent);
+            _turnByAgentId[id] = layers.Apply(agent);
         }
     }
-#pragma warning restore MAAI001
 
     /// <summary>
     /// Gets whether the row answers its runs out of store 1 on its own session, rather than the
