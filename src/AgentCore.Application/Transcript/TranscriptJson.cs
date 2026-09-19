@@ -21,20 +21,9 @@ public static class TranscriptJson
             AllowOutOfOrderMetadataProperties = true,
         };
 
-        options.AddAIContentType<RenderContent>(RenderContentTypeId);
-        options.AddAIContentType<SourceContent>(SourceContentTypeId);
-        options.AddAIContentType<FileContent>(FileContentTypeId);
+        ReaderContent.Register(options);
         options.MakeReadOnly();
 
         return options;
     }
-
-    /// <summary>The discriminator a stored RenderContent is written with. It is a wire format.</summary>
-    private const string RenderContentTypeId = "agentcore.render";
-
-    /// <summary>The discriminator a stored SourceContent is written with. It is a wire format.</summary>
-    private const string SourceContentTypeId = "agentcore.source";
-
-    /// <summary>The discriminator a stored FileContent is written with. It is a wire format.</summary>
-    private const string FileContentTypeId = "agentcore.file";
 }

@@ -62,10 +62,10 @@ internal static class AgentContextProviderCompiler
                 exception.Message);
         }
 
-        // Bound ahead of the knowledge early-return below, for the same reason: a compaction: block
-        // is independent of whether this agent composes a knowledge: block.
         if (compaction is { } resolved)
         {
+            providers.Add(new ReaderContentFilterProvider());
+            
 #pragma warning disable MAAI001 // Compaction is evaluation-only in Microsoft.Agents.AI 1.17.0.
             providers.Add(new CompactionProvider(
                 CompactionStrategyFactory.Create(resolved),
