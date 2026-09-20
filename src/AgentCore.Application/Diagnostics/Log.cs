@@ -312,4 +312,23 @@ internal static partial class Log
         Level = LogLevel.Warning,
         Message = "The file '{Name}' of conversation {ConversationId} could not be published.")]
     public static partial void SandboxFileCaptureFailed(ILogger logger, string conversationId, string name, Exception exception);
+
+    /// <summary>The compaction strategy threw after a turn committed, so the session keeps the view it had.</summary>
+    /// <param name="logger">The logger of the session.</param>
+    /// <param name="conversationId">The id of the conversation.</param>
+    /// <param name="turnIndex">The zero-based index of the turn that committed.</param>
+    /// <param name="exception">The cause.</param>
+    [LoggerMessage(
+        EventId = 26,
+        Level = LogLevel.Warning,
+        Message = "The transcript of conversation {ConversationId} could not be compacted before turn {TurnIndex}. "
+            + "The session keeps the view it had and tries again before the next turn.")]
+    public static partial void TranscriptCompactionFailed(ILogger logger, string conversationId, int turnIndex, Exception exception);
+
+    [LoggerMessage(
+        EventId = 27,
+        Level = LogLevel.Warning,
+        Message = "The compaction strategy of conversation {ConversationId} produced, before turn {TurnIndex}, a shape one summary row "
+            + "cannot stand for: not one new message over the oldest rows with the rest kept in order. The session keeps the view it had.")]
+    public static partial void TranscriptCompactionUnsupported(ILogger logger, string conversationId, int turnIndex);
 }

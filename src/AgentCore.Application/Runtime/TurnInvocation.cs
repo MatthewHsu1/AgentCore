@@ -3,8 +3,9 @@ using AgentCore.Application.Runtime.Harness;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.State;
 using AgentCore.Domain.Knowledge;
-using Microsoft.Extensions.AI;
 using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Application.Runtime;
 
@@ -47,6 +48,9 @@ internal sealed record TurnInvocation
 
     /// <summary>Gets whether this row's session carries the caller's own history.</summary>
     public bool CarriesHistory { get; init; }
+
+    /// <summary>Gets the conversation's logger, or <see langword="null"/> to log nowhere.</summary>
+    public ILogger? Logger { get; init; }
 
     /// <summary>Gets the screen this conversation draws on, or <see langword="null"/> when it has none.</summary>
     public IRenderPort? Screen { get; init; }

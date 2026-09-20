@@ -128,20 +128,48 @@ public interface IConversationStore
         ChatMessage content,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Reads one whole conversation's words, oldest message first.</summary>
+    /// <summary>
+    /// Reads a conversation's words as its session opens them: the newest summary row, and every row
+    /// above what it covers. The rows a summary stands in for are not read. With no summary, every row.
+    /// This is the one read that returns a summary row.
+    /// </summary>
     /// <param name="conversationId">The conversation to read.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>Every message of the conversation, or an empty list when it holds none.</returns>
-    ValueTask<IReadOnlyList<ConversationMessage>> ReadAsync(
+    /// <returns>The rows, oldest ordinal first. The summary sits at its own ordinal, above the rows it covers.</returns>
+    ValueTask<IReadOnlyList<ConversationMessage>> ReadForSessionAsync(
         string conversationId,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Withdraws the tail of a conversation's words, from one ordinal onward.</summary>
+    /// <summary>Reads the newest turns of a conversation before a given one, oldest message first. Summary rows are left out.</summary>
+    /// <param name="conversationId">The conversation to read.</param>
+    /// <param name="window">Which turns: how many, and before which.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>Every message of those turns, or an empty list when none fall in the window.</returns>
+    ValueTask<IReadOnlyList<ConversationMessage>> ReadWindowAsync(
+        string conversationId,
+        TranscriptWindow window,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Finds the ordinal of one message somebody said. Summary rows are not found.</summary>
+    /// <param name="conversationId">The conversation to search.</param>
+    /// <param name="messageId">The message to find.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The ordinal, or <see langword="null"/> when the conversation holds no such message.</returns>
+    ValueTask<int?> OrdinalOfAsync(
+        string conversationId,
+        string messageId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Withdraws the tail of a conversation's words, from one ordinal onward. A summary row goes
+    /// only when the cut reaches a row it covers: written after the rows it stands for, its own
+    /// ordinal says nothing about where the cut falls.
+    /// </summary>
     /// <param name="conversationId">The conversation to cut.</param>
     /// <param name="fromOrdinal">The first ordinal to remove. It goes too.</param>
     /// <param name="cancellationToken">Cancels the delete.</param>
-    /// <returns>How many messages went.</returns>
-    ValueTask<int> TruncateAsync(
+    /// <returns>How many rows went, and the span of turns they belonged to.</returns>
+    ValueTask<ConversationCut> TruncateAsync(
         string conversationId,
         int fromOrdinal,
         CancellationToken cancellationToken = default);

@@ -32,7 +32,6 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
         _store = store ?? new InMemoryConversationStore();
 
         _logger = logger ?? NullLogger.Instance;
-
     }
 
     /// <summary>
@@ -86,12 +85,9 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
         return UnderLock(session, static transcript => transcript.NextOrdinal);
     }
 
-    /// <summary>
-    /// Replaces the conversation's live history with what store 1 now holds, so a later turn sees a row a
-    /// host appended from outside any turn.
-    /// </summary>
+    /// <summary>Replaces the conversation's live history with what store 1 holds.</summary>
     /// <param name="session">The session this conversation runs on.</param>
-    /// <param name="rows">Every stored message of the conversation, as store 1 now holds it.</param>
+    /// <param name="rows">The rows store 1 read for the session, as <see cref="ConversationTranscript.Resync"/> takes them.</param>
     /// <param name="nextOrdinal">The next free ordinal of the conversation, from store 0's own counter.</param>
     public void Resync(AgentSession session, IReadOnlyList<ConversationMessage> rows, int nextOrdinal)
     {
@@ -105,6 +101,70 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
                 transcript.Resync(rows, nextOrdinal);
                 return true;
             });
+    }
+
+    /// <summary>Reads the summary the session holds in place of its oldest rows, or <see langword="null"/> when every row is live.</summary>
+    /// <param name="session">The session this conversation runs on.</param>
+    public ChatMessage? Summary(AgentSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        return UnderLock(session, static transcript => transcript.Summary?.Message);
+    }
+
+    /// <summary>Names where a compaction of the conversation would reach, and the revision it reads.</summary>
+    /// <param name="session">The session this conversation runs on.</param>
+    /// <returns>The floor, or <see langword="null"/> when the conversation holds nothing to compact.</returns>
+    public TranscriptFloor? Floor(AgentSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        return UnderLock(session, static transcript => transcript.Floor());
+    }
+
+    /// <summary>
+    /// Puts one summary in place of every row at or below <paramref name="coversUpTo"/>, unless the
+    /// words moved since <see cref="Floor"/> was read, and queues the summary's row for store 1 ahead
+    /// of the turn's own words.
+    /// </summary>
+    /// <param name="session">The session this conversation runs on.</param>
+    /// <param name="summary">The message that now speaks for those rows.</param>
+    /// <param name="coversUpTo">The last ordinal it speaks for.</param>
+    /// <param name="revision">The revision <see cref="Floor"/> reported.</param>
+    /// <returns><see langword="true"/> when the summary now stands.</returns>
+    public bool Compact(AgentSession session, ChatMessage summary, int coversUpTo, int revision)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(summary);
+
+        return UnderLock(
+            session,
+            (transcript, gate) =>
+            {
+                if (transcript.Compact(summary, coversUpTo, revision) is not { } row)
+                {
+                    return false;
+                }
+
+                ConversationMessageDraft draft = new(row.TurnIndex, row.Content, row.MessageId) { CoversUpTo = row.CoversUpTo };
+                gate.Enqueue(() => new ValueTask(_store.AppendAsync(
+                    transcript.ConversationId, [draft], state: null, CancellationToken.None).AsTask()));
+
+                return true;
+            });
+    }
+
+    /// <summary>
+    /// Whether <see cref="TruncateFrom"/> can cut an edit hanging off one message from what the session
+    /// holds. It cannot when the cut would reach a row the summary stands in for; every row must be read back first.
+    /// </summary>
+    /// <param name="session">The session this conversation runs on.</param>
+    /// <param name="parentMessageId">The message the edit hangs off, or <see langword="null"/> for the whole conversation.</param>
+    public bool CanTruncateFrom(AgentSession session, string? parentMessageId)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        return UnderLock(session, transcript => transcript.CanTruncateFrom(parentMessageId));
     }
 
     /// <summary>
@@ -124,7 +184,7 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
     }
 
     /// <summary>
-    /// Reads the whole conversation, oldest message first.
+    /// Reads the conversation as the model sees it: the summary first, when one stands, then every live row, oldest first.
     /// </summary>
     public IReadOnlyList<ChatMessage> Read(AgentSession session)
     {
@@ -175,11 +235,8 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
                     .Select(row => new ConversationMessageDraft(row.TurnIndex, row.Content, row.MessageId))
                     .ToArray();
 
-                Enqueue(
-                    gate,
-                    () => new ValueTask(_store.AppendAsync(
-                        transcript.ConversationId, drafts, state, CancellationToken.None).AsTask()),
-                    transcript);
+                gate.Enqueue(() => new ValueTask(_store.AppendAsync(
+                    transcript.ConversationId, drafts, state, CancellationToken.None).AsTask()));
                 return rows[^1].MessageId;
             });
     }
@@ -196,6 +253,10 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
     /// the conversation holds no message of that name — a caller naming a message this host never stored —
     /// and the turn then runs as a plain new turn.
     /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// The cut reaches a row the summary stands in for. Ask <see cref="CanTruncateFrom"/> first, and read every
+    /// row back when it says no.
+    /// </exception>
     public WithdrawnTurns? TruncateFrom(AgentSession session, string? parentMessageId)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -225,11 +286,8 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
 
                 Log.ConversationTruncated(_logger, transcript.ConversationId, from, transcript.TurnIndex);
 
-                Enqueue(
-                    gate,
-                    () => new ValueTask(
-                        _store.TruncateAsync(transcript.ConversationId, from, CancellationToken.None).AsTask()),
-                    transcript);
+                gate.Enqueue(() => new ValueTask(
+                    _store.TruncateAsync(transcript.ConversationId, from, CancellationToken.None).AsTask()));
 
                 return withdrawn;
             });
@@ -279,10 +337,7 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
 
                 foreach (var row in rows)
                 {
-                    Enqueue(
-                        gate,
-                        () => _store.RewriteAsync(row.ConversationId, row.MessageId, row.Content, CancellationToken.None),
-                        transcript);
+                    gate.Enqueue(() => _store.RewriteAsync(row.ConversationId, row.MessageId, row.Content, CancellationToken.None));
                 }
 
                 return true;
@@ -316,33 +371,6 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
     protected override ValueTask StoreChatHistoryAsync(
         InvokedContext context, CancellationToken cancellationToken = default) => default;
 
-    /// <summary>Queues one store write behind everything this conversation has already queued.</summary>
-    private void Enqueue(ConversationGate gate, Func<ValueTask> write, ConversationTranscript transcript)
-        => gate.Writes = WriteAfterAsync(gate.Writes, gate, write, transcript.ConversationId, transcript.TurnIndex);
-
-    /// <summary>Writes to the store, and lets the conversation outlive a store that refuses.</summary>
-    private async Task WriteAfterAsync(
-        Task previous, ConversationGate gate, Func<ValueTask> write, string conversationId, int turnIndex)
-    {
-        await previous.ConfigureAwait(false);
-
-        try
-        {
-            await write().ConfigureAwait(false);
-        }
-#pragma warning disable CA1031 // A store 1 write failure never ends a conversation, and never breaks the chain behind it.
-        catch (Exception exception)
-#pragma warning restore CA1031
-        {
-            Log.TranscriptWriteFailed(_logger, conversationId, turnIndex, exception);
-
-            // The words are lost and the conversation is not. The report is what turns that into a fact the
-            // host can count; the contract of TranscriptWriteDropped is that it cannot throw, which
-            // is what keeps this chain from ever faulting.
-            gate.Dropped?.Invoke(turnIndex, exception);
-        }
-    }
-
     /// <summary>Runs one piece of work against the conversation's transcript, alone.</summary>
     private TResult UnderLock<TResult>(AgentSession session, Func<ConversationTranscript, ConversationGate, TResult> work)
     {
@@ -357,21 +385,5 @@ internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
     private TResult UnderLock<TResult>(AgentSession session, Func<ConversationTranscript, TResult> work)
         => UnderLock(session, (transcript, _) => work(transcript));
 
-    private ConversationGate GateFor(AgentSession session) => _gates.GetValue(session, static _ => new ConversationGate());
-
-    /// <summary>What one conversation holds outside its state bag: its lock, its transcript, and its queue of store writes.</summary>
-    private sealed class ConversationGate
-    {
-        /// <summary>Gets the lock every read and every change of this conversation's transcript takes.</summary>
-        public Lock Sync { get; } = new();
-
-        /// <summary>Gets the conversation's live transcript. It never enters the state bag, so serializing the bag stays small.</summary>
-        public ConversationTranscript Transcript { get; } = new();
-
-        /// <summary>Gets or sets the tail of this conversation's store writes. It never faults.</summary>
-        public Task Writes { get; set; } = Task.CompletedTask;
-
-        /// <summary>Gets or sets where a dropped write of this conversation is reported, if anywhere.</summary>
-        public TranscriptWriteDropped? Dropped { get; set; }
-    }
+    private ConversationGate GateFor(AgentSession session) => _gates.GetValue(session, _ => new ConversationGate(_logger));
 }

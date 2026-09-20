@@ -85,7 +85,8 @@ internal static class PostgresConversationStoreSql
     /// ordinals <c>mark</c> reserves, and <c>RETURNING</c> on the <c>UPDATE</c> sees the bumped
     /// <c>next_ordinal</c>, so subtracting that same count back off it gives the first one this batch
     /// may use. A null element of <c>$2</c> (turn_index) takes the conversation's own next turn index instead
-    /// of naming one, which is what an append from outside any turn asks for.
+    /// of naming one, which is what an append from outside any turn asks for. <c>$6</c> is the
+    /// <c>covers_up_to</c> of each row: null for every row somebody said.
     /// </summary>
     internal const string AppendSql = $"""
         WITH mark AS (
@@ -95,23 +96,74 @@ internal static class PostgresConversationStoreSql
          RETURNING next_ordinal - cardinality($5::text[]) AS first,
                    coalesce((state ->> 'nextTurnIndex')::int, 0) AS next_turn_index
         )
-        INSERT INTO {Schema}.conversation_message (conversation_id, ordinal, turn_index, role, content, message_id)
-        SELECT $1, mark.first + d.position - 1, coalesce(d.turn_index, mark.next_turn_index), d.role, d.content, d.message_id
-          FROM mark, unnest($2::int[], $3::text[], $4::jsonb[], $5::text[]) WITH ORDINALITY
-               AS d(turn_index, role, content, message_id, position)
+        INSERT INTO {Schema}.conversation_message (conversation_id, ordinal, turn_index, role, content, message_id, covers_up_to)
+        SELECT $1, mark.first + d.position - 1, coalesce(d.turn_index, mark.next_turn_index), d.role, d.content, d.message_id, d.covers_up_to
+          FROM mark, unnest($2::int[], $3::text[], $4::jsonb[], $5::text[], $6::int[]) WITH ORDINALITY
+               AS d(turn_index, role, content, message_id, covers_up_to, position)
         RETURNING ordinal, turn_index, message_id
         """;
 
-    /// <summary>Reads one whole conversation.</summary>
-    internal const string ReadSql =
+    /// <summary>The columns every row read returns, in the order <c>PostgresConversationWords.ReadRowsAsync</c> reads them.</summary>
+    private const string RowColumns = "ordinal, turn_index, content, message_id, covers_up_to";
+
+    /// <summary>
+    /// Reads a conversation as its session opens it: the newest summary row, and every row somebody
+    /// said above what it covers. With no summary, every row.
+    /// </summary>
+    internal const string ReadForSessionSql =
         $"""
-        SELECT ordinal, turn_index, content, message_id
-          FROM {Schema}.conversation_message WHERE conversation_id = $1 ORDER BY ordinal
+        WITH summary AS (
+            SELECT ordinal, covers_up_to FROM {Schema}.conversation_message
+             WHERE conversation_id = $1 AND covers_up_to IS NOT NULL
+             ORDER BY ordinal DESC LIMIT 1
+        )
+        SELECT {RowColumns}
+          FROM {Schema}.conversation_message m
+         WHERE m.conversation_id = $1
+           AND m.ordinal > coalesce((SELECT covers_up_to FROM summary), -1)
+           AND (m.covers_up_to IS NULL OR m.ordinal = (SELECT ordinal FROM summary))
+         ORDER BY m.ordinal
         """;
 
-    /// <summary>Withdraws the tail of a conversation, from one ordinal onward.</summary>
+    /// <summary>
+    /// Reads the newest turns of a conversation before a given one, whole. <c>$2</c> is the turn to
+    /// read before, or null for the newest; <c>$3</c> is how many turns at most.
+    /// </summary>
+    internal const string ReadWindowSql =
+        $"""
+        SELECT {RowColumns}
+          FROM {Schema}.conversation_message
+         WHERE conversation_id = $1
+           AND covers_up_to IS NULL
+           AND turn_index IN (
+               SELECT DISTINCT turn_index FROM {Schema}.conversation_message
+                WHERE conversation_id = $1 AND covers_up_to IS NULL AND ($2::int IS NULL OR turn_index < $2)
+                ORDER BY turn_index DESC LIMIT $3)
+         ORDER BY ordinal
+        """;
+
+    /// <summary>
+    /// Withdraws the tail of a conversation, from one ordinal onward. A summary row goes only when
+    /// the cut reaches a row it covers.
+    /// </summary>
     internal const string TruncateSql =
-        $"DELETE FROM {Schema}.conversation_message WHERE conversation_id = $1 AND ordinal >= $2";
+        $"""
+        WITH gone AS (
+            DELETE FROM {Schema}.conversation_message
+             WHERE conversation_id = $1 AND ordinal >= $2 AND (covers_up_to IS NULL OR covers_up_to >= $2)
+            RETURNING turn_index, covers_up_to)
+        SELECT count(*)::int,
+               min(turn_index) FILTER (WHERE covers_up_to IS NULL),
+               max(turn_index) FILTER (WHERE covers_up_to IS NULL)
+          FROM gone
+        """;
+
+    /// <summary>Finds the ordinal of one spoken row by its message id. Summary rows are not found.</summary>
+    internal const string OrdinalOfSql =
+        $"""
+        SELECT ordinal FROM {Schema}.conversation_message
+         WHERE conversation_id = $1 AND message_id = $2 AND covers_up_to IS NULL
+        """;
 
     internal const string RewriteSql = $"""
         UPDATE {Schema}.conversation_message SET content = $3, updated_at = now()
@@ -149,6 +201,7 @@ internal static class PostgresConversationStoreSql
               FROM {{Schema}}.conversation_message
              WHERE conversation_id = $1
                AND role = 'assistant'
+               AND covers_up_to IS NULL
                AND content -> 'contents' @> '[{"$type": "text"}]'
              ORDER BY conversation_id, turn_index, ordinal DESC
         ),

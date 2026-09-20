@@ -48,9 +48,6 @@ public sealed record AgentDefaults
     /// <summary>Gets the shared <c>knowledge:</c> block, or <see langword="null"/> when the document declares none.</summary>
     public AgentKnowledgeConfiguration? Knowledge { get; init; }
 
-    /// <summary>Gets the shared <c>compaction:</c> block, or <see langword="null"/> when the document declares none.</summary>
-    public CompactionConfiguration? Compaction { get; init; }
-
     /// <summary>Gets whether agents inherit the todo tools, or <see langword="null"/> to name nothing.</summary>
     public bool? Todos { get; init; }
 
@@ -100,9 +97,6 @@ public sealed record AgentConfiguration
 
     /// <summary>Gets this agent's <c>knowledge:</c> block, or <see langword="null"/> to inherit key by key.</summary>
     public AgentKnowledgeConfiguration? Knowledge { get; init; }
-
-    /// <summary>Gets this agent's <c>compaction:</c> block, or <see langword="null"/> to inherit key by key.</summary>
-    public CompactionConfiguration? Compaction { get; init; }
 
     /// <summary>Gets whether this agent gets the todo tools, or <see langword="null"/> to inherit.</summary>
     public bool? Todos { get; init; }

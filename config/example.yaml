@@ -19,7 +19,7 @@
 #   3. extractor    the model call that fills the extractor slots
 #   4. guards       named JSONLogic rules the stage machine tests
 #   5. tools        what an agent may call
-#   6. agents       models, prompts, knowledge, compaction
+#   6. agents       models, prompts, knowledge
 #   7. entries      what a caller reaches: a stage machine or one agent
 #   8. providers    adapters: llm, conversation, speech, telephony, moderation, embeddings, knowledge,
 #                   telemetry
@@ -227,7 +227,7 @@ tools:
 
 
 # =============================================================================================
-# 6. agents: models, prompts, knowledge, compaction
+# 6. agents: models, prompts, knowledge
 # =============================================================================================
 #
 # defaults: applies to every item. An item overrides a key by declaring it.
@@ -268,23 +268,6 @@ agents:
     # open says it cannot look the answer up. Set scoped: false on an agent that must read the
     # whole corpus.
     knowledge: { mode: prefetch, limit: 5, citations: false }
-
-    # Bounds the conversation an agent carries. Every strategy is deterministic: the same messages
-    # give the same result. There is no summarization on purpose. A resumed conversation rebuilds from
-    # the replayed words, and a model-written summary would give one conversation two histories.
-    #   strategy          truncate | sliding_window | tool_result | context_window
-    #                     tool_result folds old function-tool groups into one short line each.
-    #                     context_window folds first, then truncates whole groups.
-    #   trigger           exactly ONE of tokens, messages, turns, groups. Zero or two is a load
-    #                     error.
-    #   keep              the newest groups the strategy never touches.
-    #   foldResultChars   how much of a tool result one fold keeps.
-    # There is no per-agent opt-out. An item with no block inherits this one. To compact some
-    # agents only, declare the block on those items instead of here.
-    #
-    # context_window, not tool_result, here: the analyst below carries search, a hosted tool.
-    # tool_result folds function tools only, so a hosted tool's results would grow for ever.
-    compaction: { strategy: context_window, trigger: { messages: 40 }, keep: 6, foldResultChars: 300 }
 
   items:
     # Voice, scripted. One round trip, no source labels spoken. Inherit knowledge from defaults.

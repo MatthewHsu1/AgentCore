@@ -1,7 +1,7 @@
-using AgentCore.Application.Conversation.Memory;
-using AgentCore.Application.Llm;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Conversation.Memory;
+using AgentCore.Application.Llm;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Transcript;
@@ -184,10 +184,6 @@ public static class ConfigurationCompiler
             }
         }
 
-        // A kind: agent tool names another agents.items entry, so one agent may need a second one
-        // that this walk has not reached yet. The walk therefore resolves on demand instead of in
-        // declaration order, and it holds the agents it entered so a delegation loop becomes a
-        // compile error rather than a stack overflow.
         List<string> path = [];
 
         AgentsWalk walk = new(
@@ -207,8 +203,6 @@ public static class ConfigurationCompiler
         {
             if (agents.TryGetValue(id, out var existing))
             {
-                // Built once, then shared. A delegating agent reuses the inner agent and never
-                // compiles a second copy of it. See T44 and CompiledAgentRegistry.
                 return existing;
             }
 
@@ -234,8 +228,9 @@ public static class ConfigurationCompiler
             var compiledTools = AgentToolCompiler.Build(
                 item, item.Model ?? section.Defaults?.Model, tools, context, pointer, Resolve);
 
-            var providers = AgentContextProviderCompiler.Build(walk, item, context, pointer, Resolve);
+            var providers = AgentContextProviderCompiler.Build(walk, item, context, pointer, Resolve, history);
             harnessStateKeys.UnionWith(AgentHarnessProviders.StateKeysOf(providers));
+
             harnessStateKeys.UnionWith(AgentApproval.StateKeysFor(section.Defaults, item, compiledTools));
 
             var built = new ChatClientAgent(
@@ -261,6 +256,7 @@ public static class ConfigurationCompiler
 
             var approved = AgentApproval.Apply(instrumented, section.Defaults, item);
             var looped = AgentHarnessProviders.ApplyLoop(approved, section.Defaults, item, pointer);
+
             agents[id] = looped;
             return looped;
         }

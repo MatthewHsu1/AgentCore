@@ -20,4 +20,12 @@ namespace AgentCore.Application.Transcript;
 /// </para>
 /// </param>
 public sealed record ConversationMessage(
-    string ConversationId, int Ordinal, int TurnIndex, ChatMessage Content, string MessageId);
+    string ConversationId, int Ordinal, int TurnIndex, ChatMessage Content, string MessageId)
+{
+    /// <summary>
+    /// Gets the last ordinal this row stands in for, when it is a summary the session wrote in place
+    /// of every row at or below it; <see langword="null"/> for a row somebody said. Every consumer
+    /// read of store 1 leaves summary rows out; only the session's own read returns one.
+    /// </summary>
+    public int? CoversUpTo { get; init; }
+}

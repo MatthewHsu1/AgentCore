@@ -11,9 +11,6 @@ using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Runtime;
 
-// The prepare half of the turn loop (OpenAI turn_preparation seam): guards, withdrawal,
-// request building, and the non-streaming run core. Owns no committed state; everything it
-// reads lives on the owning ConversationSession, which keeps the single live-state owner of Phase 1.
 internal sealed class ConversationTurnRunner
 {
     private readonly ConversationSession _session;
@@ -64,6 +61,7 @@ internal sealed class ConversationTurnRunner
     {
         var session = await _session.Ledger.OpenSessionAsync(cancellationToken).ConfigureAwait(false);
 
+        await AdmitTurnAsync(session, origin, cancellationToken).ConfigureAwait(false);
         var turn = BeginTurn(userInput, session, origin);
 
         var cancellation = _session.Interruptions.StartRun(cancellationToken);
@@ -72,7 +70,7 @@ internal sealed class ConversationTurnRunner
         {
             var invocation = TurnInvocationOf(turn);
 
-            var runSession = await RunSessionAsync(turn, cancellation.Token).ConfigureAwait(false);
+            var runSession = await OpenRunAsync(turn, cancellation.Token).ConfigureAwait(false);
             
             TurnRegistry.Set(runSession, invocation);
 
@@ -81,9 +79,6 @@ internal sealed class ConversationTurnRunner
 
             try
             {
-                // Interrupt never cancels this token: the turn is not audible, so a barge-in takes
-                // the amendment path against the turn that finished last. Only the host's own token
-                // cancels this run, and that cancellation propagates.
                 response = await turn.Agent
                     .RunAsync(
                         turn.Request,
@@ -94,14 +89,10 @@ internal sealed class ConversationTurnRunner
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                // Section 8.7, sixth row. The run throws, the turn ends, and the conversation lives.
                 toolFault = exception.Message;
                 response = new AgentResponse();
             }
 
-            // CompleteTurnAsync publishes LastTurn itself, under the same lock that records what a
-            // late barge-in may still amend. Assigning it a second time here could overwrite an
-            // amendment that landed in between.
             return await _session.Completion.CompleteTurnAsync(turn, response, toolFault, ConversationTurnStream.ReadDisposition(response), cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -113,14 +104,13 @@ internal sealed class ConversationTurnRunner
     }
 
     /// <summary>
-    /// Picks the agent, withdraws whatever this turn replaces, builds the model input, and takes the
-    /// turn.
+    /// Admits one turn: refuses a terminal or running conversation, then withdraws whatever the turn
+    /// replaces. <see cref="BeginTurn"/> follows, from the same frame.
     /// </summary>
-    /// <param name="userInput">What the caller said or answered: words, an approval answer, or both.</param>
     /// <param name="session">The session of this conversation.</param>
     /// <param name="origin">Where the turn hangs, or null for a caller that does not say.</param>
-    /// <returns>Everything the rest of the turn needs.</returns>
-    internal ConversationTurn BeginTurn(ChatMessage userInput, AgentSession session, ConversationTurnOrigin? origin = null)
+    /// <param name="cancellationToken">Cancels the withdrawal.</param>
+    internal async ValueTask AdmitTurnAsync(AgentSession session, ConversationTurnOrigin? origin, CancellationToken cancellationToken)
     {
         if (_session.IsComplete)
         {
@@ -128,49 +118,48 @@ internal sealed class ConversationTurnRunner
                 $"The conversation '{_session.ConversationId}' reached the terminal stage '{_session.Stage}', so it runs no further turn.");
         }
 
-        var agent = ResolveAgent();
-
-        // One session runs one turn at a time. The state document takes no lock, so a second turn
-        // that overlapped the first would corrupt it rather than fail.
         if (!_session.Interruptions.TryEnterTurn())
         {
             throw new InvalidOperationException(
                 $"A turn of the conversation '{_session.ConversationId}' is still running. One conversation runs one turn at a time.");
         }
 
+        try
+        {
+            _session.Clarifications.BeginTurn();
+
+            await WithdrawSupersededAsync(session, origin, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            _session.Interruptions.ReleaseTurn();
+
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Picks the agent, builds the model input, and takes the turn <see cref="AdmitTurnAsync"/> admitted.
+    /// Synchronous on purpose: the turn span it opens must be the ambient activity of the caller's
+    /// frame, and an async method hands no <see cref="Activity.Current"/> back.
+    /// </summary>
+    /// <param name="userInput">What the caller said or answered: words, an approval answer, or both.</param>
+    /// <param name="session">The session of this conversation.</param>
+    /// <param name="origin">Where the turn hangs, or null for a caller that does not say.</param>
+    /// <returns>Everything the rest of the turn needs.</returns>
+    internal ConversationTurn BeginTurn(ChatMessage userInput, AgentSession session, ConversationTurnOrigin? origin = null)
+    {
         Activity? activity = null;
         try
         {
-            // After both guards: a turn refused as terminal or already-running must not drop the
-            // probe latch out from under the turn actually in flight. Runs exactly once here, in
-            // BeginTurn, and never per streaming step, which would drop the latch several times
-            // inside one streaming turn.
-            _session.Clarifications.BeginTurn();
+            var agent = ResolveAgent();
 
-            // Behind both guards, because the withdrawal deletes: a turn refused for a terminal conversation or
-            // for one already running must not have taken the tail of the conversation with it on the way out.
-            // Ahead of the request below, because the words it withdraws have to be gone from the live
-            // history this run reads and not only from the store. The turn index is deliberately not
-            // wound back with them: store 3 keeps its rows for the withdrawn turns, and two turns at one
-            // index in the chain is worse than a gap in it.
-            WithdrawSuperseded(session, origin);
-
-            // The reminder rides a request that happens anyway, and it rides exactly one, as a message
-            // the framework appends for that invocation and stores nowhere. It reads the state document
-            // and never the transcript. Only an entry with a policy: has a stage that waits on a slot.
             var reminder = _session.Policy is null ? null : UnfilledSlotReminder.Build(_session.State, _session.Policy.CurrentStage);
+
             ChatMessage spoken = userInput;
 
-            // The framework has never heard of a turn, so the turn loop names this one before the run.
             _session.History.BeginTurn(session, _session.State.TurnIndex);
 
-            // Rows 1 and 2 read the conversation out of the session, so the run carries the new message alone
-            // and the provider prepends the rest. A graph row that reuses its session reads the same
-            // way: the resumed conversation already carries what came before. Any other graph row
-            // takes no provider, so its history rides the request, rendered into the one role a node
-            // still recognises. Neither shape puts the caller's message in store 1 yet: the turn
-            // writes what it said and what it heard together, when it commits, so the run that is
-            // about to read the history does not find its own prompt already in it.
             List<ChatMessage> request;
             if (_session.SessionCarriesHistory || _session.ReusesGraphSession)
             {
@@ -185,9 +174,8 @@ internal sealed class ConversationTurnRunner
                 request = [spoken];
             }
 
-            // One turn is one span. The conversation id rides here, on a span attribute, because T61 refuses it
-            // on a metric. The span is disposed in the finally of whichever run method opened the turn.
             activity = AgentCoreTelemetry.StartTurn(_session.ConversationId, _session.State.TurnIndex, _session.State.Stage);
+
             var knowledge = StateKnowledgeScope.Compose(
                 _session.State, _session.Compiled.Configuration.Providers?.Knowledge?.Scope, _session.Scope);
 
@@ -215,33 +203,33 @@ internal sealed class ConversationTurnRunner
         }
         catch
         {
-            // Only the run methods' own finally frees the session and closes the span, and it starts
-            // after this method returns. A throw while the turn is still being built would otherwise
-            // leave _running set, so every later turn of the conversation is refused as one already running.
             activity?.Dispose();
+
             _session.Interruptions.ReleaseTurn();
+
             throw;
         }
     }
 
     /// <summary>Takes back everything the conversation said after the message this turn hangs off.</summary>
-    internal void WithdrawSuperseded(AgentSession session, ConversationTurnOrigin? origin)
+    internal async ValueTask WithdrawSupersededAsync(AgentSession session, ConversationTurnOrigin? origin, CancellationToken cancellationToken)
     {
-        if (origin is not { NamesParent: true }
-            || _session.History.TruncateFrom(session, origin.ParentMessageId) is not { } withdrawn)
+        if (origin is not { NamesParent: true })
         {
             return;
         }
 
-        // Without this, lastNamed would survive a withdrawal that deleted the very turns it recorded,
-        // and silence the probe forever about a question the caller edited away. The ask counter is
-        // deliberately untouched here: what the caller heard, they still heard, and clearing it
-        // would let the withdrawn segment buy a fresh maxAsks budget.
+        var cut = _session.History.CanTruncateFrom(session, origin.ParentMessageId)
+            ? _session.History.TruncateFrom(session, origin.ParentMessageId)
+            : await _session.Ledger.CutUnderSummaryAsync(session, origin.ParentMessageId, cancellationToken).ConfigureAwait(false);
+
+        if (cut is not { } withdrawn)
+        {
+            return;
+        }
+
         _session.Clarifications.Withdraw();
 
-        // The turn index the event is filed under is the one about to run; the payload is what says
-        // which turns it replaced. The rows of those turns are already deleted, so nothing else in
-        // any store can answer that afterwards.
         _ = _session.Events.Raise(
             ConversationEventKind.TurnSuperseded,
             _session.Time.GetUtcNow(),
@@ -261,7 +249,6 @@ internal sealed class ConversationTurnRunner
     {
         if (_session.Policy is null)
         {
-            // Row 1, row 3, and row 4 of the compile table. One entry agent answers every turn.
             return _session.Compiled.TurnAgent;
         }
 
@@ -281,7 +268,7 @@ internal sealed class ConversationTurnRunner
     /// <param name="turn">The turn about to run.</param>
     /// <param name="cancellationToken">Cancels the open.</param>
     /// <returns>The conversation's session on rows 1 and 2, the conversation's shared workflow session on a graph row that reuses one, and a fresh workflow session on any other graph row.</returns>
-    internal async ValueTask<AgentSession> RunSessionAsync(ConversationTurn turn, CancellationToken cancellationToken)
+    internal async ValueTask<AgentSession> OpenRunAsync(ConversationTurn turn, CancellationToken cancellationToken)
     {
         if (_session.SessionCarriesHistory)
         {
@@ -312,6 +299,7 @@ internal sealed class ConversationTurnRunner
             Knowledge = turn.Knowledge,
             Clarifications = _session.Clarifications,
             CarriesHistory = _session.SessionCarriesHistory,
+            Logger = _session.Logger,
             Screen = turn.Renders,
             Sources = turn.Sources,
             Renders = turn.Renders,

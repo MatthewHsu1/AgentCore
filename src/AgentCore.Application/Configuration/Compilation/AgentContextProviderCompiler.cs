@@ -5,8 +5,9 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime.Compaction;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Skills;
+using AgentCore.Application.Transcript;
 using Microsoft.Agents.AI;
-using Microsoft.Agents.AI.Compaction;
+
 namespace AgentCore.Application.Configuration.Compilation;
 
 internal static class AgentContextProviderCompiler
@@ -23,12 +24,14 @@ internal static class AgentContextProviderCompiler
     /// <param name="context">The compile-time seams.</param>
     /// <param name="pointer">This agent's JSON pointer.</param>
     /// <param name="resolve">Resolves an <c>agents.items</c> id to its compiled agent, or <see langword="null"/> when undeclared.</param>
+    /// <param name="history">Store 1, or <see langword="null"/> on a row whose session carries no history and so has nothing to summarise.</param>
     public static List<AIContextProvider> Build(
         AgentsWalk walk,
         AgentConfiguration item,
         AgentCompilationContext context,
         string pointer,
-        Func<string, AIAgent?> resolve)
+        Func<string, AIAgent?> resolve,
+        AgentCoreChatHistoryProvider? history)
     {
         var defaults = walk.Defaults;
         List<AIContextProvider> providers = [];
@@ -45,29 +48,21 @@ internal static class AgentContextProviderCompiler
             providers.Add(SkillsProviderFactory.Create(RequireCatalog(item, context, pointer, "skills"), item.Skills, context.Loggers));
         }
 
-        ResolvedCompaction? compaction;
-        try
-        {
-            compaction = AgentCompaction.Compose(defaults, item);
-        }
-        catch (ArgumentException exception)
+        var model = item.Model ?? defaults?.Model;
+        if (context.ChatClients.GetContextWindow(model) is not { } contextWindow)
         {
             throw ConfigurationCompiler.Fail(
-                ConfigurationError.AppendPointer(ConfigurationError.AppendPointer(pointer, "compaction"), "trigger"),
-                exception.Message);
+                ConfigurationError.AppendPointer(pointer, "model"),
+                $"the agent '{item.Id}' uses the model '{model?.Ref ?? "default"}' and its adapter "
+                + "reports no context window, so compaction cannot size itself. Add the model to the "
+                + "adapter's table.");
         }
 
-        if (compaction is { } resolved)
-        {
-            providers.Add(new ReaderContentFilterProvider());
-            
-#pragma warning disable MAAI001 // Compaction is evaluation-only in Microsoft.Agents.AI 1.17.0.
-            providers.Add(new CompactionProvider(
-                CompactionStrategyFactory.Create(resolved),
-                loggerFactory: context.Loggers));
-#pragma warning restore MAAI001
-        }
-        
+        providers.Add(new ReaderContentFilterProvider());
+
+        var stages = context.Compaction ?? CompactionStrategyFactory.Create(context.ChatClients.GetChatClient(model), contextWindow);
+        providers.AddRange(CompactionStrategyFactory.BuildProviders(stages, history));
+
         AgentHarnessProviders.Add(providers, defaults, item, context, pointer, resolve, walk.Background);
 
         if (AgentKnowledge.Compose(defaults, item) is not { } composed)
@@ -85,8 +80,6 @@ internal static class AgentContextProviderCompiler
                 + $"{nameof(IKnowledgeRetrievalPort)}, or remove the knowledge: block.");
         }
 
-        // The document-level wiring, carried onto this agent's own resolved knowledge so the search
-        // side does not have to re-derive it.
         var knowledge = composed with { Clarification = walk.Clarification };
 
         providers.Add(KnowledgeProviderFactory.Create(

@@ -99,11 +99,8 @@ public sealed class CompositeChatClientFactory : IChatClientFactory, IDisposable
             return _vendor[entry.As];
         }
 
-        // The vendor client stays one for each 'as' name. Only the conversation settings differ, so the
-        // wrapper sits above the shared client rather than beside it. ConfigureOptions clones the
-        // caller's ChatOptions (or starts a new one) and never mutates them, which is the same
-        // semantic a hand-rolled wrapper used to reimplement.
         var key = entry.As + "|" + temperature.ToString("R", CultureInfo.InvariantCulture);
+
         return _shaped.GetOrAdd(
             key,
             _ => _vendor[entry.As]
@@ -136,17 +133,16 @@ public sealed class CompositeChatClientFactory : IChatClientFactory, IDisposable
         return adapter.ResolveHostedTool(marker, entry);
     }
 
+    /// <inheritdoc />
+    public int? GetContextWindow(ModelReference? model)
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) == 1, this);
+
+        var entry = Resolve(model);
+        return _adapters.TryGetValue(entry.As, out var adapter) ? adapter.GetContextWindow(entry) : null;
+    }
+
     /// <summary>Releases every client the adapters built.</summary>
-    /// <remarks>
-    /// A shaped client is a view over a shared vendor client, not an owner of one: it holds no
-    /// resource of its own, and its own <see cref="IDisposable.Dispose"/> chains straight through
-    /// to the vendor client it wraps (that is how <see cref="DelegatingChatClient"/> and the client
-    /// <c>ConfigureOptions</c> builds both work). Disposing the shaped clients here as well as the
-    /// vendor clients would therefore dispose a shared vendor client once for every shaped wrapper
-    /// built over it, plus once more directly - safe only by accident, and wrong the moment a vendor
-    /// client's <c>Dispose</c> is not idempotent. Only the vendor client is released; the shaped
-    /// dictionary is dropped without disposing what it held.
-    /// </remarks>
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 1)

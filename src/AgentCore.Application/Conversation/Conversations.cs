@@ -33,7 +33,8 @@ public sealed class Conversations : IConversations, IConversationStore
     public IConversationStore Store => _conversations;
 
     /// <inheritdoc />
-    public async ValueTask<StoredConversation?> LoadAsync(string conversationId, CancellationToken cancellationToken = default)
+    public async ValueTask<StoredConversation?> LoadWindowAsync(
+        string conversationId, TranscriptWindow window, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(conversationId);
 
@@ -44,10 +45,16 @@ public sealed class Conversations : IConversations, IConversationStore
             return null;
         }
 
-        var messages = await _conversations.ReadAsync(conversationId, cancellationToken).ConfigureAwait(false);
+        var messages = await _conversations.ReadWindowAsync(conversationId, window, cancellationToken).ConfigureAwait(false);
+        
         var files = await LinkFilesAsync(conversationId, messages.Select(message => message.Content), cancellationToken).ConfigureAwait(false);
 
-        return new StoredConversation(record, messages, files);
+        var turns = messages.Select(message => message.TurnIndex).Distinct().Count();
+
+        return new StoredConversation(record, messages, files)
+        {
+            OlderBefore = turns == window.Turns ? messages.Min(message => message.TurnIndex) : null,
+        };
     }
 
     /// <summary>Links every published file the messages carry and the store kept, each name once, in first-seen order.</summary>
@@ -162,11 +169,19 @@ public sealed class Conversations : IConversations, IConversationStore
         => _conversations.RewriteAsync(conversationId, messageId, content, cancellationToken);
 
     /// <inheritdoc />
-    public ValueTask<IReadOnlyList<ConversationMessage>> ReadAsync(string conversationId, CancellationToken cancellationToken = default)
-        => _conversations.ReadAsync(conversationId, cancellationToken);
+    public ValueTask<IReadOnlyList<ConversationMessage>> ReadForSessionAsync(string conversationId, CancellationToken cancellationToken = default)
+        => _conversations.ReadForSessionAsync(conversationId, cancellationToken);
 
     /// <inheritdoc />
-    public ValueTask<int> TruncateAsync(string conversationId, int fromOrdinal, CancellationToken cancellationToken = default)
+    public ValueTask<IReadOnlyList<ConversationMessage>> ReadWindowAsync(string conversationId, TranscriptWindow window, CancellationToken cancellationToken = default)
+        => _conversations.ReadWindowAsync(conversationId, window, cancellationToken);
+
+    /// <inheritdoc />
+    public ValueTask<int?> OrdinalOfAsync(string conversationId, string messageId, CancellationToken cancellationToken = default)
+        => _conversations.OrdinalOfAsync(conversationId, messageId, cancellationToken);
+
+    /// <inheritdoc />
+    public ValueTask<ConversationCut> TruncateAsync(string conversationId, int fromOrdinal, CancellationToken cancellationToken = default)
         => _conversations.TruncateAsync(conversationId, fromOrdinal, cancellationToken);
 
     /// <inheritdoc />

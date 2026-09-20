@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Transcript;
 using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Conversation;
@@ -10,9 +11,6 @@ namespace AgentCore.Application.Conversation;
 /// <param name="client">The model that writes it.</param>
 public sealed class ChatConversationTitler(IConversationStore conversations, IChatClient client) : IConversationTitler
 {
-    // Messages and not turns: one turn writes several when tools are called. A six-word title does
-    // not improve for having read the whole conversation, and the whole conversation is what the prompt would be
-    // charged for. The cap holds for a caller's messages too, which arrive unbounded.
     private const int MaxMessages = 6;
 
     // A system message
@@ -31,18 +29,18 @@ public sealed class ChatConversationTitler(IConversationStore conversations, ICh
         return GenerateCoreAsync(conversationId, cancellationToken);
     }
 
-    /// <summary>Reads the conversation's messages and streams the title <see cref="NameAsync"/> writes.</summary>
+    /// <summary>Reads the conversation's newest messages and streams the title <see cref="NameAsync"/> writes.</summary>
     private async IAsyncEnumerable<string> GenerateCoreAsync(
         string conversationId, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var rows = await conversations.ReadAsync(conversationId, cancellationToken).ConfigureAwait(false);
+        var rows = await conversations.ReadWindowAsync(conversationId, new TranscriptWindow(null, MaxMessages), cancellationToken).ConfigureAwait(false);
 
         if (rows.Count == 0)
         {
             yield break;
         }
 
-        await foreach (var piece in NameAsync(conversationId, rows.Select(row => row.Content), cancellationToken)
+        await foreach (var piece in NameAsync(conversationId, rows.TakeLast(MaxMessages).Select(row => row.Content), cancellationToken)
             .ConfigureAwait(false))
         {
             yield return piece;

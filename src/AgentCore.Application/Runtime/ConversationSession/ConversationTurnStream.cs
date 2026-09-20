@@ -38,6 +38,7 @@ internal sealed class ConversationTurnStream
     {
         var session = await _session.Ledger.OpenSessionAsync(cancellationToken).ConfigureAwait(false);
 
+        await _session.Runner.AdmitTurnAsync(session, origin, cancellationToken).ConfigureAwait(false);
         var turn = _session.Runner.BeginTurn(userInput, session, origin);
 
         // A streaming turn becomes audible only once it hands the host its first piece of content.
@@ -49,7 +50,7 @@ internal sealed class ConversationTurnStream
             string? toolFault = null;
 
             var invocation = _session.Runner.TurnInvocationOf(turn);
-            var runSession = await _session.Runner.RunSessionAsync(turn, cancellation.Token).ConfigureAwait(false);
+            var runSession = await _session.Runner.OpenRunAsync(turn, cancellation.Token).ConfigureAwait(false);
             
             TurnRegistry.Set(runSession, invocation);
 
@@ -67,8 +68,6 @@ internal sealed class ConversationTurnStream
                 {
                     AgentResponseUpdate update;
 
-                    // The enumeration itself sits in its own try, because a method that yields takes
-                    // no catch clause around the yield.
                     try
                     {
                         if (!await stream.MoveNextAsync().ConfigureAwait(false))
@@ -80,14 +79,12 @@ internal sealed class ConversationTurnStream
                     }
                     catch (OperationCanceledException) when (_session.Interruptions.CurrentInterruption() is not null)
                     {
-                        // The caller spoke over the reply, and the relay already reported how much of
-                        // it played. Nothing here estimates that value: see item 6c.
                         break;
                     }
                     catch (Exception exception) when (exception is not OperationCanceledException)
                     {
-                        // Section 8.7, sixth row.
                         toolFault = exception.Message;
+
                         break;
                     }
 
@@ -96,12 +93,8 @@ internal sealed class ConversationTurnStream
                     var content = update.AsChatResponseUpdate();
                     if (TurnMessages.CarriesContent(content) && Speaks(update))
                     {
-                        // Marked before the yield, not after it: an async iterator only resumes past
-                        // a yield once the host comes back for the next update, and by then the host
-                        // has already queued this piece for the caller.
                         _session.Interruptions.RunIsAudible = true;
 
-                        // The host speaks this, so it leaves the seam as fast as the model produced it.
                         yield return content;
                     }
                 }
@@ -111,9 +104,6 @@ internal sealed class ConversationTurnStream
                 await stream.DisposeAsync().ConfigureAwait(false);
             }
 
-            // CompleteTurnAsync publishes LastTurn itself. See the same note in RunTurnAsync. The
-            // disposition comes off the raw updates and never off the folded response: update-level
-            // properties do not survive streaming coalescing.
             _ = await _session.Completion.CompleteTurnAsync(
                     turn, updates.ToAgentResponse(), toolFault, ReadDisposition(updates), cancellationToken)
                 .ConfigureAwait(false);

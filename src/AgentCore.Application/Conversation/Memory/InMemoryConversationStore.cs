@@ -12,18 +12,14 @@ public sealed class InMemoryConversationStore : IConversationStore
 
     private readonly Dictionary<string, ConversationRecord> _conversations = [];
 
-    private readonly Dictionary<(string ConversationId, int Ordinal), ConversationMessage> _rows = [];
+    private readonly InMemoryConversationWords _words = new();
 
     /// <summary>The resume blob of each conversation, beside the row rather than on it.</summary>
     private readonly Dictionary<string, ConversationSessionState> _state = [];
 
-    /// <summary>The next free ordinal of each conversation. Never rewound, even when its words are.</summary>
-    private readonly Dictionary<string, int> _nextOrdinal = [];
+    private readonly InMemoryConversationClaims _claims = new();
 
-    private readonly HashSet<(string ConversationId, string PrincipalKey)> _claims = [];
-
-    /// <summary>One serialized agent session per continuation id, beside the conversations.</summary>
-    private readonly Dictionary<string, JsonElement> _continuations = [];
+    private readonly InMemoryConversationContinuations _continuations = new();
 
     private readonly TimeProvider _time;
 
@@ -48,7 +44,7 @@ public sealed class InMemoryConversationStore : IConversationStore
             return ValueTask.FromResult(existing with
             {
                 State = _state.GetValueOrDefault(conversationId),
-                NextOrdinal = _nextOrdinal.GetValueOrDefault(conversationId),
+                NextOrdinal = _words.NextOrdinal(conversationId),
             });
         }
     }
@@ -67,7 +63,7 @@ public sealed class InMemoryConversationStore : IConversationStore
                 : conversation with
                 {
                     State = _state.GetValueOrDefault(conversationId),
-                    NextOrdinal = _nextOrdinal.GetValueOrDefault(conversationId),
+                    NextOrdinal = _words.NextOrdinal(conversationId),
                 });
         }
     }
@@ -83,29 +79,14 @@ public sealed class InMemoryConversationStore : IConversationStore
         ArgumentNullException.ThrowIfNull(principalKey);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
-        var hasCursor = ConversationCursor.TryDecode(after, out var sortAt, out var cursorId);
-
         lock (_lock)
         {
-            var ordered = _claims
-                .Where(claim => claim.PrincipalKey == principalKey)
-                .Select(claim => _conversations.GetValueOrDefault(claim.ConversationId))
-                .OfType<ConversationRecord>()
-                .Where(conversation => status is null || conversation.Status == status)
-                .Where(conversation => !hasCursor
-                    || SortValue(conversation) < sortAt
-                    || (SortValue(conversation) == sortAt
-                        && string.CompareOrdinal(conversation.ConversationId, cursorId) < 0))
-                .OrderByDescending(SortValue)
-                .ThenByDescending(conversation => conversation.ConversationId, StringComparer.Ordinal)
-                .Take(limit)
-                .ToList();
+            var claimed = _claims
+                .ConversationsOf(principalKey)
+                .Select(_conversations.GetValueOrDefault)
+                .OfType<ConversationRecord>();
 
-            var next = ordered.Count == limit
-                ? ConversationCursor.Encode(SortValue(ordered[^1]), ordered[^1].ConversationId)
-                : null;
-
-            return ValueTask.FromResult(new ConversationPage(ordered, next));
+            return ValueTask.FromResult(InMemoryConversationListing.Page(claimed, after, limit, status));
         }
     }
 
@@ -149,17 +130,10 @@ public sealed class InMemoryConversationStore : IConversationStore
     {
         ArgumentNullException.ThrowIfNull(conversationId);
 
-        _conversations.Remove(conversationId);
-
-        _claims.RemoveWhere(claim => claim.ConversationId == conversationId);
-
-        _state.Remove(conversationId);
-
-        _nextOrdinal.Remove(conversationId);
-
-        _continuations.Remove(conversationId);
-
-        RemoveWords(conversationId);
+        lock (_lock)
+        {
+            Forget(conversationId);
+        }
 
         return default;
     }
@@ -182,23 +156,13 @@ public sealed class InMemoryConversationStore : IConversationStore
             // short in a durable backing, and this store has no transaction; honouring it here would
             // only make the caller loop for the same answer.
             var going = _conversations.Values
-                .Where(conversation => SortValue(conversation) < cutoff)
+                .Where(conversation => InMemoryConversationListing.SortValue(conversation) < cutoff)
                 .Select(conversation => conversation.ConversationId)
                 .ToList();
 
             foreach (var conversationId in going)
             {
-                _conversations.Remove(conversationId);
-
-                _claims.RemoveWhere(claim => claim.ConversationId == conversationId);
-
-                _state.Remove(conversationId);
-
-                _nextOrdinal.Remove(conversationId);
-
-                _continuations.Remove(conversationId);
-
-                RemoveWords(conversationId);
+                Forget(conversationId);
             }
 
             return ValueTask.FromResult(going.Count);
@@ -215,7 +179,7 @@ public sealed class InMemoryConversationStore : IConversationStore
 
         lock (_lock)
         {
-            _claims.Add((conversationId, principalKey));
+            _claims.Attach(conversationId, principalKey);
         }
 
         return default;
@@ -230,7 +194,7 @@ public sealed class InMemoryConversationStore : IConversationStore
 
         lock (_lock)
         {
-            _claims.Remove((conversationId, principalKey));
+            _claims.Detach(conversationId, principalKey);
         }
 
         return default;
@@ -259,20 +223,7 @@ public sealed class InMemoryConversationStore : IConversationStore
             }
 
             var fallbackTurnIndex = _state.GetValueOrDefault(conversationId)?.NextTurnIndex ?? 0;
-            var first = _nextOrdinal.GetValueOrDefault(conversationId);
-
-            var rows = new List<ConversationMessage>(messages.Count);
-            for (var index = 0; index < messages.Count; index++)
-            {
-                var draft = messages[index];
-                ConversationMessage row = new(
-                    conversationId, first + index, draft.TurnIndex ?? fallbackTurnIndex, draft.Content, draft.MessageId);
-
-                rows.Add(row);
-                _rows.Add((row.ConversationId, row.Ordinal), row);
-            }
-
-            _nextOrdinal[conversationId] = first + messages.Count;
+            var rows = _words.Append(conversationId, messages, fallbackTurnIndex);
 
             var now = _time.GetUtcNow();
             _conversations[conversationId] = conversation with { LastMessageAt = now };
@@ -282,7 +233,7 @@ public sealed class InMemoryConversationStore : IConversationStore
                 _state[conversationId] = state;
             }
 
-            return ValueTask.FromResult<IReadOnlyList<ConversationMessage>>(rows);
+            return ValueTask.FromResult(rows);
         }
     }
 
@@ -296,55 +247,58 @@ public sealed class InMemoryConversationStore : IConversationStore
 
         lock (_lock)
         {
-            foreach (var pair in _rows)
-            {
-                if (pair.Key.ConversationId != conversationId || pair.Value.MessageId != messageId)
-                {
-                    continue;
-                }
-
-                _rows[pair.Key] = pair.Value with { Content = content };
-                break;
-            }
+            _words.Rewrite(conversationId, messageId, content);
         }
 
         return default;
     }
 
     /// <inheritdoc />
-    public ValueTask<IReadOnlyList<ConversationMessage>> ReadAsync(
+    public ValueTask<IReadOnlyList<ConversationMessage>> ReadForSessionAsync(
         string conversationId, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(conversationId);
 
         lock (_lock)
         {
-            IReadOnlyList<ConversationMessage> rows =
-                [.. _rows.Values.Where(row => row.ConversationId == conversationId).OrderBy(row => row.Ordinal)];
-
-            return ValueTask.FromResult(rows);
+            return ValueTask.FromResult(_words.ReadForSession(conversationId));
         }
     }
 
     /// <inheritdoc />
-    public ValueTask<int> TruncateAsync(
+    public ValueTask<IReadOnlyList<ConversationMessage>> ReadWindowAsync(
+        string conversationId, TranscriptWindow window, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(conversationId);
+
+        lock (_lock)
+        {
+            return ValueTask.FromResult(_words.Read(conversationId, window));
+        }
+    }
+
+    /// <inheritdoc />
+    public ValueTask<int?> OrdinalOfAsync(
+        string conversationId, string messageId, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(conversationId);
+        ArgumentException.ThrowIfNullOrEmpty(messageId);
+
+        lock (_lock)
+        {
+            return ValueTask.FromResult(_words.OrdinalOf(conversationId, messageId));
+        }
+    }
+
+    /// <inheritdoc />
+    public ValueTask<ConversationCut> TruncateAsync(
         string conversationId, int fromOrdinal, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(conversationId);
 
         lock (_lock)
         {
-            var going = _rows.Keys
-                .Where(key => string.Equals(key.ConversationId, conversationId, StringComparison.Ordinal)
-                           && key.Ordinal >= fromOrdinal)
-                .ToList();
-
-            foreach (var key in going)
-            {
-                _rows.Remove(key);
-            }
-
-            return ValueTask.FromResult(going.Count);
+            return ValueTask.FromResult(_words.Truncate(conversationId, fromOrdinal));
         }
     }
 
@@ -355,7 +309,7 @@ public sealed class InMemoryConversationStore : IConversationStore
 
         lock (_lock)
         {
-            return ValueTask.FromResult(RemoveWords(conversationId));
+            return ValueTask.FromResult(_words.Erase(conversationId));
         }
     }
 
@@ -366,7 +320,7 @@ public sealed class InMemoryConversationStore : IConversationStore
 
         lock (_lock)
         {
-            _continuations[continuationId] = envelope.Clone();
+            _continuations.Save(continuationId, envelope);
         }
 
         return default;
@@ -379,8 +333,7 @@ public sealed class InMemoryConversationStore : IConversationStore
 
         lock (_lock)
         {
-            return ValueTask.FromResult<JsonElement?>(
-                _continuations.TryGetValue(continuationId, out var envelope) ? envelope : null);
+            return ValueTask.FromResult(_continuations.Get(continuationId));
         }
     }
 
@@ -391,23 +344,20 @@ public sealed class InMemoryConversationStore : IConversationStore
 
         lock (_lock)
         {
-            _continuations.Remove(continuationId);
+            _continuations.Forget(continuationId);
         }
 
         return default;
     }
 
-    private static DateTimeOffset SortValue(ConversationRecord conversation) => conversation.LastMessageAt ?? conversation.CreatedAt;
-
-    private int RemoveWords(string conversationId)
+    /// <summary>Drops a conversation, its claims, its state, its continuation and its words. Runs under the lock.</summary>
+    private void Forget(string conversationId)
     {
-        var going = _rows.Keys.Where(key => key.ConversationId == conversationId).ToList();
-        foreach (var key in going)
-        {
-            _rows.Remove(key);
-        }
-
-        return going.Count;
+        _conversations.Remove(conversationId);
+        _claims.Forget(conversationId);
+        _state.Remove(conversationId);
+        _continuations.Forget(conversationId);
+        _words.Forget(conversationId);
     }
 
     private ValueTask Amend(string conversationId, Func<ConversationRecord, ConversationRecord> amend)

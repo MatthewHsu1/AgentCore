@@ -1,3 +1,4 @@
+using AgentCore.Application.Runtime.Compaction;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Knowledge;
@@ -87,4 +88,9 @@ public sealed class AgentCompilationContext
     /// references against, or <see langword="null"/> to treat every such reference as unresolved.
     /// </summary>
     public ResolvedSecrets? Secrets { get; init; }
+
+    /// <summary>
+    /// Gets or sets the compaction stages every agent runs.
+    /// </summary>
+    internal CompactionStages? Compaction { get; init; }
 }

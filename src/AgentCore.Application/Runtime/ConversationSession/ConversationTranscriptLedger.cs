@@ -7,9 +7,6 @@ using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Runtime;
 
-// The transcript half of the session (MAF history-provider seam): opening the session once,
-// re-syncing it with store 0 before every later turn, draining writes, and naming approval
-// answers. Reads and publishes the live session through the owning ConversationSession.
 internal sealed class ConversationTranscriptLedger
 {
     private readonly ConversationSession _session;
@@ -42,11 +39,6 @@ internal sealed class ConversationTranscriptLedger
             checkpoint = _session.Checkpoint;
         }
 
-        // One restore point for both sources, and store 0 outranks the host's checkpoint outright
-        // rather than merging with it. Store 0's blob is written in the same batch as the turn's
-        // words, so its state and store 1's words are of one moment and cannot disagree; a
-        // checkpoint's state beside store 1's words can be of two. So the checkpoint decides only a
-        // conversation store 0 does not know, or knows without state.
         var stored = record.State ?? checkpoint;
 
         AgentSession session;
@@ -61,9 +53,6 @@ internal sealed class ConversationTranscriptLedger
         {
             session = new ConversationHistorySession();
 
-            // Rows 1 and 2 restore provider state onto their long-lived session above. A graph
-            // row instead keeps one workflow session for the whole conversation: MAF restores each
-            // participant's provider state from its checkpoints whenever a turn runs on it.
             if (_session.ReusesGraphSession)
             {
                 _session.GraphSession = stored is { Version: ConversationSessionState.CurrentVersion, WorkflowState: { } blob }
@@ -74,7 +63,7 @@ internal sealed class ConversationTranscriptLedger
 
         IReadOnlyList<ConversationMessage> spoken = record.LastMessageAt is null
             ? []
-            : await _session.Compiled.ConversationStore.ReadAsync(_session.ConversationId, cancellationToken).ConfigureAwait(false);
+            : await _session.Compiled.ConversationStore.ReadForSessionAsync(_session.ConversationId, cancellationToken).ConfigureAwait(false);
 
         lock (_session.InterruptLock)
         {
@@ -89,9 +78,6 @@ internal sealed class ConversationTranscriptLedger
                     _session.Events.RaiseDroppedTranscriptWrite,
                     new TranscriptMarks(record.NextOrdinal, stored?.NextTurnIndex ?? 0));
 
-                // After the constructor, never inside it. The const writer has already run by now,
-                // so a slot a previous session filled lands on top of the const default rather than
-                // under it — and the record it is read from only exists after an async store read.
                 if (stored is { } s)
                 {
                     _session.States.Restore(s);
@@ -114,16 +100,15 @@ internal sealed class ConversationTranscriptLedger
 
         try
         {
-            var refreshed = await _session.Compiled.ConversationStore.GetAsync(_session.ConversationId, cancellationToken).ConfigureAwait(false)
-                ?? throw new InvalidOperationException(
-                    $"Store 0 holds no conversation '{_session.ConversationId}' for its own session to resync against.");
+            var refreshed = await RecordAsync("resync against", cancellationToken).ConfigureAwait(false);
 
             if (refreshed.NextOrdinal == _session.History.NextOrdinal(opened))
             {
                 return;
             }
 
-            var rows = await _session.Compiled.ConversationStore.ReadAsync(_session.ConversationId, cancellationToken).ConfigureAwait(false);
+            var rows = await _session.Compiled.ConversationStore.ReadForSessionAsync(
+                _session.ConversationId, cancellationToken).ConfigureAwait(false);
 
             _session.History.Resync(opened, rows, refreshed.NextOrdinal);
         }
@@ -135,6 +120,55 @@ internal sealed class ConversationTranscriptLedger
             _session.Events.RaiseFailedTranscriptResync(_session.State.TurnIndex, exception);
         }
     }
+
+    /// <summary>
+    /// Cuts an edit that reaches under the summary: the parent is a row the summary stands in for,
+    /// or the edit takes the whole conversation. The caller asks
+    /// <see cref="AgentCoreChatHistoryProvider.CanTruncateFrom"/> first and comes here when it says no.
+    /// </summary>
+    /// <param name="opened">The session of this conversation.</param>
+    /// <param name="parentMessageId">The message the edit hangs off, or <see langword="null"/> for the whole conversation.</param>
+    /// <param name="cancellationToken">Cancels the cut.</param>
+    /// <returns>The turns the cut withdrew, or <see langword="null"/> when nothing went.</returns>
+    internal async ValueTask<WithdrawnTurns?> CutUnderSummaryAsync(
+        AgentSession opened, string? parentMessageId, CancellationToken cancellationToken)
+    {
+        var store = _session.Compiled.ConversationStore;
+
+        await _session.History.DrainAsync(opened).ConfigureAwait(false);
+
+        int from;
+        if (parentMessageId is null)
+        {
+            from = 0;
+        }
+        else if (await store.OrdinalOfAsync(_session.ConversationId, parentMessageId, cancellationToken).ConfigureAwait(false) is { } parent)
+        {
+            from = parent + 1;
+        }
+        else
+        {
+            return null;
+        }
+
+        var cut = await store.TruncateAsync(_session.ConversationId, from, cancellationToken).ConfigureAwait(false);
+        Log.ConversationTruncated(_session.Logger, _session.ConversationId, from, _session.State.TurnIndex);
+
+        var refreshed = await RecordAsync("edit", cancellationToken).ConfigureAwait(false);
+        var rows = await store.ReadForSessionAsync(_session.ConversationId, cancellationToken).ConfigureAwait(false);
+
+        _session.History.Resync(opened, rows, refreshed.NextOrdinal);
+
+        return cut.Turns;
+    }
+
+    /// <summary>Store 0's record of this conversation, which must exist for a session that already opened it.</summary>
+    /// <param name="purpose">What the session is about to do with it, for the error.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    private async ValueTask<ConversationRecord> RecordAsync(string purpose, CancellationToken cancellationToken)
+        => await _session.Compiled.ConversationStore.GetAsync(_session.ConversationId, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException(
+                $"Store 0 holds no conversation '{_session.ConversationId}' for its own session to {purpose}.");
 
     /// <summary>
     /// Reads the session of this conversation, or null before its first turn opened one.

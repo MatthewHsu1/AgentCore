@@ -21,4 +21,14 @@ public interface IChatClientFactory
     /// <param name="model">The reference, or <see langword="null"/> for the factory's default entry.</param>
     /// <returns>The tool to hand the model, or <see langword="null"/> when the vendor behind it does not run it.</returns>
     AITool? ResolveHostedTool(AITool marker, ModelReference? model) => null;
+
+    /// <summary>Reports the context window of the model one reference names, in tokens.</summary>
+    /// <param name="model">
+    /// The reference, or <see langword="null"/> for the factory's default entry.
+    /// </param>
+    /// <returns>
+    /// The window in tokens, or <see langword="null"/> when the adapter behind that entry does not
+    /// know the model.
+    /// </returns>
+    int? GetContextWindow(ModelReference? model);
 }

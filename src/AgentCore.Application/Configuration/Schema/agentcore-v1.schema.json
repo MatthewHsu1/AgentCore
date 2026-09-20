@@ -265,7 +265,7 @@
     },
     "titler": {
       "type": "object",
-      "description": "The model that names a conversation from its first few messages. The key is optional, and a document that omits it leaves the titler on the default providers.llm entry.",
+      "description": "The model that names a conversation from its newest messages. The key is optional, and a document that omits it leaves the titler on the default providers.llm entry.",
       "required": [
         "model"
       ],
@@ -659,9 +659,6 @@
             "knowledge": {
               "$ref": "#/$defs/agentKnowledge"
             },
-            "compaction": {
-              "$ref": "#/$defs/compaction"
-            },
             "todos": {
               "type": "boolean",
               "description": "Whether agents inherit the todos tools."
@@ -740,9 +737,6 @@
         "knowledge": {
           "$ref": "#/$defs/agentKnowledge"
         },
-        "compaction": {
-          "$ref": "#/$defs/compaction"
-        },
         "todos": {
           "type": "boolean",
           "description": "The agent gets the todos tools (TodoProvider)."
@@ -802,32 +796,6 @@
             "$ref": "#/$defs/skillName"
           }
         }
-      }
-    },
-    "compaction": {
-      "type": ["object", "null"],
-      "description": "Decision 3: no strategy here calls a model. A resumed conversation rebuilds a new session and re-derives from the replayed words, so a strategy that called a model would give one conversation two histories.",
-      "additionalProperties": false,
-      "properties": {
-        "strategy": {
-          "type": "string",
-          "enum": ["tool_result", "truncate", "sliding_window", "context_window"]
-        },
-        "trigger": {
-          "type": "object",
-          "additionalProperties": false,
-          "minProperties": 1,
-          "maxProperties": 1,
-          "description": "Exactly one condition. Zero would compact on every turn; two would leave the document silent about whether they are combined with All or Any.",
-          "properties": {
-            "tokens":   { "type": "integer", "minimum": 1 },
-            "messages": { "type": "integer", "minimum": 1 },
-            "turns":    { "type": "integer", "minimum": 1 },
-            "groups":   { "type": "integer", "minimum": 1 }
-          }
-        },
-        "keep": { "type": "integer", "minimum": 0 },
-        "foldResultChars": { "type": "integer", "minimum": 1 }
       }
     },
     "agentStore": {

@@ -9,4 +9,8 @@ namespace AgentCore.Application.Transcript;
 /// </param>
 /// <param name="Content">The message itself.</param>
 /// <param name="MessageId">What the message is called. Unique within the conversation. Never empty.</param>
-public sealed record ConversationMessageDraft(int? TurnIndex, ChatMessage Content, string MessageId);
+public sealed record ConversationMessageDraft(int? TurnIndex, ChatMessage Content, string MessageId)
+{
+    /// <inheritdoc cref="ConversationMessage.CoversUpTo"/>
+    public int? CoversUpTo { get; init; }
+}
