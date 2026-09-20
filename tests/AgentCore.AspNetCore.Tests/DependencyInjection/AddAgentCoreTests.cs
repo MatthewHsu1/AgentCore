@@ -1431,13 +1431,6 @@ public sealed class AddAgentCoreTests
             string conversationId, string messageId, ChatMessage content, CancellationToken cancellationToken = default)
             => ValueTask.CompletedTask;
 
-        public override ValueTask<IReadOnlyList<ConversationMessage>> ReadAsync(
-            string conversationId, CancellationToken cancellationToken = default)
-        {
-            IReadOnlyList<ConversationMessage> rows = [];
-            return ValueTask.FromResult(rows);
-        }
-
         public override ValueTask<int> EraseAsync(string conversationId, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(0);
 

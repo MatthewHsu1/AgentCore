@@ -1,5 +1,6 @@
 using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Transcript;
+using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
 using static AgentCore.Application.Tests.Transcript.AgentCoreChatHistoryProviderTestSupport;
@@ -77,7 +78,7 @@ public sealed class AgentCoreChatHistoryProviderTruncateTests
         Assert.True(cut);
         Assert.Equal(
             ["hello", "hi there", "order 41?", "it ships"],
-            (await store.ReadAsync(ConversationId, TestContext.Current.CancellationToken)).Select(row => row.Content.Text));
+            (await store.ReadAllAsync(ConversationId, TestContext.Current.CancellationToken)).Select(row => row.Content.Text));
     }
 
     /// <summary>
@@ -176,6 +177,6 @@ public sealed class AgentCoreChatHistoryProviderTruncateTests
         await provider.DrainAsync(session);
         Assert.Equal(
             ["order 41?", "it ships"],
-            (await store.ReadAsync(ConversationId, TestContext.Current.CancellationToken)).Select(row => row.Content.Text));
+            (await store.ReadAllAsync(ConversationId, TestContext.Current.CancellationToken)).Select(row => row.Content.Text));
     }
 }

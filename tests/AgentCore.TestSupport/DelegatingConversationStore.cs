@@ -72,12 +72,22 @@ public abstract class DelegatingConversationStore(IConversationStore inner) : IC
         => Inner.RewriteAsync(conversationId, messageId, content, cancellationToken);
 
     /// <inheritdoc />
-    public virtual ValueTask<IReadOnlyList<ConversationMessage>> ReadAsync(
+    public virtual ValueTask<IReadOnlyList<ConversationMessage>> ReadForSessionAsync(
         string conversationId, CancellationToken cancellationToken = default)
-        => Inner.ReadAsync(conversationId, cancellationToken);
+        => Inner.ReadForSessionAsync(conversationId, cancellationToken);
 
     /// <inheritdoc />
-    public virtual ValueTask<int> TruncateAsync(
+    public virtual ValueTask<IReadOnlyList<ConversationMessage>> ReadWindowAsync(
+        string conversationId, TranscriptWindow window, CancellationToken cancellationToken = default)
+        => Inner.ReadWindowAsync(conversationId, window, cancellationToken);
+
+    /// <inheritdoc />
+    public virtual ValueTask<int?> OrdinalOfAsync(
+        string conversationId, string messageId, CancellationToken cancellationToken = default)
+        => Inner.OrdinalOfAsync(conversationId, messageId, cancellationToken);
+
+    /// <inheritdoc />
+    public virtual ValueTask<ConversationCut> TruncateAsync(
         string conversationId, int fromOrdinal, CancellationToken cancellationToken = default)
         => Inner.TruncateAsync(conversationId, fromOrdinal, cancellationToken);
 

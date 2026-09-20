@@ -3,7 +3,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime;
-using AgentCore.Application.Transcript;
+using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
 using static AgentCore.Application.Tests.Transcript.ConversationSessionResumeTestSupport;
@@ -42,7 +42,7 @@ public sealed class ConversationSessionOutsideAppendTests
         IConversationStore store = new InMemoryConversationStore();
         var (session, _) = await RunTwoTurnsWithAnOutsideHandoffAsync(store);
 
-        var rows = await store.ReadAsync(session.ConversationId, TestContext.Current.CancellationToken);
+        var rows = await store.ReadAllAsync(session.ConversationId, TestContext.Current.CancellationToken);
         var ordinals = rows.Select(row => row.Ordinal).ToArray();
 
         for (var index = 1; index < ordinals.Length; index++)
@@ -85,7 +85,7 @@ public sealed class ConversationSessionOutsideAppendTests
             ["my name is Dana", "hi Dana", "Dana joined", "still there?"],
             clientB.Requests[0].Select(message => message.Text));
 
-        var rows = await store.ReadAsync(sessionA.ConversationId, TestContext.Current.CancellationToken);
+        var rows = await store.ReadAllAsync(sessionA.ConversationId, TestContext.Current.CancellationToken);
         Assert.Equal([0, 1, 2, 3, 4], rows.Select(row => row.Ordinal));
 
         var record = await store.GetAsync(sessionA.ConversationId, TestContext.Current.CancellationToken);
@@ -121,7 +121,7 @@ public sealed class ConversationSessionOutsideAppendTests
             TestContext.Current.CancellationToken);
         await session.FlushTranscriptAsync();
 
-        var rows = await store.ReadAsync(session.ConversationId, TestContext.Current.CancellationToken);
+        var rows = await store.ReadAllAsync(session.ConversationId, TestContext.Current.CancellationToken);
 
         Assert.Equal(3, rows.Count);
         Assert.Equal("m1", rows[0].MessageId);

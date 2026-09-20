@@ -21,7 +21,7 @@ internal sealed class RecordingConversationStore() : DelegatingConversationStore
     /// <summary>Gets every rewrite the provider asked for, in order.</summary>
     public List<ConversationMessage> Rewrites { get; } = [];
 
-    /// <summary>Gets how many times a whole conversation was read back.</summary>
+    /// <summary>Gets how many times a conversation was read back, by a consumer or by its session.</summary>
     public int Reads { get; private set; }
 
     /// <summary>Reads one conversation as the store holds it now, oldest message first.</summary>
@@ -79,8 +79,12 @@ internal sealed class RecordingConversationStore() : DelegatingConversationStore
     }
 
     /// <inheritdoc />
-    public override ValueTask<IReadOnlyList<ConversationMessage>> ReadAsync(
+    /// <remarks>The rows are the ones somebody said: nothing here writes a summary row.</remarks>
+    public override ValueTask<IReadOnlyList<ConversationMessage>> ReadForSessionAsync(
         string conversationId, CancellationToken cancellationToken = default)
+        => Read(conversationId);
+
+    private ValueTask<IReadOnlyList<ConversationMessage>> Read(string conversationId)
     {
         lock (_lock)
         {

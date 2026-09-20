@@ -48,7 +48,7 @@ public sealed class ConversationSessionConversationRowTests
         // Assert
         await session.FlushTranscriptAsync();
         Assert.NotNull(await store.GetAsync(session.ConversationId, TestContext.Current.CancellationToken));
-        Assert.NotEmpty(await store.ReadAsync(session.ConversationId, TestContext.Current.CancellationToken));
+        Assert.NotEmpty(await store.ReadAllAsync(session.ConversationId, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public sealed class ConversationSessionConversationRowTests
 
         // Assert
         Assert.Equal("store 0 is down.", fault.Message);
-        Assert.Empty(await inner.ReadAsync(session.ConversationId, TestContext.Current.CancellationToken));
+        Assert.Empty(await inner.ReadAllAsync(session.ConversationId, TestContext.Current.CancellationToken));
     }
 
     private static ConversationSession CreateSession(string yaml, IChatClient reply, IConversationStore store)

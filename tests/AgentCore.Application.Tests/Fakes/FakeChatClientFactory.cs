@@ -10,8 +10,13 @@ namespace AgentCore.Application.Tests.Fakes;
 internal sealed class FakeChatClientFactory : IChatClientFactory
 {
     private readonly IChatClient _client;
+    private readonly int _contextWindow;
 
-    public FakeChatClientFactory(IChatClient client) => _client = client;
+    public FakeChatClientFactory(IChatClient client, int contextWindow = 128_000)
+    {
+        _client = client;
+        _contextWindow = contextWindow;
+    }
 
     /// <summary>Gets every model reference this factory was asked for, in call order.</summary>
     public List<ModelReference?> Requested { get; } = [];
@@ -25,4 +30,6 @@ internal sealed class FakeChatClientFactory : IChatClientFactory
 
         return _client;
     }
+
+    public int? GetContextWindow(ModelReference? model) => _contextWindow;
 }

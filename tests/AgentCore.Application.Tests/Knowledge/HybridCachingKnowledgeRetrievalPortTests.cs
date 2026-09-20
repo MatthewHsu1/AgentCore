@@ -73,9 +73,9 @@ public sealed class HybridCachingKnowledgeRetrievalPortTests
         Assert.Equal("f85-2019", PayloadPath.Read(card.Extras, "model"));
         Assert.Equal(12L, PayloadPath.Read(card.Extras, "page"));
         Assert.Equal(1.5, PayloadPath.Read(card.Extras, "weight"));
-        Assert.Equal(false, PayloadPath.Read(card.Extras, "draft"));
+        Assert.False(Assert.IsType<bool>(PayloadPath.Read(card.Extras, "draft")));
         Assert.Equal("owner-manual", PayloadPath.Read(card.Extras, "source.doc"));
-        Assert.Equal(["belt", "deck"], Assert.IsAssignableFrom<IReadOnlyList<object?>>(PayloadPath.Read(card.Extras, "tags")));
+        Assert.Equal(["belt", "deck"], Assert.IsType<IReadOnlyList<object?>>(PayloadPath.Read(card.Extras, "tags"), exactMatch: false));
     }
 
     [Fact]

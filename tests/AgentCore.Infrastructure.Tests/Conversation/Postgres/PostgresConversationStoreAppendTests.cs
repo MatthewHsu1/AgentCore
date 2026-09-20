@@ -1,9 +1,11 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Transcript;
 using AgentCore.Infrastructure.Conversation.Postgres;
 using AgentCore.Infrastructure.Tests.Database.Postgres;
+using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
 
@@ -134,7 +136,7 @@ public sealed partial class PostgresConversationStoreAppendTests : PostgresDatab
         await Task.WhenAll(WriteFiftyAsync("a"), WriteFiftyAsync("b"));
 
         // Assert
-        var rows = await store.ReadAsync("c1", Token);
+        var rows = await store.ReadAllAsync("c1", Token);
         Assert.Equal(100, rows.Count);
         Assert.Equal(Enumerable.Range(0, 100), rows.Select(row => row.Ordinal).Order());
     }
@@ -167,7 +169,7 @@ public sealed partial class PostgresConversationStoreAppendTests : PostgresDatab
         await store.RewriteAsync("c1", "m0", new ChatMessage(ChatRole.User, "corrected"), Token);
 
         // Assert
-        var rows = await store.ReadAsync("c1", Token);
+        var rows = await store.ReadAllAsync("c1", Token);
         Assert.Equal(["corrected", "second"], rows.Select(row => row.Content.Text));
     }
 
@@ -190,7 +192,7 @@ public sealed partial class PostgresConversationStoreAppendTests : PostgresDatab
     }
 
     [PostgresFact]
-    public async Task ReadAsync_ARowWithAdditionalProperties_KeepsThemAcrossTheRoundTrip()
+    public async Task AppendAsync_ARowWithAdditionalProperties_KeepsThemAcrossTheRoundTrip()
     {
         // Arrange
         IConversationStore store = new PostgresConversationStore(DataSource);
@@ -204,7 +206,7 @@ public sealed partial class PostgresConversationStoreAppendTests : PostgresDatab
         await store.AppendMessageAsync("c1", message, Token);
 
         // Assert
-        var rows = await store.ReadAsync("c1", Token);
+        var rows = await store.ReadAllAsync("c1", Token);
         Assert.Equal("human", Assert.Single(rows).Content.AdditionalProperties?["speaker"]?.ToString());
     }
 

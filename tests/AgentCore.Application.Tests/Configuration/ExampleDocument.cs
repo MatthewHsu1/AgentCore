@@ -120,7 +120,6 @@ internal static class ExampleDocument
             instructions: |
               <the stable cached prefix: persona, safety, transfer rules, and tool etiquette>
             knowledge: { mode: prefetch, limit: 5, citations: false }
-            compaction: { strategy: context_window, trigger: { messages: 40 }, keep: 6, foldResultChars: 300 }
           items:
             - { id: greeter,    instructions: "<stage delta>", tools: [] }
             - { id: identifier, instructions: "<stage delta>", tools: [ lookup_order ] }
@@ -439,14 +438,6 @@ internal static class ExampleDocument
                 "mode": "prefetch",
                 "limit": 5,
                 "citations": false
-              },
-              "compaction": {
-                "strategy": "context_window",
-                "trigger": {
-                  "messages": 40
-                },
-                "keep": 6,
-                "foldResultChars": 300
               }
             },
             "items": [

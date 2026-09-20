@@ -1,7 +1,6 @@
 using System.Runtime.CompilerServices;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Conversation.Memory;
-using AgentCore.Application.Ports;
 using AgentCore.Application.Transcript;
 using Microsoft.Extensions.AI;
 using Xunit;
@@ -59,6 +58,31 @@ public sealed class ChatConversationTitlerTests
 
         // Assert
         Assert.Equal("kept", (await conversations.GetAsync("c1", Token))!.Title);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_OneTurnWritingManyMessages_SendsOnlyTheNewestSix()
+    {
+        // Arrange: the store reads whole turns, so one wide turn hands back more than six rows.
+        // The cut is by message, not by turn.
+        InMemoryConversationStore conversations = new();
+        await conversations.CreateAsync("c1", Token);
+        await conversations.AppendAsync(
+            "c1",
+            [
+                new ConversationMessageDraft(0, new ChatMessage(ChatRole.User, "early"), "m0"),
+                .. Enumerable.Range(1, 7).Select(n => new ConversationMessageDraft(1, new ChatMessage(ChatRole.User, $"m{n}"), $"m{n}")),
+            ],
+            cancellationToken: Token);
+        StubChatClient client = new("title");
+        ChatConversationTitler titler = new(conversations, client);
+
+        // Act
+        await CollectAsync(titler.GenerateAsync("c1", Token));
+
+        // Assert
+        var transcript = Assert.Single(client.Seen, message => message.Role == ChatRole.User).Text;
+        Assert.Equal("user: m2\nuser: m3\nuser: m4\nuser: m5\nuser: m6\nuser: m7\n", transcript.ReplaceLineEndings("\n"));
     }
 
     [Fact]

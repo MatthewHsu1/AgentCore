@@ -15,9 +15,12 @@ namespace AgentCore.TestSupport;
 public sealed class RoutingChatClientFactory : IChatClientFactory
 {
     private readonly Dictionary<string, IChatClient> _byName = new(StringComparer.Ordinal);
-    private readonly IChatClient _fallback;
+    private readonly IChatClient? _fallback;
 
-    public RoutingChatClientFactory(IChatClient fallback) => _fallback = fallback;
+    /// <param name="fallback">
+    /// The client for a reference with no route, or <see langword="null"/> to throw on one.
+    /// </param>
+    public RoutingChatClientFactory(IChatClient? fallback = null) => _fallback = fallback;
 
     /// <summary>Binds one client to one <c>as</c> name.</summary>
     public RoutingChatClientFactory Route(string name, IChatClient client)
@@ -27,5 +30,9 @@ public sealed class RoutingChatClientFactory : IChatClientFactory
     }
 
     public IChatClient GetChatClient(ModelReference? model)
-        => model is not null && _byName.TryGetValue(model.Ref, out var client) ? client : _fallback;
+        => model is not null && _byName.TryGetValue(model.Ref, out var client)
+            ? client
+            : _fallback ?? throw new KeyNotFoundException($"No offline client is routed to the model '{model?.Ref}'.");
+
+    public int? GetContextWindow(ModelReference? model) => 128_000;
 }

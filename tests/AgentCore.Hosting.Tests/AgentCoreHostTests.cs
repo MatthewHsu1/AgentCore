@@ -1,3 +1,4 @@
+using AgentCore.TestSupport;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Audit;
 using AgentCore.Application.Audit.Memory;
@@ -63,12 +64,6 @@ public sealed class AgentCoreHostTests
         public void Dispose()
         {
         }
-    }
-
-    /// <summary>The factory behind every model reference in these tests.</summary>
-    private sealed class FakeChatClientFactory : IChatClientFactory
-    {
-        public IChatClient GetChatClient(ModelReference? model) => new FakeChatClient();
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -239,7 +234,7 @@ public sealed class AgentCoreHostTests
         builder.AddAgentCoreHost(options =>
         {
             options.Configuration = ConfigurationLoader.LoadYaml(McpDocument);
-            options.UseChatClients(_ => new FakeChatClientFactory());
+            options.UseChatClients(_ => new RecordingChatClientFactory(new FakeChatClient()));
         });
 
         await using var app = builder.Build();
@@ -477,7 +472,7 @@ public sealed class AgentCoreHostTests
         builder.AddAgentCoreHost(options =>
         {
             options.Configuration = ConfigurationLoader.LoadYaml(document);
-            options.UseChatClients(_ => new FakeChatClientFactory());
+            options.UseChatClients(_ => new RecordingChatClientFactory(new FakeChatClient()));
             configure?.Invoke(options);
         });
 

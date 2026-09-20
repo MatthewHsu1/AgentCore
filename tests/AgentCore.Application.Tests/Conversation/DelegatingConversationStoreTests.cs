@@ -41,7 +41,7 @@ public sealed class DelegatingConversationStoreTests
 
         // Assert
         Assert.Equal(1, store.Appends);
-        Assert.Single(await store.ReadAsync("c1", Token));
+        Assert.Single(await store.ReadAllAsync("c1", Token));
     }
 
     [Fact]

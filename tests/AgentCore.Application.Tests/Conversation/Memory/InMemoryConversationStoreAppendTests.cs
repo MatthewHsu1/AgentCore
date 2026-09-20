@@ -1,8 +1,9 @@
 using System.Text.RegularExpressions;
-using AgentCore.Application.Conversation;
 using AgentCore.Application.Conversation.Memory;
+using AgentCore.Application.Conversation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Transcript;
+using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
 
@@ -138,7 +139,7 @@ public sealed partial class InMemoryConversationStoreAppendTests
         await store.RewriteAsync("c1", "m0", new ChatMessage(ChatRole.User, "corrected"), Token);
 
         // Assert
-        var rows = await store.ReadAsync("c1", Token);
+        var rows = await store.ReadAllAsync("c1", Token);
         Assert.Equal(["corrected", "second"], rows.Select(row => row.Content.Text));
     }
 
@@ -161,7 +162,7 @@ public sealed partial class InMemoryConversationStoreAppendTests
     }
 
     [Fact]
-    public async Task ReadAsync_ARowWithAdditionalProperties_KeepsThemAcrossTheRoundTrip()
+    public async Task AppendAsync_ARowWithAdditionalProperties_KeepsThemAcrossTheRoundTrip()
     {
         // Arrange
         IConversationStore store = new InMemoryConversationStore();
@@ -175,7 +176,7 @@ public sealed partial class InMemoryConversationStoreAppendTests
         await store.AppendMessageAsync("c1", message, Token);
 
         // Assert
-        var rows = await store.ReadAsync("c1", Token);
+        var rows = await store.ReadAllAsync("c1", Token);
         Assert.Equal("human", Assert.Single(rows).Content.AdditionalProperties?["speaker"]?.ToString());
     }
 

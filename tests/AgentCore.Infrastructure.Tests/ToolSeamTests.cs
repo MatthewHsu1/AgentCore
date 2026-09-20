@@ -1,3 +1,4 @@
+using AgentCore.TestSupport;
 using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Tools.Registry;
 using System.Net;
@@ -102,7 +103,7 @@ public sealed class ToolSeamTests
           using OneReplyChatClient model = new("done");
           var compiled = ConfigurationCompiler.CompileAll(
               document,
-              new AgentCompilationContext(new OneClientFactory(model)) { Tools = registry })["main"];
+              new AgentCompilationContext(new RecordingChatClientFactory(model)) { Tools = registry })["main"];
 
           Assert.Equal(3, compiled.Agents.Count);
 
@@ -117,16 +118,6 @@ public sealed class ToolSeamTests
           Assert.Equal(
               "Bearer sk-live-0123456789",
               handler.Requests[0].Headers.GetValues("Authorization").Single());
-      }
-
-      /// <summary>Hands the same offline client to every model reference.</summary>
-      private sealed class OneClientFactory : IChatClientFactory
-      {
-          private readonly IChatClient _client;
-
-          public OneClientFactory(IChatClient client) => _client = client;
-
-          public IChatClient GetChatClient(ModelReference? model) => _client;
       }
 
       /// <summary>An offline model that answers one line and calls no tool.</summary>

@@ -1,3 +1,4 @@
+using AgentCore.TestSupport;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.AspNetCore.DependencyInjection;
@@ -151,16 +152,11 @@ public sealed class ConfigurationSecretResolverTests
         builder.AddAgentCoreHost(options =>
         {
             options.Configuration = ConfigurationLoader.LoadYaml(Document);
-            options.UseChatClients(_ => new FakeSecretChainChatClientFactory());
+            options.UseChatClients(_ => new RecordingChatClientFactory(new FakeSecretChainChatClient()));
             configure(options);
         });
 
         return builder.Build();
-    }
-
-    private sealed class FakeSecretChainChatClientFactory : IChatClientFactory
-    {
-        public IChatClient GetChatClient(ModelReference? model) => new FakeSecretChainChatClient();
     }
 
     private sealed class FakeSecretChainChatClient : IChatClient

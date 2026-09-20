@@ -743,26 +743,6 @@ public sealed class ConfigurationSchemaValidatorTests
         Assert.Empty(ConfigurationSchemaValidator.Evaluate(parsed));
     }
 
-    [Theory]
-    [InlineData("{}")]
-    [InlineData("{ tokens: 60000, messages: 40 }")]
-    public void ACompactionTriggerNotNamingExactlyOneCondition_FailsWithThePointerOfTheTrigger(string trigger)
-    {
-        var document = $$"""
-            apiVersion: agentcore/v1
-            agents:
-              defaults:
-                compaction:
-                  strategy: truncate
-                  trigger: {{trigger}}
-            """;
-
-        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
-
-        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
-        Assert.Contains(failure.Errors, error => error.Pointer == "/agents/defaults/compaction/trigger");
-    }
-
     [Fact]
     public void AFullAgenticAgent_PassesCheckOne()
     {

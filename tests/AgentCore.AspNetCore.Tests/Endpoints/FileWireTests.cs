@@ -1,8 +1,9 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using AgentCore.Application.Conversation;
 using AgentCore.Application.Configuration.Parsing;
+using AgentCore.Application.Conversation;
 using AgentCore.AspNetCore.Tests.Fakes;
+using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -98,7 +99,7 @@ public sealed class FileWireTests : IDisposable
 
         // And a later read of the transcript links the same file again.
         var conversations = host.Services.GetRequiredService<Conversations>();
-        var stored = await conversations.ReadAsync(ConversationId, TestContext.Current.CancellationToken);
+        var stored = await conversations.ReadAllAsync(ConversationId, TestContext.Current.CancellationToken);
         var links = await conversations.LinkFilesAsync(ConversationId, stored.Select(row => row.Content), TestContext.Current.CancellationToken);
 
         var link = Assert.Single(links);

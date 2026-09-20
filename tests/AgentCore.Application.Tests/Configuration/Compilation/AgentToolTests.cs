@@ -272,11 +272,11 @@ public sealed class AgentToolTests
 
           var compiled = ConfigurationCompiler.CompileAll(document, new AgentCompilationContext(factory))["main"];
 
-          // Three declared agents, so three model resolutions. Two callers share the one specialist,
-          // and neither of them compiled a second copy of it. A fourth resolution would prove the
-          // opposite, because every ChatClientAgent this compiler builds asks the factory once.
+          // Three declared agents, so three model resolutions, each asking the factory twice: once
+          // for the compaction pipeline's summariser, once for its own ChatClientAgent. Two callers
+          // share the one specialist, and neither of them compiled a second copy of it.
           Assert.Equal(3, compiled.Agents.Count);
-          Assert.Equal(3, factory.Requested.Count);
+          Assert.Equal(6, factory.Requested.Count);
       }
 
       [Fact]
@@ -293,7 +293,7 @@ public sealed class AgentToolTests
 
           Assert.Same(first, second);
           Assert.Equal(1, registry.CompileCount);
-          Assert.Equal(3, factory.Requested.Count);
+          Assert.Equal(6, factory.Requested.Count);
       }
 
       [Fact]

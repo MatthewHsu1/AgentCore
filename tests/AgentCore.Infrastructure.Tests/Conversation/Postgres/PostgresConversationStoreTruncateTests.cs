@@ -2,6 +2,7 @@ using AgentCore.Application.Conversation;
 using AgentCore.Application.Transcript;
 using AgentCore.Infrastructure.Conversation.Postgres;
 using AgentCore.Infrastructure.Tests.Database.Postgres;
+using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Npgsql;
 using Xunit;
@@ -41,8 +42,8 @@ public sealed class PostgresConversationStoreTruncateTests : PostgresDatabaseTes
 
         var went = await store.TruncateAsync("C1", 2, Token);
 
-        Assert.Equal(2, went);
-        var rows = await store.ReadAsync("C1", Token);
+        Assert.Equal(new ConversationCut(2, new WithdrawnTurns(1, 1)), went);
+        var rows = await store.ReadAllAsync("C1", Token);
         Assert.Equal([0, 1], rows.Select(row => row.Ordinal));
     }
 
@@ -70,7 +71,7 @@ public sealed class PostgresConversationStoreTruncateTests : PostgresDatabaseTes
             state: null,
             Token);
 
-        var rows = await store.ReadAsync("C1", Token);
+        var rows = await store.ReadAllAsync("C1", Token);
         Assert.Equal([0, 1, 3], rows.Select(row => row.Ordinal));
         Assert.Equal([0, 0, 2], rows.Select(row => row.TurnIndex));
     }
@@ -85,7 +86,7 @@ public sealed class PostgresConversationStoreTruncateTests : PostgresDatabaseTes
             state: null,
             Token);
 
-        Assert.Equal("m0", (await store.ReadAsync("C1", Token))[0].MessageId);
+        Assert.Equal("m0", (await store.ReadAllAsync("C1", Token))[0].MessageId);
 
         var clash = await Record.ExceptionAsync(
             () => store.AppendAsync(
@@ -115,6 +116,6 @@ public sealed class PostgresConversationStoreTruncateTests : PostgresDatabaseTes
         Assert.Equal("collecting", record?.State?.Stage);
         Assert.Equal(1, record?.NextOrdinal);
         Assert.Equal(1, record?.State?.NextTurnIndex);
-        Assert.Empty(await store.ReadAsync("C1", Token));
+        Assert.Empty(await store.ReadAllAsync("C1", Token));
     }
 }

@@ -1,3 +1,4 @@
+using AgentCore.TestSupport;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
 using Microsoft.Extensions.AI;
@@ -25,9 +26,9 @@ public sealed class HostedWebSearchCapabilityTests
     {
         // A reference the document does not declare must not throw here. The compiler asks this
         // question while deciding whether to add a tool, and a missing model is reported elsewhere.
-        IChatClientFactory factory = new SilentFactory();
-
-        Assert.Null(factory.ResolveHostedTool(new HostedWebSearchTool(), new ModelReference { Ref = "absent" }));
+        // The interface default is under test; it is reachable only through the interface type.
+        Assert.Null(((IChatClientFactory)new RecordingChatClientFactory())
+            .ResolveHostedTool(new HostedWebSearchTool(), new ModelReference { Ref = "absent" }));
     }
 
     private static LlmProviderConfiguration Entry(bool? webSearch) => new()
@@ -46,12 +47,6 @@ public sealed class HostedWebSearchCapabilityTests
             LlmProviderConfiguration entry,
             ISecretResolverPort? secrets,
             CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
-    }
-
-    private sealed class SilentFactory : IChatClientFactory
-    {
-        public IChatClient GetChatClient(ModelReference? model)
             => throw new NotSupportedException();
     }
 }

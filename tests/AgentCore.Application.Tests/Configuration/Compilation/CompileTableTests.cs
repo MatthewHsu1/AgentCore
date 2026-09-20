@@ -399,8 +399,10 @@ public sealed class CompileTableTests
             document,
             new AgentCompilationContext(factory) { Knowledge = new StubKnowledgePort([]) })["phone"];
 
-        // 5 agents on the stage machine, plus analyst and webchat, which policy: never reaches.
-        Assert.Equal(7, factory.Requested.Count);
+        // 5 agents on the stage machine, plus analyst and webchat, which policy: never reaches. Each
+        // asks the factory twice: once for the compaction pipeline's summariser, once for its own
+        // ChatClientAgent.
+        Assert.Equal(14, factory.Requested.Count);
         Assert.All(factory.Requested, model => Assert.Equal("reply", model!.Ref));
     }
 

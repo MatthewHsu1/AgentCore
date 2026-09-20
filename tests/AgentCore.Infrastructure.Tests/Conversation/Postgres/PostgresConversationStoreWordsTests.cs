@@ -5,8 +5,9 @@ using AgentCore.Application.Runtime;
 using AgentCore.Application.Transcript;
 using AgentCore.Domain.Audit;
 using AgentCore.Infrastructure.Audit.Postgres;
-using AgentCore.Infrastructure.Tests.Database.Postgres;
 using AgentCore.Infrastructure.Conversation.Postgres;
+using AgentCore.Infrastructure.Tests.Database.Postgres;
+using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
 
@@ -83,7 +84,7 @@ public sealed class PostgresConversationStoreWordsTests : PostgresDatabaseTest
             cancellationToken: Token);
 
         // Assert
-        var rows = await store.ReadAsync("C1", Token);
+        var rows = await store.ReadAllAsync("C1", Token);
         Assert.Equal(
             ["Let me check that.", "lookup", "id1"],
             [
@@ -202,7 +203,7 @@ public sealed class PostgresConversationStoreWordsTests : PostgresDatabaseTest
         var record = await store.GetAsync("C1", Token);
         Assert.Equal("a", record?.State?.Stage);
 
-        var rows = await store.ReadAsync("C1", Token);
+        var rows = await store.ReadAllAsync("C1", Token);
         Assert.Single(rows);
         Assert.Equal("m0", rows[0].MessageId);
     }
@@ -227,38 +228,6 @@ public sealed class PostgresConversationStoreWordsTests : PostgresDatabaseTest
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Read. It runs at conversation start, on a resume, and nowhere else.
-    // ---------------------------------------------------------------------------------------------
-    [PostgresFact]
-    public async Task ReadAsync_AWrittenConversation_ReturnsEveryRowInOrdinalOrder()
-    {
-        // Arrange
-        var store = await OpenAsync();
-        await store.AppendAsync("C1", Turn(turnIndex: 0, idSeed: 0), cancellationToken: Token);
-        await store.AppendAsync("C1", Turn(turnIndex: 1, idSeed: 2), cancellationToken: Token);
-
-        // Act
-        var rows = await store.ReadAsync("C1", Token);
-
-        // Assert
-        Assert.Equal([0, 1, 2, 3], rows.Select(row => row.Ordinal).ToArray());
-    }
-
-    [PostgresFact]
-    public async Task ReadAsync_AnotherConversation_ReturnsNothing()
-    {
-        // Arrange
-        var store = await OpenAsync();
-        await store.AppendAsync("C1", Turn(turnIndex: 0, idSeed: 0), cancellationToken: Token);
-
-        // Act
-        var rows = await store.ReadAsync("C2", Token);
-
-        // Assert
-        Assert.Empty(rows);
-    }
-
-    // ---------------------------------------------------------------------------------------------
     // Rewrite. R4: the record holds the words the caller heard.
     // ---------------------------------------------------------------------------------------------
     [PostgresFact]
@@ -272,7 +241,7 @@ public sealed class PostgresConversationStoreWordsTests : PostgresDatabaseTest
         await store.RewriteAsync("C1", "m1", new ChatMessage(ChatRole.Assistant, "Order 41 sh"), Token);
 
         // Assert
-        var rows = await store.ReadAsync("C1", Token);
+        var rows = await store.ReadAllAsync("C1", Token);
         Assert.Equal(["what about order 41", "Order 41 sh"], rows.Select(row => row.Content.Text).ToArray());
     }
 
@@ -324,8 +293,8 @@ public sealed class PostgresConversationStoreWordsTests : PostgresDatabaseTest
 
         // Assert
         Assert.Equal(2, erased);
-        Assert.Empty(await store.ReadAsync("C1", Token));
-        Assert.Equal(2, (await store.ReadAsync("C2", Token)).Count);
+        Assert.Empty(await store.ReadAllAsync("C1", Token));
+        Assert.Equal(2, (await store.ReadAllAsync("C2", Token)).Count);
     }
 
 

@@ -20,7 +20,7 @@ internal sealed class ThrowingConversationStore() : DelegatingConversationStore(
         string conversationId, string messageId, ChatMessage content, CancellationToken cancellationToken = default)
         => throw new InvalidOperationException("the conversation store is down.");
 
-    public override ValueTask<IReadOnlyList<ConversationMessage>> ReadAsync(
+    public override ValueTask<IReadOnlyList<ConversationMessage>> ReadForSessionAsync(
         string conversationId, CancellationToken cancellationToken = default)
         => throw new InvalidOperationException("the conversation store is down.");
 

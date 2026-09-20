@@ -24,4 +24,6 @@ internal sealed class FakeChatClientAdapter : IChatClientAdapter
         ISecretResolverPort? secrets,
         CancellationToken cancellationToken = default)
         => ValueTask.FromResult(_client());
+
+    public int? GetContextWindow(LlmProviderConfiguration entry) => 128_000;
 }

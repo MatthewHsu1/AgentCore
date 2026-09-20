@@ -194,6 +194,21 @@ public sealed class CompositeChatClientFactoryTests
     }
 
     // ---------------------------------------------------------------------------------------------
+    // GetContextWindow: forwards to the adapter of the entry the reference names.
+    // ---------------------------------------------------------------------------------------------
+    [Fact]
+    public async Task GetContextWindow_ANamedReference_ForwardsToItsOwnAdapter()
+    {
+        RecordingChatClientAdapter openai = new("openai") { ContextWindow = 128_000 };
+        RecordingChatClientAdapter anthropic = new("anthropic") { ContextWindow = 200_000 };
+
+        using var factory = await Create(TwoVendorsYaml, openai, anthropic);
+
+        Assert.Equal(128_000, factory.GetContextWindow(new ModelReference { Ref = "reply" }));
+        Assert.Equal(200_000, factory.GetContextWindow(new ModelReference { Ref = "fill" }));
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // The temperature wrapper: the document keeps its setting, the vendor client stays one.
     // ---------------------------------------------------------------------------------------------
     [Fact]

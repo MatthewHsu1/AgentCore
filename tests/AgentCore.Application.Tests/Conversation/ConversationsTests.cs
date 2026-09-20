@@ -62,7 +62,7 @@ public sealed class ConversationsTests
     }
 
     [Fact]
-    public async Task LoadAsync_ReturnsTheRowTheWordsAndOneLinkPerKeptFile()
+    public async Task LoadWindowAsync_ReturnsTheRowTheWordsAndOneLinkPerKeptFile()
     {
         // Arrange
         CountingBlobStore blobs = new();
@@ -73,7 +73,7 @@ public sealed class ConversationsTests
         await conversations.AppendMessageAsync("conversation-1", ReplyWith(("chart.png", "image/png")), token);
 
         // Act
-        var stored = await conversations.LoadAsync("conversation-1", token);
+        var stored = await conversations.LoadWindowAsync("conversation-1", new TranscriptWindow(null, 10), token);
 
         // Assert
         Assert.NotNull(stored);
@@ -85,13 +85,59 @@ public sealed class ConversationsTests
     }
 
     [Fact]
-    public async Task LoadAsync_AConversationThatWasNeverMade_IsNull()
+    public async Task LoadWindowAsync_AFullWindow_NamesTheTurnToReadBeforeNext_AndLinksThatWindowsFilesAlone()
+    {
+        // Arrange: turn 0 kept a file, turn 1 kept another. The window holds turn 1 only.
+        CountingBlobStore blobs = new();
+        Conversations conversations = new(new InMemoryConversationStore(), blobs);
+        var token = TestContext.Current.CancellationToken;
+        await conversations.CreateAsync("conversation-1", token);
+        await conversations.AppendAsync(
+            "conversation-1",
+            [
+                new ConversationMessageDraft(0, new ChatMessage(ChatRole.User, "chart it"), "m0"),
+                new ConversationMessageDraft(0, ReplyWith(("chart.png", "image/png")), "m1"),
+                new ConversationMessageDraft(1, new ChatMessage(ChatRole.User, "rows too"), "m2"),
+                new ConversationMessageDraft(1, ReplyWith(("rows.csv", "text/csv")), "m3"),
+            ],
+            cancellationToken: token);
+
+        // Act
+        var stored = await conversations.LoadWindowAsync("conversation-1", new TranscriptWindow(null, 1), token);
+
+        // Assert
+        Assert.NotNull(stored);
+        Assert.Equal(["m2", "m3"], stored.Messages.Select(message => message.MessageId));
+        Assert.Equal(1, stored.OlderBefore);
+        Assert.Equal("rows.csv", Assert.Single(stored.Files).Blob.Name);
+    }
+
+    [Fact]
+    public async Task LoadWindowAsync_AShortWindow_ReachedTheStart_AndNamesNoTurn()
+    {
+        // Arrange
+        Conversations conversations = new(new InMemoryConversationStore(), blobs: null);
+        var token = TestContext.Current.CancellationToken;
+        await conversations.CreateAsync("conversation-1", token);
+        await conversations.AppendMessageAsync("conversation-1", new ChatMessage(ChatRole.User, "hello"), token);
+
+        // Act
+        var stored = await conversations.LoadWindowAsync("conversation-1", new TranscriptWindow(null, 5), token);
+
+        // Assert
+        Assert.NotNull(stored);
+        Assert.Single(stored.Messages);
+        Assert.Null(stored.OlderBefore);
+    }
+
+    [Fact]
+    public async Task LoadWindowAsync_AConversationThatWasNeverMade_IsNull()
     {
         // Arrange
         Conversations conversations = new(new InMemoryConversationStore(), blobs: null);
 
         // Act
-        var stored = await conversations.LoadAsync("conversation-1", TestContext.Current.CancellationToken);
+        var stored = await conversations.LoadWindowAsync("conversation-1", new TranscriptWindow(null, 5), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(stored);

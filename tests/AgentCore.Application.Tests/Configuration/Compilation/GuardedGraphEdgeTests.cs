@@ -1,3 +1,4 @@
+using AgentCore.TestSupport;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
@@ -289,7 +290,7 @@ public sealed class GuardedGraphEdgeTests
               var document = ConfigurationLoader.LoadYaml(GuardedGraphYaml);
               GuardEvaluator guards = new(document.Guards);
 
-              RoutingFactory models = new();
+              RoutingChatClientFactory models = new();
               models.Route("router", _router);
               models.Route("human", _human);
               models.Route("bot", _bot);
@@ -323,19 +324,4 @@ public sealed class GuardedGraphEdgeTests
           }
       }
 
-      /// <summary>Hands one offline client to each <c>providers.llm[].as</c> name.</summary>
-      private sealed class RoutingFactory : IChatClientFactory
-      {
-          private readonly Dictionary<string, IChatClient> _byName = new(StringComparer.Ordinal);
-
-          /// <summary>Binds one client to one model name.</summary>
-          /// <param name="name">The <c>as</c> name of one <c>providers.llm</c> entry.</param>
-          /// <param name="client">The client that answers for it.</param>
-          public void Route(string name, IChatClient client) => _byName[name] = client;
-
-          public IChatClient GetChatClient(ModelReference? model)
-              => model is not null && _byName.TryGetValue(model.Ref, out var client)
-                  ? client
-                  : throw new KeyNotFoundException($"No offline client is routed to the model '{model?.Ref}'.");
-      }
   }

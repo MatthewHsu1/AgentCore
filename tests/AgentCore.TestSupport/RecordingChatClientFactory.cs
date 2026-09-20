@@ -27,6 +27,8 @@ public sealed class RecordingChatClientFactory : IChatClientFactory
         return _client;
     }
 
+    public int? GetContextWindow(ModelReference? model) => 128_000;
+
     private sealed class StubChatClient : IChatClient
     {
         public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(

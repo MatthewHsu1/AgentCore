@@ -40,7 +40,7 @@ public sealed class ConversationSessionResumeTests
 
         await SecondTurnAsync(store, conversationId, "what is my name?", "Dana");
 
-        var rows = await store.ReadAsync(conversationId, TestContext.Current.CancellationToken);
+        var rows = await store.ReadAllAsync(conversationId, TestContext.Current.CancellationToken);
 
         // Two turns, each writing what the caller said and what it heard. A resumed session that
         // restarted its ordinals would overwrite the first pair rather than follow them.
@@ -56,7 +56,7 @@ public sealed class ConversationSessionResumeTests
 
         await SecondTurnAsync(store, conversationId, "what is my name?", "Dana");
 
-        var rows = await store.ReadAsync(conversationId, TestContext.Current.CancellationToken);
+        var rows = await store.ReadAllAsync(conversationId, TestContext.Current.CancellationToken);
 
         // The turn index is the join to the audit chain, so a second turn numbered 0 would claim the
         // first turn's events as its own.
@@ -71,7 +71,7 @@ public sealed class ConversationSessionResumeTests
 
         await SecondTurnAsync(store, "empty-conversation", "hello", "hi there");
 
-        var rows = await store.ReadAsync("empty-conversation", TestContext.Current.CancellationToken);
+        var rows = await store.ReadAllAsync("empty-conversation", TestContext.Current.CancellationToken);
 
         Assert.Equal([0, 1], rows.Select(row => row.Ordinal));
         Assert.Equal([0, 0], rows.Select(row => row.TurnIndex));
@@ -96,7 +96,7 @@ public sealed class ConversationSessionResumeTests
     /// <summary>A store 1 that takes words and will not give them back.</summary>
     private sealed class UnreadableConversationStore(IConversationStore inner) : DelegatingConversationStore(inner)
     {
-        public override ValueTask<IReadOnlyList<ConversationMessage>> ReadAsync(
+        public override ValueTask<IReadOnlyList<ConversationMessage>> ReadForSessionAsync(
             string conversationId, CancellationToken cancellationToken = default)
             => throw new InvalidOperationException("store 1 will not answer a read.");
     }
