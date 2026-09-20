@@ -67,7 +67,7 @@ internal static class ToolRegistryStartup
         }
 
         var registry = await ToolRegistryBuilder
-            .BuildAsync(sources, new ToolSourceContext(configuration), cancellationToken)
+            .BuildAsync(sources, new ToolSourceContext(configuration) { Cache = options.Cache }, cancellationToken)
             .ConfigureAwait(false);
 
         var servedIds = registry.Ids.ToHashSet(StringComparer.Ordinal);

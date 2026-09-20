@@ -319,6 +319,11 @@
         "request": {
           "$ref": "#/$defs/httpRequest"
         },
+        "cacheSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "kind: http or binding. Serve one answer again for the same arguments for this long. Only for a tool that reads and changes nothing."
+        },
         "model": {
           "$ref": "#/$defs/modelRef",
           "description": "kind: builtin. Reserved: setting it fails the load. No built-in tool reads it."
@@ -346,9 +351,10 @@
               "uses"
             ],
             "properties": {
-              "parameters": false
+              "parameters": false,
+              "cacheSeconds": false
             },
-            "$comment": "kind: builtin reads fixed argument names in C# (BuiltinToolSource). A document that overrides the schema makes the model fill boxes the C# never reads, so parameters is forbidden here."
+            "$comment": "kind: builtin reads fixed argument names in C# (BuiltinToolSource). A document that overrides the schema makes the model fill boxes the C# never reads, so parameters is forbidden here. A built-in acts on the conversation (files, shell, search), so cacheSeconds is forbidden too."
           }
         },
         {
@@ -399,7 +405,11 @@
           "then": {
             "required": [
               "agent"
-            ]
+            ],
+            "properties": {
+              "cacheSeconds": false
+            },
+            "$comment": "A kind: agent tool runs a model. Its answer is not a function of its arguments, so cacheSeconds is forbidden."
           }
         },
         {

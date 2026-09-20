@@ -2342,3 +2342,9 @@ AgentCore.Application.Knowledge.HybridCachingKnowledgeRetrievalPort.DisposeAsync
 static readonly AgentCore.Application.Knowledge.HybridCachingKnowledgeRetrievalPort.DefaultLifetime -> System.TimeSpan
 AgentCore.Application.Llm.ChatRequestProperties
 const AgentCore.Application.Llm.ChatRequestProperties.ConversationId = "urn:agentcore:conversation-id" -> string!
+AgentCore.Application.Configuration.Schema.ToolConfiguration.CacheSeconds.get -> int?
+AgentCore.Application.Configuration.Schema.ToolConfiguration.CacheSeconds.init -> void
+AgentCore.Application.Tools.CachedTool
+AgentCore.Application.Tools.CachedTool.CachedTool(Microsoft.Extensions.AI.AIFunction! inner, Microsoft.Extensions.Caching.Hybrid.HybridCache! cache, System.TimeSpan lifetime) -> void
+AgentCore.Application.Tools.Registry.ToolSourceContext.Cache.get -> Microsoft.Extensions.Caching.Hybrid.HybridCache?
+AgentCore.Application.Tools.Registry.ToolSourceContext.Cache.init -> void

@@ -40,7 +40,7 @@ public static class ToolRegistryBuilder
             var registrations = await source.ProvideAsync(context, cancellationToken).ConfigureAwait(false);
             foreach (var registration in registrations)
             {
-                Add(tools, registration);
+                Add(tools, registration, context);
             }
         }
 
@@ -49,7 +49,7 @@ public static class ToolRegistryBuilder
         return new ToolRegistry(tools);
     }
 
-    private static void Add(Dictionary<string, Lazy<AITool>> tools, ToolRegistration registration)
+    private static void Add(Dictionary<string, Lazy<AITool>> tools, ToolRegistration registration, ToolSourceContext context)
     {
         if (string.IsNullOrWhiteSpace(registration.Description))
         {
@@ -60,7 +60,7 @@ public static class ToolRegistryBuilder
 
         // Every resolve runs on the single startup flow that compiles the document. Nothing resolves
         // once the host is serving, so no request thread can race the Lazy.
-        Lazy<AITool> lazy = new(() => Limit(registration), LazyThreadSafetyMode.None);
+        Lazy<AITool> lazy = new(() => Cache(Limit(registration), registration.Id, context), LazyThreadSafetyMode.None);
 
         if (!tools.TryAdd(registration.Id, lazy))
         {
@@ -90,6 +90,24 @@ public static class ToolRegistryBuilder
                 $"the tool '{registration.Id}' declares a call timeout, but the source built a "
                 + $"{tool.GetType().Name} rather than an AIFunction, which has no call to time. Take "
                 + "the timeout off the registration, or serve the tool as an AIFunction.");
+    }
+
+    /// <summary>Wraps one tool in the cache when its declaration asks for one and the host has one.</summary>
+    private static AITool Cache(AITool tool, string id, ToolSourceContext context)
+    {
+        var declared = context.Configuration.Tools.FirstOrDefault(entry => string.Equals(entry.Id, id, StringComparison.Ordinal));
+
+        if (declared?.CacheSeconds is not { } seconds || context.Cache is not { } cache)
+        {
+            return tool;
+        }
+
+        return tool is AIFunction function
+            ? new CachedTool(function, cache, TimeSpan.FromSeconds(seconds))
+            : throw ToolSourceError.Fail(
+                $"the tool '{id}' declares cacheSeconds, but the source built a {tool.GetType().Name} "
+                + "rather than an AIFunction, which has no call to cache. Take cacheSeconds off the "
+                + "declaration, or serve the tool as an AIFunction.");
     }
 
     private static void VerifyEveryDeclarationIsServed(

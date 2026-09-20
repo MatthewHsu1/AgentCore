@@ -647,6 +647,58 @@ public sealed class ConfigurationSchemaValidatorTests
         Assert.Contains(failure.Errors, error => error.Pointer.Contains(name, StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A cached call runs nothing. A built-in acts on the conversation and a <c>kind: agent</c> tool
+    /// runs a model, so neither may declare <c>cacheSeconds:</c>; a GET or a reading host delegate may.
+    /// </summary>
+    [Theory]
+    [InlineData("builtin", "uses: web.search")]
+    [InlineData("agent", "agent: reviewer")]
+    public void CacheSecondsOnAKindWhoseAnswerIsNotAFunctionOfItsArguments_FailsWithThePointerOfTheKey(string kind, string discriminatorField)
+    {
+        var document = "apiVersion: agentcore/v1\n"
+            + "agents:\n"
+            + "  items:\n"
+            + "    - { id: reviewer, instructions: \"ok\" }\n"
+            + "entries:\n"
+            + "  main:\n"
+            + "    agent: reviewer\n"
+            + "tools:\n"
+            + "  - id: lookup\n"
+            + "    kind: " + kind + "\n"
+            + "    " + discriminatorField + "\n"
+            + "    cacheSeconds: 60\n";
+
+        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml(document));
+
+        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+        Assert.Contains(failure.Errors, error => error.Pointer.Contains("cacheSeconds", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("http", "request: { method: GET, url: \"https://example.test\" }")]
+    [InlineData("binding", "binds: host.lookup")]
+    public void CacheSecondsOnAToolThatReads_PassesCheckOne(string kind, string discriminatorField)
+    {
+        var document = "apiVersion: agentcore/v1\n"
+            + "agents:\n"
+            + "  items:\n"
+            + "    - { id: reviewer, instructions: \"ok\" }\n"
+            + "entries:\n"
+            + "  main:\n"
+            + "    agent: reviewer\n"
+            + "tools:\n"
+            + "  - id: lookup\n"
+            + "    kind: " + kind + "\n"
+            + "    " + discriminatorField + "\n"
+            + "    cacheSeconds: 60\n";
+
+        var parsed = ConfigurationLoader.ReadDocument(document, ConfigurationFormat.Yaml);
+
+        Assert.Empty(ConfigurationSchemaValidator.Evaluate(parsed));
+        Assert.Equal(60, ConfigurationLoader.LoadYaml(document).Tools[0].CacheSeconds);
+    }
+
     [Fact]
     public void ABuiltinToolWithNoParameters_PassesCheckOne()
     {

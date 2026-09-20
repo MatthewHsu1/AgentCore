@@ -19,12 +19,6 @@ public enum ToolKind
     /// <summary>
     /// A tool that runs another declared agent and returns its reply. <c>agent:</c> names it.
     /// </summary>
-    /// <remarks>
-    /// This is agent-as-tool, and it is not handoff. The outer agent sees one function, calls it,
-    /// and keeps control. Handoff transfers control instead, and an entry's <c>graph:</c> with
-    /// <c>pattern: handoff</c> already carries it, so the two do not overlap. Check 8 of section 8.5
-    /// walks the edges this kind declares.
-    /// </remarks>
     Agent,
 }
 
@@ -66,10 +60,6 @@ public sealed record ToolConfiguration
     /// <summary>
     /// Gets the id of the agent this tool runs. It is set when the kind is <see cref="ToolKind.Agent"/>.
     /// </summary>
-    /// <remarks>
-    /// The value names one entry of <c>agents.items</c>. It is the one explicit delegation edge in
-    /// the document, so check 8 reads this field and never a naming convention.
-    /// </remarks>
     public string? Agent { get; init; }
 
     /// <summary>Gets the raw JSON Schema of the tool arguments, or <see langword="null"/> when the tool takes none.</summary>
@@ -77,6 +67,13 @@ public sealed record ToolConfiguration
 
     /// <summary>Gets the HTTP call. It is set when the kind is <see cref="ToolKind.Http"/>.</summary>
     public HttpRequestConfiguration? Request { get; init; }
+
+    /// <summary>
+    /// Gets how long one answer is served again for the same arguments, in seconds, or
+    /// <see langword="null"/> when every call reaches the tool. Only a <see cref="ToolKind.Http"/>
+    /// or <see cref="ToolKind.Binding"/> tool may set it.
+    /// </summary>
+    public int? CacheSeconds { get; init; }
 
     /// <summary>Reserved. No <c>kind: builtin</c> tool reads it; setting it fails the load.</summary>
     public ModelReference? Model { get; init; }
