@@ -96,8 +96,11 @@ internal sealed record TurnInvocation
 
     /// <summary>Reads the turn filed on a run's options by <see cref="RunOptions"/>, or null when there is none.</summary>
     internal static TurnInvocation? From(AgentRunOptions? options)
-        => options is ChatClientAgentRunOptions run
-            && run.ChatOptions?.AdditionalProperties?.TryGetValue(ArgumentsKey, out var filed) == true
+        => options is ChatClientAgentRunOptions run ? From(run.ChatOptions) : null;
+
+    /// <summary>Reads the turn filed on the options one request carries, or null outside a turn.</summary>
+    internal static TurnInvocation? From(ChatOptions? options)
+        => options?.AdditionalProperties?.TryGetValue(ArgumentsKey, out var filed) == true
             ? filed as TurnInvocation
             : null;
 

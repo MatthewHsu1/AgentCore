@@ -6,6 +6,7 @@ using System.ClientModel;
 using System.Globalization;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Llm;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
 using Microsoft.Extensions.AI;
@@ -64,7 +65,7 @@ public sealed class OpenAiChatClientAdapter : IChatClientAdapter
         };
     }
 
-    /// <summary>Puts <c>store</c> and <c>reasoning_effort</c> on every request this client sends.</summary>
+    /// <summary>Puts <c>store</c>, <c>reasoning_effort</c> and <c>prompt_cache_key</c> on every request this client sends.</summary>
     internal static IChatClient WithResponseDefaults(IChatClient client, string? effort)
     {
         var level = effort is { Length: > 0 } value ? Level(value) : (ResponseReasoningEffortLevel?)null;
@@ -83,6 +84,11 @@ public sealed class OpenAiChatClientAdapter : IChatClientAdapter
                     }
 
                     raw.StoredOutputEnabled ??= false;
+
+                    if (options.AdditionalProperties?.TryGetValue(ChatRequestProperties.ConversationId, out string? conversationId) == true)
+                    {
+                        raw.PromptCacheKey ??= conversationId;
+                    }
 
                     if (level is { } chosen)
                     {

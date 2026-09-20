@@ -1,6 +1,5 @@
 #pragma warning disable OPENAI001
 
-using System.Runtime.CompilerServices;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Infrastructure.Llm.OpenAI;
@@ -25,7 +24,7 @@ namespace AgentCore.Infrastructure.Tests.Llm;
 /// Every test here runs offline. No request leaves the process and no key is real.
 /// </para>
 /// </remarks>
-public sealed partial class OpenAiReasoningEffortTests
+public sealed class OpenAiReasoningEffortTests
 {
     [Theory]
     [InlineData("none")]
@@ -189,39 +188,4 @@ public sealed class OpenAiHostedToolTests
         As = "reply",
         WebSearch = webSearch,
     };
-}
-
-public sealed partial class OpenAiReasoningEffortTests
-{
-    /// <summary>Records the options it was called with, and answers nothing.</summary>
-    private sealed class CapturingChatClient : IChatClient
-    {
-        public ChatOptions? Seen { get; private set; }
-
-        public Task<ChatResponse> GetResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
-        {
-            Seen = options;
-            return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, "ok")));
-        }
-
-        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            Seen = options;
-            await Task.Yield();
-            yield return new ChatResponseUpdate(ChatRole.Assistant, "ok");
-        }
-
-        public object? GetService(Type serviceType, object? serviceKey = null)
-            => serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
-
-        public void Dispose()
-        {
-        }
-    }
 }

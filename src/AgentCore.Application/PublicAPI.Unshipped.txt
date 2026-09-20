@@ -2340,3 +2340,5 @@ AgentCore.Application.Knowledge.HybridCachingKnowledgeRetrievalPort.SearchAsync(
 AgentCore.Application.Knowledge.HybridCachingKnowledgeRetrievalPort.GetService(System.Type! serviceType, object? serviceKey = null) -> object?
 AgentCore.Application.Knowledge.HybridCachingKnowledgeRetrievalPort.DisposeAsync() -> System.Threading.Tasks.ValueTask
 static readonly AgentCore.Application.Knowledge.HybridCachingKnowledgeRetrievalPort.DefaultLifetime -> System.TimeSpan
+AgentCore.Application.Llm.ChatRequestProperties
+const AgentCore.Application.Llm.ChatRequestProperties.ConversationId = "urn:agentcore:conversation-id" -> string!

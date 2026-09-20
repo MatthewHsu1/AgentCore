@@ -1,4 +1,5 @@
 using AgentCore.Application.Conversation.Memory;
+using AgentCore.Application.Llm;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
@@ -11,40 +12,6 @@ namespace AgentCore.Application.Configuration.Compilation;
 /// <summary>
 /// The compile table of section 8.2. It is a table, not a heuristic.
 /// </summary>
-/// <remarks>
-/// <list type="table">
-/// <listheader><term>The entry holds</term><description>AgentCore builds</description></listheader>
-/// <item>
-///   <term><c>agent:</c></term>
-///   <description><see cref="SingleAgentRow"/>: <c>ChatClientAgent</c>, with no runtime</description>
-/// </item>
-/// <item>
-///   <term><c>policy:</c></term>
-///   <description><see cref="PolicyRow"/>: the machine picks a stage each turn, and the stage names one agent. Runtime is <c>Stateless</c></description>
-/// </item>
-/// <item>
-///   <term><c>graph:</c> with <c>pattern:</c></term>
-///   <description><see cref="PatternGraphRow"/>: one of the four <c>AgentWorkflowBuilder</c> shapes</description>
-/// </item>
-/// <item>
-///   <term><c>graph:</c> with <c>nodes:</c> and <c>edges:</c></term>
-///   <description><see cref="ExplicitGraphRow"/>: <c>WorkflowBuilder</c>, agents bound as executors, then <c>AsAIAgent()</c></description>
-/// </item>
-/// <item>
-///   <term>two of <c>agent:</c>, <c>policy:</c>, <c>graph:</c>, or none of them</term>
-///   <description>a load-time error</description>
-/// </item>
-/// </list>
-/// <para>
-/// Each entry selects one row, and each row is a <see cref="CompileTableRow"/>. This class selects
-/// the row each entry picks and builds what every entry shares: the <c>agents.items</c> entries,
-/// their tools, and the per-entry turn-disposition layers.
-/// </para>
-/// <para>
-/// Every failure here reports through <see cref="ConfigurationLoadException"/> and carries a JSON
-/// Pointer, exactly as the eight checks of section 8.5 do.
-/// </para>
-/// </remarks>
 public static class ConfigurationCompiler
 {
     /// <summary>Picks the row of the compile table one entry selects.</summary>
@@ -285,6 +252,7 @@ public static class ConfigurationCompiler
                     ChatHistoryProvider = history,
                     AIContextProviders = providers,
                 });
+
             path.RemoveAt(path.Count - 1);
 
             var instrumented = new AIAgentBuilder(built)
@@ -303,6 +271,7 @@ public static class ConfigurationCompiler
     private static AuditingFunctionInvokingChatClient WithToolFailureAuditing(IChatClient model)
         => new(model.AsBuilder()
                     .UseOpenTelemetry(configure: static client => client.EnableSensitiveData = false)
+                    .ConfigureOptions(ConversationRequestStamp.Apply)
                     .Use(static innerClient => new ModelFacingChatClient(innerClient))
                     .Build());
 

@@ -36,7 +36,9 @@ internal sealed class ModelFacingChatClient(IChatClient inner) : DelegatingChatC
     private sealed class KeyHider : IDisposable
     {
         private readonly ChatOptions? _options;
+
         private readonly object? _held;
+        
         private readonly bool _took;
 
         private KeyHider(ChatOptions? options)
