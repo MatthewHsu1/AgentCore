@@ -2334,3 +2334,9 @@ override AgentCore.Application.Cache.PassThroughHybridCache.RemoveByTagAsync(str
 AgentCore.Application.Embeddings.HybridCachingEmbeddingGenerator
 AgentCore.Application.Embeddings.HybridCachingEmbeddingGenerator.HybridCachingEmbeddingGenerator(Microsoft.Extensions.AI.IEmbeddingGenerator<string!, Microsoft.Extensions.AI.Embedding<float>!>! inner, Microsoft.Extensions.Caching.Hybrid.HybridCache! cache, System.TimeSpan? lifetime = null) -> void
 static readonly AgentCore.Application.Embeddings.HybridCachingEmbeddingGenerator.DefaultLifetime -> System.TimeSpan
+AgentCore.Application.Knowledge.HybridCachingKnowledgeRetrievalPort
+AgentCore.Application.Knowledge.HybridCachingKnowledgeRetrievalPort.HybridCachingKnowledgeRetrievalPort(AgentCore.Application.Ports.IKnowledgeRetrievalPort! inner, Microsoft.Extensions.Caching.Hybrid.HybridCache! cache, System.TimeSpan? lifetime = null) -> void
+AgentCore.Application.Knowledge.HybridCachingKnowledgeRetrievalPort.SearchAsync(string! query, AgentCore.Domain.Knowledge.KnowledgeScope? scope = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Domain.Knowledge.KnowledgeCard!>!>
+AgentCore.Application.Knowledge.HybridCachingKnowledgeRetrievalPort.GetService(System.Type! serviceType, object? serviceKey = null) -> object?
+AgentCore.Application.Knowledge.HybridCachingKnowledgeRetrievalPort.DisposeAsync() -> System.Threading.Tasks.ValueTask
+static readonly AgentCore.Application.Knowledge.HybridCachingKnowledgeRetrievalPort.DefaultLifetime -> System.TimeSpan

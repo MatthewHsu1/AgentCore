@@ -1,5 +1,7 @@
+using AgentCore.Application.Cache;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using Microsoft.Extensions.AI;
 using AgentCore.AspNetCore.DependencyInjection;
@@ -74,6 +76,34 @@ public sealed class KnowledgeStartupTests
 
         Assert.Same(fake, port);
         Assert.Same(startup, seen);
+    }
+
+    [Fact]
+    public async Task OpenAsync_CacheSet_WrapsTheStoreAndStillReachesIt()
+    {
+        RecordingAdapter adapter = new("test");
+        AgentCoreOptions options = new() { Cache = PassThroughHybridCache.Instance };
+        options.UseKnowledgeStores(adapter);
+
+        var configuration = Configuration(new KnowledgeProviderConfiguration
+        {
+            Kind = "test",
+            Collection = "manuals",
+            Fields = new KnowledgeFieldsConfiguration { Body = "body" },
+        });
+        AgentCoreStartup startup = new(configuration, ResolvedSecrets.Empty);
+
+        var port = await KnowledgeStartup.OpenAsync(
+            configuration,
+            options,
+            startup,
+            embeddings: null,
+            scopeDeclared: false,
+            requireScope: false,
+            TestContext.Current.CancellationToken);
+
+        Assert.IsType<HybridCachingKnowledgeRetrievalPort>(port);
+        Assert.Same(adapter.LastBuilt, port.GetService<IKnowledgeFacetReadPort>());
     }
 
     [Fact]
@@ -177,11 +207,15 @@ public sealed class KnowledgeStartupTests
         }
     }
 
-    /// <summary>A port that answers with nothing. Only its identity is asserted against.</summary>
-    private sealed class FakePort : IKnowledgeRetrievalPort
+    /// <summary>A port that answers with nothing. Its identity, and one extra capability, are asserted against.</summary>
+    private sealed class FakePort : IKnowledgeRetrievalPort, IKnowledgeFacetReadPort
     {
         public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
             string query, KnowledgeScope? scope = null, CancellationToken cancellationToken = default)
+            => ValueTask.FromResult<IReadOnlyList<KnowledgeCard>>([]);
+
+        public ValueTask<IReadOnlyList<KnowledgeCard>> ReadByFacetAsync(
+            string path, string value, int limit, CancellationToken cancellationToken = default)
             => ValueTask.FromResult<IReadOnlyList<KnowledgeCard>>([]);
     }
 }

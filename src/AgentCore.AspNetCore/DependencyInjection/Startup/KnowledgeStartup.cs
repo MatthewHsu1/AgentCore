@@ -26,7 +26,25 @@ internal static class KnowledgeStartup
     /// </param>
     /// <param name="cancellationToken">Cancels the adapter build.</param>
     /// <returns>The port, open, or <see langword="null"/>.</returns>
-    internal static ValueTask<IKnowledgeRetrievalPort?> OpenAsync(
+    internal static async ValueTask<IKnowledgeRetrievalPort?> OpenAsync(
+        AgentCoreConfiguration configuration,
+        AgentCoreOptions options,
+        AgentCoreStartup startup,
+        IEmbeddingGenerator<string, Embedding<float>>? embeddings,
+        bool scopeDeclared,
+        bool requireScope,
+        CancellationToken cancellationToken)
+    {
+        var port = await OpenStoreAsync(
+                configuration, options, startup, embeddings, scopeDeclared, requireScope, cancellationToken)
+            .ConfigureAwait(false);
+
+        return port is null || options.Cache is not { } cache
+            ? port
+            : new HybridCachingKnowledgeRetrievalPort(port, cache);
+    }
+
+    private static ValueTask<IKnowledgeRetrievalPort?> OpenStoreAsync(
         AgentCoreConfiguration configuration,
         AgentCoreOptions options,
         AgentCoreStartup startup,
