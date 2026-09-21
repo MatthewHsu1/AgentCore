@@ -12,7 +12,15 @@ namespace AgentCore.Application.Runtime.Compaction
         /// <summary>Fraction of the model's context window at which compaction fires.</summary>
         public const double FireFraction = 0.75;
 
-        /// <summary>Fraction of the model's context window the summary stops at.</summary>
-        public const double TargetFraction = 0.5;
+        /// <summary>
+        /// Tokens. The fire point never goes above this, however large the window.
+        /// </summary>
+        public const int FireTokensCeiling = 200_000;
+
+        /// <summary>The token count above which compaction fires for a window.</summary>
+        public static int FireTokens(int contextWindow)
+        {
+            return Math.Min((int)(contextWindow * FireFraction), FireTokensCeiling);
+        }
     }
 }

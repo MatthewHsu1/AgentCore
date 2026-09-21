@@ -13,7 +13,7 @@ namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
     /// <see cref="CompactionStrategyFactory"/>: the one fixed <c>Cap -&gt; Summary</c> pair (D7, D9),
-    /// sized off the model's window, and the compiler's refusal when the window is unknown (D14, D15).
+    /// fired off the model's window under the token ceiling, and the compiler's refusal when the window is unknown (D14, D15).
     /// </summary>
 #pragma warning disable MAAI001 // Compaction is evaluation-only in Microsoft.Agents.AI 1.21.0.
     public sealed class CompactionStrategyFactoryTests
@@ -29,11 +29,12 @@ namespace AgentCore.Application.Tests.Runtime
         }
 
         [Fact]
-        public async Task Create_AViewAt76PercentOfTheWindow_FiresAndLandsAtOrUnderTheTarget()
+        public async Task Create_AViewAt76PercentOfTheWindow_FiresAndKeepsOnlyTheFourNewestGroups()
         {
-            // window = 1000: fire above 750 (75%), stop at or below 500 (50%). 20 pairs of 76-char
-            // messages sum to exactly 3040 UTF-8 bytes, which MAF's byte/4 estimator (no tokenizer
-            // supplied) reads as exactly 760 tokens - over the fire line.
+            // window = 1000: fire above 750 (75%). 20 pairs of 76-char messages sum to exactly 3040
+            // UTF-8 bytes, which MAF's byte/4 estimator (no tokenizer supplied) reads as exactly 760
+            // tokens - over the fire line. There is no token target: every group older than the
+            // kept four goes into the one summary.
             using SequencedChatClient summariser = new("summary.");
             CompactionStages stages = CompactionStrategyFactory.Create(summariser, contextWindow: 1000);
 
@@ -42,8 +43,24 @@ namespace AgentCore.Application.Tests.Runtime
             List<ChatMessage> compacted = [.. await CompactionProvider.CompactAsync(
                 stages.Summary, view, cancellationToken: TestContext.Current.CancellationToken)];
 
-            int after = EstimatedTokens(compacted);
-            Assert.True(after <= 500, $"expected at or under the 500-token target, got {after}.");
+            AssertSummaryThenTail(view, compacted);
+        }
+
+        [Fact]
+        public async Task Create_AOneMillionWindowAtJustOverTheCeiling_FiresAndKeepsOnlyTheFourNewestGroups()
+        {
+            // window = 1,000,000: 75% would be 750,000, but the 200,000-token ceiling wins. The
+            // estimator rounds down per message, so 20 pairs of 20,004-char messages read as
+            // 40 x 5,001 = 200,040 tokens - over the ceiling, far under 75% of the window.
+            using SequencedChatClient summariser = new("summary.");
+            CompactionStages stages = CompactionStrategyFactory.Create(summariser, contextWindow: 1_000_000);
+
+            List<ChatMessage> view = Conversation(pairs: 20, charsPerMessage: 20_004);
+
+            List<ChatMessage> compacted = [.. await CompactionProvider.CompactAsync(
+                stages.Summary, view, cancellationToken: TestContext.Current.CancellationToken)];
+
+            AssertSummaryThenTail(view, compacted);
         }
 
         [Fact]
@@ -137,9 +154,15 @@ namespace AgentCore.Application.Tests.Runtime
                 });
         }
 
-        private static int EstimatedTokens(IReadOnlyList<ChatMessage> messages)
+        /// <summary>One new summary message, then the view's four newest messages, the same instances.</summary>
+        private static void AssertSummaryThenTail(List<ChatMessage> view, List<ChatMessage> compacted)
         {
-            return messages.Sum(message => System.Text.Encoding.UTF8.GetByteCount(message.Text)) / 4;
+            Assert.Equal(CompactionDefaults.Keep + 1, compacted.Count);
+            Assert.DoesNotContain(compacted[0], view);
+            for (int index = 1; index < compacted.Count; index++)
+            {
+                Assert.Same(view[view.Count - CompactionDefaults.Keep + index - 1], compacted[index]);
+            }
         }
 
         private static List<ChatMessage> Conversation(int pairs, int charsPerMessage)

@@ -6,14 +6,12 @@ using Microsoft.Extensions.AI;
 namespace AgentCore.Application.Runtime.Compaction
 {
     /// <summary>
-    /// Builds the one fixed compaction every agent runs: cap old tool results, then summarise the
-    /// rest, sized off the model's own context window (D7, D9). The trigger-taking overload lets a
-    /// test size the same pair to fire on a handful of fixture messages.
+    /// Builds the one fixed compaction every agent runs.
     /// </summary>
 #pragma warning disable MAAI001 // Compaction is evaluation-only in Microsoft.Agents.AI 1.21.0.
     internal static class CompactionStrategyFactory
     {
-        /// <summary>Builds the stages off the window fractions.</summary>
+        /// <summary>Builds the stages off the window fraction and the token ceiling.</summary>
         /// <param name="summariser">The chat client the summary stage calls. This is the agent's own reply model.</param>
         /// <param name="contextWindow">The reply model's context window, in tokens.</param>
         /// <returns>A <see cref="ToolResultCapProvider"/> and a <see cref="SummarizationCompactionStrategy"/>, on the same trigger.</returns>
@@ -22,26 +20,21 @@ namespace AgentCore.Application.Runtime.Compaction
         {
             ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(contextWindow, 0);
 
-            return Create(
-                summariser,
-                CompactionTriggers.TokensExceed((int)(contextWindow * CompactionDefaults.FireFraction)),
-                CompactionTriggers.TokensBelow((int)(contextWindow * CompactionDefaults.TargetFraction)));
+            return Create(summariser, CompactionTriggers.TokensExceed(CompactionDefaults.FireTokens(contextWindow)));
         }
 
-        /// <summary>Builds the stages off explicit triggers. A test passes <c>Always</c> and <c>Never</c> here.</summary>
+        /// <summary>Builds the stages off an explicit trigger. A test passes <c>Always</c> or <c>Never</c> here.</summary>
         /// <param name="summariser">The chat client the summary stage calls.</param>
         /// <param name="fire">When a stage applies, judged over everything bound for the model.</param>
-        /// <param name="target">Where the summary stops. Only the summary stage reads this.</param>
         /// <returns>A <see cref="ToolResultCapProvider"/> and a <see cref="SummarizationCompactionStrategy"/>, on the same trigger.</returns>
-        public static CompactionStages Create(IChatClient summariser, CompactionTrigger fire, CompactionTrigger target)
+        public static CompactionStages Create(IChatClient summariser, CompactionTrigger fire)
         {
             ArgumentNullException.ThrowIfNull(summariser);
             ArgumentNullException.ThrowIfNull(fire);
-            ArgumentNullException.ThrowIfNull(target);
 
             return new CompactionStages(
                 new ToolResultCapProvider(fire, CompactionDefaults.Keep, CompactionDefaults.CapResultChars),
-                new SummarizationCompactionStrategy(summariser, fire, CompactionDefaults.Keep, target: target));
+                new SummarizationCompactionStrategy(summariser, fire, CompactionDefaults.Keep, target: CompactionTriggers.Never));
         }
 
         /// <summary>Builds the providers in chain order: the cap always runs, the summary needs history to persist its row.</summary>
