@@ -207,7 +207,7 @@ namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
             PostgresConversationStore store = new(DataSource);
             _ = await store.CreateAsync("c1", Token);
             using JsonDocument document = JsonDocument.Parse("""{ "conversationId": "c1" }""");
-            await store.SaveContinuationAsync("c1", document.RootElement, Token);
+            await store.SaveContinuationAsync("c1", "c1", document.RootElement, Token);
 
             // Act
             await store.DeleteAsync("c1", Token);

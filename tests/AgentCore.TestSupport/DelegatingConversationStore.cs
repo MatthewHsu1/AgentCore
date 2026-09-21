@@ -149,9 +149,9 @@ namespace AgentCore.TestSupport
 
         /// <inheritdoc />
         public virtual ValueTask SaveContinuationAsync(
-            string continuationId, JsonElement envelope, CancellationToken cancellationToken = default)
+            string continuationId, string conversationId, JsonElement envelope, CancellationToken cancellationToken = default)
         {
-            return Inner.SaveContinuationAsync(continuationId, envelope, cancellationToken);
+            return Inner.SaveContinuationAsync(continuationId, conversationId, envelope, cancellationToken);
         }
 
         /// <inheritdoc />

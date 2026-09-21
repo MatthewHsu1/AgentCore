@@ -235,9 +235,9 @@ namespace AgentCore.Application.Conversation
         }
 
         /// <inheritdoc />
-        public ValueTask SaveContinuationAsync(string continuationId, JsonElement envelope, CancellationToken cancellationToken = default)
+        public ValueTask SaveContinuationAsync(string continuationId, string conversationId, JsonElement envelope, CancellationToken cancellationToken = default)
         {
-            return Store.SaveContinuationAsync(continuationId, envelope, cancellationToken);
+            return Store.SaveContinuationAsync(continuationId, conversationId, envelope, cancellationToken);
         }
 
         /// <inheritdoc />

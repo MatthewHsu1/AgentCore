@@ -65,10 +65,16 @@ CREATE INDEX conversation_message_summary_idx    ON agentcore.conversation_messa
 GRANT SELECT, INSERT, UPDATE, DELETE ON agentcore.conversation_message TO agentcore_writer;
 
 CREATE TABLE agentcore.response_continuation (
-    store_id    text        PRIMARY KEY,
-    envelope    jsonb       NOT NULL,
-    created_at  timestamptz NOT NULL DEFAULT now()
+    store_id        text        PRIMARY KEY,
+    conversation_id text        NOT NULL REFERENCES agentcore.conversation(conversation_id) ON DELETE CASCADE,
+    envelope        jsonb       NOT NULL,
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    updated_at      timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE INDEX response_continuation_conversation_idx ON agentcore.response_continuation (conversation_id);
+
+CREATE INDEX response_continuation_retention_idx ON agentcore.response_continuation (updated_at);
 
 REVOKE ALL ON agentcore.response_continuation FROM PUBLIC;
 

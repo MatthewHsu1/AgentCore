@@ -6,11 +6,7 @@ using Microsoft.Extensions.AI;
 namespace AgentCore.Application.Ports
 {
     /// <summary>
-    /// The door a host or a consumer reads and writes stored conversations through: rows, words, and the
-    /// files a conversation published, together. Words are read a window of turns at a time and never
-    /// whole: a consumer that could read a whole conversation would, and a long one is a slow query and a
-    /// large body every time. What the turn loop and the sweeper need beyond this stays on
-    /// <see cref="IConversationStore"/>, which is the adapter seam and not a consumer surface.
+    /// The door a host or a consumer reads and writes stored conversations through.
     /// </summary>
     public interface IConversations
     {
@@ -66,5 +62,11 @@ namespace AgentCore.Application.Ports
 
         /// <inheritdoc cref="IConversationStore.DetachPrincipalAsync"/>
         ValueTask DetachPrincipalAsync(string conversationId, string principalKey, CancellationToken cancellationToken = default);
+
+        /// <inheritdoc cref="IConversationStore.SweepAsync"/>
+        ValueTask<int> SweepAsync(
+            TimeSpan retention,
+            int batchSize = 500,
+            CancellationToken cancellationToken = default);
     }
 }

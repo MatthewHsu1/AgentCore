@@ -255,7 +255,7 @@ namespace AgentCore.Application.Tests.Conversation
             InMemoryConversationStore store = new();
             _ = await store.CreateAsync("c1", Token);
             using JsonDocument document = JsonDocument.Parse("""{ "conversationId": "c1" }""");
-            await store.SaveContinuationAsync("c1", document.RootElement, Token);
+            await store.SaveContinuationAsync("c1", "c1", document.RootElement, Token);
 
             // Act
             await store.DeleteAsync("c1", Token);
@@ -265,14 +265,17 @@ namespace AgentCore.Application.Tests.Conversation
         }
 
         [Fact]
-        public async Task SweepAsync_AConversationPastRetention_TakesItsResumeStateWithIt()
+        public async Task SweepAsync_AContinuationPastRetention_TakesTheRowOnly()
         {
-            // Arrange — retention is the promise that a conversation stops existing, and slots hold what the
-            // extractor took from the caller, so state left behind is data kept past the promise.
+            // Arrange — retention ages out resume state, not the conversation it resumes: the words and
+            // the slots the extractor filled stay, the same way a stale response id stops resolving with
+            // most providers while the conversation itself lives on.
             TestTimeProvider clock = new();
             InMemoryConversationStore store = new(clock);
             _ = await store.CreateAsync("c1", Token);
             _ = await store.AppendAsync("c1", [Word()], new ConversationSessionState { Stage = "collecting" }, Token);
+            using JsonDocument document = JsonDocument.Parse("""{ "state": {} }""");
+            await store.SaveContinuationAsync("c1", "c1", document.RootElement, Token);
 
             // Act
             clock.Advance(TimeSpan.FromDays(2));
@@ -280,7 +283,8 @@ namespace AgentCore.Application.Tests.Conversation
 
             // Assert
             Assert.Equal(1, swept);
-            Assert.Null((await store.CreateAsync("c1", Token)).State);
+            Assert.Null(await store.GetContinuationAsync("c1", Token));
+            Assert.NotNull(await store.GetAsync("c1", Token));
         }
 
         private static ConversationMessageDraft Word()
