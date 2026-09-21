@@ -4,8 +4,8 @@
 
 using System.ClientModel;
 using System.ClientModel.Primitives;
-using System.Collections.Concurrent;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Llm;
@@ -14,7 +14,6 @@ using AgentCore.Application.Secrets;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using OpenAI;
-using ChatClient = OpenAI.Chat.ChatClient;
 using ChatCompletionOptions = OpenAI.Chat.ChatCompletionOptions;
 using ChatReasoningEffortLevel = OpenAI.Chat.ChatReasoningEffortLevel;
 
@@ -49,11 +48,8 @@ namespace AgentCore.Infrastructure.Llm.OpenCodeGo
         /// <summary>The endpoint this adapter posts to, unless a host names its own.</summary>
         public static readonly Uri DefaultApiEndpoint = new("https://opencode.ai/zen/go/v1", UriKind.Absolute);
 
-        /// <summary>One vendor client per (model, conversation) pair, built once and reused.</summary>
-        private readonly ConcurrentDictionary<(string Model, string SessionId), IChatClient> _clients = new();
-
-        /// <summary>The <c>reasoningEffort</c> each model was declared with, read once per model.</summary>
-        private readonly ConcurrentDictionary<string, string?> _effortByModel = new();
+        /// <summary>The conversation id the header policy reads on send. </summary>
+        private readonly AsyncLocal<string?> _currentSessionId = new();
 
         private readonly IHttpMessageHandlerFactory _handlers;
 
@@ -62,6 +58,8 @@ namespace AgentCore.Infrastructure.Llm.OpenCodeGo
         private HttpClient? _transport;
 
         private ApiKeyCredential? _credential;
+
+        private OpenAIClient? _vendorClient;
 
         /// <summary>Creates the adapter over the outbound pipeline of the host.</summary>
         /// <param name="handlers">The pipeline that holds the connection lifetime, the deadline, and the retry.</param>
@@ -118,29 +116,30 @@ namespace AgentCore.Infrastructure.Llm.OpenCodeGo
                 _credential = new ApiKeyCredential(apiKey);
             }
 
-            _effortByModel[entry.Model] = entry.ReasoningEffort;
-
-            return new ConversationRoutedChatClient(entry.Model, ClientFor);
+            return new ConversationRoutedChatClient(
+                () => BuildClientFor(entry.Model, entry.ReasoningEffort), _currentSessionId);
         }
 
-        /// <summary>Gets the vendor client of one (model, conversation) pair, building it on the first ask.</summary>
-        private IChatClient ClientFor(string model, string sessionId)
+        /// <summary>Gets the vendor client of one model, built fresh over the one shared vendor connection.</summary>
+        private IChatClient BuildClientFor(string model, string? effort)
         {
-            return _clients.GetOrAdd((model, sessionId), key =>
+            _vendorClient ??= CreateVendorClient();
+
+            return WithReasoningEffort(_vendorClient.GetChatClient(model).AsIChatClient(), effort);
+        }
+
+        /// <summary>Builds the one vendor connection every model shares, with the session header wired to <see cref="_currentSessionId"/>.</summary>
+        private OpenAIClient CreateVendorClient()
+        {
+            OpenAIClientOptions options = new()
             {
-                OpenAIClientOptions options = new()
-                {
-                    Endpoint = _apiEndpoint,
-                    Transport = new HttpClientPipelineTransport(_transport!),
-                };
+                Endpoint = _apiEndpoint,
+                Transport = new HttpClientPipelineTransport(_transport!),
+            };
 
-                options.AddPolicy(new OpenCodeGoHeaderPolicy(key.SessionId), PipelinePosition.BeforeTransport);
+            options.AddPolicy(new OpenCodeGoHeaderPolicy(_currentSessionId), PipelinePosition.BeforeTransport);
 
-                ChatClient vendorClient = new OpenAIClient(_credential!, options).GetChatClient(key.Model);
-                string? effort = _effortByModel.GetValueOrDefault(key.Model);
-
-                return WithReasoningEffort(vendorClient.AsIChatClient(), effort);
-            });
+            return new OpenAIClient(_credential!, options);
         }
 
         /// <summary>Puts <c>reasoning_effort</c> on every request this client sends, unless the caller already set one.</summary>
@@ -201,7 +200,7 @@ namespace AgentCore.Infrastructure.Llm.OpenCodeGo
         }
 
         /// <summary>Writes the two headers OpenCode Go's own docs ask for, last, so nothing after this undoes them.</summary>
-        private sealed class OpenCodeGoHeaderPolicy(string sessionId) : PipelinePolicy
+        private sealed class OpenCodeGoHeaderPolicy(AsyncLocal<string?> currentSessionId) : PipelinePolicy
         {
             public override void Process(PipelineMessage message, IReadOnlyList<PipelinePolicy> pipeline, int currentIndex)
             {
@@ -217,26 +216,40 @@ namespace AgentCore.Infrastructure.Llm.OpenCodeGo
 
             private void Annotate(PipelineMessage message)
             {
+                string sessionId = currentSessionId.Value
+                    ?? throw new InvalidOperationException(
+                        "OpenCode Go requires a conversation id set on the current call before it reaches the transport.");
+
                 message.Request.Headers.Set(SessionHeaderName, sessionId);
                 message.Request.Headers.Set("User-Agent", UserAgentValue);
             }
         }
 
-        /// <summary>Routes each call to the vendor client of the conversation it belongs to.</summary>
+        /// <summary>Routes each call to the vendor client of its model, after stamping the conversation id the header policy reads.</summary>
         private sealed class ConversationRoutedChatClient(
-            string model,
-            Func<string, string, IChatClient> resolve) : IChatClient
+            Func<IChatClient> resolve,
+            AsyncLocal<string?> currentSessionId) : IChatClient
         {
             public Task<ChatResponse> GetResponseAsync(
                 IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
             {
-                return Route(options).GetResponseAsync(messages, options, cancellationToken);
+                currentSessionId.Value = RequireConversationId(options);
+                return resolve().GetResponseAsync(messages, options, cancellationToken);
             }
 
-            public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-                IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
+            public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+                IEnumerable<ChatMessage> messages,
+                ChatOptions? options = null,
+                [EnumeratorCancellation] CancellationToken cancellationToken = default)
             {
-                return Route(options).GetStreamingResponseAsync(messages, options, cancellationToken);
+                currentSessionId.Value = RequireConversationId(options);
+
+                await foreach (ChatResponseUpdate update in resolve()
+                    .GetStreamingResponseAsync(messages, options, cancellationToken)
+                    .ConfigureAwait(false))
+                {
+                    yield return update;
+                }
             }
 
             public object? GetService(Type serviceType, object? serviceKey = null)
@@ -247,11 +260,11 @@ namespace AgentCore.Infrastructure.Llm.OpenCodeGo
 
             public void Dispose()
             {
-                // The vendor clients this routes to share the adapter's one transport, which the
+                // The vendor client this routes to shares the adapter's one transport, which the
                 // adapter — not any conversation's view of it — owns.
             }
 
-            private IChatClient Route(ChatOptions? options)
+            private static string RequireConversationId(ChatOptions? options)
             {
                 if (options?.AdditionalProperties?.TryGetValue(
                         ChatRequestProperties.ConversationId, out string? conversationId) != true
@@ -261,7 +274,7 @@ namespace AgentCore.Infrastructure.Llm.OpenCodeGo
                         $"OpenCode Go requires a conversation id on every request. Set {ChatRequestProperties.ConversationId} in ChatOptions.AdditionalProperties.");
                 }
 
-                return resolve(model, conversationId);
+                return conversationId;
             }
         }
     }
