@@ -45,6 +45,9 @@ namespace AgentCore.AspNetCore.DependencyInjection
         /// <summary>Gets the seam that resolves a model reference, or <see langword="null"/>.</summary>
         internal Func<AgentCoreStartup, CancellationToken, ValueTask<IChatClientFactory>>? ChatClients { get; private set; }
 
+        /// <summary>Gets the catalog every chat adapter's context window is read from, or <see langword="null"/>.</summary>
+        internal IModelCatalogPort? ModelCatalog { get; private set; }
+
         /// <summary>Gets the embedding vendors the host registered, or <see langword="null"/>.</summary>
         internal IReadOnlyList<IEmbeddingGeneratorAdapter>? Embeddings { get; private set; }
 
@@ -117,6 +120,16 @@ namespace AgentCore.AspNetCore.DependencyInjection
             return this;
         }
 
+        /// <summary>Binds the catalog every chat adapter's context window is read from.</summary>
+        /// <param name="catalog">Looks up one entry's context window by its <c>kind</c> and <c>model</c>.</param>
+        /// <returns>These options, so a host chains its conversations.</returns>
+        public AgentCoreOptions UseModelCatalog(IModelCatalogPort catalog)
+        {
+            ArgumentNullException.ThrowIfNull(catalog);
+            ModelCatalog = catalog;
+            return this;
+        }
+
         /// <summary>Binds the vendor adapters, and the document picks one by each entry's <c>kind</c>.</summary>
         /// <param name="adapters">One adapter for each vendor this host supports.</param>
         /// <returns>These options, so a host chains its conversations.</returns>
@@ -124,7 +137,7 @@ namespace AgentCore.AspNetCore.DependencyInjection
         {
             ArgumentNullException.ThrowIfNull(adapters);
             return UseChatClients(async (startup, cancellationToken) => await CompositeChatClientFactory
-                .CreateAsync(startup.Configuration, SecretResolver, adapters, cancellationToken)
+                .CreateAsync(startup.Configuration, SecretResolver, adapters, ModelCatalog, cancellationToken)
                 .ConfigureAwait(false));
         }
 

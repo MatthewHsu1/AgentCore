@@ -8,7 +8,9 @@ using AgentCore.Infrastructure.Conversation.Postgres;
 using AgentCore.Infrastructure.Embeddings.OpenAI;
 using AgentCore.Infrastructure.Evaluation.OpenAiModeration;
 using AgentCore.Infrastructure.Knowledge.VectorData.Qdrant;
+using AgentCore.Infrastructure.Llm.ModelsDev;
 using AgentCore.Infrastructure.Llm.OpenAI;
+using AgentCore.Infrastructure.Llm.OpenCodeGo;
 using AgentCore.Infrastructure.Secrets;
 using AgentCore.Infrastructure.Telemetry.Grafana;
 using AgentCore.Infrastructure.Tools;
@@ -98,8 +100,11 @@ namespace AgentCore.Hosting
                 new ConfigurationSecretResolver(hostConfiguration),
             ]);
 
+            // Every vendor's models.dev lookup shares one fetch of the catalog.
+            _ = options.UseModelCatalog(ModelsDevCatalogPort.Create(httpClients));
+
             // providers.llm[].kind picks the adapter for each entry.
-            _ = options.UseChatClients(new OpenAiChatClientAdapter());
+            _ = options.UseChatClients(new OpenAiChatClientAdapter(), new OpenCodeGoChatClientAdapter(httpClients));
 
             // providers.embeddings.kind picks the adapter.
             _ = options.UseEmbeddings(new OpenAiEmbeddingGeneratorAdapter());

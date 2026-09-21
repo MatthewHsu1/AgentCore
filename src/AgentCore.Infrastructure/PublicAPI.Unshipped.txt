@@ -34,7 +34,6 @@ AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter.UseA
 AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter.UseMappers(params AgentCore.Application.Knowledge.IKnowledgePointMapper![]! mappers) -> AgentCore.Infrastructure.Knowledge.VectorData.Qdrant.QdrantKnowledgeAdapter!
 AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter
 AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.CreateClientAsync(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.IChatClient!>
-AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.GetContextWindow(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration! entry) -> int?
 AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.Kind.get -> string!
 AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.OpenAiChatClientAdapter() -> void
 AgentCore.Infrastructure.Llm.OpenAI.OpenAiChatClientAdapter.ResolveHostedTool(Microsoft.Extensions.AI.AITool! marker, AgentCore.Application.Configuration.Schema.LlmProviderConfiguration! entry) -> Microsoft.Extensions.AI.AITool?
@@ -102,3 +101,24 @@ const AgentCore.Infrastructure.Blobs.S3.S3BlobStoreAdapter.DefaultRegion = "us-e
 const AgentCore.Infrastructure.Blobs.S3.S3BlobStoreAdapter.ProviderKind = "s3" -> string!
 AgentCore.Infrastructure.Blobs.S3.S3BlobStore.LinkAsync(AgentCore.Application.Blobs.BlobRef! blob, System.TimeSpan lifetime, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Uri?>
 AgentCore.Infrastructure.Blobs.S3.S3BlobStore.StatAsync(string! ownerId, string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Blobs.BlobRef?>
+AgentCore.Infrastructure.Llm.ModelsDev.ModelsDevCatalogPort
+AgentCore.Infrastructure.Llm.ModelsDev.ModelsDevCatalogPort.ModelsDevCatalogPort(System.Net.Http.HttpClient! client, Microsoft.Extensions.Options.IOptions<AgentCore.Infrastructure.Llm.ModelsDev.ModelsDevCatalogOptions!>! options) -> void
+AgentCore.Infrastructure.Llm.ModelsDev.ModelsDevCatalogPort.LookupAsync(string! provider, string! model, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Llm.ModelCatalogEntry?>
+const AgentCore.Infrastructure.Llm.ModelsDev.ModelsDevCatalogPort.HttpClientName = "agentcore.models-dev" -> string!
+static AgentCore.Infrastructure.Llm.ModelsDev.ModelsDevCatalogPort.Create(System.Net.Http.IHttpClientFactory! httpClients) -> AgentCore.Infrastructure.Llm.ModelsDev.ModelsDevCatalogPort!
+AgentCore.Infrastructure.Llm.OpenCodeGo.OpenCodeGoChatClientAdapter
+AgentCore.Infrastructure.Llm.OpenCodeGo.OpenCodeGoChatClientAdapter.OpenCodeGoChatClientAdapter(System.Net.Http.IHttpMessageHandlerFactory! handlers) -> void
+AgentCore.Infrastructure.Llm.OpenCodeGo.OpenCodeGoChatClientAdapter.Kind.get -> string!
+AgentCore.Infrastructure.Llm.OpenCodeGo.OpenCodeGoChatClientAdapter.Dispose() -> void
+AgentCore.Infrastructure.Llm.OpenCodeGo.OpenCodeGoChatClientAdapter.CreateClientAsync(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.IChatClient!>
+const AgentCore.Infrastructure.Llm.OpenCodeGo.OpenCodeGoChatClientAdapter.ProviderKind = "opencode-go" -> string!
+const AgentCore.Infrastructure.Llm.OpenCodeGo.OpenCodeGoChatClientAdapter.ApiKeySecretName = "opencode-go-api-key" -> string!
+const AgentCore.Infrastructure.Llm.OpenCodeGo.OpenCodeGoChatClientAdapter.ApiKeyVariableName = "OPENCODE_GO_API_KEY" -> string!
+const AgentCore.Infrastructure.Llm.OpenCodeGo.OpenCodeGoChatClientAdapter.HttpClientName = "agentcore.opencode-go" -> string!
+const AgentCore.Infrastructure.Llm.OpenCodeGo.OpenCodeGoChatClientAdapter.SessionHeaderName = "x-opencode-session" -> string!
+const AgentCore.Infrastructure.Llm.OpenCodeGo.OpenCodeGoChatClientAdapter.UserAgentValue = "agentcore/1.0" -> string!
+static readonly AgentCore.Infrastructure.Llm.OpenCodeGo.OpenCodeGoChatClientAdapter.ApiEndpoint -> System.Uri!
+AgentCore.Infrastructure.Llm.ModelsDev.ModelsDevCatalogOptions
+AgentCore.Infrastructure.Llm.ModelsDev.ModelsDevCatalogOptions.ModelsDevCatalogOptions() -> void
+AgentCore.Infrastructure.Llm.ModelsDev.ModelsDevCatalogOptions.CatalogEndpoint.get -> System.Uri!
+AgentCore.Infrastructure.Llm.ModelsDev.ModelsDevCatalogOptions.CatalogEndpoint.set -> void

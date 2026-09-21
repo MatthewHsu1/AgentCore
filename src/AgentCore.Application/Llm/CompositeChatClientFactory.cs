@@ -14,11 +14,13 @@ namespace AgentCore.Application.Llm
     /// </summary>
     public sealed class CompositeChatClientFactory : IChatClientFactory, IDisposable
     {
-        private readonly Dictionary<string, LlmProviderConfiguration> _entries = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, LlmProviderConfiguration> _entries = [with(StringComparer.Ordinal)];
 
-        private readonly Dictionary<string, IChatClientAdapter> _adapters = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, IChatClientAdapter> _adapters = [with(StringComparer.Ordinal)];
 
-        private readonly Dictionary<string, IChatClient> _vendor = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, IChatClient> _vendor = [with(StringComparer.Ordinal)];
+
+        private readonly Dictionary<string, int?> _contextWindows = [with(StringComparer.Ordinal)];
 
         private readonly ConcurrentDictionary<string, IChatClient> _shaped = new(StringComparer.Ordinal);
 
@@ -34,6 +36,10 @@ namespace AgentCore.Application.Llm
         /// <param name="configuration">The loaded document.</param>
         /// <param name="secrets">The chain each adapter resolves its credential through, or <see langword="null"/>.</param>
         /// <param name="adapters">The adapters the host registers, one for each vendor it supports.</param>
+        /// <param name="catalog">
+        /// Looks up each entry's context window by its <c>kind</c> and <c>model</c>. A document with no
+        /// catalog answers every <see cref="GetContextWindow"/> call with <see langword="null"/>.
+        /// </param>
         /// <param name="cancellationToken">Cancels the build.</param>
         /// <returns>The factory.</returns>
         /// <exception cref="ConfigurationLoadException">
@@ -44,6 +50,7 @@ namespace AgentCore.Application.Llm
             AgentCoreConfiguration configuration,
             ISecretResolverPort? secrets,
             IReadOnlyList<IChatClientAdapter> adapters,
+            IModelCatalogPort? catalog = null,
             CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(configuration);
@@ -61,6 +68,7 @@ namespace AgentCore.Application.Llm
                     $"providers.llm entry '{entry.As}'",
                     ConfigurationError.AppendPointer(pointer, "kind"),
                     "options.UseChatClients(...)");
+
                 IChatClientAdapter adapter = VendorAdapterSelector.Select(entry.Kind, adapters, seam);
 
                 if (!factory._entries.TryAdd(entry.As, entry))
@@ -75,6 +83,15 @@ namespace AgentCore.Application.Llm
                 factory._vendor[entry.As] = await adapter
                     .CreateClientAsync(entry, secrets, cancellationToken)
                     .ConfigureAwait(false);
+
+                if (catalog is not null)
+                {
+                    ModelCatalogEntry? found = await catalog
+                        .LookupAsync(entry.Kind, entry.Model, cancellationToken)
+                        .ConfigureAwait(false);
+                        
+                    factory._contextWindows[entry.As] = found?.ContextWindow;
+                }
 
                 factory._default ??= entry;
             }
@@ -134,7 +151,7 @@ namespace AgentCore.Application.Llm
             ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) == 1, this);
 
             LlmProviderConfiguration entry = Resolve(model);
-            return _adapters.TryGetValue(entry.As, out IChatClientAdapter? adapter) ? adapter.GetContextWindow(entry) : null;
+            return _contextWindows.TryGetValue(entry.As, out int? tokens) ? tokens : null;
         }
 
         /// <summary>Releases every client the adapters built.</summary>

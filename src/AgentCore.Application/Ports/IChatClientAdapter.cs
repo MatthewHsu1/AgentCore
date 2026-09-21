@@ -26,17 +26,5 @@ namespace AgentCore.Application.Ports
         {
             return null;
         }
-
-        /// <summary>Reports the model's context window, in tokens.</summary>
-        /// <param name="entry">The <c>providers.llm[]</c> entry this adapter serves.</param>
-        /// <returns>
-        /// The window in tokens, or <see langword="null"/> when this adapter does not know the model.
-        /// Compaction is always on, so the compiler refuses an agent whose model answers
-        /// <see langword="null"/>.
-        /// </returns>
-        int? GetContextWindow(LlmProviderConfiguration entry)
-        {
-            return null;
-        }
     }
 }
