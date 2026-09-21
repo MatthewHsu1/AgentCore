@@ -101,10 +101,12 @@ namespace AgentCore.Hosting
             ]);
 
             // Every vendor's models.dev lookup shares one fetch of the catalog.
-            _ = options.UseModelCatalog(ModelsDevCatalogPort.Create(httpClients));
+            _ = options.UseModelCatalog(ModelsDevCatalogPort.CreateFromConfiguration(httpClients, hostConfiguration));
 
             // providers.llm[].kind picks the adapter for each entry.
-            _ = options.UseChatClients(new OpenAiChatClientAdapter(), new OpenCodeGoChatClientAdapter(httpClients));
+            _ = options.UseChatClients(
+                new OpenAiChatClientAdapter(),
+                OpenCodeGoChatClientAdapter.CreateFromConfiguration(httpClients, hostConfiguration));
 
             // providers.embeddings.kind picks the adapter.
             _ = options.UseEmbeddings(new OpenAiEmbeddingGeneratorAdapter());

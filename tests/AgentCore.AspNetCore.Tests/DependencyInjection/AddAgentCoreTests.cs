@@ -720,9 +720,13 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
         {
             // 'kind: openai' selects the adapter registered under that kind. The host lists what it
             // supports, once, and the document decides which entry runs.
-            using StartedHost provider = await BuildAsync(OneAgentYaml, options => options.UseChatClients(
-                new FakeChatClientAdapter("openai", () => new FragmentingChatClient("routed")),
-                new FakeChatClientAdapter("anthropic", () => new FragmentingChatClient("wrong vendor"))));
+            MapModelCatalogPort catalog = new MapModelCatalogPort().With("openai", "gpt-4.1-mini", 128_000);
+
+            using StartedHost provider = await BuildAsync(OneAgentYaml, options => options
+                .UseModelCatalog(catalog)
+                .UseChatClients(
+                    new FakeChatClientAdapter("openai", () => new FragmentingChatClient("routed")),
+                    new FakeChatClientAdapter("anthropic", () => new FragmentingChatClient("wrong vendor"))));
 
             ConversationSession session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create();
             TurnResult turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);

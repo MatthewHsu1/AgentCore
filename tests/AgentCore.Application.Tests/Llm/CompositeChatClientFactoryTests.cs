@@ -194,18 +194,37 @@ namespace AgentCore.Application.Tests.Llm
         }
 
         // ---------------------------------------------------------------------------------------------
-        // GetContextWindow: forwards to the adapter of the entry the reference names.
+        // GetContextWindow: the factory resolves it from the catalog, once, while it builds.
         // ---------------------------------------------------------------------------------------------
         [Fact]
-        public async Task GetContextWindow_ANamedReference_ForwardsToItsOwnAdapter()
+        public async Task GetContextWindow_ANamedReference_ReadsItsEntrysCatalogAnswer()
         {
-            RecordingChatClientAdapter openai = new("openai") { ContextWindow = 128_000 };
-            RecordingChatClientAdapter anthropic = new("anthropic") { ContextWindow = 200_000 };
+            MapModelCatalogPort catalog = new MapModelCatalogPort()
+                .With("openai", "gpt-4.1-mini", 128_000)
+                .With("anthropic", "claude-sonnet-5", 200_000);
 
-            using CompositeChatClientFactory factory = await Create(TwoVendorsYaml, openai, anthropic);
+            using CompositeChatClientFactory factory = await Create(
+                TwoVendorsYaml, catalog, new RecordingChatClientAdapter("openai"), new RecordingChatClientAdapter("anthropic"));
 
             Assert.Equal(128_000, factory.GetContextWindow(new ModelReference { Ref = "reply" }));
             Assert.Equal(200_000, factory.GetContextWindow(new ModelReference { Ref = "fill" }));
+        }
+
+        [Fact]
+        public async Task GetContextWindow_NoCatalogEntryForTheModel_AnswersNull()
+        {
+            using CompositeChatClientFactory factory = await Create(
+                OneVendorYaml, new MapModelCatalogPort(), new RecordingChatClientAdapter("openai"));
+
+            Assert.Null(factory.GetContextWindow(new ModelReference { Ref = "reply" }));
+        }
+
+        [Fact]
+        public async Task GetContextWindow_NoCatalogAtAll_AnswersNull()
+        {
+            using CompositeChatClientFactory factory = await Create(OneVendorYaml, new RecordingChatClientAdapter("openai"));
+
+            Assert.Null(factory.GetContextWindow(new ModelReference { Ref = "reply" }));
         }
 
         // ---------------------------------------------------------------------------------------------
@@ -372,7 +391,7 @@ namespace AgentCore.Application.Tests.Llm
         // ---------------------------------------------------------------------------------------------
         private static ValueTask<CompositeChatClientFactory> Create(string yaml, params IChatClientAdapter[] adapters)
         {
-            return Create(yaml, null, adapters);
+            return Create(yaml, (ISecretResolverPort?)null, adapters);
         }
 
         private static ValueTask<CompositeChatClientFactory> Create(
@@ -384,6 +403,19 @@ namespace AgentCore.Application.Tests.Llm
                         ConfigurationLoader.LoadYaml(yaml),
                         secrets,
                         adapters,
+                        cancellationToken: TestContext.Current.CancellationToken);
+        }
+
+        private static ValueTask<CompositeChatClientFactory> Create(
+            string yaml,
+            IModelCatalogPort catalog,
+            params IChatClientAdapter[] adapters)
+        {
+            return CompositeChatClientFactory.CreateAsync(
+                        ConfigurationLoader.LoadYaml(yaml),
+                        null,
+                        adapters,
+                        catalog,
                         TestContext.Current.CancellationToken);
         }
     }

@@ -65,14 +65,6 @@ namespace AgentCore.Infrastructure.Llm.OpenAI
             };
         }
 
-        /// <inheritdoc />
-        public int? GetContextWindow(LlmProviderConfiguration entry)
-        {
-            ArgumentNullException.ThrowIfNull(entry);
-
-            return OpenAiContextWindows.Lookup(entry.Model);
-        }
-
         /// <summary>Puts <c>store</c>, <c>reasoning_effort</c> and <c>prompt_cache_key</c> on every request this client sends.</summary>
         internal static IChatClient WithResponseDefaults(IChatClient client, string? effort)
         {

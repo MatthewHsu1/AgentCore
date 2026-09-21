@@ -14,13 +14,13 @@ namespace AgentCore.Application.Llm
     /// </summary>
     public sealed class CompositeChatClientFactory : IChatClientFactory, IDisposable
     {
-        private readonly Dictionary<string, LlmProviderConfiguration> _entries = [with(StringComparer.Ordinal)];
+        private readonly Dictionary<string, LlmProviderConfiguration> _entries = new(StringComparer.Ordinal);
 
-        private readonly Dictionary<string, IChatClientAdapter> _adapters = [with(StringComparer.Ordinal)];
+        private readonly Dictionary<string, IChatClientAdapter> _adapters = new(StringComparer.Ordinal);
 
-        private readonly Dictionary<string, IChatClient> _vendor = [with(StringComparer.Ordinal)];
+        private readonly Dictionary<string, IChatClient> _vendor = new(StringComparer.Ordinal);
 
-        private readonly Dictionary<string, int?> _contextWindows = [with(StringComparer.Ordinal)];
+        private readonly Dictionary<string, int?> _contextWindows = new(StringComparer.Ordinal);
 
         private readonly ConcurrentDictionary<string, IChatClient> _shaped = new(StringComparer.Ordinal);
 
