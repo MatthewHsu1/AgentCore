@@ -4,6 +4,7 @@ using AgentCore.Application.Conversation;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Ports;
+using AgentCore.AspNetCore.Conversation;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.AspNetCore.Sessions;
 using Microsoft.Agents.AI.Hosting;
@@ -94,6 +95,30 @@ namespace AgentCore.AspNetCore.DependencyInjection
                 ?? EvaluationConfiguration.DefaultSampleRate));
 
             services.TryAddSingleton<IEvaluationScorePublisher, InMemoryEvaluationScorePublisher>();
+
+            return services;
+        }
+
+        /// <summary>
+        /// Opts this host into the periodic retention sweep of stored conversations.
+        /// </summary>
+        /// <param name="services">The service collection of the host.</param>
+        /// <param name="configure">Sets the retention, the interval, and the batch size. Defaults live on <see cref="ConversationSweepOptions"/>.</param>
+        /// <returns>The same collection, so a host chains its conversations.</returns>
+        public static IServiceCollection AddConversationSweep(
+            this IServiceCollection services,
+            Action<ConversationSweepOptions>? configure = null)
+        {
+            ArgumentNullException.ThrowIfNull(services);
+
+            OptionsBuilder<ConversationSweepOptions> builder = services.AddOptions<ConversationSweepOptions>();
+
+            if (configure is not null)
+            {
+                _ = builder.Configure(configure);
+            }
+
+            _ = services.AddHostedService<ConversationSweeper>();
 
             return services;
         }
