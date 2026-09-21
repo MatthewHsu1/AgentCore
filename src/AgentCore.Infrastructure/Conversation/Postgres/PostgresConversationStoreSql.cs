@@ -175,8 +175,8 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
         /// <summary>Files one session envelope under one continuation id, replacing any envelope already there.</summary>
         internal const string SaveContinuationSql =
             $"""
-        INSERT INTO {Schema}.response_continuation (store_id, envelope) VALUES ($1, $2)
-        ON CONFLICT (store_id) DO UPDATE SET envelope = EXCLUDED.envelope
+        INSERT INTO {Schema}.response_continuation (store_id, conversation_id, envelope) VALUES ($1, $2, $3)
+        ON CONFLICT (store_id) DO UPDATE SET envelope = EXCLUDED.envelope, updated_at = now()
         """;
 
         /// <summary>Reads the envelope one continuation id names.</summary>
@@ -216,32 +216,19 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
          ORDER BY m.turn_index
         """;
 
-        /// <summary>Deletes one batch of conversations that have aged out whole.</summary>
+        /// <summary>
+        /// Deletes one batch of continuation rows that have gone untouched past the retention window.
+        /// Conversations are never swept: a chat id and every response id it ever advanced age out
+        /// on their own, independently of whether the conversation itself is still open.
+        /// </summary>
         internal static readonly string SweepContinuationsSql =
             $"""
         DELETE FROM {Schema}.response_continuation
         WHERE store_id IN (
-          SELECT conversation_id FROM (
-            SELECT c.conversation_id
-              FROM {Schema}.conversation c
-              {ActivityJoin}
-             WHERE {SortAt} < now() - $1
-             LIMIT $2
-          ) q)
-        """;
-
-        /// <summary>Deletes one batch of conversations that have aged out whole.</summary>
-        internal static readonly string SweepSql =
-            $"""
-        DELETE FROM {Schema}.conversation
-        WHERE conversation_id IN (
-          SELECT conversation_id FROM (
-            SELECT c.conversation_id
-              FROM {Schema}.conversation c
-              {ActivityJoin}
-             WHERE {SortAt} < now() - $1
-             LIMIT $2
-          ) q)
+          SELECT store_id FROM {Schema}.response_continuation
+           WHERE updated_at < now() - $1
+           LIMIT $2
+        )
         """;
     }
 }

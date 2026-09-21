@@ -147,22 +147,7 @@ namespace AgentCore.Application.Conversation.Memory
             {
                 DateTimeOffset cutoff = _time.GetUtcNow() - retention;
 
-                // SortValue is the clock ListAsync ranks by, so a conversation is swept exactly when it has
-                // fallen off the end of the list.
-                //
-                // batchSize is read for its guard and then ignored. It exists to keep one transaction
-                // short in a durable backing, and this store has no transaction; honouring it here would
-                // only make the caller loop for the same answer.
-                List<string> going = [.. _conversations.Values
-                    .Where(conversation => InMemoryConversationListing.SortValue(conversation) < cutoff)
-                    .Select(conversation => conversation.ConversationId)];
-
-                foreach (string? conversationId in going)
-                {
-                    Forget(conversationId);
-                }
-
-                return ValueTask.FromResult(going.Count);
+                return ValueTask.FromResult(_continuations.Sweep(cutoff));
             }
         }
 
@@ -311,13 +296,14 @@ namespace AgentCore.Application.Conversation.Memory
         }
 
         /// <inheritdoc />
-        public ValueTask SaveContinuationAsync(string continuationId, JsonElement envelope, CancellationToken cancellationToken = default)
+        public ValueTask SaveContinuationAsync(string continuationId, string conversationId, JsonElement envelope, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(continuationId);
+            ArgumentNullException.ThrowIfNull(conversationId);
 
             lock (_lock)
             {
-                _continuations.Save(continuationId, envelope);
+                _continuations.Save(continuationId, conversationId, envelope, _time.GetUtcNow());
             }
 
             return default;
@@ -353,7 +339,7 @@ namespace AgentCore.Application.Conversation.Memory
             _ = _conversations.Remove(conversationId);
             _claims.Forget(conversationId);
             _ = _state.Remove(conversationId);
-            _continuations.Forget(conversationId);
+            _continuations.ForgetConversation(conversationId);
             _words.Forget(conversationId);
         }
 

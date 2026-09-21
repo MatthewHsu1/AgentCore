@@ -10,6 +10,8 @@ namespace AgentCore.AspNetCore.Sessions
     /// </summary>
     public sealed class AgentCoreAgentSessionStore : AgentSessionStore
     {
+        private const string PointerProperty = "$continuationPointer";
+
         private readonly IConversationStore _conversations;
 
         /// <summary>Creates the seam over one conversation store.</summary>
@@ -34,17 +36,52 @@ namespace AgentCore.AspNetCore.Sessions
         }
 
         /// <inheritdoc />
-        public override async ValueTask SaveSessionAsync(
+        public override ValueTask SaveSessionAsync(
             AIAgent agent, string sessionStoreId, AgentSession session, CancellationToken cancellationToken = default)
+        {
+            return SaveSessionForConversationAsync(agent, sessionStoreId, sessionStoreId, session, cancellationToken);
+        }
+
+        /// <summary>Files the session under one continuation id, on behalf of one conversation.</summary>
+        /// <param name="agent">The agent the session belongs to.</param>
+        /// <param name="sessionStoreId">The conversation id or response id to file the envelope under.</param>
+        /// <param name="conversationId">The conversation the continuation belongs to.</param>
+        /// <param name="session">The session to file.</param>
+        /// <param name="cancellationToken">Cancels the write.</param>
+        public async ValueTask SaveSessionForConversationAsync(
+            AIAgent agent, string sessionStoreId, string conversationId, AgentSession session, CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(agent);
             ArgumentNullException.ThrowIfNull(sessionStoreId);
+            ArgumentNullException.ThrowIfNull(conversationId);
             ArgumentNullException.ThrowIfNull(session);
 
             JsonElement envelope = await agent
                 .SerializeSessionAsync(session, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
-            await _conversations.SaveContinuationAsync(sessionStoreId, envelope, cancellationToken).ConfigureAwait(false);
+
+            await _conversations.SaveContinuationAsync(sessionStoreId, conversationId, envelope, cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Points one continuation id at another, in place of a full envelope. A resume through the
+        /// pointer id always reads the latest state, without a second copy of it.
+        /// </summary>
+        /// <param name="sessionStoreId">The continuation id the pointer is filed under.</param>
+        /// <param name="conversationId">The conversation the pointer belongs to.</param>
+        /// <param name="target">The continuation id holding the full envelope.</param>
+        /// <param name="cancellationToken">Cancels the write.</param>
+        public ValueTask SavePointerAsync(
+            string sessionStoreId, string conversationId, string target, CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(sessionStoreId);
+            ArgumentNullException.ThrowIfNull(conversationId);
+            ArgumentNullException.ThrowIfNull(target);
+
+            JsonElement pointer = JsonSerializer.SerializeToElement(
+                new Dictionary<string, string> { [PointerProperty] = target });
+
+            return _conversations.SaveContinuationAsync(sessionStoreId, conversationId, pointer, cancellationToken);
         }
 
         /// <inheritdoc />
@@ -55,11 +92,37 @@ namespace AgentCore.AspNetCore.Sessions
             ArgumentNullException.ThrowIfNull(sessionStoreId);
 
             JsonElement? envelope = await _conversations.GetContinuationAsync(sessionStoreId, cancellationToken).ConfigureAwait(false);
-            return envelope is null
-                ? await agent.CreateSessionAsync(cancellationToken).ConfigureAwait(false)
-                : await agent
+
+            if (envelope is null)
+            {
+                return await agent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            if (TryReadPointerTarget(envelope.Value, out string? target))
+            {
+                envelope = await _conversations.GetContinuationAsync(target, cancellationToken).ConfigureAwait(false)
+                    ?? throw new InvalidOperationException(
+                        $"Continuation '{sessionStoreId}' points at '{target}', which no longer names an envelope.");
+            }
+
+            return await agent
                 .DeserializeSessionAsync(envelope.Value, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
+        }
+
+        /// <summary>Reads the target a pointer row names, or answers <see langword="false"/> for a full envelope.</summary>
+        private static bool TryReadPointerTarget(JsonElement envelope, out string target)
+        {
+            if (envelope.ValueKind == JsonValueKind.Object
+                && envelope.TryGetProperty(PointerProperty, out JsonElement value)
+                && value.ValueKind == JsonValueKind.String)
+            {
+                target = value.GetString()!;
+                return true;
+            }
+
+            target = "";
+            return false;
         }
 
         /// <inheritdoc />

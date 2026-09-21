@@ -109,10 +109,6 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
             await using NpgsqlCommand command = _dataSource.CreateCommand(DeleteSql);
             _ = command.Parameters.Add(new NpgsqlParameter { Value = conversationId });
             _ = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-
-            await using NpgsqlCommand continuation = _dataSource.CreateCommand(DeleteContinuationSql);
-            _ = continuation.Parameters.Add(new NpgsqlParameter { Value = conversationId });
-            _ = await continuation.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
@@ -177,15 +173,7 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
 
             while (true)
             {
-                await using NpgsqlCommand continuations = _dataSource.CreateCommand(SweepContinuationsSql);
-
-                _ = continuations.Parameters.Add(
-                    new NpgsqlParameter { Value = retention, NpgsqlDbType = NpgsqlDbType.Interval });
-
-                _ = continuations.Parameters.Add(new NpgsqlParameter { Value = batchSize });
-                _ = await continuations.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-
-                await using NpgsqlCommand command = _dataSource.CreateCommand(SweepSql);
+                await using NpgsqlCommand command = _dataSource.CreateCommand(SweepContinuationsSql);
 
                 _ = command.Parameters.Add(
                     new NpgsqlParameter { Value = retention, NpgsqlDbType = NpgsqlDbType.Interval });
@@ -298,12 +286,14 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
         }
 
         /// <inheritdoc />
-        public async ValueTask SaveContinuationAsync(string continuationId, JsonElement envelope, CancellationToken cancellationToken = default)
+        public async ValueTask SaveContinuationAsync(string continuationId, string conversationId, JsonElement envelope, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(continuationId);
+            ArgumentNullException.ThrowIfNull(conversationId);
 
             await using NpgsqlCommand command = _dataSource.CreateCommand(SaveContinuationSql);
             _ = command.Parameters.Add(new NpgsqlParameter { Value = continuationId });
+            _ = command.Parameters.Add(new NpgsqlParameter { Value = conversationId });
             _ = command.Parameters.Add(new NpgsqlParameter
             {
                 NpgsqlDbType = NpgsqlDbType.Jsonb,

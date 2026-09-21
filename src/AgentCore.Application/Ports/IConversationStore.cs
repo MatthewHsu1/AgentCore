@@ -180,18 +180,19 @@ namespace AgentCore.Application.Ports
         /// <returns>How many messages went.</returns>
         ValueTask<int> EraseAsync(string conversationId, CancellationToken cancellationToken = default);
 
-        /// <summary>Deletes every conversation whose last activity is older than the retention window.</summary>
+        /// <summary>
+        /// Deletes every continuation row untouched past the retention window.
+        /// </summary>
         /// <param name="retention">
-        /// How long a conversation is kept, measured from its most recent message, or from when it was made when
-        /// it holds none. The window belongs to a deployment: it is not a schema key, and nothing here
-        /// defaults it.
+        /// How long a continuation row is kept, measured from when it was last written. The window belongs
+        /// to a deployment: it is not a schema key, and nothing here defaults it.
         /// </param>
         /// <param name="batchSize">
-        /// How many conversations one transaction may delete. The sweep loops until a batch deletes nothing, so
-        /// this bounds one transaction and never the work.
+        /// How many continuation rows one transaction may delete. The sweep loops until a batch deletes
+        /// nothing, so this bounds one transaction and never the work.
         /// </param>
         /// <param name="cancellationToken">Cancels the sweep between batches, and inside one.</param>
-        /// <returns>How many conversations went, over every batch.</returns>
+        /// <returns>How many continuation rows went, over every batch.</returns>
         ValueTask<int> SweepAsync(
             TimeSpan retention,
             int batchSize = 500,
@@ -219,6 +220,7 @@ namespace AgentCore.Application.Ports
 
         /// <summary>Files one session envelope under one continuation id, replacing any envelope already there.</summary>
         /// <param name="continuationId">The continuation id: a conversation id or a response id.</param>
+        /// <param name="conversationId">The conversation the continuation belongs to.</param>
         /// <param name="envelope">The serialized session, as the agent wrote it.</param>
         /// <param name="cancellationToken">Cancels the write.</param>
         /// <remarks>
@@ -227,6 +229,7 @@ namespace AgentCore.Application.Ports
         /// </remarks>
         ValueTask SaveContinuationAsync(
             string continuationId,
+            string conversationId,
             JsonElement envelope,
             CancellationToken cancellationToken = default);
 

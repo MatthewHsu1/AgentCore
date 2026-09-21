@@ -27,7 +27,8 @@ namespace AgentCore.AspNetCore.Endpoints
         /// <summary>Files the session, under every id that names it now.</summary>
         public Task FileAsync(CancellationToken cancellationToken)
         {
-            return ResponsesSessionFiling.SaveAsync(Sessions, Agent, Session, ResponseId, ConversationId, cancellationToken);
+            return ResponsesSessionFiling.SaveAsync(
+                Sessions, Agent, Session, ResponseId, ConversationId, Conversation.ConversationId, cancellationToken);
         }
     }
 }

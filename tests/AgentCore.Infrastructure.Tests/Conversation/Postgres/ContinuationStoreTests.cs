@@ -30,10 +30,11 @@ namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
         {
             // Arrange
             PostgresConversationStore store = new(DataSource);
+            _ = await store.CreateAsync("conv_1", Token);
             using JsonDocument document = JsonDocument.Parse("""{ "conversationId": "c1", "state": {} }""");
 
             // Act
-            await store.SaveContinuationAsync("conv_1", document.RootElement, Token);
+            await store.SaveContinuationAsync("conv_1", "conv_1", document.RootElement, Token);
             JsonElement? found = await store.GetContinuationAsync("conv_1", Token);
 
             // Assert
@@ -42,7 +43,7 @@ namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
 
             // Act
             using JsonDocument replacement = JsonDocument.Parse("{}");
-            await store.SaveContinuationAsync("conv_1", replacement.RootElement, Token);
+            await store.SaveContinuationAsync("conv_1", "conv_1", replacement.RootElement, Token);
             JsonElement? replaced = await store.GetContinuationAsync("conv_1", Token);
 
             // Assert

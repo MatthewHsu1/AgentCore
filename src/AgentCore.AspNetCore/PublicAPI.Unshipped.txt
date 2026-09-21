@@ -56,6 +56,8 @@ AgentCore.AspNetCore.Sessions.AgentCoreAgentSessionStore.ContainsAsync(string! s
 override AgentCore.AspNetCore.Sessions.AgentCoreAgentSessionStore.DeleteSessionAsync(Microsoft.Agents.AI.AIAgent! agent, string! sessionStoreId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 override AgentCore.AspNetCore.Sessions.AgentCoreAgentSessionStore.GetSessionAsync(Microsoft.Agents.AI.AIAgent! agent, string! sessionStoreId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Agents.AI.AgentSession!>
 override AgentCore.AspNetCore.Sessions.AgentCoreAgentSessionStore.SaveSessionAsync(Microsoft.Agents.AI.AIAgent! agent, string! sessionStoreId, Microsoft.Agents.AI.AgentSession! session, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.AspNetCore.Sessions.AgentCoreAgentSessionStore.SaveSessionForConversationAsync(Microsoft.Agents.AI.AIAgent! agent, string! sessionStoreId, string! conversationId, Microsoft.Agents.AI.AgentSession! session, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+AgentCore.AspNetCore.Sessions.AgentCoreAgentSessionStore.SavePointerAsync(string! sessionStoreId, string! conversationId, string! target, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayConversationAdapter
 AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayConversationAdapter.CarriesText.get -> bool
 AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayConversationAdapter.CreateHandler(AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration! configuration) -> Microsoft.AspNetCore.Http.RequestDelegate!
@@ -85,3 +87,14 @@ static readonly AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.Fi
 static readonly AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.RequestDeadline -> System.TimeSpan
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseBlobStores(params AgentCore.Application.Ports.IBlobStoreAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 const AgentCore.AspNetCore.Endpoints.ResponsesEndpointRouteBuilderExtensions.TimeZoneHeaderName = "X-AgentCore-Time-Zone" -> string!
+AgentCore.AspNetCore.Conversation.ConversationSweepOptions
+AgentCore.AspNetCore.Conversation.ConversationSweepOptions.ConversationSweepOptions() -> void
+AgentCore.AspNetCore.Conversation.ConversationSweepOptions.Retention.get -> System.TimeSpan
+AgentCore.AspNetCore.Conversation.ConversationSweepOptions.Retention.set -> void
+AgentCore.AspNetCore.Conversation.ConversationSweepOptions.Interval.get -> System.TimeSpan
+AgentCore.AspNetCore.Conversation.ConversationSweepOptions.Interval.set -> void
+AgentCore.AspNetCore.Conversation.ConversationSweepOptions.BatchSize.get -> int
+AgentCore.AspNetCore.Conversation.ConversationSweepOptions.BatchSize.set -> void
+AgentCore.AspNetCore.Conversation.ConversationSweeper
+AgentCore.AspNetCore.Conversation.ConversationSweeper.ConversationSweeper(AgentCore.Application.Ports.IConversations! conversations, Microsoft.Extensions.Options.IOptions<AgentCore.AspNetCore.Conversation.ConversationSweepOptions!>! options, System.TimeProvider! timeProvider, Microsoft.Extensions.Logging.ILogger<AgentCore.AspNetCore.Conversation.ConversationSweeper!>! logger) -> void
+static AgentCore.AspNetCore.DependencyInjection.AgentCoreServiceCollectionExtensions.AddConversationSweep(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<AgentCore.AspNetCore.Conversation.ConversationSweepOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
