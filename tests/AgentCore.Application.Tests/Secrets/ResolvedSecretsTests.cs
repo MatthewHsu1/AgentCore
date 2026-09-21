@@ -4,47 +4,48 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
 using AgentCore.Application.Tests.Configuration;
 using Xunit;
+using AgentCore.Application.Configuration.Schema;
 
-namespace AgentCore.Application.Tests.Secrets;
-
-/// <summary>
-/// The seam the parser leaves open: <c>${secret:name}</c> is a reference and never a value.
-/// </summary>
-/// <remarks>
-/// <see cref="SecretTemplate"/> keeps the references, and <see cref="ResolvedSecrets"/> turns them
-/// into values once, at startup. A tool call never reaches <see cref="ISecretResolverPort"/>.
-/// </remarks>
-public sealed class ResolvedSecretsTests
+namespace AgentCore.Application.Tests.Secrets
 {
-    private const string ApiKeyName = "orders-api-key";
-    private const string ApiKeyValue = "sk-live-0123456789";
-
-    // ---------------------------------------------------------------------------------------------
-    // Resolving the whole document, once.
-    // ---------------------------------------------------------------------------------------------
-    [Fact]
-    public async Task TheWorkedExample_ResolvesItsOneSecret()
+    /// <summary>
+    /// The seam the parser leaves open: <c>${secret:name}</c> is a reference and never a value.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="SecretTemplate"/> keeps the references, and <see cref="ResolvedSecrets"/> turns them
+    /// into values once, at startup. A tool call never reaches <see cref="ISecretResolverPort"/>.
+    /// </remarks>
+    public sealed class ResolvedSecretsTests
     {
-        var document = ConfigurationLoader.LoadYaml(ExampleDocument.Yaml);
-        MapSecretResolver resolver = new MapSecretResolver().With(ApiKeyName, ApiKeyValue);
+        private const string ApiKeyName = "orders-api-key";
+        private const string ApiKeyValue = "sk-live-0123456789";
 
-        var secrets = await ResolvedSecrets.ResolveAsync(
-            document,
-            resolver,
-            TestContext.Current.CancellationToken);
+        // ---------------------------------------------------------------------------------------------
+        // Resolving the whole document, once.
+        // ---------------------------------------------------------------------------------------------
+        [Fact]
+        public async Task TheWorkedExample_ResolvesItsOneSecret()
+        {
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(ExampleDocument.Yaml);
+            MapSecretResolver resolver = new MapSecretResolver().With(ApiKeyName, ApiKeyValue);
 
-        Assert.Equal(1, secrets.Count);
-        Assert.Equal([ApiKeyName], secrets.Names);
-        Assert.True(secrets.Contains(ApiKeyName));
+            ResolvedSecrets secrets = await ResolvedSecrets.ResolveAsync(
+                document,
+                resolver,
+                TestContext.Current.CancellationToken);
 
-        var header = document.Tools.Single(tool => tool.Id == "lookup_order").Request!.Headers["Authorization"];
-        Assert.Equal("Bearer " + ApiKeyValue, secrets.Format(header));
-    }
+            Assert.Equal(1, secrets.Count);
+            Assert.Equal([ApiKeyName], secrets.Names);
+            Assert.True(secrets.Contains(ApiKeyName));
 
-    [Fact]
-    public async Task AShellEnvValue_IsResolved_LikeAnMcpEnvValue()
-    {
-        const string document = """
+            SecretTemplate header = document.Tools.Single(tool => tool.Id == "lookup_order").Request!.Headers["Authorization"];
+            Assert.Equal("Bearer " + ApiKeyValue, secrets.Format(header));
+        }
+
+        [Fact]
+        public async Task AShellEnvValue_IsResolved_LikeAnMcpEnvValue()
+        {
+            const string document = """
             apiVersion: agentcore/v1
             agents:
               items:
@@ -58,21 +59,21 @@ public sealed class ResolvedSecretsTests
                 agent: worker
             """;
 
-        MapSecretResolver resolver = new MapSecretResolver().With("db-password", "hunter2");
+            MapSecretResolver resolver = new MapSecretResolver().With("db-password", "hunter2");
 
-        var secrets = await ResolvedSecrets.ResolveAsync(
-            ConfigurationLoader.LoadYaml(document),
-            resolver,
-            TestContext.Current.CancellationToken);
+            ResolvedSecrets secrets = await ResolvedSecrets.ResolveAsync(
+                ConfigurationLoader.LoadYaml(document),
+                resolver,
+                TestContext.Current.CancellationToken);
 
-        Assert.Equal(["db-password"], secrets.Names);
-        Assert.Equal(["db-password"], resolver.Asked);
-    }
+            Assert.Equal(["db-password"], secrets.Names);
+            Assert.Equal(["db-password"], resolver.Asked);
+        }
 
-    [Fact]
-    public async Task OneName_ReadsTheResolverOnce_HoweverManyToolsReferenceIt()
-    {
-        const string document = """
+        [Fact]
+        public async Task OneName_ReadsTheResolverOnce_HoweverManyToolsReferenceIt()
+        {
+            const string document = """
             apiVersion: agentcore/v1
             agents:
               items:
@@ -95,22 +96,22 @@ public sealed class ResolvedSecretsTests
                   headers: { Authorization: "Bearer ${secret:orders-api-key}" }
             """;
 
-        MapSecretResolver resolver = new MapSecretResolver().With(ApiKeyName, ApiKeyValue);
+            MapSecretResolver resolver = new MapSecretResolver().With(ApiKeyName, ApiKeyValue);
 
-        var secrets = await ResolvedSecrets.ResolveAsync(
-            ConfigurationLoader.LoadYaml(document),
-            resolver,
-            TestContext.Current.CancellationToken);
+            ResolvedSecrets secrets = await ResolvedSecrets.ResolveAsync(
+                ConfigurationLoader.LoadYaml(document),
+                resolver,
+                TestContext.Current.CancellationToken);
 
-        // Three references, one name, one read. Startup pays for the read, and no conversation does.
-        Assert.Equal([ApiKeyName], resolver.Asked);
-        Assert.Equal(1, secrets.Count);
-    }
+            // Three references, one name, one read. Startup pays for the read, and no conversation does.
+            Assert.Equal([ApiKeyName], resolver.Asked);
+            Assert.Equal(1, secrets.Count);
+        }
 
-    [Fact]
-    public async Task ADocumentWithNoReference_ReadsNothing()
-    {
-        const string document = """
+        [Fact]
+        public async Task ADocumentWithNoReference_ReadsNothing()
+        {
+            const string document = """
             apiVersion: agentcore/v1
             tools:
               - id: plain
@@ -127,112 +128,113 @@ public sealed class ResolvedSecretsTests
                 agent: only
             """;
 
-        MapSecretResolver resolver = new();
+            MapSecretResolver resolver = new();
 
-        var secrets = await ResolvedSecrets.ResolveAsync(
-            ConfigurationLoader.LoadYaml(document),
-            resolver,
-            TestContext.Current.CancellationToken);
-
-        Assert.Empty(resolver.Asked);
-        Assert.Equal(0, secrets.Count);
-    }
-
-    // ---------------------------------------------------------------------------------------------
-    // Failing at startup, and never in the middle of a conversation.
-    // ---------------------------------------------------------------------------------------------
-    [Fact]
-    public async Task AnUnresolvableName_FailsAtStartupAndNamesThePointer()
-    {
-        var document = ConfigurationLoader.LoadYaml(ExampleDocument.Yaml);
-        MapSecretResolver resolver = new();
-
-        var failure = await Assert.ThrowsAsync<SecretResolutionException>(
-            async () => await ResolvedSecrets.ResolveAsync(
-                document,
+            ResolvedSecrets secrets = await ResolvedSecrets.ResolveAsync(
+                ConfigurationLoader.LoadYaml(document),
                 resolver,
-                TestContext.Current.CancellationToken));
+                TestContext.Current.CancellationToken);
 
-        Assert.Equal(ApiKeyName, failure.SecretName);
-        Assert.Contains(ApiKeyName, failure.Message, StringComparison.Ordinal);
-        Assert.Contains("/tools/0/request/headers/Authorization", failure.Message, StringComparison.Ordinal);
-    }
+            Assert.Empty(resolver.Asked);
+            Assert.Equal(0, secrets.Count);
+        }
 
-    [Fact]
-    public void FormattingAnUnknownName_Fails()
-    {
-        var secrets = ResolvedSecrets.Create([KeyValuePair.Create(ApiKeyName, ApiKeyValue)]);
-        var template = SecretTemplate.Parse("${secret:missing-name}");
-
-        var failure = Assert.Throws<SecretResolutionException>(() => secrets.Format(template));
-
-        Assert.Equal("missing-name", failure.SecretName);
-    }
-
-    // ---------------------------------------------------------------------------------------------
-    // A value never reaches a log or a message.
-    // ---------------------------------------------------------------------------------------------
-    [Fact]
-    public void NoFailureMessage_EverHoldsAValue()
-    {
-        var secrets = ResolvedSecrets.Create([KeyValuePair.Create(ApiKeyName, ApiKeyValue)]);
-        var template = SecretTemplate.Parse("Bearer ${secret:orders-api-key} and ${secret:missing-name}");
-
-        var failure = Assert.Throws<SecretResolutionException>(() => secrets.Format(template));
-
-        Assert.DoesNotContain(ApiKeyValue, failure.ToString(), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void TheResolvedSet_NeverWritesAValueInItsOwnText()
-    {
-        var secrets = ResolvedSecrets.Create([KeyValuePair.Create(ApiKeyName, ApiKeyValue)]);
-
-        // A resolved set lands in a log line, a diagnostic dump, or a debugger tooltip sooner or
-        // later. It reports how many names it holds, and never what they are worth.
-        Assert.DoesNotContain(ApiKeyValue, secrets.ToString(), StringComparison.Ordinal);
-    }
-
-    // ---------------------------------------------------------------------------------------------
-    // Formatting.
-    // ---------------------------------------------------------------------------------------------
-    [Fact]
-    public void ATemplateWithNoReference_FormatsToItself()
-    {
-        var template = SecretTemplate.Parse("application/json");
-
-        Assert.Equal("application/json", ResolvedSecrets.Empty.Format(template));
-    }
-
-    [Fact]
-    public void TwoReferencesInOneString_BothResolve()
-    {
-        var secrets = ResolvedSecrets.Create(
-        [
-            KeyValuePair.Create("left", "L"),
-            KeyValuePair.Create("right", "R"),
-        ]);
-
-        Assert.Equal("<L|R>", secrets.Format(SecretTemplate.Parse("<${secret:left}|${secret:right}>")));
-    }
-
-    [Fact]
-    public async Task TheResolver_TakesTheCancellationTokenTheCallerGives()
-    {
-        var document = ConfigurationLoader.LoadYaml(ExampleDocument.Yaml);
-        using CancellationTokenSource source = new();
-        await source.CancelAsync();
-
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            async () => await ResolvedSecrets.ResolveAsync(document, new CancellingSecretResolver(), source.Token));
-    }
-
-    private sealed class CancellingSecretResolver : ISecretResolverPort
-    {
-        public ValueTask<string?> TryResolveAsync(string name, CancellationToken cancellationToken = default)
+        // ---------------------------------------------------------------------------------------------
+        // Failing at startup, and never in the middle of a conversation.
+        // ---------------------------------------------------------------------------------------------
+        [Fact]
+        public async Task AnUnresolvableName_FailsAtStartupAndNamesThePointer()
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            return ValueTask.FromResult<string?>(null);
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(ExampleDocument.Yaml);
+            MapSecretResolver resolver = new();
+
+            SecretResolutionException failure = await Assert.ThrowsAsync<SecretResolutionException>(
+                async () => await ResolvedSecrets.ResolveAsync(
+                    document,
+                    resolver,
+                    TestContext.Current.CancellationToken));
+
+            Assert.Equal(ApiKeyName, failure.SecretName);
+            Assert.Contains(ApiKeyName, failure.Message, StringComparison.Ordinal);
+            Assert.Contains("/tools/0/request/headers/Authorization", failure.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void FormattingAnUnknownName_Fails()
+        {
+            ResolvedSecrets secrets = ResolvedSecrets.Create([KeyValuePair.Create(ApiKeyName, ApiKeyValue)]);
+            SecretTemplate template = SecretTemplate.Parse("${secret:missing-name}");
+
+            SecretResolutionException failure = Assert.Throws<SecretResolutionException>(() => secrets.Format(template));
+
+            Assert.Equal("missing-name", failure.SecretName);
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // A value never reaches a log or a message.
+        // ---------------------------------------------------------------------------------------------
+        [Fact]
+        public void NoFailureMessage_EverHoldsAValue()
+        {
+            ResolvedSecrets secrets = ResolvedSecrets.Create([KeyValuePair.Create(ApiKeyName, ApiKeyValue)]);
+            SecretTemplate template = SecretTemplate.Parse("Bearer ${secret:orders-api-key} and ${secret:missing-name}");
+
+            SecretResolutionException failure = Assert.Throws<SecretResolutionException>(() => secrets.Format(template));
+
+            Assert.DoesNotContain(ApiKeyValue, failure.ToString(), StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void TheResolvedSet_NeverWritesAValueInItsOwnText()
+        {
+            ResolvedSecrets secrets = ResolvedSecrets.Create([KeyValuePair.Create(ApiKeyName, ApiKeyValue)]);
+
+            // A resolved set lands in a log line, a diagnostic dump, or a debugger tooltip sooner or
+            // later. It reports how many names it holds, and never what they are worth.
+            Assert.DoesNotContain(ApiKeyValue, secrets.ToString(), StringComparison.Ordinal);
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // Formatting.
+        // ---------------------------------------------------------------------------------------------
+        [Fact]
+        public void ATemplateWithNoReference_FormatsToItself()
+        {
+            SecretTemplate template = SecretTemplate.Parse("application/json");
+
+            Assert.Equal("application/json", ResolvedSecrets.Empty.Format(template));
+        }
+
+        [Fact]
+        public void TwoReferencesInOneString_BothResolve()
+        {
+            ResolvedSecrets secrets = ResolvedSecrets.Create(
+            [
+                KeyValuePair.Create("left", "L"),
+                KeyValuePair.Create("right", "R"),
+            ]);
+
+            Assert.Equal("<L|R>", secrets.Format(SecretTemplate.Parse("<${secret:left}|${secret:right}>")));
+        }
+
+        [Fact]
+        public async Task TheResolver_TakesTheCancellationTokenTheCallerGives()
+        {
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(ExampleDocument.Yaml);
+            using CancellationTokenSource source = new();
+            await source.CancelAsync();
+
+            _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                async () => await ResolvedSecrets.ResolveAsync(document, new CancellingSecretResolver(), source.Token));
+        }
+
+        private sealed class CancellingSecretResolver : ISecretResolverPort
+        {
+            public ValueTask<string?> TryResolveAsync(string name, CancellationToken cancellationToken = default)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return ValueTask.FromResult<string?>(null);
+            }
         }
     }
 }

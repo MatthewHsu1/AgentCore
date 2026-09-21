@@ -6,119 +6,136 @@ using System.ClientModel;
 using System.Globalization;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Llm;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
 using Microsoft.Extensions.AI;
 using OpenAI;
 using OpenAI.Responses;
 
-namespace AgentCore.Infrastructure.Llm.OpenAI;
-
-/// <summary>
-/// The OpenAI adapter behind <see cref="IChatClientAdapter"/>.
-/// </summary>
-public sealed class OpenAiChatClientAdapter : IChatClientAdapter
+namespace AgentCore.Infrastructure.Llm.OpenAI
 {
-    /// <summary>The one <c>providers.llm[].kind</c> value this adapter serves.</summary>
-    public const string ProviderKind = "openai";
-
-    /// <summary>The <c>${secret:name}</c> name the resolver chain is asked for.</summary>
-    public const string ApiKeySecretName = KnownSecrets.OpenAiApiKeyName;
-
-    /// <summary>The standard OpenAI environment variable, read when the chain holds no name.</summary>
-    public const string ApiKeyVariableName = KnownSecrets.OpenAiApiKeyVariable;
-
-    private OpenAIClient? _client;
-
-    /// <inheritdoc/>
-    public string Kind => ProviderKind;
-
-    /// <summary>Builds the client of one entry, reading the key on the first build only.</summary>
-    public async ValueTask<IChatClient> CreateClientAsync(
-        LlmProviderConfiguration entry,
-        ISecretResolverPort? secrets,
-        CancellationToken cancellationToken = default)
+    /// <summary>
+    /// The OpenAI adapter behind <see cref="IChatClientAdapter"/>.
+    /// </summary>
+    public sealed class OpenAiChatClientAdapter : IChatClientAdapter
     {
-        ArgumentNullException.ThrowIfNull(entry);
+        /// <summary>The one <c>providers.llm[].kind</c> value this adapter serves.</summary>
+        public const string ProviderKind = "openai";
 
-        _client ??= new OpenAIClient(new ApiKeyCredential(
-            await secrets
-                .RequireAsync(KnownSecrets.OpenAi, cancellationToken: cancellationToken)
-                .ConfigureAwait(false)));
+        /// <summary>The <c>${secret:name}</c> name the resolver chain is asked for.</summary>
+        public const string ApiKeySecretName = KnownSecrets.OpenAiApiKeyName;
 
-        var client = _client.GetResponsesClient().AsIChatClient(entry.Model);
+        /// <summary>The standard OpenAI environment variable, read when the chain holds no name.</summary>
+        public const string ApiKeyVariableName = KnownSecrets.OpenAiApiKeyVariable;
 
-        return WithResponseDefaults(client, entry.ReasoningEffort);
-    }
+        private OpenAIClient? _client;
 
-    /// <inheritdoc />
-    public AITool? ResolveHostedTool(AITool marker, LlmProviderConfiguration entry)
-    {
-        ArgumentNullException.ThrowIfNull(marker);
-        ArgumentNullException.ThrowIfNull(entry);
+        /// <inheritdoc/>
+        public string Kind => ProviderKind;
 
-        return marker switch
+        /// <summary>Builds the client of one entry, reading the key on the first build only.</summary>
+        public async ValueTask<IChatClient> CreateClientAsync(
+            LlmProviderConfiguration entry,
+            ISecretResolverPort? secrets,
+            CancellationToken cancellationToken = default)
         {
-            HostedWebSearchTool when entry.WebSearch != false => marker,
-            _ => null,
-        };
-    }
+            ArgumentNullException.ThrowIfNull(entry);
 
-    /// <summary>Puts <c>store</c> and <c>reasoning_effort</c> on every request this client sends.</summary>
-    internal static IChatClient WithResponseDefaults(IChatClient client, string? effort)
-    {
-        var level = effort is { Length: > 0 } value ? Level(value) : (ResponseReasoningEffortLevel?)null;
+            _client ??= new OpenAIClient(new ApiKeyCredential(
+                await secrets
+                    .RequireAsync(KnownSecrets.OpenAi, cancellationToken: cancellationToken)
+                    .ConfigureAwait(false)));
 
-        return client
-            .AsBuilder()
-            .ConfigureOptions(options =>
+            IChatClient client = _client.GetResponsesClient().AsIChatClient(entry.Model);
+
+            return WithResponseDefaults(client, entry.ReasoningEffort);
+        }
+
+        /// <inheritdoc />
+        public AITool? ResolveHostedTool(AITool marker, LlmProviderConfiguration entry)
+        {
+            ArgumentNullException.ThrowIfNull(marker);
+            ArgumentNullException.ThrowIfNull(entry);
+
+            return marker switch
             {
-                var caller = options.RawRepresentationFactory;
+                HostedWebSearchTool when entry.WebSearch != false => marker,
+                _ => null,
+            };
+        }
 
-                options.RawRepresentationFactory = inner =>
+        /// <inheritdoc />
+        public int? GetContextWindow(LlmProviderConfiguration entry)
+        {
+            ArgumentNullException.ThrowIfNull(entry);
+
+            return OpenAiContextWindows.Lookup(entry.Model);
+        }
+
+        /// <summary>Puts <c>store</c>, <c>reasoning_effort</c> and <c>prompt_cache_key</c> on every request this client sends.</summary>
+        internal static IChatClient WithResponseDefaults(IChatClient client, string? effort)
+        {
+            ResponseReasoningEffortLevel? level = effort is { Length: > 0 } value ? Level(value) : (ResponseReasoningEffortLevel?)null;
+
+            return client
+                .AsBuilder()
+                .ConfigureOptions(options =>
                 {
-                    if (caller?.Invoke(inner) is not CreateResponseOptions raw)
-                    {
-                        raw = new CreateResponseOptions();
-                    }
+                    Func<IChatClient, object?>? caller = options.RawRepresentationFactory;
 
-                    raw.StoredOutputEnabled ??= false;
-
-                    if (level is { } chosen)
+                    options.RawRepresentationFactory = inner =>
                     {
-                        raw.ReasoningOptions ??= new ResponseReasoningOptions
+                        if (caller?.Invoke(inner) is not CreateResponseOptions raw)
                         {
-                            ReasoningEffortLevel = chosen,
-                        };
-                    }
+                            raw = new CreateResponseOptions();
+                        }
 
-                    return raw;
-                };
-            })
-            .Build();
-    }
+                        raw.StoredOutputEnabled ??= false;
 
-    /// <summary>Reads one <c>reasoningEffort</c> value.</summary>
-    /// <param name="effort">The value the document wrote.</param>
-    /// <returns>The vendor level.</returns>
-    /// <exception cref="ConfigurationLoadException">The value is not one this vendor knows.</exception>
-    private static ResponseReasoningEffortLevel Level(string effort)
-        => effort.ToLowerInvariant() switch
+                        if (options.AdditionalProperties?.TryGetValue(ChatRequestProperties.ConversationId, out string? conversationId) == true)
+                        {
+                            raw.PromptCacheKey ??= conversationId;
+                        }
+
+                        if (level is { } chosen)
+                        {
+                            raw.ReasoningOptions ??= new ResponseReasoningOptions
+                            {
+                                ReasoningEffortLevel = chosen,
+                            };
+                        }
+
+                        return raw;
+                    };
+                })
+                .Build();
+        }
+
+        /// <summary>Reads one <c>reasoningEffort</c> value.</summary>
+        /// <param name="effort">The value the document wrote.</param>
+        /// <returns>The vendor level.</returns>
+        /// <exception cref="ConfigurationLoadException">The value is not one this vendor knows.</exception>
+        private static ResponseReasoningEffortLevel Level(string effort)
         {
-            "none" => ResponseReasoningEffortLevel.None,
-            "minimal" => ResponseReasoningEffortLevel.Minimal,
-            "low" => ResponseReasoningEffortLevel.Low,
-            "medium" => ResponseReasoningEffortLevel.Medium,
-            "high" => ResponseReasoningEffortLevel.High,
-            _ => throw new ConfigurationLoadException(new ConfigurationError
+            return effort.ToLowerInvariant() switch
             {
-                Pointer = "/providers/llm",
-                Message = string.Format(
-                    CultureInfo.InvariantCulture,
-                    "reasoningEffort '{0}' is not one this vendor knows. Write none, minimal, low, "
-                    + "medium or high.",
-                    effort),
-                Check = ConfigurationCheck.ReferenceResolution,
-            }),
-        };
+                "none" => ResponseReasoningEffortLevel.None,
+                "minimal" => ResponseReasoningEffortLevel.Minimal,
+                "low" => ResponseReasoningEffortLevel.Low,
+                "medium" => ResponseReasoningEffortLevel.Medium,
+                "high" => ResponseReasoningEffortLevel.High,
+                _ => throw new ConfigurationLoadException(new ConfigurationError
+                {
+                    Pointer = "/providers/llm",
+                    Message = string.Format(
+                        CultureInfo.InvariantCulture,
+                        "reasoningEffort '{0}' is not one this vendor knows. Write none, minimal, low, "
+                        + "medium or high.",
+                        effort),
+                    Check = ConfigurationCheck.ReferenceResolution,
+                }),
+            };
+        }
+    }
 }

@@ -4,15 +4,15 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.State;
 using Xunit;
 
-namespace AgentCore.Application.Tests.State;
-
-/// <summary>
-/// <see cref="StateDocument.WrittenSlots"/>: the durable-blob view of a conversation's declared state.
-/// </summary>
-public sealed class StateDocumentTests
+namespace AgentCore.Application.Tests.State
 {
-    private const string Yaml =
-        """
+    /// <summary>
+    /// <see cref="StateDocument.WrittenSlots"/>: the durable-blob view of a conversation's declared state.
+    /// </summary>
+    public sealed class StateDocumentTests
+    {
+        private const string Yaml =
+            """
         apiVersion: agentcore/v1
         state:
           model:  { type: string, writer: tool, from: lookup.model }
@@ -27,18 +27,18 @@ public sealed class StateDocumentTests
             agent: only
         """;
 
-    private static readonly AgentCoreConfiguration Document = ConfigurationLoader.LoadYaml(Yaml);
+        private static readonly AgentCoreConfiguration Document = ConfigurationLoader.LoadYaml(Yaml);
 
-    /// <summary>How many slots the concurrency test fills. Enough to keep the reader busy while it does.</summary>
-    private const int SlotCount = 200;
+        /// <summary>How many slots the concurrency test fills. Enough to keep the reader busy while it does.</summary>
+        private const int SlotCount = 200;
 
-    /// <summary>A document of <see cref="SlotCount"/> declared slots, written out rather than held as a literal.</summary>
-    private static string ManySlotsYaml =>
-        $$"""
+        /// <summary>A document of <see cref="SlotCount"/> declared slots, written out rather than held as a literal.</summary>
+        private static string ManySlotsYaml =>
+            $$"""
         apiVersion: agentcore/v1
         state:
         {{string.Join('\n', Enumerable.Range(0, SlotCount)
-            .Select(slot => $"  {SlotName(slot)}: {{ type: integer, writer: tool, from: lookup.{SlotName(slot)} }}"))}}
+                .Select(slot => $"  {SlotName(slot)}: {{ type: integer, writer: tool, from: lookup.{SlotName(slot)} }}"))}}
         tools:
           - { id: lookup, kind: builtin, uses: orders.read }
         agents:
@@ -49,128 +49,136 @@ public sealed class StateDocumentTests
             agent: only
         """;
 
-    private static AgentCoreConfiguration WithEnumSlot() => new()
-    {
-        ApiVersion = "agentcore/v1",
-        Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(),
-        State = new Dictionary<string, StateSlotConfiguration>(StringComparer.Ordinal)
+        private static AgentCoreConfiguration WithEnumSlot()
         {
-            ["applies_to"] = new()
+            return new()
             {
-                Type = StateSlotType.String,
-                Writer = StateWriter.Extractor,
-                EnumValues = [JsonValue.Create("f63")!, JsonValue.Create("f65")!],
-            },
-        },
-    };
-
-    [Fact]
-    public void TryWrite_ValueOutsideTheEnum_IsRefused()
-    {
-        var state = new StateDocument(WithEnumSlot());
-
-        Assert.False(state.TryWrite("applies_to", JsonValue.Create("F63 Treadmill")));
-        Assert.True(state.IsUnfilled("applies_to"));
-    }
-
-    [Fact]
-    public void TryWrite_ValueOutsideTheEnum_KeepsThePreviousValue()
-    {
-        var state = new StateDocument(WithEnumSlot());
-        Assert.True(state.TryWrite("applies_to", JsonValue.Create("f63")));
-
-        Assert.False(state.TryWrite("applies_to", JsonValue.Create("f80")));
-        Assert.Equal("f63", state.Read("applies_to")?.GetValue<string>());
-    }
-
-    [Fact]
-    public void TryWrite_ValueInsideTheEnum_IsAccepted()
-    {
-        var state = new StateDocument(WithEnumSlot());
-
-        Assert.True(state.TryWrite("applies_to", JsonValue.Create("f65")));
-        Assert.Equal("f65", state.Read("applies_to")?.GetValue<string>());
-    }
-
-    [Fact]
-    public void WrittenSlots_HandsOutAFreshCopyEveryConversation()
-    {
-        StateDocument state = new(Document);
-        var result = JsonNode.Parse("""{ "model": "F63" }""");
-        Assert.Equal(1, ToolStateWriter.Apply(state, "lookup", result));
-
-        var first = state.WrittenSlots();
-        var second = state.WrittenSlots();
-
-        // The declared state schema only ever writes scalars (section 8.3's four writers coerce
-        // to boolean/integer/number/string), so a scalar JsonValue is the only value shape this
-        // slot can hold today, and a scalar exposes no public mutator. The clone's contract is
-        // still checked the way a caller could actually break it without one: two conversations must not
-        // hand back the same node instance, because a caller free to reparent or wrap one conversation's
-        // node (e.g. into a JsonObject of its own) would otherwise reach into the live document,
-        // or into the copy a different caller was given.
-        Assert.NotSame(first["model"], second["model"]);
-        Assert.Equal("F63", second["model"]!.GetValue<string>());
-    }
-
-    [Fact]
-    public void WrittenSlots_OmitsASlotNoWriterHasFilled()
-    {
-        StateDocument state = new(Document);
-        var result = JsonNode.Parse("""{ "model": "F63" }""");
-        Assert.Equal(1, ToolStateWriter.Apply(state, "lookup", result));
-
-        var written = state.WrittenSlots();
-
-        // "serial" is declared but no writer touched it. Absent, not present-with-its-default,
-        // is the distinction IsUnfilled exists to preserve; Snapshot() (which fills every
-        // declared slot with its default) would destroy it.
-        Assert.True(written.ContainsKey("model"));
-        Assert.False(written.ContainsKey("serial"));
-        Assert.True(state.IsUnfilled("serial"));
-    }
-
-    [Fact]
-    public async Task WrittenSlots_ReadWhileTheTurnLoopIsStillWriting_AnswersInsteadOfThrowing()
-    {
-        // The turn loop is this document's only WRITER, but it is not its only toucher.
-        // ConversationSession.Snapshot reads it off the turn, and AgentCoreAgent.SerializeSessionCoreAsync is
-        // a framework seam any host thread may conversation while a turn is running — an exposure this branch
-        // created, because that seam used to throw NotSupportedException instead of answering.
-        // Enumerating a plain Dictionary mid-write is an InvalidOperationException, and it would
-        // surface out of the framework's own serialization API.
-        var document = ConfigurationLoader.LoadYaml(ManySlotsYaml);
-
-        for (var round = 0; round < 60; round++)
-        {
-            StateDocument state = new(document);
-            using ManualResetEventSlim reading = new();
-            using CancellationTokenSource written = new();
-
-            var reader = Task.Run(
-                () =>
+                ApiVersion = "agentcore/v1",
+                Agents = new AgentsConfiguration { Items = [] },
+                Entries = new Dictionary<string, EntryConfiguration>(),
+                State = new Dictionary<string, StateSlotConfiguration>(StringComparer.Ordinal)
                 {
-                    reading.Set();
-                    while (!written.IsCancellationRequested)
+                    ["applies_to"] = new()
                     {
-                        // A torn read is fine and is the accepted price: the snapshot is best effort
-                        // by D5, and the next turn's write corrects it. A throw is not fine.
-                        _ = state.WrittenSlots();
-                    }
+                        Type = StateSlotType.String,
+                        Writer = StateWriter.Extractor,
+                        EnumValues = [JsonValue.Create("f63")!, JsonValue.Create("f65")!],
+                    },
                 },
-                TestContext.Current.CancellationToken);
+            };
+        }
 
-            reading.Wait(TestContext.Current.CancellationToken);
+        [Fact]
+        public void TryWrite_ValueOutsideTheEnum_IsRefused()
+        {
+            StateDocument state = new(WithEnumSlot());
 
-            for (var slot = 0; slot < SlotCount; slot++)
+            Assert.False(state.TryWrite("applies_to", JsonValue.Create("F63 Treadmill")));
+            Assert.True(state.IsUnfilled("applies_to"));
+        }
+
+        [Fact]
+        public void TryWrite_ValueOutsideTheEnum_KeepsThePreviousValue()
+        {
+            StateDocument state = new(WithEnumSlot());
+            Assert.True(state.TryWrite("applies_to", JsonValue.Create("f63")));
+
+            Assert.False(state.TryWrite("applies_to", JsonValue.Create("f80")));
+            Assert.Equal("f63", state.Read("applies_to")?.GetValue<string>());
+        }
+
+        [Fact]
+        public void TryWrite_ValueInsideTheEnum_IsAccepted()
+        {
+            StateDocument state = new(WithEnumSlot());
+
+            Assert.True(state.TryWrite("applies_to", JsonValue.Create("f65")));
+            Assert.Equal("f65", state.Read("applies_to")?.GetValue<string>());
+        }
+
+        [Fact]
+        public void WrittenSlots_HandsOutAFreshCopyEveryConversation()
+        {
+            StateDocument state = new(Document);
+            JsonNode? result = JsonNode.Parse("""{ "model": "F63" }""");
+            Assert.Equal(1, ToolStateWriter.Apply(state, "lookup", result));
+
+            IReadOnlyDictionary<string, JsonNode?> first = state.WrittenSlots();
+            IReadOnlyDictionary<string, JsonNode?> second = state.WrittenSlots();
+
+            // The declared state schema only ever writes scalars (section 8.3's four writers coerce
+            // to boolean/integer/number/string), so a scalar JsonValue is the only value shape this
+            // slot can hold today, and a scalar exposes no public mutator. The clone's contract is
+            // still checked the way a caller could actually break it without one: two conversations must not
+            // hand back the same node instance, because a caller free to reparent or wrap one conversation's
+            // node (e.g. into a JsonObject of its own) would otherwise reach into the live document,
+            // or into the copy a different caller was given.
+            Assert.NotSame(first["model"], second["model"]);
+            Assert.Equal("F63", second["model"]!.GetValue<string>());
+        }
+
+        [Fact]
+        public void WrittenSlots_OmitsASlotNoWriterHasFilled()
+        {
+            StateDocument state = new(Document);
+            JsonNode? result = JsonNode.Parse("""{ "model": "F63" }""");
+            Assert.Equal(1, ToolStateWriter.Apply(state, "lookup", result));
+
+            IReadOnlyDictionary<string, JsonNode?> written = state.WrittenSlots();
+
+            // "serial" is declared but no writer touched it. Absent, not present-with-its-default,
+            // is the distinction IsUnfilled exists to preserve; Snapshot() (which fills every
+            // declared slot with its default) would destroy it.
+            Assert.True(written.ContainsKey("model"));
+            Assert.False(written.ContainsKey("serial"));
+            Assert.True(state.IsUnfilled("serial"));
+        }
+
+        [Fact]
+        public async Task WrittenSlots_ReadWhileTheTurnLoopIsStillWriting_AnswersInsteadOfThrowing()
+        {
+            // The turn loop is this document's only WRITER, but it is not its only toucher.
+            // ConversationSession.Snapshot reads it off the turn, and AgentCoreAgent.SerializeSessionCoreAsync is
+            // a framework seam any host thread may conversation while a turn is running — an exposure this branch
+            // created, because that seam used to throw NotSupportedException instead of answering.
+            // Enumerating a plain Dictionary mid-write is an InvalidOperationException, and it would
+            // surface out of the framework's own serialization API.
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(ManySlotsYaml);
+
+            for (int round = 0; round < 60; round++)
             {
-                Assert.True(state.TryWrite(SlotName(slot), JsonValue.Create((long)slot)));
-            }
+                StateDocument state = new(document);
+                using ManualResetEventSlim reading = new();
+                using CancellationTokenSource written = new();
 
-            await written.CancelAsync();
-            await reader;
+                Task reader = Task.Run(
+                    () =>
+                    {
+                        reading.Set();
+                        while (!written.IsCancellationRequested)
+                        {
+                            // A torn read is fine and is the accepted price: the snapshot is best effort
+                            // by D5, and the next turn's write corrects it. A throw is not fine.
+                            _ = state.WrittenSlots();
+                        }
+                    },
+                    TestContext.Current.CancellationToken);
+
+                reading.Wait(TestContext.Current.CancellationToken);
+
+                for (int slot = 0; slot < SlotCount; slot++)
+                {
+                    Assert.True(state.TryWrite(SlotName(slot), JsonValue.Create((long)slot)));
+                }
+
+                await written.CancelAsync();
+                await reader;
+            }
+        }
+
+        private static string SlotName(int index)
+        {
+            return $"s{index}";
         }
     }
-
-    private static string SlotName(int index) => $"s{index}";
 }

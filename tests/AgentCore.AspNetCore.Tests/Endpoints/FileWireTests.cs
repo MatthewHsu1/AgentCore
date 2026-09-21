@@ -1,25 +1,28 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using AgentCore.Application.Conversation;
+using AgentCore.Application.Blobs;
 using AgentCore.Application.Configuration.Parsing;
+using AgentCore.Application.Conversation;
+using AgentCore.Application.Transcript;
 using AgentCore.AspNetCore.Tests.Fakes;
+using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
-namespace AgentCore.AspNetCore.Tests.Endpoints;
-
-/// <summary>
-/// The whole wire a published file travels: the model calls <c>file.publish</c> on a file in the
-/// conversation's workspace, the blob store keeps it under the conversation, the browser gets one
-/// <c>agentcore_file</c> part with the link, and the transcript links the same file on a later read.
-/// </summary>
-public sealed class FileWireTests : IDisposable
+namespace AgentCore.AspNetCore.Tests.Endpoints
 {
-    private const string ConversationId = "conversation-pub-1";
+    /// <summary>
+    /// The whole wire a published file travels: the model calls <c>file.publish</c> on a file in the
+    /// conversation's workspace, the blob store keeps it under the conversation, the browser gets one
+    /// <c>agentcore_file</c> part with the link, and the transcript links the same file on a later read.
+    /// </summary>
+    public sealed class FileWireTests : IDisposable
+    {
+        private const string ConversationId = "conversation-pub-1";
 
-    private const string Yaml =
-        """
+        private const string Yaml =
+            """
           apiVersion: agentcore/v1
           tools:
             - { id: publish, kind: builtin, uses: file.publish }
@@ -41,161 +44,166 @@ public sealed class FileWireTests : IDisposable
             blobs: { kind: fake }
           """;
 
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "agentcore-filewire-" + Guid.NewGuid().ToString("N"));
+        private readonly string _root = Path.Combine(Path.GetTempPath(), "agentcore-filewire-" + Guid.NewGuid().ToString("N"));
 
-    public FileWireTests() => Directory.CreateDirectory(Path.Combine(_root, ConversationId));
-
-    public void Dispose()
-    {
-        if (Directory.Exists(_root))
+        public FileWireTests()
         {
-            Directory.Delete(_root, recursive: true);
+            _ = Directory.CreateDirectory(Path.Combine(_root, ConversationId));
         }
-    }
-
-    [Fact]
-    public async Task AToolThatPublishes_ReachesTheBrowserAsAFilePartAndTheTranscriptLinksItLater()
-    {
-        File.WriteAllText(Path.Combine(_root, ConversationId, "report.csv"), "month,sales\njan,10\n");
-        FakeBlobStoreAdapter blobs = new();
-
-        await using var host = await ResponsesHost.StartAsync(
-            Yaml,
-            new PublishingChatClient(),
-            configure: options => options.UseWorkspace(_root).UseBlobStores(blobs));
-
-        using var response = await host.PostAsync(
-            $$"""{ "stream": true, "conversation": "{{ConversationId}}", "input": "send me the report", "agentcore": { "message_id": "m1" } }""");
-        var events = await ResponsesHost.ReadEventsAsync(response);
-
-        var files = events
-            .Select(text => JsonDocument.Parse(text).RootElement)
-            .Where(chunk => chunk.TryGetProperty("agentcore_file", out var file) && file.ValueKind != JsonValueKind.Null)
-            .Select(chunk => chunk.GetProperty("agentcore_file"))
-            .ToList();
-
-        var file = Assert.Single(files);
-        Assert.Equal("report.csv", file.GetProperty("name").GetString());
-        Assert.Equal("Quarterly report", file.GetProperty("title").GetString());
-        Assert.Equal("text/csv", file.GetProperty("media_type").GetString());
-        Assert.Equal(19, file.GetProperty("length").GetInt64());
-        Assert.Equal($"https://blobs.test/{ConversationId}/report.csv?ttl=900", file.GetProperty("url").GetString());
-
-        // The bytes are in the store, owned by the conversation.
-        var (mediaType, bytes) = blobs.Store.Blobs[(ConversationId, "report.csv")];
-        Assert.Equal("text/csv", mediaType);
-        Assert.Equal("month,sales\njan,10\n", System.Text.Encoding.UTF8.GetString(bytes));
-
-        // The model read the link back in its tool result.
-        var toolResult = events
-            .Select(text => JsonDocument.Parse(text).RootElement)
-            .Where(chunk => chunk.TryGetProperty("agentcore_tool", out var tool)
-                && tool.GetProperty("phase").GetString() == "result")
-            .Select(chunk => chunk.GetProperty("agentcore_tool"))
-            .Single();
-        Assert.False(toolResult.GetProperty("failed").GetBoolean());
-        Assert.Equal($"https://blobs.test/{ConversationId}/report.csv?ttl=900", toolResult.GetProperty("result").GetProperty("url").GetString());
-
-        // And a later read of the transcript links the same file again.
-        var conversations = host.Services.GetRequiredService<Conversations>();
-        var stored = await conversations.ReadAsync(ConversationId, TestContext.Current.CancellationToken);
-        var links = await conversations.LinkFilesAsync(ConversationId, stored.Select(row => row.Content), TestContext.Current.CancellationToken);
-
-        var link = Assert.Single(links);
-        Assert.Equal((ConversationId, "report.csv", "text/csv", 19L), (link.Blob.OwnerId, link.Blob.Name, link.Blob.MediaType, link.Blob.Length));
-        Assert.Equal($"https://blobs.test/{ConversationId}/report.csv?ttl=900", link.Url?.ToString());
-    }
-
-    [Fact]
-    public async Task AToolThatPublishesAMissingFile_TellsTheModelAndWritesNoFilePart()
-    {
-        FakeBlobStoreAdapter blobs = new();
-
-        await using var host = await ResponsesHost.StartAsync(
-            Yaml,
-            new PublishingChatClient(),
-            configure: options => options.UseWorkspace(_root).UseBlobStores(blobs));
-
-        using var response = await host.PostAsync(
-            $$"""{ "stream": true, "conversation": "{{ConversationId}}", "input": "send me the report", "agentcore": { "message_id": "m1" } }""");
-        var events = await ResponsesHost.ReadEventsAsync(response);
-
-        Assert.DoesNotContain(events, text => text.Contains("agentcore_file", StringComparison.Ordinal));
-
-        var toolResult = events
-            .Select(text => JsonDocument.Parse(text).RootElement)
-            .Where(chunk => chunk.TryGetProperty("agentcore_tool", out var tool)
-                && tool.GetProperty("phase").GetString() == "result")
-            .Select(chunk => chunk.GetProperty("agentcore_tool"))
-            .Single();
-        Assert.True(toolResult.GetProperty("failed").GetBoolean());
-        Assert.Contains("report.csv", toolResult.GetProperty("result").GetProperty("message").GetString(), StringComparison.Ordinal);
-        Assert.Empty(blobs.Store.Blobs);
-    }
-
-    [Fact]
-    public async Task APublishToolWithNoBlobStore_FailsTheStartNamingTheToolAndThePort()
-    {
-        var yaml = Yaml.Replace("blobs: { kind: fake }", string.Empty, StringComparison.Ordinal);
-
-        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(() => ResponsesHost.StartAsync(
-            yaml,
-            new PublishingChatClient(),
-            configure: options => options.UseWorkspace(_root)));
-
-        Assert.Contains("'publish'", failure.Message, StringComparison.Ordinal);
-        Assert.Contains("providers.blobs", failure.Message, StringComparison.Ordinal);
-    }
-
-    /// <summary>Calls the publish tool it is offered, once, on the report, then answers in words.</summary>
-    private sealed class PublishingChatClient : IChatClient
-    {
-        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            await Task.Yield();
-
-            var alreadyPublished = messages.Any(message => message.Contents.OfType<FunctionResultContent>().Any());
-
-            if (!alreadyPublished && options?.Tools?.OfType<AIFunction>().FirstOrDefault(tool => tool.Name == "publish") is { } publish)
-            {
-                yield return new ChatResponseUpdate(
-                    ChatRole.Assistant,
-                    [new FunctionCallContent(
-                        "conversation_1",
-                        publish.Name,
-                        new Dictionary<string, object?>(StringComparer.Ordinal)
-                        {
-                            ["path"] = "report.csv",
-                            ["title"] = "Quarterly report",
-                        })]);
-                yield break;
-            }
-
-            yield return new ChatResponseUpdate(ChatRole.Assistant, "here is the report.");
-        }
-
-        public async Task<ChatResponse> GetResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
-        {
-            List<ChatResponseUpdate> updates = [];
-            await foreach (var update in GetStreamingResponseAsync(messages, options, cancellationToken).ConfigureAwait(false))
-            {
-                updates.Add(update);
-            }
-
-            return updates.ToChatResponse();
-        }
-
-        public object? GetService(Type serviceType, object? serviceKey = null)
-            => serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
 
         public void Dispose()
         {
+            if (Directory.Exists(_root))
+            {
+                Directory.Delete(_root, recursive: true);
+            }
+        }
+
+        [Fact]
+        public async Task AToolThatPublishes_ReachesTheBrowserAsAFilePartAndTheTranscriptLinksItLater()
+        {
+            File.WriteAllText(Path.Combine(_root, ConversationId, "report.csv"), "month,sales\njan,10\n");
+            FakeBlobStoreAdapter blobs = new();
+
+            await using ResponsesHost host = await ResponsesHost.StartAsync(
+                Yaml,
+                new PublishingChatClient(),
+                configure: options => options.UseWorkspace(_root).UseBlobStores(blobs));
+
+            using HttpResponseMessage response = await host.PostAsync(
+                $$"""{ "stream": true, "conversation": "{{ConversationId}}", "input": "send me the report", "agentcore": { "message_id": "m1" } }""");
+            List<string> events = await ResponsesHost.ReadEventsAsync(response);
+
+            List<JsonElement> files = [.. events
+                .Select(text => JsonDocument.Parse(text).RootElement)
+                .Where(chunk => chunk.TryGetProperty("agentcore_file", out JsonElement file) && file.ValueKind != JsonValueKind.Null)
+                .Select(chunk => chunk.GetProperty("agentcore_file"))];
+
+            JsonElement file = Assert.Single(files);
+            Assert.Equal("report.csv", file.GetProperty("name").GetString());
+            Assert.Equal("Quarterly report", file.GetProperty("title").GetString());
+            Assert.Equal("text/csv", file.GetProperty("media_type").GetString());
+            Assert.Equal(19, file.GetProperty("length").GetInt64());
+            Assert.Equal($"https://blobs.test/{ConversationId}/report.csv?ttl=900", file.GetProperty("url").GetString());
+
+            // The bytes are in the store, owned by the conversation.
+            (string? mediaType, byte[]? bytes) = blobs.Store.Blobs[(ConversationId, "report.csv")];
+            Assert.Equal("text/csv", mediaType);
+            Assert.Equal("month,sales\njan,10\n", System.Text.Encoding.UTF8.GetString(bytes));
+
+            // The model read the link back in its tool result.
+            JsonElement toolResult = events
+                .Select(text => JsonDocument.Parse(text).RootElement)
+                .Where(chunk => chunk.TryGetProperty("agentcore_tool", out JsonElement tool)
+                    && tool.GetProperty("phase").GetString() == "result")
+                .Select(chunk => chunk.GetProperty("agentcore_tool"))
+                .Single();
+            Assert.False(toolResult.GetProperty("failed").GetBoolean());
+            Assert.Equal($"https://blobs.test/{ConversationId}/report.csv?ttl=900", toolResult.GetProperty("result").GetProperty("url").GetString());
+
+            // And a later read of the transcript links the same file again.
+            Conversations conversations = host.Services.GetRequiredService<Conversations>();
+            IReadOnlyList<ConversationMessage> stored = await conversations.ReadAllAsync(ConversationId, TestContext.Current.CancellationToken);
+            IReadOnlyList<FileLink> links = await conversations.LinkFilesAsync(ConversationId, stored.Select(row => row.Content), TestContext.Current.CancellationToken);
+
+            FileLink link = Assert.Single(links);
+            Assert.Equal((ConversationId, "report.csv", "text/csv", 19L), (link.Blob.OwnerId, link.Blob.Name, link.Blob.MediaType, link.Blob.Length));
+            Assert.Equal($"https://blobs.test/{ConversationId}/report.csv?ttl=900", link.Url?.ToString());
+        }
+
+        [Fact]
+        public async Task AToolThatPublishesAMissingFile_TellsTheModelAndWritesNoFilePart()
+        {
+            FakeBlobStoreAdapter blobs = new();
+
+            await using ResponsesHost host = await ResponsesHost.StartAsync(
+                Yaml,
+                new PublishingChatClient(),
+                configure: options => options.UseWorkspace(_root).UseBlobStores(blobs));
+
+            using HttpResponseMessage response = await host.PostAsync(
+                $$"""{ "stream": true, "conversation": "{{ConversationId}}", "input": "send me the report", "agentcore": { "message_id": "m1" } }""");
+            List<string> events = await ResponsesHost.ReadEventsAsync(response);
+
+            Assert.DoesNotContain(events, text => text.Contains("agentcore_file", StringComparison.Ordinal));
+
+            JsonElement toolResult = events
+                .Select(text => JsonDocument.Parse(text).RootElement)
+                .Where(chunk => chunk.TryGetProperty("agentcore_tool", out JsonElement tool)
+                    && tool.GetProperty("phase").GetString() == "result")
+                .Select(chunk => chunk.GetProperty("agentcore_tool"))
+                .Single();
+            Assert.True(toolResult.GetProperty("failed").GetBoolean());
+            Assert.Contains("report.csv", toolResult.GetProperty("result").GetProperty("message").GetString(), StringComparison.Ordinal);
+            Assert.Empty(blobs.Store.Blobs);
+        }
+
+        [Fact]
+        public async Task APublishToolWithNoBlobStore_FailsTheStartNamingTheToolAndThePort()
+        {
+            string yaml = Yaml.Replace("blobs: { kind: fake }", string.Empty, StringComparison.Ordinal);
+
+            ConfigurationLoadException failure = await Assert.ThrowsAsync<ConfigurationLoadException>(() => ResponsesHost.StartAsync(
+                yaml,
+                new PublishingChatClient(),
+                configure: options => options.UseWorkspace(_root)));
+
+            Assert.Contains("'publish'", failure.Message, StringComparison.Ordinal);
+            Assert.Contains("providers.blobs", failure.Message, StringComparison.Ordinal);
+        }
+
+        /// <summary>Calls the publish tool it is offered, once, on the report, then answers in words.</summary>
+        private sealed class PublishingChatClient : IChatClient
+        {
+            public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+                IEnumerable<ChatMessage> messages,
+                ChatOptions? options = null,
+                [EnumeratorCancellation] CancellationToken cancellationToken = default)
+            {
+                await Task.Yield();
+
+                bool alreadyPublished = messages.Any(message => message.Contents.OfType<FunctionResultContent>().Any());
+
+                if (!alreadyPublished && options?.Tools?.OfType<AIFunction>().FirstOrDefault(tool => tool.Name == "publish") is { } publish)
+                {
+                    yield return new ChatResponseUpdate(
+                        ChatRole.Assistant,
+                        [new FunctionCallContent(
+                            "conversation_1",
+                            publish.Name,
+                            new Dictionary<string, object?>(StringComparer.Ordinal)
+                            {
+                                ["path"] = "report.csv",
+                                ["title"] = "Quarterly report",
+                            })]);
+                    yield break;
+                }
+
+                yield return new ChatResponseUpdate(ChatRole.Assistant, "here is the report.");
+            }
+
+            public async Task<ChatResponse> GetResponseAsync(
+                IEnumerable<ChatMessage> messages,
+                ChatOptions? options = null,
+                CancellationToken cancellationToken = default)
+            {
+                List<ChatResponseUpdate> updates = [];
+                await foreach (ChatResponseUpdate? update in GetStreamingResponseAsync(messages, options, cancellationToken).ConfigureAwait(false))
+                {
+                    updates.Add(update);
+                }
+
+                return updates.ToChatResponse();
+            }
+
+            public object? GetService(Type serviceType, object? serviceKey = null)
+            {
+                return serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
+            }
+
+            public void Dispose()
+            {
+            }
         }
     }
 }

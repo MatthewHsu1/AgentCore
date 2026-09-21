@@ -1,12 +1,17 @@
 using Microsoft.Extensions.AI;
 
-namespace AgentCore.Application.Transcript;
-
-/// <summary>One message to write to a conversation. The store gives it its ordinal.</summary>
-/// <param name="TurnIndex">
-/// The turn the message belongs to, or <see langword="null"/> for a message written outside any
-/// turn, which the store stamps with the turn the conversation's session takes next.
-/// </param>
-/// <param name="Content">The message itself.</param>
-/// <param name="MessageId">What the message is called. Unique within the conversation. Never empty.</param>
-public sealed record ConversationMessageDraft(int? TurnIndex, ChatMessage Content, string MessageId);
+namespace AgentCore.Application.Transcript
+{
+    /// <summary>One message to write to a conversation. The store gives it its ordinal.</summary>
+    /// <param name="TurnIndex">
+    /// The turn the message belongs to, or <see langword="null"/> for a message written outside any
+    /// turn, which the store stamps with the turn the conversation's session takes next.
+    /// </param>
+    /// <param name="Content">The message itself.</param>
+    /// <param name="MessageId">What the message is called. Unique within the conversation. Never empty.</param>
+    public sealed record ConversationMessageDraft(int? TurnIndex, ChatMessage Content, string MessageId)
+    {
+        /// <inheritdoc cref="ConversationMessage.CoversUpTo"/>
+        public int? CoversUpTo { get; init; }
+    }
+}

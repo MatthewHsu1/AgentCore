@@ -1,107 +1,113 @@
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Conversation.Memory;
 using AgentCore.TestSupport;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Transcript;
 using Microsoft.Extensions.AI;
 
-namespace AgentCore.Application.Tests.Fakes;
-
-/// <summary>A store kept in this process, with the conversations made against its words recorded.</summary>
-internal sealed class RecordingConversationStore() : DelegatingConversationStore(new InMemoryConversationStore())
+namespace AgentCore.Application.Tests.Fakes
 {
-    private readonly Lock _lock = new();
-
-    /// <summary>The words as the store holds them now. It backs <see cref="Live"/>, not <see cref="Rows"/>.</summary>
-    private readonly Dictionary<(string ConversationId, int Ordinal), ConversationMessage> _rows = [];
-
-    /// <summary>Gets every row the provider appended, in the order it appended them.</summary>
-    public List<ConversationMessage> Rows { get; } = [];
-
-    /// <summary>Gets every rewrite the provider asked for, in order.</summary>
-    public List<ConversationMessage> Rewrites { get; } = [];
-
-    /// <summary>Gets how many times a whole conversation was read back.</summary>
-    public int Reads { get; private set; }
-
-    /// <summary>Reads one conversation as the store holds it now, oldest message first.</summary>
-    /// <param name="conversationId">The conversation to read.</param>
-    public IReadOnlyList<ConversationMessage> Live(string conversationId)
+    /// <summary>A store kept in this process, with the conversations made against its words recorded.</summary>
+    internal sealed class RecordingConversationStore() : DelegatingConversationStore(new InMemoryConversationStore())
     {
-        lock (_lock)
-        {
-            return [.. _rows.Values.Where(row => row.ConversationId == conversationId).OrderBy(row => row.Ordinal)];
-        }
-    }
+        private readonly Lock _lock = new();
 
-    /// <inheritdoc />
-    public override async ValueTask<IReadOnlyList<ConversationMessage>> AppendAsync(
-        string conversationId,
-        IReadOnlyList<ConversationMessageDraft> messages,
-        ConversationSessionState? state = null,
-        CancellationToken cancellationToken = default)
-    {
-        var rows = await base.AppendAsync(conversationId, messages, state, cancellationToken).ConfigureAwait(false);
+        /// <summary>The words as the store holds them now. It backs <see cref="Live"/>, not <see cref="Rows"/>.</summary>
+        private readonly Dictionary<(string ConversationId, int Ordinal), ConversationMessage> _rows = [];
 
-        lock (_lock)
+        /// <summary>Gets every row the provider appended, in the order it appended them.</summary>
+        public List<ConversationMessage> Rows { get; } = [];
+
+        /// <summary>Gets every rewrite the provider asked for, in order.</summary>
+        public List<ConversationMessage> Rewrites { get; } = [];
+
+        /// <summary>Gets how many times a conversation was read back, by a consumer or by its session.</summary>
+        public int Reads { get; private set; }
+
+        /// <summary>Reads one conversation as the store holds it now, oldest message first.</summary>
+        /// <param name="conversationId">The conversation to read.</param>
+        public IReadOnlyList<ConversationMessage> Live(string conversationId)
         {
-            Rows.AddRange(rows);
-            foreach (var row in rows)
+            lock (_lock)
             {
-                _rows[(row.ConversationId, row.Ordinal)] = row;
+                return [.. _rows.Values.Where(row => row.ConversationId == conversationId).OrderBy(row => row.Ordinal)];
             }
         }
 
-        return rows;
-    }
-
-    /// <inheritdoc />
-    public override async ValueTask RewriteAsync(
-        string conversationId, string messageId, ChatMessage content, CancellationToken cancellationToken = default)
-    {
-        await base.RewriteAsync(conversationId, messageId, content, cancellationToken).ConfigureAwait(false);
-
-        lock (_lock)
+        /// <inheritdoc />
+        public override async ValueTask<IReadOnlyList<ConversationMessage>> AppendAsync(
+            string conversationId,
+            IReadOnlyList<ConversationMessageDraft> messages,
+            ConversationSessionState? state = null,
+            CancellationToken cancellationToken = default)
         {
-            foreach (var pair in _rows)
+            IReadOnlyList<ConversationMessage> rows = await base.AppendAsync(conversationId, messages, state, cancellationToken).ConfigureAwait(false);
+
+            lock (_lock)
             {
-                if (pair.Key.ConversationId != conversationId || pair.Value.MessageId != messageId)
+                Rows.AddRange(rows);
+                foreach (ConversationMessage row in rows)
                 {
-                    continue;
+                    _rows[(row.ConversationId, row.Ordinal)] = row;
+                }
+            }
+
+            return rows;
+        }
+
+        /// <inheritdoc />
+        public override async ValueTask RewriteAsync(
+            string conversationId, string messageId, ChatMessage content, CancellationToken cancellationToken = default)
+        {
+            await base.RewriteAsync(conversationId, messageId, content, cancellationToken).ConfigureAwait(false);
+
+            lock (_lock)
+            {
+                foreach (KeyValuePair<(string ConversationId, int Ordinal), ConversationMessage> pair in _rows)
+                {
+                    if (pair.Key.ConversationId != conversationId || pair.Value.MessageId != messageId)
+                    {
+                        continue;
+                    }
+
+                    ConversationMessage rewritten = pair.Value with { Content = content };
+                    _rows[pair.Key] = rewritten;
+                    Rewrites.Add(rewritten);
+                    break;
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        /// <remarks>The rows are the ones somebody said: nothing here writes a summary row.</remarks>
+        public override ValueTask<IReadOnlyList<ConversationMessage>> ReadForSessionAsync(
+            string conversationId, CancellationToken cancellationToken = default)
+        {
+            return Read(conversationId);
+        }
+
+        private ValueTask<IReadOnlyList<ConversationMessage>> Read(string conversationId)
+        {
+            lock (_lock)
+            {
+                Reads++;
+            }
+
+            return ValueTask.FromResult(Live(conversationId));
+        }
+
+        /// <inheritdoc />
+        public override ValueTask<int> EraseAsync(string conversationId, CancellationToken cancellationToken = default)
+        {
+            lock (_lock)
+            {
+                List<(string ConversationId, int Ordinal)> going = [.. _rows.Keys.Where(key => key.ConversationId == conversationId)];
+                foreach ((string ConversationId, int Ordinal) key in going)
+                {
+                    _ = _rows.Remove(key);
                 }
 
-                var rewritten = pair.Value with { Content = content };
-                _rows[pair.Key] = rewritten;
-                Rewrites.Add(rewritten);
-                break;
+                return ValueTask.FromResult(going.Count);
             }
-        }
-    }
-
-    /// <inheritdoc />
-    public override ValueTask<IReadOnlyList<ConversationMessage>> ReadAsync(
-        string conversationId, CancellationToken cancellationToken = default)
-    {
-        lock (_lock)
-        {
-            Reads++;
-        }
-
-        return ValueTask.FromResult(Live(conversationId));
-    }
-
-    /// <inheritdoc />
-    public override ValueTask<int> EraseAsync(string conversationId, CancellationToken cancellationToken = default)
-    {
-        lock (_lock)
-        {
-            var going = _rows.Keys.Where(key => key.ConversationId == conversationId).ToList();
-            foreach (var key in going)
-            {
-                _rows.Remove(key);
-            }
-
-            return ValueTask.FromResult(going.Count);
         }
     }
 }

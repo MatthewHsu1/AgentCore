@@ -1,26 +1,27 @@
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
-namespace AgentCore.Application.Runtime.Turn;
-
-/// <summary>
-/// The framework's per-invocation seam, bound to every compiled agent.
-/// </summary>
-internal sealed class TurnContextProvider : AIContextProvider
+namespace AgentCore.Application.Runtime.Turn
 {
-    /// <inheritdoc />
-    protected override ValueTask<AIContext> ProvideAIContextAsync(
-        InvokingContext context, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// The framework's per-invocation seam, bound to every compiled agent.
+    /// </summary>
+    internal sealed class TurnContextProvider : AIContextProvider
     {
-        ArgumentNullException.ThrowIfNull(context);
-
-        var instructions = TurnRegistry.For(context.Session)?.Instructions;
-
-        return new(new AIContext
+        /// <inheritdoc />
+        protected override ValueTask<AIContext> ProvideAIContextAsync(
+            InvokingContext context, CancellationToken cancellationToken = default)
         {
-            Messages = string.IsNullOrEmpty(instructions)
-                ? null
-                : [new ChatMessage(ChatRole.System, instructions)],
-        });
+            ArgumentNullException.ThrowIfNull(context);
+
+            string? instructions = TurnRegistry.For(context.Session)?.Instructions;
+
+            return new(new AIContext
+            {
+                Messages = string.IsNullOrEmpty(instructions)
+                    ? null
+                    : [new ChatMessage(ChatRole.System, instructions)],
+            });
+        }
     }
 }

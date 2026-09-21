@@ -7,22 +7,22 @@ using AgentCore.Application.Tests.Fakes;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Llm;
-
-/// <summary>
-/// The composite behind <c>UseChatClients</c>. It routes each <c>providers.llm[]</c> entry to the
-/// adapter whose <see cref="IChatClientAdapter.Kind"/> matches, and it owns everything no vendor owns:
-/// the <c>as</c> map, the default entry, the temperature wrapper, and the client cache.
-/// </summary>
-/// <remarks>
-/// Every adapter here is a fake, so every test runs offline. The document names the vendor and the
-/// host registers the adapters; these tests prove the document alone decides which adapter builds
-/// which client.
-/// </remarks>
-public sealed class CompositeChatClientFactoryTests
+namespace AgentCore.Application.Tests.Llm
 {
-    private const string TwoVendorsYaml =
-        """
+    /// <summary>
+    /// The composite behind <c>UseChatClients</c>. It routes each <c>providers.llm[]</c> entry to the
+    /// adapter whose <see cref="IChatClientAdapter.Kind"/> matches, and it owns everything no vendor owns:
+    /// the <c>as</c> map, the default entry, the temperature wrapper, and the client cache.
+    /// </summary>
+    /// <remarks>
+    /// Every adapter here is a fake, so every test runs offline. The document names the vendor and the
+    /// host registers the adapters; these tests prove the document alone decides which adapter builds
+    /// which client.
+    /// </remarks>
+    public sealed class CompositeChatClientFactoryTests
+    {
+        private const string TwoVendorsYaml =
+            """
         apiVersion: agentcore/v1
         agents:
           items:
@@ -40,8 +40,8 @@ public sealed class CompositeChatClientFactoryTests
             agent: only
         """;
 
-    private const string OneVendorYaml =
-        """
+        private const string OneVendorYaml =
+            """
         apiVersion: agentcore/v1
         agents:
           items:
@@ -59,8 +59,8 @@ public sealed class CompositeChatClientFactoryTests
             agent: only
         """;
 
-    private const string UpperCaseKindYaml =
-        """
+        private const string UpperCaseKindYaml =
+            """
         apiVersion: agentcore/v1
         agents:
           items:
@@ -77,8 +77,8 @@ public sealed class CompositeChatClientFactoryTests
             agent: only
         """;
 
-    private const string DuplicateAsYaml =
-        """
+        private const string DuplicateAsYaml =
+            """
         apiVersion: agentcore/v1
         agents:
           items:
@@ -96,8 +96,8 @@ public sealed class CompositeChatClientFactoryTests
             agent: only
         """;
 
-    private const string NoModelYaml =
-        """
+        private const string NoModelYaml =
+            """
         apiVersion: agentcore/v1
         agents:
           items:
@@ -107,264 +107,284 @@ public sealed class CompositeChatClientFactoryTests
             agent: only
         """;
 
-    // ---------------------------------------------------------------------------------------------
-    // Routing: the document names the vendor, and the matching adapter builds the client.
-    // ---------------------------------------------------------------------------------------------
-    [Fact]
-    public async Task TwoKinds_RouteToTheTwoAdaptersTheHostRegistered()
-    {
-        RecordingChatClientAdapter openai = new("openai");
-        RecordingChatClientAdapter anthropic = new("anthropic");
-
-        using var factory = await Create(TwoVendorsYaml, openai, anthropic);
-
-        Assert.Same(openai.ClientOf("reply"), factory.GetChatClient(new ModelReference { Ref = "reply" }));
-        Assert.Same(anthropic.ClientOf("fill"), factory.GetChatClient(new ModelReference { Ref = "fill" }));
-    }
-
-    [Fact]
-    public async Task AKindWrittenInAnotherCase_StillFindsItsAdapter()
-    {
-        RecordingChatClientAdapter openai = new("openai");
-
-        using var factory = await Create(UpperCaseKindYaml, openai);
-
-        Assert.Same(openai.ClientOf("reply"), factory.GetChatClient(new ModelReference { Ref = "reply" }));
-    }
-
-    [Fact]
-    public async Task EveryClient_IsBuiltWhileTheFactoryBuildsAndNeverAgain()
-    {
-        RecordingChatClientAdapter openai = new("openai");
-
-        using var factory = await Create(OneVendorYaml, openai);
-        factory.GetChatClient(new ModelReference { Ref = "reply" });
-        factory.GetChatClient(new ModelReference { Ref = "reply" });
-        factory.GetChatClient(new ModelReference { Ref = "fill" });
-
-        // One build for each 'as' name, at startup. A conversation costs no build.
-        Assert.Equal(["reply", "fill"], openai.BuiltNames);
-    }
-
-    [Fact]
-    public async Task TheAdapter_ReceivesTheResolverChainTheHostBound()
-    {
-        RecordingChatClientAdapter openai = new("openai");
-        MapSecretResolver resolver = new();
-
-        using var factory = await Create(UpperCaseKindYaml, resolver, openai);
-
-        Assert.Same(resolver, openai.LastSecrets);
-    }
-
-    // ---------------------------------------------------------------------------------------------
-    // The 'as' map and the default entry, exactly as the one-vendor factory held them.
-    // ---------------------------------------------------------------------------------------------
-    [Fact]
-    public async Task AReferenceWithNoModel_TakesTheFirstDeclaredEntry()
-    {
-        RecordingChatClientAdapter openai = new("openai");
-
-        using var factory = await Create(OneVendorYaml, openai);
-
-        Assert.Same(factory.GetChatClient(new ModelReference { Ref = "reply" }), factory.GetChatClient(null));
-    }
-
-    [Fact]
-    public async Task AnUnknownAsName_FailsAndNamesWhatTheDocumentDoesDeclare()
-    {
-        using var factory = await Create(OneVendorYaml, new RecordingChatClientAdapter("openai"));
-
-        var failure = Assert.Throws<ConfigurationLoadException>(
-            () => factory.GetChatClient(new ModelReference { Ref = "summarise" }));
-
-        Assert.Contains("'summarise'", failure.Message, StringComparison.Ordinal);
-        Assert.Contains("'reply'", failure.Message, StringComparison.Ordinal);
-        Assert.Contains("'fill'", failure.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task ADocumentWithNoModel_FailsAReferenceThatNamesNone()
-    {
-        using var factory = await Create(NoModelYaml, new RecordingChatClientAdapter("openai"));
-
-        var failure = Assert.Throws<ConfigurationLoadException>(() => factory.GetChatClient(null));
-
-        Assert.Contains("declares no model", failure.Message, StringComparison.Ordinal);
-    }
-
-    // ---------------------------------------------------------------------------------------------
-    // The temperature wrapper: the document keeps its setting, the vendor client stays one.
-    // ---------------------------------------------------------------------------------------------
-    [Fact]
-    public async Task ATemperature_ReachesTheConversationWithoutASecondVendorClient()
-    {
-        RecordingChatClientAdapter openai = new("openai");
-
-        using var factory = await Create(OneVendorYaml, openai);
-        var shaped = factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.2 });
-        await shaped.GetResponseAsync([new ChatMessage(ChatRole.User, "hi")], null, TestContext.Current.CancellationToken);
-
-        Assert.Equal(0.2f, openai.RecorderOf("reply").LastOptions?.Temperature);
-        Assert.Equal(["reply", "fill"], openai.BuiltNames);
-    }
-
-    [Fact]
-    public async Task OneTemperature_TakesOneWrapperHoweverOftenItIsAsked()
-    {
-        using var factory = await Create(OneVendorYaml, new RecordingChatClientAdapter("openai"));
-
-        var first = factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.2 });
-        var second = factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.2 });
-
-        Assert.Same(first, second);
-        Assert.NotSame(first, factory.GetChatClient(new ModelReference { Ref = "reply" }));
-    }
-
-    [Fact]
-    public async Task ACallerSuppliedTemperature_WinsOverTheDocumentDefault()
-    {
-        RecordingChatClientAdapter openai = new("openai");
-
-        using var factory = await Create(OneVendorYaml, openai);
-        var shaped = factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.2 });
-
-        // The document sets the default; a caller that sets its own keeps it.
-        await shaped.GetResponseAsync(
-            [new ChatMessage(ChatRole.User, "hi")],
-            new ChatOptions { Temperature = 0.9f },
-            TestContext.Current.CancellationToken);
-
-        Assert.Equal(0.9f, openai.RecorderOf("reply").LastOptions?.Temperature);
-    }
-
-    [Fact]
-    public async Task AConversationWithNoOptions_StillGetsTheDocumentTemperature()
-    {
-        RecordingChatClientAdapter openai = new("openai");
-
-        using var factory = await Create(OneVendorYaml, openai);
-        var shaped = factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.2 });
-
-        await shaped.GetResponseAsync(
-            [new ChatMessage(ChatRole.User, "hi")],
-            null,
-            TestContext.Current.CancellationToken);
-
-        Assert.Equal(0.2f, openai.RecorderOf("reply").LastOptions?.Temperature);
-    }
-
-    [Fact]
-    public async Task ATemperature_ReachesAStreamingConversationToo()
-    {
-        RecordingChatClientAdapter openai = new("openai");
-
-        using var factory = await Create(OneVendorYaml, openai);
-        var shaped = factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.3 });
-
-        await foreach (var _ in shaped.GetStreamingResponseAsync(
-            [new ChatMessage(ChatRole.User, "hi")],
-            null,
-            TestContext.Current.CancellationToken))
+        // ---------------------------------------------------------------------------------------------
+        // Routing: the document names the vendor, and the matching adapter builds the client.
+        // ---------------------------------------------------------------------------------------------
+        [Fact]
+        public async Task TwoKinds_RouteToTheTwoAdaptersTheHostRegistered()
         {
-            // Draining the stream is enough to run the wrapper's Shape/Configure step.
+            RecordingChatClientAdapter openai = new("openai");
+            RecordingChatClientAdapter anthropic = new("anthropic");
+
+            using CompositeChatClientFactory factory = await Create(TwoVendorsYaml, openai, anthropic);
+
+            Assert.Same(openai.ClientOf("reply"), factory.GetChatClient(new ModelReference { Ref = "reply" }));
+            Assert.Same(anthropic.ClientOf("fill"), factory.GetChatClient(new ModelReference { Ref = "fill" }));
         }
 
-        Assert.Equal(0.3f, openai.RecorderOf("reply").LastOptions?.Temperature);
+        [Fact]
+        public async Task AKindWrittenInAnotherCase_StillFindsItsAdapter()
+        {
+            RecordingChatClientAdapter openai = new("openai");
+
+            using CompositeChatClientFactory factory = await Create(UpperCaseKindYaml, openai);
+
+            Assert.Same(openai.ClientOf("reply"), factory.GetChatClient(new ModelReference { Ref = "reply" }));
+        }
+
+        [Fact]
+        public async Task EveryClient_IsBuiltWhileTheFactoryBuildsAndNeverAgain()
+        {
+            RecordingChatClientAdapter openai = new("openai");
+
+            using CompositeChatClientFactory factory = await Create(OneVendorYaml, openai);
+            _ = factory.GetChatClient(new ModelReference { Ref = "reply" });
+            _ = factory.GetChatClient(new ModelReference { Ref = "reply" });
+            _ = factory.GetChatClient(new ModelReference { Ref = "fill" });
+
+            // One build for each 'as' name, at startup. A conversation costs no build.
+            Assert.Equal(["reply", "fill"], openai.BuiltNames);
+        }
+
+        [Fact]
+        public async Task TheAdapter_ReceivesTheResolverChainTheHostBound()
+        {
+            RecordingChatClientAdapter openai = new("openai");
+            MapSecretResolver resolver = new();
+
+            using CompositeChatClientFactory factory = await Create(UpperCaseKindYaml, resolver, openai);
+
+            Assert.Same(resolver, openai.LastSecrets);
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // The 'as' map and the default entry, exactly as the one-vendor factory held them.
+        // ---------------------------------------------------------------------------------------------
+        [Fact]
+        public async Task AReferenceWithNoModel_TakesTheFirstDeclaredEntry()
+        {
+            RecordingChatClientAdapter openai = new("openai");
+
+            using CompositeChatClientFactory factory = await Create(OneVendorYaml, openai);
+
+            Assert.Same(factory.GetChatClient(new ModelReference { Ref = "reply" }), factory.GetChatClient(null));
+        }
+
+        [Fact]
+        public async Task AnUnknownAsName_FailsAndNamesWhatTheDocumentDoesDeclare()
+        {
+            using CompositeChatClientFactory factory = await Create(OneVendorYaml, new RecordingChatClientAdapter("openai"));
+
+            ConfigurationLoadException failure = Assert.Throws<ConfigurationLoadException>(
+                () => factory.GetChatClient(new ModelReference { Ref = "summarise" }));
+
+            Assert.Contains("'summarise'", failure.Message, StringComparison.Ordinal);
+            Assert.Contains("'reply'", failure.Message, StringComparison.Ordinal);
+            Assert.Contains("'fill'", failure.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task ADocumentWithNoModel_FailsAReferenceThatNamesNone()
+        {
+            using CompositeChatClientFactory factory = await Create(NoModelYaml, new RecordingChatClientAdapter("openai"));
+
+            ConfigurationLoadException failure = Assert.Throws<ConfigurationLoadException>(() => factory.GetChatClient(null));
+
+            Assert.Contains("declares no model", failure.Message, StringComparison.Ordinal);
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // GetContextWindow: forwards to the adapter of the entry the reference names.
+        // ---------------------------------------------------------------------------------------------
+        [Fact]
+        public async Task GetContextWindow_ANamedReference_ForwardsToItsOwnAdapter()
+        {
+            RecordingChatClientAdapter openai = new("openai") { ContextWindow = 128_000 };
+            RecordingChatClientAdapter anthropic = new("anthropic") { ContextWindow = 200_000 };
+
+            using CompositeChatClientFactory factory = await Create(TwoVendorsYaml, openai, anthropic);
+
+            Assert.Equal(128_000, factory.GetContextWindow(new ModelReference { Ref = "reply" }));
+            Assert.Equal(200_000, factory.GetContextWindow(new ModelReference { Ref = "fill" }));
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // The temperature wrapper: the document keeps its setting, the vendor client stays one.
+        // ---------------------------------------------------------------------------------------------
+        [Fact]
+        public async Task ATemperature_ReachesTheConversationWithoutASecondVendorClient()
+        {
+            RecordingChatClientAdapter openai = new("openai");
+
+            using CompositeChatClientFactory factory = await Create(OneVendorYaml, openai);
+            IChatClient shaped = factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.2 });
+            _ = await shaped.GetResponseAsync([new ChatMessage(ChatRole.User, "hi")], null, TestContext.Current.CancellationToken);
+
+            Assert.Equal(0.2f, openai.RecorderOf("reply").LastOptions?.Temperature);
+            Assert.Equal(["reply", "fill"], openai.BuiltNames);
+        }
+
+        [Fact]
+        public async Task OneTemperature_TakesOneWrapperHoweverOftenItIsAsked()
+        {
+            using CompositeChatClientFactory factory = await Create(OneVendorYaml, new RecordingChatClientAdapter("openai"));
+
+            IChatClient first = factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.2 });
+            IChatClient second = factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.2 });
+
+            Assert.Same(first, second);
+            Assert.NotSame(first, factory.GetChatClient(new ModelReference { Ref = "reply" }));
+        }
+
+        [Fact]
+        public async Task ACallerSuppliedTemperature_WinsOverTheDocumentDefault()
+        {
+            RecordingChatClientAdapter openai = new("openai");
+
+            using CompositeChatClientFactory factory = await Create(OneVendorYaml, openai);
+            IChatClient shaped = factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.2 });
+
+            // The document sets the default; a caller that sets its own keeps it.
+            _ = await shaped.GetResponseAsync(
+                [new ChatMessage(ChatRole.User, "hi")],
+                new ChatOptions { Temperature = 0.9f },
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(0.9f, openai.RecorderOf("reply").LastOptions?.Temperature);
+        }
+
+        [Fact]
+        public async Task AConversationWithNoOptions_StillGetsTheDocumentTemperature()
+        {
+            RecordingChatClientAdapter openai = new("openai");
+
+            using CompositeChatClientFactory factory = await Create(OneVendorYaml, openai);
+            IChatClient shaped = factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.2 });
+
+            _ = await shaped.GetResponseAsync(
+                [new ChatMessage(ChatRole.User, "hi")],
+                null,
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(0.2f, openai.RecorderOf("reply").LastOptions?.Temperature);
+        }
+
+        [Fact]
+        public async Task ATemperature_ReachesAStreamingConversationToo()
+        {
+            RecordingChatClientAdapter openai = new("openai");
+
+            using CompositeChatClientFactory factory = await Create(OneVendorYaml, openai);
+            IChatClient shaped = factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.3 });
+
+            await foreach (ChatResponseUpdate _ in shaped.GetStreamingResponseAsync(
+                [new ChatMessage(ChatRole.User, "hi")],
+                null,
+                TestContext.Current.CancellationToken))
+            {
+                // Draining the stream is enough to run the wrapper's Shape/Configure step.
+            }
+
+            Assert.Equal(0.3f, openai.RecorderOf("reply").LastOptions?.Temperature);
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // Disposal: the factory owns the vendor client. A shaped wrapper is only a view over it, so
+        // disposing the factory must not dispose the shared vendor client more than once.
+        // ---------------------------------------------------------------------------------------------
+        [Fact]
+        public async Task Dispose_ReleasesTheVendorClientExactlyOnce_EvenWithTwoShapedWrappersOverIt()
+        {
+            RecordingChatClientAdapter openai = new("openai");
+            CompositeChatClientFactory factory = await Create(OneVendorYaml, openai);
+
+            // Two different temperatures over the same 'as' name take two different shaped wrappers,
+            // both delegating to the one shared vendor client underneath.
+            _ = factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.1 });
+            _ = factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.9 });
+
+            factory.Dispose();
+
+            // A shaped wrapper's own Dispose() chains to the vendor client (that's how
+            // DelegatingChatClient/ConfigureOptionsChatClient work). If the factory disposed the
+            // wrappers too, the vendor client would be disposed three times here: once through each
+            // wrapper's cascade, and once directly. Ownership says only the factory's own disposal of
+            // the vendor client counts.
+            Assert.Equal(1, openai.RecorderOf("reply").DisposeCount);
+        }
+
+        [Fact]
+        public async Task Dispose_ReleasesEveryVendorClientExactlyOnce()
+        {
+            RecordingChatClientAdapter openai = new("openai");
+            CompositeChatClientFactory factory = await Create(OneVendorYaml, openai);
+
+            _ = factory.GetChatClient(new ModelReference { Ref = "reply" });
+            _ = factory.GetChatClient(new ModelReference { Ref = "fill", Temperature = 0.5 });
+
+            factory.Dispose();
+
+            Assert.Equal(1, openai.RecorderOf("reply").DisposeCount);
+            Assert.Equal(1, openai.RecorderOf("fill").DisposeCount);
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // What it refuses, at startup and never on the first call.
+        // ---------------------------------------------------------------------------------------------
+        [Fact]
+        public async Task AKindNoAdapterServes_FailsTheBuildAndNamesTheRegisteredKinds()
+        {
+            ConfigurationLoadException failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+                async () => await Create(TwoVendorsYaml, new RecordingChatClientAdapter("openai")));
+
+            ConfigurationError error = Assert.Single(failure.Errors);
+            Assert.Equal("/providers/llm/1/kind", error.Pointer);
+            Assert.Contains("anthropic", error.Message, StringComparison.Ordinal);
+            Assert.Contains("'openai'", error.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task TwoAdaptersForOneKindFailTheStart()
+        {
+            ConfigurationLoadException failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+                async () => await Create(
+                    OneVendorYaml,
+                    new RecordingChatClientAdapter("openai"),
+                    new RecordingChatClientAdapter("openai")));
+
+            Assert.Contains("two adapters", failure.Message, StringComparison.Ordinal);
+            Assert.Contains("providers.llm", failure.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task TwoEntriesWithOneAsName_FailTheBuild()
+        {
+            ConfigurationLoadException failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+                async () => await Create(DuplicateAsYaml, new RecordingChatClientAdapter("openai")));
+
+            ConfigurationError error = Assert.Single(failure.Errors);
+            Assert.Equal("/providers/llm/1/as", error.Pointer);
+            Assert.Contains("'reply'", error.Message, StringComparison.Ordinal);
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // Helpers.
+        // ---------------------------------------------------------------------------------------------
+        private static ValueTask<CompositeChatClientFactory> Create(string yaml, params IChatClientAdapter[] adapters)
+        {
+            return Create(yaml, null, adapters);
+        }
+
+        private static ValueTask<CompositeChatClientFactory> Create(
+            string yaml,
+            ISecretResolverPort? secrets,
+            params IChatClientAdapter[] adapters)
+        {
+            return CompositeChatClientFactory.CreateAsync(
+                        ConfigurationLoader.LoadYaml(yaml),
+                        secrets,
+                        adapters,
+                        TestContext.Current.CancellationToken);
+        }
     }
-
-    // ---------------------------------------------------------------------------------------------
-    // Disposal: the factory owns the vendor client. A shaped wrapper is only a view over it, so
-    // disposing the factory must not dispose the shared vendor client more than once.
-    // ---------------------------------------------------------------------------------------------
-    [Fact]
-    public async Task Dispose_ReleasesTheVendorClientExactlyOnce_EvenWithTwoShapedWrappersOverIt()
-    {
-        RecordingChatClientAdapter openai = new("openai");
-        var factory = await Create(OneVendorYaml, openai);
-
-        // Two different temperatures over the same 'as' name take two different shaped wrappers,
-        // both delegating to the one shared vendor client underneath.
-        factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.1 });
-        factory.GetChatClient(new ModelReference { Ref = "reply", Temperature = 0.9 });
-
-        factory.Dispose();
-
-        // A shaped wrapper's own Dispose() chains to the vendor client (that's how
-        // DelegatingChatClient/ConfigureOptionsChatClient work). If the factory disposed the
-        // wrappers too, the vendor client would be disposed three times here: once through each
-        // wrapper's cascade, and once directly. Ownership says only the factory's own disposal of
-        // the vendor client counts.
-        Assert.Equal(1, openai.RecorderOf("reply").DisposeCount);
-    }
-
-    [Fact]
-    public async Task Dispose_ReleasesEveryVendorClientExactlyOnce()
-    {
-        RecordingChatClientAdapter openai = new("openai");
-        var factory = await Create(OneVendorYaml, openai);
-
-        factory.GetChatClient(new ModelReference { Ref = "reply" });
-        factory.GetChatClient(new ModelReference { Ref = "fill", Temperature = 0.5 });
-
-        factory.Dispose();
-
-        Assert.Equal(1, openai.RecorderOf("reply").DisposeCount);
-        Assert.Equal(1, openai.RecorderOf("fill").DisposeCount);
-    }
-
-    // ---------------------------------------------------------------------------------------------
-    // What it refuses, at startup and never on the first call.
-    // ---------------------------------------------------------------------------------------------
-    [Fact]
-    public async Task AKindNoAdapterServes_FailsTheBuildAndNamesTheRegisteredKinds()
-    {
-        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
-            async () => await Create(TwoVendorsYaml, new RecordingChatClientAdapter("openai")));
-
-        var error = Assert.Single(failure.Errors);
-        Assert.Equal("/providers/llm/1/kind", error.Pointer);
-        Assert.Contains("anthropic", error.Message, StringComparison.Ordinal);
-        Assert.Contains("'openai'", error.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task TwoAdaptersForOneKindFailTheStart()
-    {
-        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
-            async () => await Create(
-                OneVendorYaml,
-                new RecordingChatClientAdapter("openai"),
-                new RecordingChatClientAdapter("openai")));
-
-        Assert.Contains("two adapters", failure.Message, StringComparison.Ordinal);
-        Assert.Contains("providers.llm", failure.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task TwoEntriesWithOneAsName_FailTheBuild()
-    {
-        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
-            async () => await Create(DuplicateAsYaml, new RecordingChatClientAdapter("openai")));
-
-        var error = Assert.Single(failure.Errors);
-        Assert.Equal("/providers/llm/1/as", error.Pointer);
-        Assert.Contains("'reply'", error.Message, StringComparison.Ordinal);
-    }
-
-    // ---------------------------------------------------------------------------------------------
-    // Helpers.
-    // ---------------------------------------------------------------------------------------------
-    private static ValueTask<CompositeChatClientFactory> Create(string yaml, params IChatClientAdapter[] adapters)
-        => Create(yaml, null, adapters);
-
-    private static ValueTask<CompositeChatClientFactory> Create(
-        string yaml,
-        ISecretResolverPort? secrets,
-        params IChatClientAdapter[] adapters)
-        => CompositeChatClientFactory.CreateAsync(
-            ConfigurationLoader.LoadYaml(yaml),
-            secrets,
-            adapters,
-            TestContext.Current.CancellationToken);
 }

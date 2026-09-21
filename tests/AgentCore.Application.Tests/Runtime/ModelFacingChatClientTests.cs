@@ -1,112 +1,117 @@
-using System.Text.Json;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Transcript;
+using AgentCore.Domain.Sources;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Runtime;
-
-/// <summary>
-/// <see cref="ModelFacingChatClient"/> is the only seam that strips a <see cref="RenderContent"/>
-/// before the model reads it. Every assertion here is against what the fake inner
-/// <see cref="IChatClient"/> received, never against the returned response, because the strip must
-/// happen to the outgoing request and nothing else.
-/// </summary>
-public sealed class ModelFacingChatClientTests
+namespace AgentCore.Application.Tests.Runtime
 {
-    private static readonly JsonElement Payload = JsonDocument.Parse("""{"x":1}""").RootElement.Clone();
-
-    [Fact]
-    public async Task GetResponseAsync_StripsRenderContentBeforeTheInnerClientSeesIt()
+    /// <summary>
+    /// <see cref="ModelFacingChatClient"/> is the only seam that strips a <see cref="SourceContent"/>
+    /// before the model reads it. Every assertion here is against what the fake inner
+    /// <see cref="IChatClient"/> received, never against the returned response, because the strip must
+    /// happen to the outgoing request and nothing else.
+    /// </summary>
+    public sealed class ModelFacingChatClientTests
     {
-        var inner = new SequencedChatClient("ok");
-        var client = new ModelFacingChatClient(inner);
-        var drew = new ChatMessage(ChatRole.Assistant,
-        [
-            new TextContent("here you go"),
-            new RenderContent { Name = "order-card", RenderId = "order-41", Data = Payload },
-        ]);
-
-        await client.GetResponseAsync([drew], cancellationToken: TestContext.Current.CancellationToken);
-
-        var forwarded = Assert.Single(inner.Requests);
-        var message = Assert.Single(forwarded);
-        Assert.DoesNotContain(message.Contents, c => c is RenderContent);
-        Assert.Single(message.Contents.OfType<TextContent>());
-    }
-
-    [Fact]
-    public async Task GetStreamingResponseAsync_StripsRenderContentBeforeTheInnerClientSeesIt()
-    {
-        var inner = new SequencedChatClient("ok");
-        var client = new ModelFacingChatClient(inner);
-        var drew = new ChatMessage(ChatRole.Assistant,
-        [
-            new TextContent("here you go"),
-            new RenderContent { Name = "order-card", RenderId = "order-41", Data = Payload },
-        ]);
-
-        await foreach (var _ in client.GetStreamingResponseAsync(
-            [drew], cancellationToken: TestContext.Current.CancellationToken))
+        private static readonly SourceContent Citation = new()
         {
-        }
-
-        var forwarded = Assert.Single(inner.Requests);
-        var message = Assert.Single(forwarded);
-        Assert.DoesNotContain(message.Contents, c => c is RenderContent);
-    }
-
-    [Fact]
-    public async Task GetResponseAsync_PassesAMessageWithNoRenderContentThroughByReference()
-    {
-        var inner = new SequencedChatClient("ok");
-        var client = new ModelFacingChatClient(inner);
-        var plain = new ChatMessage(ChatRole.User, "hello");
-
-        await client.GetResponseAsync([plain], cancellationToken: TestContext.Current.CancellationToken);
-
-        var forwarded = Assert.Single(inner.Requests);
-        Assert.Same(plain, Assert.Single(forwarded));
-    }
-
-    [Fact]
-    public async Task GetStreamingResponseAsync_PassesAMessageWithNoRenderContentThroughByReference()
-    {
-        var inner = new SequencedChatClient("ok");
-        var client = new ModelFacingChatClient(inner);
-        var plain = new ChatMessage(ChatRole.User, "hello");
-
-        await foreach (var _ in client.GetStreamingResponseAsync(
-            [plain], cancellationToken: TestContext.Current.CancellationToken))
-        {
-        }
-
-        var forwarded = Assert.Single(inner.Requests);
-        Assert.Same(plain, Assert.Single(forwarded));
-    }
-
-    [Fact]
-    public async Task GetResponseAsync_RebuiltMessageCarriesAdditionalPropertiesAndIdentity()
-    {
-        var inner = new SequencedChatClient("ok");
-        var client = new ModelFacingChatClient(inner);
-        var drew = new ChatMessage(ChatRole.Assistant,
-        [
-            new RenderContent { Name = "order-card", RenderId = "order-41", Data = Payload },
-        ])
-        {
-            MessageId = "msg-1",
-            AuthorName = "assistant-1",
-            CreatedAt = DateTimeOffset.UnixEpoch,
-            AdditionalProperties = new AdditionalPropertiesDictionary { ["k"] = "v" },
+            Source = new SourceReference { SourceId = "order-41", Kind = SourceKind.Document, Title = "Order #41", Origin = "knowledge" },
+            CallId = "call-1",
         };
 
-        await client.GetResponseAsync([drew], cancellationToken: TestContext.Current.CancellationToken);
+        [Fact]
+        public async Task GetResponseAsync_StripsSourceContentBeforeTheInnerClientSeesIt()
+        {
+            SequencedChatClient inner = new("ok");
+            ModelFacingChatClient client = new(inner);
+            ChatMessage cited = new(ChatRole.Assistant,
+            [
+                new TextContent("here you go"),
+                Citation,
+            ]);
 
-        var forwarded = Assert.Single(Assert.Single(inner.Requests));
-        Assert.Equal("msg-1", forwarded.MessageId);
-        Assert.Equal("assistant-1", forwarded.AuthorName);
-        Assert.Equal(DateTimeOffset.UnixEpoch, forwarded.CreatedAt);
-        Assert.Equal("v", forwarded.AdditionalProperties?["k"]);
+            _ = await client.GetResponseAsync([cited], cancellationToken: TestContext.Current.CancellationToken);
+
+            List<ChatMessage> forwarded = Assert.Single(inner.Requests);
+            ChatMessage message = Assert.Single(forwarded);
+            Assert.DoesNotContain(message.Contents, c => c is SourceContent);
+            _ = Assert.Single(message.Contents.OfType<TextContent>());
+        }
+
+        [Fact]
+        public async Task GetStreamingResponseAsync_StripsSourceContentBeforeTheInnerClientSeesIt()
+        {
+            SequencedChatClient inner = new("ok");
+            ModelFacingChatClient client = new(inner);
+            ChatMessage cited = new(ChatRole.Assistant,
+            [
+                new TextContent("here you go"),
+                Citation,
+            ]);
+
+            await foreach (ChatResponseUpdate _ in client.GetStreamingResponseAsync(
+                [cited], cancellationToken: TestContext.Current.CancellationToken))
+            {
+            }
+
+            List<ChatMessage> forwarded = Assert.Single(inner.Requests);
+            ChatMessage message = Assert.Single(forwarded);
+            Assert.DoesNotContain(message.Contents, c => c is SourceContent);
+        }
+
+        [Fact]
+        public async Task GetResponseAsync_PassesAMessageWithNoSourceContentThroughByReference()
+        {
+            SequencedChatClient inner = new("ok");
+            ModelFacingChatClient client = new(inner);
+            ChatMessage plain = new(ChatRole.User, "hello");
+
+            _ = await client.GetResponseAsync([plain], cancellationToken: TestContext.Current.CancellationToken);
+
+            List<ChatMessage> forwarded = Assert.Single(inner.Requests);
+            Assert.Same(plain, Assert.Single(forwarded));
+        }
+
+        [Fact]
+        public async Task GetStreamingResponseAsync_PassesAMessageWithNoSourceContentThroughByReference()
+        {
+            SequencedChatClient inner = new("ok");
+            ModelFacingChatClient client = new(inner);
+            ChatMessage plain = new(ChatRole.User, "hello");
+
+            await foreach (ChatResponseUpdate _ in client.GetStreamingResponseAsync(
+                [plain], cancellationToken: TestContext.Current.CancellationToken))
+            {
+            }
+
+            List<ChatMessage> forwarded = Assert.Single(inner.Requests);
+            Assert.Same(plain, Assert.Single(forwarded));
+        }
+
+        [Fact]
+        public async Task GetResponseAsync_RebuiltMessageCarriesAdditionalPropertiesAndIdentity()
+        {
+            SequencedChatClient inner = new("ok");
+            ModelFacingChatClient client = new(inner);
+            ChatMessage cited = new(ChatRole.Assistant,
+            [
+                Citation,
+            ])
+            {
+                MessageId = "msg-1",
+                AuthorName = "assistant-1",
+                CreatedAt = DateTimeOffset.UnixEpoch,
+                AdditionalProperties = new AdditionalPropertiesDictionary { ["k"] = "v" },
+            };
+
+            _ = await client.GetResponseAsync([cited], cancellationToken: TestContext.Current.CancellationToken);
+
+            ChatMessage forwarded = Assert.Single(Assert.Single(inner.Requests));
+            Assert.Equal("msg-1", forwarded.MessageId);
+            Assert.Equal("assistant-1", forwarded.AuthorName);
+            Assert.Equal(DateTimeOffset.UnixEpoch, forwarded.CreatedAt);
+            Assert.Equal("v", forwarded.AdditionalProperties?["k"]);
+        }
     }
 }

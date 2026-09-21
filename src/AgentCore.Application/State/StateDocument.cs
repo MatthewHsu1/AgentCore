@@ -2,167 +2,171 @@ using System.Collections.Concurrent;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Schema;
 
-namespace AgentCore.Application.State;
-
-/// <summary>
-/// The declared state of one conversation, plus the three reserved slots.
-/// </summary>
-public sealed class StateDocument
+namespace AgentCore.Application.State
 {
-    private readonly ConcurrentDictionary<string, JsonNode?> _written = new(StringComparer.Ordinal);
-
-    /// <summary>Creates the state of one conversation from the declared slots.</summary>
-    /// <param name="configuration">The loaded document.</param>
-    /// <param name="stage">The stage the conversation starts in, or <see langword="null"/> when there is no policy.</param>
-    public StateDocument(AgentCoreConfiguration configuration, string? stage = null)
+    /// <summary>
+    /// The declared state of one conversation, plus the three reserved slots.
+    /// </summary>
+    public sealed class StateDocument
     {
-        ArgumentNullException.ThrowIfNull(configuration);
+        private readonly ConcurrentDictionary<string, JsonNode?> _written = new(StringComparer.Ordinal);
 
-        Configuration = configuration;
-        Stage = stage ?? string.Empty;
-    }
-
-    /// <summary>Gets the document this state was declared by.</summary>
-    public AgentCoreConfiguration Configuration { get; }
-
-    /// <summary>Gets or sets the reserved <c>stage</c> slot. The policy runtime owns it.</summary>
-    public string Stage { get; set; }
-
-    /// <summary>Gets or sets the reserved <c>turnIndex</c> slot. The turn loop owns it.</summary>
-    public int TurnIndex { get; set; }
-
-    /// <summary>Gets or sets the reserved <c>conversationDurationSeconds</c> slot. The turn loop owns it.</summary>
-    public double ConversationDurationSeconds { get; set; }
-
-    /// <summary>Gets the names of the declared slots. The reserved slots are not declared.</summary>
-    public IEnumerable<string> SlotNames => Configuration.State.Keys;
-
-    /// <summary>Reports whether no writer has filled a slot yet.</summary>
-    /// <param name="slot">The slot name.</param>
-    /// <returns><see langword="true"/> when the slot is declared and still unfilled.</returns>
-    public bool IsUnfilled(string slot)
-    {
-        ArgumentNullException.ThrowIfNull(slot);
-        return Configuration.State.ContainsKey(slot) && !_written.ContainsKey(slot);
-    }
-
-    /// <summary>Reads a slot. An unfilled slot reads as its declared default.</summary>
-    /// <param name="slot">The slot name. A reserved name reads the reserved value.</param>
-    /// <returns>The value, or <see langword="null"/> when the slot is unknown or has no default.</returns>
-    public JsonNode? Read(string slot)
-    {
-        ArgumentNullException.ThrowIfNull(slot);
-
-        if (ReservedStateSlots.Contains(slot))
+        /// <summary>Creates the state of one conversation from the declared slots.</summary>
+        /// <param name="configuration">The loaded document.</param>
+        /// <param name="stage">The stage the conversation starts in, or <see langword="null"/> when there is no policy.</param>
+        public StateDocument(AgentCoreConfiguration configuration, string? stage = null)
         {
-            return ReadReserved(slot);
+            ArgumentNullException.ThrowIfNull(configuration);
+
+            Configuration = configuration;
+            Stage = stage ?? string.Empty;
         }
 
-        if (_written.TryGetValue(slot, out var written))
+        /// <summary>Gets the document this state was declared by.</summary>
+        public AgentCoreConfiguration Configuration { get; }
+
+        /// <summary>Gets or sets the reserved <c>stage</c> slot. The policy runtime owns it.</summary>
+        public string Stage { get; set; }
+
+        /// <summary>Gets or sets the reserved <c>turnIndex</c> slot. The turn loop owns it.</summary>
+        public int TurnIndex { get; set; }
+
+        /// <summary>Gets or sets the reserved <c>conversationDurationSeconds</c> slot. The turn loop owns it.</summary>
+        public double ConversationDurationSeconds { get; set; }
+
+        /// <summary>Gets the names of the declared slots. The reserved slots are not declared.</summary>
+        public IEnumerable<string> SlotNames => Configuration.State.Keys;
+
+        /// <summary>Reports whether no writer has filled a slot yet.</summary>
+        /// <param name="slot">The slot name.</param>
+        /// <returns><see langword="true"/> when the slot is declared and still unfilled.</returns>
+        public bool IsUnfilled(string slot)
         {
+            ArgumentNullException.ThrowIfNull(slot);
+            return Configuration.State.ContainsKey(slot) && !_written.ContainsKey(slot);
+        }
+
+        /// <summary>Reads a slot. An unfilled slot reads as its declared default.</summary>
+        /// <param name="slot">The slot name. A reserved name reads the reserved value.</param>
+        /// <returns>The value, or <see langword="null"/> when the slot is unknown or has no default.</returns>
+        public JsonNode? Read(string slot)
+        {
+            ArgumentNullException.ThrowIfNull(slot);
+
+            if (ReservedStateSlots.Contains(slot))
+            {
+                return ReadReserved(slot);
+            }
+
+            if (_written.TryGetValue(slot, out JsonNode? written))
+            {
+                return written;
+            }
+
+            return Configuration.State.TryGetValue(slot, out StateSlotConfiguration? declared)
+                ? declared.Default?.DeepClone()
+                : null;
+        }
+
+        /// <summary>Writes a slot after coercing the value to the declared type.</summary>
+        /// <param name="slot">The declared slot name.</param>
+        /// <param name="value">The raw value the writer produced.</param>
+        /// <returns>
+        /// <see langword="true"/> when the value coerced and the slot changed. <see langword="false"/>
+        /// when coercion failed or the value is outside the slot's <c>enum</c>, which leaves the slot
+        /// as it was.
+        /// </returns>
+        /// <exception cref="ArgumentException">The slot is reserved, and a reserved slot is read-only.</exception>
+        public bool TryWrite(string slot, JsonNode? value)
+        {
+            ArgumentNullException.ThrowIfNull(slot);
+
+            if (ReservedStateSlots.Contains(slot))
+            {
+                throw new ArgumentException($"The slot '{slot}' is reserved and read-only.", nameof(slot));
+            }
+
+            if (!Configuration.State.TryGetValue(slot, out StateSlotConfiguration? declared))
+            {
+                return false;
+            }
+
+            if (!StateValueCoercion.TryCoerce(value, declared.Type, out JsonNode? coerced))
+            {
+                return false;
+            }
+
+            // A slot that names its members has a closed domain, and the knowledge scope reads such a
+            // slot straight into a search filter. Refusing here is the only gate: the extractor's schema
+            // is a request to the model, and Restore writes a host-supplied blob through this same path.
+            if (declared.EnumValues is { Count: > 0 } members && !IsMember(members, coerced))
+            {
+                return false;
+            }
+
+            _written[slot] = coerced;
+            return true;
+        }
+
+        // ToJsonString rather than JsonNode.DeepEquals, so the comparison works on every target
+        // framework this package builds for.
+        private static bool IsMember(IReadOnlyList<JsonNode> members, JsonNode? value)
+        {
+            string? written = value?.ToJsonString();
+
+            return members.Any(member => string.Equals(member.ToJsonString(), written, StringComparison.Ordinal));
+        }
+
+        /// <summary>Takes a snapshot the guards read. It holds every declared slot and the three reserved slots.</summary>
+        /// <returns>The snapshot. It does not change when the document changes.</returns>
+        public IReadOnlyDictionary<string, JsonNode?> Snapshot()
+        {
+            Dictionary<string, JsonNode?> snapshot = new(StringComparer.Ordinal);
+
+            foreach (string slot in Configuration.State.Keys)
+            {
+                snapshot[slot] = Read(slot);
+            }
+
+            snapshot[ReservedStateSlots.Stage] = JsonValue.Create(Stage);
+            snapshot[ReservedStateSlots.TurnIndex] = JsonValue.Create(TurnIndex);
+            snapshot[ReservedStateSlots.ConversationDurationSeconds] = JsonValue.Create(ConversationDurationSeconds);
+            return snapshot;
+        }
+
+        /// <summary>Reads the declared slots a writer has actually filled, for the durable blob.</summary>
+        /// <returns>A copy. An unfilled slot is absent, which is what keeps unfilled and filled-default apart.</returns>
+        /// <remarks>
+        /// Not <see cref="Snapshot"/>: that one fills every declared slot with its default and adds the
+        /// three reserved slots, which is right for a guard and wrong for a blob. Restoring a default as
+        /// though a writer had chosen it would lose the difference <see cref="IsUnfilled(string)"/>
+        /// exists to keep.
+        /// </remarks>
+        public IReadOnlyDictionary<string, JsonNode?> WrittenSlots()
+        {
+            Dictionary<string, JsonNode?> written = new(_written.Count, StringComparer.Ordinal);
+
+            foreach (KeyValuePair<string, JsonNode?> entry in _written)
+            {
+                written[entry.Key] = entry.Value?.DeepClone();
+            }
+
             return written;
         }
 
-        return Configuration.State.TryGetValue(slot, out var declared)
-            ? declared.Default?.DeepClone()
-            : null;
-    }
-
-    /// <summary>Writes a slot after coercing the value to the declared type.</summary>
-    /// <param name="slot">The declared slot name.</param>
-    /// <param name="value">The raw value the writer produced.</param>
-    /// <returns>
-    /// <see langword="true"/> when the value coerced and the slot changed. <see langword="false"/>
-    /// when coercion failed or the value is outside the slot's <c>enum</c>, which leaves the slot
-    /// as it was.
-    /// </returns>
-    /// <exception cref="ArgumentException">The slot is reserved, and a reserved slot is read-only.</exception>
-    public bool TryWrite(string slot, JsonNode? value)
-    {
-        ArgumentNullException.ThrowIfNull(slot);
-
-        if (ReservedStateSlots.Contains(slot))
+        private JsonValue? ReadReserved(string slot)
         {
-            throw new ArgumentException($"The slot '{slot}' is reserved and read-only.", nameof(slot));
+            if (string.Equals(slot, ReservedStateSlots.Stage, StringComparison.Ordinal))
+            {
+                return JsonValue.Create(Stage);
+            }
+
+            if (string.Equals(slot, ReservedStateSlots.TurnIndex, StringComparison.Ordinal))
+            {
+                return JsonValue.Create(TurnIndex);
+            }
+
+            return JsonValue.Create(ConversationDurationSeconds);
         }
-
-        if (!Configuration.State.TryGetValue(slot, out var declared))
-        {
-            return false;
-        }
-
-        if (!StateValueCoercion.TryCoerce(value, declared.Type, out var coerced))
-        {
-            return false;
-        }
-
-        // A slot that names its members has a closed domain, and the knowledge scope reads such a
-        // slot straight into a search filter. Refusing here is the only gate: the extractor's schema
-        // is a request to the model, and Restore writes a host-supplied blob through this same path.
-        if (declared.EnumValues is { Count: > 0 } members && !IsMember(members, coerced))
-        {
-            return false;
-        }
-
-        _written[slot] = coerced;
-        return true;
-    }
-
-    // ToJsonString rather than JsonNode.DeepEquals, so the comparison works on every target
-    // framework this package builds for.
-    private static bool IsMember(IReadOnlyList<JsonNode> members, JsonNode? value)
-    {
-        var written = value?.ToJsonString();
-
-        return members.Any(member => string.Equals(member.ToJsonString(), written, StringComparison.Ordinal));
-    }
-
-    /// <summary>Takes a snapshot the guards read. It holds every declared slot and the three reserved slots.</summary>
-    /// <returns>The snapshot. It does not change when the document changes.</returns>
-    public IReadOnlyDictionary<string, JsonNode?> Snapshot()
-    {
-        Dictionary<string, JsonNode?> snapshot = new(StringComparer.Ordinal);
-
-        foreach (var slot in Configuration.State.Keys)
-        {
-            snapshot[slot] = Read(slot);
-        }
-
-        snapshot[ReservedStateSlots.Stage] = JsonValue.Create(Stage);
-        snapshot[ReservedStateSlots.TurnIndex] = JsonValue.Create(TurnIndex);
-        snapshot[ReservedStateSlots.ConversationDurationSeconds] = JsonValue.Create(ConversationDurationSeconds);
-        return snapshot;
-    }
-
-    /// <summary>Reads the declared slots a writer has actually filled, for the durable blob.</summary>
-    /// <returns>A copy. An unfilled slot is absent, which is what keeps unfilled and filled-default apart.</returns>
-    /// <remarks>
-    /// Not <see cref="Snapshot"/>: that one fills every declared slot with its default and adds the
-    /// three reserved slots, which is right for a guard and wrong for a blob. Restoring a default as
-    /// though a writer had chosen it would lose the difference <see cref="IsUnfilled(string)"/>
-    /// exists to keep.
-    /// </remarks>
-    public IReadOnlyDictionary<string, JsonNode?> WrittenSlots()
-    {
-        Dictionary<string, JsonNode?> written = new(_written.Count, StringComparer.Ordinal);
-
-        foreach (var entry in _written)
-        {
-            written[entry.Key] = entry.Value?.DeepClone();
-        }
-
-        return written;
-    }
-
-    private JsonValue? ReadReserved(string slot)
-    {
-        if (string.Equals(slot, ReservedStateSlots.Stage, StringComparison.Ordinal))
-        {
-            return JsonValue.Create(Stage);
-        }
-
-        return string.Equals(slot, ReservedStateSlots.TurnIndex, StringComparison.Ordinal)
-            ? JsonValue.Create(TurnIndex)
-            : JsonValue.Create(ConversationDurationSeconds);
     }
 }

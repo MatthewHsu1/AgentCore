@@ -1,15 +1,15 @@
+using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
-using AgentCore.Application.Configuration.Validation;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Configuration;
-
-/// <summary>
-/// The document schema knows the <c>resolve</c> block on a filterable facet.
-/// </summary>
-public sealed class FacetResolveSchemaTests
+namespace AgentCore.Application.Tests.Configuration
 {
-    private const string Facets = """
+    /// <summary>
+    /// The document schema knows the <c>resolve</c> block on a filterable facet.
+    /// </summary>
+    public sealed class FacetResolveSchemaTests
+    {
+        private const string Facets = """
         apiVersion: agentcore/v1
         agents:
           items:
@@ -35,33 +35,34 @@ public sealed class FacetResolveSchemaTests
                   resolve:
         """;
 
-    [Fact]
-    public void AFacetWithResolve_PassesTheSchema()
-    {
-        var document = ConfigurationLoader.ReadDocument(
-            Facets + """
+        [Fact]
+        public void AFacetWithResolve_PassesTheSchema()
+        {
+            JsonNode document = ConfigurationLoader.ReadDocument(
+                Facets + """
 
                         via: { key: lookup, value: model-numbers }
                         query: "<product> model number"
                         read: the Tag column of the row for the person's year
             """,
-            ConfigurationFormat.Yaml);
+                ConfigurationFormat.Yaml);
 
-        Assert.Empty(ConfigurationSchemaValidator.Evaluate(document));
-    }
+            Assert.Empty(ConfigurationSchemaValidator.Evaluate(document));
+        }
 
-    [Fact]
-    public void AResolveMissingItsRead_FailsTheSchema()
-    {
-        var document = ConfigurationLoader.ReadDocument(
-            Facets + """
+        [Fact]
+        public void AResolveMissingItsRead_FailsTheSchema()
+        {
+            JsonNode document = ConfigurationLoader.ReadDocument(
+                Facets + """
 
                         via: { key: lookup, value: model-numbers }
                         query: "<product> model number"
             """,
-            ConfigurationFormat.Yaml);
+                ConfigurationFormat.Yaml);
 
-        var failure = Assert.Single(ConfigurationSchemaValidator.Evaluate(document));
-        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+            ConfigurationError failure = Assert.Single(ConfigurationSchemaValidator.Evaluate(document));
+            Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+        }
     }
 }

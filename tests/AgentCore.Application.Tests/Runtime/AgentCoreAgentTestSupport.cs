@@ -8,14 +8,15 @@ using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using AgentCore.Application.Configuration.Schema;
 
-namespace AgentCore.Application.Tests.Runtime;
-
-/// <summary>The documents and the shim-building helper the <see cref="AgentCoreAgent"/> tests share.</summary>
-internal static class AgentCoreAgentTestSupport
+namespace AgentCore.Application.Tests.Runtime
 {
-    internal const string SingleAgentYaml =
-        """
+    /// <summary>The documents and the shim-building helper the <see cref="AgentCoreAgent"/> tests share.</summary>
+    internal static class AgentCoreAgentTestSupport
+    {
+        internal const string SingleAgentYaml =
+            """
         apiVersion: agentcore/v1
         agents:
           defaults:
@@ -27,10 +28,10 @@ internal static class AgentCoreAgentTestSupport
             agent: solo
         """;
 
-    // The same row with one declared slot, so the round trip has something of its own to carry.
-    // SingleAgentYaml declares none, and a document with no slots proves nothing about slots.
-    internal const string SlottedAgentYaml =
-        """
+        // The same row with one declared slot, so the round trip has something of its own to carry.
+        // SingleAgentYaml declares none, and a document with no slots proves nothing about slots.
+        internal const string SlottedAgentYaml =
+            """
         apiVersion: agentcore/v1
         state:
           escalate: { type: boolean, writer: extractor, default: false }
@@ -45,10 +46,10 @@ internal static class AgentCoreAgentTestSupport
             agent: solo
         """;
 
-    // A policy that ends itself after one turn, so a conversation can be driven terminal and then round
-    // tripped. The guard reads the reserved turnIndex slot, so no extractor and no tool is needed.
-    internal const string TerminalAgentYaml =
-        """
+        // A policy that ends itself after one turn, so a conversation can be driven terminal and then round
+        // tripped. The guard reads the reserved turnIndex slot, so no extractor and no tool is needed.
+        internal const string TerminalAgentYaml =
+            """
         apiVersion: agentcore/v1
         guards:
           always: { ">=": [ { var: turnIndex }, 0 ] }
@@ -66,30 +67,33 @@ internal static class AgentCoreAgentTestSupport
                 - { id: done, agent: solo, terminal: true }
         """;
 
-    internal static AgentCoreAgent BuildAgent(
-        IChatClient reply,
-        out CompiledAgent compiled,
-        string yaml = SingleAgentYaml,
-        IConversationStore? store = null,
-        string entryName = "main")
-    {
-        var document = ConfigurationLoader.LoadYaml(yaml);
-        compiled = ConfigurationCompiler.CompileAll(
-            document,
-            new AgentCompilationContext(new RoutingChatClientFactory(reply)) { ConversationStore = store })[entryName];
+        internal static AgentCoreAgent BuildAgent(
+            IChatClient reply,
+            out CompiledAgent compiled,
+            string yaml = SingleAgentYaml,
+            IConversationStore? store = null,
+            string entryName = "main")
+        {
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(yaml);
+            compiled = ConfigurationCompiler.CompileAll(
+                document,
+                new AgentCompilationContext(new RoutingChatClientFactory(reply)) { ConversationStore = store })[entryName];
 
-        ConversationSessionFactory sessions = new(compiled, new GuardEvaluator(compiled.Configuration.Guards));
-        return new AgentCoreAgent(sessions, entryName);
+            ConversationSessionFactory sessions = new(compiled, new GuardEvaluator(compiled.Configuration.Guards));
+            return new AgentCoreAgent(sessions, entryName);
+        }
+
+        /// <summary>Writes what a host hands to <c>DeserializeSessionAsync</c>: a conversation id, its state, and its entry.</summary>
+        internal static JsonElement Envelope(string conversationId, ConversationSessionState state, string entryName = "main")
+        {
+            return JsonSerializer.SerializeToElement(
+                        new Dictionary<string, JsonNode?>(StringComparer.Ordinal)
+                        {
+                            ["conversationId"] = JsonValue.Create(conversationId),
+                            ["state"] = JsonSerializer.SerializeToNode(state, ConversationStateJson.Options),
+                            ["entry"] = JsonValue.Create(entryName),
+                        },
+                        ConversationStateJson.Options);
+        }
     }
-
-    /// <summary>Writes what a host hands to <c>DeserializeSessionAsync</c>: a conversation id, its state, and its entry.</summary>
-    internal static JsonElement Envelope(string conversationId, ConversationSessionState state, string entryName = "main")
-        => JsonSerializer.SerializeToElement(
-            new Dictionary<string, JsonNode?>(StringComparer.Ordinal)
-            {
-                ["conversationId"] = JsonValue.Create(conversationId),
-                ["state"] = JsonSerializer.SerializeToNode(state, ConversationStateJson.Options),
-                ["entry"] = JsonValue.Create(entryName),
-            },
-            ConversationStateJson.Options);
 }

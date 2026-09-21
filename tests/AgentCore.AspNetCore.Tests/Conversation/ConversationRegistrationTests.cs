@@ -9,133 +9,134 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Xunit;
 
-namespace AgentCore.AspNetCore.Tests.Conversation;
-
-/// <summary>
-/// <c>providers.conversation</c> is selected while the host starts, and the pairing rule runs there too.
-/// </summary>
-/// <remarks>
-/// <para>
-/// Registering a vendor is what turns this seam on, exactly as it is for telemetry, knowledge,
-/// moderation, and speech. Every test here starts a host alone, with no route
-/// mapped anywhere, because agreement between two document entries is a document fact and is true
-/// or false whether or not anything is ever routed.
-/// </para>
-/// <para>
-/// Every test runs offline against a fake model. There is no Telnyx account, no network conversation, and
-/// no API key anywhere in this file.
-/// </para>
-/// </remarks>
-public sealed class ConversationRegistrationTests
+namespace AgentCore.AspNetCore.Tests.Conversation
 {
-    /// <summary>A conversation transport that is a name and a wire fact, which is all the port asks for.</summary>
-    private sealed class FakeConversationAdapter(string kind, bool carriesText) : IConversationAdapter
+    /// <summary>
+    /// <c>providers.conversation</c> is selected while the host starts, and the pairing rule runs there too.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Registering a vendor is what turns this seam on, exactly as it is for telemetry, knowledge,
+    /// moderation, and speech. Every test here starts a host alone, with no route
+    /// mapped anywhere, because agreement between two document entries is a document fact and is true
+    /// or false whether or not anything is ever routed.
+    /// </para>
+    /// <para>
+    /// Every test runs offline against a fake model. There is no Telnyx account, no network conversation, and
+    /// no API key anywhere in this file.
+    /// </para>
+    /// </remarks>
+    public sealed class ConversationRegistrationTests
     {
-        public string Kind { get; } = kind;
+        /// <summary>A conversation transport that is a name and a wire fact, which is all the port asks for.</summary>
+        private sealed class FakeConversationAdapter(string kind, bool carriesText) : IConversationAdapter
+        {
+            public string Kind { get; } = kind;
 
-        public bool CarriesText { get; } = carriesText;
-    }
+            public bool CarriesText { get; } = carriesText;
+        }
 
-    [Fact]
-    public async Task AMatchingPairStarts()
-    {
-        using var provider = await BuildAsync(
-            conversationKind: "telnyx-relay",
-            speechKind: "telnyx-relay",
-            new FakeConversationAdapter("telnyx-relay", carriesText: true));
-
-        Assert.NotNull(provider.Services.GetService<IReadOnlyList<IConversationAdapter>>());
-    }
-
-    [Fact]
-    public async Task AMismatchedPairFailsTheStartEvenWithNoRouteMapped()
-    {
-        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
-            async () => await BuildAsync(
+        [Fact]
+        public async Task AMatchingPairStarts()
+        {
+            using IHost provider = await BuildAsync(
                 conversationKind: "telnyx-relay",
-                speechKind: "deepgram",
-                new FakeConversationAdapter("telnyx-relay", carriesText: true)));
+                speechKind: "telnyx-relay",
+                new FakeConversationAdapter("telnyx-relay", carriesText: true));
 
-        Assert.Equal("/providers/speech/stt/kind", failure.Errors[0].Pointer);
-    }
+            Assert.NotNull(provider.Services.GetService<IReadOnlyList<IConversationAdapter>>());
+        }
 
-    [Fact]
-    public async Task AHostThatRegistersNoConversationAdapterIsNotAskedAnything()
-    {
-        // The seam is off, exactly as telemetry, knowledge, and moderation are when nothing is
-        // registered for them. A contradictory document is not read, and the start succeeds.
-        using var provider = await BuildAsync(conversationKind: "telnyx-relay", speechKind: "deepgram");
+        [Fact]
+        public async Task AMismatchedPairFailsTheStartEvenWithNoRouteMapped()
+        {
+            ConfigurationLoadException failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+                async () => await BuildAsync(
+                    conversationKind: "telnyx-relay",
+                    speechKind: "deepgram",
+                    new FakeConversationAdapter("telnyx-relay", carriesText: true)));
 
-        Assert.Null(provider.Services.GetService<IReadOnlyList<IConversationAdapter>>());
-    }
+            Assert.Equal("/providers/speech/stt/kind", failure.Errors[0].Pointer);
+        }
 
-    [Fact]
-    public async Task ADocumentNamingAnUnregisteredConversationKindFailsTheStart()
-    {
-        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
-            async () => await BuildAsync(
-                conversationKind: "sip",
-                speechKind: "sip",
-                new FakeConversationAdapter("telnyx-relay", carriesText: true)));
+        [Fact]
+        public async Task AHostThatRegistersNoConversationAdapterIsNotAskedAnything()
+        {
+            // The seam is off, exactly as telemetry, knowledge, and moderation are when nothing is
+            // registered for them. A contradictory document is not read, and the start succeeds.
+            using IHost provider = await BuildAsync(conversationKind: "telnyx-relay", speechKind: "deepgram");
 
-        Assert.Equal("/providers/conversation/kind", failure.Errors[0].Pointer);
-    }
+            Assert.Null(provider.Services.GetService<IReadOnlyList<IConversationAdapter>>());
+        }
 
-    // ---------------------------------------------------------------------------------------------
-    // The two blocks are required by the schema, so a loaded document that writes a providers
-    // section carries both. A configuration a host built in code passes through no schema at all,
-    // and so does a loaded document that writes no providers section: the root requires only
-    // apiVersion and name. Both routes reach the guard with a block missing, and both are refused
-    // by a message that names the block rather than by a NullReferenceException.
-    // ---------------------------------------------------------------------------------------------
-    [Fact]
-    public async Task AConfigurationBuiltInCodeWithNoConversationBlockFailsTheStart()
-    {
-        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
-            async () => await BuildFromAsync(
-                InCode(new ProvidersConfiguration
-                {
-                    Llm = OneModel,
-                    Speech = new SpeechProviderConfiguration
+        [Fact]
+        public async Task ADocumentNamingAnUnregisteredConversationKindFailsTheStart()
+        {
+            ConfigurationLoadException failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+                async () => await BuildAsync(
+                    conversationKind: "sip",
+                    speechKind: "sip",
+                    new FakeConversationAdapter("telnyx-relay", carriesText: true)));
+
+            Assert.Equal("/providers/conversation/kind", failure.Errors[0].Pointer);
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // The two blocks are required by the schema, so a loaded document that writes a providers
+        // section carries both. A configuration a host built in code passes through no schema at all,
+        // and so does a loaded document that writes no providers section: the root requires only
+        // apiVersion and name. Both routes reach the guard with a block missing, and both are refused
+        // by a message that names the block rather than by a NullReferenceException.
+        // ---------------------------------------------------------------------------------------------
+        [Fact]
+        public async Task AConfigurationBuiltInCodeWithNoConversationBlockFailsTheStart()
+        {
+            ConfigurationLoadException failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+                async () => await BuildFromAsync(
+                    InCode(new ProvidersConfiguration
                     {
-                        Stt = new VendorProviderConfiguration { Kind = "telnyx-relay" },
-                        Tts = new VendorProviderConfiguration { Kind = "telnyx-relay" },
-                    },
-                }),
-                new FakeConversationAdapter("telnyx-relay", carriesText: true)));
+                        Llm = OneModel,
+                        Speech = new SpeechProviderConfiguration
+                        {
+                            Stt = new VendorProviderConfiguration { Kind = "telnyx-relay" },
+                            Tts = new VendorProviderConfiguration { Kind = "telnyx-relay" },
+                        },
+                    }),
+                    new FakeConversationAdapter("telnyx-relay", carriesText: true)));
 
-        Assert.Equal("/providers/conversation", failure.Errors[0].Pointer);
-    }
+            Assert.Equal("/providers/conversation", failure.Errors[0].Pointer);
+        }
 
-    [Fact]
-    public async Task AConfigurationBuiltInCodeWithNoSpeechBlockFailsTheStart()
-    {
-        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
-            async () => await BuildFromAsync(
-                InCode(new ProvidersConfiguration
-                {
-                    Llm = OneModel,
-                    Conversation = new ConversationProviderConfiguration { Kind = "telnyx-relay" },
-                }),
-                new FakeConversationAdapter("telnyx-relay", carriesText: true)));
+        [Fact]
+        public async Task AConfigurationBuiltInCodeWithNoSpeechBlockFailsTheStart()
+        {
+            ConfigurationLoadException failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+                async () => await BuildFromAsync(
+                    InCode(new ProvidersConfiguration
+                    {
+                        Llm = OneModel,
+                        Conversation = new ConversationProviderConfiguration { Kind = "telnyx-relay" },
+                    }),
+                    new FakeConversationAdapter("telnyx-relay", carriesText: true)));
 
-        Assert.Equal("/providers/speech", failure.Errors[0].Pointer);
-    }
+            Assert.Equal("/providers/speech", failure.Errors[0].Pointer);
+        }
 
-    // ---------------------------------------------------------------------------------------------
-    // Helpers.
-    // ---------------------------------------------------------------------------------------------
+        // ---------------------------------------------------------------------------------------------
+        // Helpers.
+        // ---------------------------------------------------------------------------------------------
 
-    /// <summary>The one model every document here names, so the compile has something to resolve.</summary>
-    private static IReadOnlyList<LlmProviderConfiguration> OneModel { get; } =
-        [new LlmProviderConfiguration { Kind = "openai", Model = "gpt-4.1-mini", As = "reply" }];
+        /// <summary>The one model every document here names, so the compile has something to resolve.</summary>
+        private static IReadOnlyList<LlmProviderConfiguration> OneModel { get; } =
+            [new LlmProviderConfiguration { Kind = "openai", Model = "gpt-4.1-mini", As = "reply" }];
 
-    /// <summary>Writes one document that names both required blocks.</summary>
-    /// <param name="conversationKind">The value <c>providers.conversation.kind</c> carries.</param>
-    /// <param name="speechKind">The value both speech roles carry, <c>stt</c> and <c>tts</c> alike.</param>
-    /// <returns>The document text.</returns>
-    private static string Document(string conversationKind, string speechKind)
-        => $$"""
+        /// <summary>Writes one document that names both required blocks.</summary>
+        /// <param name="conversationKind">The value <c>providers.conversation.kind</c> carries.</param>
+        /// <param name="speechKind">The value both speech roles carry, <c>stt</c> and <c>tts</c> alike.</param>
+        /// <returns>The document text.</returns>
+        private static string Document(string conversationKind, string speechKind)
+        {
+            return $$"""
            apiVersion: agentcore/v1
            providers:
              conversation:   { kind: {{conversationKind}} }
@@ -151,75 +152,81 @@ public sealed class ConversationRegistrationTests
              main:
                agent: dummy
            """;
+        }
 
-    /// <summary>Builds a configuration the way a host that loads no document does.</summary>
-    /// <param name="providers">The <c>providers</c> block, with one of the two required entries left out.</param>
-    /// <returns>The configuration.</returns>
-    private static AgentCoreConfiguration InCode(ProvidersConfiguration providers)
-        => new()
+        /// <summary>Builds a configuration the way a host that loads no document does.</summary>
+        /// <param name="providers">The <c>providers</c> block, with one of the two required entries left out.</param>
+        /// <returns>The configuration.</returns>
+        private static AgentCoreConfiguration InCode(ProvidersConfiguration providers)
         {
-            ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
-            Agents = new AgentsConfiguration
+            return new()
             {
-                Items = [new AgentConfiguration { Id = "only", Instructions = "I answer everything" }],
-            },
-            Entries = new Dictionary<string, EntryConfiguration>
-            {
-                ["main"] = new EntryConfiguration { Agent = "only" },
-            },
-            Providers = providers,
-        };
+                ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
+                Agents = new AgentsConfiguration
+                {
+                    Items = [new AgentConfiguration { Id = "only", Instructions = "I answer everything" }],
+                },
+                Entries = new Dictionary<string, EntryConfiguration>
+                {
+                    ["main"] = new EntryConfiguration { Agent = "only" },
+                },
+                Providers = providers,
+            };
+        }
 
-    /// <summary>Starts a host on a document that names both kinds.</summary>
-    /// <param name="conversationKind">The value <c>providers.conversation.kind</c> carries.</param>
-    /// <param name="speechKind">The value both speech roles carry, <c>stt</c> and <c>tts</c> alike.</param>
-    /// <param name="adapters">The conversation transports this host registers, if any.</param>
-    /// <returns>The composed container.</returns>
-    private static Task<IHost> BuildAsync(
-        string conversationKind,
-        string speechKind,
-        params IConversationAdapter[] adapters)
-        => BuildFromAsync(ConfigurationLoader.LoadYaml(Document(conversationKind, speechKind)), adapters);
-
-    /// <summary>Starts a host on one configuration, however that configuration was made.</summary>
-    /// <param name="configuration">The document, loaded or built in code.</param>
-    /// <param name="adapters">The conversation transports this host registers, if any.</param>
-    /// <returns>The composed container.</returns>
-    /// <remarks>
-    /// <c>UseConversation</c> is called only when this host has something to register. Calling it with an
-    /// empty list would turn the seam on for a host that registered no vendor, which is the one
-    /// thing these tests prove does not happen.
-    /// </remarks>
-    private static async Task<IHost> BuildFromAsync(
-        AgentCoreConfiguration configuration,
-        params IConversationAdapter[] adapters)
-    {
-        HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
-
-        builder.Services.AddAgentCore(options =>
+        /// <summary>Starts a host on a document that names both kinds.</summary>
+        /// <param name="conversationKind">The value <c>providers.conversation.kind</c> carries.</param>
+        /// <param name="speechKind">The value both speech roles carry, <c>stt</c> and <c>tts</c> alike.</param>
+        /// <param name="adapters">The conversation transports this host registers, if any.</param>
+        /// <returns>The composed container.</returns>
+        private static Task<IHost> BuildAsync(
+            string conversationKind,
+            string speechKind,
+            params IConversationAdapter[] adapters)
         {
-            options.Configuration = configuration;
-            options.UseChatClients(_ => new RoutingChatClientFactory(new FragmentingChatClient("hello")));
-            options.UseSpeech(new TelnyxRelaySpeechAdapter());
+            return BuildFromAsync(ConfigurationLoader.LoadYaml(Document(conversationKind, speechKind)), adapters);
+        }
 
-            if (adapters.Length > 0)
+        /// <summary>Starts a host on one configuration, however that configuration was made.</summary>
+        /// <param name="configuration">The document, loaded or built in code.</param>
+        /// <param name="adapters">The conversation transports this host registers, if any.</param>
+        /// <returns>The composed container.</returns>
+        /// <remarks>
+        /// <c>UseConversation</c> is called only when this host has something to register. Calling it with an
+        /// empty list would turn the seam on for a host that registered no vendor, which is the one
+        /// thing these tests prove does not happen.
+        /// </remarks>
+        private static async Task<IHost> BuildFromAsync(
+            AgentCoreConfiguration configuration,
+            params IConversationAdapter[] adapters)
+        {
+            HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
+
+            _ = builder.Services.AddAgentCore(options =>
             {
-                options.UseConversation(adapters);
+                options.Configuration = configuration;
+                _ = options.UseChatClients(_ => new RoutingChatClientFactory(new FragmentingChatClient("hello")));
+                _ = options.UseSpeech(new TelnyxRelaySpeechAdapter());
+
+                if (adapters.Length > 0)
+                {
+                    _ = options.UseConversation(adapters);
+                }
+            });
+
+            IHost host = builder.Build();
+            try
+            {
+                await host.StartAsync(TestContext.Current.CancellationToken);
             }
-        });
+            catch
+            {
+                // A failed start never stops what started, so disposal is the only cleanup path.
+                host.Dispose();
+                throw;
+            }
 
-        var host = builder.Build();
-        try
-        {
-            await host.StartAsync(TestContext.Current.CancellationToken);
+            return host;
         }
-        catch
-        {
-            // A failed start never stops what started, so disposal is the only cleanup path.
-            host.Dispose();
-            throw;
-        }
-
-        return host;
     }
 }

@@ -1,19 +1,20 @@
 using System.Text.Json;
 
-namespace AgentCore.Application.Conversation;
-
-/// <summary>How <see cref="ConversationSessionState"/> is encoded. Every store agrees on it.</summary>
-public static class ConversationStateJson
+namespace AgentCore.Application.Conversation
 {
-    /// <summary>The shared options.</summary>
-    public static JsonSerializerOptions Options { get; } = Build();
-
-    private static JsonSerializerOptions Build()
+    /// <summary>How <see cref="ConversationSessionState"/> is encoded. Every store agrees on it.</summary>
+    public static class ConversationStateJson
     {
-        JsonSerializerOptions options = new(JsonSerializerDefaults.Web);
+        /// <summary>The shared options.</summary>
+        public static JsonSerializerOptions Options { get; } = Build();
 
-        options.MakeReadOnly(populateMissingResolver: true);
-        
-        return options;
+        private static JsonSerializerOptions Build()
+        {
+            JsonSerializerOptions options = new(JsonSerializerDefaults.Web);
+
+            options.MakeReadOnly(populateMissingResolver: true);
+
+            return options;
+        }
     }
 }

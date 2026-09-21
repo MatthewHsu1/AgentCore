@@ -10,106 +10,111 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
 
-namespace AgentCore.AspNetCore.Tests.DependencyInjection;
-
-/// <summary>
-/// That the composition root's own logger factory reaches the provider a shipped host compiles.
-/// </summary>
-/// <remarks>
-/// <para>
-/// The knowledge provider's own facts hand a recording factory straight into
-/// <c>KnowledgeProviderFactory.Create</c>, and every compile-table fact builds an
-/// <c>AgentCompilationContext</c> without a <c>Loggers</c> at all. So one line —
-/// <c>CompilationStartup</c>'s <c>Loggers = loggers</c> — is what makes the whole observability fix
-/// live in a real host, and deleting it left the entire suite green while a store outage went silent
-/// again. That is the original defect restated, so it gets a fact of its own, taken through
-/// <c>AgentCoreBoot</c> rather than through the compiler.
-/// </para>
-/// <para>
-/// The assertion is on the ERROR row and not the debug one: it is the row that exists for an outage,
-/// and it is the row a default production configuration is listening to.
-/// </para>
-/// </remarks>
-public sealed class KnowledgeLoggingThroughBootTests
+namespace AgentCore.AspNetCore.Tests.DependencyInjection
 {
-    [Fact]
-    public async Task BootAsync_TheStoreIsDown_TheCompiledProviderWritesThroughTheHostsLoggerFactory()
+    /// <summary>
+    /// That the composition root's own logger factory reaches the provider a shipped host compiles.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The knowledge provider's own facts hand a recording factory straight into
+    /// <c>KnowledgeProviderFactory.Create</c>, and every compile-table fact builds an
+    /// <c>AgentCompilationContext</c> without a <c>Loggers</c> at all. So one line —
+    /// <c>CompilationStartup</c>'s <c>Loggers = loggers</c> — is what makes the whole observability fix
+    /// live in a real host, and deleting it left the entire suite green while a store outage went silent
+    /// again. That is the original defect restated, so it gets a fact of its own, taken through
+    /// <c>AgentCoreBoot</c> rather than through the compiler.
+    /// </para>
+    /// <para>
+    /// The assertion is on the ERROR row and not the debug one: it is the row that exists for an outage,
+    /// and it is the row a default production configuration is listening to.
+    /// </para>
+    /// </remarks>
+    public sealed class KnowledgeLoggingThroughBootTests
     {
-        RecordingLoggerFactory loggers = new();
-        InvalidOperationException down = new("qdrant is down");
+        [Fact]
+        public async Task BootAsync_TheStoreIsDown_TheCompiledProviderWritesThroughTheHostsLoggerFactory()
+        {
+            RecordingLoggerFactory loggers = new();
+            InvalidOperationException down = new("qdrant is down");
 
-        await using var boot = Boot(new ThrowingPort(down), loggers);
-        await boot.BootAsync(TestContext.Current.CancellationToken);
+            await using AgentCoreBoot boot = Boot(new ThrowingPort(down), loggers);
+            await boot.BootAsync(TestContext.Current.CancellationToken);
 
-        var provider = Assert.Single(Providers(boot.CompiledEntries["main"].Agents["resolver"]).OfType<KnowledgePrefetchProvider>());
+            KnowledgePrefetchProvider provider = Assert.Single(Providers(boot.CompiledEntries["main"].Agents["resolver"]).OfType<KnowledgePrefetchProvider>());
 
 #pragma warning disable MAAI001 // The context constructors are the framework's own experimental surface.
-        AIContextProvider.InvokingContext context = new(
-            boot.CompiledEntries["main"].Agents["resolver"], null, new AIContext());
+            AIContextProvider.InvokingContext context = new(
+                boot.CompiledEntries["main"].Agents["resolver"], null, new AIContext());
 #pragma warning restore MAAI001
-        await provider.InvokingAsync(context, TestContext.Current.CancellationToken);
+            _ = await provider.InvokingAsync(context, TestContext.Current.CancellationToken);
 
-        var line = Assert.Single(loggers.Of(12));
-        Assert.Equal("resolver", line.Field<string>("Agent"));
-        Assert.Same(down, line.Exception);
-    }
+            CapturedLine line = Assert.Single(loggers.Of(12));
+            Assert.Equal("resolver", line.Field<string>("Agent"));
+            Assert.Same(down, line.Exception);
+        }
 
-    /// <summary>The document: one agent, one knowledge block, nothing else the boot must resolve.</summary>
-    private static AgentCoreConfiguration OneScopelessReader()
-        => new()
+        /// <summary>The document: one agent, one knowledge block, nothing else the boot must resolve.</summary>
+        private static AgentCoreConfiguration OneScopelessReader()
         {
-            ApiVersion = "agentcore/v1",
-            Agents = new AgentsConfiguration
+            return new()
             {
-                Items =
-                [
-                    new AgentConfiguration
-                    {
-                        Id = "resolver",
-                        Instructions = "I answer from the knowledge base",
-                        Knowledge = new AgentKnowledgeConfiguration
+                ApiVersion = "agentcore/v1",
+                Agents = new AgentsConfiguration
+                {
+                    Items =
+                            [
+                                new AgentConfiguration
                         {
-                            Mode = KnowledgeMode.Prefetch,
-                            Scoped = false,
+                            Id = "resolver",
+                            Instructions = "I answer from the knowledge base",
+                            Knowledge = new AgentKnowledgeConfiguration
+                            {
+                                Mode = KnowledgeMode.Prefetch,
+                                Scoped = false,
+                            },
                         },
-                    },
-                ],
-            },
-            Entries = new Dictionary<string, EntryConfiguration>
-            {
-                ["main"] = new EntryConfiguration { Agent = "resolver" },
-            },
-        };
+                    ],
+                },
+                Entries = new Dictionary<string, EntryConfiguration>
+                {
+                    ["main"] = new EntryConfiguration { Agent = "resolver" },
+                },
+            };
+        }
 
-    private static AgentCoreBoot Boot(IKnowledgeRetrievalPort port, RecordingLoggerFactory loggers)
-    {
-        AgentCoreOptions options = new()
+        private static AgentCoreBoot Boot(IKnowledgeRetrievalPort port, RecordingLoggerFactory loggers)
         {
-            Configuration = OneScopelessReader(),
+            AgentCoreOptions options = new()
+            {
+                Configuration = OneScopelessReader(),
 
-            // The seam the boot's own constructor prefers over the container's factory. Setting it
-            // here is what makes "the host's factory" a thing this test can read back.
-            LoggerFactory = loggers,
-        };
+                // The seam the boot's own constructor prefers over the container's factory. Setting it
+                // here is what makes "the host's factory" a thing this test can read back.
+                LoggerFactory = loggers,
+            };
 
-        options.UseChatClients(_ => new RoutingChatClientFactory(new FragmentingChatClient("hello")));
-        options.UseKnowledgeRetrieval(_ => port);
+            _ = options.UseChatClients(_ => new RoutingChatClientFactory(new FragmentingChatClient("hello")));
+            _ = options.UseKnowledgeRetrieval(_ => port);
 
-        return new AgentCoreBoot(Options.Create(options), NullLoggerFactory.Instance);
-    }
+            return new AgentCoreBoot(Options.Create(options), NullLoggerFactory.Instance);
+        }
 
-    private static IEnumerable<AIContextProvider> Providers(AIAgent agent)
-    {
-        var inner = agent.GetService<ChatClientAgent>();
-        Assert.NotNull(inner);
-        return inner.AIContextProviders ?? [];
-    }
+        private static IEnumerable<AIContextProvider> Providers(AIAgent agent)
+        {
+            ChatClientAgent? inner = agent.GetService<ChatClientAgent>();
+            Assert.NotNull(inner);
+            return inner.AIContextProviders ?? [];
+        }
 
-    /// <summary>A store that is down, the way Qdrant is down.</summary>
-    private sealed class ThrowingPort(Exception failure) : IKnowledgeRetrievalPort
-    {
-        public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
-            string query, KnowledgeScope? scope = null, CancellationToken cancellationToken = default)
-            => throw failure;
+        /// <summary>A store that is down, the way Qdrant is down.</summary>
+        private sealed class ThrowingPort(Exception failure) : IKnowledgeRetrievalPort
+        {
+            public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
+                string query, KnowledgeScope? scope = null, CancellationToken cancellationToken = default)
+            {
+                throw failure;
+            }
+        }
     }
 }

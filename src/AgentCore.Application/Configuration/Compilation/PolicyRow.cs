@@ -2,71 +2,67 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using Microsoft.Agents.AI;
 
-namespace AgentCore.Application.Configuration.Compilation;
-
-/// <summary>
-/// Row 2: the entry holds <c>policy:</c>. The machine picks a stage each turn, the stage names
-/// one agent, and that agent's run answers the caller. Runtime is <c>Stateless</c>.
-/// </summary>
-internal sealed class PolicyRow : CompileTableRow
+namespace AgentCore.Application.Configuration.Compilation
 {
-    internal static readonly PolicyRow Instance = new();
-
-    /// <summary>A stage that names no agent. CompiledAgent.ForStage reads the same sentinel.</summary>
-    private const string NoAgentId = "";
-
-    internal override CompiledAgentShape Shape => CompiledAgentShape.Policy;
-
-    internal override bool SessionCarriesHistory => true;
-
-    internal override EntryBuild BuildEntry(
-        AgentCoreConfiguration configuration,
-        string entryName,
-        EntryConfiguration entry,
-        string entryPointer,
-        Dictionary<string, AIAgent> agents,
-        AgentCompilationContext context)
+    /// <summary>
+    /// Row 2: the entry holds <c>policy:</c>. The machine picks a stage each turn, the stage names
+    /// one agent, and that agent's run answers the caller. Runtime is <c>Stateless</c>.
+    /// </summary>
+    internal sealed class PolicyRow : CompileTableRow
     {
-        var policy = entry.Policy!;
-        var policyPointer = ConfigurationError.AppendPointer(entryPointer, "policy");
-        var initialPointer = ConfigurationError.AppendPointer(policyPointer, "initial");
-        Dictionary<string, string> stages = new(StringComparer.Ordinal);
+        internal static readonly PolicyRow Instance = new();
 
-        for (var index = 0; index < policy.Stages.Count; index++)
+        /// <summary>A stage that names no agent. CompiledAgent.ForStage reads the same sentinel.</summary>
+        private const string NoAgentId = "";
+
+        internal override CompiledAgentShape Shape => CompiledAgentShape.Policy;
+
+        internal override bool SessionCarriesHistory => true;
+
+        internal override EntryBuild BuildEntry(
+            AgentCoreConfiguration configuration,
+            string entryName,
+            EntryConfiguration entry,
+            string entryPointer,
+            Dictionary<string, AIAgent> agents,
+            AgentCompilationContext context)
         {
-            var stage = policy.Stages[index];
-            var stagePointer = ConfigurationError.AppendPointer(
-                ConfigurationError.AppendPointer(policyPointer, "stages"), index);
-            if (stage.Agent is not { } agentId)
+            PolicyConfiguration policy = entry.Policy!;
+            string policyPointer = ConfigurationError.AppendPointer(entryPointer, "policy");
+            string initialPointer = ConfigurationError.AppendPointer(policyPointer, "initial");
+            Dictionary<string, string> stages = new(StringComparer.Ordinal);
+
+            for (int index = 0; index < policy.Stages.Count; index++)
             {
-                stages[stage.Id] = NoAgentId;
-                continue;
+                StageConfiguration stage = policy.Stages[index];
+                string stagePointer = ConfigurationError.AppendPointer(
+                    ConfigurationError.AppendPointer(policyPointer, "stages"), index);
+                if (stage.Agent is not { } agentId)
+                {
+                    stages[stage.Id] = NoAgentId;
+                    continue;
+                }
+
+                if (!agents.ContainsKey(agentId))
+                {
+                    throw ConfigurationCompiler.Fail(
+                        ConfigurationError.AppendPointer(stagePointer, "agent"),
+                        $"the stage '{stage.Id}' names the agent '{agentId}', which agents.items does not declare.");
+                }
+
+                stages[stage.Id] = agentId;
             }
 
-            if (!agents.ContainsKey(agentId))
+            return stages.GetValueOrDefault(policy.Initial) switch
             {
-                throw ConfigurationCompiler.Fail(
-                    ConfigurationError.AppendPointer(stagePointer, "agent"),
-                    $"the stage '{stage.Id}' names the agent '{agentId}', which agents.items does not declare.");
-            }
-
-            stages[stage.Id] = agentId;
+                null => throw ConfigurationCompiler.Fail(
+                    initialPointer,
+                    $"the initial stage '{policy.Initial}' is not declared in policy.stages."),
+                "" => throw ConfigurationCompiler.Fail(
+                    initialPointer,
+                    $"the initial stage '{policy.Initial}' names no agent, so no turn can run."),
+                string initialAgent => new EntryBuild(agents[initialAgent], stages),
+            };
         }
-
-        if (!stages.TryGetValue(policy.Initial, out var initialAgent))
-        {
-            throw ConfigurationCompiler.Fail(
-                initialPointer,
-                $"the initial stage '{policy.Initial}' is not declared in policy.stages.");
-        }
-
-        if (initialAgent.Length == 0)
-        {
-            throw ConfigurationCompiler.Fail(
-                initialPointer,
-                $"the initial stage '{policy.Initial}' names no agent, so no turn can run.");
-        }
-
-        return new EntryBuild(agents[initialAgent], stages);
     }
 }

@@ -1,45 +1,45 @@
-namespace AgentCore.Application.Tests.Configuration;
-
-/// <summary>
-/// The worked example of section 8.1, in both forms.
-/// </summary>
-/// <remarks>
-/// The YAML is the document as the design writes it, plus the three optional keys section 8.1 does
-/// not print: <c>fallbackReply</c>, <c>refusalReply</c>, and <c>evaluation</c>. All three hold their
-/// default, and the shipped
-/// <c>config/example.yaml</c> holds the same document. The JSON is the same document again, and it
-/// was produced by a different YAML reader so that rule 17 of section 11 tests something real.
-/// </remarks>
-internal static class ExampleDocument
+namespace AgentCore.Application.Tests.Configuration
 {
     /// <summary>
-    /// The last line of the <c>providers:</c> block, for a test that splices its own provider block
-    /// in after it.
+    /// The worked example of section 8.1, in both forms.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// Three test files used to keep a private copy of the one-line providers.knowledge entry and
-    /// anchor on that. When the block grew to ten lines, every copy stopped matching, Replace
-    /// silently did nothing, and eighteen tests failed on a provider that had never been written
-    /// into the document at all. One anchor, owned by the document, cannot drift out of step with it.
-    /// </para>
-    /// <para>
-    /// It must stay the LAST line of providers:. A splice after any earlier line lands inside the
-    /// block that follows, which is a different failure again -- valid YAML, wrong nesting, and a
-    /// provider silently belonging to the wrong parent.
-    /// </para>
+    /// The YAML is the document as the design writes it, plus the three optional keys section 8.1 does
+    /// not print: <c>fallbackReply</c>, <c>refusalReply</c>, and <c>evaluation</c>. All three hold their
+    /// default, and the shipped
+    /// <c>config/example.yaml</c> holds the same document. The JSON is the same document again, and it
+    /// was produced by a different YAML reader so that rule 17 of section 11 tests something real.
     /// </remarks>
-    public const string LastProviderLine = "    citation: source-locator";
+    internal static class ExampleDocument
+    {
+        /// <summary>
+        /// The last line of the <c>providers:</c> block, for a test that splices its own provider block
+        /// in after it.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Three test files used to keep a private copy of the one-line providers.knowledge entry and
+        /// anchor on that. When the block grew to ten lines, every copy stopped matching, Replace
+        /// silently did nothing, and eighteen tests failed on a provider that had never been written
+        /// into the document at all. One anchor, owned by the document, cannot drift out of step with it.
+        /// </para>
+        /// <para>
+        /// It must stay the LAST line of providers:. A splice after any earlier line lands inside the
+        /// block that follows, which is a different failure again -- valid YAML, wrong nesting, and a
+        /// provider silently belonging to the wrong parent.
+        /// </para>
+        /// </remarks>
+        public const string LastProviderLine = "    citation: source-locator";
 
-    /// <summary>
-    /// The one-line <c>providers.blobs</c> entry, for a test that takes it out or swaps its own in.
-    /// </summary>
-    public const string BlobsLine =
-        "  blobs: { kind: s3, endpoint: https://s3.us-east-005.backblazeb2.com, bucket: agentcore-files, region: us-east-005 }";
+        /// <summary>
+        /// The one-line <c>providers.blobs</c> entry, for a test that takes it out or swaps its own in.
+        /// </summary>
+        public const string BlobsLine =
+            "  blobs: { kind: s3, endpoint: https://s3.us-east-005.backblazeb2.com, bucket: agentcore-files, region: us-east-005 }";
 
-    /// <summary>The section 8.1 document as YAML.</summary>
-    public const string Yaml =
-        """
+        /// <summary>The section 8.1 document as YAML.</summary>
+        public const string Yaml =
+            """
         apiVersion: agentcore/v1
         fallbackReply: "I am sorry. I could not finish that. Please say it again."
         refusalReply: "I am sorry. I cannot help with that request."
@@ -120,7 +120,6 @@ internal static class ExampleDocument
             instructions: |
               <the stable cached prefix: persona, safety, transfer rules, and tool etiquette>
             knowledge: { mode: prefetch, limit: 5, citations: false }
-            compaction: { strategy: context_window, trigger: { messages: 40 }, keep: 6, foldResultChars: 300 }
           items:
             - { id: greeter,    instructions: "<stage delta>", tools: [] }
             - { id: identifier, instructions: "<stage delta>", tools: [ lookup_order ] }
@@ -209,9 +208,10 @@ internal static class ExampleDocument
           judge: { ref: judge, temperature: 0 }
         """;
 
-    /// <summary>The same document as JSON.</summary>
-    public const string Json =
-        """
+        /// <summary>The same document as JSON.</summary>
+        public const string Json =
+                                 /*lang=json,strict*/
+                                 """
         {
           "apiVersion": "agentcore/v1",
           "fallbackReply": "I am sorry. I could not finish that. Please say it again.",
@@ -439,14 +439,6 @@ internal static class ExampleDocument
                 "mode": "prefetch",
                 "limit": 5,
                 "citations": false
-              },
-              "compaction": {
-                "strategy": "context_window",
-                "trigger": {
-                  "messages": 40
-                },
-                "keep": 6,
-                "foldResultChars": 300
               }
             },
             "items": [
@@ -679,4 +671,5 @@ internal static class ExampleDocument
           }
         }
         """;
+    }
 }

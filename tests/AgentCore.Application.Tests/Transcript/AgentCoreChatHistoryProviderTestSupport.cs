@@ -8,133 +8,152 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Transcript;
-
-/// <summary>What both halves of the provider's test suite share: the conversation id, the session state
-/// key, and the plumbing to open a conversation and read its history back.</summary>
-internal static class AgentCoreChatHistoryProviderTestSupport
+namespace AgentCore.Application.Tests.Transcript
 {
-    internal const string ConversationId = "conversation-1";
-
-    /// <summary>
-    /// The provider's MAF-default state key: its own type name. The transcript no longer files
-    /// under it — or anywhere in the bag — and a change still renames what the collision checks
-    /// compare, so it stays pinned here rather than inlined.
-    /// </summary>
-    internal const string StateKey = "AgentCoreChatHistoryProvider";
-
-    /// <summary>
-    /// Opens one conversation on a fresh session, the way <c>ConversationSession</c> does at conversation start: the row is
-    /// made before any turn can append against it, exactly as <c>ConversationSession.OpenSessionAsync</c>
-    /// makes it before it ever reaches this provider.
-    /// </summary>
-    internal static async Task<(AgentCoreChatHistoryProvider Provider, RecordingConversationStore Store, StubSession Session)> NewConversation()
+    /// <summary>What both halves of the provider's test suite share: the conversation id, the session state
+    /// key, and the plumbing to open a conversation and read its history back.</summary>
+    internal static class AgentCoreChatHistoryProviderTestSupport
     {
-        var store = new RecordingConversationStore();
-        await store.CreateAsync(ConversationId, TestContext.Current.CancellationToken);
-        var provider = new AgentCoreChatHistoryProvider(store);
-        var session = new StubSession();
-        provider.BeginConversation(session, ConversationId, []);
-        return (provider, store, session);
-    }
+        internal const string ConversationId = "conversation-1";
 
-    /// <summary>Writes one turn the way <c>ConversationSession</c> does: name the turn, then append it.</summary>
-    internal static void AppendTurn(
-        AgentCoreChatHistoryProvider provider,
-        AgentSession session,
-        int turnIndex,
-        string said,
-        string replied)
-    {
-        provider.BeginTurn(session, turnIndex);
-        provider.AppendTurn(
-            session,
-            [new ChatMessage(ChatRole.User, said), new ChatMessage(ChatRole.Assistant, replied)]);
-    }
+        /// <summary>
+        /// The provider's MAF-default state key: its own type name. The transcript no longer files
+        /// under it — or anywhere in the bag — and a change still renames what the collision checks
+        /// compare, so it stays pinned here rather than inlined.
+        /// </summary>
+        internal const string StateKey = "AgentCoreChatHistoryProvider";
 
-
-    internal static async Task<IReadOnlyList<ChatMessage>> ProvideAsync(
-        AgentCoreChatHistoryProvider provider, AgentSession session)
-    {
-#pragma warning disable MAAI001 // The context constructors are the framework's own experimental surface.
-        var context = new ChatHistoryProvider.InvokingContext(StubAgent.Instance, session, []);
-#pragma warning restore MAAI001
-        var messages = await provider.InvokingAsync(context, TestContext.Current.CancellationToken);
-        return [.. messages];
-    }
-}
-
-/// <summary>
-/// Holds one append open, so a barge-in can arrive while a turn is still writing. It keeps the
-/// real store's ordering rule: a rewrite of a row that is not there yet changes nothing.
-/// </summary>
-internal sealed class BlockingConversationStore() : DelegatingConversationStore(new InMemoryConversationStore())
-{
-    private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private bool _block;
-
-    public Task Entered => _entered.Task;
-
-    public void BlockNextAppend() => _block = true;
-
-    public void Release() => _release.TrySetResult();
-
-    public override async ValueTask<IReadOnlyList<ConversationMessage>> AppendAsync(
-        string conversationId,
-        IReadOnlyList<ConversationMessageDraft> messages,
-        ConversationSessionState? state = null,
-        CancellationToken cancellationToken = default)
-    {
-        if (_block)
+        /// <summary>
+        /// Opens one conversation on a fresh session, the way <c>ConversationSession</c> does at conversation start: the row is
+        /// made before any turn can append against it, exactly as <c>ConversationSession.OpenSessionAsync</c>
+        /// makes it before it ever reaches this provider.
+        /// </summary>
+        internal static async Task<(AgentCoreChatHistoryProvider Provider, RecordingConversationStore Store, StubSession Session)> NewConversation()
         {
-            _block = false;
-            _entered.TrySetResult();
-            await _release.Task.WaitAsync(cancellationToken);
+            RecordingConversationStore store = new();
+            _ = await store.CreateAsync(ConversationId, TestContext.Current.CancellationToken);
+            AgentCoreChatHistoryProvider provider = new(store);
+            StubSession session = new();
+            _ = provider.BeginConversation(session, ConversationId, []);
+            return (provider, store, session);
         }
 
-        return await Inner.AppendAsync(conversationId, messages, state, cancellationToken);
+        /// <summary>Writes one turn the way <c>ConversationSession</c> does: name the turn, then append it.</summary>
+        internal static void AppendTurn(
+            AgentCoreChatHistoryProvider provider,
+            AgentSession session,
+            int turnIndex,
+            string said,
+            string replied)
+        {
+            provider.BeginTurn(session, turnIndex);
+            _ = provider.AppendTurn(
+                session,
+                [new ChatMessage(ChatRole.User, said), new ChatMessage(ChatRole.Assistant, replied)]);
+        }
+
+
+        internal static async Task<IReadOnlyList<ChatMessage>> ProvideAsync(
+            AgentCoreChatHistoryProvider provider, AgentSession session)
+        {
+#pragma warning disable MAAI001 // The context constructors are the framework's own experimental surface.
+            ChatHistoryProvider.InvokingContext context = new(StubAgent.Instance, session, []);
+#pragma warning restore MAAI001
+            IEnumerable<ChatMessage> messages = await provider.InvokingAsync(context, TestContext.Current.CancellationToken);
+            return [.. messages];
+        }
     }
 
-    public override ValueTask RewriteAsync(
-        string conversationId, string messageId, ChatMessage content, CancellationToken cancellationToken = default)
-        => Inner.RewriteAsync(conversationId, messageId, content, cancellationToken);
-}
+    /// <summary>
+    /// Holds one append open, so a barge-in can arrive while a turn is still writing. It keeps the
+    /// real store's ordering rule: a rewrite of a row that is not there yet changes nothing.
+    /// </summary>
+    internal sealed class BlockingConversationStore() : DelegatingConversationStore(new InMemoryConversationStore())
+    {
+        private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private bool _block;
 
-internal sealed class StubSession : AgentSession;
+        public Task Entered => _entered.Task;
 
-/// <summary>Stands in for the agent the framework names on a context. Nothing here runs it.</summary>
-internal sealed class StubAgent : AIAgent
-{
-    public static StubAgent Instance { get; } = new();
+        public void BlockNextAppend()
+        {
+            _block = true;
+        }
 
-    protected override ValueTask<AgentSession> CreateSessionCoreAsync(
-        CancellationToken cancellationToken = default)
-        => new(new StubSession());
+        public void Release()
+        {
+            _ = _release.TrySetResult();
+        }
 
-    protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
-        AgentSession session,
-        JsonSerializerOptions? jsonSerializerOptions = null,
-        CancellationToken cancellationToken = default)
-        => throw new NotSupportedException();
+        public override async ValueTask<IReadOnlyList<ConversationMessage>> AppendAsync(
+            string conversationId,
+            IReadOnlyList<ConversationMessageDraft> messages,
+            ConversationSessionState? state = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (_block)
+            {
+                _block = false;
+                _ = _entered.TrySetResult();
+                await _release.Task.WaitAsync(cancellationToken);
+            }
 
-    protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
-        JsonElement serializedState,
-        JsonSerializerOptions? jsonSerializerOptions = null,
-        CancellationToken cancellationToken = default)
-        => throw new NotSupportedException();
+            return await Inner.AppendAsync(conversationId, messages, state, cancellationToken);
+        }
 
-    protected override Task<AgentResponse> RunCoreAsync(
-        IEnumerable<ChatMessage> messages,
-        AgentSession? session = null,
-        AgentRunOptions? options = null,
-        CancellationToken cancellationToken = default)
-        => throw new NotSupportedException();
+        public override ValueTask RewriteAsync(
+            string conversationId, string messageId, ChatMessage content, CancellationToken cancellationToken = default)
+        {
+            return Inner.RewriteAsync(conversationId, messageId, content, cancellationToken);
+        }
+    }
 
-    protected override IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
-        IEnumerable<ChatMessage> messages,
-        AgentSession? session = null,
-        AgentRunOptions? options = null,
-        CancellationToken cancellationToken = default)
-        => throw new NotSupportedException();
+    internal sealed class StubSession : AgentSession;
+
+    /// <summary>Stands in for the agent the framework names on a context. Nothing here runs it.</summary>
+    internal sealed class StubAgent : AIAgent
+    {
+        public static StubAgent Instance { get; } = new();
+
+        protected override ValueTask<AgentSession> CreateSessionCoreAsync(
+            CancellationToken cancellationToken = default)
+        {
+            return new(new StubSession());
+        }
+
+        protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
+            AgentSession session,
+            JsonSerializerOptions? jsonSerializerOptions = null,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
+        protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
+            JsonElement serializedState,
+            JsonSerializerOptions? jsonSerializerOptions = null,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
+        protected override Task<AgentResponse> RunCoreAsync(
+            IEnumerable<ChatMessage> messages,
+            AgentSession? session = null,
+            AgentRunOptions? options = null,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
+        protected override IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
+            IEnumerable<ChatMessage> messages,
+            AgentSession? session = null,
+            AgentRunOptions? options = null,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+    }
 }

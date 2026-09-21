@@ -1,94 +1,96 @@
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
+using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Tests.Fakes;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Configuration.Compilation;
-
-/// <summary>
-/// Rule 16 of section 11, and T44. A fan-out of 26 simultaneous conversations against one compiled agent is
-/// clean, and no code path compiles an agent for each conversation.
-/// </summary>
-public sealed class CompiledAgentConcurrencyTests
+namespace AgentCore.Application.Tests.Configuration.Compilation
 {
-    private const int FanOut = 26;
-
-    [Fact]
-    public async Task Rule16_TwentySixSimultaneousConversations_ShareOneCompiledAgent()
+    /// <summary>
+    /// Rule 16 of section 11, and T44. A fan-out of 26 simultaneous conversations against one compiled agent is
+    /// clean, and no code path compiles an agent for each conversation.
+    /// </summary>
+    public sealed class CompiledAgentConcurrencyTests
     {
-        using ScriptedChatClient client = new("Hello", " from", " one", " agent.");
-        var document = ConfigurationLoader.LoadYaml(CompileTableTests.OneAgentYaml);
-        AgentCompilationContext context = new(new FakeChatClientFactory(client));
-        CompiledAgentRegistry registry = new();
+        private const int FanOut = 26;
 
-        var token = TestContext.Current.CancellationToken;
-        using Barrier gate = new(FanOut);
+        [Fact]
+        public async Task Rule16_TwentySixSimultaneousConversations_ShareOneCompiledAgent()
+        {
+            using ScriptedChatClient client = new("Hello", " from", " one", " agent.");
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(CompileTableTests.OneAgentYaml);
+            AgentCompilationContext context = new(new FakeChatClientFactory(client));
+            CompiledAgentRegistry registry = new();
 
-        var runs = Enumerable.Range(0, FanOut).Select(index => Task.Run(
-            async () =>
-            {
-                // Every conversation asks the registry for the agent, exactly as the turn loop does.
-                var compiled = registry.GetOrCompile(document, "main", context);
+            CancellationToken token = TestContext.Current.CancellationToken;
+            using Barrier gate = new(FanOut);
 
-                // Nothing starts until all 26 are ready, so the fan-out is really simultaneous.
-                gate.SignalAndWait(token);
+            IEnumerable<Task<(CompiledAgent compiled, string Text)>> runs = Enumerable.Range(0, FanOut).Select(index => Task.Run(
+                async () =>
+                {
+                    // Every conversation asks the registry for the agent, exactly as the turn loop does.
+                    CompiledAgent compiled = registry.GetOrCompile(document, "main", context);
 
-                var reply = await compiled.Agent.RunAsync($"conversation {index}", cancellationToken: token)
-                    .ConfigureAwait(false);
-                return (compiled, reply.Text);
-            },
-            token));
+                    // Nothing starts until all 26 are ready, so the fan-out is really simultaneous.
+                    gate.SignalAndWait(token);
 
-        var results = await Task.WhenAll(runs);
+                    Microsoft.Agents.AI.AgentResponse reply = await compiled.Agent.RunAsync($"conversation {index}", cancellationToken: token)
+                        .ConfigureAwait(false);
+                    return (compiled, reply.Text);
+                },
+                token));
 
-        // No code path compiles an agent for each conversation. The compiled agent is a process singleton.
-        Assert.Equal(1, registry.CompileCount);
-        Assert.All(results, result => Assert.Same(results[0].compiled, result.compiled));
-        Assert.All(results, result => Assert.Equal(client.FullText, result.Text));
-        Assert.Equal(FanOut, client.Calls);
-    }
+            (CompiledAgent compiled, string Text)[] results = await Task.WhenAll(runs);
 
-    [Fact]
-    public async Task Rule16_TwentySixSimultaneousConversations_AreCleanAgainstOneGraphWrapper()
-    {
-        using ScriptedChatClient client = new("Hello", " from", " the", " graph.");
-        var document = ConfigurationLoader.LoadYaml(CompileTableTests.ExplicitGraphYaml);
-        AgentCompilationContext context = new(new FakeChatClientFactory(client));
-        CompiledAgentRegistry registry = new();
+            // No code path compiles an agent for each conversation. The compiled agent is a process singleton.
+            Assert.Equal(1, registry.CompileCount);
+            Assert.All(results, result => Assert.Same(results[0].compiled, result.compiled));
+            Assert.All(results, result => Assert.Equal(client.FullText, result.Text));
+            Assert.Equal(FanOut, client.Calls);
+        }
 
-        var token = TestContext.Current.CancellationToken;
-        var compiled = registry.GetOrCompile(document, "main", context);
-        using Barrier gate = new(FanOut);
+        [Fact]
+        public async Task Rule16_TwentySixSimultaneousConversations_AreCleanAgainstOneGraphWrapper()
+        {
+            using ScriptedChatClient client = new("Hello", " from", " the", " graph.");
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(CompileTableTests.ExplicitGraphYaml);
+            AgentCompilationContext context = new(new FakeChatClientFactory(client));
+            CompiledAgentRegistry registry = new();
 
-        var runs = Enumerable.Range(0, FanOut).Select(index => Task.Run(
-            async () =>
-            {
-                gate.SignalAndWait(token);
-                var reply = await compiled.Agent.RunAsync($"conversation {index}", cancellationToken: token)
-                    .ConfigureAwait(false);
-                return reply.Text;
-            },
-            token));
+            CancellationToken token = TestContext.Current.CancellationToken;
+            CompiledAgent compiled = registry.GetOrCompile(document, "main", context);
+            using Barrier gate = new(FanOut);
 
-        var texts = await Task.WhenAll(runs);
+            IEnumerable<Task<string>> runs = Enumerable.Range(0, FanOut).Select(index => Task.Run(
+                async () =>
+                {
+                    gate.SignalAndWait(token);
+                    Microsoft.Agents.AI.AgentResponse reply = await compiled.Agent.RunAsync($"conversation {index}", cancellationToken: token)
+                        .ConfigureAwait(false);
+                    return reply.Text;
+                },
+                token));
 
-        // T44: nothing serializes inside the AsAIAgent() wrapper, so one wrapper serves every conversation.
-        Assert.Equal(1, registry.CompileCount);
-        Assert.All(texts, text => Assert.Contains("graph.", text, StringComparison.Ordinal));
-    }
+            string[] texts = await Task.WhenAll(runs);
 
-    [Fact]
-    public void Rule16_TheRegistryCompilesOncePerDocument()
-    {
-        using ScriptedChatClient client = new("ok");
-        var document = ConfigurationLoader.LoadYaml(CompileTableTests.OneAgentYaml);
-        AgentCompilationContext context = new(new FakeChatClientFactory(client));
-        CompiledAgentRegistry registry = new();
+            // T44: nothing serializes inside the AsAIAgent() wrapper, so one wrapper serves every conversation.
+            Assert.Equal(1, registry.CompileCount);
+            Assert.All(texts, text => Assert.Contains("graph.", text, StringComparison.Ordinal));
+        }
 
-        var first = registry.GetOrCompile(document, "main", context);
-        var second = registry.GetOrCompile(document, "main", context);
+        [Fact]
+        public void Rule16_TheRegistryCompilesOncePerDocument()
+        {
+            using ScriptedChatClient client = new("ok");
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(CompileTableTests.OneAgentYaml);
+            AgentCompilationContext context = new(new FakeChatClientFactory(client));
+            CompiledAgentRegistry registry = new();
 
-        Assert.Same(first, second);
-        Assert.Equal(1, registry.CompileCount);
+            CompiledAgent first = registry.GetOrCompile(document, "main", context);
+            CompiledAgent second = registry.GetOrCompile(document, "main", context);
+
+            Assert.Same(first, second);
+            Assert.Equal(1, registry.CompileCount);
+        }
     }
 }

@@ -1,36 +1,37 @@
 using AgentCore.Application.Runtime.Turn;
 using Microsoft.Agents.AI;
 
-namespace AgentCore.Application.Runtime.Harness;
-
-/// <summary>
-/// The context provider behind an agent's <c>shell:</c> block: on every invocation it hands the
-/// model this conversation's shell executor as MAF's own tool. No instructions of our own — MAF's tool
-/// description is what the model reads — and no <c>StateKeys</c>, because the shell keeps no
-/// session state.
-/// </summary>
-internal sealed class ConversationShellProvider : AIContextProvider
+namespace AgentCore.Application.Runtime.Harness
 {
-    private const string NoTurnMessage =
-        "A shell: tool runs only while a turn runs through a ConversationSession with a workspace root bound.";
-
-    private readonly ConversationShellOptions _options;
-
-    public ConversationShellProvider(ConversationShellOptions options)
+    /// <summary>
+    /// The context provider behind an agent's <c>shell:</c> block: on every invocation it hands the
+    /// model this conversation's shell executor as MAF's own tool. No instructions of our own — MAF's tool
+    /// description is what the model reads — and no <c>StateKeys</c>, because the shell keeps no
+    /// session state.
+    /// </summary>
+    internal sealed class ConversationShellProvider : AIContextProvider
     {
-        ArgumentNullException.ThrowIfNull(options);
-        _options = options;
-    }
+        private const string NoTurnMessage =
+            "A shell: tool runs only while a turn runs through a ConversationSession with a workspace root bound.";
 
-    protected override ValueTask<AIContext> ProvideAIContextAsync(
-        InvokingContext context, CancellationToken cancellationToken = default)
-    {
-        var shells = TurnRegistry.For(context.Session)?.Shells
-            ?? throw new InvalidOperationException(NoTurnMessage);
+        private readonly ConversationShellOptions _options;
 
-        return new ValueTask<AIContext>(new AIContext
+        public ConversationShellProvider(ConversationShellOptions options)
         {
-            Tools = [shells.Get(_options).AsAIFunction(requireApproval: false)],
-        });
+            ArgumentNullException.ThrowIfNull(options);
+            _options = options;
+        }
+
+        protected override ValueTask<AIContext> ProvideAIContextAsync(
+            InvokingContext context, CancellationToken cancellationToken = default)
+        {
+            ConversationShells shells = TurnRegistry.For(context.Session)?.Shells
+                ?? throw new InvalidOperationException(NoTurnMessage);
+
+            return new ValueTask<AIContext>(new AIContext
+            {
+                Tools = [shells.Get(_options).AsAIFunction(requireApproval: false)],
+            });
+        }
     }
 }

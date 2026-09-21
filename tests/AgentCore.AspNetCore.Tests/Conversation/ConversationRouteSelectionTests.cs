@@ -13,162 +13,165 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
-namespace AgentCore.AspNetCore.Tests.Conversation;
-
-/// <summary>
-/// <c>providers.conversation</c> decides which transport answers the one conversation route, and whether a conversation
-/// routes here at all.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>No fake here names Telnyx, and this file references no vendor type.</b> That is the point of
-/// the seam — spec §12. If this file ever needs a vendor type to prove the route, the selection has
-/// leaked back into the vendor.
-/// </para>
-/// <para>
-/// The selection happens while the host starts and not while the route is mapped, so these read
-/// <see cref="ConversationSeamStartup"/> rather than <c>MapCall</c>. A host maps its routes on a built
-/// application, which is after the document has been read; deciding there would mean a document
-/// edit could silently leave the path a 404.
-/// </para>
-/// <para>
-/// Every test runs offline. There is no account, no network conversation, and no API key anywhere in this
-/// file.
-/// </para>
-/// </remarks>
-public sealed class ConversationRouteSelectionTests
+namespace AgentCore.AspNetCore.Tests.Conversation
 {
-    [Fact]
-    public void TheTransportTheDocumentNamesIsAskedForItsHandler()
-    {
-        var transport = new FakeTransport("bundled-fake");
-
-        var seams = Build(conversationKind: "bundled-fake", transport);
-
-        Assert.NotNull(seams.Handler);
-
-        // The block handed over is the providers.conversation entry of this document, not null and not some
-        // empty stand-in. The kind is what proves which entry it is.
-        Assert.NotNull(transport.Configuration);
-        Assert.Equal("bundled-fake", transport.Configuration.Kind);
-
-        // And nothing reports the route as unroutable when one does route.
-        Assert.Null(seams.Unroutable);
-    }
-
-    [Fact]
-    public void AKindNoRegisteredAdapterServesFailsTheStartWithAPointer()
-    {
-        // The host registers a transport, and the document names a different vendor. That is a
-        // deployment that would otherwise start with no inbound conversation route and no reason given, so
-        // the boot must refuse it, with the pointer of the field the reader has to fix.
-        var failure = Assert.Throws<ConfigurationLoadException>(
-            () => Build(conversationKind: "no-such-vendor", new FakeTransport("bundled-fake")));
-
-        Assert.Equal("/providers/conversation/kind", failure.Errors[0].Pointer);
-    }
-
-    [Fact]
-    public void ADialOutVendorRoutesNothingAndSaysWhy()
-    {
-        var seams = Build(conversationKind: "dial-out-fake", new FakeDialOut("dial-out-fake"));
-
-        // Section 12 asks this case to route nothing AND say so. A route that vanishes in silence is
-        // how a deployment loses every call to a 404 with nothing to read.
-        Assert.Null(seams.Handler);
-        Assert.NotNull(seams.Unroutable);
-        Assert.Contains("dial-out-fake", seams.Unroutable, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void AHostThatRegisteredNoTransportRoutesNothingAndSaysWhy()
-    {
-        var seams = ConversationSeamStartup.Build(
-            ConfigurationLoader.LoadYaml(Document("bundled-fake")), new AgentCoreOptions());
-
-        Assert.Null(seams.Handler);
-        Assert.NotNull(seams.Unroutable);
-        Assert.Contains("no conversation adapter", seams.Unroutable, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task AHostWithNoAgentCoreRegistrationAnswersTheRouteWithAReason()
-    {
-        var builder = WebApplication.CreateSlimBuilder();
-        builder.Logging.ClearProviders();
-        builder.WebHost.UseUrls("http://127.0.0.1:0");
-
-        await using var app = builder.Build();
-        app.MapCall();
-        await app.StartAsync(TestContext.Current.CancellationToken);
-
-        using HttpClient client = new() { BaseAddress = new Uri(Address(app)) };
-        var response = await client.GetAsync("/v1/main/call", TestContext.Current.CancellationToken);
-
-        // A readable refusal, and not the 404 a route that mapped nothing would have produced.
-        Assert.Equal(System.Net.HttpStatusCode.ServiceUnavailable, response.StatusCode);
-        Assert.Contains(
-            "registered no AgentCore services",
-            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken),
-            StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void TheDefaultPatternIsVendorNeutral()
-    {
-        Assert.Equal("/v1/{entry}/call", ConversationEndpointRouteBuilderExtensions.DefaultPattern);
-    }
-
-    [Fact]
-    public void ARouteWithNoEntryParameterIsRefused()
-    {
-        var builder = WebApplication.CreateSlimBuilder();
-        using var app = builder.Build();
-
-        var failure = Assert.Throws<ArgumentException>(() => app.MapCall("/v1/conversation"));
-
-        Assert.Contains("{entry}", failure.Message, StringComparison.Ordinal);
-    }
-
-    // ---------------------------------------------------------------------------------------------
-    // Helpers.
-    // ---------------------------------------------------------------------------------------------
-
-    /// <summary>Runs the conversation seam over one document and the adapters a host registered.</summary>
-    /// <param name="conversationKind">The value <c>providers.conversation.kind</c> carries.</param>
-    /// <param name="adapters">The conversation vendors this host registers.</param>
-    /// <returns>What the seam produced.</returns>
-    private static ConversationSeamAdapters Build(string conversationKind, params IConversationAdapter[] adapters)
-    {
-        AgentCoreOptions options = new();
-        options.UseConversation(adapters);
-        options.UseSpeech(new FakeSpeech(conversationKind));
-
-        return ConversationSeamStartup.Build(ConfigurationLoader.LoadYaml(Document(conversationKind)), options);
-    }
-
-    /// <summary>Reads back the port the server bound, since the test asked for any free one.</summary>
-    /// <param name="app">The started application.</param>
-    /// <returns>The base address to send to.</returns>
-    private static string Address(WebApplication app)
-        => app.Services
-            .GetRequiredService<IServer>()
-            .Features
-            .Get<IServerAddressesFeature>()!
-            .Addresses
-            .First();
-
-    /// <summary>Writes one document that names both blocks section 8.2 requires of one another.</summary>
-    /// <param name="conversationKind">The value <c>providers.conversation.kind</c> carries.</param>
-    /// <returns>The document text.</returns>
+    /// <summary>
+    /// <c>providers.conversation</c> decides which transport answers the one conversation route, and whether a conversation
+    /// routes here at all.
+    /// </summary>
     /// <remarks>
-    /// Written line by line here rather than at each call site, because the block sits under
-    /// <c>providers:</c> and YAML indentation written by hand at a conversation site is how test documents
-    /// go wrong. <c>speech</c> names the same kind as <c>conversation</c> because the schema requires the
-    /// block to exist; nothing in this file selects a speech vendor.
+    /// <para>
+    /// <b>No fake here names Telnyx, and this file references no vendor type.</b> That is the point of
+    /// the seam — spec §12. If this file ever needs a vendor type to prove the route, the selection has
+    /// leaked back into the vendor.
+    /// </para>
+    /// <para>
+    /// The selection happens while the host starts and not while the route is mapped, so these read
+    /// <see cref="ConversationSeamStartup"/> rather than <c>MapCall</c>. A host maps its routes on a built
+    /// application, which is after the document has been read; deciding there would mean a document
+    /// edit could silently leave the path a 404.
+    /// </para>
+    /// <para>
+    /// Every test runs offline. There is no account, no network conversation, and no API key anywhere in this
+    /// file.
+    /// </para>
     /// </remarks>
-    private static string Document(string conversationKind)
-        => $$"""
+    public sealed class ConversationRouteSelectionTests
+    {
+        [Fact]
+        public void TheTransportTheDocumentNamesIsAskedForItsHandler()
+        {
+            FakeTransport transport = new("bundled-fake");
+
+            ConversationSeamAdapters seams = Build(conversationKind: "bundled-fake", transport);
+
+            Assert.NotNull(seams.Handler);
+
+            // The block handed over is the providers.conversation entry of this document, not null and not some
+            // empty stand-in. The kind is what proves which entry it is.
+            Assert.NotNull(transport.Configuration);
+            Assert.Equal("bundled-fake", transport.Configuration.Kind);
+
+            // And nothing reports the route as unroutable when one does route.
+            Assert.Null(seams.Unroutable);
+        }
+
+        [Fact]
+        public void AKindNoRegisteredAdapterServesFailsTheStartWithAPointer()
+        {
+            // The host registers a transport, and the document names a different vendor. That is a
+            // deployment that would otherwise start with no inbound conversation route and no reason given, so
+            // the boot must refuse it, with the pointer of the field the reader has to fix.
+            ConfigurationLoadException failure = Assert.Throws<ConfigurationLoadException>(
+                () => Build(conversationKind: "no-such-vendor", new FakeTransport("bundled-fake")));
+
+            Assert.Equal("/providers/conversation/kind", failure.Errors[0].Pointer);
+        }
+
+        [Fact]
+        public void ADialOutVendorRoutesNothingAndSaysWhy()
+        {
+            ConversationSeamAdapters seams = Build(conversationKind: "dial-out-fake", new FakeDialOut("dial-out-fake"));
+
+            // Section 12 asks this case to route nothing AND say so. A route that vanishes in silence is
+            // how a deployment loses every call to a 404 with nothing to read.
+            Assert.Null(seams.Handler);
+            Assert.NotNull(seams.Unroutable);
+            Assert.Contains("dial-out-fake", seams.Unroutable, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void AHostThatRegisteredNoTransportRoutesNothingAndSaysWhy()
+        {
+            ConversationSeamAdapters seams = ConversationSeamStartup.Build(
+                ConfigurationLoader.LoadYaml(Document("bundled-fake")), new AgentCoreOptions());
+
+            Assert.Null(seams.Handler);
+            Assert.NotNull(seams.Unroutable);
+            Assert.Contains("no conversation adapter", seams.Unroutable, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task AHostWithNoAgentCoreRegistrationAnswersTheRouteWithAReason()
+        {
+            WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
+            _ = builder.Logging.ClearProviders();
+            _ = builder.WebHost.UseUrls("http://127.0.0.1:0");
+
+            await using WebApplication app = builder.Build();
+            _ = app.MapCall();
+            await app.StartAsync(TestContext.Current.CancellationToken);
+
+            using HttpClient client = new() { BaseAddress = new Uri(Address(app)) };
+            HttpResponseMessage response = await client.GetAsync("/v1/main/call", TestContext.Current.CancellationToken);
+
+            // A readable refusal, and not the 404 a route that mapped nothing would have produced.
+            Assert.Equal(System.Net.HttpStatusCode.ServiceUnavailable, response.StatusCode);
+            Assert.Contains(
+                "registered no AgentCore services",
+                await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken),
+                StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void TheDefaultPatternIsVendorNeutral()
+        {
+            Assert.Equal("/v1/{entry}/call", ConversationEndpointRouteBuilderExtensions.DefaultPattern);
+        }
+
+        [Fact]
+        public void ARouteWithNoEntryParameterIsRefused()
+        {
+            WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
+            using WebApplication app = builder.Build();
+
+            ArgumentException failure = Assert.Throws<ArgumentException>(() => app.MapCall("/v1/conversation"));
+
+            Assert.Contains("{entry}", failure.Message, StringComparison.Ordinal);
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // Helpers.
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>Runs the conversation seam over one document and the adapters a host registered.</summary>
+        /// <param name="conversationKind">The value <c>providers.conversation.kind</c> carries.</param>
+        /// <param name="adapters">The conversation vendors this host registers.</param>
+        /// <returns>What the seam produced.</returns>
+        private static ConversationSeamAdapters Build(string conversationKind, params IConversationAdapter[] adapters)
+        {
+            AgentCoreOptions options = new();
+            _ = options.UseConversation(adapters);
+            _ = options.UseSpeech(new FakeSpeech(conversationKind));
+
+            return ConversationSeamStartup.Build(ConfigurationLoader.LoadYaml(Document(conversationKind)), options);
+        }
+
+        /// <summary>Reads back the port the server bound, since the test asked for any free one.</summary>
+        /// <param name="app">The started application.</param>
+        /// <returns>The base address to send to.</returns>
+        private static string Address(WebApplication app)
+        {
+            return app.Services
+                        .GetRequiredService<IServer>()
+                        .Features
+                        .Get<IServerAddressesFeature>()!
+                        .Addresses
+                        .First();
+        }
+
+        /// <summary>Writes one document that names both blocks section 8.2 requires of one another.</summary>
+        /// <param name="conversationKind">The value <c>providers.conversation.kind</c> carries.</param>
+        /// <returns>The document text.</returns>
+        /// <remarks>
+        /// Written line by line here rather than at each call site, because the block sits under
+        /// <c>providers:</c> and YAML indentation written by hand at a conversation site is how test documents
+        /// go wrong. <c>speech</c> names the same kind as <c>conversation</c> because the schema requires the
+        /// block to exist; nothing in this file selects a speech vendor.
+        /// </remarks>
+        private static string Document(string conversationKind)
+        {
+            return $$"""
            apiVersion: agentcore/v1
            providers:
              conversation:   { kind: {{conversationKind}} }
@@ -184,39 +187,41 @@ public sealed class ConversationRouteSelectionTests
              main:
                agent: dummy
            """;
-
-    /// <summary>A transport that answers a conversation and names no vendor.</summary>
-    /// <remarks>
-    /// It records the block the seam is supposed to hand it. Recording only that
-    /// <c>CreateHandler</c> ran would let a seam that resolved the document block to something other
-    /// than the one the reader wrote still pass.
-    /// </remarks>
-    private sealed class FakeTransport(string kind) : IConversationTransportAdapter
-    {
-        public string Kind { get; } = kind;
-
-        public bool CarriesText => true;
-
-        public ConversationProviderConfiguration? Configuration { get; private set; }
-
-        public RequestDelegate CreateHandler(ConversationProviderConfiguration configuration)
-        {
-            Configuration = configuration;
-            return _ => Task.CompletedTask;
         }
-    }
 
-    /// <summary>A vendor this process dials out to. It has no route to answer.</summary>
-    private sealed class FakeDialOut(string kind) : IConversationAdapter
-    {
-        public string Kind { get; } = kind;
+        /// <summary>A transport that answers a conversation and names no vendor.</summary>
+        /// <remarks>
+        /// It records the block the seam is supposed to hand it. Recording only that
+        /// <c>CreateHandler</c> ran would let a seam that resolved the document block to something other
+        /// than the one the reader wrote still pass.
+        /// </remarks>
+        private sealed class FakeTransport(string kind) : IConversationTransportAdapter
+        {
+            public string Kind { get; } = kind;
 
-        public bool CarriesText => false;
-    }
+            public bool CarriesText => true;
 
-    /// <summary>The speech vendor the pairing rule reads, which builds nothing.</summary>
-    private sealed class FakeSpeech(string kind) : ISpeechAdapter
-    {
-        public string Kind { get; } = kind;
+            public ConversationProviderConfiguration? Configuration { get; private set; }
+
+            public RequestDelegate CreateHandler(ConversationProviderConfiguration configuration)
+            {
+                Configuration = configuration;
+                return _ => Task.CompletedTask;
+            }
+        }
+
+        /// <summary>A vendor this process dials out to. It has no route to answer.</summary>
+        private sealed class FakeDialOut(string kind) : IConversationAdapter
+        {
+            public string Kind { get; } = kind;
+
+            public bool CarriesText => false;
+        }
+
+        /// <summary>The speech vendor the pairing rule reads, which builds nothing.</summary>
+        private sealed class FakeSpeech(string kind) : ISpeechAdapter
+        {
+            public string Kind { get; } = kind;
+        }
     }
 }

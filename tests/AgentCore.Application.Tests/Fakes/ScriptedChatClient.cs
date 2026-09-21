@@ -1,84 +1,86 @@
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.AI;
 
-namespace AgentCore.Application.Tests.Fakes;
-
-/// <summary>
-/// A deterministic offline stand-in for a chat model. No socket, no key.
-/// </summary>
-/// <remarks>
-/// The streaming path yields one update for each fragment. A test may hold the stream open after the
-/// first fragment with <see cref="GateAfterFirstFragment"/>, which turns "does the seam stream?" into
-/// a question a test answers without a stopwatch.
-/// </remarks>
-internal sealed class ScriptedChatClient : IChatClient
+namespace AgentCore.Application.Tests.Fakes
 {
-    private readonly string[] _fragments;
-    private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private int _calls;
-
-    public ScriptedChatClient(params string[] fragments) => _fragments = fragments;
-
-    /// <summary>Gets the text the model produces, as one string.</summary>
-    public string FullText => string.Concat(_fragments);
-
-    /// <summary>Gets or sets whether the stream stops after the first fragment until the gate opens.</summary>
-    public bool GateAfterFirstFragment { get; set; }
-
-    /// <summary>Gets how many requests this client answered.</summary>
-    public int Calls => Volatile.Read(ref _calls);
-
-    /// <summary>Lets the rest of the fragments flow.</summary>
-    public void OpenGate() => _gate.TrySetResult();
-
-    public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-        IEnumerable<ChatMessage> messages,
-        ChatOptions? options = null,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    /// <summary>
+    /// A deterministic offline stand-in for a chat model. No socket, no key.
+    /// </summary>
+    /// <remarks>
+    /// The streaming path yields one update for each fragment. A test may hold the stream open after the
+    /// first fragment with <see cref="GateAfterFirstFragment"/>, which turns "does the seam stream?" into
+    /// a question a test answers without a stopwatch.
+    /// </remarks>
+    internal sealed class ScriptedChatClient(params string[] fragments) : IChatClient
     {
-        ArgumentNullException.ThrowIfNull(messages);
-        Interlocked.Increment(ref _calls);
+        private readonly string[] _fragments = fragments;
+        private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _calls;
 
-        var responseId = Guid.NewGuid().ToString("N");
+        /// <summary>Gets the text the model produces, as one string.</summary>
+        public string FullText => string.Concat(_fragments);
 
-        for (var index = 0; index < _fragments.Length; index++)
+        /// <summary>Gets or sets whether the stream stops after the first fragment until the gate opens.</summary>
+        public bool GateAfterFirstFragment { get; set; }
+
+        /// <summary>Gets how many requests this client answered.</summary>
+        public int Calls => Volatile.Read(ref _calls);
+
+        /// <summary>Lets the rest of the fragments flow.</summary>
+        public void OpenGate()
         {
-            if (index == 1 && GateAfterFirstFragment)
+            _ = _gate.TrySetResult();
+        }
+
+        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(messages);
+            _ = Interlocked.Increment(ref _calls);
+
+            string responseId = Guid.NewGuid().ToString("N");
+
+            for (int index = 0; index < _fragments.Length; index++)
             {
-                await _gate.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+                if (index == 1 && GateAfterFirstFragment)
+                {
+                    await _gate.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+                }
+
+                yield return new ChatResponseUpdate(ChatRole.Assistant, _fragments[index])
+                {
+                    ResponseId = responseId,
+                    MessageId = responseId,
+                };
+            }
+        }
+
+        public async Task<ChatResponse> GetResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            CancellationToken cancellationToken = default)
+        {
+            List<ChatResponseUpdate> updates = [];
+            await foreach (ChatResponseUpdate? update in GetStreamingResponseAsync(messages, options, cancellationToken)
+                .ConfigureAwait(false))
+            {
+                updates.Add(update);
             }
 
-            yield return new ChatResponseUpdate(ChatRole.Assistant, _fragments[index])
-            {
-                ResponseId = responseId,
-                MessageId = responseId,
-            };
+            return updates.ToChatResponse();
         }
-    }
 
-    public async Task<ChatResponse> GetResponseAsync(
-        IEnumerable<ChatMessage> messages,
-        ChatOptions? options = null,
-        CancellationToken cancellationToken = default)
-    {
-        List<ChatResponseUpdate> updates = [];
-        await foreach (var update in GetStreamingResponseAsync(messages, options, cancellationToken)
-            .ConfigureAwait(false))
+        public object? GetService(Type serviceType, object? serviceKey = null)
         {
-            updates.Add(update);
+            ArgumentNullException.ThrowIfNull(serviceType);
+            return serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
         }
 
-        return updates.ToChatResponse();
-    }
-
-    public object? GetService(Type serviceType, object? serviceKey = null)
-    {
-        ArgumentNullException.ThrowIfNull(serviceType);
-        return serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
-    }
-
-    public void Dispose()
-    {
-        // Nothing to release.
+        public void Dispose()
+        {
+            // Nothing to release.
+        }
     }
 }

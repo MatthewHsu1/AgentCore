@@ -7,15 +7,15 @@ using AgentCore.Application.Tests.Fakes;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.State;
-
-/// <summary>
-/// The extractor of section 8.3. Every slot is nullable on the wire, and that is not optional.
-/// </summary>
-public sealed class StateExtractorTests
+namespace AgentCore.Application.Tests.State
 {
-    private const string Yaml =
-        """
+    /// <summary>
+    /// The extractor of section 8.3. Every slot is nullable on the wire, and that is not optional.
+    /// </summary>
+    public sealed class StateExtractorTests
+    {
+        private const string Yaml =
+            """
         apiVersion: agentcore/v1
         state:
           callerAskedForHuman: { type: boolean, default: false, writer: extractor }
@@ -33,185 +33,185 @@ public sealed class StateExtractorTests
             agent: only
         """;
 
-    private static readonly AgentCoreConfiguration Document = ConfigurationLoader.LoadYaml(Yaml);
+        private static readonly AgentCoreConfiguration Document = ConfigurationLoader.LoadYaml(Yaml);
 
-    [Fact]
-    public void TheSchema_HoldsOnlyTheExtractorSlots()
-    {
-        var schema = StateExtractor.BuildSchema(Document);
-
-        var properties = schema.GetProperty("properties");
-        Assert.Equal(3, properties.EnumerateObject().Count());
-        Assert.False(properties.TryGetProperty("failedResolveTurns", out _));
-    }
-
-    [Fact]
-    public void TheSchema_MakesEverySlotNullableAndRequired()
-    {
-        var schema = StateExtractor.BuildSchema(Document);
-
-        foreach (var property in schema.GetProperty("properties").EnumerateObject())
+        [Fact]
+        public void TheSchema_HoldsOnlyTheExtractorSlots()
         {
-            var types = property.Value.GetProperty("type").EnumerateArray().Select(item => item.GetString()).ToList();
+            JsonElement schema = StateExtractor.BuildSchema(Document);
 
-            // A missing field defaults silently, so every slot is nullable and every slot is required.
-            Assert.Contains("null", types);
-            Assert.Equal(2, types.Count);
+            JsonElement properties = schema.GetProperty("properties");
+            Assert.Equal(3, properties.EnumerateObject().Count());
+            Assert.False(properties.TryGetProperty("failedResolveTurns", out _));
         }
 
-        var required = schema.GetProperty("required").EnumerateArray().Select(item => item.GetString()).ToList();
-        Assert.Equal(3, required.Count);
-        Assert.False(schema.GetProperty("additionalProperties").GetBoolean());
-    }
+        [Fact]
+        public void TheSchema_MakesEverySlotNullableAndRequired()
+        {
+            JsonElement schema = StateExtractor.BuildSchema(Document);
 
-    [Fact]
-    public void TheSchema_CarriesTheSlotDescription()
-    {
-        var schema = StateExtractor.BuildSchema(Document);
+            foreach (JsonProperty property in schema.GetProperty("properties").EnumerateObject())
+            {
+                List<string?> types = [.. property.Value.GetProperty("type").EnumerateArray().Select(item => item.GetString())];
 
-        Assert.Equal(
-            "the machine model",
-            schema.GetProperty("properties").GetProperty("machineModel").GetProperty("description").GetString());
-    }
+                // A missing field defaults silently, so every slot is nullable and every slot is required.
+                Assert.Contains("null", types);
+                Assert.Equal(2, types.Count);
+            }
 
-    [Fact]
-    public void ANullField_LeavesThePreviousValue()
-    {
-        var (extractor, state) = Build();
-        state.TryWrite("callerAskedForHuman", JsonValue.Create(true));
+            List<string?> required = [.. schema.GetProperty("required").EnumerateArray().Select(item => item.GetString())];
+            Assert.Equal(3, required.Count);
+            Assert.False(schema.GetProperty("additionalProperties").GetBoolean());
+        }
 
-        var result = extractor.Write(state, """{ "callerAskedForHuman": null, "callerSaidGoodbye": null, "machineModel": null }""");
+        [Fact]
+        public void TheSchema_CarriesTheSlotDescription()
+        {
+            JsonElement schema = StateExtractor.BuildSchema(Document);
 
-        Assert.True(result.Deserialized);
-        Assert.Equal(3, result.LeftNull);
-        Assert.Equal(0, result.Filled);
-        Assert.True(state.Read("callerAskedForHuman")!.GetValue<bool>());
-    }
+            Assert.Equal(
+                "the machine model",
+                schema.GetProperty("properties").GetProperty("machineModel").GetProperty("description").GetString());
+        }
 
-    [Fact]
-    public void AFalseField_WritesFalse()
-    {
-        var (extractor, state) = Build();
-        state.TryWrite("callerAskedForHuman", JsonValue.Create(true));
+        [Fact]
+        public void ANullField_LeavesThePreviousValue()
+        {
+            (StateExtractor? extractor, StateDocument? state) = Build();
+            _ = state.TryWrite("callerAskedForHuman", JsonValue.Create(true));
 
-        var result = extractor.Write(state, """{ "callerAskedForHuman": false, "callerSaidGoodbye": null, "machineModel": null }""");
+            StateExtractionResult result = extractor.Write(state, /*lang=json,strict*/ """{ "callerAskedForHuman": null, "callerSaidGoodbye": null, "machineModel": null }""");
 
-        Assert.Equal(1, result.Filled);
-        Assert.False(state.Read("callerAskedForHuman")!.GetValue<bool>());
-        Assert.False(state.IsUnfilled("callerAskedForHuman"));
-    }
+            Assert.True(result.Deserialized);
+            Assert.Equal(3, result.LeftNull);
+            Assert.Equal(0, result.Filled);
+            Assert.True(state.Read("callerAskedForHuman")!.GetValue<bool>());
+        }
 
-    [Fact]
-    public void UnfilledAndFilledFalse_AreDifferentStates()
-    {
-        var (extractor, state) = Build();
+        [Fact]
+        public void AFalseField_WritesFalse()
+        {
+            (StateExtractor? extractor, StateDocument? state) = Build();
+            _ = state.TryWrite("callerAskedForHuman", JsonValue.Create(true));
 
-        // Both read as false. Only one of them has an answer behind it.
-        Assert.True(state.IsUnfilled("callerSaidGoodbye"));
-        Assert.False(state.Read("callerSaidGoodbye")!.GetValue<bool>());
+            StateExtractionResult result = extractor.Write(state, /*lang=json,strict*/ """{ "callerAskedForHuman": false, "callerSaidGoodbye": null, "machineModel": null }""");
 
-        extractor.Write(state, """{ "callerSaidGoodbye": false }""");
+            Assert.Equal(1, result.Filled);
+            Assert.False(state.Read("callerAskedForHuman")!.GetValue<bool>());
+            Assert.False(state.IsUnfilled("callerAskedForHuman"));
+        }
 
-        Assert.False(state.IsUnfilled("callerSaidGoodbye"));
-        Assert.False(state.Read("callerSaidGoodbye")!.GetValue<bool>());
-    }
+        [Fact]
+        public void UnfilledAndFilledFalse_AreDifferentStates()
+        {
+            (StateExtractor? extractor, StateDocument? state) = Build();
 
-    [Fact]
-    public void AMissingField_IsTreatedAsNull()
-    {
-        var (extractor, state) = Build();
-        state.TryWrite("machineModel", JsonValue.Create("F85"));
+            // Both read as false. Only one of them has an answer behind it.
+            Assert.True(state.IsUnfilled("callerSaidGoodbye"));
+            Assert.False(state.Read("callerSaidGoodbye")!.GetValue<bool>());
 
-        var result = extractor.Write(state, """{ "callerSaidGoodbye": true }""");
+            _ = extractor.Write(state, /*lang=json,strict*/ """{ "callerSaidGoodbye": false }""");
 
-        Assert.Equal(1, result.Filled);
-        Assert.Equal(2, result.LeftNull);
-        Assert.Equal("F85", state.Read("machineModel")!.GetValue<string>());
-    }
+            Assert.False(state.IsUnfilled("callerSaidGoodbye"));
+            Assert.False(state.Read("callerSaidGoodbye")!.GetValue<bool>());
+        }
 
-    [Fact]
-    public void AReplyThatDoesNotDeserialize_LeavesTheSlotsUnchanged()
-    {
-        var (extractor, state) = Build();
-        state.TryWrite("machineModel", JsonValue.Create("F80"));
+        [Fact]
+        public void AMissingField_IsTreatedAsNull()
+        {
+            (StateExtractor? extractor, StateDocument? state) = Build();
+            _ = state.TryWrite("machineModel", JsonValue.Create("F85"));
 
-        var result = extractor.Write(state, "I am sorry, I cannot do that.");
+            StateExtractionResult result = extractor.Write(state, /*lang=json,strict*/ """{ "callerSaidGoodbye": true }""");
 
-        // Section 8.7: the extractor has no retry, and a failed extraction never drops a conversation.
-        Assert.False(result.Deserialized);
-        Assert.NotNull(result.Failure);
-        Assert.Equal(0, result.Filled);
-        Assert.Equal("F80", state.Read("machineModel")!.GetValue<string>());
-    }
+            Assert.Equal(1, result.Filled);
+            Assert.Equal(2, result.LeftNull);
+            Assert.Equal("F85", state.Read("machineModel")!.GetValue<string>());
+        }
 
-    [Fact]
-    public void AnEmptyReply_LeavesTheSlotsUnchanged()
-    {
-        var (extractor, state) = Build();
+        [Fact]
+        public void AReplyThatDoesNotDeserialize_LeavesTheSlotsUnchanged()
+        {
+            (StateExtractor? extractor, StateDocument? state) = Build();
+            _ = state.TryWrite("machineModel", JsonValue.Create("F80"));
 
-        var result = extractor.Write(state, "");
+            StateExtractionResult result = extractor.Write(state, "I am sorry, I cannot do that.");
 
-        Assert.False(result.Deserialized);
-        Assert.True(state.IsUnfilled("machineModel"));
-    }
+            // Section 8.7: the extractor has no retry, and a failed extraction never drops a conversation.
+            Assert.False(result.Deserialized);
+            Assert.NotNull(result.Failure);
+            Assert.Equal(0, result.Filled);
+            Assert.Equal("F80", state.Read("machineModel")!.GetValue<string>());
+        }
 
-    [Fact]
-    public void AnAnswerThatDoesNotCoerce_IsRejectedAndTheSlotStays()
-    {
-        var (extractor, state) = Build();
+        [Fact]
+        public void AnEmptyReply_LeavesTheSlotsUnchanged()
+        {
+            (StateExtractor? extractor, StateDocument? state) = Build();
 
-        var result = extractor.Write(state, """{ "machineModel": [ "F85" ] }""");
+            StateExtractionResult result = extractor.Write(state, "");
 
-        Assert.Equal(1, result.Rejected);
-        Assert.True(state.IsUnfilled("machineModel"));
-    }
+            Assert.False(result.Deserialized);
+            Assert.True(state.IsUnfilled("machineModel"));
+        }
 
-    [Fact]
-    public async Task TheExtractor_MakesExactlyOneModelCall()
-    {
-        using ScriptedChatClient client = new("""{ "callerAskedForHuman": null, "callerSaidGoodbye": true, "machineModel": null }""");
-        StateExtractor extractor = new(Document, client);
-        StateDocument state = new(Document);
+        [Fact]
+        public void AnAnswerThatDoesNotCoerce_IsRejectedAndTheSlotStays()
+        {
+            (StateExtractor? extractor, StateDocument? state) = Build();
 
-        var result = await extractor.ExtractAsync(
-            state,
-            [new ChatMessage(ChatRole.User, "goodbye")],
-            TestContext.Current.CancellationToken);
+            StateExtractionResult result = extractor.Write(state, /*lang=json,strict*/ """{ "machineModel": [ "F85" ] }""");
 
-        // The extractor has no retry: one conversation, and one only.
-        Assert.Equal(1, client.Calls);
-        Assert.True(result.Deserialized);
-        Assert.True(state.Read("callerSaidGoodbye")!.GetValue<bool>());
-        Assert.True(state.IsUnfilled("machineModel"));
-    }
+            Assert.Equal(1, result.Rejected);
+            Assert.True(state.IsUnfilled("machineModel"));
+        }
 
-    [Fact]
-    public async Task TheExtractor_SendsTheNullableSchemaAsTheResponseFormat()
-    {
-        using RecordingChatClient client = new("""{ "callerSaidGoodbye": null }""");
-        StateExtractor extractor = new(Document, client);
+        [Fact]
+        public async Task TheExtractor_MakesExactlyOneModelCall()
+        {
+            using ScriptedChatClient client = new(/*lang=json,strict*/ """{ "callerAskedForHuman": null, "callerSaidGoodbye": true, "machineModel": null }""");
+            StateExtractor extractor = new(Document, client);
+            StateDocument state = new(Document);
 
-        await extractor.ExtractAsync(
-            new StateDocument(Document),
-            [new ChatMessage(ChatRole.User, "hello")],
-            TestContext.Current.CancellationToken);
+            StateExtractionResult result = await extractor.ExtractAsync(
+                state,
+                [new ChatMessage(ChatRole.User, "goodbye")],
+                TestContext.Current.CancellationToken);
 
-        var format = Assert.IsType<ChatResponseFormatJson>(client.LastOptions!.ResponseFormat);
-        Assert.Equal(StateExtractor.SchemaName, format.SchemaName);
-        Assert.Contains("null", format.Schema!.Value.GetRawText(), StringComparison.Ordinal);
-    }
+            // The extractor has no retry: one conversation, and one only.
+            Assert.Equal(1, client.Calls);
+            Assert.True(result.Deserialized);
+            Assert.True(state.Read("callerSaidGoodbye")!.GetValue<bool>());
+            Assert.True(state.IsUnfilled("machineModel"));
+        }
 
-    [Fact]
-    public void ADocumentWithNoExtractorSection_Throws()
-    {
-        var document = ConfigurationLoader.LoadYaml(CompileTableYaml);
-        using ScriptedChatClient client = new("{}");
+        [Fact]
+        public async Task TheExtractor_SendsTheNullableSchemaAsTheResponseFormat()
+        {
+            using RecordingChatClient client = new(/*lang=json,strict*/ """{ "callerSaidGoodbye": null }""");
+            StateExtractor extractor = new(Document, client);
 
-        Assert.Throws<InvalidOperationException>(() => new StateExtractor(document, client));
-    }
+            _ = await extractor.ExtractAsync(
+                new StateDocument(Document),
+                [new ChatMessage(ChatRole.User, "hello")],
+                TestContext.Current.CancellationToken);
 
-    private const string CompileTableYaml =
-        """
+            ChatResponseFormatJson format = Assert.IsType<ChatResponseFormatJson>(client.LastOptions!.ResponseFormat);
+            Assert.Equal(StateExtractor.SchemaName, format.SchemaName);
+            Assert.Contains("null", format.Schema!.Value.GetRawText(), StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void ADocumentWithNoExtractorSection_Throws()
+        {
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(CompileTableYaml);
+            using ScriptedChatClient client = new("{}");
+
+            _ = Assert.Throws<InvalidOperationException>(() => new StateExtractor(document, client));
+        }
+
+        private const string CompileTableYaml =
+            """
         apiVersion: agentcore/v1
         agents:
           items:
@@ -221,44 +221,46 @@ public sealed class StateExtractorTests
             agent: only
         """;
 
-    private static (StateExtractor Extractor, StateDocument State) Build()
-    {
-        var client = new ScriptedChatClient("{}");
-        return (new StateExtractor(Document, client), new StateDocument(Document));
-    }
-
-    private sealed class RecordingChatClient : IChatClient
-    {
-        private readonly string _reply;
-
-        public RecordingChatClient(string reply) => _reply = reply;
-
-        public ChatOptions? LastOptions { get; private set; }
-
-        public Task<ChatResponse> GetResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
+        private static (StateExtractor Extractor, StateDocument State) Build()
         {
-            LastOptions = options;
-            return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, _reply)));
+            ScriptedChatClient client = new("{}");
+            return (new StateExtractor(Document, client), new StateDocument(Document));
         }
 
-        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        private sealed class RecordingChatClient(string reply) : IChatClient
         {
-            LastOptions = options;
-            yield return new ChatResponseUpdate(ChatRole.Assistant, _reply);
-            await Task.CompletedTask.ConfigureAwait(false);
-        }
+            private readonly string _reply = reply;
 
-        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+            public ChatOptions? LastOptions { get; private set; }
 
-        public void Dispose()
-        {
-            // Nothing to release.
+            public Task<ChatResponse> GetResponseAsync(
+                IEnumerable<ChatMessage> messages,
+                ChatOptions? options = null,
+                CancellationToken cancellationToken = default)
+            {
+                LastOptions = options;
+                return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, _reply)));
+            }
+
+            public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+                IEnumerable<ChatMessage> messages,
+                ChatOptions? options = null,
+                [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+            {
+                LastOptions = options;
+                yield return new ChatResponseUpdate(ChatRole.Assistant, _reply);
+                await Task.CompletedTask.ConfigureAwait(false);
+            }
+
+            public object? GetService(Type serviceType, object? serviceKey = null)
+            {
+                return null;
+            }
+
+            public void Dispose()
+            {
+                // Nothing to release.
+            }
         }
     }
 }

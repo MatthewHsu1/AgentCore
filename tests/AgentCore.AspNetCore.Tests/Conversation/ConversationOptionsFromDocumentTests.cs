@@ -3,108 +3,111 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
 using Xunit;
 
-namespace AgentCore.AspNetCore.Tests.Conversation;
-
-/// <summary>
-/// The three socket limits come out of <c>providers.conversation</c>, and a bad one stops the start.
-/// </summary>
-/// <remarks>
-/// These replace the three map-time <c>ArgumentOutOfRangeException</c> facts that used to live in
-/// <c>TelnyxRelayEndpointTests</c>. The values no longer come from a C# caller, so the failure is a
-/// <see cref="ConfigurationLoadException"/> carrying the JSON pointer of the offending field rather
-/// than an exception naming a property: a reader needs the line of the document to fix. Spec §12.
-/// </remarks>
-public sealed class ConversationOptionsFromDocumentTests
+namespace AgentCore.AspNetCore.Tests.Conversation
 {
-    private static ConversationProviderConfiguration Entry(
-        int? idle = null, int? close = null, int? frame = null)
-        => new()
+    /// <summary>
+    /// The three socket limits come out of <c>providers.conversation</c>, and a bad one stops the start.
+    /// </summary>
+    /// <remarks>
+    /// These replace the three map-time <c>ArgumentOutOfRangeException</c> facts that used to live in
+    /// <c>TelnyxRelayEndpointTests</c>. The values no longer come from a C# caller, so the failure is a
+    /// <see cref="ConfigurationLoadException"/> carrying the JSON pointer of the offending field rather
+    /// than an exception naming a property: a reader needs the line of the document to fix. Spec §12.
+    /// </remarks>
+    public sealed class ConversationOptionsFromDocumentTests
+    {
+        private static ConversationProviderConfiguration Entry(
+            int? idle = null, int? close = null, int? frame = null)
         {
-            Kind = "telnyx-relay",
-            IdleTimeoutSeconds = idle,
-            CloseTimeoutSeconds = close,
-            MaxFrameBytes = frame,
-        };
+            return new()
+            {
+                Kind = "telnyx-relay",
+                IdleTimeoutSeconds = idle,
+                CloseTimeoutSeconds = close,
+                MaxFrameBytes = frame,
+            };
+        }
 
-    [Fact]
-    public void TheThreeKnobsReachTheOptions()
-    {
-        var options = TelnyxRelayConversationAdapter.BuildOptions(Entry(idle: 30, close: 5, frame: 4096));
+        [Fact]
+        public void TheThreeKnobsReachTheOptions()
+        {
+            TelnyxRelayOptions options = TelnyxRelayConversationAdapter.BuildOptions(Entry(idle: 30, close: 5, frame: 4096));
 
-        Assert.Equal(TimeSpan.FromSeconds(30), options.IdleTimeout);
-        Assert.Equal(TimeSpan.FromSeconds(5), options.CloseTimeout);
-        Assert.Equal(4096, options.MaxFrameBytes);
-    }
+            Assert.Equal(TimeSpan.FromSeconds(30), options.IdleTimeout);
+            Assert.Equal(TimeSpan.FromSeconds(5), options.CloseTimeout);
+            Assert.Equal(4096, options.MaxFrameBytes);
+        }
 
-    [Fact]
-    public void AnAbsentKnobKeepsTheShippedDefault()
-    {
-        var shipped = new TelnyxRelayOptions();
+        [Fact]
+        public void AnAbsentKnobKeepsTheShippedDefault()
+        {
+            TelnyxRelayOptions shipped = new();
 
-        var options = TelnyxRelayConversationAdapter.BuildOptions(Entry());
+            TelnyxRelayOptions options = TelnyxRelayConversationAdapter.BuildOptions(Entry());
 
-        Assert.Equal(shipped.IdleTimeout, options.IdleTimeout);
-        Assert.Equal(shipped.CloseTimeout, options.CloseTimeout);
-        Assert.Equal(shipped.MaxFrameBytes, options.MaxFrameBytes);
-    }
+            Assert.Equal(shipped.IdleTimeout, options.IdleTimeout);
+            Assert.Equal(shipped.CloseTimeout, options.CloseTimeout);
+            Assert.Equal(shipped.MaxFrameBytes, options.MaxFrameBytes);
+        }
 
-    [Fact]
-    public void MinusOneMeansInfinite()
-    {
-        var options = TelnyxRelayConversationAdapter.BuildOptions(Entry(idle: -1));
+        [Fact]
+        public void MinusOneMeansInfinite()
+        {
+            TelnyxRelayOptions options = TelnyxRelayConversationAdapter.BuildOptions(Entry(idle: -1));
 
-        Assert.Equal(Timeout.InfiniteTimeSpan, options.IdleTimeout);
-    }
+            Assert.Equal(Timeout.InfiniteTimeSpan, options.IdleTimeout);
+        }
 
-    [Fact]
-    public void MinusOneMeansInfiniteOnTheCloseTimeoutToo()
-    {
-        // The two timeouts read the same field of the same document block, and nothing but this
-        // pins that they read it the same way. A close timeout that quietly turned -1 into a
-        // negative TimeSpan would be refused by CancelAfter on the first teardown that used it.
-        var options = TelnyxRelayConversationAdapter.BuildOptions(Entry(close: -1));
+        [Fact]
+        public void MinusOneMeansInfiniteOnTheCloseTimeoutToo()
+        {
+            // The two timeouts read the same field of the same document block, and nothing but this
+            // pins that they read it the same way. A close timeout that quietly turned -1 into a
+            // negative TimeSpan would be refused by CancelAfter on the first teardown that used it.
+            TelnyxRelayOptions options = TelnyxRelayConversationAdapter.BuildOptions(Entry(close: -1));
 
-        Assert.Equal(Timeout.InfiniteTimeSpan, options.CloseTimeout);
-    }
+            Assert.Equal(Timeout.InfiniteTimeSpan, options.CloseTimeout);
+        }
 
-    [Fact]
-    public void ANegativeSecondsThatIsNotMinusOneFailsTheStartWithAPointer()
-    {
-        // -1 is the one negative the document is allowed to write, and it means never. Every other
-        // negative is a typo, and it must be caught here rather than handed to CancelAfter, which
-        // refuses any negative span but -1 milliseconds at the moment teardown needs it.
-        var failure = Assert.Throws<ConfigurationLoadException>(
-            () => TelnyxRelayConversationAdapter.BuildOptions(Entry(idle: -2)));
+        [Fact]
+        public void ANegativeSecondsThatIsNotMinusOneFailsTheStartWithAPointer()
+        {
+            // -1 is the one negative the document is allowed to write, and it means never. Every other
+            // negative is a typo, and it must be caught here rather than handed to CancelAfter, which
+            // refuses any negative span but -1 milliseconds at the moment teardown needs it.
+            ConfigurationLoadException failure = Assert.Throws<ConfigurationLoadException>(
+                () => TelnyxRelayConversationAdapter.BuildOptions(Entry(idle: -2)));
 
-        Assert.Equal("/providers/conversation/idleTimeoutSeconds", failure.Errors[0].Pointer);
-    }
+            Assert.Equal("/providers/conversation/idleTimeoutSeconds", failure.Errors[0].Pointer);
+        }
 
-    [Fact]
-    public void AZeroFrameCapFailsTheStartWithAPointer()
-    {
-        var failure = Assert.Throws<ConfigurationLoadException>(
-            () => TelnyxRelayConversationAdapter.BuildOptions(Entry(frame: 0)));
+        [Fact]
+        public void AZeroFrameCapFailsTheStartWithAPointer()
+        {
+            ConfigurationLoadException failure = Assert.Throws<ConfigurationLoadException>(
+                () => TelnyxRelayConversationAdapter.BuildOptions(Entry(frame: 0)));
 
-        Assert.Equal("/providers/conversation/maxFrameBytes", failure.Errors[0].Pointer);
-    }
+            Assert.Equal("/providers/conversation/maxFrameBytes", failure.Errors[0].Pointer);
+        }
 
-    [Fact]
-    public void ATimeoutPastTheTimerCeilingFailsTheStartWithAPointer()
-    {
-        var failure = Assert.Throws<ConfigurationLoadException>(
-            () => TelnyxRelayConversationAdapter.BuildOptions(Entry(idle: 5_000_000)));
+        [Fact]
+        public void ATimeoutPastTheTimerCeilingFailsTheStartWithAPointer()
+        {
+            ConfigurationLoadException failure = Assert.Throws<ConfigurationLoadException>(
+                () => TelnyxRelayConversationAdapter.BuildOptions(Entry(idle: 5_000_000)));
 
-        Assert.Equal("/providers/conversation/idleTimeoutSeconds", failure.Errors[0].Pointer);
-    }
+            Assert.Equal("/providers/conversation/idleTimeoutSeconds", failure.Errors[0].Pointer);
+        }
 
-    [Fact]
-    public void ACloseTimeoutPastTheTimerCeilingFailsTheStartWithItsOwnPointer()
-    {
-        // The pointer must name the field the document actually wrote. A shared checker that
-        // reported idleTimeoutSeconds for both would send a reader to the wrong line.
-        var failure = Assert.Throws<ConfigurationLoadException>(
-            () => TelnyxRelayConversationAdapter.BuildOptions(Entry(close: 5_000_000)));
+        [Fact]
+        public void ACloseTimeoutPastTheTimerCeilingFailsTheStartWithItsOwnPointer()
+        {
+            // The pointer must name the field the document actually wrote. A shared checker that
+            // reported idleTimeoutSeconds for both would send a reader to the wrong line.
+            ConfigurationLoadException failure = Assert.Throws<ConfigurationLoadException>(
+                () => TelnyxRelayConversationAdapter.BuildOptions(Entry(close: 5_000_000)));
 
-        Assert.Equal("/providers/conversation/closeTimeoutSeconds", failure.Errors[0].Pointer);
+            Assert.Equal("/providers/conversation/closeTimeoutSeconds", failure.Errors[0].Pointer);
+        }
     }
 }

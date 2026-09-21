@@ -1,209 +1,209 @@
-using AgentCore.TestSupport;
 using System.Net.WebSockets;
 using System.Text.Json;
 using AgentCore.AspNetCore.Tests.Fakes;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
-namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay;
-
-/// <summary>
-/// What the write loop does that no real socket lets a test watch.
-/// </summary>
-/// <remarks>
-/// Every test here drives <c>TelnyxRelayConnection.RunAsync</c> over <see cref="FakeWebSocket"/>.
-/// There is no Kestrel, no port, and no client socket. Everything else about the connection is the
-/// real thing, including the session factory and the store <c>AddAgentCore</c> registers.
-/// </remarks>
-public sealed class TelnyxRelayWriteLoopTests
+namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
 {
-    [Fact(Timeout = 30_000)]
-    public async Task AnItemParkedBetweenTheDequeueAndTheGate_NeverReachesTheSocket()
+    /// <summary>
+    /// What the write loop does that no real socket lets a test watch.
+    /// </summary>
+    /// <remarks>
+    /// Every test here drives <c>TelnyxRelayConnection.RunAsync</c> over <see cref="FakeWebSocket"/>.
+    /// There is no Kestrel, no port, and no client socket. Everything else about the connection is the
+    /// real thing, including the session factory and the store <c>AddAgentCore</c> registers.
+    /// </remarks>
+    public sealed class TelnyxRelayWriteLoopTests
     {
-        // This is the fix that closed an earlier Critical, and it is the one place a real socket
-        // cannot reach: the window between the write loop taking an item off the channel and the
-        // turn-id comparison in front of its one SendAsync call. HandleInterrupt's own drain cannot
-        // help here, because the item has already left the channel by the time the drain runs. Only
-        // the gate can stop it, so deleting the gate must turn this test red.
-        using BlockingChatClient reply = new("first second third");
-        EventObservedLoggerProvider interrupted = new("InterruptReceived");
-        await using var harness = await RelayConnectionHarness.StartAsync(
-            TelnyxRelayTurnTests.PolicyYaml,
-            reply,
-            logging => logging.AddProvider(interrupted));
-
-        using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
-        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(
-            deadline.Token, TestContext.Current.CancellationToken);
-
-        // Armed before the first frame, because the write loop reads State for the first time only
-        // once a turn has actually queued something.
-        harness.Socket.ParkNextStateRead();
-        harness.Socket.Queue(RelayFrames.Setup(conversationSessionId: "conversation-gate"));
-        harness.Socket.Queue(RelayFrames.Prompt("hi", last: true));
-
-        try
+        [Fact(Timeout = 30_000)]
+        public async Task AnItemParkedBetweenTheDequeueAndTheGate_NeverReachesTheSocket()
         {
-            try
-            {
-                await harness.Socket.Parked.WaitAsync(bounded.Token);
-            }
-            catch (OperationCanceledException) when (deadline.IsCancellationRequested)
-            {
-                Assert.Fail("the write loop never reached its first item within ten seconds.");
-            }
+            // This is the fix that closed an earlier Critical, and it is the one place a real socket
+            // cannot reach: the window between the write loop taking an item off the channel and the
+            // turn-id comparison in front of its one SendAsync call. HandleInterrupt's own drain cannot
+            // help here, because the item has already left the channel by the time the drain runs. Only
+            // the gate can stop it, so deleting the gate must turn this test red.
+            using BlockingChatClient reply = new("first second third");
+            EventObservedLoggerProvider interrupted = new("InterruptReceived");
+            await using RelayConnectionHarness harness = await RelayConnectionHarness.StartAsync(
+                TelnyxRelayTurnTests.PolicyYaml,
+                reply,
+                logging => logging.AddProvider(interrupted));
 
-            harness.Socket.Queue(RelayFrames.Interrupt("nothing played", durationMs: 0));
+            using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
+            using CancellationTokenSource bounded = CancellationTokenSource.CreateLinkedTokenSource(
+                deadline.Token, TestContext.Current.CancellationToken);
+
+            // Armed before the first frame, because the write loop reads State for the first time only
+            // once a turn has actually queued something.
+            harness.Socket.ParkNextStateRead();
+            harness.Socket.Queue(RelayFrames.Setup(conversationSessionId: "conversation-gate"));
+            harness.Socket.Queue(RelayFrames.Prompt("hi", last: true));
 
             try
             {
-                await interrupted.Observed.WaitAsync(bounded.Token);
+                try
+                {
+                    await harness.Socket.Parked.WaitAsync(bounded.Token);
+                }
+                catch (OperationCanceledException) when (deadline.IsCancellationRequested)
+                {
+                    Assert.Fail("the write loop never reached its first item within ten seconds.");
+                }
+
+                harness.Socket.Queue(RelayFrames.Interrupt("nothing played", durationMs: 0));
+
+                try
+                {
+                    await interrupted.Observed.WaitAsync(bounded.Token);
+                }
+                catch (OperationCanceledException) when (deadline.IsCancellationRequested)
+                {
+                    Assert.Fail("the connection never reported the barge-in within ten seconds.");
+                }
+            }
+            finally
+            {
+                // Both gates are released here, so a failed assertion above still lets the write loop
+                // and the model finish rather than stranding a thread for the rest of the run.
+                harness.Socket.ReleaseParkedState();
+                reply.Release();
+            }
+
+            harness.Socket.QueueClose();
+
+            try
+            {
+                await harness.Connection.WaitAsync(bounded.Token);
             }
             catch (OperationCanceledException) when (deadline.IsCancellationRequested)
             {
-                Assert.Fail("the connection never reported the barge-in within ten seconds.");
+                Assert.Fail("the connection never tore down within ten seconds.");
             }
-        }
-        finally
-        {
-            // Both gates are released here, so a failed assertion above still lets the write loop
-            // and the model finish rather than stranding a thread for the rest of the run.
-            harness.Socket.ReleaseParkedState();
-            reply.Release();
+
+            Assert.Empty(harness.Socket.Sent);
         }
 
-        harness.Socket.QueueClose();
-
-        try
+        [Fact(Timeout = 30_000)]
+        public async Task AHostThatStops_ClosesWithEndpointUnavailable()
         {
-            await harness.Connection.WaitAsync(bounded.Token);
-        }
-        catch (OperationCanceledException) when (deadline.IsCancellationRequested)
-        {
-            Assert.Fail("the connection never tore down within ten seconds.");
-        }
+            // A real socket aborts before this status can be observed on the wire, so the assertion is
+            // made on the arguments CloseOutputAsync was called with instead.
+            using FragmentingChatClient reply = new("hello");
+            await using RelayConnectionHarness harness = await RelayConnectionHarness.StartAsync(TelnyxRelayTurnTests.PolicyYaml, reply);
 
-        Assert.Empty(harness.Socket.Sent);
-    }
+            using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
+            using CancellationTokenSource bounded = CancellationTokenSource.CreateLinkedTokenSource(
+                deadline.Token, TestContext.Current.CancellationToken);
 
-    [Fact(Timeout = 30_000)]
-    public async Task AHostThatStops_ClosesWithEndpointUnavailable()
-    {
-        // A real socket aborts before this status can be observed on the wire, so the assertion is
-        // made on the arguments CloseOutputAsync was called with instead.
-        using FragmentingChatClient reply = new("hello");
-        await using var harness = await RelayConnectionHarness.StartAsync(TelnyxRelayTurnTests.PolicyYaml, reply);
+            harness.Socket.Queue(RelayFrames.Setup(conversationSessionId: "conversation-stopping"));
+            harness.StopApplication();
 
-        using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
-        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(
-            deadline.Token, TestContext.Current.CancellationToken);
-
-        harness.Socket.Queue(RelayFrames.Setup(conversationSessionId: "conversation-stopping"));
-        harness.StopApplication();
-
-        try
-        {
-            await harness.Connection.WaitAsync(bounded.Token);
-        }
-        catch (OperationCanceledException) when (deadline.IsCancellationRequested)
-        {
-            Assert.Fail("the connection never tore down after the host stopped, within ten seconds.");
-        }
-
-        var close = harness.Socket.CloseSent;
-        Assert.NotNull(close);
-        Assert.Equal(WebSocketCloseStatus.EndpointUnavailable, close!.Value.Status);
-    }
-
-    [Fact(Timeout = 30_000)]
-    public async Task AWriteLoopThatFaults_ClosesWithInternalServerError()
-    {
-        // Nothing on a healthy loopback socket makes a send throw, so the fault is injected here.
-        // The status is this endpoint's own report of its own defect, and a real conversation would see it.
-        using FragmentingChatClient reply = new("hello there caller");
-        await using var harness = await RelayConnectionHarness.StartAsync(TelnyxRelayTurnTests.PolicyYaml, reply);
-
-        using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
-        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(
-            deadline.Token, TestContext.Current.CancellationToken);
-
-        harness.Socket.FailEverySend(new InvalidOperationException("the send failed."));
-        harness.Socket.Queue(RelayFrames.Setup(conversationSessionId: "conversation-write-fault"));
-        harness.Socket.Queue(RelayFrames.Prompt("hi", last: true));
-
-        try
-        {
-            await harness.Connection.WaitAsync(bounded.Token);
-        }
-        catch (OperationCanceledException) when (deadline.IsCancellationRequested)
-        {
-            Assert.Fail("the connection never tore down after the write loop faulted, within ten seconds.");
-        }
-
-        var close = harness.Socket.CloseSent;
-        Assert.NotNull(close);
-        Assert.Equal(WebSocketCloseStatus.InternalServerError, close!.Value.Status);
-    }
-
-    [Fact(Timeout = 30_000)]
-    public async Task ManyFragmentsInOneTurn_EachArriveIntactWhenTheWriterIsReused()
-    {
-        // A guard, not a red-first test: the behaviour it pins already holds and must keep holding.
-        // The write loop serializes every frame through one buffer and one JSON writer it resets
-        // between frames, and the only defect that reuse could introduce is a frame carrying
-        // another frame's bytes — a leftover tail after a short frame, a truncation, or two
-        // documents in one message. Three spoken fragments in one turn is the smallest reply that
-        // would show any of the three, and the assertions below read each frame back as JSON rather
-        // than counting sends, so a corrupted frame fails here instead of passing as "four sends".
-        using FragmentingChatClient reply = new("alpha bravo charlie");
-        await using var harness = await RelayConnectionHarness.StartAsync(TelnyxRelayTurnTests.PolicyYaml, reply);
-
-        using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
-        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(
-            deadline.Token, TestContext.Current.CancellationToken);
-
-        harness.Socket.Queue(RelayFrames.Setup(conversationSessionId: "conversation-reused-writer"));
-        harness.Socket.Queue(RelayFrames.Prompt("hi", last: true));
-
-        try
-        {
-            // The reply closes on the empty last: true frame CompleteAsync queues, so waiting for a
-            // fourth send waits for the whole turn rather than timing it. Queueing the close before
-            // that frame arrived would cancel the turn mid-stream and cut the reply short.
-            while (harness.Socket.Sent.Count < 4)
+            try
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(10), bounded.Token);
+                await harness.Connection.WaitAsync(bounded.Token);
             }
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested)
+            {
+                Assert.Fail("the connection never tore down after the host stopped, within ten seconds.");
+            }
+
+            (WebSocketCloseStatus Status, string? Description)? close = harness.Socket.CloseSent;
+            _ = Assert.NotNull(close);
+            Assert.Equal(WebSocketCloseStatus.EndpointUnavailable, close!.Value.Status);
         }
-        catch (OperationCanceledException) when (deadline.IsCancellationRequested)
+
+        [Fact(Timeout = 30_000)]
+        public async Task AWriteLoopThatFaults_ClosesWithInternalServerError()
         {
-            Assert.Fail("the reply never reached its last frame within ten seconds.");
+            // Nothing on a healthy loopback socket makes a send throw, so the fault is injected here.
+            // The status is this endpoint's own report of its own defect, and a real conversation would see it.
+            using FragmentingChatClient reply = new("hello there caller");
+            await using RelayConnectionHarness harness = await RelayConnectionHarness.StartAsync(TelnyxRelayTurnTests.PolicyYaml, reply);
+
+            using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
+            using CancellationTokenSource bounded = CancellationTokenSource.CreateLinkedTokenSource(
+                deadline.Token, TestContext.Current.CancellationToken);
+
+            harness.Socket.FailEverySend(new InvalidOperationException("the send failed."));
+            harness.Socket.Queue(RelayFrames.Setup(conversationSessionId: "conversation-write-fault"));
+            harness.Socket.Queue(RelayFrames.Prompt("hi", last: true));
+
+            try
+            {
+                await harness.Connection.WaitAsync(bounded.Token);
+            }
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested)
+            {
+                Assert.Fail("the connection never tore down after the write loop faulted, within ten seconds.");
+            }
+
+            (WebSocketCloseStatus Status, string? Description)? close = harness.Socket.CloseSent;
+            _ = Assert.NotNull(close);
+            Assert.Equal(WebSocketCloseStatus.InternalServerError, close!.Value.Status);
         }
 
-        var sent = harness.Socket.Sent;
-        Assert.Equal(4, sent.Count);
-
-        List<string> tokens = [];
-        List<bool> lasts = [];
-
-        foreach (var frame in sent)
+        [Fact(Timeout = 30_000)]
+        public async Task ManyFragmentsInOneTurn_EachArriveIntactWhenTheWriterIsReused()
         {
-            // Parsed, never substring-matched. A buffer whose written count survived a reset would
-            // put a leftover tail after the document, which JsonDocument.Parse refuses outright,
-            // and a writer reset out of order would leave the document incomplete.
-            using var document = JsonDocument.Parse(frame);
-            var root = document.RootElement;
+            // A guard, not a red-first test: the behaviour it pins already holds and must keep holding.
+            // The write loop serializes every frame through one buffer and one JSON writer it resets
+            // between frames, and the only defect that reuse could introduce is a frame carrying
+            // another frame's bytes — a leftover tail after a short frame, a truncation, or two
+            // documents in one message. Three spoken fragments in one turn is the smallest reply that
+            // would show any of the three, and the assertions below read each frame back as JSON rather
+            // than counting sends, so a corrupted frame fails here instead of passing as "four sends".
+            using FragmentingChatClient reply = new("alpha bravo charlie");
+            await using RelayConnectionHarness harness = await RelayConnectionHarness.StartAsync(TelnyxRelayTurnTests.PolicyYaml, reply);
 
-            Assert.Equal("text", root.GetProperty("type").GetString());
-            tokens.Add(root.GetProperty("token").GetString()!);
-            lasts.Add(root.GetProperty("last").GetBoolean());
+            using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
+            using CancellationTokenSource bounded = CancellationTokenSource.CreateLinkedTokenSource(
+                deadline.Token, TestContext.Current.CancellationToken);
+
+            harness.Socket.Queue(RelayFrames.Setup(conversationSessionId: "conversation-reused-writer"));
+            harness.Socket.Queue(RelayFrames.Prompt("hi", last: true));
+
+            try
+            {
+                // The reply closes on the empty last: true frame CompleteAsync queues, so waiting for a
+                // fourth send waits for the whole turn rather than timing it. Queueing the close before
+                // that frame arrived would cancel the turn mid-stream and cut the reply short.
+                while (harness.Socket.Sent.Count < 4)
+                {
+                    await Task.Delay(TimeSpan.FromMilliseconds(10), bounded.Token);
+                }
+            }
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested)
+            {
+                Assert.Fail("the reply never reached its last frame within ten seconds.");
+            }
+
+            IReadOnlyList<string> sent = harness.Socket.Sent;
+            Assert.Equal(4, sent.Count);
+
+            List<string> tokens = [];
+            List<bool> lasts = [];
+
+            foreach (string frame in sent)
+            {
+                // Parsed, never substring-matched. A buffer whose written count survived a reset would
+                // put a leftover tail after the document, which JsonDocument.Parse refuses outright,
+                // and a writer reset out of order would leave the document incomplete.
+                using JsonDocument document = JsonDocument.Parse(frame);
+                JsonElement root = document.RootElement;
+
+                Assert.Equal("text", root.GetProperty("type").GetString());
+                tokens.Add(root.GetProperty("token").GetString()!);
+                lasts.Add(root.GetProperty("last").GetBoolean());
+            }
+
+            // Distinct tokens, in the order the model streamed them, then the empty closing frame.
+            string[] expectedTokens = ["alpha", " bravo", " charlie", string.Empty];
+            bool[] expectedLast = [false, false, false, true];
+
+            Assert.Equal(expectedTokens, tokens);
+            Assert.Equal(expectedLast, lasts);
         }
-
-        // Distinct tokens, in the order the model streamed them, then the empty closing frame.
-        string[] expectedTokens = ["alpha", " bravo", " charlie", string.Empty];
-        bool[] expectedLast = [false, false, false, true];
-
-        Assert.Equal(expectedTokens, tokens);
-        Assert.Equal(expectedLast, lasts);
     }
 }

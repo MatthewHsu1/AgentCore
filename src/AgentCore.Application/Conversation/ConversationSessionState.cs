@@ -2,59 +2,60 @@ using System.Collections.ObjectModel;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace AgentCore.Application.Conversation;
-
-/// <summary>Everything one conversation's session holds that has no other durable home.</summary>
-public sealed record ConversationSessionState
+namespace AgentCore.Application.Conversation
 {
-    /// <summary>The slots of a state whose writers filled none.</summary>
-    private static readonly IReadOnlyDictionary<string, JsonNode?> NoSlots =
-        ReadOnlyDictionary<string, JsonNode?>.Empty;
+    /// <summary>Everything one conversation's session holds that has no other durable home.</summary>
+    public sealed record ConversationSessionState
+    {
+        /// <summary>The slots of a state whose writers filled none.</summary>
+        private static readonly IReadOnlyDictionary<string, JsonNode?> NoSlots =
+            ReadOnlyDictionary<string, JsonNode?>.Empty;
 
-    /// <summary>The slots of a conversation whose knowledge probe asked about none.</summary>
-    private static readonly IReadOnlyDictionary<string, ConversationClarificationState> NoClarifications =
-        ReadOnlyDictionary<string, ConversationClarificationState>.Empty;
+        /// <summary>The slots of a conversation whose knowledge probe asked about none.</summary>
+        private static readonly IReadOnlyDictionary<string, ConversationClarificationState> NoClarifications =
+            ReadOnlyDictionary<string, ConversationClarificationState>.Empty;
 
-    /// <summary>The providers of a conversation whose document declares no harness switch.</summary>
-    private static readonly IReadOnlyDictionary<string, JsonElement> NoProviders =
-        ReadOnlyDictionary<string, JsonElement>.Empty;
+        /// <summary>The providers of a conversation whose document declares no harness switch.</summary>
+        private static readonly IReadOnlyDictionary<string, JsonElement> NoProviders =
+            ReadOnlyDictionary<string, JsonElement>.Empty;
 
-    /// <summary>The shape this version of the library writes.</summary>
-    public const int CurrentVersion = 1;
+        /// <summary>The shape this version of the library writes.</summary>
+        public const int CurrentVersion = 1;
 
-    /// <summary>Gets the shape this blob was written in.</summary>
-    public int Version { get; init; } = CurrentVersion;
+        /// <summary>Gets the shape this blob was written in.</summary>
+        public int Version { get; init; } = CurrentVersion;
 
-    /// <summary>Gets the index the conversation's next turn takes.</summary>
-    public int NextTurnIndex { get; init; }
+        /// <summary>Gets the index the conversation's next turn takes.</summary>
+        public int NextTurnIndex { get; init; }
 
-    /// <summary>Gets the stage the machine held. It is empty when the document declares no policy.</summary>
-    public string Stage { get; init; } = string.Empty;
+        /// <summary>Gets the stage the machine held. It is empty when the document declares no policy.</summary>
+        public string Stage { get; init; } = string.Empty;
 
-    /// <summary>Gets whether the machine had already reached a terminal stage.</summary>
-    public bool IsComplete { get; init; }
+        /// <summary>Gets whether the machine had already reached a terminal stage.</summary>
+        public bool IsComplete { get; init; }
 
-    /// <summary>Gets the declared slots a writer had filled, by name. An unfilled slot is absent.</summary>
-    public IReadOnlyDictionary<string, JsonNode?> Slots { get; init; } = NoSlots;
+        /// <summary>Gets the declared slots a writer had filled, by name. An unfilled slot is absent.</summary>
+        public IReadOnlyDictionary<string, JsonNode?> Slots { get; init; } = NoSlots;
 
-    /// <summary>
-    /// Gets what each slot's knowledge probe has spent of its ask budget, by slot name. A slot
-    /// nothing has asked about is absent.
-    /// </summary>
-    public IReadOnlyDictionary<string, ConversationClarificationState> Clarifications { get; init; } = NoClarifications;
+        /// <summary>
+        /// Gets what each slot's knowledge probe has spent of its ask budget, by slot name. A slot
+        /// nothing has asked about is absent.
+        /// </summary>
+        public IReadOnlyDictionary<string, ConversationClarificationState> Clarifications { get; init; } = NoClarifications;
 
-    /// <summary>
-    /// Gets the MAF provider state a harness switch (<c>todos:</c>, <c>mode:</c>, <c>memory:</c>,
-    /// <c>files:</c>, <c>background:</c>) held, keyed by that provider's state key. A document with
-    /// no harness switch holds none. Absent in an old blob, which restores its stage and slots as before.
-    /// </summary>
-    public IReadOnlyDictionary<string, JsonElement> Providers { get; init; } = NoProviders;
+        /// <summary>
+        /// Gets the MAF provider state a harness switch (<c>todos:</c>, <c>mode:</c>, <c>memory:</c>,
+        /// <c>files:</c>, <c>background:</c>) held, keyed by that provider's state key. A document with
+        /// no harness switch holds none. Absent in an old blob, which restores its stage and slots as before.
+        /// </summary>
+        public IReadOnlyDictionary<string, JsonElement> Providers { get; init; } = NoProviders;
 
-    /// <summary>
-    /// Gets the opaque workflow session of a graph row's conversation, carrying the harness providers'
-    /// checkpointed state across turns. Only a graph row whose document declares a harness switch
-    /// writes one; rows 1 and 2 keep provider state in <see cref="Providers"/>, and any other conversation
-    /// keeps neither. Absent in an old blob, which resumes with a fresh session.
-    /// </summary>
-    public JsonElement? WorkflowState { get; init; }
+        /// <summary>
+        /// Gets the opaque workflow session of a graph row's conversation, carrying the harness providers'
+        /// checkpointed state across turns. Only a graph row whose document declares a harness switch
+        /// writes one; rows 1 and 2 keep provider state in <see cref="Providers"/>, and any other conversation
+        /// keeps neither. Absent in an old blob, which resumes with a fresh session.
+        /// </summary>
+        public JsonElement? WorkflowState { get; init; }
+    }
 }

@@ -10,287 +10,290 @@ using AgentCore.Application.Tools.Registry;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Tools;
-
-/// <summary>
-/// The typed half of <c>kind: binding</c>: the host registers a method, and its signature is the
-/// argument schema the model reads.
-/// </summary>
-/// <remarks>
-/// The document writes <c>binds: CreateCase</c> and no <c>parameters:</c>. Everything the model
-/// needs to fill the conversation comes off the method, so the two can never drift apart.
-/// </remarks>
-public sealed class TypedBindingToolTests
+namespace AgentCore.Application.Tests.Tools
 {
-    private static readonly ToolConfiguration OpenCase = new()
-    {
-        Id = "open_case",
-        Kind = ToolKind.Binding,
-        Binds = "CreateCase",
-        Description = "Open a service case for a human agent.",
-    };
-
-    // ---------------------------------------------------------------------------------------------
-    // The registry.
-    // ---------------------------------------------------------------------------------------------
-    [Fact]
-    public void ATypedMethodAndAJsonDelegate_AreReadBackApart()
-    {
-        ToolBindingRegistry registry = new();
-        registry.Register("CreateCase", (string summary) => summary);
-        registry.Register("CloseCase", (_, _) => ValueTask.FromResult<object?>(null));
-
-        Assert.True(registry.TryGetMethod("CreateCase", out var method));
-        Assert.NotNull(method);
-        Assert.False(registry.TryGetBinding("CreateCase", out var absentBinding));
-        Assert.Null(absentBinding);
-
-        Assert.True(registry.TryGetBinding("CloseCase", out var binding));
-        Assert.NotNull(binding);
-        Assert.False(registry.TryGetMethod("CloseCase", out var absentMethod));
-        Assert.Null(absentMethod);
-    }
-
-    [Fact]
-    public void ATypedMethod_CountsAgainstTheSameNames()
-    {
-        ToolBindingRegistry registry = new();
-        registry.Register("CreateCase", (string summary) => summary);
-
-        Assert.Equal(1, registry.Count);
-        Assert.True(registry.Contains("CreateCase"));
-        Assert.Contains("CreateCase", registry.Names);
-    }
-
-    [Fact]
-    public void TheSameNameTypedThenJson_FailsAtStartup()
-    {
-        ToolBindingRegistry registry = new();
-        registry.Register("CreateCase", (string summary) => summary);
-
-        Assert.Throws<ArgumentException>(
-            () => registry.Register("CreateCase", (_, _) => ValueTask.FromResult<object?>(null)));
-    }
-
-    // ---------------------------------------------------------------------------------------------
-    // The schema the model reads.
-    // ---------------------------------------------------------------------------------------------
-    [Fact]
-    public async Task TheSchemaComesOffTheMethodSignature()
-    {
-        var tool = await CreateAsync(
-            ([Description("What the customer wants.")] string summary, int priority = 3) => $"{summary}/{priority}");
-
-        var properties = tool.JsonSchema.GetProperty("properties");
-        Assert.True(properties.TryGetProperty("summary", out var summaryProperty));
-        Assert.True(properties.TryGetProperty("priority", out _));
-        Assert.Equal("What the customer wants.", summaryProperty.GetProperty("description").GetString());
-    }
-
-    [Fact]
-    public async Task AParameterWithADefault_IsNotRequired()
-    {
-        var tool = await CreateAsync((string summary, int priority = 3) => $"{summary}/{priority}");
-
-        var required = tool.JsonSchema.GetProperty("required").EnumerateArray().Select(e => e.GetString()).ToList();
-
-        Assert.Contains("summary", required);
-        Assert.DoesNotContain("priority", required);
-    }
-
-    [Fact]
-    public async Task TheNameAndDescription_StillComeFromTheDocument()
-    {
-        var tool = await CreateAsync((string summary) => summary);
-
-        Assert.Equal("open_case", tool.Name);
-        Assert.Equal("Open a service case for a human agent.", tool.Description);
-    }
-
-    /// <summary>The model never sees the scope parameter: it names the running conversation, not an argument the model fills.</summary>
-    [Fact]
-    public async Task AToolCallScopeParameter_IsLeftOutOfTheSchema()
-    {
-        var tool = await CreateAsync((string reason, ToolCallScope scope, CancellationToken ct) => reason);
-
-        var properties = tool.JsonSchema.GetProperty("properties");
-        Assert.True(properties.TryGetProperty("reason", out _));
-        Assert.False(properties.TryGetProperty("scope", out _));
-        Assert.DoesNotContain("ConversationId", tool.JsonSchema.GetRawText(), StringComparison.Ordinal);
-    }
-
-    // ---------------------------------------------------------------------------------------------
-    // Calling.
-    // ---------------------------------------------------------------------------------------------
-    [Fact]
-    public async Task TheModelArgumentsReachTheMethodParameters()
-    {
-        string? seenSummary = null;
-        int seenPriority = 0;
-        var tool = await CreateAsync((string summary, int priority) =>
-        {
-            seenSummary = summary;
-            seenPriority = priority;
-            return "C-1";
-        });
-
-        var result = await tool.InvokeAsync(
-            new AIFunctionArguments { ["summary"] = "broken belt", ["priority"] = 1 },
-            TestContext.Current.CancellationToken);
-
-        Assert.Equal("broken belt", seenSummary);
-        Assert.Equal(1, seenPriority);
-        Assert.Equal("C-1", $"{result}");
-    }
-
-    /// <summary>Arguments arrive off the wire as <see cref="JsonElement"/>, not as CLR values.</summary>
-    [Fact]
-    public async Task ArgumentsThatArriveAsJsonElements_BindToo()
-    {
-        var tool = await CreateAsync((string summary, int priority) => $"{summary}/{priority}");
-        using var document = JsonDocument.Parse("""{"summary":"loose bolt","priority":7}""");
-
-        var result = await tool.InvokeAsync(
-            new AIFunctionArguments
-            {
-                ["summary"] = document.RootElement.GetProperty("summary"),
-                ["priority"] = document.RootElement.GetProperty("priority"),
-            },
-            TestContext.Current.CancellationToken);
-
-        Assert.Equal("loose bolt/7", $"{result}");
-    }
-
-    [Fact]
-    public async Task AnArgumentTheModelLeftOut_TakesTheMethodDefault()
-    {
-        var tool = await CreateAsync((string summary, int priority = 3) => $"{summary}/{priority}");
-
-        var result = await tool.InvokeAsync(
-            new AIFunctionArguments { ["summary"] = "no power" }, TestContext.Current.CancellationToken);
-
-        Assert.Equal("no power/3", $"{result}");
-    }
-
-    [Fact]
-    public async Task TheCancellationTokenReachesTheMethod()
-    {
-        var tool = await CreateAsync((string summary, CancellationToken cancellationToken) =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return summary;
-        });
-
-        using CancellationTokenSource cancelled = new();
-        await cancelled.CancelAsync();
-
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
-            await tool.InvokeAsync(new AIFunctionArguments { ["summary"] = "anything" }, cancelled.Token));
-    }
-
     /// <summary>
-    /// A binding declares a <see cref="ToolCallScope"/> parameter to read the conversation it runs in, but a
-    /// call to the tool with no turn open on this flow has no call to report.
+    /// The typed half of <c>kind: binding</c>: the host registers a method, and its signature is the
+    /// argument schema the model reads.
     /// </summary>
-    [Fact]
-    public async Task AToolCallScopeParameterWithNoTurnOpen_Throws()
+    /// <remarks>
+    /// The document writes <c>binds: CreateCase</c> and no <c>parameters:</c>. Everything the model
+    /// needs to fill the conversation comes off the method, so the two can never drift apart.
+    /// </remarks>
+    public sealed class TypedBindingToolTests
     {
-        var tool = await CreateAsync((string reason, ToolCallScope scope) => reason);
-
-        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await tool.InvokeAsync(
-                new AIFunctionArguments { ["reason"] = "the caller wants a person" },
-                TestContext.Current.CancellationToken));
-
-        Assert.Contains("ToolCallScope", thrown.Message, StringComparison.Ordinal);
-        Assert.Equal(ToolCallScopes.NoTurnMessage, thrown.Message);
-    }
-
-    /// <summary>A tool call carrying the turn in its arguments binds the scope off no flow at all.</summary>
-    [Fact]
-    public async Task AToolCallScopeParameterWithTheTurnFiled_BindsWithoutAFlow()
-    {
-        ToolCallScope? captured = null;
-        var tool = await CreateAsync((string reason, ToolCallScope scope) =>
+        private static readonly ToolConfiguration OpenCase = new()
         {
-            captured = scope;
-            return reason;
-        });
-
-        TurnInvocation turn = new()
-        {
-            ConversationId = "conversation-9",
-            TurnIndex = 4,
-            Stage = "handling",
-            Workspace = "ws",
+            Id = "open_case",
+            Kind = ToolKind.Binding,
+            Binds = "CreateCase",
+            Description = "Open a service case for a human agent.",
         };
 
-        var result = await tool.InvokeAsync(
-            turn.FileIn(new AIFunctionArguments { ["reason"] = "the caller wants a person" }),
-            TestContext.Current.CancellationToken);
-
-        Assert.Equal("the caller wants a person", $"{result}");
-        Assert.Equal("conversation-9", captured!.ConversationId);
-        Assert.Equal(4, captured.TurnIndex);
-        Assert.Equal("handling", captured.Stage);
-        Assert.Equal("ws", captured.Workspace);
-    }
-
-    /// <summary>The error policy of section 8.7 keys off <see cref="DeclaredTool"/>, not off the delegate.</summary>
-    [Fact]
-    public async Task ATypedBinding_IsStillADeclaredTool()
-    {
-        var tool = await CreateAsync((string summary) => summary);
-
-        Assert.IsType<DeclaredTool>(tool, exactMatch: false);
-    }
-
-    // ---------------------------------------------------------------------------------------------
-    // The boot rules.
-    // ---------------------------------------------------------------------------------------------
-    [Fact]
-    public async Task ATypedBindingThatAlsoDeclaresParameters_FailsTheBoot()
-    {
-        ToolBindingRegistry bindings = new();
-        bindings.Register("CreateCase", (string summary) => summary);
-
-        var declared = OpenCase with
+        // ---------------------------------------------------------------------------------------------
+        // The registry.
+        // ---------------------------------------------------------------------------------------------
+        [Fact]
+        public void ATypedMethodAndAJsonDelegate_AreReadBackApart()
         {
-            Parameters = JsonNode.Parse("""{"type":"object","properties":{"summary":{"type":"string"}}}"""),
-        };
+            ToolBindingRegistry registry = new();
+            _ = registry.Register("CreateCase", (string summary) => summary);
+            _ = registry.Register("CloseCase", (_, _) => ValueTask.FromResult<object?>(null));
 
-        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(async () =>
-            await new BindingToolSource(bindings).ProvideAsync(
-                ContextFor(declared), TestContext.Current.CancellationToken));
+            Assert.True(registry.TryGetMethod("CreateCase", out Delegate? method));
+            Assert.NotNull(method);
+            Assert.False(registry.TryGetBinding("CreateCase", out ToolBinding? absentBinding));
+            Assert.Null(absentBinding);
 
-        Assert.Contains("parameters:", failure.Message, StringComparison.Ordinal);
-        Assert.Contains("open_case", failure.Message, StringComparison.Ordinal);
-    }
+            Assert.True(registry.TryGetBinding("CloseCase", out ToolBinding? binding));
+            Assert.NotNull(binding);
+            Assert.False(registry.TryGetMethod("CloseCase", out Delegate? absentMethod));
+            Assert.Null(absentMethod);
+        }
 
-    [Fact]
-    public async Task ATypedBinding_BecomesOneRegistration()
-    {
-        ToolBindingRegistry bindings = new();
-        bindings.Register("CreateCase", (string summary) => summary);
+        [Fact]
+        public void ATypedMethod_CountsAgainstTheSameNames()
+        {
+            ToolBindingRegistry registry = new();
+            _ = registry.Register("CreateCase", (string summary) => summary);
 
-        var registrations = await new BindingToolSource(bindings).ProvideAsync(
-            ContextFor(OpenCase), TestContext.Current.CancellationToken);
+            Assert.Equal(1, registry.Count);
+            Assert.True(registry.Contains("CreateCase"));
+            Assert.Contains("CreateCase", registry.Names);
+        }
 
-        Assert.Equal("open_case", Assert.Single(registrations).Id);
-    }
+        [Fact]
+        public void TheSameNameTypedThenJson_FailsAtStartup()
+        {
+            ToolBindingRegistry registry = new();
+            _ = registry.Register("CreateCase", (string summary) => summary);
 
-    private static ToolSourceContext ContextFor(ToolConfiguration tool)
-        => new(new AgentCoreConfiguration { ApiVersion = "agentcore/v1", Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(), Tools = [tool] });
+            _ = Assert.Throws<ArgumentException>(
+                () => registry.Register("CreateCase", (_, _) => ValueTask.FromResult<object?>(null)));
+        }
 
-    /// <summary>Builds the tool the way the boot does: through the source, off the document.</summary>
-    private static async Task<AIFunction> CreateAsync(Delegate method)
-    {
-        ToolBindingRegistry bindings = new();
-        bindings.Register("CreateCase", method);
+        // ---------------------------------------------------------------------------------------------
+        // The schema the model reads.
+        // ---------------------------------------------------------------------------------------------
+        [Fact]
+        public async Task TheSchemaComesOffTheMethodSignature()
+        {
+            AIFunction tool = await CreateAsync(
+                ([Description("What the customer wants.")] string summary, int priority = 3) => $"{summary}/{priority}");
 
-        var registrations = await new BindingToolSource(bindings).ProvideAsync(
-            ContextFor(OpenCase), TestContext.Current.CancellationToken);
+            JsonElement properties = tool.JsonSchema.GetProperty("properties");
+            Assert.True(properties.TryGetProperty("summary", out JsonElement summaryProperty));
+            Assert.True(properties.TryGetProperty("priority", out _));
+            Assert.Equal("What the customer wants.", summaryProperty.GetProperty("description").GetString());
+        }
 
-        return Assert.IsType<AIFunction>(Assert.Single(registrations).Materialise(), exactMatch: false);
+        [Fact]
+        public async Task AParameterWithADefault_IsNotRequired()
+        {
+            AIFunction tool = await CreateAsync((string summary, int priority = 3) => $"{summary}/{priority}");
+
+            List<string?> required = [.. tool.JsonSchema.GetProperty("required").EnumerateArray().Select(e => e.GetString())];
+
+            Assert.Contains("summary", required);
+            Assert.DoesNotContain("priority", required);
+        }
+
+        [Fact]
+        public async Task TheNameAndDescription_StillComeFromTheDocument()
+        {
+            AIFunction tool = await CreateAsync((string summary) => summary);
+
+            Assert.Equal("open_case", tool.Name);
+            Assert.Equal("Open a service case for a human agent.", tool.Description);
+        }
+
+        /// <summary>The model never sees the scope parameter: it names the running conversation, not an argument the model fills.</summary>
+        [Fact]
+        public async Task AToolCallScopeParameter_IsLeftOutOfTheSchema()
+        {
+            AIFunction tool = await CreateAsync((string reason, ToolCallScope scope, CancellationToken ct) => reason);
+
+            JsonElement properties = tool.JsonSchema.GetProperty("properties");
+            Assert.True(properties.TryGetProperty("reason", out _));
+            Assert.False(properties.TryGetProperty("scope", out _));
+            Assert.DoesNotContain("ConversationId", tool.JsonSchema.GetRawText(), StringComparison.Ordinal);
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // Calling.
+        // ---------------------------------------------------------------------------------------------
+        [Fact]
+        public async Task TheModelArgumentsReachTheMethodParameters()
+        {
+            string? seenSummary = null;
+            int seenPriority = 0;
+            AIFunction tool = await CreateAsync((string summary, int priority) =>
+            {
+                seenSummary = summary;
+                seenPriority = priority;
+                return "C-1";
+            });
+
+            object? result = await tool.InvokeAsync(
+                new AIFunctionArguments { ["summary"] = "broken belt", ["priority"] = 1 },
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal("broken belt", seenSummary);
+            Assert.Equal(1, seenPriority);
+            Assert.Equal("C-1", $"{result}");
+        }
+
+        /// <summary>Arguments arrive off the wire as <see cref="JsonElement"/>, not as CLR values.</summary>
+        [Fact]
+        public async Task ArgumentsThatArriveAsJsonElements_BindToo()
+        {
+            AIFunction tool = await CreateAsync((string summary, int priority) => $"{summary}/{priority}");
+            using JsonDocument document = JsonDocument.Parse("""{"summary":"loose bolt","priority":7}""");
+
+            object? result = await tool.InvokeAsync(
+                new AIFunctionArguments
+                {
+                    ["summary"] = document.RootElement.GetProperty("summary"),
+                    ["priority"] = document.RootElement.GetProperty("priority"),
+                },
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal("loose bolt/7", $"{result}");
+        }
+
+        [Fact]
+        public async Task AnArgumentTheModelLeftOut_TakesTheMethodDefault()
+        {
+            AIFunction tool = await CreateAsync((string summary, int priority = 3) => $"{summary}/{priority}");
+
+            object? result = await tool.InvokeAsync(
+                new AIFunctionArguments { ["summary"] = "no power" }, TestContext.Current.CancellationToken);
+
+            Assert.Equal("no power/3", $"{result}");
+        }
+
+        [Fact]
+        public async Task TheCancellationTokenReachesTheMethod()
+        {
+            AIFunction tool = await CreateAsync((string summary, CancellationToken cancellationToken) =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return summary;
+            });
+
+            using CancellationTokenSource cancelled = new();
+            await cancelled.CancelAsync();
+
+            _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+                await tool.InvokeAsync(new AIFunctionArguments { ["summary"] = "anything" }, cancelled.Token));
+        }
+
+        /// <summary>
+        /// A binding declares a <see cref="ToolCallScope"/> parameter to read the conversation it runs in, but a
+        /// call to the tool with no turn open on this flow has no call to report.
+        /// </summary>
+        [Fact]
+        public async Task AToolCallScopeParameterWithNoTurnOpen_Throws()
+        {
+            AIFunction tool = await CreateAsync((string reason, ToolCallScope scope) => reason);
+
+            InvalidOperationException thrown = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+                await tool.InvokeAsync(
+                    new AIFunctionArguments { ["reason"] = "the caller wants a person" },
+                    TestContext.Current.CancellationToken));
+
+            Assert.Contains("ToolCallScope", thrown.Message, StringComparison.Ordinal);
+            Assert.Equal(ToolCallScopes.NoTurnMessage, thrown.Message);
+        }
+
+        /// <summary>A tool call carrying the turn in its arguments binds the scope off no flow at all.</summary>
+        [Fact]
+        public async Task AToolCallScopeParameterWithTheTurnFiled_BindsWithoutAFlow()
+        {
+            ToolCallScope? captured = null;
+            AIFunction tool = await CreateAsync((string reason, ToolCallScope scope) =>
+            {
+                captured = scope;
+                return reason;
+            });
+
+            TurnInvocation turn = new()
+            {
+                ConversationId = "conversation-9",
+                TurnIndex = 4,
+                Stage = "handling",
+                Workspace = "ws",
+            };
+
+            object? result = await tool.InvokeAsync(
+                turn.FileIn(new AIFunctionArguments { ["reason"] = "the caller wants a person" }),
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal("the caller wants a person", $"{result}");
+            Assert.Equal("conversation-9", captured!.ConversationId);
+            Assert.Equal(4, captured.TurnIndex);
+            Assert.Equal("handling", captured.Stage);
+            Assert.Equal("ws", captured.Workspace);
+        }
+
+        /// <summary>The error policy of section 8.7 keys off <see cref="DeclaredTool"/>, not off the delegate.</summary>
+        [Fact]
+        public async Task ATypedBinding_IsStillADeclaredTool()
+        {
+            AIFunction tool = await CreateAsync((string summary) => summary);
+
+            _ = Assert.IsType<DeclaredTool>(tool, exactMatch: false);
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // The boot rules.
+        // ---------------------------------------------------------------------------------------------
+        [Fact]
+        public async Task ATypedBindingThatAlsoDeclaresParameters_FailsTheBoot()
+        {
+            ToolBindingRegistry bindings = new();
+            _ = bindings.Register("CreateCase", (string summary) => summary);
+
+            ToolConfiguration declared = OpenCase with
+            {
+                Parameters = JsonNode.Parse("""{"type":"object","properties":{"summary":{"type":"string"}}}"""),
+            };
+
+            ConfigurationLoadException failure = await Assert.ThrowsAsync<ConfigurationLoadException>(async () =>
+                await new BindingToolSource(bindings).ProvideAsync(
+                    ContextFor(declared), TestContext.Current.CancellationToken));
+
+            Assert.Contains("parameters:", failure.Message, StringComparison.Ordinal);
+            Assert.Contains("open_case", failure.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task ATypedBinding_BecomesOneRegistration()
+        {
+            ToolBindingRegistry bindings = new();
+            _ = bindings.Register("CreateCase", (string summary) => summary);
+
+            IReadOnlyList<ToolRegistration> registrations = await new BindingToolSource(bindings).ProvideAsync(
+                ContextFor(OpenCase), TestContext.Current.CancellationToken);
+
+            Assert.Equal("open_case", Assert.Single(registrations).Id);
+        }
+
+        private static ToolSourceContext ContextFor(ToolConfiguration tool)
+        {
+            return new(new AgentCoreConfiguration { ApiVersion = "agentcore/v1", Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(), Tools = [tool] });
+        }
+
+        /// <summary>Builds the tool the way the boot does: through the source, off the document.</summary>
+        private static async Task<AIFunction> CreateAsync(Delegate method)
+        {
+            ToolBindingRegistry bindings = new();
+            _ = bindings.Register("CreateCase", method);
+
+            IReadOnlyList<ToolRegistration> registrations = await new BindingToolSource(bindings).ProvideAsync(
+                ContextFor(OpenCase), TestContext.Current.CancellationToken);
+
+            return Assert.IsType<AIFunction>(Assert.Single(registrations).Materialise(), exactMatch: false);
+        }
     }
 }

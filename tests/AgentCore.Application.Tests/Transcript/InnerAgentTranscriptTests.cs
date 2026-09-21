@@ -3,17 +3,18 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
+using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Transcript;
-
-/// <summary>
-/// Pins the isolation a <c>kind: agent</c> tool sells: the outer agent buys the inner agent's
-/// answer, never its working-out.
-/// </summary>
-public sealed class InnerAgentTranscriptTests
+namespace AgentCore.Application.Tests.Transcript
 {
-    private const string DelegatingYaml = """
+    /// <summary>
+    /// Pins the isolation a <c>kind: agent</c> tool sells: the outer agent buys the inner agent's
+    /// answer, never its working-out.
+    /// </summary>
+    public sealed class InnerAgentTranscriptTests
+    {
+        private const string DelegatingYaml = """
           apiVersion: agentcore/v1
           tools:
             - { id: call_helper, kind: agent, agent: helper, description: "ask the helper" }
@@ -31,37 +32,38 @@ public sealed class InnerAgentTranscriptTests
                     terminal: true
           """;
 
-      /// <summary>
-      /// The inner agent runs on a session of its own, which no <c>BeginConversation</c> ever named, so store 1
-      /// never sees its rounds. Keeping them would cost tokens on every later turn and would put the
-      /// inner agent's working-out into the audit record, which no consumer asked for.
-      /// </summary>
-      [Fact]
-      public async Task ADelegatingTurn_WritesTheOuterRoundsOnly()
-      {
-          RecordingConversationStore store = new();
-          using ToolCallingChatClient model = new("done");
-          var compiled = ConfigurationCompiler.CompileAll(
-              ConfigurationLoader.LoadYaml(DelegatingYaml),
-              new AgentCompilationContext(new FakeChatClientFactory(model)) { ConversationStore = store })["main"];
+        /// <summary>
+        /// The inner agent runs on a session of its own, which no <c>BeginConversation</c> ever named, so store 1
+        /// never sees its rounds. Keeping them would cost tokens on every later turn and would put the
+        /// inner agent's working-out into the audit record, which no consumer asked for.
+        /// </summary>
+        [Fact]
+        public async Task ADelegatingTurn_WritesTheOuterRoundsOnly()
+        {
+            RecordingConversationStore store = new();
+            using ToolCallingChatClient model = new("done");
+            CompiledAgent compiled = ConfigurationCompiler.CompileAll(
+                ConfigurationLoader.LoadYaml(DelegatingYaml),
+                new AgentCompilationContext(new FakeChatClientFactory(model)) { ConversationStore = store })["main"];
 
-          var session = new ConversationSessionFactory(
-              compiled, new GuardEvaluator(compiled.Configuration.Guards), extractor: null).Create();
+            ConversationSession session = new ConversationSessionFactory(
+                compiled, new GuardEvaluator(compiled.Configuration.Guards), extractor: null).Create();
 
-          await foreach (var _ in session.RunTurnStreamingAsync("hi", TestContext.Current.CancellationToken))
-          {
-          }
+            await foreach (ChatResponseUpdate _ in session.RunTurnStreamingAsync("hi", TestContext.Current.CancellationToken))
+            {
+            }
 
-          await session.FlushTranscriptAsync();
+            await session.FlushTranscriptAsync();
 
-          // Outer tool call, inner answer, outer reply. The old count was two: the inner run
-          // never reached its own model, so a kind: agent tool never heard its agent. Three is
-          // the delegation actually working — and the rows below still hold, so its working-out
-          // stays off store 1 all the same.
-          Assert.Equal(3, model.Calls);
-          Assert.Equal(
-              ["user", "assistant", "tool", "assistant"],
-              store.Rows.Select(row => row.Content.Role.Value));
-          Assert.All(store.Rows, row => Assert.Equal(session.ConversationId, row.ConversationId));
-      }
-  }
+            // Outer tool call, inner answer, outer reply. The old count was two: the inner run
+            // never reached its own model, so a kind: agent tool never heard its agent. Three is
+            // the delegation actually working — and the rows below still hold, so its working-out
+            // stays off store 1 all the same.
+            Assert.Equal(3, model.Calls);
+            Assert.Equal(
+                ["user", "assistant", "tool", "assistant"],
+                store.Rows.Select(row => row.Content.Role.Value));
+            Assert.All(store.Rows, row => Assert.Equal(session.ConversationId, row.ConversationId));
+        }
+    }
+}

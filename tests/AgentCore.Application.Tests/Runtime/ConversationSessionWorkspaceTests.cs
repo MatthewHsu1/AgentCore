@@ -10,20 +10,22 @@ using AgentCore.Application.Tools.Registry;
 using AgentCore.Domain.Audit;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Domain;
+using AgentCore.Application.Configuration.Schema;
 
-namespace AgentCore.Application.Tests.Runtime;
-
-/// <summary>
-/// The conversation workspace as a host sees it: bound (or not) through <see cref="ConversationSessionFactory"/>,
-/// deleted when the conversation ends, and visible to a bound tool through <see cref="ToolCallScope"/>.
-/// </summary>
-/// <remarks>
-/// Every test here runs offline. There is no network conversation and no API key anywhere in this file.
-/// </remarks>
-public sealed class ConversationSessionWorkspaceTests : IDisposable
+namespace AgentCore.Application.Tests.Runtime
 {
-    private const string SimpleYaml =
-        """
+    /// <summary>
+    /// The conversation workspace as a host sees it: bound (or not) through <see cref="ConversationSessionFactory"/>,
+    /// deleted when the conversation ends, and visible to a bound tool through <see cref="ToolCallScope"/>.
+    /// </summary>
+    /// <remarks>
+    /// Every test here runs offline. There is no network conversation and no API key anywhere in this file.
+    /// </remarks>
+    public sealed class ConversationSessionWorkspaceTests : IDisposable
+    {
+        private const string SimpleYaml =
+            """
         apiVersion: agentcore/v1
         agents:
           items:
@@ -33,8 +35,8 @@ public sealed class ConversationSessionWorkspaceTests : IDisposable
             agent: only
         """;
 
-    private const string TerminalYaml =
-        """
+        private const string TerminalYaml =
+            """
           apiVersion: agentcore/v1
           state:
             callerSaidGoodbye:
@@ -66,8 +68,8 @@ public sealed class ConversationSessionWorkspaceTests : IDisposable
                     terminal: true
           """;
 
-      private const string ScopeYaml =
-          """
+        private const string ScopeYaml =
+            """
         apiVersion: agentcore/v1
         tools:
           - { id: request_human, kind: binding, binds: RequestHuman, description: "Ask a human to take the conversation." }
@@ -79,129 +81,130 @@ public sealed class ConversationSessionWorkspaceTests : IDisposable
             agent: only
         """;
 
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "agentcore-ws-" + Guid.NewGuid().ToString("N"));
+        private readonly string _root = Path.Combine(Path.GetTempPath(), "agentcore-ws-" + Guid.NewGuid().ToString("N"));
 
-    public void Dispose()
-    {
-        if (Directory.Exists(_root))
+        public void Dispose()
         {
-            Directory.Delete(_root, recursive: true);
-        }
-    }
-
-    [Fact]
-    public void ARootBound_CreatesTheConversationsFolder()
-    {
-        using SequencedChatClient reply = new("hi there.");
-        var factory = Build(SimpleYaml, reply, fill: null, _root);
-
-        var session = factory.Create("conversation-1");
-
-        Assert.Equal(Path.Combine(_root, "conversation-1"), session.Workspace);
-        Assert.True(Directory.Exists(session.Workspace));
-    }
-
-    [Fact]
-    public void NoRootBound_LeavesWorkspaceNull_AndCreatesNothing()
-    {
-        using SequencedChatClient reply = new("hi there.");
-        var factory = Build(SimpleYaml, reply, fill: null, workspaceRoot: null);
-
-        var session = factory.Create("conversation-1");
-
-        Assert.Null(session.Workspace);
-        Assert.False(Directory.Exists(_root));
-    }
-
-    [Fact]
-    public void EndConversation_DeletesTheFolder_AndIsSafeToCallTwice()
-    {
-        using SequencedChatClient reply = new("hi there.");
-        var factory = Build(SimpleYaml, reply, fill: null, _root);
-        var session = factory.Create("conversation-1");
-        var path = session.Workspace!;
-
-        session.EndConversation(ConversationEndReason.CallerHungUp);
-
-        Assert.False(Directory.Exists(path));
-        Assert.False(session.EndConversation(ConversationEndReason.CallerHungUp));
-    }
-
-    [Fact]
-    public async Task ATurnThatReachesATerminalStage_AlsoDeletesTheFolder()
-    {
-        using SequencedChatClient reply = new("hello there.");
-        using SequencedChatClient fill = new("""{ "callerSaidGoodbye": true }""");
-        var factory = Build(TerminalYaml, reply, fill, _root);
-        var session = factory.Create("conversation-1");
-        var path = session.Workspace!;
-
-        var turn = await session.RunTurnAsync("goodbye", TestContext.Current.CancellationToken);
-
-        Assert.True(turn.IsTerminal);
-        Assert.True(session.IsComplete);
-        Assert.False(Directory.Exists(path));
-    }
-
-    [Fact]
-    public async Task ABoundTool_SeesTheRunningConversationsWorkspace()
-    {
-        List<ToolCallScope> captured = [];
-        ToolBindingRegistry bindings = new();
-        bindings.Register("RequestHuman", (string reason, ToolCallScope scope) => captured.Add(scope));
-
-        var document = ConfigurationLoader.LoadYaml(ScopeYaml);
-        var chatClients = new RoutingChatClientFactory(
-            new ToolCallingChatClient(
-                "connecting you now.",
-                new Dictionary<string, object?>(StringComparer.Ordinal) { ["reason"] = "the caller wants a person" }));
-        var compiled = ConfigurationCompiler.CompileAll(
-            document,
-            new AgentCompilationContext(chatClients)
+            if (Directory.Exists(_root))
             {
-                Tools = await ToolRegistryBuilder.BuildAsync(
-                    [new BindingToolSource(bindings)],
-                    new ToolSourceContext(document),
-                    TestContext.Current.CancellationToken),
-            })["main"];
-
-        var factory = new ConversationSessionFactory(
-            compiled,
-            new GuardEvaluator(compiled.Configuration.Guards),
-            workspaceRoot: _root);
-        var session = factory.Create("conversation-1");
-
-        await session.RunTurnAsync("I need a person", TestContext.Current.CancellationToken);
-
-        var scope = Assert.Single(captured);
-        Assert.Equal(session.Workspace, scope.Workspace);
-        Assert.NotNull(scope.Workspace);
-    }
-
-    private static ConversationSessionFactory Build(
-        string yaml,
-        IChatClient reply,
-        IChatClient? fill,
-        string? workspaceRoot)
-    {
-        var document = ConfigurationLoader.LoadYaml(yaml);
-        var chatClients = new RoutingChatClientFactory(reply);
-        if (fill is not null)
-        {
-            chatClients.Route("fill", fill);
+                Directory.Delete(_root, recursive: true);
+            }
         }
 
-        var compiled = ConfigurationCompiler.CompileAll(
-            document,
-            new AgentCompilationContext(chatClients)
-            {
-                Tools = TestToolRegistry.From(document, builder: null, TestContext.Current.CancellationToken),
-            })["main"];
+        [Fact]
+        public void ARootBound_CreatesTheConversationsFolder()
+        {
+            using SequencedChatClient reply = new("hi there.");
+            ConversationSessionFactory factory = Build(SimpleYaml, reply, fill: null, _root);
 
-        return new ConversationSessionFactory(
-            compiled,
-            new GuardEvaluator(compiled.Configuration.Guards),
-            ConversationSessionFactory.CreateExtractor(compiled, chatClients),
-            workspaceRoot: workspaceRoot);
+            ConversationSession session = factory.Create("conversation-1");
+
+            Assert.Equal(Path.Combine(_root, "conversation-1"), session.Workspace);
+            Assert.True(Directory.Exists(session.Workspace));
+        }
+
+        [Fact]
+        public void NoRootBound_LeavesWorkspaceNull_AndCreatesNothing()
+        {
+            using SequencedChatClient reply = new("hi there.");
+            ConversationSessionFactory factory = Build(SimpleYaml, reply, fill: null, workspaceRoot: null);
+
+            ConversationSession session = factory.Create("conversation-1");
+
+            Assert.Null(session.Workspace);
+            Assert.False(Directory.Exists(_root));
+        }
+
+        [Fact]
+        public void EndConversation_DeletesTheFolder_AndIsSafeToCallTwice()
+        {
+            using SequencedChatClient reply = new("hi there.");
+            ConversationSessionFactory factory = Build(SimpleYaml, reply, fill: null, _root);
+            ConversationSession session = factory.Create("conversation-1");
+            string path = session.Workspace!;
+
+            _ = session.EndConversation(ConversationEndReason.CallerHungUp);
+
+            Assert.False(Directory.Exists(path));
+            Assert.False(session.EndConversation(ConversationEndReason.CallerHungUp));
+        }
+
+        [Fact]
+        public async Task ATurnThatReachesATerminalStage_AlsoDeletesTheFolder()
+        {
+            using SequencedChatClient reply = new("hello there.");
+            using SequencedChatClient fill = new(/*lang=json,strict*/ """{ "callerSaidGoodbye": true }""");
+            ConversationSessionFactory factory = Build(TerminalYaml, reply, fill, _root);
+            ConversationSession session = factory.Create("conversation-1");
+            string path = session.Workspace!;
+
+            TurnResult turn = await session.RunTurnAsync("goodbye", TestContext.Current.CancellationToken);
+
+            Assert.True(turn.IsTerminal);
+            Assert.True(session.IsComplete);
+            Assert.False(Directory.Exists(path));
+        }
+
+        [Fact]
+        public async Task ABoundTool_SeesTheRunningConversationsWorkspace()
+        {
+            List<ToolCallScope> captured = [];
+            ToolBindingRegistry bindings = new();
+            _ = bindings.Register("RequestHuman", (string reason, ToolCallScope scope) => captured.Add(scope));
+
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(ScopeYaml);
+            RoutingChatClientFactory chatClients = new(
+                new ToolCallingChatClient(
+                    "connecting you now.",
+                    new Dictionary<string, object?>(StringComparer.Ordinal) { ["reason"] = "the caller wants a person" }));
+            CompiledAgent compiled = ConfigurationCompiler.CompileAll(
+                document,
+                new AgentCompilationContext(chatClients)
+                {
+                    Tools = await ToolRegistryBuilder.BuildAsync(
+                        [new BindingToolSource(bindings)],
+                        new ToolSourceContext(document),
+                        TestContext.Current.CancellationToken),
+                })["main"];
+
+            ConversationSessionFactory factory = new(
+                compiled,
+                new GuardEvaluator(compiled.Configuration.Guards),
+                workspaceRoot: _root);
+            ConversationSession session = factory.Create("conversation-1");
+
+            _ = await session.RunTurnAsync("I need a person", TestContext.Current.CancellationToken);
+
+            ToolCallScope scope = Assert.Single(captured);
+            Assert.Equal(session.Workspace, scope.Workspace);
+            Assert.NotNull(scope.Workspace);
+        }
+
+        private static ConversationSessionFactory Build(
+            string yaml,
+            IChatClient reply,
+            IChatClient? fill,
+            string? workspaceRoot)
+        {
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(yaml);
+            RoutingChatClientFactory chatClients = new(reply);
+            if (fill is not null)
+            {
+                _ = chatClients.Route("fill", fill);
+            }
+
+            CompiledAgent compiled = ConfigurationCompiler.CompileAll(
+                document,
+                new AgentCompilationContext(chatClients)
+                {
+                    Tools = TestToolRegistry.From(document, builder: null, TestContext.Current.CancellationToken),
+                })["main"];
+
+            return new ConversationSessionFactory(
+                compiled,
+                new GuardEvaluator(compiled.Configuration.Guards),
+                ConversationSessionFactory.CreateExtractor(compiled, chatClients),
+                workspaceRoot: workspaceRoot);
+        }
     }
 }

@@ -1,50 +1,53 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
+using AgentCore.Domain;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Hosting.OpenAI;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.AI;
 
-namespace AgentCore.AspNetCore.Endpoints;
-
-/// <summary>The whole-reply branch of the Responses path: one turn, one JSON answer.</summary>
-internal static class ResponsesTurnReply
+namespace AgentCore.AspNetCore.Endpoints
 {
-    /// <summary>Runs one turn and answers the whole reply, filed under its ids.</summary>
-    internal static async Task WriteAsync(HttpContext http, ResponsesTurn turn, CancellationToken cancellationToken)
+    /// <summary>The whole-reply branch of the Responses path: one turn, one JSON answer.</summary>
+    internal static class ResponsesTurnReply
     {
-        var result = await turn.Conversation
-            .RunTurnMessageAtOriginAsync(turn.Input, turn.Origin, cancellationToken)
-            .ConfigureAwait(false);
-
-        await turn.FileAsync(cancellationToken).ConfigureAwait(false);
-
-        var response = new AgentResponse(new ChatMessage(ChatRole.Assistant, result.ReplyText))
+        /// <summary>Runs one turn and answers the whole reply, filed under its ids.</summary>
+        internal static async Task WriteAsync(HttpContext http, ResponsesTurn turn, CancellationToken cancellationToken)
         {
-            AgentId = turn.Agent.Id,
-            ResponseId = turn.ResponseId,
-            CreatedAt = result.EndedAt,
-        };
+            TurnResult result = await turn.Conversation
+                .RunTurnMessageAtOriginAsync(turn.Input, turn.Origin, cancellationToken)
+                .ConfigureAwait(false);
 
-        var rendered = OpenAIResponses.WriteResponse(response, turn.ResponseId, turn.ConversationId);
+            await turn.FileAsync(cancellationToken).ConfigureAwait(false);
 
-        // The render is a closed JsonElement, so the turn facts go on as JSON: the object
-        // the framework wrote, with the metadata member replaced by ours beside its own.
+            AgentResponse response = new(new ChatMessage(ChatRole.Assistant, result.ReplyText))
+            {
+                AgentId = turn.Agent.Id,
+                ResponseId = turn.ResponseId,
+                CreatedAt = result.EndedAt,
+            };
 
-        var node = JsonNode.Parse(rendered.GetRawText())!.AsObject();
-        JsonObject metadata = node["metadata"]?.AsObject() ?? [];
+            JsonElement rendered = OpenAIResponses.WriteResponse(response, turn.ResponseId, turn.ConversationId);
 
-        foreach (var (name, value) in ResponsesAgentCore.TurnMetadata(turn.Conversation, result))
-        {
-            metadata[name] = value;
+            // The render is a closed JsonElement, so the turn facts go on as JSON: the object
+            // the framework wrote, with the metadata member replaced by ours beside its own.
+
+            JsonObject node = JsonNode.Parse(rendered.GetRawText())!.AsObject();
+            JsonObject metadata = node["metadata"]?.AsObject() ?? [];
+
+            foreach ((string? name, string? value) in ResponsesAgentCore.TurnMetadata(turn.Conversation, result))
+            {
+                metadata[name] = value;
+            }
+
+            node["metadata"] = metadata;
+
+            http.Response.StatusCode = StatusCodes.Status200OK;
+            http.Response.Headers[ResponsesEndpointRouteBuilderExtensions.StageHeaderName] = result.StageAfter;
+
+            await http.Response
+                .WriteAsJsonAsync(node, cancellationToken)
+                .ConfigureAwait(false);
         }
-
-        node["metadata"] = metadata;
-
-        http.Response.StatusCode = StatusCodes.Status200OK;
-        http.Response.Headers[ResponsesEndpointRouteBuilderExtensions.StageHeaderName] = result.StageAfter;
-
-        await http.Response
-            .WriteAsJsonAsync(node, cancellationToken)
-            .ConfigureAwait(false);
     }
 }
