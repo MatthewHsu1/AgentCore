@@ -2,70 +2,71 @@ using System.Diagnostics.CodeAnalysis;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
 
-namespace AgentCore.Infrastructure.Secrets;
-
-/// <summary>
-/// Asks each resolver in order, and takes the first hit.
-/// </summary>
-/// <remarks>
-/// <para>
-/// The host lists the links it wants and the order it wants them in. A link that does not hold the
-/// name answers <see langword="null"/>, so the next link reads. The first value wins, and no later
-/// link is asked. When no link holds the name, the chain answers <see langword="null"/> and
-/// <see cref="ResolvedSecrets.ResolveAsync"/> turns that into the one startup failure.
-/// </para>
-/// <para>
-/// The chain is open: a vault, a parameter store, or a test double joins by taking a place in the
-/// list. Nothing here fixes the number of links, and no link knows about any other.
-/// </para>
-/// <para>
-/// A typical order runs the most specific store first and the most general last. A host that mounts
-/// its credentials as files usually writes <c>[ FileSecretResolver, EnvironmentSecretResolver ]</c>,
-/// so an operator overrides one name by writing one file.
-/// </para>
-/// </remarks>
-public sealed class ChainedSecretResolver : ISecretResolverPort
+namespace AgentCore.Infrastructure.Secrets
 {
-    private readonly ISecretResolverPort[] _links;
-
-    /// <summary>Creates the chain.</summary>
-    /// <param name="links">The resolvers, in the order the chain asks them.</param>
-    [SuppressMessage(
-        "csharpsquid",
-        "S3236",
-        Justification = "The name identifies the validated constructor parameter, not the loop variable; it carries no caller information.")]
-    public ChainedSecretResolver(IEnumerable<ISecretResolverPort> links)
+    /// <summary>
+    /// Asks each resolver in order, and takes the first hit.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The host lists the links it wants and the order it wants them in. A link that does not hold the
+    /// name answers <see langword="null"/>, so the next link reads. The first value wins, and no later
+    /// link is asked. When no link holds the name, the chain answers <see langword="null"/> and
+    /// <see cref="ResolvedSecrets.ResolveAsync"/> turns that into the one startup failure.
+    /// </para>
+    /// <para>
+    /// The chain is open: a vault, a parameter store, or a test double joins by taking a place in the
+    /// list. Nothing here fixes the number of links, and no link knows about any other.
+    /// </para>
+    /// <para>
+    /// A typical order runs the most specific store first and the most general last. A host that mounts
+    /// its credentials as files usually writes <c>[ FileSecretResolver, EnvironmentSecretResolver ]</c>,
+    /// so an operator overrides one name by writing one file.
+    /// </para>
+    /// </remarks>
+    public sealed class ChainedSecretResolver : ISecretResolverPort
     {
-        ArgumentNullException.ThrowIfNull(links);
+        private readonly ISecretResolverPort[] _links;
 
-        _links = [.. links];
-        foreach (var link in _links)
+        /// <summary>Creates the chain.</summary>
+        /// <param name="links">The resolvers, in the order the chain asks them.</param>
+        [SuppressMessage(
+            "csharpsquid",
+            "S3236",
+            Justification = "The name identifies the validated constructor parameter, not the loop variable; it carries no caller information.")]
+        public ChainedSecretResolver(IEnumerable<ISecretResolverPort> links)
         {
-            ArgumentNullException.ThrowIfNull(link, nameof(links));
-        }
-    }
+            ArgumentNullException.ThrowIfNull(links);
 
-    /// <summary>Gets the number of links.</summary>
-    public int Count => _links.Length;
-
-    /// <summary>Reads the value of one secret from the first link that holds it.</summary>
-    /// <param name="name">The name the document wrote.</param>
-    /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The value, or <see langword="null"/> when no link holds the name.</returns>
-    public async ValueTask<string?> TryResolveAsync(string name, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(name);
-
-        foreach (var link in _links)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (await link.TryResolveAsync(name, cancellationToken).ConfigureAwait(false) is { } value)
+            _links = [.. links];
+            foreach (ISecretResolverPort link in _links)
             {
-                return value;
+                ArgumentNullException.ThrowIfNull(link, nameof(links));
             }
         }
 
-        return null;
+        /// <summary>Gets the number of links.</summary>
+        public int Count => _links.Length;
+
+        /// <summary>Reads the value of one secret from the first link that holds it.</summary>
+        /// <param name="name">The name the document wrote.</param>
+        /// <param name="cancellationToken">Cancels the read.</param>
+        /// <returns>The value, or <see langword="null"/> when no link holds the name.</returns>
+        public async ValueTask<string?> TryResolveAsync(string name, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(name);
+
+            foreach (ISecretResolverPort link in _links)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (await link.TryResolveAsync(name, cancellationToken).ConfigureAwait(false) is { } value)
+                {
+                    return value;
+                }
+            }
+
+            return null;
+        }
     }
 }

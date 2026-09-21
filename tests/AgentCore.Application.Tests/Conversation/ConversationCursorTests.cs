@@ -1,52 +1,53 @@
 using AgentCore.Application.Conversation;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Conversation;
-
-/// <summary>The opaque cursor a listing hands back and takes again.</summary>
-public sealed class ConversationCursorTests
+namespace AgentCore.Application.Tests.Conversation
 {
-    [Fact]
-    public void Encode_ThenDecode_ReturnsBothValues()
+    /// <summary>The opaque cursor a listing hands back and takes again.</summary>
+    public sealed class ConversationCursorTests
     {
-        // Arrange
-        DateTimeOffset sortAt = new(2026, 8, 30, 12, 34, 56, 789, TimeSpan.Zero);
+        [Fact]
+        public void Encode_ThenDecode_ReturnsBothValues()
+        {
+            // Arrange
+            DateTimeOffset sortAt = new(2026, 8, 30, 12, 34, 56, 789, TimeSpan.Zero);
 
-        // Act
-        var cursor = ConversationCursor.Encode(sortAt, "conversation-1");
-        var decoded = ConversationCursor.TryDecode(cursor, out var readAt, out var readId);
+            // Act
+            string cursor = ConversationCursor.Encode(sortAt, "conversation-1");
+            bool decoded = ConversationCursor.TryDecode(cursor, out DateTimeOffset readAt, out string? readId);
 
-        // Assert
-        Assert.True(decoded);
-        Assert.Equal(sortAt, readAt);
-        Assert.Equal("conversation-1", readId);
-    }
+            // Assert
+            Assert.True(decoded);
+            Assert.Equal(sortAt, readAt);
+            Assert.Equal("conversation-1", readId);
+        }
 
-    [Fact]
-    public void Encode_AConversationIdHoldingTheSeparator_RoundTripsWhole()
-    {
-        // Arrange
-        const string ConversationId = "conversation|with|pipes";
+        [Fact]
+        public void Encode_AConversationIdHoldingTheSeparator_RoundTripsWhole()
+        {
+            // Arrange
+            const string ConversationId = "conversation|with|pipes";
 
-        // Act
-        var cursor = ConversationCursor.Encode(DateTimeOffset.UnixEpoch, ConversationId);
-        ConversationCursor.TryDecode(cursor, out _, out var readId);
+            // Act
+            string cursor = ConversationCursor.Encode(DateTimeOffset.UnixEpoch, ConversationId);
+            _ = ConversationCursor.TryDecode(cursor, out _, out string? readId);
 
-        // Assert
-        Assert.Equal(ConversationId, readId);
-    }
+            // Assert
+            Assert.Equal(ConversationId, readId);
+        }
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("not-base64!")]
-    [InlineData("bm90LWEtY3Vyc29y")]
-    public void TryDecode_SomethingThatIsNotACursor_IsFalseAndNotAThrow(string? cursor)
-    {
-        // Act
-        var decoded = ConversationCursor.TryDecode(cursor, out _, out _);
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("not-base64!")]
+        [InlineData("bm90LWEtY3Vyc29y")]
+        public void TryDecode_SomethingThatIsNotACursor_IsFalseAndNotAThrow(string? cursor)
+        {
+            // Act
+            bool decoded = ConversationCursor.TryDecode(cursor, out _, out _);
 
-        // Assert
-        Assert.False(decoded);
+            // Assert
+            Assert.False(decoded);
+        }
     }
 }

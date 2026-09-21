@@ -3,45 +3,45 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Domain;
 
-namespace AgentCore.Application.Tests.Configuration.Compilation;
-
-/// <summary>
-/// Row 4 of the section 8.2 compile table, with a guarded edge.
-/// </summary>
-/// <remarks>
-/// <para>
-/// Two rules pull apart here. T44 makes the compiled agent a process singleton, so one graph serves
-/// every conversation and no code path compiles one for each conversation. A guarded edge reads the state of one
-/// conversation, and each conversation owns its own state document. The graph-state wrapper files the turn's
-/// snapshot on the run and a gate executor reads it back, so the compiled graph captures nothing
-/// per conversation and concurrent conversations never share it.
-/// </para>
-/// <para>
-/// Every test here runs offline. There is no network conversation and no API key in this file.
-/// </para>
-/// </remarks>
-public sealed class GuardedGraphEdgeTests
+namespace AgentCore.Application.Tests.Configuration.Compilation
 {
-    private const int FanOut = 26;
-
-    /// <summary>The text of the node a conversation reaches when the guard <c>wants_human</c> holds.</summary>
-    private const string EscalatedReply = "ESCALATED";
-
-    /// <summary>The text of the node a conversation reaches when the guard <c>stays_with_bot</c> holds.</summary>
-    private const string HandledReply = "HANDLED";
-
     /// <summary>
-    /// One start node and two guarded exits. Check 5 of section 8.5 proves the two guards exclusive
-    /// over the state domain, so exactly one edge fires for each conversation.
+    /// Row 4 of the section 8.2 compile table, with a guarded edge.
     /// </summary>
-    internal const string GuardedGraphYaml =
-        """
+    /// <remarks>
+    /// <para>
+    /// Two rules pull apart here. T44 makes the compiled agent a process singleton, so one graph serves
+    /// every conversation and no code path compiles one for each conversation. A guarded edge reads the state of one
+    /// conversation, and each conversation owns its own state document. The graph-state wrapper files the turn's
+    /// snapshot on the run and a gate executor reads it back, so the compiled graph captures nothing
+    /// per conversation and concurrent conversations never share it.
+    /// </para>
+    /// <para>
+    /// Every test here runs offline. There is no network conversation and no API key in this file.
+    /// </para>
+    /// </remarks>
+    public sealed class GuardedGraphEdgeTests
+    {
+        private const int FanOut = 26;
+
+        /// <summary>The text of the node a conversation reaches when the guard <c>wants_human</c> holds.</summary>
+        private const string EscalatedReply = "ESCALATED";
+
+        /// <summary>The text of the node a conversation reaches when the guard <c>stays_with_bot</c> holds.</summary>
+        private const string HandledReply = "HANDLED";
+
+        /// <summary>
+        /// One start node and two guarded exits. Check 5 of section 8.5 proves the two guards exclusive
+        /// over the state domain, so exactly one edge fires for each conversation.
+        /// </summary>
+        internal const string GuardedGraphYaml =
+            """
           apiVersion: agentcore/v1
           state:
             escalate: { type: boolean, writer: extractor, default: false }
@@ -74,254 +74,261 @@ public sealed class GuardedGraphEdgeTests
               - { kind: openai, model: gpt-4.1-mini, as: bot }
           """;
 
-      [Fact]
-      public void AGuardedEdge_PassesEveryOneOfTheEightChecks()
-      {
-          var document = ConfigurationLoader.LoadYaml(GuardedGraphYaml);
+        [Fact]
+        public void AGuardedEdge_PassesEveryOneOfTheEightChecks()
+        {
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(GuardedGraphYaml);
 
-          // The defect this file closes: the document was valid and then failed to compile. Check 5
-          // even proves the two guards exclusive, so the load has nothing left to object to.
-          var result = ConfigurationValidator.Evaluate(document);
+            // The defect this file closes: the document was valid and then failed to compile. Check 5
+            // even proves the two guards exclusive, so the load has nothing left to object to.
+            ConfigurationValidationResult result = ConfigurationValidator.Evaluate(document);
 
-          Assert.Empty(result.Errors);
-      }
+            Assert.Empty(result.Errors);
+        }
 
-      [Fact]
-      public async Task AGuardedEdge_CompilesAndTakesTheEdgeTheStateNames()
-      {
-          using Harness harness = new();
-          var session = harness.NewSession();
-          session.State.TryWrite("escalate", true);
+        [Fact]
+        public async Task AGuardedEdge_CompilesAndTakesTheEdgeTheStateNames()
+        {
+            using Harness harness = new();
+            ConversationSession session = harness.NewSession();
+            _ = session.State.TryWrite("escalate", true);
 
-          var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
+            TurnResult turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
 
-          Assert.Contains(EscalatedReply, turn.ReplyText, StringComparison.Ordinal);
-          Assert.DoesNotContain(HandledReply, turn.ReplyText, StringComparison.Ordinal);
-      }
+            Assert.Contains(EscalatedReply, turn.ReplyText, StringComparison.Ordinal);
+            Assert.DoesNotContain(HandledReply, turn.ReplyText, StringComparison.Ordinal);
+        }
 
-      [Fact]
-      public async Task AGuardedEdge_TakesTheOtherEdgeWhenTheStateSaysSo()
-      {
-          using Harness harness = new();
-          var session = harness.NewSession();
-          session.State.TryWrite("escalate", false);
+        [Fact]
+        public async Task AGuardedEdge_TakesTheOtherEdgeWhenTheStateSaysSo()
+        {
+            using Harness harness = new();
+            ConversationSession session = harness.NewSession();
+            _ = session.State.TryWrite("escalate", false);
 
-          var turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
+            TurnResult turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
 
-          Assert.Contains(HandledReply, turn.ReplyText, StringComparison.Ordinal);
-          Assert.DoesNotContain(EscalatedReply, turn.ReplyText, StringComparison.Ordinal);
-      }
+            Assert.Contains(HandledReply, turn.ReplyText, StringComparison.Ordinal);
+            Assert.DoesNotContain(EscalatedReply, turn.ReplyText, StringComparison.Ordinal);
+        }
 
-      [Fact]
-      public async Task AGuardedEdge_TakesTheEdgeTheStateNamesWhileStreaming()
-      {
-          using Harness harness = new();
-          var session = harness.NewSession();
-          session.State.TryWrite("escalate", true);
+        [Fact]
+        public async Task AGuardedEdge_TakesTheEdgeTheStateNamesWhileStreaming()
+        {
+            using Harness harness = new();
+            ConversationSession session = harness.NewSession();
+            _ = session.State.TryWrite("escalate", true);
 
-          List<string> text = [];
-          await foreach (var update in session.RunTurnStreamingAsync(
-              "hello", TestContext.Current.CancellationToken))
-          {
-              text.Add(update.Text);
-          }
-
-          // The turn's snapshot rides the run's own messages, so the streaming path needs no
-          // per-step scope to route: the gate reads what the entry filed before the first model call.
-          Assert.Contains(EscalatedReply, string.Concat(text), StringComparison.Ordinal);
-          Assert.DoesNotContain(HandledReply, string.Concat(text), StringComparison.Ordinal);
-      }
-
-      [Fact]
-      public async Task Rule16_TwentySixSimultaneousConversations_EachTakeTheirOwnEdgeThroughOneCompiledGraph()
-      {
-          using Harness harness = new();
-          var token = TestContext.Current.CancellationToken;
-          using Barrier gate = new(FanOut);
-
-          var conversations = Enumerable.Range(0, FanOut).Select(index => Task.Run(
-              async () =>
-              {
-                  var escalate = index % 2 == 0;
-                  var session = harness.NewSession();
-                  session.State.TryWrite("escalate", escalate);
-
-                  // Nothing starts until all 26 are ready, so the fan-out is really simultaneous.
-                  gate.SignalAndWait(token);
-
-                  var turn = await session.RunTurnAsync($"conversation {index}", token).ConfigureAwait(false);
-                  return (Escalate: escalate, turn.ReplyText);
-              },
-              token));
-
-          var results = await Task.WhenAll(conversations);
-
-          // Rule 16: one compiled agent, and no code path compiles one for each conversation.
-          Assert.Equal(1, harness.CompileCount);
-
-          // No conversation read the state of another one. Thirteen went each way, and none went both.
-          Assert.All(results, result => Assert.Contains(
-              result.Escalate ? EscalatedReply : HandledReply, result.ReplyText, StringComparison.Ordinal));
-          Assert.All(results, result => Assert.DoesNotContain(
-              result.Escalate ? HandledReply : EscalatedReply, result.ReplyText, StringComparison.Ordinal));
-          Assert.Equal(FanOut / 2, results.Count(result => result.Escalate));
-      }
-
-      [Fact]
-      public async Task AGuardedEdgeWithNoFiledState_FailsLoudlyAndNeverAnswersFalse()
-      {
-          using Harness harness = new();
-
-          // The run goes straight at the shared graph, with no turn filed on it anywhere. A guarded
-          // edge that quietly became unconditional is the silent graph failure section 8.2 refuses
-          // to ship, so the wrapper throws instead.
-          var failure = await Record.ExceptionAsync(() => harness.Compiled.Agent.RunAsync(
-              "hello", cancellationToken: TestContext.Current.CancellationToken));
-
-          Assert.NotNull(failure);
-          Assert.Contains(GraphGuardGate.NoStateMessage, Flatten(failure), StringComparison.Ordinal);
-      }
-
-      [Fact]
-      public void AGuardedGraph_KeepsTheNameOfTheDocument()
-      {
-          using Harness harness = new();
-
-          // The check that makes a missing state source loud sits in front of the graph, and it must
-          // not change what the graph is. The entry key names the compiled agent.
-          Assert.Equal("main", harness.Compiled.Agent.Name);
-          Assert.Equal(CompiledAgentShape.ExplicitGraph, harness.Compiled.Shape);
-      }
-
-      [Fact]
-      public async Task Rule13_AGuardedGraph_YieldsItsFirstDeltaBeforeTheModelFinishes()
-      {
-          using Harness harness = new(holdEscalatedReply: true);
-          var session = harness.NewSession();
-          session.State.TryWrite("escalate", true);
-
-          using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(30));
-          using var linked = CancellationTokenSource.CreateLinkedTokenSource(
-              timeout.Token, TestContext.Current.CancellationToken);
-
-          string? first = null;
-          await foreach (var update in session.RunTurnStreamingAsync("hello", linked.Token))
-          {
-              if (update.Text is not { Length: > 0 } text)
-              {
-                  continue;
-              }
-
-              first = text;
-
-              // The reply reached us, so let the model finish. The order proves the seam still streams
-              // with the guard check in front of it.
-              harness.ReleaseEscalatedReply();
-              break;
-          }
-
-          harness.ReleaseEscalatedReply();
-
-          // The delta arrives before the run finishes, which is what rule 13 asks. It is the OUTPUT
-          // node's word and not the start node's: the caller hears the answer, never the graph
-          // deliberating its way to one, on the streaming path exactly as on the buffered one.
-          Assert.Equal("ESCALATED", first);
-      }
-
-      [Fact]
-      public void AGuardedEdgeWithNoEvaluator_IsALoadTimeErrorThatNamesTheMissingSeam()
-      {
-          var document = ConfigurationLoader.LoadYaml(GuardedGraphYaml);
-          using ScriptedChatClient client = new("ok");
-          AgentCompilationContext context = new(new FakeChatClientFactory(client));
-
-          var failure = Assert.Throws<ConfigurationLoadException>(
-              () => ConfigurationCompiler.CompileAll(document, context)["main"]);
-
-          Assert.Equal("/entries/main/graph/edges/0/when", failure.Pointer);
-          Assert.Contains("binds no guard evaluator", failure.Message, StringComparison.Ordinal);
-      }
-
-      /// <summary>Reads one fault and every fault it wraps, as one string.</summary>
-      /// <param name="exception">The fault the run reported.</param>
-      /// <returns>Every message in the chain, joined.</returns>
-      private static string Flatten(Exception exception)
-      {
-          List<string> messages = [];
-          for (Exception? current = exception; current is not null; current = current.InnerException)
-          {
-              messages.Add(current.Message);
-              if (current is AggregateException aggregate)
-              {
-                  messages.AddRange(aggregate.InnerExceptions.Select(Flatten));
-              }
-          }
-
-          return string.Join(" | ", messages);
-      }
-
-      /// <summary>
-      /// One compiled graph, wired the way the composition root wires it.
-      /// </summary>
-      /// <remarks>
-      /// The seam is the one <c>AddAgentCore</c> bind: the shared guard evaluator. Nothing per conversation
-      /// is captured: the turn's snapshot rides each run.
-      /// </remarks>
-      private sealed class Harness : IDisposable
-      {
-          private readonly ScriptedChatClient _router = new("ROUTED");
-          private readonly ScriptedChatClient _human;
-          private readonly ScriptedChatClient _bot = new(HandledReply);
-          private readonly CompiledAgentRegistry _registry = new();
-          private readonly ConversationSessionFactory _sessions;
-
-          /// <summary>Compiles the guarded graph once, over three offline models.</summary>
-          /// <param name="holdEscalatedReply">
-          /// Whether the escalated node holds every fragment after the first. A test that asks for this
-          /// proves the reply reaches the caller before the model finishes.
-          /// </param>
-          public Harness(bool holdEscalatedReply = false)
-          {
-              _human = new ScriptedChatClient(EscalatedReply, " and", " more.")
-              {
-                  GateAfterFirstFragment = holdEscalatedReply,
-              };
-
-              var document = ConfigurationLoader.LoadYaml(GuardedGraphYaml);
-              GuardEvaluator guards = new(document.Guards);
-
-              RoutingChatClientFactory models = new();
-              models.Route("router", _router);
-              models.Route("human", _human);
-              models.Route("bot", _bot);
-
-            Compiled = _registry.GetOrCompile(document, "main", new AgentCompilationContext(models)
+            List<string> text = [];
+            await foreach (ChatResponseUpdate update in session.RunTurnStreamingAsync(
+                "hello", TestContext.Current.CancellationToken))
             {
-                Guards = guards,
-            });
+                text.Add(update.Text);
+            }
 
-              _sessions = new ConversationSessionFactory(Compiled, guards);
-          }
+            // The turn's snapshot rides the run's own messages, so the streaming path needs no
+            // per-step scope to route: the gate reads what the entry filed before the first model call.
+            Assert.Contains(EscalatedReply, string.Concat(text), StringComparison.Ordinal);
+            Assert.DoesNotContain(HandledReply, string.Concat(text), StringComparison.Ordinal);
+        }
 
-          /// <summary>Gets the one compiled agent every conversation shares.</summary>
-          public CompiledAgent Compiled { get; }
+        [Fact]
+        public async Task Rule16_TwentySixSimultaneousConversations_EachTakeTheirOwnEdgeThroughOneCompiledGraph()
+        {
+            using Harness harness = new();
+            CancellationToken token = TestContext.Current.CancellationToken;
+            using Barrier gate = new(FanOut);
 
-          /// <summary>Gets how many times the registry ran the compile table.</summary>
-          public int CompileCount => _registry.CompileCount;
+            IEnumerable<Task<(bool Escalate, string ReplyText)>> conversations = Enumerable.Range(0, FanOut).Select(index => Task.Run(
+                async () =>
+                {
+                    bool escalate = index % 2 == 0;
+                    ConversationSession session = harness.NewSession();
+                    _ = session.State.TryWrite("escalate", escalate);
 
-          /// <summary>Builds the session of one more conversation.</summary>
-          /// <returns>The session.</returns>
-          public ConversationSession NewSession() => _sessions.Create();
+                    // Nothing starts until all 26 are ready, so the fan-out is really simultaneous.
+                    gate.SignalAndWait(token);
 
-          /// <summary>Lets the rest of the escalated reply flow.</summary>
-          public void ReleaseEscalatedReply() => _human.OpenGate();
+                    TurnResult turn = await session.RunTurnAsync($"conversation {index}", token).ConfigureAwait(false);
+                    return (Escalate: escalate, turn.ReplyText);
+                },
+                token));
 
-          public void Dispose()
-          {
-              _router.Dispose();
-              _human.Dispose();
-              _bot.Dispose();
-          }
-      }
+            (bool Escalate, string ReplyText)[] results = await Task.WhenAll(conversations);
 
-  }
+            // Rule 16: one compiled agent, and no code path compiles one for each conversation.
+            Assert.Equal(1, harness.CompileCount);
+
+            // No conversation read the state of another one. Thirteen went each way, and none went both.
+            Assert.All(results, result => Assert.Contains(
+                result.Escalate ? EscalatedReply : HandledReply, result.ReplyText, StringComparison.Ordinal));
+            Assert.All(results, result => Assert.DoesNotContain(
+                result.Escalate ? HandledReply : EscalatedReply, result.ReplyText, StringComparison.Ordinal));
+            Assert.Equal(FanOut / 2, results.Count(result => result.Escalate));
+        }
+
+        [Fact]
+        public async Task AGuardedEdgeWithNoFiledState_FailsLoudlyAndNeverAnswersFalse()
+        {
+            using Harness harness = new();
+
+            // The run goes straight at the shared graph, with no turn filed on it anywhere. A guarded
+            // edge that quietly became unconditional is the silent graph failure section 8.2 refuses
+            // to ship, so the wrapper throws instead.
+            Exception? failure = await Record.ExceptionAsync(() => harness.Compiled.Agent.RunAsync(
+                "hello", cancellationToken: TestContext.Current.CancellationToken));
+
+            Assert.NotNull(failure);
+            Assert.Contains(GraphGuardGate.NoStateMessage, Flatten(failure), StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void AGuardedGraph_KeepsTheNameOfTheDocument()
+        {
+            using Harness harness = new();
+
+            // The check that makes a missing state source loud sits in front of the graph, and it must
+            // not change what the graph is. The entry key names the compiled agent.
+            Assert.Equal("main", harness.Compiled.Agent.Name);
+            Assert.Equal(CompiledAgentShape.ExplicitGraph, harness.Compiled.Shape);
+        }
+
+        [Fact]
+        public async Task Rule13_AGuardedGraph_YieldsItsFirstDeltaBeforeTheModelFinishes()
+        {
+            using Harness harness = new(holdEscalatedReply: true);
+            ConversationSession session = harness.NewSession();
+            _ = session.State.TryWrite("escalate", true);
+
+            using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(30));
+            using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(
+                timeout.Token, TestContext.Current.CancellationToken);
+
+            string? first = null;
+            await foreach (ChatResponseUpdate update in session.RunTurnStreamingAsync("hello", linked.Token))
+            {
+                if (update.Text is not { Length: > 0 } text)
+                {
+                    continue;
+                }
+
+                first = text;
+
+                // The reply reached us, so let the model finish. The order proves the seam still streams
+                // with the guard check in front of it.
+                harness.ReleaseEscalatedReply();
+                break;
+            }
+
+            harness.ReleaseEscalatedReply();
+
+            // The delta arrives before the run finishes, which is what rule 13 asks. It is the OUTPUT
+            // node's word and not the start node's: the caller hears the answer, never the graph
+            // deliberating its way to one, on the streaming path exactly as on the buffered one.
+            Assert.Equal("ESCALATED", first);
+        }
+
+        [Fact]
+        public void AGuardedEdgeWithNoEvaluator_IsALoadTimeErrorThatNamesTheMissingSeam()
+        {
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(GuardedGraphYaml);
+            using ScriptedChatClient client = new("ok");
+            AgentCompilationContext context = new(new FakeChatClientFactory(client));
+
+            ConfigurationLoadException failure = Assert.Throws<ConfigurationLoadException>(
+                () => ConfigurationCompiler.CompileAll(document, context)["main"]);
+
+            Assert.Equal("/entries/main/graph/edges/0/when", failure.Pointer);
+            Assert.Contains("binds no guard evaluator", failure.Message, StringComparison.Ordinal);
+        }
+
+        /// <summary>Reads one fault and every fault it wraps, as one string.</summary>
+        /// <param name="exception">The fault the run reported.</param>
+        /// <returns>Every message in the chain, joined.</returns>
+        private static string Flatten(Exception exception)
+        {
+            List<string> messages = [];
+            for (Exception? current = exception; current is not null; current = current.InnerException)
+            {
+                messages.Add(current.Message);
+                if (current is AggregateException aggregate)
+                {
+                    messages.AddRange(aggregate.InnerExceptions.Select(Flatten));
+                }
+            }
+
+            return string.Join(" | ", messages);
+        }
+
+        /// <summary>
+        /// One compiled graph, wired the way the composition root wires it.
+        /// </summary>
+        /// <remarks>
+        /// The seam is the one <c>AddAgentCore</c> bind: the shared guard evaluator. Nothing per conversation
+        /// is captured: the turn's snapshot rides each run.
+        /// </remarks>
+        private sealed class Harness : IDisposable
+        {
+            private readonly ScriptedChatClient _router = new("ROUTED");
+            private readonly ScriptedChatClient _human;
+            private readonly ScriptedChatClient _bot = new(HandledReply);
+            private readonly CompiledAgentRegistry _registry = new();
+            private readonly ConversationSessionFactory _sessions;
+
+            /// <summary>Compiles the guarded graph once, over three offline models.</summary>
+            /// <param name="holdEscalatedReply">
+            /// Whether the escalated node holds every fragment after the first. A test that asks for this
+            /// proves the reply reaches the caller before the model finishes.
+            /// </param>
+            public Harness(bool holdEscalatedReply = false)
+            {
+                _human = new ScriptedChatClient(EscalatedReply, " and", " more.")
+                {
+                    GateAfterFirstFragment = holdEscalatedReply,
+                };
+
+                AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(GuardedGraphYaml);
+                GuardEvaluator guards = new(document.Guards);
+
+                RoutingChatClientFactory models = new();
+                _ = models.Route("router", _router);
+                _ = models.Route("human", _human);
+                _ = models.Route("bot", _bot);
+
+                Compiled = _registry.GetOrCompile(document, "main", new AgentCompilationContext(models)
+                {
+                    Guards = guards,
+                });
+
+                _sessions = new ConversationSessionFactory(Compiled, guards);
+            }
+
+            /// <summary>Gets the one compiled agent every conversation shares.</summary>
+            public CompiledAgent Compiled { get; }
+
+            /// <summary>Gets how many times the registry ran the compile table.</summary>
+            public int CompileCount => _registry.CompileCount;
+
+            /// <summary>Builds the session of one more conversation.</summary>
+            /// <returns>The session.</returns>
+            public ConversationSession NewSession()
+            {
+                return _sessions.Create();
+            }
+
+            /// <summary>Lets the rest of the escalated reply flow.</summary>
+            public void ReleaseEscalatedReply()
+            {
+                _human.OpenGate();
+            }
+
+            public void Dispose()
+            {
+                _router.Dispose();
+                _human.Dispose();
+                _bot.Dispose();
+            }
+        }
+
+    }
+}

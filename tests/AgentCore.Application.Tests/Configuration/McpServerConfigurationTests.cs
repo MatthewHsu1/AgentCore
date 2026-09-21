@@ -1,35 +1,34 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
 using AgentCore.TestSupport;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Configuration;
-
-/// <summary>
-/// What an <c>mcp:</c> entry may hold, and where a credential is allowed to go.
-/// </summary>
-/// <remarks>
-/// An HTTP server behind authentication is reached with <c>headers:</c>, and a stdio server's
-/// credential belongs in <c>env:</c>. Neither may go in <c>command:</c>, where every user on the
-/// machine can read it out of <c>ps</c>.
-/// </remarks>
-public sealed class McpServerConfigurationTests
+namespace AgentCore.Application.Tests.Configuration
 {
-    private const string TokenName = "gh-token";
-    private const string TokenValue = "ghp_0123456789";
-
-    private static CancellationToken Token => TestContext.Current.CancellationToken;
-
-    // ---------------------------------------------------------------------------------------------
-    // A credential has somewhere to go, on either transport.
-    // ---------------------------------------------------------------------------------------------
-    [Fact]
-    public void AStdioServer_BindsItsEnvironment()
+    /// <summary>
+    /// What an <c>mcp:</c> entry may hold, and where a credential is allowed to go.
+    /// </summary>
+    /// <remarks>
+    /// An HTTP server behind authentication is reached with <c>headers:</c>, and a stdio server's
+    /// credential belongs in <c>env:</c>. Neither may go in <c>command:</c>, where every user on the
+    /// machine can read it out of <c>ps</c>.
+    /// </remarks>
+    public sealed class McpServerConfigurationTests
     {
-        var document = ConfigurationLoader.LoadYaml("""
+        private const string TokenName = "gh-token";
+        private const string TokenValue = "ghp_0123456789";
+
+        private static CancellationToken Token => TestContext.Current.CancellationToken;
+
+        // ---------------------------------------------------------------------------------------------
+        // A credential has somewhere to go, on either transport.
+        // ---------------------------------------------------------------------------------------------
+        [Fact]
+        public void AStdioServer_BindsItsEnvironment()
+        {
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
             agents:
               items:
@@ -47,19 +46,19 @@ public sealed class McpServerConfigurationTests
                 allow: ["*"]
             """);
 
-        var server = Assert.Single(document.Mcp);
-        Assert.Equal("${secret:gh-token}", server.Env["GITHUB_TOKEN"].Raw);
-        Assert.True(server.Env["GITHUB_TOKEN"].HasSecretReferences);
+            McpServerConfiguration server = Assert.Single(document.Mcp);
+            Assert.Equal("${secret:gh-token}", server.Env["GITHUB_TOKEN"].Raw);
+            Assert.True(server.Env["GITHUB_TOKEN"].HasSecretReferences);
 
-        // A plain value is config, not a credential, and is carried through untouched.
-        Assert.Equal("production", server.Env["NODE_ENV"].Raw);
-        Assert.False(server.Env["NODE_ENV"].HasSecretReferences);
-    }
+            // A plain value is config, not a credential, and is carried through untouched.
+            Assert.Equal("production", server.Env["NODE_ENV"].Raw);
+            Assert.False(server.Env["NODE_ENV"].HasSecretReferences);
+        }
 
-    [Fact]
-    public void AnHttpServer_BindsItsHeaders()
-    {
-        var document = ConfigurationLoader.LoadYaml("""
+        [Fact]
+        public void AnHttpServer_BindsItsHeaders()
+        {
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
             agents:
               items:
@@ -76,14 +75,14 @@ public sealed class McpServerConfigurationTests
                 allow: ["*"]
             """);
 
-        var server = Assert.Single(document.Mcp);
-        Assert.Equal("Bearer ${secret:jira-token}", server.Headers["Authorization"].Raw);
-    }
+            McpServerConfiguration server = Assert.Single(document.Mcp);
+            Assert.Equal("Bearer ${secret:jira-token}", server.Headers["Authorization"].Raw);
+        }
 
-    [Fact]
-    public async Task AnMcpCredential_IsResolvedAtStartup_LikeAToolHeader()
-    {
-        var document = ConfigurationLoader.LoadYaml("""
+        [Fact]
+        public async Task AnMcpCredential_IsResolvedAtStartup_LikeAToolHeader()
+        {
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
             agents:
               items:
@@ -104,19 +103,19 @@ public sealed class McpServerConfigurationTests
                 allow: ["*"]
             """);
 
-        var secrets = await ResolvedSecrets.ResolveAsync(
-            document,
-            new MapSecretResolver().With(TokenName, TokenValue).With("jira-token", "jira-abc"),
-            Token);
+            ResolvedSecrets secrets = await ResolvedSecrets.ResolveAsync(
+                document,
+                new MapSecretResolver().With(TokenName, TokenValue).With("jira-token", "jira-abc"),
+                Token);
 
-        Assert.Equal(TokenValue, secrets.Format(document.Mcp[0].Env["GITHUB_TOKEN"]));
-        Assert.Equal("Bearer jira-abc", secrets.Format(document.Mcp[1].Headers["Authorization"]));
-    }
+            Assert.Equal(TokenValue, secrets.Format(document.Mcp[0].Env["GITHUB_TOKEN"]));
+            Assert.Equal("Bearer jira-abc", secrets.Format(document.Mcp[1].Headers["Authorization"]));
+        }
 
-    [Fact]
-    public async Task AnMcpCredentialThatResolvesToNothing_FailsTheBoot_NamingWhereItWasWritten()
-    {
-        var document = ConfigurationLoader.LoadYaml("""
+        [Fact]
+        public async Task AnMcpCredentialThatResolvesToNothing_FailsTheBoot_NamingWhereItWasWritten()
+        {
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
             agents:
               items:
@@ -132,20 +131,20 @@ public sealed class McpServerConfigurationTests
                 allow: ["*"]
             """);
 
-        var failure = await Assert.ThrowsAsync<SecretResolutionException>(
-            async () => await ResolvedSecrets.ResolveAsync(document, new MapSecretResolver(), Token));
+            SecretResolutionException failure = await Assert.ThrowsAsync<SecretResolutionException>(
+                async () => await ResolvedSecrets.ResolveAsync(document, new MapSecretResolver(), Token));
 
-        Assert.Contains(TokenName, failure.Message, StringComparison.Ordinal);
-        Assert.Contains("/mcp/0/env/GITHUB_TOKEN", failure.Message, StringComparison.Ordinal);
-    }
+            Assert.Contains(TokenName, failure.Message, StringComparison.Ordinal);
+            Assert.Contains("/mcp/0/env/GITHUB_TOKEN", failure.Message, StringComparison.Ordinal);
+        }
 
-    // ---------------------------------------------------------------------------------------------
-    // A credential in command: or url: would leak while not even working, so the document is refused.
-    // ---------------------------------------------------------------------------------------------
-    [Fact]
-    public void ASecretWrittenIntoCommand_FailsTheDocument_AndPointsAtEnv()
-    {
-        var document = ConfigurationLoader.LoadYaml("""
+        // ---------------------------------------------------------------------------------------------
+        // A credential in command: or url: would leak while not even working, so the document is refused.
+        // ---------------------------------------------------------------------------------------------
+        [Fact]
+        public void ASecretWrittenIntoCommand_FailsTheDocument_AndPointsAtEnv()
+        {
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
             agents:
               items:
@@ -160,17 +159,17 @@ public sealed class McpServerConfigurationTests
                 allow: ["*"]
             """);
 
-        var error = Assert.Single(ConfigurationValidator.EvaluateStructure(document).Errors);
+            ConfigurationError error = Assert.Single(ConfigurationValidator.EvaluateStructure(document).Errors);
 
-        Assert.Equal("/mcp/0/command/2", error.Pointer);
-        Assert.Contains("ps", error.Message, StringComparison.Ordinal);
-        Assert.Contains("env:", error.Message, StringComparison.Ordinal);
-    }
+            Assert.Equal("/mcp/0/command/2", error.Pointer);
+            Assert.Contains("ps", error.Message, StringComparison.Ordinal);
+            Assert.Contains("env:", error.Message, StringComparison.Ordinal);
+        }
 
-    [Fact]
-    public void ASecretWrittenIntoUrl_FailsTheDocument_AndPointsAtHeaders()
-    {
-        var document = ConfigurationLoader.LoadYaml("""
+        [Fact]
+        public void ASecretWrittenIntoUrl_FailsTheDocument_AndPointsAtHeaders()
+        {
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
             agents:
               items:
@@ -185,16 +184,16 @@ public sealed class McpServerConfigurationTests
                 allow: ["*"]
             """);
 
-        var error = Assert.Single(ConfigurationValidator.EvaluateStructure(document).Errors);
+            ConfigurationError error = Assert.Single(ConfigurationValidator.EvaluateStructure(document).Errors);
 
-        Assert.Equal("/mcp/0/url", error.Pointer);
-        Assert.Contains("headers:", error.Message, StringComparison.Ordinal);
-    }
+            Assert.Equal("/mcp/0/url", error.Pointer);
+            Assert.Contains("headers:", error.Message, StringComparison.Ordinal);
+        }
 
-    [Fact]
-    public void AServerThatWritesNoSecretAnywhereOdd_Passes()
-    {
-        var document = ConfigurationLoader.LoadYaml("""
+        [Fact]
+        public void AServerThatWritesNoSecretAnywhereOdd_Passes()
+        {
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
             agents:
               items:
@@ -210,20 +209,20 @@ public sealed class McpServerConfigurationTests
                 allow: ["*"]
             """);
 
-        Assert.Empty(ConfigurationValidator.EvaluateStructure(document).Errors);
-    }
+            Assert.Empty(ConfigurationValidator.EvaluateStructure(document).Errors);
+        }
 
-    // ---------------------------------------------------------------------------------------------
-    // The transport branches: a key that belongs to the other transport is refused by check 1, so a
-    // deployer never gets a header silently ignored on a child process.
-    // ---------------------------------------------------------------------------------------------
-    [Theory]
-    [InlineData("stdio", "command: [\"a\"]", "headers: { Authorization: x }")]
-    [InlineData("http", "url: https://x.example.com/", "env: { A: b }")]
-    [InlineData("http", "url: https://x.example.com/", "inheritEnv: true")]
-    public void AKeyOfTheOtherTransport_IsRefused(string transport, string address, string wrongKey)
-    {
-        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml($"""
+        // ---------------------------------------------------------------------------------------------
+        // The transport branches: a key that belongs to the other transport is refused by check 1, so a
+        // deployer never gets a header silently ignored on a child process.
+        // ---------------------------------------------------------------------------------------------
+        [Theory]
+        [InlineData("stdio", "command: [\"a\"]", "headers: { Authorization: x }")]
+        [InlineData("http", "url: https://x.example.com/", "env: { A: b }")]
+        [InlineData("http", "url: https://x.example.com/", "inheritEnv: true")]
+        public void AKeyOfTheOtherTransport_IsRefused(string transport, string address, string wrongKey)
+        {
+            ConfigurationLoadException failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationLoader.LoadYaml($"""
             apiVersion: agentcore/v1
             agents:
               items:
@@ -240,16 +239,16 @@ public sealed class McpServerConfigurationTests
                 allow: ["*"]
             """));
 
-        Assert.Contains("/mcp/0", failure.Message, StringComparison.Ordinal);
-    }
+            Assert.Contains("/mcp/0", failure.Message, StringComparison.Ordinal);
+        }
 
-    // ---------------------------------------------------------------------------------------------
-    // The timing knobs bind. What they do to a connection is McpServerSessionTests.
-    // ---------------------------------------------------------------------------------------------
-    [Fact]
-    public void TimeoutsAndRetry_Bind()
-    {
-        var document = ConfigurationLoader.LoadYaml("""
+        // ---------------------------------------------------------------------------------------------
+        // The timing knobs bind. What they do to a connection is McpServerSessionTests.
+        // ---------------------------------------------------------------------------------------------
+        [Fact]
+        public void TimeoutsAndRetry_Bind()
+        {
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
             agents:
               items:
@@ -268,17 +267,17 @@ public sealed class McpServerConfigurationTests
                 allow: ["*"]
             """);
 
-        var server = Assert.Single(document.Mcp);
-        Assert.Equal(3, server.ConnectTimeoutSeconds);
-        Assert.Equal(12, server.CallTimeoutSeconds);
-        Assert.Equal(5, server.Retry!.Attempts);
-        Assert.Equal(250, server.Retry.BackoffMs);
-    }
+            McpServerConfiguration server = Assert.Single(document.Mcp);
+            Assert.Equal(3, server.ConnectTimeoutSeconds);
+            Assert.Equal(12, server.CallTimeoutSeconds);
+            Assert.Equal(5, server.Retry!.Attempts);
+            Assert.Equal(250, server.Retry.BackoffMs);
+        }
 
-    [Fact]
-    public void AServerThatNamesNoTimings_LeavesThemUnset_SoTheSessionDefaultsApply()
-    {
-        var document = ConfigurationLoader.LoadYaml("""
+        [Fact]
+        public void AServerThatNamesNoTimings_LeavesThemUnset_SoTheSessionDefaultsApply()
+        {
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
             agents:
               items:
@@ -293,20 +292,20 @@ public sealed class McpServerConfigurationTests
                 allow: ["*"]
             """);
 
-        var server = Assert.Single(document.Mcp);
-        Assert.Null(server.ConnectTimeoutSeconds);
-        Assert.Null(server.CallTimeoutSeconds);
-        Assert.Null(server.Retry);
-    }
+            McpServerConfiguration server = Assert.Single(document.Mcp);
+            Assert.Null(server.ConnectTimeoutSeconds);
+            Assert.Null(server.CallTimeoutSeconds);
+            Assert.Null(server.Retry);
+        }
 
-    /// <summary>
-    /// The SDK's own default is to inherit, which would hand a third-party child process every other
-    /// credential this one holds. A document has to ask for that.
-    /// </summary>
-    [Fact]
-    public void InheritingTheHostEnvironment_IsOffUnlessTheDocumentAsks()
-    {
-        var document = ConfigurationLoader.LoadYaml("""
+        /// <summary>
+        /// The SDK's own default is to inherit, which would hand a third-party child process every other
+        /// credential this one holds. A document has to ask for that.
+        /// </summary>
+        [Fact]
+        public void InheritingTheHostEnvironment_IsOffUnlessTheDocumentAsks()
+        {
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
             agents:
               items:
@@ -326,7 +325,8 @@ public sealed class McpServerConfigurationTests
                 allow: ["*"]
             """);
 
-        Assert.False(document.Mcp[0].InheritEnv);
-        Assert.True(document.Mcp[1].InheritEnv);
+            Assert.False(document.Mcp[0].InheritEnv);
+            Assert.True(document.Mcp[1].InheritEnv);
+        }
     }
 }

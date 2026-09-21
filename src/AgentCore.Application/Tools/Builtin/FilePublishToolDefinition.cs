@@ -1,41 +1,43 @@
 using AgentCore.Application.Blobs;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Ports;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace AgentCore.Application.Tools.Builtin;
-
-/// <summary>
-/// The <c>uses: file.publish</c> builtin: one <see cref="FilePublishTool"/> over the blob store.
-/// </summary>
-internal sealed class FilePublishToolDefinition : IBuiltinToolDefinition
+namespace AgentCore.Application.Tools.Builtin
 {
-    /// <inheritdoc />
-    public string Name => BuiltinToolNames.FilePublish;
-
-    /// <inheritdoc />
-    public string DefaultDescription =>
-        "Hands one file from the workspace to the person and returns a link to it. "
-        + "A file that is not published is lost when the conversation ends.";
-
-    /// <inheritdoc />
-    public AITool Build(ToolConfiguration tool, BuiltinToolPorts ports)
+    /// <summary>
+    /// The <c>uses: file.publish</c> builtin: one <see cref="FilePublishTool"/> over the blob store.
+    /// </summary>
+    internal sealed class FilePublishToolDefinition : IBuiltinToolDefinition
     {
-        ArgumentNullException.ThrowIfNull(tool);
-        ArgumentNullException.ThrowIfNull(ports);
+        /// <inheritdoc />
+        public string Name => BuiltinToolNames.FilePublish;
 
-        var blobs = ports.Blobs ?? throw BuiltinToolSource.Unbound(tool, Name, "providers.blobs");
+        /// <inheritdoc />
+        public string DefaultDescription =>
+            "Hands one file from the workspace to the person and returns a link to it. "
+            + "A file that is not published is lost when the conversation ends.";
 
-        var root = ports.WorkspaceRoot ?? throw BuiltinToolSource.Unbound(
-            tool, Name, "the workspace root (options.UseWorkspace(...))");
+        /// <inheritdoc />
+        public AITool Build(ToolConfiguration tool, BuiltinToolPorts ports)
+        {
+            ArgumentNullException.ThrowIfNull(tool);
+            ArgumentNullException.ThrowIfNull(ports);
 
-        return new FilePublishTool(
-            tool,
-            blobs,
-            ports.BlobPolicy ?? BlobPolicy.Default,
-            root,
-            ports.Loggers?.CreateLogger<FilePublishTool>() ?? NullLogger<FilePublishTool>.Instance)
-            .AsAIFunction();
+            IBlobStore blobs = ports.Blobs ?? throw BuiltinToolSource.Unbound(tool, Name, "providers.blobs");
+
+            string root = ports.WorkspaceRoot ?? throw BuiltinToolSource.Unbound(
+                tool, Name, "the workspace root (options.UseWorkspace(...))");
+
+            return new FilePublishTool(
+                tool,
+                blobs,
+                ports.BlobPolicy ?? BlobPolicy.Default,
+                root,
+                ports.Loggers?.CreateLogger<FilePublishTool>() ?? NullLogger<FilePublishTool>.Instance)
+                .AsAIFunction();
+        }
     }
 }

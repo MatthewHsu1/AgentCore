@@ -1,29 +1,30 @@
 using System.Text.Json;
 using Microsoft.Extensions.AI;
 
-namespace AgentCore.Application.Transcript;
-
-/// <summary>How a stored message is encoded and decoded. Every store and the state bag agree on it.</summary>
-public static class TranscriptJson
+namespace AgentCore.Application.Transcript
 {
-    /// <summary>The shared options. Every store and the state bag serialise a <c>ChatMessage</c> with it.</summary>
-    public static JsonSerializerOptions Options { get; } = Build();
-
-    private static JsonSerializerOptions Build()
+    /// <summary>How a stored message is encoded and decoded. Every store and the state bag agree on it.</summary>
+    public static class TranscriptJson
     {
-        // AIJsonUtilities.DefaultOptions ships the polymorphic converters, so a tool call, a tool
-        // result, text, and usage all round-trip with no code of ours. It is read-only, though, and
-        // AddAIContentType throws on a read-only instance, so copy first.
-        JsonSerializerOptions options = new(AIJsonUtilities.DefaultOptions)
+        /// <summary>The shared options. Every store and the state bag serialise a <c>ChatMessage</c> with it.</summary>
+        public static JsonSerializerOptions Options { get; } = Build();
+
+        private static JsonSerializerOptions Build()
         {
-            // jsonb keeps no key order, so the $type discriminator does not come back first.
-            // Without this every read of a stored message throws.
-            AllowOutOfOrderMetadataProperties = true,
-        };
+            // AIJsonUtilities.DefaultOptions ships the polymorphic converters, so a tool call, a tool
+            // result, text, and usage all round-trip with no code of ours. It is read-only, though, and
+            // AddAIContentType throws on a read-only instance, so copy first.
+            JsonSerializerOptions options = new(AIJsonUtilities.DefaultOptions)
+            {
+                // jsonb keeps no key order, so the $type discriminator does not come back first.
+                // Without this every read of a stored message throws.
+                AllowOutOfOrderMetadataProperties = true,
+            };
 
-        ReaderContent.Register(options);
-        options.MakeReadOnly();
+            ReaderContent.Register(options);
+            options.MakeReadOnly();
 
-        return options;
+            return options;
+        }
     }
 }

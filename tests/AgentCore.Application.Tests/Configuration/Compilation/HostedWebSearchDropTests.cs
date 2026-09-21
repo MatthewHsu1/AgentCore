@@ -5,224 +5,242 @@ using AgentCore.Application.Tests.Runtime;
 using AgentCore.Application.Tools.Builtin;
 using AgentCore.Application.Tools.Registry;
 using AgentCore.TestSupport;
-using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Configuration.Compilation;
-
-/// <summary>
-/// The hosted markers reaching, or not reaching, one compiled agent.
-/// </summary>
-public sealed class HostedWebSearchDropTests
+namespace AgentCore.Application.Tests.Configuration.Compilation
 {
-    private const string SearchToolId = BuiltinToolNames.WebSearch;
-
-    [Fact]
-    public void Compile_CapableModel_KeepsTheTool()
+    /// <summary>
+    /// The hosted markers reaching, or not reaching, one compiled agent.
+    /// </summary>
+    public sealed class HostedWebSearchDropTests
     {
-        var tools = Tools(agent: "reply", capable: true);
+        private const string SearchToolId = BuiltinToolNames.WebSearch;
 
-        Assert.Single(tools.OfType<HostedWebSearchTool>());
-    }
+        [Fact]
+        public void Compile_CapableModel_KeepsTheTool()
+        {
+            List<AITool> tools = Tools(agent: "reply", capable: true);
 
-    [Fact]
-    public void Compile_TunedMarker_ReachesTheModel()
-    {
-        HostedWebSearchTool tuned = new(new Dictionary<string, object?> { ["memory_limit"] = "4g" });
-        var tools = BuildAgentTools("reply", model: null, ScreeningChatClientFactory(tuned));
+            _ = Assert.Single(tools.OfType<HostedWebSearchTool>());
+        }
 
-        Assert.Same(tuned, Assert.Single(tools.OfType<HostedWebSearchTool>()));
-    }
+        [Fact]
+        public void Compile_TunedMarker_ReachesTheModel()
+        {
+            HostedWebSearchTool tuned = new(new Dictionary<string, object?> { ["memory_limit"] = "4g" });
+            List<AITool> tools = BuildAgentTools("reply", model: null, ScreeningChatClientFactory(tuned));
 
-    [Fact]
-    public void Compile_IncapableModel_DropsTheTool()
-    {
-        var tools = Tools(agent: "reply", capable: false);
+            Assert.Same(tuned, Assert.Single(tools.OfType<HostedWebSearchTool>()));
+        }
 
-        Assert.Empty(tools.OfType<HostedWebSearchTool>());
-    }
+        [Fact]
+        public void Compile_IncapableModel_DropsTheTool()
+        {
+            List<AITool> tools = Tools(agent: "reply", capable: false);
 
-    [Fact]
-    public void Compile_IncapableModel_LogsOneWarning()
-    {
-        var (tools, logs) = ToolsAndLogs(agent: "reply", capable: false);
+            Assert.Empty(tools.OfType<HostedWebSearchTool>());
+        }
 
-        Assert.Empty(tools.OfType<HostedWebSearchTool>());
-        var warning = Assert.Single(logs);
-        Assert.Contains("reply", warning, StringComparison.Ordinal);
-        Assert.Contains("web.search", warning, StringComparison.Ordinal);
-    }
+        [Fact]
+        public void Compile_IncapableModel_LogsOneWarning()
+        {
+            (List<AITool>? tools, List<string>? logs) = ToolsAndLogs(agent: "reply", capable: false);
 
-    [Fact]
-    public void Compile_IncapableModel_DoesNotThrow()
-    {
-        // An agent with no web search still answers. This never stops a host.
-        Assert.Null(Record.Exception(() => Tools(agent: "reply", capable: false)));
-    }
+            Assert.Empty(tools.OfType<HostedWebSearchTool>());
+            string warning = Assert.Single(logs);
+            Assert.Contains("reply", warning, StringComparison.Ordinal);
+            Assert.Contains("web.search", warning, StringComparison.Ordinal);
+        }
 
-    [Fact]
-    public void Compile_TwoAgentsOnDifferentModels_OnlyTheCapableOneKeepsIt()
-    {
-        var (capable, incapable) = TwoAgents();
+        [Fact]
+        public void Compile_IncapableModel_DoesNotThrow()
+        {
+            // An agent with no web search still answers. This never stops a host.
+            Assert.Null(Record.Exception(() => Tools(agent: "reply", capable: false)));
+        }
 
-        Assert.Single(capable.OfType<HostedWebSearchTool>());
-        Assert.Empty(incapable.OfType<HostedWebSearchTool>());
-    }
+        [Fact]
+        public void Compile_TwoAgentsOnDifferentModels_OnlyTheCapableOneKeepsIt()
+        {
+            (List<AITool>? capable, List<AITool>? incapable) = TwoAgents();
 
-    [Fact]
-    public void Compile_HostSuppliedHostedTool_IsDroppedByTheSameRule()
-    {
-        // The check tests the tool type, not the builtin name, so a hosted search tool arriving
-        // from a host's own IToolSource is covered with no second place to forget.
-        var tools = ToolsFromHostSource(capable: false);
+            _ = Assert.Single(capable.OfType<HostedWebSearchTool>());
+            Assert.Empty(incapable.OfType<HostedWebSearchTool>());
+        }
 
-        Assert.Empty(tools.OfType<HostedWebSearchTool>());
-    }
+        [Fact]
+        public void Compile_HostSuppliedHostedTool_IsDroppedByTheSameRule()
+        {
+            // The check tests the tool type, not the builtin name, so a hosted search tool arriving
+            // from a host's own IToolSource is covered with no second place to forget.
+            List<AITool> tools = ToolsFromHostSource(capable: false);
 
-    [Fact]
-    public async Task Compile_TwoAgentsOnDifferentModels_ThroughTheRealCompiler_OnlyTheCapableOneKeepsIt()
-    {
-        // AgentToolCompiler.Build takes the model as a parameter, and the six tests above call it
-        // directly. None of them exercises the expression that picks that parameter per agent
-        // (ConfigurationCompiler's item.Model ?? section.Defaults?.Model), so this one goes through
-        // ConfigurationCompiler.Compile on a document with two agents pinned to two different models,
-        // and reads back what each agent actually sent its chat client.
-        const string capableRef = "vendor-a";
-        const string incapableRef = "vendor-b";
+            Assert.Empty(tools.OfType<HostedWebSearchTool>());
+        }
 
-        using SequencedChatClient reply = new("hello there.");
-        var registry = BuildRegistry([new BuiltinToolSource(new BuiltinToolPorts(null))], [SearchTool()]);
+        [Fact]
+        public async Task Compile_TwoAgentsOnDifferentModels_ThroughTheRealCompiler_OnlyTheCapableOneKeepsIt()
+        {
+            // AgentToolCompiler.Build takes the model as a parameter, and the six tests above call it
+            // directly. None of them exercises the expression that picks that parameter per agent
+            // (ConfigurationCompiler's item.Model ?? section.Defaults?.Model), so this one goes through
+            // ConfigurationCompiler.Compile on a document with two agents pinned to two different models,
+            // and reads back what each agent actually sent its chat client.
+            const string capableRef = "vendor-a";
+            const string incapableRef = "vendor-b";
 
-        var compiled = ConfigurationCompiler.CompileAll(
-            new AgentCoreConfiguration
-            {
-                ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
-                Tools = [SearchTool()],
-                Agents = new AgentsConfiguration
+            using SequencedChatClient reply = new("hello there.");
+            ToolRegistry registry = BuildRegistry([new BuiltinToolSource(new BuiltinToolPorts(null))], [SearchTool()]);
+
+            CompiledAgent compiled = ConfigurationCompiler.CompileAll(
+                new AgentCoreConfiguration
                 {
-                    Items =
-                    [
-                        new AgentConfiguration { Id = "capable", Model = new ModelReference { Ref = capableRef }, Tools = [SearchToolId] },
-                        new AgentConfiguration { Id = "incapable", Model = new ModelReference { Ref = incapableRef }, Tools = [SearchToolId] },
-                    ],
-                },
-                Entries = new Dictionary<string, EntryConfiguration>
-                {
-                    ["main"] = new EntryConfiguration
+                    ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
+                    Tools = [SearchTool()],
+                    Agents = new AgentsConfiguration
                     {
-                        Policy = new PolicyConfiguration
+                        Items =
+                        [
+                            new AgentConfiguration { Id = "capable", Model = new ModelReference { Ref = capableRef }, Tools = [SearchToolId] },
+                            new AgentConfiguration { Id = "incapable", Model = new ModelReference { Ref = incapableRef }, Tools = [SearchToolId] },
+                        ],
+                    },
+                    Entries = new Dictionary<string, EntryConfiguration>
+                    {
+                        ["main"] = new EntryConfiguration
                         {
-                            Initial = "opening",
-                            Stages =
-                            [
-                                new StageConfiguration { Id = "opening", Agent = "capable" },
-                                new StageConfiguration { Id = "closing", Agent = "incapable" },
-                            ],
+                            Policy = new PolicyConfiguration
+                            {
+                                Initial = "opening",
+                                Stages =
+                                [
+                                    new StageConfiguration { Id = "opening", Agent = "capable" },
+                                    new StageConfiguration { Id = "closing", Agent = "incapable" },
+                                ],
+                            },
                         },
                     },
                 },
-            },
-            new AgentCompilationContext(RoutingCapabilityChatClientFactory(capableRef, reply)) { Tools = registry })["main"];
+                new AgentCompilationContext(RoutingCapabilityChatClientFactory(capableRef, reply)) { Tools = registry })["main"];
 
-        var token = TestContext.Current.CancellationToken;
-        await compiled.Agents["capable"].RunAsync("hi", cancellationToken: token);
-        await compiled.Agents["incapable"].RunAsync("hi", cancellationToken: token);
+            CancellationToken token = TestContext.Current.CancellationToken;
+            _ = await compiled.Agents["capable"].RunAsync("hi", cancellationToken: token);
+            _ = await compiled.Agents["incapable"].RunAsync("hi", cancellationToken: token);
 
-        Assert.Single((reply.Options[0]?.Tools ?? []).OfType<HostedWebSearchTool>());
-        Assert.Empty((reply.Options[1]?.Tools ?? []).OfType<HostedWebSearchTool>());
-    }
+            _ = Assert.Single((reply.Options[0]?.Tools ?? []).OfType<HostedWebSearchTool>());
+            Assert.Empty((reply.Options[1]?.Tools ?? []).OfType<HostedWebSearchTool>());
+        }
 
-    private static ToolConfiguration SearchTool()
-        => new() { Id = SearchToolId, Kind = ToolKind.Builtin, Uses = BuiltinToolNames.WebSearch };
-
-    private static List<AITool> Tools(string agent, bool capable)
-        => BuildAgentTools(agent, model: null, SearchTool(), ScreeningChatClientFactory(Marker(capable)));
-
-    private static HostedWebSearchTool? Marker(bool capable) => capable ? new HostedWebSearchTool() : null;
-
-    private static (List<AITool> Tools, List<string> Logs) ToolsAndLogs(string agent, bool capable)
-    {
-        RecordingLoggerFactory loggers = new();
-        var tools = BuildAgentTools(agent, model: null, SearchTool(), ScreeningChatClientFactory(Marker(capable)), loggers);
-        return (tools, [.. loggers.Of(18).Select(line => line.Message)]);
-    }
-
-    private static (List<AITool> Capable, List<AITool> Incapable) TwoAgents()
-    {
-        const string capableRef = "vendor-a";
-        const string incapableRef = "vendor-b";
-
-        var factory = RoutingCapabilityChatClientFactory(capableRef);
-
-        var capable = BuildAgentTools("capable", new ModelReference { Ref = capableRef }, factory);
-        var incapable = BuildAgentTools("incapable", new ModelReference { Ref = incapableRef }, factory);
-        return (capable, incapable);
-    }
-
-    private static List<AITool> ToolsFromHostSource(bool capable)
-    {
-        const string hostToolId = "vendor_search";
-
-        AgentConfiguration item = new() { Id = "reply", Tools = [hostToolId] };
-        Dictionary<string, ToolConfiguration> declared = new(StringComparer.Ordinal);
-        var registry = BuildRegistry([new HostSearchToolSource(hostToolId)], []);
-
-        AgentCompilationContext context = new(ScreeningChatClientFactory(Marker(capable))) { Tools = registry };
-
-        return AgentToolCompiler.Build(item, model: null, declared, context, "/agents/items/0", static _ => null) ?? [];
-    }
-
-
-    private static List<AITool> BuildAgentTools(
-        string agentId,
-        ModelReference? model,
-        IChatClientFactory chatClients,
-        RecordingLoggerFactory? loggers = null)
-        => BuildAgentTools(agentId, model, SearchTool(), chatClients, loggers);
-
-    private static List<AITool> BuildAgentTools(
-        string agentId,
-        ModelReference? model,
-        ToolConfiguration declared,
-        IChatClientFactory chatClients,
-        RecordingLoggerFactory? loggers = null)
-    {
-        AgentConfiguration item = new() { Id = agentId, Tools = [declared.Id] };
-        Dictionary<string, ToolConfiguration> declaredById = new(StringComparer.Ordinal) { [declared.Id] = declared };
-        var registry = BuildRegistry([new BuiltinToolSource(new BuiltinToolPorts(null))], [declared]);
-
-        AgentCompilationContext context = new(chatClients) { Tools = registry, Loggers = loggers };
-
-        return AgentToolCompiler.Build(item, model, declaredById, context, "/agents/items/0", static _ => null) ?? [];
-    }
-
-    private static ToolRegistry BuildRegistry(IEnumerable<IToolSource> sources, IReadOnlyList<ToolConfiguration> declared)
-    {
-        AgentCoreConfiguration document = new()
+        private static ToolConfiguration SearchTool()
         {
-            ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
-            Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(),
-            Tools = declared,
-        };
+            return new() { Id = SearchToolId, Kind = ToolKind.Builtin, Uses = BuiltinToolNames.WebSearch };
+        }
 
-        return ToolRegistryBuilder.BuildAsync(sources, new ToolSourceContext(document)).AsTask().GetAwaiter().GetResult();
+        private static List<AITool> Tools(string agent, bool capable)
+        {
+            return BuildAgentTools(agent, model: null, SearchTool(), ScreeningChatClientFactory(Marker(capable)));
+        }
+
+        private static HostedWebSearchTool? Marker(bool capable)
+        {
+            return capable ? new HostedWebSearchTool() : null;
+        }
+
+        private static (List<AITool> Tools, List<string> Logs) ToolsAndLogs(string agent, bool capable)
+        {
+            RecordingLoggerFactory loggers = new();
+            List<AITool> tools = BuildAgentTools(agent, model: null, SearchTool(), ScreeningChatClientFactory(Marker(capable)), loggers);
+            return (tools, [.. loggers.Of(18).Select(line => line.Message)]);
+        }
+
+        private static (List<AITool> Capable, List<AITool> Incapable) TwoAgents()
+        {
+            const string capableRef = "vendor-a";
+            const string incapableRef = "vendor-b";
+
+            LambdaChatClientFactory factory = RoutingCapabilityChatClientFactory(capableRef);
+
+            List<AITool> capable = BuildAgentTools("capable", new ModelReference { Ref = capableRef }, factory);
+            List<AITool> incapable = BuildAgentTools("incapable", new ModelReference { Ref = incapableRef }, factory);
+            return (capable, incapable);
+        }
+
+        private static List<AITool> ToolsFromHostSource(bool capable)
+        {
+            const string hostToolId = "vendor_search";
+
+            AgentConfiguration item = new() { Id = "reply", Tools = [hostToolId] };
+            Dictionary<string, ToolConfiguration> declared = new(StringComparer.Ordinal);
+            ToolRegistry registry = BuildRegistry([new HostSearchToolSource(hostToolId)], []);
+
+            AgentCompilationContext context = new(ScreeningChatClientFactory(Marker(capable))) { Tools = registry };
+
+            return AgentToolCompiler.Build(item, model: null, declared, context, "/agents/items/0", static _ => null) ?? [];
+        }
+
+
+        private static List<AITool> BuildAgentTools(
+            string agentId,
+            ModelReference? model,
+            IChatClientFactory chatClients,
+            RecordingLoggerFactory? loggers = null)
+        {
+            return BuildAgentTools(agentId, model, SearchTool(), chatClients, loggers);
+        }
+
+        private static List<AITool> BuildAgentTools(
+            string agentId,
+            ModelReference? model,
+            ToolConfiguration declared,
+            IChatClientFactory chatClients,
+            RecordingLoggerFactory? loggers = null)
+        {
+            AgentConfiguration item = new() { Id = agentId, Tools = [declared.Id] };
+            Dictionary<string, ToolConfiguration> declaredById = new(StringComparer.Ordinal) { [declared.Id] = declared };
+            ToolRegistry registry = BuildRegistry([new BuiltinToolSource(new BuiltinToolPorts(null))], [declared]);
+
+            AgentCompilationContext context = new(chatClients) { Tools = registry, Loggers = loggers };
+
+            return AgentToolCompiler.Build(item, model, declaredById, context, "/agents/items/0", static _ => null) ?? [];
+        }
+
+        private static ToolRegistry BuildRegistry(IEnumerable<IToolSource> sources, IReadOnlyList<ToolConfiguration> declared)
+        {
+            AgentCoreConfiguration document = new()
+            {
+                ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
+                Agents = new AgentsConfiguration { Items = [] },
+                Entries = new Dictionary<string, EntryConfiguration>(),
+                Tools = declared,
+            };
+
+            return ToolRegistryBuilder.BuildAsync(sources, new ToolSourceContext(document)).AsTask().GetAwaiter().GetResult();
+        }
+
+        private sealed class HostSearchToolSource(string id) : IToolSource
+        {
+            public ValueTask<IReadOnlyList<ToolRegistration>> ProvideAsync(
+                ToolSourceContext context, CancellationToken cancellationToken = default)
+            {
+                return ValueTask.FromResult<IReadOnlyList<ToolRegistration>>(
+                                [new ToolRegistration(id, "A vendor's own hosted search.", () => new HostedWebSearchTool())]);
+            }
+        }
+
+        /// <summary>Admits any hosted tool for <paramref name="capableRef"/> only.</summary>
+        private static LambdaChatClientFactory RoutingCapabilityChatClientFactory(string capableRef, IChatClient? client = null)
+        {
+            return new(
+            client is null ? null : _ => client,
+            (marker, model) => string.Equals(model?.Ref, capableRef, StringComparison.Ordinal) ? marker : null);
+        }
+
+        /// <summary>Admits a hosted tool of <paramref name="marker"/>'s type, answering with <paramref name="marker"/>.</summary>
+        private static LambdaChatClientFactory ScreeningChatClientFactory(AITool? marker)
+        {
+            return new(
+            hostedTool: (asked, _) => marker is not null && asked.GetType() == marker.GetType() ? marker : null);
+        }
     }
-
-    private sealed class HostSearchToolSource(string id) : IToolSource
-    {
-        public ValueTask<IReadOnlyList<ToolRegistration>> ProvideAsync(
-            ToolSourceContext context, CancellationToken cancellationToken = default)
-            => ValueTask.FromResult<IReadOnlyList<ToolRegistration>>(
-                [new ToolRegistration(id, "A vendor's own hosted search.", () => new HostedWebSearchTool())]);
-    }
-
-    /// <summary>Admits any hosted tool for <paramref name="capableRef"/> only.</summary>
-    private static LambdaChatClientFactory RoutingCapabilityChatClientFactory(string capableRef, IChatClient? client = null) => new(
-        client is null ? null : _ => client,
-        (marker, model) => string.Equals(model?.Ref, capableRef, StringComparison.Ordinal) ? marker : null);
-
-    /// <summary>Admits a hosted tool of <paramref name="marker"/>'s type, answering with <paramref name="marker"/>.</summary>
-    private static LambdaChatClientFactory ScreeningChatClientFactory(AITool? marker) => new(
-        hostedTool: (asked, _) => marker is not null && asked.GetType() == marker.GetType() ? marker : null);
 }

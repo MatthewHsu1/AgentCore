@@ -4,103 +4,108 @@ using System.Text.Json.Nodes;
 
 using AgentCore.Application.Configuration.Schema;
 
-namespace AgentCore.Application.Knowledge;
-
-/// <summary>
-/// Grows the framework's one-string search schema by a <c>filters</c> argument.
-/// </summary>
-internal static class FacetFilterSchema
+namespace AgentCore.Application.Knowledge
 {
-    /// <summary>The argument the model fills to narrow its own search.</summary>
-    internal const string ArgumentName = "filters";
-
-    /// <summary>The key of one filter entry.</summary>
-    internal const string KeyProperty = "key";
-
-    /// <summary>The value of one filter entry.</summary>
-    internal const string ValueProperty = "value";
-
-    /// <summary>Adds the argument to a schema that does not carry it.</summary>
-    /// <param name="innerSchema">The schema of the function being wrapped.</param>
-    /// <param name="facets">What <c>scope.filterable</c> declared, in document order.</param>
-    /// <returns>The extended schema.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="facets"/> is <see langword="null"/>.</exception>
-    internal static JsonElement Extend(
-        JsonElement innerSchema, IReadOnlyList<KnowledgeFilterableFacetConfiguration> facets)
-    {
-        ArgumentNullException.ThrowIfNull(facets);
-
-        if (JsonSerializer.Deserialize<JsonNode>(innerSchema) is not JsonObject schema)
-        {
-            return innerSchema;
-        }
-
-        if (schema["properties"] is not JsonObject properties)
-        {
-            properties = [];
-            schema["properties"] = properties;
-        }
-
-        properties[ArgumentName] = Argument(facets);
-
-        return JsonSerializer.Deserialize<JsonElement>(schema);
-    }
-
-    private static JsonObject Argument(IReadOnlyList<KnowledgeFilterableFacetConfiguration> facets)
-        => new()
-        {
-            ["type"] = "array",
-            ["description"] = Wording(facets),
-            ["items"] = new JsonObject
-            {
-                ["type"] = "object",
-                ["properties"] = new JsonObject
-                {
-                    [KeyProperty] = new JsonObject
-                    {
-                        ["type"] = "string",
-                        ["enum"] = new JsonArray([.. facets.Select(facet => (JsonNode)facet.Key)]),
-                    },
-                    [ValueProperty] = new JsonObject
-                    {
-                        ["type"] = "string",
-                        ["description"] =
-                            "The value, exactly as the cards store it; it is matched exactly. A key "
-                            + "that says how to find its value must be found that way first.",
-                    },
-                },
-                ["required"] = new JsonArray(KeyProperty, ValueProperty),
-            },
-        };
-
     /// <summary>
-    /// The one place a facet's meaning reaches the model.
+    /// Grows the framework's one-string search schema by a <c>filters</c> argument.
     /// </summary>
-    /// <remarks>
-    /// Per key, because JSON Schema hangs no description off an enum member, and the alternative —
-    /// an <c>anyOf</c> of <c>const</c> branches — is read unevenly across vendors.
-    /// </remarks>
-    private static string Wording(IReadOnlyList<KnowledgeFilterableFacetConfiguration> facets)
+    internal static class FacetFilterSchema
     {
-        StringBuilder wording = new(
-            "Narrow the search to cards carrying these facet values. Leave it out when the question "
-            + "names none: a filter that matches nothing returns nothing. The keys are:");
+        /// <summary>The argument the model fills to narrow its own search.</summary>
+        internal const string ArgumentName = "filters";
 
-        foreach (var facet in facets)
+        /// <summary>The key of one filter entry.</summary>
+        internal const string KeyProperty = "key";
+
+        /// <summary>The value of one filter entry.</summary>
+        internal const string ValueProperty = "value";
+
+        /// <summary>Adds the argument to a schema that does not carry it.</summary>
+        /// <param name="innerSchema">The schema of the function being wrapped.</param>
+        /// <param name="facets">What <c>scope.filterable</c> declared, in document order.</param>
+        /// <returns>The extended schema.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="facets"/> is <see langword="null"/>.</exception>
+        internal static JsonElement Extend(
+            JsonElement innerSchema, IReadOnlyList<KnowledgeFilterableFacetConfiguration> facets)
         {
-            wording.Append("\n- ").Append(facet.Key).Append(": ").Append(facet.Description);
+            ArgumentNullException.ThrowIfNull(facets);
 
-            if (facet.Resolve is { } resolve)
+            if (JsonSerializer.Deserialize<JsonNode>(innerSchema) is not JsonObject schema)
             {
-                wording.Append(' ').Append(Recipe(resolve));
+                return innerSchema;
             }
+
+            if (schema["properties"] is not JsonObject properties)
+            {
+                properties = [];
+                schema["properties"] = properties;
+            }
+
+            properties[ArgumentName] = Argument(facets);
+
+            return JsonSerializer.Deserialize<JsonElement>(schema);
         }
 
-        return wording.ToString();
-    }
+        private static JsonObject Argument(IReadOnlyList<KnowledgeFilterableFacetConfiguration> facets)
+        {
+            return new()
+            {
+                ["type"] = "array",
+                ["description"] = Wording(facets),
+                ["items"] = new JsonObject
+                {
+                    ["type"] = "object",
+                    ["properties"] = new JsonObject
+                    {
+                        [KeyProperty] = new JsonObject
+                        {
+                            ["type"] = "string",
+                            ["enum"] = new JsonArray([.. facets.Select(facet => (JsonNode)facet.Key)]),
+                        },
+                        [ValueProperty] = new JsonObject
+                        {
+                            ["type"] = "string",
+                            ["description"] =
+                                        "The value, exactly as the cards store it; it is matched exactly. A key "
+                                        + "that says how to find its value must be found that way first.",
+                        },
+                    },
+                    ["required"] = new JsonArray(KeyProperty, ValueProperty),
+                },
+            };
+        }
 
-    private static string Recipe(KnowledgeFacetResolveConfiguration resolve)
-        => $"To find the value: search once for \"{resolve.Query}\" with filters "
-            + $"[{{key: {resolve.Via.Key}, value: {resolve.Via.Value}}}], and read {resolve.Read}. "
-            + "Copy it exactly; never build one.";
+        /// <summary>
+        /// The one place a facet's meaning reaches the model.
+        /// </summary>
+        /// <remarks>
+        /// Per key, because JSON Schema hangs no description off an enum member, and the alternative —
+        /// an <c>anyOf</c> of <c>const</c> branches — is read unevenly across vendors.
+        /// </remarks>
+        private static string Wording(IReadOnlyList<KnowledgeFilterableFacetConfiguration> facets)
+        {
+            StringBuilder wording = new(
+                "Narrow the search to cards carrying these facet values. Leave it out when the question "
+                + "names none: a filter that matches nothing returns nothing. The keys are:");
+
+            foreach (KnowledgeFilterableFacetConfiguration facet in facets)
+            {
+                _ = wording.Append("\n- ").Append(facet.Key).Append(": ").Append(facet.Description);
+
+                if (facet.Resolve is { } resolve)
+                {
+                    _ = wording.Append(' ').Append(Recipe(resolve));
+                }
+            }
+
+            return wording.ToString();
+        }
+
+        private static string Recipe(KnowledgeFacetResolveConfiguration resolve)
+        {
+            return $"To find the value: search once for \"{resolve.Query}\" with filters "
+                        + $"[{{key: {resolve.Via.Key}, value: {resolve.Via.Value}}}], and read {resolve.Read}. "
+                        + "Copy it exactly; never build one.";
+        }
+    }
 }

@@ -3,184 +3,192 @@ using AgentCore.Application.Knowledge;
 using AgentCore.Domain.Knowledge;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Knowledge;
-
-/// <summary>
-/// The only place a Qdrant outage's real cause survives once tool mode discards it.
-/// </summary>
-public sealed class KnowledgeAuditRecordTests
+namespace AgentCore.Application.Tests.Knowledge
 {
-    [Fact]
-    public void Cards_DistinguishRankedFromLinked()
+    /// <summary>
+    /// The only place a Qdrant outage's real cause survives once tool mode discards it.
+    /// </summary>
+    public sealed class KnowledgeAuditRecordTests
     {
-        // `via` is the mechanism the probes proved is required for correctness, three times over.
-        // It is therefore the thing that will need debugging.
-        var record = KnowledgeAuditRecord.For("resolver", KnowledgeMode.Prefetch, "e33", Scope(),
-            [Ranked("a", 0.87), Linked("b")], latencyMs: 106, failure: null);
-
-        Assert.Equal("ranked", record.Cards[0].Via);
-
-        // "link", not "see_also". How a card arrived is the audit record's own vocabulary; the old
-        // value was one collection's payload key, and a deployment whose link field is named
-        // something else read a log line naming a field it does not have.
-        Assert.Equal("link", record.Cards[1].Via);
-        Assert.Null(record.Cards[1].Score);
-    }
-
-    [Fact]
-    public void For_ReadsTheWholeRetrievalLatencyAsOneNumber()
-    {
-        // Ruling 19: IKnowledgeRetrievalPort is one atomic method, so embed time and search time
-        // are not separately observable above it. There is one field, not two.
-        var record = KnowledgeAuditRecord.For("resolver", KnowledgeMode.Prefetch, "e33", Scope(),
-            [], latencyMs: 106, failure: null);
-
-        Assert.Equal(106, record.LatencyMs);
-    }
-
-    [Fact]
-    public void For_AFailedRetrieval_KeepsTheRealCause()
-    {
-        // In tool mode the framework discards the exception message. This is the only place it survives.
-        var record = KnowledgeAuditRecord.For("resolver", KnowledgeMode.Tool, "e33", Scope(),
-            [], latencyMs: 92, failure: new InvalidOperationException("qdrant is down"));
-
-        Assert.Contains("qdrant is down", record.Failure, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void CardEntry_CarriesEveryFieldTheCitationIsRebuiltFrom()
-    {
-        // Only Via and Score were checked before, so a mapping mistake in the other four would
-        // survive: an engineer reading the record would be shown the wrong manual, at the wrong page,
-        // for the wrong card, with nothing looking broken.
-        var record = KnowledgeAuditRecord.For("resolver", KnowledgeMode.Prefetch, "e33", Scope(),
-            [Ranked("ct900-e33-incline-err", 0.87)], latencyMs: 106, failure: null);
-
-        var card = Assert.Single(record.Cards);
-        Assert.Equal("ct900-e33-incline-err", card.CardId);
-        Assert.Equal(3, card.Authority);
-        Assert.Equal("ct900-om", card.SourceRef);
-        Assert.Equal("p.27", card.Locator);
-        Assert.Equal(0.87, card.Score);
-    }
-
-    [Fact]
-    public void For_CarriesEveryFieldTheOutageIsDiagnosedFrom()
-    {
-        var record = KnowledgeAuditRecord.For("analyst", KnowledgeMode.Tool, "belt slipping", Scope(),
-            [], latencyMs: 106, failure: null) with { TurnId = "turn-7" };
-
-        Assert.Equal("turn-7", record.TurnId);
-        Assert.Equal("analyst", record.Agent);
-        Assert.Equal(KnowledgeMode.Tool, record.Mode);
-        Assert.Equal("belt slipping", record.Query);
-        Assert.Equal("ct900", record.Scope["model"]);
-    }
-
-    [Fact]
-    public void For_NoTurnIdIsReachable_LeavesTheFieldEmptyRatherThanInventingOne()
-    {
-        // Ruling 19, then Ruling 21. The provider that writes this record can reach no conversation id and no
-        // turn index, so it passes null. A synthesised id would read as real to whoever greps for it.
-        var record = KnowledgeAuditRecord.For("analyst", KnowledgeMode.Tool, "e33", scope: null,
-            [], latencyMs: 106, failure: null);
-
-        Assert.Null(record.TurnId);
-        Assert.Empty(record.Scope);
-    }
-
-    [Fact]
-    public void CardEntry_CardWithNoAuthorityOrSource_RecordsNulls()
-    {
-        var card = new KnowledgeCard { CardId = "plain-01", Text = "a card", ViaLink = false };
-
-        var entry = KnowledgeAuditRecord.CardEntry.From(card);
-
-        Assert.Equal("plain-01", entry.CardId);
-        Assert.Null(entry.Authority);
-        Assert.Equal(string.Empty, entry.SourceRef);
-        Assert.Equal(string.Empty, entry.Locator);
-        Assert.Equal("ranked", entry.Via);
-    }
-
-    [Fact]
-    public void For_CarriesTheScopeOrigins()
-    {
-        KnowledgeScope scope = new()
+        [Fact]
+        public void Cards_DistinguishRankedFromLinked()
         {
-            Facets = new Dictionary<string, string>(StringComparer.Ordinal) { ["brand"] = "*" },
-            Origins = new Dictionary<string, KnowledgeFacetOrigin>(StringComparer.Ordinal)
-            {
-                ["brand"] = KnowledgeFacetOrigin.Wildcard,
-            },
-        };
+            // `via` is the mechanism the probes proved is required for correctness, three times over.
+            // It is therefore the thing that will need debugging.
+            KnowledgeAuditRecord record = KnowledgeAuditRecord.For("resolver", KnowledgeMode.Prefetch, "e33", Scope(),
+                [Ranked("a", 0.87), Linked("b")], latencyMs: 106, failure: null);
 
-        var record = KnowledgeAuditRecord.For(
-            "agent", KnowledgeMode.Tool, "q", scope, [], 1.0, null);
+            Assert.Equal("ranked", record.Cards[0].Via);
 
-        Assert.Equal(KnowledgeFacetOrigin.Wildcard, record.ScopeOrigins["brand"]);
-    }
+            // "link", not "see_also". How a card arrived is the audit record's own vocabulary; the old
+            // value was one collection's payload key, and a deployment whose link field is named
+            // something else read a log line naming a field it does not have.
+            Assert.Equal("link", record.Cards[1].Via);
+            Assert.Null(record.Cards[1].Score);
+        }
 
-    [Fact]
-    public void ForLog_WritesEachFacetWithItsOriginAsText()
-    {
-        // The log line prints the view with the record's own ToString, and a dictionary prints as
-        // its type name there. The one thing an operator opens the line to see, which facet
-        // narrowed the search, has to be in the text.
-        KnowledgeScope scope = new()
+        [Fact]
+        public void For_ReadsTheWholeRetrievalLatencyAsOneNumber()
         {
-            Facets = new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["model"] = "f85-2019",
-                ["code"] = "*",
-            },
-            Origins = new Dictionary<string, KnowledgeFacetOrigin>(StringComparer.Ordinal)
-            {
-                ["model"] = KnowledgeFacetOrigin.Tool,
-                ["code"] = KnowledgeFacetOrigin.Wildcard,
-            },
-        };
+            // Ruling 19: IKnowledgeRetrievalPort is one atomic method, so embed time and search time
+            // are not separately observable above it. There is one field, not two.
+            KnowledgeAuditRecord record = KnowledgeAuditRecord.For("resolver", KnowledgeMode.Prefetch, "e33", Scope(),
+                [], latencyMs: 106, failure: null);
 
-        var view = KnowledgeAuditRecord.For("agent", KnowledgeMode.Tool, "q", scope, [], 1.0, null)
-            .ForLog();
+            Assert.Equal(106, record.LatencyMs);
+        }
 
-        Assert.Equal("code=* (Wildcard), model=f85-2019 (Tool)", view.Scope);
-    }
-
-    [Fact]
-    public void ForLog_FacetWithNoRecordedOrigin_WritesTheValueAlone()
-    {
-        var view = KnowledgeAuditRecord.For("agent", KnowledgeMode.Tool, "q", Scope(), [], 1.0, null)
-            .ForLog();
-
-        Assert.Equal("model=ct900", view.Scope);
-    }
-
-    [Fact]
-    public void ForLog_NoScopeWasOpen_WritesAnEmptyString()
-    {
-        var view = KnowledgeAuditRecord.For("agent", KnowledgeMode.Tool, "q", scope: null, [], 1.0, null)
-            .ForLog();
-
-        Assert.Equal(string.Empty, view.Scope);
-    }
-
-    private static KnowledgeScope Scope()
-        => new() { Facets = new Dictionary<string, string> { ["model"] = "ct900" } };
-
-    private static KnowledgeCard Ranked(string id, double score)
-        => new()
+        [Fact]
+        public void For_AFailedRetrieval_KeepsTheRealCause()
         {
-            CardId = id,
-            Text = "card " + id,
-            Authority = 3,
-            SourceRef = "ct900-om",
-            SourceLocator = "p.27",
-            Score = score,
-            ViaLink = false,
-        };
+            // In tool mode the framework discards the exception message. This is the only place it survives.
+            KnowledgeAuditRecord record = KnowledgeAuditRecord.For("resolver", KnowledgeMode.Tool, "e33", Scope(),
+                [], latencyMs: 92, failure: new InvalidOperationException("qdrant is down"));
 
-    private static KnowledgeCard Linked(string id)
-        => Ranked(id, 0) with { Score = null, ViaLink = true };
+            Assert.Contains("qdrant is down", record.Failure, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void CardEntry_CarriesEveryFieldTheCitationIsRebuiltFrom()
+        {
+            // Only Via and Score were checked before, so a mapping mistake in the other four would
+            // survive: an engineer reading the record would be shown the wrong manual, at the wrong page,
+            // for the wrong card, with nothing looking broken.
+            KnowledgeAuditRecord record = KnowledgeAuditRecord.For("resolver", KnowledgeMode.Prefetch, "e33", Scope(),
+                [Ranked("ct900-e33-incline-err", 0.87)], latencyMs: 106, failure: null);
+
+            KnowledgeAuditRecord.CardEntry card = Assert.Single(record.Cards);
+            Assert.Equal("ct900-e33-incline-err", card.CardId);
+            Assert.Equal(3, card.Authority);
+            Assert.Equal("ct900-om", card.SourceRef);
+            Assert.Equal("p.27", card.Locator);
+            Assert.Equal(0.87, card.Score);
+        }
+
+        [Fact]
+        public void For_CarriesEveryFieldTheOutageIsDiagnosedFrom()
+        {
+            KnowledgeAuditRecord record = KnowledgeAuditRecord.For("analyst", KnowledgeMode.Tool, "belt slipping", Scope(),
+                [], latencyMs: 106, failure: null) with
+            { TurnId = "turn-7" };
+
+            Assert.Equal("turn-7", record.TurnId);
+            Assert.Equal("analyst", record.Agent);
+            Assert.Equal(KnowledgeMode.Tool, record.Mode);
+            Assert.Equal("belt slipping", record.Query);
+            Assert.Equal("ct900", record.Scope["model"]);
+        }
+
+        [Fact]
+        public void For_NoTurnIdIsReachable_LeavesTheFieldEmptyRatherThanInventingOne()
+        {
+            // Ruling 19, then Ruling 21. The provider that writes this record can reach no conversation id and no
+            // turn index, so it passes null. A synthesised id would read as real to whoever greps for it.
+            KnowledgeAuditRecord record = KnowledgeAuditRecord.For("analyst", KnowledgeMode.Tool, "e33", scope: null,
+                [], latencyMs: 106, failure: null);
+
+            Assert.Null(record.TurnId);
+            Assert.Empty(record.Scope);
+        }
+
+        [Fact]
+        public void CardEntry_CardWithNoAuthorityOrSource_RecordsNulls()
+        {
+            KnowledgeCard card = new() { CardId = "plain-01", Text = "a card", ViaLink = false };
+
+            KnowledgeAuditRecord.CardEntry entry = KnowledgeAuditRecord.CardEntry.From(card);
+
+            Assert.Equal("plain-01", entry.CardId);
+            Assert.Null(entry.Authority);
+            Assert.Equal(string.Empty, entry.SourceRef);
+            Assert.Equal(string.Empty, entry.Locator);
+            Assert.Equal("ranked", entry.Via);
+        }
+
+        [Fact]
+        public void For_CarriesTheScopeOrigins()
+        {
+            KnowledgeScope scope = new()
+            {
+                Facets = new Dictionary<string, string>(StringComparer.Ordinal) { ["brand"] = "*" },
+                Origins = new Dictionary<string, KnowledgeFacetOrigin>(StringComparer.Ordinal)
+                {
+                    ["brand"] = KnowledgeFacetOrigin.Wildcard,
+                },
+            };
+
+            KnowledgeAuditRecord record = KnowledgeAuditRecord.For(
+                "agent", KnowledgeMode.Tool, "q", scope, [], 1.0, null);
+
+            Assert.Equal(KnowledgeFacetOrigin.Wildcard, record.ScopeOrigins["brand"]);
+        }
+
+        [Fact]
+        public void ForLog_WritesEachFacetWithItsOriginAsText()
+        {
+            // The log line prints the view with the record's own ToString, and a dictionary prints as
+            // its type name there. The one thing an operator opens the line to see, which facet
+            // narrowed the search, has to be in the text.
+            KnowledgeScope scope = new()
+            {
+                Facets = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["model"] = "f85-2019",
+                    ["code"] = "*",
+                },
+                Origins = new Dictionary<string, KnowledgeFacetOrigin>(StringComparer.Ordinal)
+                {
+                    ["model"] = KnowledgeFacetOrigin.Tool,
+                    ["code"] = KnowledgeFacetOrigin.Wildcard,
+                },
+            };
+
+            KnowledgeAuditRecord.LogView view = KnowledgeAuditRecord.For("agent", KnowledgeMode.Tool, "q", scope, [], 1.0, null)
+                .ForLog();
+
+            Assert.Equal("code=* (Wildcard), model=f85-2019 (Tool)", view.Scope);
+        }
+
+        [Fact]
+        public void ForLog_FacetWithNoRecordedOrigin_WritesTheValueAlone()
+        {
+            KnowledgeAuditRecord.LogView view = KnowledgeAuditRecord.For("agent", KnowledgeMode.Tool, "q", Scope(), [], 1.0, null)
+                .ForLog();
+
+            Assert.Equal("model=ct900", view.Scope);
+        }
+
+        [Fact]
+        public void ForLog_NoScopeWasOpen_WritesAnEmptyString()
+        {
+            KnowledgeAuditRecord.LogView view = KnowledgeAuditRecord.For("agent", KnowledgeMode.Tool, "q", scope: null, [], 1.0, null)
+                .ForLog();
+
+            Assert.Equal(string.Empty, view.Scope);
+        }
+
+        private static KnowledgeScope Scope()
+        {
+            return new() { Facets = new Dictionary<string, string> { ["model"] = "ct900" } };
+        }
+
+        private static KnowledgeCard Ranked(string id, double score)
+        {
+            return new()
+            {
+                CardId = id,
+                Text = "card " + id,
+                Authority = 3,
+                SourceRef = "ct900-om",
+                SourceLocator = "p.27",
+                Score = score,
+                ViaLink = false,
+            };
+        }
+
+        private static KnowledgeCard Linked(string id)
+        {
+            return Ranked(id, 0) with { Score = null, ViaLink = true };
+        }
+    }
 }

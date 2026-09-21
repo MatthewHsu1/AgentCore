@@ -1,42 +1,46 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-namespace AgentCore.Application.Tools;
-
-/// <summary>
-/// The one rule for carrying what the model filled into JSON.
-/// </summary>
-public static class ToolArgumentJson
+namespace AgentCore.Application.Tools
 {
-    /// <summary>Copies every argument into one JSON object.</summary>
-    /// <param name="arguments">The arguments the model filled.</param>
-    /// <returns>The object, with one property per argument.</returns>
-    public static JsonObject ToJsonObject(IEnumerable<KeyValuePair<string, object?>> arguments)
+    /// <summary>
+    /// The one rule for carrying what the model filled into JSON.
+    /// </summary>
+    public static class ToolArgumentJson
     {
-        ArgumentNullException.ThrowIfNull(arguments);
-
-        JsonObject payload = [];
-        foreach (var argument in arguments)
+        /// <summary>Copies every argument into one JSON object.</summary>
+        /// <param name="arguments">The arguments the model filled.</param>
+        /// <returns>The object, with one property per argument.</returns>
+        public static JsonObject ToJsonObject(IEnumerable<KeyValuePair<string, object?>> arguments)
         {
-            payload[argument.Key] = ToNode(argument.Value);
+            ArgumentNullException.ThrowIfNull(arguments);
+
+            JsonObject payload = [];
+            foreach (KeyValuePair<string, object?> argument in arguments)
+            {
+                payload[argument.Key] = ToNode(argument.Value);
+            }
+
+            return payload;
         }
 
-        return payload;
+        /// <summary>Carries one tool argument into a JSON node.</summary>
+        /// <param name="value">The value the model filled, in whatever type it arrived as.</param>
+        /// <returns>The node, or <see langword="null"/> when the model filled nothing.</returns>
+        internal static JsonNode? ToNode(object? value)
+        {
+            return value switch
+            {
+                null => null,
+                JsonNode node => node.DeepClone(),
+                JsonElement element => JsonNode.Parse(element.GetRawText()),
+                string text => JsonValue.Create(text),
+                bool flag => JsonValue.Create(flag),
+                int number => JsonValue.Create(number),
+                long number => JsonValue.Create(number),
+                double number => JsonValue.Create(number),
+                decimal number => JsonValue.Create(number),
+                _ => JsonValue.Create(value.ToString()),
+            };
+        }
     }
-
-    /// <summary>Carries one tool argument into a JSON node.</summary>
-    /// <param name="value">The value the model filled, in whatever type it arrived as.</param>
-    /// <returns>The node, or <see langword="null"/> when the model filled nothing.</returns>
-    internal static JsonNode? ToNode(object? value) => value switch
-    {
-        null => null,
-        JsonNode node => node.DeepClone(),
-        JsonElement element => JsonNode.Parse(element.GetRawText()),
-        string text => JsonValue.Create(text),
-        bool flag => JsonValue.Create(flag),
-        int number => JsonValue.Create(number),
-        long number => JsonValue.Create(number),
-        double number => JsonValue.Create(number),
-        decimal number => JsonValue.Create(number),
-        _ => JsonValue.Create(value.ToString()),
-    };
 }

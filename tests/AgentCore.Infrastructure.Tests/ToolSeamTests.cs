@@ -7,9 +7,7 @@ using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
-using AgentCore.Application.Tools;
 using AgentCore.Application.Tools.Builtin;
 using AgentCore.Infrastructure.Secrets;
 using AgentCore.Infrastructure.Tests.Tools;
@@ -17,20 +15,20 @@ using AgentCore.Infrastructure.Tools;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentCore.Infrastructure.Tests;
-
-/// <summary>
-/// The whole seam, from the document to the conversation: secrets, then tools, then the compile table.
-/// </summary>
-/// <remarks>
-/// The worked example of section 8.1 declares all four tool kinds. This test walks the three that
-/// need a source, in the order a host starts them: resolve every <c>${secret:name}</c> once, build
-/// the sources over the resolved values, then compile.
-/// </remarks>
-public sealed class ToolSeamTests
+namespace AgentCore.Infrastructure.Tests
 {
-    private const string Yaml =
-        """
+    /// <summary>
+    /// The whole seam, from the document to the conversation: secrets, then tools, then the compile table.
+    /// </summary>
+    /// <remarks>
+    /// The worked example of section 8.1 declares all four tool kinds. This test walks the three that
+    /// need a source, in the order a host starts them: resolve every <c>${secret:name}</c> once, build
+    /// the sources over the resolved values, then compile.
+    /// </remarks>
+    public sealed class ToolSeamTests
+    {
+        private const string Yaml =
+            """
           apiVersion: agentcore/v1
           tools:
             - id: lookup_order
@@ -72,85 +70,86 @@ public sealed class ToolSeamTests
                 tts: { kind: telnyx-relay }
           """;
 
-      private static CancellationToken Token => TestContext.Current.CancellationToken;
+        private static CancellationToken Token => TestContext.Current.CancellationToken;
 
-      [Fact]
-      public async Task TheWorkedExample_CompilesWithEveryToolBound()
-      {
-          var document = ConfigurationLoader.LoadYaml(Yaml);
+        [Fact]
+        public async Task TheWorkedExample_CompilesWithEveryToolBound()
+        {
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(Yaml);
 
-          // Step one: resolve every reference the document holds, once.
-          ChainedSecretResolver chain = new([new EnvironmentSecretResolver(_ => "sk-live-0123456789")]);
-          var secrets = await ResolvedSecrets.ResolveAsync(document, chain, Token);
+            // Step one: resolve every reference the document holds, once.
+            ChainedSecretResolver chain = new([new EnvironmentSecretResolver(_ => "sk-live-0123456789")]);
+            ResolvedSecrets secrets = await ResolvedSecrets.ResolveAsync(document, chain, Token);
 
-          using var handler = StubHttpMessageHandler.Answering(HttpStatusCode.OK, """{"status":"shipped"}""");
-          using HttpClient client = new(handler);
+            using StubHttpMessageHandler handler = StubHttpMessageHandler.Answering(HttpStatusCode.OK, /*lang=json,strict*/ """{"status":"shipped"}""");
+            using HttpClient client = new(handler);
 
-          ToolBindingRegistry bindings = new();
-          bindings.Register("CreateCase", (arguments, cancellationToken)
-              => ValueTask.FromResult<object?>(JsonNode.Parse("""{"caseId":"C-1"}""")));
+            ToolBindingRegistry bindings = new();
+            _ = bindings.Register("CreateCase", (arguments, cancellationToken)
+                => ValueTask.FromResult<object?>(JsonNode.Parse("""{"caseId":"C-1"}""")));
 
-          // Step two: build the sources over the resolved values.
-          var registry = await ToolRegistryBuilder.BuildAsync(
-              [
-                  new BuiltinToolSource(new BuiltinToolPorts(null)),
-                  new HttpToolSource(client, secrets),
-                  new BindingToolSource(bindings),
-              ],
-              new ToolSourceContext(document), Token);
+            // Step two: build the sources over the resolved values.
+            ToolRegistry registry = await ToolRegistryBuilder.BuildAsync(
+                [
+                    new BuiltinToolSource(new BuiltinToolPorts(null)),
+                      new HttpToolSource(client, secrets),
+                      new BindingToolSource(bindings),
+                  ],
+                new ToolSourceContext(document), Token);
 
-          // Step three: compile.
-          using OneReplyChatClient model = new("done");
-          var compiled = ConfigurationCompiler.CompileAll(
-              document,
-              new AgentCompilationContext(new RecordingChatClientFactory(model)) { Tools = registry })["main"];
+            // Step three: compile.
+            using OneReplyChatClient model = new("done");
+            CompiledAgent compiled = ConfigurationCompiler.CompileAll(
+                document,
+                new AgentCompilationContext(new RecordingChatClientFactory(model)) { Tools = registry })["main"];
 
-          Assert.Equal(3, compiled.Agents.Count);
+            Assert.Equal(3, compiled.Agents.Count);
 
-          // The HTTP tool now makes its call. Before this seam existed it could not.
-          var lookup = Assert.IsType<AIFunction>(registry.Resolve("lookup_order"), exactMatch: false);
+            // The HTTP tool now makes its call. Before this seam existed it could not.
+            AIFunction lookup = Assert.IsType<AIFunction>(registry.Resolve("lookup_order"), exactMatch: false);
 
-          var result = await lookup.InvokeAsync(
-              new AIFunctionArguments(new Dictionary<string, object?>(StringComparer.Ordinal) { ["orderId"] = "A-42" }),
-              Token);
+            object? result = await lookup.InvokeAsync(
+                new AIFunctionArguments(new Dictionary<string, object?>(StringComparer.Ordinal) { ["orderId"] = "A-42" }),
+                Token);
 
-          Assert.Equal("shipped", Assert.IsType<JsonObject>(result)["status"]!.GetValue<string>());
-          Assert.Equal(
-              "Bearer sk-live-0123456789",
-              handler.Requests[0].Headers.GetValues("Authorization").Single());
-      }
+            Assert.Equal("shipped", Assert.IsType<JsonObject>(result)["status"]!.GetValue<string>());
+            Assert.Equal(
+                "Bearer sk-live-0123456789",
+                handler.Requests[0].Headers.GetValues("Authorization").Single());
+        }
 
-      /// <summary>An offline model that answers one line and calls no tool.</summary>
-      private sealed class OneReplyChatClient : IChatClient
-      {
-          private readonly string _reply;
+        /// <summary>An offline model that answers one line and calls no tool.</summary>
+        private sealed class OneReplyChatClient(string reply) : IChatClient
+        {
+            private readonly string _reply = reply;
 
-          public OneReplyChatClient(string reply) => _reply = reply;
+            public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+                IEnumerable<ChatMessage> messages,
+                ChatOptions? options = null,
+                [EnumeratorCancellation] CancellationToken cancellationToken = default)
+            {
+                await Task.Yield();
+                yield return new ChatResponseUpdate(ChatRole.Assistant, _reply);
+            }
 
-          public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-              IEnumerable<ChatMessage> messages,
-              ChatOptions? options = null,
-              [EnumeratorCancellation] CancellationToken cancellationToken = default)
-          {
-              await Task.Yield();
-              yield return new ChatResponseUpdate(ChatRole.Assistant, _reply);
-          }
+            public Task<ChatResponse> GetResponseAsync(
+                IEnumerable<ChatMessage> messages,
+                ChatOptions? options = null,
+                CancellationToken cancellationToken = default)
+            {
+                return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, _reply)));
+            }
 
-          public Task<ChatResponse> GetResponseAsync(
-              IEnumerable<ChatMessage> messages,
-              ChatOptions? options = null,
-              CancellationToken cancellationToken = default)
-              => Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, _reply)));
+            public object? GetService(Type serviceType, object? serviceKey = null)
+            {
+                ArgumentNullException.ThrowIfNull(serviceType);
+                return serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
+            }
 
-          public object? GetService(Type serviceType, object? serviceKey = null)
-          {
-              ArgumentNullException.ThrowIfNull(serviceType);
-              return serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
-          }
-
-          public void Dispose()
-          {
-              // Nothing to release.
-          }
-      }
-  }
+            public void Dispose()
+            {
+                // Nothing to release.
+            }
+        }
+    }
+}

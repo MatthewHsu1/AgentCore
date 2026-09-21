@@ -4,84 +4,90 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Tools.Registry;
 using Microsoft.Extensions.AI;
 
-namespace AgentCore.Application.Tools.Binding;
-
-/// <summary>
-/// Serves the <c>kind: binding</c> tools.
-/// </summary>
-public sealed class BindingToolSource : IToolSource
+namespace AgentCore.Application.Tools.Binding
 {
-    private readonly ToolBindingRegistry _registry;
-
-    /// <summary>Creates the source.</summary>
-    /// <param name="registry">The delegates the host registered.</param>
-    public BindingToolSource(ToolBindingRegistry registry)
+    /// <summary>
+    /// Serves the <c>kind: binding</c> tools.
+    /// </summary>
+    public sealed class BindingToolSource : IToolSource
     {
-        ArgumentNullException.ThrowIfNull(registry);
-        _registry = registry;
-    }
+        private readonly ToolBindingRegistry _registry;
 
-    /// <inheritdoc />
-    /// <exception cref="ConfigurationLoadException">
-    /// A <c>binds:</c> name is missing, is not registered, or names a typed method while the
-    /// declaration also writes <c>parameters:</c>.
-    /// </exception>
-    public ValueTask<IReadOnlyList<ToolRegistration>> ProvideAsync(
-        ToolSourceContext context, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-
-        List<ToolRegistration> registrations = [];
-        foreach (var declared in context.DeclarationsOf(ToolKind.Binding))
+        /// <summary>Creates the source.</summary>
+        /// <param name="registry">The delegates the host registered.</param>
+        public BindingToolSource(ToolBindingRegistry registry)
         {
-            if (declared.Binds is not { Length: > 0 } name)
-            {
-                throw ToolSourceError.Fail($"the tool '{declared.Id}' is kind: binding and names no binds:.");
-            }
-
-            if (_registry.TryGetMethod(name, out var method) && method is not null)
-            {
-                if (declared.Parameters is not null)
-                {
-                    throw ToolSourceError.Fail(
-                        $"the tool '{declared.Id}' binds to '{name}', which the host registered as a typed "
-                        + "method, and it also declares parameters:. The method signature is the schema, so "
-                        + "the two disagree the moment either one changes. Take the parameters: off the "
-                        + "declaration, or register the name as a ToolBinding instead.");
-                }
-
-                var typed = method;
-                registrations.Add(new ToolRegistration(
-                    declared.Id, declared.Description ?? string.Empty, () => new TypedBindingTool(declared, typed)));
-                continue;
-            }
-
-            if (!_registry.TryGetBinding(name, out var binding) || binding is null)
-            {
-                throw ToolSourceError.Fail(
-                    $"the tool '{declared.Id}' binds to '{name}', which the host did not register. Register the "
-                    + "delegate on the ToolBindingRegistry before the document compiles.");
-            }
-
-            var bound = binding;
-            registrations.Add(new ToolRegistration(
-                declared.Id, declared.Description ?? string.Empty, () => new BindingTool(declared, bound)));
+            ArgumentNullException.ThrowIfNull(registry);
+            _registry = registry;
         }
 
-        return ValueTask.FromResult<IReadOnlyList<ToolRegistration>>(registrations);
+        /// <inheritdoc />
+        /// <exception cref="ConfigurationLoadException">
+        /// A <c>binds:</c> name is missing, is not registered, or names a typed method while the
+        /// declaration also writes <c>parameters:</c>.
+        /// </exception>
+        public ValueTask<IReadOnlyList<ToolRegistration>> ProvideAsync(
+            ToolSourceContext context, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(context);
+
+            List<ToolRegistration> registrations = [];
+            foreach (ToolConfiguration declared in context.DeclarationsOf(ToolKind.Binding))
+            {
+                if (declared.Binds is not { Length: > 0 } name)
+                {
+                    throw ToolSourceError.Fail($"the tool '{declared.Id}' is kind: binding and names no binds:.");
+                }
+
+                if (_registry.TryGetMethod(name, out Delegate? method) && method is not null)
+                {
+                    if (declared.Parameters is not null)
+                    {
+                        throw ToolSourceError.Fail(
+                            $"the tool '{declared.Id}' binds to '{name}', which the host registered as a typed "
+                            + "method, and it also declares parameters:. The method signature is the schema, so "
+                            + "the two disagree the moment either one changes. Take the parameters: off the "
+                            + "declaration, or register the name as a ToolBinding instead.");
+                    }
+
+                    Delegate typed = method;
+                    registrations.Add(new ToolRegistration(
+                        declared.Id, declared.Description ?? string.Empty, () => new TypedBindingTool(declared, typed)));
+                    continue;
+                }
+
+                if (!_registry.TryGetBinding(name, out ToolBinding? binding) || binding is null)
+                {
+                    throw ToolSourceError.Fail(
+                        $"the tool '{declared.Id}' binds to '{name}', which the host did not register. Register the "
+                        + "delegate on the ToolBindingRegistry before the document compiles.");
+                }
+
+                ToolBinding bound = binding;
+                registrations.Add(new ToolRegistration(
+                    declared.Id, declared.Description ?? string.Empty, () => new BindingTool(declared, bound)));
+            }
+
+            return ValueTask.FromResult<IReadOnlyList<ToolRegistration>>(registrations);
+        }
     }
-}
 
-/// <summary>One <c>kind: binding</c> tool.</summary>
-internal sealed class BindingTool : DeclaredTool
-{
-    private readonly ToolBinding _binding;
+    /// <summary>One <c>kind: binding</c> tool.</summary>
+    internal sealed class BindingTool : DeclaredTool
+    {
+        private readonly ToolBinding _binding;
 
-    internal BindingTool(ToolConfiguration tool, ToolBinding binding)
-        : base(tool) => _binding = binding;
+        internal BindingTool(ToolConfiguration tool, ToolBinding binding)
+            : base(tool)
+        {
+            _binding = binding;
+        }
 
-    protected override ValueTask<object?> CallAsync(
-        AIFunctionArguments arguments,
-        CancellationToken cancellationToken)
-        => _binding(ArgumentsAsJson(arguments), cancellationToken);
+        protected override ValueTask<object?> CallAsync(
+            AIFunctionArguments arguments,
+            CancellationToken cancellationToken)
+        {
+            return _binding(ArgumentsAsJson(arguments), cancellationToken);
+        }
+    }
 }

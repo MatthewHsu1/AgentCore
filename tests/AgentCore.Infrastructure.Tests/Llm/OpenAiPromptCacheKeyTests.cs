@@ -6,69 +6,70 @@ using Microsoft.Extensions.AI;
 using OpenAI.Responses;
 using Xunit;
 
-namespace AgentCore.Infrastructure.Tests.Llm;
-
-/// <summary>
-/// The conversation id the runtime stamps under <see cref="ChatRequestProperties.ConversationId"/>
-/// reaches the vendor as <c>prompt_cache_key</c>, so every turn of one conversation lands on the
-/// same prompt cache. Every test here runs offline.
-/// </summary>
-public sealed class OpenAiPromptCacheKeyTests
+namespace AgentCore.Infrastructure.Tests.Llm
 {
-    [Fact]
-    public async Task AStampedConversationId_BecomesThePromptCacheKey()
+    /// <summary>
+    /// The conversation id the runtime stamps under <see cref="ChatRequestProperties.ConversationId"/>
+    /// reaches the vendor as <c>prompt_cache_key</c>, so every turn of one conversation lands on the
+    /// same prompt cache. Every test here runs offline.
+    /// </summary>
+    public sealed class OpenAiPromptCacheKeyTests
     {
-        CapturingChatClient inner = new();
+        [Fact]
+        public async Task AStampedConversationId_BecomesThePromptCacheKey()
+        {
+            CapturingChatClient inner = new();
 
-        var client = OpenAiChatClientAdapter.WithResponseDefaults(inner, effort: null);
-        await client.GetResponseAsync(
-            "hi",
-            new ChatOptions
-            {
-                AdditionalProperties = new AdditionalPropertiesDictionary
+            IChatClient client = OpenAiChatClientAdapter.WithResponseDefaults(inner, effort: null);
+            _ = await client.GetResponseAsync(
+                "hi",
+                new ChatOptions
                 {
-                    [ChatRequestProperties.ConversationId] = "conv-42",
+                    AdditionalProperties = new AdditionalPropertiesDictionary
+                    {
+                        [ChatRequestProperties.ConversationId] = "conv-42",
+                    },
                 },
-            },
-            TestContext.Current.CancellationToken);
+                TestContext.Current.CancellationToken);
 
-        var raw = Assert.IsType<CreateResponseOptions>(inner.Seen!.RawRepresentationFactory!(inner));
+            CreateResponseOptions raw = Assert.IsType<CreateResponseOptions>(inner.Seen!.RawRepresentationFactory!(inner));
 
-        Assert.Equal("conv-42", raw.PromptCacheKey);
-    }
+            Assert.Equal("conv-42", raw.PromptCacheKey);
+        }
 
-    [Fact]
-    public async Task ARequestOutsideAConversation_SendsNoPromptCacheKey()
-    {
-        CapturingChatClient inner = new();
+        [Fact]
+        public async Task ARequestOutsideAConversation_SendsNoPromptCacheKey()
+        {
+            CapturingChatClient inner = new();
 
-        var client = OpenAiChatClientAdapter.WithResponseDefaults(inner, effort: null);
-        await client.GetResponseAsync("hi", cancellationToken: TestContext.Current.CancellationToken);
+            IChatClient client = OpenAiChatClientAdapter.WithResponseDefaults(inner, effort: null);
+            _ = await client.GetResponseAsync("hi", cancellationToken: TestContext.Current.CancellationToken);
 
-        var raw = Assert.IsType<CreateResponseOptions>(inner.Seen!.RawRepresentationFactory!(inner));
+            CreateResponseOptions raw = Assert.IsType<CreateResponseOptions>(inner.Seen!.RawRepresentationFactory!(inner));
 
-        Assert.Null(raw.PromptCacheKey);
-    }
+            Assert.Null(raw.PromptCacheKey);
+        }
 
-    [Fact]
-    public async Task AKeyTheCallerSetItself_Wins()
-    {
-        CapturingChatClient inner = new();
-        CreateResponseOptions mine = new() { PromptCacheKey = "caller-key" };
+        [Fact]
+        public async Task AKeyTheCallerSetItself_Wins()
+        {
+            CapturingChatClient inner = new();
+            CreateResponseOptions mine = new() { PromptCacheKey = "caller-key" };
 
-        var client = OpenAiChatClientAdapter.WithResponseDefaults(inner, effort: null);
-        await client.GetResponseAsync(
-            "hi",
-            new ChatOptions
-            {
-                RawRepresentationFactory = _ => mine,
-                AdditionalProperties = new AdditionalPropertiesDictionary
+            IChatClient client = OpenAiChatClientAdapter.WithResponseDefaults(inner, effort: null);
+            _ = await client.GetResponseAsync(
+                "hi",
+                new ChatOptions
                 {
-                    [ChatRequestProperties.ConversationId] = "conv-42",
+                    RawRepresentationFactory = _ => mine,
+                    AdditionalProperties = new AdditionalPropertiesDictionary
+                    {
+                        [ChatRequestProperties.ConversationId] = "conv-42",
+                    },
                 },
-            },
-            TestContext.Current.CancellationToken);
+                TestContext.Current.CancellationToken);
 
-        Assert.Equal("caller-key", mine.PromptCacheKey);
+            Assert.Equal("caller-key", mine.PromptCacheKey);
+        }
     }
 }

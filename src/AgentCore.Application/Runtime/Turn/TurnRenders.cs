@@ -2,26 +2,27 @@ using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Transcript;
 
-namespace AgentCore.Application.Runtime.Turn;
-
-/// <summary>What a turn has drawn and not yet attached to a message.</summary>
-internal sealed class TurnRenders : TurnAttachments<RenderContent>, IRenderPort
+namespace AgentCore.Application.Runtime.Turn
 {
-    /// <inheritdoc/>
-    public void Publish(string name, string renderId, object data, bool transient = false)
+    /// <summary>What a turn has drawn and not yet attached to a message.</summary>
+    internal sealed class TurnRenders : TurnAttachments<RenderContent>, IRenderPort
     {
-        ArgumentNullException.ThrowIfNull(name);
-        ArgumentNullException.ThrowIfNull(renderId);
-        ArgumentNullException.ThrowIfNull(data);
-
-        if (transient || OuterCallId is not { } callId)
+        /// <inheritdoc/>
+        public void Publish(string name, string renderId, object data, bool transient = false)
         {
-            return;
+            ArgumentNullException.ThrowIfNull(name);
+            ArgumentNullException.ThrowIfNull(renderId);
+            ArgumentNullException.ThrowIfNull(data);
+
+            if (transient || OuterCallId is not { } callId)
+            {
+                return;
+            }
+
+            JsonElement element = JsonSerializer.SerializeToElement(data, data.GetType(), TranscriptJson.Options);
+            RenderContent content = new() { Name = name, RenderId = renderId, Data = element };
+
+            Attach(callId, content, existing => string.Equals(existing.RenderId, renderId, StringComparison.Ordinal));
         }
-
-        var element = JsonSerializer.SerializeToElement(data, data.GetType(), TranscriptJson.Options);
-        var content = new RenderContent { Name = name, RenderId = renderId, Data = element };
-
-        Attach(callId, content, existing => string.Equals(existing.RenderId, renderId, StringComparison.Ordinal));
     }
 }

@@ -3,25 +3,25 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Configuration;
-
-/// <summary>
-/// The <c>mcp:</c> block of decision 13: parse and shape only, no connection.
-/// </summary>
-/// <remarks>
-/// Each test pins one rule check 1 of section 8.5 enforces over an <c>mcp:</c> server: the
-/// <c>allow:</c> entry shapes decision 6 permits, and the transport/command/url pairing a server's
-/// connection depends on. Served ids depend on <c>id</c> and <c>allow[].as</c> (decision 10), not on
-/// the transport.
-/// </remarks>
-public sealed class McpConfigurationTests
+namespace AgentCore.Application.Tests.Configuration
 {
-    private static readonly string[] JiraCommand = ["npx", "-y", "@atlassian/mcp"];
-
-    [Fact]
-    public void AStdioServerBindsItsCommandAndTwoAllowEntries()
+    /// <summary>
+    /// The <c>mcp:</c> block of decision 13: parse and shape only, no connection.
+    /// </summary>
+    /// <remarks>
+    /// Each test pins one rule check 1 of section 8.5 enforces over an <c>mcp:</c> server: the
+    /// <c>allow:</c> entry shapes decision 6 permits, and the transport/command/url pairing a server's
+    /// connection depends on. Served ids depend on <c>id</c> and <c>allow[].as</c> (decision 10), not on
+    /// the transport.
+    /// </remarks>
+    public sealed class McpConfigurationTests
     {
-        var configuration = Load("""
+        private static readonly string[] JiraCommand = ["npx", "-y", "@atlassian/mcp"];
+
+        [Fact]
+        public void AStdioServerBindsItsCommandAndTwoAllowEntries()
+        {
+            AgentCoreConfiguration configuration = Load("""
             mcp:
               - id: jira
                 transport: stdio
@@ -31,29 +31,29 @@ public sealed class McpConfigurationTests
                   - search_issues: { as: find_ticket }
             """);
 
-        var server = Assert.Single(configuration.Mcp);
-        Assert.Equal("jira", server.Id);
-        Assert.Equal(McpTransport.Stdio, server.Transport);
-        Assert.Equal(JiraCommand, server.Command);
+            McpServerConfiguration server = Assert.Single(configuration.Mcp);
+            Assert.Equal("jira", server.Id);
+            Assert.Equal(McpTransport.Stdio, server.Transport);
+            Assert.Equal(JiraCommand, server.Command);
 
-        Assert.Collection(
-            server.Allow,
-            entry =>
-            {
-                Assert.Equal("create_issue", entry.Name);
-                Assert.Null(entry.As);
-            },
-            entry =>
-            {
-                Assert.Equal("search_issues", entry.Name);
-                Assert.Equal("find_ticket", entry.As);
-            });
-    }
+            Assert.Collection(
+                server.Allow,
+                entry =>
+                {
+                    Assert.Equal("create_issue", entry.Name);
+                    Assert.Null(entry.As);
+                },
+                entry =>
+                {
+                    Assert.Equal("search_issues", entry.Name);
+                    Assert.Equal("find_ticket", entry.As);
+                });
+        }
 
-    [Fact]
-    public void AWildcardAllowBindsToOneUnaliasedEntry()
-    {
-        var configuration = Load("""
+        [Fact]
+        public void AWildcardAllowBindsToOneUnaliasedEntry()
+        {
+            AgentCoreConfiguration configuration = Load("""
             mcp:
               - id: jira
                 transport: stdio
@@ -61,16 +61,16 @@ public sealed class McpConfigurationTests
                 allow: ["*"]
             """);
 
-        var entry = Assert.Single(Assert.Single(configuration.Mcp).Allow);
-        Assert.Equal("*", entry.Name);
-        Assert.Null(entry.As);
-    }
+            McpAllowEntry entry = Assert.Single(Assert.Single(configuration.Mcp).Allow);
+            Assert.Equal("*", entry.Name);
+            Assert.Null(entry.As);
+        }
 
-    [Fact]
-    public void AnAllowEntryMapWithTwoKeys_FailsTheLoad()
-    {
-        var failure = Assert.Throws<ConfigurationLoadException>(
-            () => Load("""
+        [Fact]
+        public void AnAllowEntryMapWithTwoKeys_FailsTheLoad()
+        {
+            ConfigurationLoadException failure = Assert.Throws<ConfigurationLoadException>(
+                () => Load("""
                 mcp:
                   - id: jira
                     transport: stdio
@@ -79,15 +79,15 @@ public sealed class McpConfigurationTests
                       - { a: { as: x }, b: { as: y } }
                 """));
 
-        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
-        Assert.Contains(failure.Errors, error => error.Pointer.StartsWith("/mcp", StringComparison.Ordinal));
-    }
+            Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+            Assert.Contains(failure.Errors, error => error.Pointer.StartsWith("/mcp", StringComparison.Ordinal));
+        }
 
-    [Fact]
-    public void AnAllowEntryMapWithAKeyOtherThanAs_FailsTheLoad()
-    {
-        var failure = Assert.Throws<ConfigurationLoadException>(
-            () => Load("""
+        [Fact]
+        public void AnAllowEntryMapWithAKeyOtherThanAs_FailsTheLoad()
+        {
+            ConfigurationLoadException failure = Assert.Throws<ConfigurationLoadException>(
+                () => Load("""
                 mcp:
                   - id: jira
                     transport: stdio
@@ -96,43 +96,43 @@ public sealed class McpConfigurationTests
                       - search_issues: { rename: find_ticket }
                 """));
 
-        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
-        Assert.Contains(failure.Errors, error => error.Pointer.StartsWith("/mcp", StringComparison.Ordinal));
-    }
+            Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+            Assert.Contains(failure.Errors, error => error.Pointer.StartsWith("/mcp", StringComparison.Ordinal));
+        }
 
-    [Fact]
-    public void AStdioServerWithNoCommand_FailsTheLoad()
-    {
-        var failure = Assert.Throws<ConfigurationLoadException>(
-            () => Load("""
+        [Fact]
+        public void AStdioServerWithNoCommand_FailsTheLoad()
+        {
+            ConfigurationLoadException failure = Assert.Throws<ConfigurationLoadException>(
+                () => Load("""
                 mcp:
                   - id: jira
                     transport: stdio
                 """));
 
-        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
-        Assert.Contains(failure.Errors, error => error.Pointer.StartsWith("/mcp", StringComparison.Ordinal));
-    }
+            Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+            Assert.Contains(failure.Errors, error => error.Pointer.StartsWith("/mcp", StringComparison.Ordinal));
+        }
 
-    [Fact]
-    public void AnHttpServerWithNoUrl_FailsTheLoad()
-    {
-        var failure = Assert.Throws<ConfigurationLoadException>(
-            () => Load("""
+        [Fact]
+        public void AnHttpServerWithNoUrl_FailsTheLoad()
+        {
+            ConfigurationLoadException failure = Assert.Throws<ConfigurationLoadException>(
+                () => Load("""
                 mcp:
                   - id: jira
                     transport: http
                 """));
 
-        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
-        Assert.Contains(failure.Errors, error => error.Pointer.StartsWith("/mcp", StringComparison.Ordinal));
-    }
+            Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+            Assert.Contains(failure.Errors, error => error.Pointer.StartsWith("/mcp", StringComparison.Ordinal));
+        }
 
-    [Fact]
-    public void AnUnknownKeyOnAServer_FailsTheLoad()
-    {
-        var failure = Assert.Throws<ConfigurationLoadException>(
-            () => Load("""
+        [Fact]
+        public void AnUnknownKeyOnAServer_FailsTheLoad()
+        {
+            ConfigurationLoadException failure = Assert.Throws<ConfigurationLoadException>(
+                () => Load("""
                 mcp:
                   - id: jira
                     transport: stdio
@@ -140,15 +140,15 @@ public sealed class McpConfigurationTests
                     nickname: jira-prod
                 """));
 
-        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
-        Assert.Contains(failure.Errors, error => error.Pointer.StartsWith("/mcp", StringComparison.Ordinal));
-    }
+            Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+            Assert.Contains(failure.Errors, error => error.Pointer.StartsWith("/mcp", StringComparison.Ordinal));
+        }
 
-    [Fact]
-    public void AStdioServerWithAUrl_FailsTheLoad()
-    {
-        var failure = Assert.Throws<ConfigurationLoadException>(
-            () => Load("""
+        [Fact]
+        public void AStdioServerWithAUrl_FailsTheLoad()
+        {
+            ConfigurationLoadException failure = Assert.Throws<ConfigurationLoadException>(
+                () => Load("""
                 mcp:
                   - id: jira
                     transport: stdio
@@ -156,15 +156,15 @@ public sealed class McpConfigurationTests
                     url: https://example.test
                 """));
 
-        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
-        Assert.Contains(failure.Errors, error => error.Pointer.StartsWith("/mcp", StringComparison.Ordinal));
-    }
+            Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+            Assert.Contains(failure.Errors, error => error.Pointer.StartsWith("/mcp", StringComparison.Ordinal));
+        }
 
-    [Fact]
-    public void AnHttpServerWithACommand_FailsTheLoad()
-    {
-        var failure = Assert.Throws<ConfigurationLoadException>(
-            () => Load("""
+        [Fact]
+        public void AnHttpServerWithACommand_FailsTheLoad()
+        {
+            ConfigurationLoadException failure = Assert.Throws<ConfigurationLoadException>(
+                () => Load("""
                 mcp:
                   - id: jira
                     transport: http
@@ -172,21 +172,21 @@ public sealed class McpConfigurationTests
                     command: [npx]
                 """));
 
-        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
-        Assert.Contains(failure.Errors, error => error.Pointer.StartsWith("/mcp", StringComparison.Ordinal));
-    }
+            Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+            Assert.Contains(failure.Errors, error => error.Pointer.StartsWith("/mcp", StringComparison.Ordinal));
+        }
 
-    /// <summary>
-    /// A null <c>allow:</c> entry is check 1's job, and check 1 already refuses it (see
-    /// <see cref="AnAllowEntryMapWithTwoKeys_FailsTheLoad"/> and its neighbours). This test bypasses
-    /// check 1 and binds a hand-built tree directly, the route <see cref="McpAllowEntryConverter"/>'s
-    /// own failure branches exist for: without <c>HandleNull</c>, <c>JsonSerializer</c> never conversations
-    /// <c>Read</c> for a null token and simply stores a null reference in the list.
-    /// </summary>
-    [Fact]
-    public void ANullAllowEntry_FailsThroughTheBinder()
-    {
-        var document = JsonNode.Parse("""
+        /// <summary>
+        /// A null <c>allow:</c> entry is check 1's job, and check 1 already refuses it (see
+        /// <see cref="AnAllowEntryMapWithTwoKeys_FailsTheLoad"/> and its neighbours). This test bypasses
+        /// check 1 and binds a hand-built tree directly, the route <see cref="McpAllowEntryConverter"/>'s
+        /// own failure branches exist for: without <c>HandleNull</c>, <c>JsonSerializer</c> never conversations
+        /// <c>Read</c> for a null token and simply stores a null reference in the list.
+        /// </summary>
+        [Fact]
+        public void ANullAllowEntry_FailsThroughTheBinder()
+        {
+            JsonNode document = JsonNode.Parse("""
             {
                 "apiVersion": "agentcore/v1",
                 "agents": { "items": [{ "id": "only" }] },
@@ -197,17 +197,17 @@ public sealed class McpConfigurationTests
             }
             """)!;
 
-        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationBinder.Bind(document));
+            ConfigurationLoadException failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationBinder.Bind(document));
 
-        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
-        Assert.Contains(failure.Errors, error => error.Pointer.StartsWith("/mcp", StringComparison.Ordinal));
-    }
+            Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+            Assert.Contains(failure.Errors, error => error.Pointer.StartsWith("/mcp", StringComparison.Ordinal));
+        }
 
-    /// <summary>Decision 10: a served MCP tool id carries the one dot that <c>tools:</c> otherwise forbids.</summary>
-    [Fact]
-    public void AnAgentReferencingADottedMcpToolId_PassesTheLoad()
-    {
-        var configuration = ConfigurationLoader.LoadYaml("""
+        /// <summary>Decision 10: a served MCP tool id carries the one dot that <c>tools:</c> otherwise forbids.</summary>
+        [Fact]
+        public void AnAgentReferencingADottedMcpToolId_PassesTheLoad()
+        {
+            AgentCoreConfiguration configuration = ConfigurationLoader.LoadYaml("""
             apiVersion: agentcore/v1
             agents:
               items:
@@ -218,16 +218,16 @@ public sealed class McpConfigurationTests
                 agent: front
             """);
 
-        var agent = Assert.Single(configuration.Agents!.Items);
-        Assert.Equal("jira.create_issue", Assert.Single(agent.Tools));
-    }
+            AgentConfiguration agent = Assert.Single(configuration.Agents!.Items);
+            Assert.Equal("jira.create_issue", Assert.Single(agent.Tools));
+        }
 
-    /// <summary>A tool id carries at most one dot; a second dot is not a served MCP id and is refused.</summary>
-    [Fact]
-    public void AnAgentReferencingATwoDottedToolId_FailsTheLoad()
-    {
-        var failure = Assert.Throws<ConfigurationLoadException>(
-            () => ConfigurationLoader.LoadYaml("""
+        /// <summary>A tool id carries at most one dot; a second dot is not a served MCP id and is refused.</summary>
+        [Fact]
+        public void AnAgentReferencingATwoDottedToolId_FailsTheLoad()
+        {
+            ConfigurationLoadException failure = Assert.Throws<ConfigurationLoadException>(
+                () => ConfigurationLoader.LoadYaml("""
                 apiVersion: agentcore/v1
                 agents:
                   items:
@@ -238,13 +238,16 @@ public sealed class McpConfigurationTests
                     agent: front
                 """));
 
-        Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
-    }
+            Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
+        }
 
-    /// <summary>Loads a document section under the smallest complete document header.</summary>
-    /// <param name="section">The section, written at the document's own margin.</param>
-    /// <returns>The loaded document.</returns>
-    private static AgentCoreConfiguration Load(string section)
-        => ConfigurationLoader.LoadYaml(
-            "apiVersion: agentcore/v1\nagents:\n  items:\n    - { id: only, instructions: \"ok\" }\nentries:\n  main:\n    agent: only\n" + section);
+        /// <summary>Loads a document section under the smallest complete document header.</summary>
+        /// <param name="section">The section, written at the document's own margin.</param>
+        /// <returns>The loaded document.</returns>
+        private static AgentCoreConfiguration Load(string section)
+        {
+            return ConfigurationLoader.LoadYaml(
+                        "apiVersion: agentcore/v1\nagents:\n  items:\n    - { id: only, instructions: \"ok\" }\nentries:\n  main:\n    agent: only\n" + section);
+        }
+    }
 }

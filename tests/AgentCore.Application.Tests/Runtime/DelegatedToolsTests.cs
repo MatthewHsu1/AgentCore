@@ -7,27 +7,27 @@ using AgentCore.Application.Tests.Fakes;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Runtime;
-
-/// <summary>
-/// Tools that belong to one conversation, offered to the runs that call delegates and to nothing else.
-/// </summary>
-/// <remarks>
-/// <para>
-/// The compiled agent is a process singleton, so a tool that belongs to one conversation cannot be compiled
-/// onto it. It travels on the turn instead, and the gate is the id of the delegating tool the run
-/// sits under. A gate on the agent NAME would be wrong: <c>CompiledAgentRegistry</c> makes compiled
-/// agents singletons, so two <c>kind: agent</c> declarations can name one agent and both would be
-/// handed the tool.
-/// </para>
-/// <para>
-/// Every test here runs offline: no network conversation and no API key.
-/// </para>
-/// </remarks>
-public sealed class DelegatedToolsTests
+namespace AgentCore.Application.Tests.Runtime
 {
-    private const string DelegationYaml =
-        """
+    /// <summary>
+    /// Tools that belong to one conversation, offered to the runs that call delegates and to nothing else.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The compiled agent is a process singleton, so a tool that belongs to one conversation cannot be compiled
+    /// onto it. It travels on the turn instead, and the gate is the id of the delegating tool the run
+    /// sits under. A gate on the agent NAME would be wrong: <c>CompiledAgentRegistry</c> makes compiled
+    /// agents singletons, so two <c>kind: agent</c> declarations can name one agent and both would be
+    /// handed the tool.
+    /// </para>
+    /// <para>
+    /// Every test here runs offline: no network conversation and no API key.
+    /// </para>
+    /// </remarks>
+    public sealed class DelegatedToolsTests
+    {
+        private const string DelegationYaml =
+            """
           apiVersion: agentcore/v1
           tools:
             - { id: ask_specialist, kind: agent, agent: specialist, description: Ask the specialist. }
@@ -45,105 +45,106 @@ public sealed class DelegatedToolsTests
                   - { id: greeting, agent: greeter, terminal: true }
           """;
 
-      private static AIFunction DrawTool { get; } =
-          AIFunctionFactory.Create(() => "drawn.", "build_ui", "Draw something on the caller's screen.");
+        private static AIFunction DrawTool { get; } =
+            AIFunctionFactory.Create(() => "drawn.", "build_ui", "Draw something on the caller's screen.");
 
-      [Fact]
-      public async Task AToolSetForADelegation_ReachesTheRunThatDelegationMakes()
-      {
-          var (session, greeter, specialist) = NewConversation();
-          session.SetDelegatedTools("ask_specialist", [DrawTool]);
+        [Fact]
+        public async Task AToolSetForADelegation_ReachesTheRunThatDelegationMakes()
+        {
+            (ConversationSession? session, ToolCallingChatClient? greeter, ToolCallingChatClient? specialist) = NewConversation();
+            session.SetDelegatedTools("ask_specialist", [DrawTool]);
 
-          await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+            _ = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
-          Assert.Contains("build_ui", specialist.Offered.Select(tool => tool.Name));
-          Assert.DoesNotContain("build_ui", greeter.Offered.Select(tool => tool.Name));
-      }
+            Assert.Contains("build_ui", specialist.Offered.Select(tool => tool.Name));
+            Assert.DoesNotContain("build_ui", greeter.Offered.Select(tool => tool.Name));
+        }
 
-      [Fact]
-      public async Task AToolSetForADelegation_ReachesAStreamingTurnToo()
-      {
-          // The framework streams the tool-call update BEFORE it invokes the function, so the first
-          // yield restores the caller's execution context while the delegation is still pending. Only
-          // the per-round re-entry in RunTurnStreamingAsync keeps the turn's tools alive across it.
-          var (session, _, specialist) = NewConversation();
-          session.SetDelegatedTools("ask_specialist", [DrawTool]);
+        [Fact]
+        public async Task AToolSetForADelegation_ReachesAStreamingTurnToo()
+        {
+            // The framework streams the tool-call update BEFORE it invokes the function, so the first
+            // yield restores the caller's execution context while the delegation is still pending. Only
+            // the per-round re-entry in RunTurnStreamingAsync keeps the turn's tools alive across it.
+            (ConversationSession? session, ToolCallingChatClient _, ToolCallingChatClient? specialist) = NewConversation();
+            session.SetDelegatedTools("ask_specialist", [DrawTool]);
 
-          await foreach (var _ in session.RunTurnStreamingAsync("hi", TestContext.Current.CancellationToken))
-          {
-          }
+            await foreach (ChatResponseUpdate _ in session.RunTurnStreamingAsync("hi", TestContext.Current.CancellationToken))
+            {
+            }
 
-          Assert.Contains("build_ui", specialist.Offered.Select(tool => tool.Name));
-      }
+            Assert.Contains("build_ui", specialist.Offered.Select(tool => tool.Name));
+        }
 
-      [Fact]
-      public async Task AToolSetForAnotherDelegation_ReachesNobody()
-      {
-          var (session, greeter, specialist) = NewConversation();
-          session.SetDelegatedTools("some_other_tool", [DrawTool]);
+        [Fact]
+        public async Task AToolSetForAnotherDelegation_ReachesNobody()
+        {
+            (ConversationSession? session, ToolCallingChatClient? greeter, ToolCallingChatClient? specialist) = NewConversation();
+            session.SetDelegatedTools("some_other_tool", [DrawTool]);
 
-          await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+            _ = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
-          Assert.DoesNotContain("build_ui", specialist.Offered.Select(tool => tool.Name));
-          Assert.DoesNotContain("build_ui", greeter.Offered.Select(tool => tool.Name));
-      }
+            Assert.DoesNotContain("build_ui", specialist.Offered.Select(tool => tool.Name));
+            Assert.DoesNotContain("build_ui", greeter.Offered.Select(tool => tool.Name));
+        }
 
-      [Fact]
-      public async Task AConversationThatSetsNoTools_OffersTheSameToolsItAlwaysDid()
-      {
-          var (session, _, specialist) = NewConversation();
+        [Fact]
+        public async Task AConversationThatSetsNoTools_OffersTheSameToolsItAlwaysDid()
+        {
+            (ConversationSession? session, _, ToolCallingChatClient? specialist) = NewConversation();
 
-          await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+            _ = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
-          Assert.NotEmpty(specialist.Offered.Count > 0 ? specialist.Offered : [DrawTool]);
-          Assert.DoesNotContain("build_ui", specialist.Offered.Select(tool => tool.Name));
-      }
+            Assert.NotEmpty(specialist.Offered.Count > 0 ? specialist.Offered : [DrawTool]);
+            Assert.DoesNotContain("build_ui", specialist.Offered.Select(tool => tool.Name));
+        }
 
-      [Fact]
-      public async Task TheSecondCallOfSetDelegatedTools_ReplacesTheFirst()
-      {
-          var replacement = AIFunctionFactory.Create(() => "drawn.", "draw_later", "The one that wins.");
-          var (session, _, specialist) = NewConversation();
+        [Fact]
+        public async Task TheSecondCallOfSetDelegatedTools_ReplacesTheFirst()
+        {
+            AIFunction replacement = AIFunctionFactory.Create(() => "drawn.", "draw_later", "The one that wins.");
+            (ConversationSession? session, _, ToolCallingChatClient? specialist) = NewConversation();
 
-          session.SetDelegatedTools("ask_specialist", [DrawTool]);
-          session.SetDelegatedTools("ask_specialist", [replacement]);
+            session.SetDelegatedTools("ask_specialist", [DrawTool]);
+            session.SetDelegatedTools("ask_specialist", [replacement]);
 
-          await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+            _ = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
-          Assert.Contains("draw_later", specialist.Offered.Select(tool => tool.Name));
-          Assert.DoesNotContain("build_ui", specialist.Offered.Select(tool => tool.Name));
-      }
+            Assert.Contains("draw_later", specialist.Offered.Select(tool => tool.Name));
+            Assert.DoesNotContain("build_ui", specialist.Offered.Select(tool => tool.Name));
+        }
 
-      [Fact]
-      public void SetDelegatedTools_RefusesNulls()
-      {
-          var (session, _, _) = NewConversation();
+        [Fact]
+        public void SetDelegatedTools_RefusesNulls()
+        {
+            (ConversationSession? session, _, _) = NewConversation();
 
-          Assert.Throws<ArgumentNullException>(() => session.SetDelegatedTools(null!, [DrawTool]));
-          Assert.Throws<ArgumentNullException>(() => session.SetDelegatedTools("ask_specialist", null!));
-      }
+            _ = Assert.Throws<ArgumentNullException>(() => session.SetDelegatedTools(null!, [DrawTool]));
+            _ = Assert.Throws<ArgumentNullException>(() => session.SetDelegatedTools("ask_specialist", null!));
+        }
 
-      /// <summary>Opens a conversation whose greeter delegates once, over two scripted models.</summary>
-      private static (ConversationSession Session, ToolCallingChatClient Greeter, ToolCallingChatClient Specialist) NewConversation()
-      {
-          ToolCallingChatClient greeter = new(
-              "hello there.",
-              new Dictionary<string, object?>(StringComparer.Ordinal) { ["query"] = "check the order system" });
-          ToolCallingChatClient specialist = new("the specialist answer");
+        /// <summary>Opens a conversation whose greeter delegates once, over two scripted models.</summary>
+        private static (ConversationSession Session, ToolCallingChatClient Greeter, ToolCallingChatClient Specialist) NewConversation()
+        {
+            ToolCallingChatClient greeter = new(
+                "hello there.",
+                new Dictionary<string, object?>(StringComparer.Ordinal) { ["query"] = "check the order system" });
+            ToolCallingChatClient specialist = new("the specialist answer");
 
-          RoutingChatClientFactory chatClients = new(greeter);
-          chatClients.Route("reply", greeter);
-          chatClients.Route("specialist", specialist);
+            RoutingChatClientFactory chatClients = new(greeter);
+            _ = chatClients.Route("reply", greeter);
+            _ = chatClients.Route("specialist", specialist);
 
-          var compiled = ConfigurationCompiler.CompileAll(
-              ConfigurationLoader.LoadYaml(DelegationYaml), new AgentCompilationContext(chatClients))["main"];
+            CompiledAgent compiled = ConfigurationCompiler.CompileAll(
+                ConfigurationLoader.LoadYaml(DelegationYaml), new AgentCompilationContext(chatClients))["main"];
 
-          var session = new ConversationSessionFactory(
-              compiled,
-              new GuardEvaluator(compiled.Configuration.Guards),
-              extractor: null).Create();
+            ConversationSession session = new ConversationSessionFactory(
+                compiled,
+                new GuardEvaluator(compiled.Configuration.Guards),
+                extractor: null).Create();
 
-          return (session, greeter, specialist);
-      }
+            return (session, greeter, specialist);
+        }
 
-  }
+    }
+}

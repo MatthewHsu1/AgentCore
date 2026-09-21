@@ -3,36 +3,37 @@ using AgentCore.Application.Ports;
 using AgentCore.Infrastructure.Database.Postgres;
 using Npgsql;
 
-namespace AgentCore.Infrastructure.Conversation.Postgres;
-
-/// <summary>
-/// The <c>postgres</c> conversation vendor behind <see cref="IConversationStore"/>.
-/// </summary>
-public sealed class PostgresConversationStoreAdapter : IConversationStoreAdapter
+namespace AgentCore.Infrastructure.Conversation.Postgres
 {
     /// <summary>
-    /// The one <c>kind</c> value this adapter serves.
+    /// The <c>postgres</c> conversation vendor behind <see cref="IConversationStore"/>.
     /// </summary>
-    public const string ProviderKind = "postgres";
-
-    /// <summary>
-    /// Gets the one <c>kind</c> value this adapter serves.
-    /// </summary>
-    public string Kind => ProviderKind;
-
-    /// <inheritdoc />
-    public async ValueTask<IConversationStore> OpenAsync(
-        VendorProviderConfiguration entry,
-        ISecretResolverPort? secrets,
-        CancellationToken cancellationToken = default)
+    public sealed class PostgresConversationStoreAdapter : IConversationStoreAdapter
     {
-        NpgsqlDataSource dataSource = await PostgresDataSourceFactory
-            .OpenMigratedAsync(
-                secrets,
-                "A conversation's row in providers.conversations is written to PostgreSQL.",
-                cancellationToken)
-            .ConfigureAwait(false);
+        /// <summary>
+        /// The one <c>kind</c> value this adapter serves.
+        /// </summary>
+        public const string ProviderKind = "postgres";
 
-        return new PostgresConversationStore(dataSource);
+        /// <summary>
+        /// Gets the one <c>kind</c> value this adapter serves.
+        /// </summary>
+        public string Kind => ProviderKind;
+
+        /// <inheritdoc />
+        public async ValueTask<IConversationStore> OpenAsync(
+            VendorProviderConfiguration entry,
+            ISecretResolverPort? secrets,
+            CancellationToken cancellationToken = default)
+        {
+            NpgsqlDataSource dataSource = await PostgresDataSourceFactory
+                .OpenMigratedAsync(
+                    secrets,
+                    "A conversation's row in providers.conversations is written to PostgreSQL.",
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            return new PostgresConversationStore(dataSource);
+        }
     }
 }

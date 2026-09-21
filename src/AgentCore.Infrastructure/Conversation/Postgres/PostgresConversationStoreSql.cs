@@ -1,72 +1,72 @@
 using AgentCore.Infrastructure.Database.Postgres;
 
-namespace AgentCore.Infrastructure.Conversation.Postgres;
-
-/// <summary>Every statement <see cref="PostgresConversationStore"/> runs.</summary>
-internal static class PostgresConversationStoreSql
+namespace AgentCore.Infrastructure.Conversation.Postgres
 {
-    private const string Schema = PostgresSchema.SchemaName;
+    /// <summary>Every statement <see cref="PostgresConversationStore"/> runs.</summary>
+    internal static class PostgresConversationStoreSql
+    {
+        private const string Schema = PostgresSchema.SchemaName;
 
-    internal const string Regular = "regular";
+        internal const string Regular = "regular";
 
-    internal const string Archived = "archived";
+        internal const string Archived = "archived";
 
-    /// <summary>The value a listing sorts and pages by.</summary>
-    internal const string SortAt = "COALESCE(m.last_message_at, c.created_at)";
+        /// <summary>The value a listing sorts and pages by.</summary>
+        internal const string SortAt = "COALESCE(m.last_message_at, c.created_at)";
 
-    /// <summary>
-    /// The columns a row is read through, and the derived activity time beside them.
-    /// </summary>
-    internal const string Projection =
-        $"""
+        /// <summary>
+        /// The columns a row is read through, and the derived activity time beside them.
+        /// </summary>
+        internal const string Projection =
+            $"""
         c.conversation_id, c.title, c.status, c.external_id, c.custom, c.created_at,
         {SortAt} AS sort_at, m.last_message_at
         """;
 
-    internal const string ActivityJoin =
-        $"""
+        internal const string ActivityJoin =
+            $"""
         LEFT JOIN LATERAL (
             SELECT max(updated_at) AS last_message_at FROM {Schema}.conversation_message x WHERE x.conversation_id = c.conversation_id
         ) m ON true
         """;
 
-    internal const string CreateSql =
-        $"INSERT INTO {Schema}.conversation (conversation_id) VALUES ($1) ON CONFLICT (conversation_id) DO NOTHING";
+        internal const string CreateSql =
+            $"INSERT INTO {Schema}.conversation (conversation_id) VALUES ($1) ON CONFLICT (conversation_id) DO NOTHING";
 
-    /// <summary>One conversation's row, with the session state a resume reads back and its ordinal counter.</summary>
-    internal static readonly string GetSql =
-        $"SELECT {Projection}, c.state, c.next_ordinal FROM {Schema}.conversation c {ActivityJoin} WHERE c.conversation_id = $1";
+        /// <summary>One conversation's row, with the session state a resume reads back and its ordinal counter.</summary>
+        internal static readonly string GetSql =
+            $"SELECT {Projection}, c.state, c.next_ordinal FROM {Schema}.conversation c {ActivityJoin} WHERE c.conversation_id = $1";
 
-    internal const string StateSql =
-        $"UPDATE {Schema}.conversation SET state = $2, updated_at = now() WHERE conversation_id = $1";
+        internal const string StateSql =
+            $"UPDATE {Schema}.conversation SET state = $2, updated_at = now() WHERE conversation_id = $1";
 
-    internal const string RenameSql =
-        $"UPDATE {Schema}.conversation SET title = $2, updated_at = now() WHERE conversation_id = $1";
+        internal const string RenameSql =
+            $"UPDATE {Schema}.conversation SET title = $2, updated_at = now() WHERE conversation_id = $1";
 
-    internal const string StatusSql =
-        $"UPDATE {Schema}.conversation SET status = $2, updated_at = now() WHERE conversation_id = $1";
+        internal const string StatusSql =
+            $"UPDATE {Schema}.conversation SET status = $2, updated_at = now() WHERE conversation_id = $1";
 
-    internal const string CustomSql =
-        $"UPDATE {Schema}.conversation SET custom = $2, updated_at = now() WHERE conversation_id = $1";
+        internal const string CustomSql =
+            $"UPDATE {Schema}.conversation SET custom = $2, updated_at = now() WHERE conversation_id = $1";
 
-    internal const string ExternalIdSql =
-        $"UPDATE {Schema}.conversation SET external_id = $2, updated_at = now() WHERE conversation_id = $1";
+        internal const string ExternalIdSql =
+            $"UPDATE {Schema}.conversation SET external_id = $2, updated_at = now() WHERE conversation_id = $1";
 
-    internal const string DeleteSql = $"DELETE FROM {Schema}.conversation WHERE conversation_id = $1";
+        internal const string DeleteSql = $"DELETE FROM {Schema}.conversation WHERE conversation_id = $1";
 
-    internal const string AttachSql =
-        $"""
+        internal const string AttachSql =
+            $"""
         INSERT INTO {Schema}.conversation_principal (conversation_id, principal_key, role)
         VALUES ($1, $2, $3)
         ON CONFLICT (principal_key, conversation_id) DO NOTHING
         """;
 
-    internal const string DetachSql =
-        $"DELETE FROM {Schema}.conversation_principal WHERE conversation_id = $1 AND principal_key = $2";
+        internal const string DetachSql =
+            $"DELETE FROM {Schema}.conversation_principal WHERE conversation_id = $1 AND principal_key = $2";
 
-    /// <summary>One page of one principal's conversations.</summary>
-    internal static readonly string ListSql =
-        $"""
+        /// <summary>One page of one principal's conversations.</summary>
+        internal static readonly string ListSql =
+            $"""
          SELECT {Projection}
            FROM {Schema}.conversation_principal p
            JOIN {Schema}.conversation c USING (conversation_id)
@@ -79,16 +79,16 @@ internal static class PostgresConversationStoreSql
           LIMIT $5
          """;
 
-    /// <summary>
-    /// Numbers and inserts every row of one append in a single statement. <c>$5</c> (the message ids)
-    /// doubles as the count the whole batch numbers from: <c>cardinality($5::text[])</c> is how many
-    /// ordinals <c>mark</c> reserves, and <c>RETURNING</c> on the <c>UPDATE</c> sees the bumped
-    /// <c>next_ordinal</c>, so subtracting that same count back off it gives the first one this batch
-    /// may use. A null element of <c>$2</c> (turn_index) takes the conversation's own next turn index instead
-    /// of naming one, which is what an append from outside any turn asks for. <c>$6</c> is the
-    /// <c>covers_up_to</c> of each row: null for every row somebody said.
-    /// </summary>
-    internal const string AppendSql = $"""
+        /// <summary>
+        /// Numbers and inserts every row of one append in a single statement. <c>$5</c> (the message ids)
+        /// doubles as the count the whole batch numbers from: <c>cardinality($5::text[])</c> is how many
+        /// ordinals <c>mark</c> reserves, and <c>RETURNING</c> on the <c>UPDATE</c> sees the bumped
+        /// <c>next_ordinal</c>, so subtracting that same count back off it gives the first one this batch
+        /// may use. A null element of <c>$2</c> (turn_index) takes the conversation's own next turn index instead
+        /// of naming one, which is what an append from outside any turn asks for. <c>$6</c> is the
+        /// <c>covers_up_to</c> of each row: null for every row somebody said.
+        /// </summary>
+        internal const string AppendSql = $"""
         WITH mark AS (
             UPDATE {Schema}.conversation
                SET next_ordinal = next_ordinal + cardinality($5::text[]), updated_at = now()
@@ -103,15 +103,15 @@ internal static class PostgresConversationStoreSql
         RETURNING ordinal, turn_index, message_id
         """;
 
-    /// <summary>The columns every row read returns, in the order <c>PostgresConversationWords.ReadRowsAsync</c> reads them.</summary>
-    private const string RowColumns = "ordinal, turn_index, content, message_id, covers_up_to";
+        /// <summary>The columns every row read returns, in the order <c>PostgresConversationWords.ReadRowsAsync</c> reads them.</summary>
+        private const string RowColumns = "ordinal, turn_index, content, message_id, covers_up_to";
 
-    /// <summary>
-    /// Reads a conversation as its session opens it: the newest summary row, and every row somebody
-    /// said above what it covers. With no summary, every row.
-    /// </summary>
-    internal const string ReadForSessionSql =
-        $"""
+        /// <summary>
+        /// Reads a conversation as its session opens it: the newest summary row, and every row somebody
+        /// said above what it covers. With no summary, every row.
+        /// </summary>
+        internal const string ReadForSessionSql =
+            $"""
         WITH summary AS (
             SELECT ordinal, covers_up_to FROM {Schema}.conversation_message
              WHERE conversation_id = $1 AND covers_up_to IS NOT NULL
@@ -125,12 +125,12 @@ internal static class PostgresConversationStoreSql
          ORDER BY m.ordinal
         """;
 
-    /// <summary>
-    /// Reads the newest turns of a conversation before a given one, whole. <c>$2</c> is the turn to
-    /// read before, or null for the newest; <c>$3</c> is how many turns at most.
-    /// </summary>
-    internal const string ReadWindowSql =
-        $"""
+        /// <summary>
+        /// Reads the newest turns of a conversation before a given one, whole. <c>$2</c> is the turn to
+        /// read before, or null for the newest; <c>$3</c> is how many turns at most.
+        /// </summary>
+        internal const string ReadWindowSql =
+            $"""
         SELECT {RowColumns}
           FROM {Schema}.conversation_message
          WHERE conversation_id = $1
@@ -142,12 +142,12 @@ internal static class PostgresConversationStoreSql
          ORDER BY ordinal
         """;
 
-    /// <summary>
-    /// Withdraws the tail of a conversation, from one ordinal onward. A summary row goes only when
-    /// the cut reaches a row it covers.
-    /// </summary>
-    internal const string TruncateSql =
-        $"""
+        /// <summary>
+        /// Withdraws the tail of a conversation, from one ordinal onward. A summary row goes only when
+        /// the cut reaches a row it covers.
+        /// </summary>
+        internal const string TruncateSql =
+            $"""
         WITH gone AS (
             DELETE FROM {Schema}.conversation_message
              WHERE conversation_id = $1 AND ordinal >= $2 AND (covers_up_to IS NULL OR covers_up_to >= $2)
@@ -158,39 +158,39 @@ internal static class PostgresConversationStoreSql
           FROM gone
         """;
 
-    /// <summary>Finds the ordinal of one spoken row by its message id. Summary rows are not found.</summary>
-    internal const string OrdinalOfSql =
-        $"""
+        /// <summary>Finds the ordinal of one spoken row by its message id. Summary rows are not found.</summary>
+        internal const string OrdinalOfSql =
+            $"""
         SELECT ordinal FROM {Schema}.conversation_message
          WHERE conversation_id = $1 AND message_id = $2 AND covers_up_to IS NULL
         """;
 
-    internal const string RewriteSql = $"""
+        internal const string RewriteSql = $"""
         UPDATE {Schema}.conversation_message SET content = $3, updated_at = now()
          WHERE conversation_id = $1 AND message_id = $2
         """;
 
-    internal const string EraseSql = $"DELETE FROM {Schema}.conversation_message WHERE conversation_id = $1";
+        internal const string EraseSql = $"DELETE FROM {Schema}.conversation_message WHERE conversation_id = $1";
 
-    /// <summary>Files one session envelope under one continuation id, replacing any envelope already there.</summary>
-    internal const string SaveContinuationSql =
-        $"""
+        /// <summary>Files one session envelope under one continuation id, replacing any envelope already there.</summary>
+        internal const string SaveContinuationSql =
+            $"""
         INSERT INTO {Schema}.response_continuation (store_id, envelope) VALUES ($1, $2)
         ON CONFLICT (store_id) DO UPDATE SET envelope = EXCLUDED.envelope
         """;
 
-    /// <summary>Reads the envelope one continuation id names.</summary>
-    internal const string GetContinuationSql =
-        $"SELECT envelope FROM {Schema}.response_continuation WHERE store_id = $1";
+        /// <summary>Reads the envelope one continuation id names.</summary>
+        internal const string GetContinuationSql =
+            $"SELECT envelope FROM {Schema}.response_continuation WHERE store_id = $1";
 
-    /// <summary>Withdraws whatever one continuation id names, if anything.</summary>
-    internal const string DeleteContinuationSql =
-        $"DELETE FROM {Schema}.response_continuation WHERE store_id = $1";
+        /// <summary>Withdraws whatever one continuation id names, if anything.</summary>
+        internal const string DeleteContinuationSql =
+            $"DELETE FROM {Schema}.response_continuation WHERE store_id = $1";
 
-    /// <summary>
-    /// Reads what store 1 holds for each spoken turn of one conversation, beside what store 3 proves.
-    /// </summary>
-    internal const string VerifySql = $$"""
+        /// <summary>
+        /// Reads what store 1 holds for each spoken turn of one conversation, beside what store 3 proves.
+        /// </summary>
+        internal const string VerifySql = $$"""
         WITH spoken AS (
             SELECT DISTINCT ON (conversation_id, turn_index)
                    conversation_id, turn_index,
@@ -216,9 +216,9 @@ internal static class PostgresConversationStoreSql
          ORDER BY m.turn_index
         """;
 
-    /// <summary>Deletes one batch of conversations that have aged out whole.</summary>
-    internal static readonly string SweepContinuationsSql =
-        $"""
+        /// <summary>Deletes one batch of conversations that have aged out whole.</summary>
+        internal static readonly string SweepContinuationsSql =
+            $"""
         DELETE FROM {Schema}.response_continuation
         WHERE store_id IN (
           SELECT conversation_id FROM (
@@ -230,9 +230,9 @@ internal static class PostgresConversationStoreSql
           ) q)
         """;
 
-    /// <summary>Deletes one batch of conversations that have aged out whole.</summary>
-    internal static readonly string SweepSql =
-        $"""
+        /// <summary>Deletes one batch of conversations that have aged out whole.</summary>
+        internal static readonly string SweepSql =
+            $"""
         DELETE FROM {Schema}.conversation
         WHERE conversation_id IN (
           SELECT conversation_id FROM (
@@ -243,4 +243,5 @@ internal static class PostgresConversationStoreSql
              LIMIT $2
           ) q)
         """;
+    }
 }

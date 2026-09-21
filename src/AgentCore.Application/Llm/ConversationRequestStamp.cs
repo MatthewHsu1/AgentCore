@@ -1,22 +1,23 @@
 using AgentCore.Application.Runtime;
 using Microsoft.Extensions.AI;
 
-namespace AgentCore.Application.Llm;
-
-/// <summary>
-/// Copies the running turn's conversation id onto the request, under
-/// <see cref="ChatRequestProperties.ConversationId"/>, where a vendor adapter can read it.
-/// </summary>
-internal static class ConversationRequestStamp
+namespace AgentCore.Application.Llm
 {
-    internal static void Apply(ChatOptions options)
+    /// <summary>
+    /// Copies the running turn's conversation id onto the request, under
+    /// <see cref="ChatRequestProperties.ConversationId"/>, where a vendor adapter can read it.
+    /// </summary>
+    internal static class ConversationRequestStamp
     {
-        ArgumentNullException.ThrowIfNull(options);
-
-        if (TurnInvocation.From(options) is { ConversationId: { Length: > 0 } conversationId })
+        internal static void Apply(ChatOptions options)
         {
-            options.AdditionalProperties ??= [];
-            options.AdditionalProperties[ChatRequestProperties.ConversationId] = conversationId;
+            ArgumentNullException.ThrowIfNull(options);
+
+            if (TurnInvocation.From(options) is { ConversationId: { Length: > 0 } conversationId })
+            {
+                options.AdditionalProperties ??= [];
+                options.AdditionalProperties[ChatRequestProperties.ConversationId] = conversationId;
+            }
         }
     }
 }

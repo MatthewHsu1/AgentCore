@@ -7,20 +7,20 @@ using AgentCore.Infrastructure.Database.Postgres;
 using Npgsql;
 using NpgsqlTypes;
 
-namespace AgentCore.Infrastructure.Audit.Postgres;
-
-/// <summary>
-/// Store 3, in PostgreSQL. It appends and it never updates.
-/// </summary>
-internal sealed class PostgresAuditSink : IAuditSinkPort, IAsyncDisposable
+namespace AgentCore.Infrastructure.Audit.Postgres
 {
-    private const string Schema = PostgresSchema.SchemaName;
+    /// <summary>
+    /// Store 3, in PostgreSQL. It appends and it never updates.
+    /// </summary>
+    internal sealed class PostgresAuditSink : IAuditSinkPort, IAsyncDisposable
+    {
+        private const string Schema = PostgresSchema.SchemaName;
 
-    /// <summary>Serialises the writers of one conversation so two of them cannot pick the same sequence.</summary>
-    internal const string LockSql = "SELECT pg_advisory_xact_lock(hashtext($1))";
+        /// <summary>Serialises the writers of one conversation so two of them cannot pick the same sequence.</summary>
+        internal const string LockSql = "SELECT pg_advisory_xact_lock(hashtext($1))";
 
-    /// <summary>Appends one conversation's run, numbering only the rows that will actually survive.</summary>
-    internal const string AppendSql = $"""
+        /// <summary>Appends one conversation's run, numbering only the rows that will actually survive.</summary>
+        internal const string AppendSql = $"""
         INSERT INTO {Schema}.audit_event (
             conversation_id, event_id, sequence, kind, occurred_at, turn_index, amends_event_id, payload)
         SELECT $1,
@@ -37,137 +37,141 @@ internal sealed class PostgresAuditSink : IAuditSinkPort, IAsyncDisposable
         ON CONFLICT (conversation_id, event_id) DO NOTHING
         """;
 
-    private readonly NpgsqlDataSource _dataSource;
+        private readonly NpgsqlDataSource _dataSource;
 
-    /// <summary>Creates the sink over a data source it then owns.</summary>
-    /// <param name="dataSource">The pool every append runs on. Disposing the sink disposes it.</param>
-    /// <exception cref="ArgumentNullException">The data source is <see langword="null"/>.</exception>
-    public PostgresAuditSink(NpgsqlDataSource dataSource)
-    {
-        ArgumentNullException.ThrowIfNull(dataSource);
-        _dataSource = dataSource;
-    }
-
-    /// <inheritdoc />
-    public ValueTask AppendAsync(AuditEvent auditEvent, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(auditEvent);
-        return AppendManyAsync([auditEvent], cancellationToken);
-    }
-
-    /// <inheritdoc />
-    public async ValueTask AppendManyAsync(
-        IReadOnlyList<AuditEvent> auditEvents,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(auditEvents);
-
-        if (auditEvents.Count == 0)
+        /// <summary>Creates the sink over a data source it then owns.</summary>
+        /// <param name="dataSource">The pool every append runs on. Disposing the sink disposes it.</param>
+        /// <exception cref="ArgumentNullException">The data source is <see langword="null"/>.</exception>
+        public PostgresAuditSink(NpgsqlDataSource dataSource)
         {
-            return;
+            ArgumentNullException.ThrowIfNull(dataSource);
+            _dataSource = dataSource;
         }
 
-        // Every event is checked before any of them is written, so a run that holds one malformed
-        // event writes none of it and the caller learns which rule it broke.
-        foreach (AuditEvent auditEvent in auditEvents)
+        /// <inheritdoc />
+        public ValueTask AppendAsync(AuditEvent auditEvent, CancellationToken cancellationToken = default)
         {
-            AuditEventVocabulary.Validate(auditEvent);
+            ArgumentNullException.ThrowIfNull(auditEvent);
+            return AppendManyAsync([auditEvent], cancellationToken);
         }
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        await using NpgsqlBatch batch = new(connection, transaction);
-
-        // Grouped, because the queue in front of this sink batches across conversations, and a conversation is the
-        // unit the sequence counts within. Ordered by conversation id, because two transactions that each
-        // hold two conversations would otherwise be able to take the two locks in opposite orders and wait
-        // on each other forever. Best effort, and only that: the lock is on hashtext(conversation_id), so a
-        // consistent order on ids is a consistent order on locks only while the hash is injective
-        // over the ids in play. See the remarks on LockSql for what a collision costs.
-        foreach (var conversation in auditEvents
-            .GroupBy(item => item.ConversationId, StringComparer.Ordinal)
-            .OrderBy(group => group.Key, StringComparer.Ordinal))
+        /// <inheritdoc />
+        public async ValueTask AppendManyAsync(
+            IReadOnlyList<AuditEvent> auditEvents,
+            CancellationToken cancellationToken = default)
         {
-            NpgsqlBatchCommand lockCommand = new(LockSql);
-            lockCommand.Parameters.Add(new NpgsqlParameter { Value = conversation.Key });
-            batch.BatchCommands.Add(lockCommand);
+            ArgumentNullException.ThrowIfNull(auditEvents);
 
-            batch.BatchCommands.Add(AppendCommand(conversation.Key, [.. conversation]));
-        }
-
-        // One round trip for the run. A durable insert is ~13 ms, so twenty apart cost 260 ms and
-        // twenty together cost 13 ms.
-        await batch.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Disposes the pool this sink was given.
-    /// </summary>
-    /// <returns>A task that completes when the pool is closed.</returns>
-    public ValueTask DisposeAsync() => _dataSource.DisposeAsync();
-
-    [SuppressMessage(
-        "csharpsquid",
-        "S3265",
-        Justification = "Npgsql documents Array combined with an element type via bit OR, and the enum omits Flags only upstream.")]
-    private static NpgsqlBatchCommand AppendCommand(string conversationId, IReadOnlyList<AuditEvent> run)
-    {
-        NpgsqlBatchCommand command = new(AppendSql);
-
-        // Two events in the same batch sharing an EventId would both survive the NOT EXISTS filter
-        // (neither is in the table yet), so row_number() would number the duplicate too and
-        // ON CONFLICT would then silently drop it — reserving a sequence for a row that never lands.
-        // One survivor per EventId keeps the numbering dense.
-        AuditEvent[] distinct = [.. run.DistinctBy(item => item.EventId)];
-
-        command.Parameters.Add(new NpgsqlParameter { Value = conversationId });
-        command.Parameters.Add(new NpgsqlParameter<Guid[]>
-        {
-            TypedValue = [.. distinct.Select(item => item.EventId)],
-        });
-        command.Parameters.Add(new NpgsqlParameter<string[]>
-        {
-            TypedValue = [.. distinct.Select(item => AuditEventKinds.ToToken(item.Kind))],
-        });
-        command.Parameters.Add(new NpgsqlParameter<DateTimeOffset[]>
-        {
-            TypedValue = [.. distinct.Select(item => item.OccurredAt)],
-        });
-        command.Parameters.Add(new NpgsqlParameter<int?[]>
-        {
-            TypedValue = [.. distinct.Select(item => item.TurnIndex)],
-        });
-        command.Parameters.Add(new NpgsqlParameter<Guid?[]>
-        {
-            TypedValue = [.. distinct.Select(item => item.AmendsEventId)],
-        });
-        command.Parameters.Add(new NpgsqlParameter
-        {
-            Value = distinct.Select(item => PayloadJson(item.Payload)).ToArray(),
-            NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Jsonb,
-        });
-
-        return command;
-    }
-
-    /// <summary>
-    /// Writes the payload as a flat JSON object of strings.
-    /// </summary>
-    private static string PayloadJson(IReadOnlyDictionary<string, string> payload)
-    {
-        using MemoryStream buffer = new();
-        using (Utf8JsonWriter writer = new(buffer))
-        {
-            writer.WriteStartObject();
-            foreach (KeyValuePair<string, string> entry in payload)
+            if (auditEvents.Count == 0)
             {
-                writer.WriteString(entry.Key, entry.Value);
+                return;
             }
 
-            writer.WriteEndObject();
+            // Every event is checked before any of them is written, so a run that holds one malformed
+            // event writes none of it and the caller learns which rule it broke.
+            foreach (AuditEvent auditEvent in auditEvents)
+            {
+                AuditEventVocabulary.Validate(auditEvent);
+            }
+
+            await using NpgsqlConnection connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+            await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            await using NpgsqlBatch batch = new(connection, transaction);
+
+            // Grouped, because the queue in front of this sink batches across conversations, and a conversation is the
+            // unit the sequence counts within. Ordered by conversation id, because two transactions that each
+            // hold two conversations would otherwise be able to take the two locks in opposite orders and wait
+            // on each other forever. Best effort, and only that: the lock is on hashtext(conversation_id), so a
+            // consistent order on ids is a consistent order on locks only while the hash is injective
+            // over the ids in play. See the remarks on LockSql for what a collision costs.
+            foreach (IGrouping<string, AuditEvent>? conversation in auditEvents
+                .GroupBy(item => item.ConversationId, StringComparer.Ordinal)
+                .OrderBy(group => group.Key, StringComparer.Ordinal))
+            {
+                NpgsqlBatchCommand lockCommand = new(LockSql);
+                _ = lockCommand.Parameters.Add(new NpgsqlParameter { Value = conversation.Key });
+                batch.BatchCommands.Add(lockCommand);
+
+                batch.BatchCommands.Add(AppendCommand(conversation.Key, [.. conversation]));
+            }
+
+            // One round trip for the run. A durable insert is ~13 ms, so twenty apart cost 260 ms and
+            // twenty together cost 13 ms.
+            _ = await batch.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        return Encoding.UTF8.GetString(buffer.ToArray());
+        /// <summary>
+        /// Disposes the pool this sink was given.
+        /// </summary>
+        /// <returns>A task that completes when the pool is closed.</returns>
+        public ValueTask DisposeAsync()
+        {
+            return _dataSource.DisposeAsync();
+        }
+
+        [SuppressMessage(
+            "csharpsquid",
+            "S3265",
+            Justification = "Npgsql documents Array combined with an element type via bit OR, and the enum omits Flags only upstream.")]
+        private static NpgsqlBatchCommand AppendCommand(string conversationId, IReadOnlyList<AuditEvent> run)
+        {
+            NpgsqlBatchCommand command = new(AppendSql);
+
+            // Two events in the same batch sharing an EventId would both survive the NOT EXISTS filter
+            // (neither is in the table yet), so row_number() would number the duplicate too and
+            // ON CONFLICT would then silently drop it — reserving a sequence for a row that never lands.
+            // One survivor per EventId keeps the numbering dense.
+            AuditEvent[] distinct = [.. run.DistinctBy(item => item.EventId)];
+
+            _ = command.Parameters.Add(new NpgsqlParameter { Value = conversationId });
+            _ = command.Parameters.Add(new NpgsqlParameter<Guid[]>
+            {
+                TypedValue = [.. distinct.Select(item => item.EventId)],
+            });
+            _ = command.Parameters.Add(new NpgsqlParameter<string[]>
+            {
+                TypedValue = [.. distinct.Select(item => AuditEventKinds.ToToken(item.Kind))],
+            });
+            _ = command.Parameters.Add(new NpgsqlParameter<DateTimeOffset[]>
+            {
+                TypedValue = [.. distinct.Select(item => item.OccurredAt)],
+            });
+            _ = command.Parameters.Add(new NpgsqlParameter<int?[]>
+            {
+                TypedValue = [.. distinct.Select(item => item.TurnIndex)],
+            });
+            _ = command.Parameters.Add(new NpgsqlParameter<Guid?[]>
+            {
+                TypedValue = [.. distinct.Select(item => item.AmendsEventId)],
+            });
+            _ = command.Parameters.Add(new NpgsqlParameter
+            {
+                Value = distinct.Select(item => PayloadJson(item.Payload)).ToArray(),
+                NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Jsonb,
+            });
+
+            return command;
+        }
+
+        /// <summary>
+        /// Writes the payload as a flat JSON object of strings.
+        /// </summary>
+        private static string PayloadJson(IReadOnlyDictionary<string, string> payload)
+        {
+            using MemoryStream buffer = new();
+            using (Utf8JsonWriter writer = new(buffer))
+            {
+                writer.WriteStartObject();
+                foreach (KeyValuePair<string, string> entry in payload)
+                {
+                    writer.WriteString(entry.Key, entry.Value);
+                }
+
+                writer.WriteEndObject();
+            }
+
+            return Encoding.UTF8.GetString(buffer.ToArray());
+        }
     }
 }

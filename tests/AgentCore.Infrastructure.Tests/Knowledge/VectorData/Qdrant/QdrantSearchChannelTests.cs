@@ -1,84 +1,86 @@
 using AgentCore.Infrastructure.Knowledge.VectorData.Qdrant;
+using Qdrant.Client;
 using Qdrant.Client.Grpc;
 using Xunit;
 
-namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant;
-
-[Collection(QdrantServerCollection.Name)]
-public sealed class QdrantSearchChannelTests
+namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant
 {
-    [QdrantFact]
-    public async Task QueryAsync_ReturnsPointsInFusedOrder()
+    [Collection(QdrantServerCollection.Name)]
+    public sealed class QdrantSearchChannelTests
     {
-        using var client = QdrantServer.CreateClient();
-        var collection = $"channel-{Guid.NewGuid():N}";
-
-        try
+        [QdrantFact]
+        public async Task QueryAsync_ReturnsPointsInFusedOrder()
         {
-            await KbShapedCorpus.CreateAsync(client, collection, interleaved: true, TestContext.Current.CancellationToken);
-            var channel = new QdrantSearchChannel(client);
+            using QdrantClient client = QdrantServer.CreateClient();
+            string collection = $"channel-{Guid.NewGuid():N}";
 
-            var prefetch = new PrefetchQuery
+            try
             {
-                Limit = 20,
-                Using = "dense",
-                Query = new Query
+                await KbShapedCorpus.CreateAsync(client, collection, interleaved: true, TestContext.Current.CancellationToken);
+                QdrantSearchChannel channel = new(client);
+
+                PrefetchQuery prefetch = new()
                 {
-                    Nearest = new VectorInput
+                    Limit = 20,
+                    Using = "dense",
+                    Query = new Query
                     {
-                        Dense = new DenseVector { Data = { KbShapedCorpus.QueryVector() } },
+                        Nearest = new VectorInput
+                        {
+                            Dense = new DenseVector { Data = { KbShapedCorpus.QueryVector() } },
+                        },
                     },
-                },
-            };
+                };
 
-            var points = await channel.QueryAsync(
-                new SearchQuery(collection, [prefetch], new Query { Fusion = Fusion.Rrf }, 5),
-                TestContext.Current.CancellationToken);
+                IReadOnlyList<ScoredPoint> points = await channel.QueryAsync(
+                    new SearchQuery(collection, [prefetch], new Query { Fusion = Fusion.Rrf }, 5),
+                    TestContext.Current.CancellationToken);
 
-            Assert.Equal(5, points.Count);
-            Assert.Equal(KbShapedCorpus.Id(0), points[0].Payload["card_id"].StringValue);
+                Assert.Equal(5, points.Count);
+                Assert.Equal(KbShapedCorpus.Id(0), points[0].Payload["card_id"].StringValue);
+            }
+            finally
+            {
+                await client.DeleteCollectionAsync(collection, cancellationToken: TestContext.Current.CancellationToken);
+            }
         }
-        finally
+
+        [QdrantFact]
+        public async Task RetrieveAsync_FetchesTheWholePayloadByKey()
         {
-            await client.DeleteCollectionAsync(collection, cancellationToken: TestContext.Current.CancellationToken);
+            using QdrantClient client = QdrantServer.CreateClient();
+            string collection = $"channel-{Guid.NewGuid():N}";
+
+            try
+            {
+                await KbShapedCorpus.CreateAsync(client, collection, interleaved: true, TestContext.Current.CancellationToken);
+                QdrantSearchChannel channel = new(client);
+
+                IReadOnlyList<RetrievedPoint> points = await channel.RetrieveAsync(
+                    collection,
+                    [KbShapedCorpus.PointKey(KbShapedCorpus.Id(3)), KbShapedCorpus.PointKey(KbShapedCorpus.Id(9))],
+                    TestContext.Current.CancellationToken);
+
+                Assert.Equal(2, points.Count);
+                Assert.Contains(points, p => p.Payload["card_id"].StringValue == KbShapedCorpus.Id(3));
+                Assert.True(points[0].Payload.ContainsKey("see_also"));
+            }
+            finally
+            {
+                await client.DeleteCollectionAsync(collection, cancellationToken: TestContext.Current.CancellationToken);
+            }
         }
-    }
 
-    [QdrantFact]
-    public async Task RetrieveAsync_FetchesTheWholePayloadByKey()
-    {
-        using var client = QdrantServer.CreateClient();
-        var collection = $"channel-{Guid.NewGuid():N}";
-
-        try
+        [QdrantFact]
+        public async Task QueryAsync_CancelledToken_Throws()
         {
-            await KbShapedCorpus.CreateAsync(client, collection, interleaved: true, TestContext.Current.CancellationToken);
-            var channel = new QdrantSearchChannel(client);
+            using QdrantClient client = QdrantServer.CreateClient();
+            QdrantSearchChannel channel = new(client);
+            using CancellationTokenSource cancelled = new();
+            await cancelled.CancelAsync();
 
-            var points = await channel.RetrieveAsync(
-                collection,
-                [KbShapedCorpus.PointKey(KbShapedCorpus.Id(3)), KbShapedCorpus.PointKey(KbShapedCorpus.Id(9))],
-                TestContext.Current.CancellationToken);
-
-            Assert.Equal(2, points.Count);
-            Assert.Contains(points, p => p.Payload["card_id"].StringValue == KbShapedCorpus.Id(3));
-            Assert.True(points[0].Payload.ContainsKey("see_also"));
+            _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await channel.QueryAsync(
+                new SearchQuery("anything", [], new Query { Fusion = Fusion.Rrf }, 1), cancelled.Token));
         }
-        finally
-        {
-            await client.DeleteCollectionAsync(collection, cancellationToken: TestContext.Current.CancellationToken);
-        }
-    }
-
-    [QdrantFact]
-    public async Task QueryAsync_CancelledToken_Throws()
-    {
-        using var client = QdrantServer.CreateClient();
-        var channel = new QdrantSearchChannel(client);
-        using var cancelled = new CancellationTokenSource();
-        await cancelled.CancelAsync();
-
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await channel.QueryAsync(
-            new SearchQuery("anything", [], new Query { Fusion = Fusion.Rrf }, 1), cancelled.Token));
     }
 }

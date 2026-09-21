@@ -10,119 +10,125 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Xunit;
 
-namespace AgentCore.AspNetCore.Tests.DependencyInjection;
-
-/// <summary>
-/// The <c>ambiguity:</c> warning the validator raises, exercised through
-/// <see cref="AgentCoreBoot.BootAsync"/> so the plumbing that carries it to the log is what is
-/// under test.
-/// </summary>
-public sealed class AmbiguityStartupTests
+namespace AgentCore.AspNetCore.Tests.DependencyInjection
 {
-    [Fact]
-    public async Task BootAsync_ASingleFacetAmbiguityDocument_LogsTheConfigurationWarningBelowTelemetry()
+    /// <summary>
+    /// The <c>ambiguity:</c> warning the validator raises, exercised through
+    /// <see cref="AgentCoreBoot.BootAsync"/> so the plumbing that carries it to the log is what is
+    /// under test.
+    /// </summary>
+    public sealed class AmbiguityStartupTests
     {
-        // A warning EvaluateStructure raised (K33 here) must reach the log, through
-        // ConfigurationStartup.Load's returned Warnings and AgentCoreBoot's own logger.
-        RecordingLoggerFactory loggers = new();
-
-        AgentCoreOptions options = new()
+        [Fact]
+        public async Task BootAsync_ASingleFacetAmbiguityDocument_LogsTheConfigurationWarningBelowTelemetry()
         {
-            Configuration = SingleFacetDocument(),
-            LoggerFactory = loggers,
-        };
-        options.UseChatClients(_ => new RoutingChatClientFactory(new FragmentingChatClient("hello")));
-        options.UseKnowledgeStores(new TestKnowledgeAdapter());
+            // A warning EvaluateStructure raised (K33 here) must reach the log, through
+            // ConfigurationStartup.Load's returned Warnings and AgentCoreBoot's own logger.
+            RecordingLoggerFactory loggers = new();
 
-        await using var boot = new AgentCoreBoot(Options.Create(options), loggers);
-        await boot.BootAsync(TestContext.Current.CancellationToken);
+            AgentCoreOptions options = new()
+            {
+                Configuration = SingleFacetDocument(),
+                LoggerFactory = loggers,
+            };
+            _ = options.UseChatClients(_ => new RoutingChatClientFactory(new FragmentingChatClient("hello")));
+            _ = options.UseKnowledgeStores(new TestKnowledgeAdapter());
 
-        var warnings = loggers.Lines.Where(line =>
-            line.Level == LogLevel.Warning
-            && line.Message.Contains("/providers/knowledge/ambiguity", StringComparison.Ordinal))
-            .ToList();
+            await using AgentCoreBoot boot = new(Options.Create(options), loggers);
+            await boot.BootAsync(TestContext.Current.CancellationToken);
 
-        Assert.Contains(warnings, line => line.Message.Contains("at most one", StringComparison.Ordinal));
-    }
+            List<CapturedLine> warnings = [.. loggers.Lines.Where(line =>
+                line.Level == LogLevel.Warning
+                && line.Message.Contains("/providers/knowledge/ambiguity", StringComparison.Ordinal))];
 
-    private static AgentCoreConfiguration SingleFacetDocument()
-        => new()
+            Assert.Contains(warnings, line => line.Message.Contains("at most one", StringComparison.Ordinal));
+        }
+
+        private static AgentCoreConfiguration SingleFacetDocument()
         {
-            ApiVersion = "agentcore/v1",
-            Extractor = new ExtractorConfiguration { Model = new ModelReference { Ref = "fill" } },
-            State = new Dictionary<string, StateSlotConfiguration>(StringComparer.Ordinal)
+            return new()
             {
-                ["machine"] = new StateSlotConfiguration
+                ApiVersion = "agentcore/v1",
+                Extractor = new ExtractorConfiguration { Model = new ModelReference { Ref = "fill" } },
+                State = new Dictionary<string, StateSlotConfiguration>(StringComparer.Ordinal)
                 {
-                    Type = StateSlotType.String,
-                    Writer = StateWriter.Extractor,
-                    EnumValues = [JsonValue.Create("ct900")!, JsonValue.Create("ct1200")!],
-                },
-            },
-            Providers = new ProvidersConfiguration
-            {
-                Llm = [new LlmProviderConfiguration { Kind = "test", Model = "test", As = "fill" }],
-                Knowledge = new KnowledgeProviderConfiguration
-                {
-                    Kind = "test",
-                    Collection = "kb",
-                    Fields = new KnowledgeFieldsConfiguration { Body = "body" },
-                    Scope = new KnowledgeScopeConfiguration
+                    ["machine"] = new StateSlotConfiguration
                     {
-                        Template = "facets.{key}",
-                        FromState = ["machine"],
-                        Wildcard = new KnowledgeWildcardConfiguration { Value = "*", Facets = ["machine"] },
-                    },
-                    Ambiguity = new KnowledgeAmbiguityConfiguration(),
-                },
-            },
-            Agents = new AgentsConfiguration
-            {
-                Items =
-                [
-                    new AgentConfiguration
-                    {
-                        Id = "resolver",
-                        Instructions = "I answer about one machine",
-                        Knowledge = new AgentKnowledgeConfiguration { Mode = KnowledgeMode.Prefetch, Scoped = true },
-                    },
-                ],
-            },
-            Entries = new Dictionary<string, EntryConfiguration>
-            {
-                ["main"] = new EntryConfiguration
-                {
-                    Policy = new PolicyConfiguration
-                    {
-                        Initial = "answering",
-                        Stages = [new StageConfiguration { Id = "answering", Agent = "resolver", Terminal = true }],
+                        Type = StateSlotType.String,
+                        Writer = StateWriter.Extractor,
+                        EnumValues = [JsonValue.Create("ct900")!, JsonValue.Create("ct1200")!],
                     },
                 },
-            },
-        };
+                Providers = new ProvidersConfiguration
+                {
+                    Llm = [new LlmProviderConfiguration { Kind = "test", Model = "test", As = "fill" }],
+                    Knowledge = new KnowledgeProviderConfiguration
+                    {
+                        Kind = "test",
+                        Collection = "kb",
+                        Fields = new KnowledgeFieldsConfiguration { Body = "body" },
+                        Scope = new KnowledgeScopeConfiguration
+                        {
+                            Template = "facets.{key}",
+                            FromState = ["machine"],
+                            Wildcard = new KnowledgeWildcardConfiguration { Value = "*", Facets = ["machine"] },
+                        },
+                        Ambiguity = new KnowledgeAmbiguityConfiguration(),
+                    },
+                },
+                Agents = new AgentsConfiguration
+                {
+                    Items =
+                            [
+                                new AgentConfiguration
+                        {
+                            Id = "resolver",
+                            Instructions = "I answer about one machine",
+                            Knowledge = new AgentKnowledgeConfiguration { Mode = KnowledgeMode.Prefetch, Scoped = true },
+                        },
+                    ],
+                },
+                Entries = new Dictionary<string, EntryConfiguration>
+                {
+                    ["main"] = new EntryConfiguration
+                    {
+                        Policy = new PolicyConfiguration
+                        {
+                            Initial = "answering",
+                            Stages = [new StageConfiguration { Id = "answering", Agent = "resolver", Terminal = true }],
+                        },
+                    },
+                },
+            };
+        }
 
-    /// <summary>Answers <c>providers.knowledge.kind: test</c> with a port that finds nothing.</summary>
-    private sealed class TestKnowledgeAdapter : IKnowledgeStoreAdapter
-    {
-        public string Kind => "test";
+        /// <summary>Answers <c>providers.knowledge.kind: test</c> with a port that finds nothing.</summary>
+        private sealed class TestKnowledgeAdapter : IKnowledgeStoreAdapter
+        {
+            public string Kind => "test";
 
-        public bool CanServeSearch => true;
+            public bool CanServeSearch => true;
 
-        public bool CanScope => true;
+            public bool CanScope => true;
 
-        public ValueTask<IKnowledgeRetrievalPort> CreateSearchAsync(
-            KnowledgeProviderConfiguration entry,
-            ISecretResolverPort? secrets,
-            IEmbeddingGenerator<string, Embedding<float>>? embeddings,
-            bool requireScope,
-            CancellationToken cancellationToken = default)
-            => ValueTask.FromResult<IKnowledgeRetrievalPort>(new EmptyPort());
-    }
+            public ValueTask<IKnowledgeRetrievalPort> CreateSearchAsync(
+                KnowledgeProviderConfiguration entry,
+                ISecretResolverPort? secrets,
+                IEmbeddingGenerator<string, Embedding<float>>? embeddings,
+                bool requireScope,
+                CancellationToken cancellationToken = default)
+            {
+                return ValueTask.FromResult<IKnowledgeRetrievalPort>(new EmptyPort());
+            }
+        }
 
-    private sealed class EmptyPort : IKnowledgeRetrievalPort
-    {
-        public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
-            string query, KnowledgeScope? scope = null, CancellationToken cancellationToken = default)
-            => ValueTask.FromResult<IReadOnlyList<KnowledgeCard>>([]);
+        private sealed class EmptyPort : IKnowledgeRetrievalPort
+        {
+            public ValueTask<IReadOnlyList<KnowledgeCard>> SearchAsync(
+                string query, KnowledgeScope? scope = null, CancellationToken cancellationToken = default)
+            {
+                return ValueTask.FromResult<IReadOnlyList<KnowledgeCard>>([]);
+            }
+        }
     }
 }

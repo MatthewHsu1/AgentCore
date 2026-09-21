@@ -2,25 +2,26 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Transcript;
 using AgentCore.Domain.Sources;
 
-namespace AgentCore.Application.Runtime.Turn;
-
-/// <summary>What a turn has cited and not yet attached to a message.</summary>
-internal sealed class TurnSources : TurnAttachments<SourceContent>, ISourcePort
+namespace AgentCore.Application.Runtime.Turn
 {
-    /// <inheritdoc/>
-    public void Publish(SourceReference source)
+    /// <summary>What a turn has cited and not yet attached to a message.</summary>
+    internal sealed class TurnSources : TurnAttachments<SourceContent>, ISourcePort
     {
-        ArgumentNullException.ThrowIfNull(source);
-
-        if (OuterCallId is not { } callId)
+        /// <inheritdoc/>
+        public void Publish(SourceReference source)
         {
-            return;
+            ArgumentNullException.ThrowIfNull(source);
+
+            if (OuterCallId is not { } callId)
+            {
+                return;
+            }
+
+            SourceContent content = new() { Source = source, CallId = callId };
+
+            // Two searches in one turn can return the same card.
+            Attach(callId, content, existing =>
+                string.Equals(existing.Source.SourceId, source.SourceId, StringComparison.Ordinal));
         }
-
-        var content = new SourceContent { Source = source, CallId = callId };
-
-        // Two searches in one turn can return the same card.
-        Attach(callId, content, existing =>
-            string.Equals(existing.Source.SourceId, source.SourceId, StringComparison.Ordinal));
     }
 }

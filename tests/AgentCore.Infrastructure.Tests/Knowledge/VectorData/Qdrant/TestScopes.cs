@@ -1,12 +1,16 @@
 using AgentCore.Domain.Knowledge;
 
-namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant;
-
-/// <summary>The scope a wildcard test opens, built from the facets it names.</summary>
-internal static class TestScopes
+namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant
 {
-    internal static KnowledgeScope Scope(params (string Key, string Value)[] facets) => new()
+    /// <summary>The scope a wildcard test opens, built from the facets it names.</summary>
+    internal static class TestScopes
     {
-        Facets = facets.ToDictionary(facet => facet.Key, facet => facet.Value, StringComparer.Ordinal),
-    };
+        internal static KnowledgeScope Scope(params (string Key, string Value)[] facets)
+        {
+            return new()
+            {
+                Facets = facets.ToDictionary(facet => facet.Key, facet => facet.Value, StringComparer.Ordinal),
+            };
+        }
+    }
 }

@@ -1,0 +1,22 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{csproj,props,targets,json,xml,yaml,yml,md}]
+indent_size = 2
+
+[*.cs]
+# Every IDE style rule at the Roslyn default preference, raised from hidden to suggestion so that
+# dotnet format applies it and SonarQube reports whatever is left.
+dotnet_analyzer_diagnostic.category-Style.severity = suggestion
+
+# Off because it folds every guard before a return into a ternary, and a second guard then nests
+# one ternary inside another, which SonarQube S3358 forbids. Sonar wins.
+dotnet_style_prefer_conditional_expression_over_return = false
+dotnet_style_prefer_conditional_expression_over_assignment = false

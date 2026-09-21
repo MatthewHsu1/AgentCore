@@ -5,111 +5,116 @@ using AgentCore.Application.State;
 using AgentCore.Domain.Knowledge;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Knowledge;
-
-public sealed class StateKnowledgeScopeTests
+namespace AgentCore.Application.Tests.Knowledge
 {
-    private static readonly KnowledgeScopeConfiguration Configured = new()
+    public sealed class StateKnowledgeScopeTests
     {
-        Template = "facets.{key}",
-        Wildcard = new() { Value = "*", Facets = ["brand", "applies_to"] },
-        FromState = ["brand", "applies_to"],
-    };
-
-    private static StateDocument Document()
-    {
-        StateSlotConfiguration Slot(params string[] members) => new()
+        private static readonly KnowledgeScopeConfiguration Configured = new()
         {
-            Type = StateSlotType.String,
-            Writer = StateWriter.Extractor,
-            EnumValues = [.. members.Select(m => (JsonNode)JsonValue.Create(m)!)],
+            Template = "facets.{key}",
+            Wildcard = new() { Value = "*", Facets = ["brand", "applies_to"] },
+            FromState = ["brand", "applies_to"],
         };
 
-        return new StateDocument(new AgentCoreConfiguration
+        private static StateDocument Document()
         {
-            ApiVersion = "agentcore/v1",
-            Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(),
-            State = new Dictionary<string, StateSlotConfiguration>(StringComparer.Ordinal)
+            static StateSlotConfiguration Slot(params string[] members)
             {
-                ["brand"] = Slot("sole", "spirit"),
-                ["applies_to"] = Slot("f63", "f80"),
-            },
-        });
-    }
+                return new()
+                {
+                    Type = StateSlotType.String,
+                    Writer = StateWriter.Extractor,
+                    EnumValues = [.. members.Select(m => (JsonNode)JsonValue.Create(m)!)],
+                };
+            }
 
-    [Fact]
-    public void Compose_NothingKnown_IsAllWildcard()
-    {
-        var scope = StateKnowledgeScope.Compose(Document(), Configured, hostScope: null);
+            return new StateDocument(new AgentCoreConfiguration
+            {
+                ApiVersion = "agentcore/v1",
+                Agents = new AgentsConfiguration { Items = [] },
+                Entries = new Dictionary<string, EntryConfiguration>(),
+                State = new Dictionary<string, StateSlotConfiguration>(StringComparer.Ordinal)
+                {
+                    ["brand"] = Slot("sole", "spirit"),
+                    ["applies_to"] = Slot("f63", "f80"),
+                },
+            });
+        }
 
-        Assert.Equal("*", scope!.Facets["brand"]);
-        Assert.Equal("*", scope.Facets["applies_to"]);
-    }
-
-    [Fact]
-    public void Compose_BrandKnown_LeavesTheMachineWildcard()
-    {
-        var state = Document();
-        state.TryWrite("brand", JsonValue.Create("sole"));
-
-        var scope = StateKnowledgeScope.Compose(state, Configured, hostScope: null);
-
-        Assert.Equal("sole", scope!.Facets["brand"]);
-        Assert.Equal("*", scope.Facets["applies_to"]);
-    }
-
-    [Fact]
-    public void Compose_HostAlreadySetTheKey_DoesNotOverwriteIt()
-    {
-        var state = Document();
-        state.TryWrite("brand", JsonValue.Create("sole"));
-        KnowledgeScope host = new()
+        [Fact]
+        public void Compose_NothingKnown_IsAllWildcard()
         {
-            Facets = new Dictionary<string, string>(StringComparer.Ordinal) { ["brand"] = "spirit" },
-        };
+            KnowledgeScope? scope = StateKnowledgeScope.Compose(Document(), Configured, hostScope: null);
 
-        var scope = StateKnowledgeScope.Compose(state, Configured, host);
+            Assert.Equal("*", scope!.Facets["brand"]);
+            Assert.Equal("*", scope.Facets["applies_to"]);
+        }
 
-        Assert.Equal("spirit", scope!.Facets["brand"]);
-    }
-
-    [Fact]
-    public void Compose_NoFromState_ReturnsTheHostInstance()
-    {
-        KnowledgeScope host = new()
+        [Fact]
+        public void Compose_BrandKnown_LeavesTheMachineWildcard()
         {
-            Facets = new Dictionary<string, string>(StringComparer.Ordinal) { ["brand"] = "sole" },
-        };
+            StateDocument state = Document();
+            _ = state.TryWrite("brand", JsonValue.Create("sole"));
 
-        var scope = StateKnowledgeScope.Compose(
-            Document(), Configured with { FromState = [] }, host);
+            KnowledgeScope? scope = StateKnowledgeScope.Compose(state, Configured, hostScope: null);
 
-        Assert.Same(host, scope);
-    }
+            Assert.Equal("sole", scope!.Facets["brand"]);
+            Assert.Equal("*", scope.Facets["applies_to"]);
+        }
 
-    [Fact]
-    public void Compose_NoWildcard_ReturnsNull()
-    {
-        var scope = StateKnowledgeScope.Compose(
-            Document(), Configured with { Wildcard = null }, hostScope: null);
-
-        Assert.Null(scope);
-    }
-
-    [Fact]
-    public void Compose_MarksEachFacetWithItsOrigin()
-    {
-        var state = Document();
-        state.TryWrite("brand", JsonValue.Create("sole"));
-        KnowledgeScope ambient = new()
+        [Fact]
+        public void Compose_HostAlreadySetTheKey_DoesNotOverwriteIt()
         {
-            Facets = new Dictionary<string, string>(StringComparer.Ordinal) { ["region"] = "uk" },
-        };
+            StateDocument state = Document();
+            _ = state.TryWrite("brand", JsonValue.Create("sole"));
+            KnowledgeScope host = new()
+            {
+                Facets = new Dictionary<string, string>(StringComparer.Ordinal) { ["brand"] = "spirit" },
+            };
 
-        var scope = StateKnowledgeScope.Compose(state, Configured, ambient)!;
+            KnowledgeScope? scope = StateKnowledgeScope.Compose(state, Configured, host);
 
-        Assert.Equal(KnowledgeFacetOrigin.Host, scope.Origins["region"]);
-        Assert.Equal(KnowledgeFacetOrigin.Extractor, scope.Origins["brand"]);
-        Assert.Equal(KnowledgeFacetOrigin.Wildcard, scope.Origins["applies_to"]);
+            Assert.Equal("spirit", scope!.Facets["brand"]);
+        }
+
+        [Fact]
+        public void Compose_NoFromState_ReturnsTheHostInstance()
+        {
+            KnowledgeScope host = new()
+            {
+                Facets = new Dictionary<string, string>(StringComparer.Ordinal) { ["brand"] = "sole" },
+            };
+
+            KnowledgeScope? scope = StateKnowledgeScope.Compose(
+                Document(), Configured with { FromState = [] }, host);
+
+            Assert.Same(host, scope);
+        }
+
+        [Fact]
+        public void Compose_NoWildcard_ReturnsNull()
+        {
+            KnowledgeScope? scope = StateKnowledgeScope.Compose(
+                Document(), Configured with { Wildcard = null }, hostScope: null);
+
+            Assert.Null(scope);
+        }
+
+        [Fact]
+        public void Compose_MarksEachFacetWithItsOrigin()
+        {
+            StateDocument state = Document();
+            _ = state.TryWrite("brand", JsonValue.Create("sole"));
+            KnowledgeScope ambient = new()
+            {
+                Facets = new Dictionary<string, string>(StringComparer.Ordinal) { ["region"] = "uk" },
+            };
+
+            KnowledgeScope scope = StateKnowledgeScope.Compose(state, Configured, ambient)!;
+
+            Assert.Equal(KnowledgeFacetOrigin.Host, scope.Origins["region"]);
+            Assert.Equal(KnowledgeFacetOrigin.Extractor, scope.Origins["brand"]);
+            Assert.Equal(KnowledgeFacetOrigin.Wildcard, scope.Origins["applies_to"]);
+        }
     }
 }

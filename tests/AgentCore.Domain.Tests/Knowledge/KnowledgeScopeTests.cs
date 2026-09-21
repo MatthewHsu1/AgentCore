@@ -1,22 +1,23 @@
 using AgentCore.Domain.Knowledge;
 using Xunit;
 
-namespace AgentCore.Domain.Tests.Knowledge;
-
-public sealed class KnowledgeScopeTests
+namespace AgentCore.Domain.Tests.Knowledge
 {
-    [Fact]
-    public void TwoScopes_WithTheSameFacetsAndNoOrigins_AreEqual()
+    public sealed class KnowledgeScopeTests
     {
-        IReadOnlyDictionary<string, string> facets = new Dictionary<string, string>(StringComparer.Ordinal)
+        [Fact]
+        public void TwoScopes_WithTheSameFacetsAndNoOrigins_AreEqual()
         {
-            ["brand"] = "sole",
-        };
+            IReadOnlyDictionary<string, string> facets = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["brand"] = "sole",
+            };
 
-        var first = new KnowledgeScope { Facets = facets };
-        var second = new KnowledgeScope { Facets = facets };
+            KnowledgeScope first = new() { Facets = facets };
+            KnowledgeScope second = new() { Facets = facets };
 
-        Assert.Equal(first, second);
-        Assert.Equal(first.GetHashCode(), second.GetHashCode());
+            Assert.Equal(first, second);
+            Assert.Equal(first.GetHashCode(), second.GetHashCode());
+        }
     }
 }

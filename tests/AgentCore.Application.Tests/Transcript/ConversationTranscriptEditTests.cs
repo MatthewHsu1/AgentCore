@@ -2,132 +2,139 @@ using AgentCore.Application.Transcript;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Transcript;
-
-/// <summary>
-/// Pins what happens when a caller sends an earlier message again: what is withdrawn, what is kept,
-/// and which numbers refuse to be wound back with it.
-/// </summary>
-public sealed class ConversationTranscriptEditTests
+namespace AgentCore.Application.Tests.Transcript
 {
-    [Fact]
-    public void Append_NamesEveryRow_AndKeepsTheNameTheCallerGaveTheFirst()
+    /// <summary>
+    /// Pins what happens when a caller sends an earlier message again: what is withdrawn, what is kept,
+    /// and which numbers refuse to be wound back with it.
+    /// </summary>
+    public sealed class ConversationTranscriptEditTests
     {
-        var transcript = new ConversationTranscript { ConversationId = "conversation-1" };
+        [Fact]
+        public void Append_NamesEveryRow_AndKeepsTheNameTheCallerGaveTheFirst()
+        {
+            ConversationTranscript transcript = new() { ConversationId = "conversation-1" };
 
-        var rows = transcript.Append([User("hello"), Assistant("hi")], firstMessageId: "caller-1");
+            IReadOnlyList<ConversationMessage> rows = transcript.Append([User("hello"), Assistant("hi")], firstMessageId: "caller-1");
 
-        Assert.Equal("caller-1", rows[0].MessageId);
+            Assert.Equal("caller-1", rows[0].MessageId);
 
-        // The reply is named too. It has to be: the message an edit hangs off is usually a reply, and
-        // no caller can have named one in advance.
-        Assert.NotNull(rows[1].MessageId);
-        Assert.NotEqual(rows[0].MessageId, rows[1].MessageId);
+            // The reply is named too. It has to be: the message an edit hangs off is usually a reply, and
+            // no caller can have named one in advance.
+            Assert.NotNull(rows[1].MessageId);
+            Assert.NotEqual(rows[0].MessageId, rows[1].MessageId);
+        }
+
+        [Fact]
+        public void TruncateFrom_DropsTheTailAndLeavesTheMarksWhereTheyAre()
+        {
+            ConversationTranscript transcript = new() { ConversationId = "conversation-1" };
+            transcript.BeginTurn(0);
+            IReadOnlyList<ConversationMessage> first = transcript.Append([User("q1"), Assistant("a1")], "caller-1");
+            transcript.BeginTurn(1);
+            _ = transcript.Append([User("q2"), Assistant("a2")], "caller-2");
+
+            WithdrawnTurns? went = transcript.TruncateFrom(transcript.OrdinalOf(first[1].MessageId!)!.Value + 1);
+
+            Assert.Equal(new WithdrawnTurns(1, 1), went);
+            Assert.Equal(["q1", "a1"], transcript.Read().Select(message => message.Text));
+
+            // The withdrawn places stay spent. Store 3 is append-only and still holds rows against the
+            // turns that stood in them, so reissuing either number would put two turns in one place.
+            Assert.Equal(4, transcript.NextOrdinal);
+            Assert.Equal(1, transcript.TurnIndex);
+        }
+
+        [Fact]
+        public void TruncateFrom_AimsTheNextBargeInAtTheReplyThatSurvived()
+        {
+            ConversationTranscript transcript = new() { ConversationId = "conversation-1" };
+            transcript.BeginTurn(0);
+            IReadOnlyList<ConversationMessage> first = transcript.Append([User("q1"), Assistant("a1")], "caller-1");
+            transcript.BeginTurn(1);
+            _ = transcript.Append([User("q2"), Assistant("a2")], "caller-2");
+
+            _ = transcript.TruncateFrom(transcript.OrdinalOf(first[1].MessageId!)!.Value + 1);
+
+            // Without this a barge-in after an edit would aim at an ordinal no row holds any more, and
+            // the cut would be a silent no-op.
+            Assert.Equal(first[1].Ordinal, transcript.LastAssistantOrdinal);
+        }
+
+        [Fact]
+        public void OrdinalOf_AMessageTheConversationDoesNotHold_IsNull()
+        {
+            ConversationTranscript transcript = new() { ConversationId = "conversation-1" };
+            _ = transcript.Append([User("hello")], "caller-1");
+
+            Assert.Null(transcript.OrdinalOf("never-stored"));
+        }
+
+        [Fact]
+        public void Resume_PrefersTheStoredMarksOverTheRowsThatSurvived()
+        {
+            // A conversation that was edited: the rows of turns 1 and 2 are gone, so the rows alone would say the
+            // next turn is 1 and the next ordinal 2 — both of which a deleted row already used.
+            ConversationTranscript transcript = new() { ConversationId = "conversation-1" };
+
+            int next = transcript.Resume(
+                [
+                    new ConversationMessage("conversation-1", 0, 0, User("q1"), "m0"),
+                    new ConversationMessage("conversation-1", 1, 0, Assistant("a1"), "m1"),
+                ],
+                new TranscriptMarks(NextOrdinal: 6, NextTurnIndex: 3));
+
+            Assert.Equal(3, next);
+            Assert.Equal(6, transcript.NextOrdinal);
+        }
+
+        [Fact]
+        public void Resume_SetsTheReplyABargeInWouldCut()
+        {
+            ConversationTranscript transcript = new() { ConversationId = "conversation-1" };
+
+            _ = transcript.Resume(
+                [
+                    new ConversationMessage("conversation-1", 0, 0, User("q1"), "m0"),
+                    new ConversationMessage("conversation-1", 1, 0, Assistant("a1"), "m1"),
+
+                    // A tool-calling turn's textless assistant message is not a reply anybody can be cut
+                    // off in the middle of, so it must not be what the next barge-in aims at.
+                    new ConversationMessage("conversation-1", 2, 0, new ChatMessage(ChatRole.Assistant, []), "m2"),
+                ],
+                new TranscriptMarks(NextOrdinal: 3, NextTurnIndex: 1));
+
+            Assert.Equal(1, transcript.LastAssistantOrdinal);
+        }
+
+        [Fact]
+        public void Resume_ThenTruncateLastReply_ActuallyCuts()
+        {
+            // A resumed conversation has to know which reply a barge-in aims at. With no ordinal to aim at,
+            // TruncateLastReply returns an empty list, which the provider reports as a write it declined
+            // rather than as a cut it lost — so the caller is silently not heard.
+            ConversationTranscript transcript = new() { ConversationId = "conversation-1" };
+            _ = transcript.Resume(
+                [
+                    new ConversationMessage("conversation-1", 0, 0, User("q1"), "m0"),
+                    new ConversationMessage("conversation-1", 1, 0, Assistant("it ships on Friday"), "m1"),
+                ],
+                new TranscriptMarks(NextOrdinal: 2, NextTurnIndex: 1));
+
+            IReadOnlyList<ConversationMessage> rows = transcript.TruncateLastReply("it ships");
+
+            _ = Assert.Single(rows);
+            Assert.Equal("it ships", rows[0].Content.Text);
+        }
+
+        private static ChatMessage User(string text)
+        {
+            return new(ChatRole.User, text);
+        }
+
+        private static ChatMessage Assistant(string text)
+        {
+            return new(ChatRole.Assistant, text);
+        }
     }
-
-    [Fact]
-    public void TruncateFrom_DropsTheTailAndLeavesTheMarksWhereTheyAre()
-    {
-        var transcript = new ConversationTranscript { ConversationId = "conversation-1" };
-        transcript.BeginTurn(0);
-        var first = transcript.Append([User("q1"), Assistant("a1")], "caller-1");
-        transcript.BeginTurn(1);
-        transcript.Append([User("q2"), Assistant("a2")], "caller-2");
-
-        var went = transcript.TruncateFrom(transcript.OrdinalOf(first[1].MessageId!)!.Value + 1);
-
-        Assert.Equal(new WithdrawnTurns(1, 1), went);
-        Assert.Equal(["q1", "a1"], transcript.Read().Select(message => message.Text));
-
-        // The withdrawn places stay spent. Store 3 is append-only and still holds rows against the
-        // turns that stood in them, so reissuing either number would put two turns in one place.
-        Assert.Equal(4, transcript.NextOrdinal);
-        Assert.Equal(1, transcript.TurnIndex);
-    }
-
-    [Fact]
-    public void TruncateFrom_AimsTheNextBargeInAtTheReplyThatSurvived()
-    {
-        var transcript = new ConversationTranscript { ConversationId = "conversation-1" };
-        transcript.BeginTurn(0);
-        var first = transcript.Append([User("q1"), Assistant("a1")], "caller-1");
-        transcript.BeginTurn(1);
-        transcript.Append([User("q2"), Assistant("a2")], "caller-2");
-
-        transcript.TruncateFrom(transcript.OrdinalOf(first[1].MessageId!)!.Value + 1);
-
-        // Without this a barge-in after an edit would aim at an ordinal no row holds any more, and
-        // the cut would be a silent no-op.
-        Assert.Equal(first[1].Ordinal, transcript.LastAssistantOrdinal);
-    }
-
-    [Fact]
-    public void OrdinalOf_AMessageTheConversationDoesNotHold_IsNull()
-    {
-        var transcript = new ConversationTranscript { ConversationId = "conversation-1" };
-        transcript.Append([User("hello")], "caller-1");
-
-        Assert.Null(transcript.OrdinalOf("never-stored"));
-    }
-
-    [Fact]
-    public void Resume_PrefersTheStoredMarksOverTheRowsThatSurvived()
-    {
-        // A conversation that was edited: the rows of turns 1 and 2 are gone, so the rows alone would say the
-        // next turn is 1 and the next ordinal 2 — both of which a deleted row already used.
-        var transcript = new ConversationTranscript { ConversationId = "conversation-1" };
-
-        var next = transcript.Resume(
-            [
-                new ConversationMessage("conversation-1", 0, 0, User("q1"), "m0"),
-                new ConversationMessage("conversation-1", 1, 0, Assistant("a1"), "m1"),
-            ],
-            new TranscriptMarks(NextOrdinal: 6, NextTurnIndex: 3));
-
-        Assert.Equal(3, next);
-        Assert.Equal(6, transcript.NextOrdinal);
-    }
-
-    [Fact]
-    public void Resume_SetsTheReplyABargeInWouldCut()
-    {
-        var transcript = new ConversationTranscript { ConversationId = "conversation-1" };
-
-        transcript.Resume(
-            [
-                new ConversationMessage("conversation-1", 0, 0, User("q1"), "m0"),
-                new ConversationMessage("conversation-1", 1, 0, Assistant("a1"), "m1"),
-
-                // A tool-calling turn's textless assistant message is not a reply anybody can be cut
-                // off in the middle of, so it must not be what the next barge-in aims at.
-                new ConversationMessage("conversation-1", 2, 0, new ChatMessage(ChatRole.Assistant, []), "m2"),
-            ],
-            new TranscriptMarks(NextOrdinal: 3, NextTurnIndex: 1));
-
-        Assert.Equal(1, transcript.LastAssistantOrdinal);
-    }
-
-    [Fact]
-    public void Resume_ThenTruncateLastReply_ActuallyCuts()
-    {
-        // A resumed conversation has to know which reply a barge-in aims at. With no ordinal to aim at,
-        // TruncateLastReply returns an empty list, which the provider reports as a write it declined
-        // rather than as a cut it lost — so the caller is silently not heard.
-        var transcript = new ConversationTranscript { ConversationId = "conversation-1" };
-        transcript.Resume(
-            [
-                new ConversationMessage("conversation-1", 0, 0, User("q1"), "m0"),
-                new ConversationMessage("conversation-1", 1, 0, Assistant("it ships on Friday"), "m1"),
-            ],
-            new TranscriptMarks(NextOrdinal: 2, NextTurnIndex: 1));
-
-        var rows = transcript.TruncateLastReply("it ships");
-
-        Assert.Single(rows);
-        Assert.Equal("it ships", rows[0].Content.Text);
-    }
-
-    private static ChatMessage User(string text) => new(ChatRole.User, text);
-
-    private static ChatMessage Assistant(string text) => new(ChatRole.Assistant, text);
 }

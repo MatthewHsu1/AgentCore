@@ -13,145 +13,148 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
-namespace AgentCore.AspNetCore.Tests.Fakes;
-
-/// <summary>
-/// One real host, on a real socket, over a fake model, answering the Responses path.
-/// </summary>
-/// <remarks>
-/// Kestrel takes port zero and reports the port it got, so many tests run at once. The socket is real
-/// on purpose: a server-sent event is a wire behaviour, and an in-memory pipe would not prove that the
-/// endpoint writes one event for each update. No test here reaches a network or needs an API key.
-/// </remarks>
-internal sealed class ResponsesHost : IAsyncDisposable
+namespace AgentCore.AspNetCore.Tests.Fakes
 {
-    private const string DataPrefix = "data: ";
-    private readonly WebApplication _app;
-
-    private ResponsesHost(WebApplication app, HttpClient client)
+    /// <summary>
+    /// One real host, on a real socket, over a fake model, answering the Responses path.
+    /// </summary>
+    /// <remarks>
+    /// Kestrel takes port zero and reports the port it got, so many tests run at once. The socket is real
+    /// on purpose: a server-sent event is a wire behaviour, and an in-memory pipe would not prove that the
+    /// endpoint writes one event for each update. No test here reaches a network or needs an API key.
+    /// </remarks>
+    internal sealed class ResponsesHost : IAsyncDisposable
     {
-        _app = app;
-        Client = client;
-    }
+        private const string DataPrefix = "data: ";
+        private readonly WebApplication _app;
 
-    /// <summary>Gets the client that speaks to the host.</summary>
-    public HttpClient Client { get; }
-
-    /// <summary>Gets the started host's services, for a test that reads what a turn stored.</summary>
-    public IServiceProvider Services => _app.Services;
-
-    /// <summary>Starts one host over one document.</summary>
-    /// <param name="yaml">The document, as YAML.</param>
-    /// <param name="reply">The model behind every name the routing factory does not hold.</param>
-    /// <param name="configure">Anything else the test binds on the options.</param>
-    /// <returns>The started host.</returns>
-    public static async Task<ResponsesHost> StartAsync(
-        string yaml, IChatClient reply, Action<AgentCoreOptions>? configure = null)
-    {
-        var builder = WebApplication.CreateSlimBuilder();
-        builder.WebHost.UseUrls("http://127.0.0.1:0");
-        builder.Logging.ClearProviders();
-
-        builder.Services.AddAgentCore(options =>
+        private ResponsesHost(WebApplication app, HttpClient client)
         {
-            options.Configuration = ConfigurationLoader.LoadYaml(yaml);
-            options.UseChatClients(_ => new RoutingChatClientFactory(reply));
-            configure?.Invoke(options);
-        });
-
-        var app = builder.Build();
-        app.MapResponses();
-        await app.StartAsync();
-
-        var address = app.Services
-            .GetRequiredService<IServer>()
-            .Features
-            .Get<IServerAddressesFeature>()!
-            .Addresses
-            .First();
-
-        HttpClient client = new() { BaseAddress = new Uri(address, UriKind.Absolute) };
-        return new ResponsesHost(app, client);
-    }
-
-    /// <summary>Sends one Responses request body.</summary>
-    /// <param name="json">The request body.</param>
-    /// <param name="headers">Request headers to send beside the body, or none.</param>
-    /// <returns>The answer.</returns>
-    public async Task<HttpResponseMessage> PostAsync(string json, IReadOnlyDictionary<string, string>? headers = null)
-    {
-        using HttpRequestMessage request = new(HttpMethod.Post, "/v1/main/responses")
-        {
-            Content = new StringContent(json, Encoding.UTF8, "application/json"),
-        };
-
-        foreach (var (name, value) in headers ?? new Dictionary<string, string>())
-        {
-            request.Headers.TryAddWithoutValidation(name, value);
+            _app = app;
+            Client = client;
         }
 
-        return await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, TestContext.Current.CancellationToken);
-    }
+        /// <summary>Gets the client that speaks to the host.</summary>
+        public HttpClient Client { get; }
 
-    /// <summary>Reads every server-sent event of one answer.</summary>
-    /// <param name="response">The answer, with the body still open.</param>
-    /// <returns>The text after each <c>data:</c> prefix, in order.</returns>
-    public static async Task<List<string>> ReadEventsAsync(HttpResponseMessage response)
-    {
-        List<string> events = [];
-        await using var body = await response.Content.ReadAsStreamAsync(TestContext.Current.CancellationToken);
-        using StreamReader reader = new(body, Encoding.UTF8);
+        /// <summary>Gets the started host's services, for a test that reads what a turn stored.</summary>
+        public IServiceProvider Services => _app.Services;
 
-        while (await reader.ReadLineAsync(TestContext.Current.CancellationToken) is { } line)
+        /// <summary>Starts one host over one document.</summary>
+        /// <param name="yaml">The document, as YAML.</param>
+        /// <param name="reply">The model behind every name the routing factory does not hold.</param>
+        /// <param name="configure">Anything else the test binds on the options.</param>
+        /// <returns>The started host.</returns>
+        public static async Task<ResponsesHost> StartAsync(
+            string yaml, IChatClient reply, Action<AgentCoreOptions>? configure = null)
         {
-            if (line.StartsWith(DataPrefix, StringComparison.Ordinal))
+            WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
+            _ = builder.WebHost.UseUrls("http://127.0.0.1:0");
+            _ = builder.Logging.ClearProviders();
+
+            _ = builder.Services.AddAgentCore(options =>
             {
-                events.Add(line[DataPrefix.Length..]);
-            }
+                options.Configuration = ConfigurationLoader.LoadYaml(yaml);
+                _ = options.UseChatClients(_ => new RoutingChatClientFactory(reply));
+                configure?.Invoke(options);
+            });
+
+            WebApplication app = builder.Build();
+            _ = app.MapResponses();
+            await app.StartAsync();
+
+            string address = app.Services
+                .GetRequiredService<IServer>()
+                .Features
+                .Get<IServerAddressesFeature>()!
+                .Addresses
+                .First();
+
+            HttpClient client = new() { BaseAddress = new Uri(address, UriKind.Absolute) };
+            return new ResponsesHost(app, client);
         }
 
-        return events;
-    }
-
-    /// <summary>Reads the text of every text delta of one stream.</summary>
-    /// <param name="events">The events the stream carried.</param>
-    /// <returns>The pieces, in order.</returns>
-    public static List<string> TextDeltas(IEnumerable<string> events)
-    {
-        List<string> pieces = [];
-        foreach (var raw in events)
+        /// <summary>Sends one Responses request body.</summary>
+        /// <param name="json">The request body.</param>
+        /// <param name="headers">Request headers to send beside the body, or none.</param>
+        /// <returns>The answer.</returns>
+        public async Task<HttpResponseMessage> PostAsync(string json, IReadOnlyDictionary<string, string>? headers = null)
         {
-            var frame = JsonNode.Parse(raw)!.AsObject();
-            if (string.Equals(frame["type"]?.GetValue<string>(), "response.output_text.delta", StringComparison.Ordinal)
-                && frame["delta"]?.GetValue<string>() is { Length: > 0 } text)
+            using HttpRequestMessage request = new(HttpMethod.Post, "/v1/main/responses")
             {
-                pieces.Add(text);
+                Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            };
+
+            foreach ((string? name, string? value) in headers ?? new Dictionary<string, string>())
+            {
+                _ = request.Headers.TryAddWithoutValidation(name, value);
             }
+
+            return await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, TestContext.Current.CancellationToken);
         }
 
-        return pieces;
-    }
+        /// <summary>Reads every server-sent event of one answer.</summary>
+        /// <param name="response">The answer, with the body still open.</param>
+        /// <returns>The text after each <c>data:</c> prefix, in order.</returns>
+        public static async Task<List<string>> ReadEventsAsync(HttpResponseMessage response)
+        {
+            List<string> events = [];
+            await using Stream body = await response.Content.ReadAsStreamAsync(TestContext.Current.CancellationToken);
+            using StreamReader reader = new(body, Encoding.UTF8);
 
-    /// <summary>Reads one answer as a node tree.</summary>
-    /// <param name="response">The answer.</param>
-    /// <returns>The body.</returns>
-    public static async Task<JsonNode> ReadJsonAsync(HttpResponseMessage response)
-    {
-        var text = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
-        return JsonNode.Parse(text)!;
-    }
+            while (await reader.ReadLineAsync(TestContext.Current.CancellationToken) is { } line)
+            {
+                if (line.StartsWith(DataPrefix, StringComparison.Ordinal))
+                {
+                    events.Add(line[DataPrefix.Length..]);
+                }
+            }
 
-    /// <summary>Reads one answer as text.</summary>
-    /// <param name="response">The answer.</param>
-    /// <returns>The body.</returns>
-    public static Task<string> ReadTextAsync(HttpResponseMessage response)
-        => response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+            return events;
+        }
 
-    /// <inheritdoc />
-    public async ValueTask DisposeAsync()
-    {
-        Client.Dispose();
-        await _app.StopAsync();
-        await _app.DisposeAsync();
+        /// <summary>Reads the text of every text delta of one stream.</summary>
+        /// <param name="events">The events the stream carried.</param>
+        /// <returns>The pieces, in order.</returns>
+        public static List<string> TextDeltas(IEnumerable<string> events)
+        {
+            List<string> pieces = [];
+            foreach (string raw in events)
+            {
+                JsonObject frame = JsonNode.Parse(raw)!.AsObject();
+                if (string.Equals(frame["type"]?.GetValue<string>(), "response.output_text.delta", StringComparison.Ordinal)
+                    && frame["delta"]?.GetValue<string>() is { Length: > 0 } text)
+                {
+                    pieces.Add(text);
+                }
+            }
+
+            return pieces;
+        }
+
+        /// <summary>Reads one answer as a node tree.</summary>
+        /// <param name="response">The answer.</param>
+        /// <returns>The body.</returns>
+        public static async Task<JsonNode> ReadJsonAsync(HttpResponseMessage response)
+        {
+            string text = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+            return JsonNode.Parse(text)!;
+        }
+
+        /// <summary>Reads one answer as text.</summary>
+        /// <param name="response">The answer.</param>
+        /// <returns>The body.</returns>
+        public static Task<string> ReadTextAsync(HttpResponseMessage response)
+        {
+            return response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        }
+
+        /// <inheritdoc />
+        public async ValueTask DisposeAsync()
+        {
+            Client.Dispose();
+            await _app.StopAsync();
+            await _app.DisposeAsync();
+        }
     }
 }

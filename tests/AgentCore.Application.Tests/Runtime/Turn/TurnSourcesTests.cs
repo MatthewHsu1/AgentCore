@@ -1,111 +1,119 @@
 using AgentCore.Application.Runtime.Turn;
+using AgentCore.Application.Transcript;
 using AgentCore.Domain.Sources;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Runtime.Turn;
-
-/// <summary>
-/// What a turn has cited and not yet attached to a message.
-/// </summary>
-/// <remarks>
-/// Keyed by the outer tool call for the same reason the render collector is: the message a source
-/// belongs on is the result of the call that produced it, and a nested call must not steal it.
-/// </remarks>
-public sealed class TurnSourcesTests
+namespace AgentCore.Application.Tests.Runtime.Turn
 {
-    [Fact]
-    public void Publish_UnderACall_IsTakenByThatCall()
+    /// <summary>
+    /// What a turn has cited and not yet attached to a message.
+    /// </summary>
+    /// <remarks>
+    /// Keyed by the outer tool call for the same reason the render collector is: the message a source
+    /// belongs on is the result of the call that produced it, and a nested call must not steal it.
+    /// </remarks>
+    public sealed class TurnSourcesTests
     {
-        TurnSources sources = new();
-
-        using (OpenCall(sources, "call-1"))
+        [Fact]
+        public void Publish_UnderACall_IsTakenByThatCall()
         {
+            TurnSources sources = new();
+
+            using (OpenCall(sources, "call-1"))
+            {
+                sources.Publish(Reference("card-1"));
+            }
+
+            IReadOnlyList<SourceContent> taken = sources.TakeFor("call-1");
+
+            SourceContent content = Assert.Single(taken);
+            Assert.Equal("card-1", content.Source.SourceId);
+        }
+
+        [Fact]
+        public void Publish_WithNoCallOpen_IsDropped()
+        {
+            // mode: prefetch searches before any tool call exists. There is no message to attach to, so
+            // the publish is dropped rather than attached to whatever message comes next.
+            TurnSources sources = new();
+
             sources.Publish(Reference("card-1"));
+
+            Assert.Empty(sources.TakeFor("call-1"));
         }
 
-        var taken = sources.TakeFor("call-1");
-
-        var content = Assert.Single(taken);
-        Assert.Equal("card-1", content.Source.SourceId);
-    }
-
-    [Fact]
-    public void Publish_WithNoCallOpen_IsDropped()
-    {
-        // mode: prefetch searches before any tool call exists. There is no message to attach to, so
-        // the publish is dropped rather than attached to whatever message comes next.
-        TurnSources sources = new();
-
-        sources.Publish(Reference("card-1"));
-
-        Assert.Empty(sources.TakeFor("call-1"));
-    }
-
-    [Fact]
-    public void Publish_TheSameIdTwice_IsShownOnce()
-    {
-        // One turn may search twice and both searches may return the same card. Two identical chips
-        // are noise, and the second publish is the fresher one.
-        TurnSources sources = new();
-
-        using (OpenCall(sources, "call-1"))
+        [Fact]
+        public void Publish_TheSameIdTwice_IsShownOnce()
         {
-            sources.Publish(Reference("card-1") with { Title = "first" });
-            sources.Publish(Reference("card-1") with { Title = "second" });
+            // One turn may search twice and both searches may return the same card. Two identical chips
+            // are noise, and the second publish is the fresher one.
+            TurnSources sources = new();
+
+            using (OpenCall(sources, "call-1"))
+            {
+                sources.Publish(Reference("card-1") with { Title = "first" });
+                sources.Publish(Reference("card-1") with { Title = "second" });
+            }
+
+            SourceContent content = Assert.Single(sources.TakeFor("call-1"));
+            Assert.Equal("second", content.Source.Title);
         }
 
-        var content = Assert.Single(sources.TakeFor("call-1"));
-        Assert.Equal("second", content.Source.Title);
-    }
-
-    [Fact]
-    public void TakeFor_TakesOnlyOnce()
-    {
-        TurnSources sources = new();
-
-        using (OpenCall(sources, "call-1"))
+        [Fact]
+        public void TakeFor_TakesOnlyOnce()
         {
-            sources.Publish(Reference("card-1"));
+            TurnSources sources = new();
+
+            using (OpenCall(sources, "call-1"))
+            {
+                sources.Publish(Reference("card-1"));
+            }
+
+            _ = Assert.Single(sources.TakeFor("call-1"));
+            Assert.Empty(sources.TakeFor("call-1"));
         }
 
-        Assert.Single(sources.TakeFor("call-1"));
-        Assert.Empty(sources.TakeFor("call-1"));
-    }
-
-    [Fact]
-    public void Publish_UnderTwoDifferentCalls_StampsEachSourceWithItsOwnCallId()
-    {
-        // A round can hold two parallel tool calls, and the base client batches both results onto
-        // one message — so the source has to carry its own call id rather than being matched to
-        // whichever call happens to be findable on that shared message afterward.
-        TurnSources sources = new();
-
-        using (OpenCall(sources, "call-1"))
+        [Fact]
+        public void Publish_UnderTwoDifferentCalls_StampsEachSourceWithItsOwnCallId()
         {
-            sources.Publish(Reference("card-1"));
+            // A round can hold two parallel tool calls, and the base client batches both results onto
+            // one message — so the source has to carry its own call id rather than being matched to
+            // whichever call happens to be findable on that shared message afterward.
+            TurnSources sources = new();
+
+            using (OpenCall(sources, "call-1"))
+            {
+                sources.Publish(Reference("card-1"));
+            }
+
+            using (OpenCall(sources, "call-2"))
+            {
+                sources.Publish(Reference("card-2"));
+            }
+
+            SourceContent fromCallOne = Assert.Single(sources.TakeFor("call-1"));
+            Assert.Equal("call-1", fromCallOne.CallId);
+            Assert.Equal("card-1", fromCallOne.Source.SourceId);
+
+            SourceContent fromCallTwo = Assert.Single(sources.TakeFor("call-2"));
+            Assert.Equal("call-2", fromCallTwo.CallId);
+            Assert.Equal("card-2", fromCallTwo.Source.SourceId);
         }
 
-        using (OpenCall(sources, "call-2"))
+        private static IDisposable OpenCall(TurnSources sources, string callId)
         {
-            sources.Publish(Reference("card-2"));
+            return sources.BeginOuterCall(callId);
         }
 
-        var fromCallOne = Assert.Single(sources.TakeFor("call-1"));
-        Assert.Equal("call-1", fromCallOne.CallId);
-        Assert.Equal("card-1", fromCallOne.Source.SourceId);
-
-        var fromCallTwo = Assert.Single(sources.TakeFor("call-2"));
-        Assert.Equal("call-2", fromCallTwo.CallId);
-        Assert.Equal("card-2", fromCallTwo.Source.SourceId);
+        private static SourceReference Reference(string id)
+        {
+            return new()
+            {
+                SourceId = id,
+                Kind = SourceKind.Document,
+                Title = "a title",
+                Origin = "knowledge",
+            };
+        }
     }
-
-    private static IDisposable OpenCall(TurnSources sources, string callId) => sources.BeginOuterCall(callId);
-
-    private static SourceReference Reference(string id) => new()
-    {
-        SourceId = id,
-        Kind = SourceKind.Document,
-        Title = "a title",
-        Origin = "knowledge",
-    };
 }

@@ -7,145 +7,145 @@ using AgentCore.Application.Tests.Runtime;
 using Microsoft.Agents.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Configuration.Compilation;
-
-/// <summary>
-/// The <c>todos:</c> / <c>mode:</c> switches reaching a compiled agent's context providers, and the
-/// tools they add reaching the model.
-/// </summary>
-public sealed class HarnessCompilationTests
+namespace AgentCore.Application.Tests.Configuration.Compilation
 {
-    private static readonly string[] ExpectedTodoTools =
-        ["todos_add", "todos_complete", "todos_remove", "todos_get_remaining", "todos_get_all"];
-
-    private static readonly string[] ExpectedModeTools = ["mode_set", "mode_get"];
-
-
-    [Fact]
-    public void Compile_TodosTrue_GetsATodoProvider()
+    /// <summary>
+    /// The <c>todos:</c> / <c>mode:</c> switches reaching a compiled agent's context providers, and the
+    /// tools they add reaching the model.
+    /// </summary>
+    public sealed class HarnessCompilationTests
     {
-        var providers = Providers(CompileOne(withTodos: true, withMode: false));
+        private static readonly string[] ExpectedTodoTools =
+            ["todos_add", "todos_complete", "todos_remove", "todos_get_remaining", "todos_get_all"];
 
-        Assert.Contains(providers, provider => provider is TodoProvider);
-    }
+        private static readonly string[] ExpectedModeTools = ["mode_set", "mode_get"];
 
-    [Fact]
-    public void Compile_ModeTrue_GetsAnAgentModeProvider()
-    {
-        var providers = Providers(CompileOne(withTodos: false, withMode: true));
 
-        Assert.Contains(providers, provider => provider is AgentModeProvider);
-    }
+        [Fact]
+        public void Compile_TodosTrue_GetsATodoProvider()
+        {
+            IEnumerable<AIContextProvider> providers = Providers(CompileOne(withTodos: true, withMode: false));
 
-    [Fact]
-    public void Compile_NeitherKey_GetsNeitherProvider()
-    {
-        var providers = Providers(CompileOne(withTodos: false, withMode: false));
+            Assert.Contains(providers, provider => provider is TodoProvider);
+        }
 
-        Assert.DoesNotContain(providers, provider => provider is TodoProvider);
-        Assert.DoesNotContain(providers, provider => provider is AgentModeProvider);
-    }
+        [Fact]
+        public void Compile_ModeTrue_GetsAnAgentModeProvider()
+        {
+            IEnumerable<AIContextProvider> providers = Providers(CompileOne(withTodos: false, withMode: true));
 
-    [Fact]
-    public async Task Compile_TodosTrue_ModelSeesTheFiveTodoTools()
-    {
-        using SequencedChatClient reply = new("hello there.");
+            Assert.Contains(providers, provider => provider is AgentModeProvider);
+        }
 
-        var compiled = ConfigurationCompiler.CompileAll(
-            new AgentCoreConfiguration
-            {
-                ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
-                Entries = new Dictionary<string, EntryConfiguration> { ["main"] = new EntryConfiguration { Agent = "only" } },
-                Agents = new AgentsConfiguration
+        [Fact]
+        public void Compile_NeitherKey_GetsNeitherProvider()
+        {
+            IEnumerable<AIContextProvider> providers = Providers(CompileOne(withTodos: false, withMode: false));
+
+            Assert.DoesNotContain(providers, provider => provider is TodoProvider);
+            Assert.DoesNotContain(providers, provider => provider is AgentModeProvider);
+        }
+
+        [Fact]
+        public async Task Compile_TodosTrue_ModelSeesTheFiveTodoTools()
+        {
+            using SequencedChatClient reply = new("hello there.");
+
+            CompiledAgent compiled = ConfigurationCompiler.CompileAll(
+                new AgentCoreConfiguration
                 {
-                    Items = [new AgentConfiguration { Id = "only", Todos = true }],
+                    ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
+                    Entries = new Dictionary<string, EntryConfiguration> { ["main"] = new EntryConfiguration { Agent = "only" } },
+                    Agents = new AgentsConfiguration
+                    {
+                        Items = [new AgentConfiguration { Id = "only", Todos = true }],
+                    },
                 },
-            },
-            new AgentCompilationContext(new FakeChatClientFactory(reply)))["main"];
+                new AgentCompilationContext(new FakeChatClientFactory(reply)))["main"];
 
-        var agent = Assert.Single(compiled.Agents.Values);
-        var token = TestContext.Current.CancellationToken;
-        var session = await agent.CreateSessionAsync(token);
+            AIAgent agent = Assert.Single(compiled.Agents.Values);
+            CancellationToken token = TestContext.Current.CancellationToken;
+            AgentSession session = await agent.CreateSessionAsync(token);
 
-        await agent.RunAsync("hi", session, cancellationToken: token);
+            _ = await agent.RunAsync("hi", session, cancellationToken: token);
 
-        var toolNames = reply.Options[^1]?.Tools?.Select(tool => tool.Name).ToArray() ?? [];
+            string[] toolNames = reply.Options[^1]?.Tools?.Select(tool => tool.Name).ToArray() ?? [];
 
-        Assert.Equal(ExpectedTodoTools, toolNames, StringComparer.Ordinal);
-    }
+            Assert.Equal(ExpectedTodoTools, toolNames, StringComparer.Ordinal);
+        }
 
-    [Fact]
-    public async Task Compile_ModeTrue_ModelSeesTheTwoModeTools()
-    {
-        using SequencedChatClient reply = new("hello there.");
+        [Fact]
+        public async Task Compile_ModeTrue_ModelSeesTheTwoModeTools()
+        {
+            using SequencedChatClient reply = new("hello there.");
 
-        var compiled = ConfigurationCompiler.CompileAll(
-            new AgentCoreConfiguration
-            {
-                ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
-                Entries = new Dictionary<string, EntryConfiguration> { ["main"] = new EntryConfiguration { Agent = "only" } },
-                Agents = new AgentsConfiguration
+            CompiledAgent compiled = ConfigurationCompiler.CompileAll(
+                new AgentCoreConfiguration
                 {
-                    Items = [new AgentConfiguration { Id = "only", Mode = true }],
+                    ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
+                    Entries = new Dictionary<string, EntryConfiguration> { ["main"] = new EntryConfiguration { Agent = "only" } },
+                    Agents = new AgentsConfiguration
+                    {
+                        Items = [new AgentConfiguration { Id = "only", Mode = true }],
+                    },
                 },
-            },
-            new AgentCompilationContext(new FakeChatClientFactory(reply)))["main"];
+                new AgentCompilationContext(new FakeChatClientFactory(reply)))["main"];
 
-        var agent = Assert.Single(compiled.Agents.Values);
-        var token = TestContext.Current.CancellationToken;
-        var session = await agent.CreateSessionAsync(token);
+            AIAgent agent = Assert.Single(compiled.Agents.Values);
+            CancellationToken token = TestContext.Current.CancellationToken;
+            AgentSession session = await agent.CreateSessionAsync(token);
 
-        await agent.RunAsync("hi", session, cancellationToken: token);
+            _ = await agent.RunAsync("hi", session, cancellationToken: token);
 
-        var toolNames = reply.Options[^1]?.Tools?.Select(tool => tool.Name).ToArray() ?? [];
+            string[] toolNames = reply.Options[^1]?.Tools?.Select(tool => tool.Name).ToArray() ?? [];
 
-        Assert.Equal(ExpectedModeTools, toolNames, StringComparer.Ordinal);
-    }
+            Assert.Equal(ExpectedModeTools, toolNames, StringComparer.Ordinal);
+        }
 
-    [Fact]
-    public void Compile_TodosAndModeTrue_HarnessStateKeysIsTheUnionOfBoth()
-    {
-        var compiled = ConfigurationCompiler.CompileAll(
-            new AgentCoreConfiguration
-            {
-                ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
-                Entries = new Dictionary<string, EntryConfiguration> { ["main"] = new EntryConfiguration { Agent = "only" } },
-                Agents = new AgentsConfiguration
+        [Fact]
+        public void Compile_TodosAndModeTrue_HarnessStateKeysIsTheUnionOfBoth()
+        {
+            CompiledAgent compiled = ConfigurationCompiler.CompileAll(
+                new AgentCoreConfiguration
                 {
-                    Items = [new AgentConfiguration { Id = "only", Todos = true, Mode = true }],
+                    ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
+                    Entries = new Dictionary<string, EntryConfiguration> { ["main"] = new EntryConfiguration { Agent = "only" } },
+                    Agents = new AgentsConfiguration
+                    {
+                        Items = [new AgentConfiguration { Id = "only", Todos = true, Mode = true }],
+                    },
                 },
-            },
-            new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hello there."))))["main"];
+                new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hello there."))))["main"];
 
-        Assert.Equal(
-            new HashSet<string>(StringComparer.Ordinal)
-            {
-                new TodoProvider().StateKeys[0],
-                new AgentModeProvider().StateKeys[0],
-            },
-            compiled.HarnessStateKeys);
-    }
-
-    [Fact]
-    public void Compile_NeitherTodosNorMode_HarnessStateKeysIsEmpty()
-    {
-        var compiled = ConfigurationCompiler.CompileAll(
-            new AgentCoreConfiguration
-            {
-                ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
-                Entries = new Dictionary<string, EntryConfiguration> { ["main"] = new EntryConfiguration { Agent = "only" } },
-                Agents = new AgentsConfiguration
+            Assert.Equal(
+                new HashSet<string>(StringComparer.Ordinal)
                 {
-                    Items = [new AgentConfiguration { Id = "only" }],
+                    new TodoProvider().StateKeys[0],
+                    new AgentModeProvider().StateKeys[0],
                 },
-            },
-            new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hello there."))))["main"];
+                compiled.HarnessStateKeys);
+        }
 
-        Assert.Empty(compiled.HarnessStateKeys);
-    }
+        [Fact]
+        public void Compile_NeitherTodosNorMode_HarnessStateKeysIsEmpty()
+        {
+            CompiledAgent compiled = ConfigurationCompiler.CompileAll(
+                new AgentCoreConfiguration
+                {
+                    ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
+                    Entries = new Dictionary<string, EntryConfiguration> { ["main"] = new EntryConfiguration { Agent = "only" } },
+                    Agents = new AgentsConfiguration
+                    {
+                        Items = [new AgentConfiguration { Id = "only" }],
+                    },
+                },
+                new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hello there."))))["main"];
 
-    private const string TwoAgentsOnlyOneWithTodosYaml =
-        """
+            Assert.Empty(compiled.HarnessStateKeys);
+        }
+
+        private const string TwoAgentsOnlyOneWithTodosYaml =
+            """
           apiVersion: agentcore/v1
           guards:
             always: { ">=": [ { var: turnIndex }, 0 ] }
@@ -162,20 +162,20 @@ public sealed class HarnessCompilationTests
                   - { id: done, agent: plain, terminal: true }
           """;
 
-      [Fact]
-      public void Compile_TwoAgentsOnlyOneWithTodos_HarnessStateKeysHasTheTodoKey()
-      {
-          var compiled = ConfigurationCompiler.CompileAll(
-              ConfigurationLoader.LoadYaml(TwoAgentsOnlyOneWithTodosYaml),
-              new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hello there."))))["main"];
+        [Fact]
+        public void Compile_TwoAgentsOnlyOneWithTodos_HarnessStateKeysHasTheTodoKey()
+        {
+            CompiledAgent compiled = ConfigurationCompiler.CompileAll(
+                ConfigurationLoader.LoadYaml(TwoAgentsOnlyOneWithTodosYaml),
+                new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hello there."))))["main"];
 
-          Assert.Equal(
-              new HashSet<string>(StringComparer.Ordinal) { new TodoProvider().StateKeys[0] },
-              compiled.HarnessStateKeys);
-      }
+            Assert.Equal(
+                new HashSet<string>(StringComparer.Ordinal) { new TodoProvider().StateKeys[0] },
+                compiled.HarnessStateKeys);
+        }
 
-      private const string ShellYaml =
-          """
+        private const string ShellYaml =
+            """
         apiVersion: agentcore/v1
         agents:
           items:
@@ -185,8 +185,8 @@ public sealed class HarnessCompilationTests
             agent: only
         """;
 
-    private const string ShellBadPolicyYaml =
-        """
+        private const string ShellBadPolicyYaml =
+            """
         apiVersion: agentcore/v1
         agents:
           items:
@@ -196,110 +196,111 @@ public sealed class HarnessCompilationTests
             agent: only
         """;
 
-    [Fact]
-    public void Compile_ShellWithNoWorkspaceRoot_FailsNamingTheShellPointer()
-    {
-        var document = ConfigurationLoader.LoadYaml(ShellYaml);
-
-        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationCompiler.CompileAll(
-            document,
-            new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hi"))))["main"]);
-
-        Assert.Equal("/agents/items/0/shell", failure.Pointer);
-        Assert.Contains("options.UseWorkspace(", failure.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Compile_ShellWithABadPolicyRegex_FailsNamingTheShellPolicyPointerAndThePattern()
-    {
-        var document = ConfigurationLoader.LoadYaml(ShellBadPolicyYaml);
-
-        var failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationCompiler.CompileAll(
-            document,
-            new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hi")))
-            {
-                WorkspaceRoot = Path.Combine(Path.GetTempPath(), "agentcore-shell-" + Guid.NewGuid().ToString("N")),
-            })["main"]);
-
-        Assert.Equal("/agents/items/0/shell/policy", failure.Pointer);
-        Assert.Contains("'('", failure.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Compile_ShellWithAValidBlockAndARoot_Compiles()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "agentcore-shell-" + Guid.NewGuid().ToString("N"));
-        try
+        [Fact]
+        public void Compile_ShellWithNoWorkspaceRoot_FailsNamingTheShellPointer()
         {
-            var compiled = ConfigurationCompiler.CompileAll(
-                ConfigurationLoader.LoadYaml(ShellYaml),
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(ShellYaml);
+
+            ConfigurationLoadException failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationCompiler.CompileAll(
+                document,
+                new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hi"))))["main"]);
+
+            Assert.Equal("/agents/items/0/shell", failure.Pointer);
+            Assert.Contains("options.UseWorkspace(", failure.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Compile_ShellWithABadPolicyRegex_FailsNamingTheShellPolicyPointerAndThePattern()
+        {
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(ShellBadPolicyYaml);
+
+            ConfigurationLoadException failure = Assert.Throws<ConfigurationLoadException>(() => ConfigurationCompiler.CompileAll(
+                document,
                 new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hi")))
                 {
-                    WorkspaceRoot = root,
-                })["main"];
+                    WorkspaceRoot = Path.Combine(Path.GetTempPath(), "agentcore-shell-" + Guid.NewGuid().ToString("N")),
+                })["main"]);
 
-            Assert.Single(compiled.Agents.Values);
-            Assert.Empty(compiled.HarnessStateKeys);
+            Assert.Equal("/agents/items/0/shell/policy", failure.Pointer);
+            Assert.Contains("'('", failure.Message, StringComparison.Ordinal);
         }
-        finally
+
+        [Fact]
+        public void Compile_ShellWithAValidBlockAndARoot_Compiles()
         {
-            if (Directory.Exists(root))
+            string root = Path.Combine(Path.GetTempPath(), "agentcore-shell-" + Guid.NewGuid().ToString("N"));
+            try
             {
-                Directory.Delete(root, recursive: true);
+                CompiledAgent compiled = ConfigurationCompiler.CompileAll(
+                    ConfigurationLoader.LoadYaml(ShellYaml),
+                    new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hi")))
+                    {
+                        WorkspaceRoot = root,
+                    })["main"];
+
+                _ = Assert.Single(compiled.Agents.Values);
+                Assert.Empty(compiled.HarnessStateKeys);
+            }
+            finally
+            {
+                if (Directory.Exists(root))
+                {
+                    Directory.Delete(root, recursive: true);
+                }
             }
         }
-    }
 
-    [Fact]
-    public void Compile_ShellBlock_GetsAToolProviderAndAnEnvironmentProvider()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "agentcore-shell-env-" + Guid.NewGuid().ToString("N"));
-        try
+        [Fact]
+        public void Compile_ShellBlock_GetsAToolProviderAndAnEnvironmentProvider()
         {
-            var compiled = ConfigurationCompiler.CompileAll(
-                ConfigurationLoader.LoadYaml(ShellYaml),
-                new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hi")))
-                {
-                    WorkspaceRoot = root,
-                })["main"];
-
-            var providers = Providers(Assert.Single(compiled.Agents.Values));
-
-            Assert.Contains(providers, provider => provider is ConversationShellProvider);
-            Assert.Contains(providers, provider => provider is ConversationShellEnvironmentProvider);
-        }
-        finally
-        {
-            if (Directory.Exists(root))
+            string root = Path.Combine(Path.GetTempPath(), "agentcore-shell-env-" + Guid.NewGuid().ToString("N"));
+            try
             {
-                Directory.Delete(root, recursive: true);
+                CompiledAgent compiled = ConfigurationCompiler.CompileAll(
+                    ConfigurationLoader.LoadYaml(ShellYaml),
+                    new AgentCompilationContext(new FakeChatClientFactory(new SequencedChatClient("hi")))
+                    {
+                        WorkspaceRoot = root,
+                    })["main"];
+
+                IEnumerable<AIContextProvider> providers = Providers(Assert.Single(compiled.Agents.Values));
+
+                Assert.Contains(providers, provider => provider is ConversationShellProvider);
+                Assert.Contains(providers, provider => provider is ConversationShellEnvironmentProvider);
+            }
+            finally
+            {
+                if (Directory.Exists(root))
+                {
+                    Directory.Delete(root, recursive: true);
+                }
             }
         }
-    }
 
-    private static AIAgent CompileOne(bool withTodos, bool withMode)
-    {
-        using SequencedChatClient reply = new("hello there.");
+        private static AIAgent CompileOne(bool withTodos, bool withMode)
+        {
+            using SequencedChatClient reply = new("hello there.");
 
-        var compiled = ConfigurationCompiler.CompileAll(
-            new AgentCoreConfiguration
-            {
-                ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
-                Entries = new Dictionary<string, EntryConfiguration> { ["main"] = new EntryConfiguration { Agent = "only" } },
-                Agents = new AgentsConfiguration
+            CompiledAgent compiled = ConfigurationCompiler.CompileAll(
+                new AgentCoreConfiguration
                 {
-                    Items = [new AgentConfiguration { Id = "only", Todos = withTodos, Mode = withMode }],
+                    ApiVersion = AgentCoreConfiguration.SupportedApiVersion,
+                    Entries = new Dictionary<string, EntryConfiguration> { ["main"] = new EntryConfiguration { Agent = "only" } },
+                    Agents = new AgentsConfiguration
+                    {
+                        Items = [new AgentConfiguration { Id = "only", Todos = withTodos, Mode = withMode }],
+                    },
                 },
-            },
-            new AgentCompilationContext(new FakeChatClientFactory(reply)))["main"];
+                new AgentCompilationContext(new FakeChatClientFactory(reply)))["main"];
 
-        return Assert.Single(compiled.Agents.Values);
-    }
+            return Assert.Single(compiled.Agents.Values);
+        }
 
-    private static IEnumerable<AIContextProvider> Providers(AIAgent agent)
-    {
-        var inner = agent.GetService<ChatClientAgent>();
-        Assert.NotNull(inner);
-        return inner.AIContextProviders ?? [];
+        private static IEnumerable<AIContextProvider> Providers(AIAgent agent)
+        {
+            ChatClientAgent? inner = agent.GetService<ChatClientAgent>();
+            Assert.NotNull(inner);
+            return inner.AIContextProviders ?? [];
+        }
     }
 }

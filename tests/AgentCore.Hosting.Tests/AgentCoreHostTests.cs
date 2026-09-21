@@ -10,7 +10,6 @@ using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
 using AgentCore.AspNetCore.DependencyInjection;
-using AgentCore.AspNetCore.Endpoints;
 using AgentCore.Domain.Knowledge;
 using AgentCore.Infrastructure.Audit.Postgres;
 using AgentCore.Infrastructure.Conversation.Postgres;
@@ -20,189 +19,195 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
+using AgentCore.Application.Tools.Binding;
 
-namespace AgentCore.Hosting.Tests;
-
-/// <summary>
-/// The two calls a host makes, and the promises they carry.
-/// </summary>
-/// <remarks>
-/// <para>
-/// This library exists so a host owns no wiring, and the whole of that promise is that a host can
-/// still overrule any part of it. Every test here is about who wins, because that is the one thing
-/// the ordering inside <c>Configure</c> can get wrong without failing to compile: each <c>Use*</c>
-/// seam is a setter, so defaults written after a host's callback would silently replace it.
-/// </para>
-/// <para>
-/// Every test runs offline against a fake model. There is no OpenAI account, no network conversation, and
-/// no API key anywhere in this file — which is itself the proof that the default vendor list costs
-/// nothing until a document names it.
-/// </para>
-/// </remarks>
-public sealed class AgentCoreHostTests
+namespace AgentCore.Hosting.Tests
 {
-    /// <summary>A model that says one thing, which is all the compile table asks for.</summary>
-    private sealed class FakeChatClient : IChatClient
-    {
-        public Task<ChatResponse> GetResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
-            => Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, "hello")));
-
-        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            await Task.CompletedTask.ConfigureAwait(false);
-            yield return new ChatResponseUpdate(ChatRole.Assistant, "hello");
-        }
-
-        public object? GetService(Type serviceType, object? serviceKey = null) => null;
-
-        public void Dispose()
-        {
-        }
-    }
-
-    // ---------------------------------------------------------------------------------------------
-    // Who wins. The host does, on every seam, because its callback runs last.
-    // ---------------------------------------------------------------------------------------------
-
-    [Fact]
-    public async Task AHostChatClientFactoryWinsOverTheDefaultVendor()
-    {
-        // The default list names the real OpenAI adapter. If it ran after the callback it would
-        // replace this factory, and the start would then want a key this test does not set.
-        using var host = await StartAsync();
-
-        Assert.NotNull(host.Services.GetService<IChatClientFactory>());
-    }
-
-    [Fact]
-    public async Task AHostThatHandsOverADocumentDoesNotAlsoGetTheDefaultPath()
-    {
-        // Both a path and a configuration is two documents, and AddAgentCoreAsync refuses that. The
-        // default path has to stand down for a host that named a document of its own.
-        using var host = await StartAsync();
-
-        Assert.NotNull(host.Services.GetService<IChatClientFactory>());
-    }
-
-    // ---------------------------------------------------------------------------------------------
-    // The durable seams. Naming a vendor here is what makes providers.audit.kind: postgres startable.
-    // ---------------------------------------------------------------------------------------------
-
-    [Fact]
-    public async Task ProvidersAuditPostgresReachesTheAdapterRatherThanTheSelector()
-    {
-        // The failure this guards is the selector's: a kind no registered adapter serves. Reaching
-        // the credential instead is the proof that the default list names the PostgreSQL vendor.
-        var failure = await Assert.ThrowsAsync<SecretResolutionException>(
-            () => StartAsync(options => options.SecretResolver = new EmptySecretResolver(), Audit));
-
-        Assert.Contains(KnownSecrets.PostgresConnectionString.Name, failure.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task ProvidersConversationsPostgresReachesTheAdapterRatherThanTheSelector()
-    {
-        var failure = await Assert.ThrowsAsync<SecretResolutionException>(
-            () => StartAsync(options => options.SecretResolver = new EmptySecretResolver(), Conversations));
-
-        Assert.Contains(KnownSecrets.PostgresConnectionString.Name, failure.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task ADocumentNamingNoDurableVendorStillGetsTheInProcessStores()
-    {
-        // Naming the PostgreSQL vendor must not make it the default. The factory answers an absent
-        // block before it reads the adapter list, and this is the line that holds it to that.
-        using var host = await StartAsync();
-
-        Assert.IsType<InMemoryAuditSink>(host.Services.GetRequiredService<QueuedAuditSink>().Store);
-        Assert.IsType<InMemoryConversationStore>(host.Services.GetRequiredService<Conversations>().Store);
-        Assert.IsType<InMemoryConversationStore>(host.Services.GetRequiredService<Conversations>().Store);
-    }
-
-    [Fact]
-    public async Task AHostAuditSinkWinsOverTheDefaultVendorOnTheSameKind()
-    {
-        // UseAuditSinks is a setter, so this replaces the list rather than joining it. Were the
-        // default written after the callback, the start would want a connection string instead.
-        using var host = await StartAsync(
-            options => options.UseAuditSinks(new FakeSinkAdapter()),
-            Audit);
-
-        Assert.IsType<QueuedAuditSink>(host.Services.GetRequiredService<IAuditSinkPort>());
-        Assert.IsType<InMemoryAuditSink>(host.Services.GetRequiredService<QueuedAuditSink>().Store);
-    }
-
-    [Fact]
-    public async Task AHostConversationStoreWinsOverTheDefaultVendorOnTheSameKind()
-    {
-        using var host = await StartAsync(
-            options => options.UseConversationStores(new FakeConversationStoreAdapter()),
-            Conversations);
-
-        Assert.IsType<InMemoryConversationStore>(host.Services.GetRequiredService<Conversations>().Store);
-    }
-
-    // ---------------------------------------------------------------------------------------------
-    // providers.knowledge.analyzer. The default QdrantKnowledgeAdapter is registered inside
-    // Configure, before the host's own callback runs, so a host analyzer only reaches it if the
-    // wiring reapplies it afterward in FinishConfiguring. If that ordering regresses, the failure
-    // below reads "no registered IKnowledgeQueryAnalyzer" instead of a network error.
-    // ---------------------------------------------------------------------------------------------
-
-    [Fact]
-    public async Task AHostKnowledgeQueryAnalyzerReachesTheDefaultAdapter()
-    {
-        // ResolveAnalyzer runs before the Qdrant client is built, so nothing on this loopback port
-        // is ever contacted unless the stub analyzer already resolved. Reaching a network failure,
-        // rather than "no registered IKnowledgeQueryAnalyzer", is the proof it did.
-        var failure = await Assert.ThrowsAnyAsync<Exception>(() => StartAsync(
-            options =>
-            {
-                options.UseEmbeddings(new FakeEmbeddingAdapter());
-                options.UseKnowledgeQueryAnalyzers(new StubQueryAnalyzer());
-            },
-            Knowledge));
-
-        Assert.DoesNotContain("no registered", failure.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task AHostKnowledgePointMapperReachesTheDefaultAdapter()
-    {
-        // ResolveMapper runs before the Qdrant client is built, so nothing on this loopback port is
-        // ever contacted unless the stub mapper already resolved. Reaching a network failure, rather
-        // than "no registered IKnowledgePointMapper", is the proof it did.
-        var failure = await Assert.ThrowsAnyAsync<Exception>(() => StartAsync(
-            options =>
-            {
-                options.UseEmbeddings(new FakeEmbeddingAdapter());
-                options.UseKnowledgePointMappers(new StubPointMapper());
-            },
-            KnowledgeMapper));
-
-        Assert.DoesNotContain("no registered", failure.Message, StringComparison.Ordinal);
-    }
-
-    // ---------------------------------------------------------------------------------------------
-    // The mcp: block. McpToolSource is registered from this project, not from AgentCore.AspNetCore —
-    // this test is what actually proves that wiring runs a real connection attempt, naming the
-    // server that failed to connect.
-    // ---------------------------------------------------------------------------------------------
-
-    /// <summary>A document naming an <c>mcp:</c> server whose command does not exist.</summary>
+    /// <summary>
+    /// The two calls a host makes, and the promises they carry.
+    /// </summary>
     /// <remarks>
-    /// A missing executable fails <c>Process.Start</c> synchronously, so this reaches
-    /// <see cref="ConfigurationLoadException"/> immediately rather than waiting out any MCP
-    /// initialization timeout — the fast, offline failure this test needs.
+    /// <para>
+    /// This library exists so a host owns no wiring, and the whole of that promise is that a host can
+    /// still overrule any part of it. Every test here is about who wins, because that is the one thing
+    /// the ordering inside <c>Configure</c> can get wrong without failing to compile: each <c>Use*</c>
+    /// seam is a setter, so defaults written after a host's callback would silently replace it.
+    /// </para>
+    /// <para>
+    /// Every test runs offline against a fake model. There is no OpenAI account, no network conversation, and
+    /// no API key anywhere in this file — which is itself the proof that the default vendor list costs
+    /// nothing until a document names it.
+    /// </para>
     /// </remarks>
-    private const string McpDocument = """
+    public sealed class AgentCoreHostTests
+    {
+        /// <summary>A model that says one thing, which is all the compile table asks for.</summary>
+        private sealed class FakeChatClient : IChatClient
+        {
+            public Task<ChatResponse> GetResponseAsync(
+                IEnumerable<ChatMessage> messages,
+                ChatOptions? options = null,
+                CancellationToken cancellationToken = default)
+            {
+                return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, "hello")));
+            }
+
+            public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+                IEnumerable<ChatMessage> messages,
+                ChatOptions? options = null,
+                [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+            {
+                await Task.CompletedTask.ConfigureAwait(false);
+                yield return new ChatResponseUpdate(ChatRole.Assistant, "hello");
+            }
+
+            public object? GetService(Type serviceType, object? serviceKey = null)
+            {
+                return null;
+            }
+
+            public void Dispose()
+            {
+            }
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // Who wins. The host does, on every seam, because its callback runs last.
+        // ---------------------------------------------------------------------------------------------
+
+        [Fact]
+        public async Task AHostChatClientFactoryWinsOverTheDefaultVendor()
+        {
+            // The default list names the real OpenAI adapter. If it ran after the callback it would
+            // replace this factory, and the start would then want a key this test does not set.
+            using WebApplication host = await StartAsync();
+
+            Assert.NotNull(host.Services.GetService<IChatClientFactory>());
+        }
+
+        [Fact]
+        public async Task AHostThatHandsOverADocumentDoesNotAlsoGetTheDefaultPath()
+        {
+            // Both a path and a configuration is two documents, and AddAgentCoreAsync refuses that. The
+            // default path has to stand down for a host that named a document of its own.
+            using WebApplication host = await StartAsync();
+
+            Assert.NotNull(host.Services.GetService<IChatClientFactory>());
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // The durable seams. Naming a vendor here is what makes providers.audit.kind: postgres startable.
+        // ---------------------------------------------------------------------------------------------
+
+        [Fact]
+        public async Task ProvidersAuditPostgresReachesTheAdapterRatherThanTheSelector()
+        {
+            // The failure this guards is the selector's: a kind no registered adapter serves. Reaching
+            // the credential instead is the proof that the default list names the PostgreSQL vendor.
+            SecretResolutionException failure = await Assert.ThrowsAsync<SecretResolutionException>(
+                () => StartAsync(options => options.SecretResolver = new EmptySecretResolver(), Audit));
+
+            Assert.Contains(KnownSecrets.PostgresConnectionString.Name, failure.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task ProvidersConversationsPostgresReachesTheAdapterRatherThanTheSelector()
+        {
+            SecretResolutionException failure = await Assert.ThrowsAsync<SecretResolutionException>(
+                () => StartAsync(options => options.SecretResolver = new EmptySecretResolver(), Conversations));
+
+            Assert.Contains(KnownSecrets.PostgresConnectionString.Name, failure.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task ADocumentNamingNoDurableVendorStillGetsTheInProcessStores()
+        {
+            // Naming the PostgreSQL vendor must not make it the default. The factory answers an absent
+            // block before it reads the adapter list, and this is the line that holds it to that.
+            using WebApplication host = await StartAsync();
+
+            _ = Assert.IsType<InMemoryAuditSink>(host.Services.GetRequiredService<QueuedAuditSink>().Store);
+            _ = Assert.IsType<InMemoryConversationStore>(host.Services.GetRequiredService<Conversations>().Store);
+            _ = Assert.IsType<InMemoryConversationStore>(host.Services.GetRequiredService<Conversations>().Store);
+        }
+
+        [Fact]
+        public async Task AHostAuditSinkWinsOverTheDefaultVendorOnTheSameKind()
+        {
+            // UseAuditSinks is a setter, so this replaces the list rather than joining it. Were the
+            // default written after the callback, the start would want a connection string instead.
+            using WebApplication host = await StartAsync(
+                options => options.UseAuditSinks(new FakeSinkAdapter()),
+                Audit);
+
+            _ = Assert.IsType<QueuedAuditSink>(host.Services.GetRequiredService<IAuditSinkPort>());
+            _ = Assert.IsType<InMemoryAuditSink>(host.Services.GetRequiredService<QueuedAuditSink>().Store);
+        }
+
+        [Fact]
+        public async Task AHostConversationStoreWinsOverTheDefaultVendorOnTheSameKind()
+        {
+            using WebApplication host = await StartAsync(
+                options => options.UseConversationStores(new FakeConversationStoreAdapter()),
+                Conversations);
+
+            _ = Assert.IsType<InMemoryConversationStore>(host.Services.GetRequiredService<Conversations>().Store);
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // providers.knowledge.analyzer. The default QdrantKnowledgeAdapter is registered inside
+        // Configure, before the host's own callback runs, so a host analyzer only reaches it if the
+        // wiring reapplies it afterward in FinishConfiguring. If that ordering regresses, the failure
+        // below reads "no registered IKnowledgeQueryAnalyzer" instead of a network error.
+        // ---------------------------------------------------------------------------------------------
+
+        [Fact]
+        public async Task AHostKnowledgeQueryAnalyzerReachesTheDefaultAdapter()
+        {
+            // ResolveAnalyzer runs before the Qdrant client is built, so nothing on this loopback port
+            // is ever contacted unless the stub analyzer already resolved. Reaching a network failure,
+            // rather than "no registered IKnowledgeQueryAnalyzer", is the proof it did.
+            Exception failure = await Assert.ThrowsAnyAsync<Exception>(() => StartAsync(
+                options =>
+                {
+                    _ = options.UseEmbeddings(new FakeEmbeddingAdapter());
+                    _ = options.UseKnowledgeQueryAnalyzers(new StubQueryAnalyzer());
+                },
+                Knowledge));
+
+            Assert.DoesNotContain("no registered", failure.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task AHostKnowledgePointMapperReachesTheDefaultAdapter()
+        {
+            // ResolveMapper runs before the Qdrant client is built, so nothing on this loopback port is
+            // ever contacted unless the stub mapper already resolved. Reaching a network failure, rather
+            // than "no registered IKnowledgePointMapper", is the proof it did.
+            Exception failure = await Assert.ThrowsAnyAsync<Exception>(() => StartAsync(
+                options =>
+                {
+                    _ = options.UseEmbeddings(new FakeEmbeddingAdapter());
+                    _ = options.UseKnowledgePointMappers(new StubPointMapper());
+                },
+                KnowledgeMapper));
+
+            Assert.DoesNotContain("no registered", failure.Message, StringComparison.Ordinal);
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // The mcp: block. McpToolSource is registered from this project, not from AgentCore.AspNetCore —
+        // this test is what actually proves that wiring runs a real connection attempt, naming the
+        // server that failed to connect.
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>A document naming an <c>mcp:</c> server whose command does not exist.</summary>
+        /// <remarks>
+        /// A missing executable fails <c>Process.Start</c> synchronously, so this reaches
+        /// <see cref="ConfigurationLoadException"/> immediately rather than waiting out any MCP
+        /// initialization timeout — the fast, offline failure this test needs.
+        /// </remarks>
+        private const string McpDocument = """
         apiVersion: agentcore/v1
         agents:
           items:
@@ -224,198 +229,198 @@ public sealed class AgentCoreHostTests
             - { kind: fake, model: fake-model, as: reply }
         """;
 
-    [Fact]
-    public async Task AnMcpServerThatCannotBeReachedFailsTheStartNamingTheServer()
-    {
-        var builder = WebApplication.CreateSlimBuilder();
-        builder.WebHost.UseUrls("http://127.0.0.1:0");
-        builder.Logging.ClearProviders();
-
-        builder.AddAgentCoreHost(options =>
+        [Fact]
+        public async Task AnMcpServerThatCannotBeReachedFailsTheStartNamingTheServer()
         {
-            options.Configuration = ConfigurationLoader.LoadYaml(McpDocument);
-            options.UseChatClients(_ => new RecordingChatClientFactory(new FakeChatClient()));
-        });
+            WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
+            _ = builder.WebHost.UseUrls("http://127.0.0.1:0");
+            _ = builder.Logging.ClearProviders();
 
-        await using var app = builder.Build();
+            _ = builder.AddAgentCoreHost(options =>
+            {
+                options.Configuration = ConfigurationLoader.LoadYaml(McpDocument);
+                _ = options.UseChatClients(_ => new RecordingChatClientFactory(new FakeChatClient()));
+            });
 
-        var failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
-            () => app.StartAsync(TestContext.Current.CancellationToken));
+            await using WebApplication app = builder.Build();
 
-        Assert.Contains("no-such-server", failure.Message, StringComparison.Ordinal);
-    }
+            ConfigurationLoadException failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+                () => app.StartAsync(TestContext.Current.CancellationToken));
 
-    // ---------------------------------------------------------------------------------------------
-    // The CreateCase stub. It fills a gap and never takes a name the host wanted.
-    // ---------------------------------------------------------------------------------------------
+            Assert.Contains("no-such-server", failure.Message, StringComparison.Ordinal);
+        }
 
-    [Fact]
-    public async Task AHostThatBindsNothingGetsTheStub()
-    {
-        AgentCoreOptions? options = null;
-        using var host = await StartAsync(captured => options = captured);
+        // ---------------------------------------------------------------------------------------------
+        // The CreateCase stub. It fills a gap and never takes a name the host wanted.
+        // ---------------------------------------------------------------------------------------------
 
-        Assert.True(options!.Bindings.TryGetBinding(
-            AgentCoreHostBuilderExtensions.CreateCaseBinding,
-            out var binding));
-
-        var result = await binding!(new JsonObject { ["summary"] = "a broken treadmill" }, TestContext.Current.CancellationToken);
-        var json = Assert.IsType<JsonObject>(result);
-
-        Assert.False((bool)json["opened"]!);
-        Assert.Equal("a broken treadmill", (string?)json["summary"]);
-    }
-
-    [Fact]
-    public async Task AHostThatBindsCreateCaseKeepsItsOwnDelegate()
-    {
-        // Registering one name twice throws, so a stub added before the callback would turn a host
-        // that wants this binding into a host that cannot start at all.
-        AgentCoreOptions? options = null;
-        using var host = await StartAsync(configure =>
+        [Fact]
+        public async Task AHostThatBindsNothingGetsTheStub()
         {
-            options = configure;
-            configure.Bind(
+            AgentCoreOptions? options = null;
+            using WebApplication host = await StartAsync(captured => options = captured);
+
+            Assert.True(options!.Bindings.TryGetBinding(
                 AgentCoreHostBuilderExtensions.CreateCaseBinding,
-                (_, _) => ValueTask.FromResult<object?>(new JsonObject { ["opened"] = true }));
-        });
+                out ToolBinding? binding));
 
-        Assert.True(options!.Bindings.TryGetBinding(
-            AgentCoreHostBuilderExtensions.CreateCaseBinding,
-            out var binding));
+            object? result = await binding!(new JsonObject { ["summary"] = "a broken treadmill" }, TestContext.Current.CancellationToken);
+            JsonObject json = Assert.IsType<JsonObject>(result);
 
-        var result = await binding!([], TestContext.Current.CancellationToken);
-        Assert.True((bool)Assert.IsType<JsonObject>(result)["opened"]!);
-    }
+            Assert.False((bool)json["opened"]!);
+            Assert.Equal("a broken treadmill", (string?)json["summary"]);
+        }
 
-    // ---------------------------------------------------------------------------------------------
-    // What this extension registered, the container has to close.
-    // ---------------------------------------------------------------------------------------------
+        [Fact]
+        public async Task AHostThatBindsCreateCaseKeepsItsOwnDelegate()
+        {
+            // Registering one name twice throws, so a stub added before the callback would turn a host
+            // that wants this binding into a host that cannot start at all.
+            AgentCoreOptions? options = null;
+            using WebApplication host = await StartAsync(configure =>
+            {
+                options = configure;
+                _ = configure.Bind(
+                    AgentCoreHostBuilderExtensions.CreateCaseBinding,
+                    (_, _) => ValueTask.FromResult<object?>(new JsonObject { ["opened"] = true }));
+            });
 
-    [Fact]
-    public async Task TheOutboundHttpPipelineClosesWithTheHost()
-    {
-        var host = await StartAsync();
-        var clients = host.Services.GetRequiredService<AgentCoreHttpClients>();
+            Assert.True(options!.Bindings.TryGetBinding(
+                AgentCoreHostBuilderExtensions.CreateCaseBinding,
+                out ToolBinding? binding));
 
-        await host.DisposeAsync();
+            object? result = await binding!([], TestContext.Current.CancellationToken);
+            Assert.True((bool)Assert.IsType<JsonObject>(result)["opened"]!);
+        }
 
-        // The pipeline holds a container and a SocketsHttpHandler per client name. A host that stops
-        // and leaves them open leaks both, and a process that restarts it leaks them again.
-        Assert.Throws<ObjectDisposedException>(() => clients.CreateClient("agentcore.test"));
-    }
+        // ---------------------------------------------------------------------------------------------
+        // What this extension registered, the container has to close.
+        // ---------------------------------------------------------------------------------------------
 
-    [Fact]
-    public async Task TheLoggerFactoryClosesWithTheHost()
-    {
-        var host = await StartAsync();
-        var loggers = host.Services.GetRequiredService<ILoggerFactory>();
+        [Fact]
+        public async Task TheOutboundHttpPipelineClosesWithTheHost()
+        {
+            WebApplication host = await StartAsync();
+            AgentCoreHttpClients clients = host.Services.GetRequiredService<AgentCoreHttpClients>();
 
-        await host.DisposeAsync();
+            await host.DisposeAsync();
 
-        // The container built this factory, so nothing else can be holding its providers.
-        Assert.Throws<ObjectDisposedException>(() => loggers.CreateLogger("after"));
-    }
+            // The pipeline holds a container and a SocketsHttpHandler per client name. A host that stops
+            // and leaves them open leaks both, and a process that restarts it leaks them again.
+            _ = Assert.Throws<ObjectDisposedException>(() => clients.CreateClient("agentcore.test"));
+        }
 
-    // ---------------------------------------------------------------------------------------------
-    // The routes. Mapping is the other half: the registrations above answer nothing on their own.
-    // ---------------------------------------------------------------------------------------------
+        [Fact]
+        public async Task TheLoggerFactoryClosesWithTheHost()
+        {
+            WebApplication host = await StartAsync();
+            ILoggerFactory loggers = host.Services.GetRequiredService<ILoggerFactory>();
 
-    [Fact]
-    public async Task HealthAnswersOnTheMappedRoute()
-    {
-        await using var app = await StartMappedAsync();
-        using HttpClient client = new() { BaseAddress = Address(app) };
+            await host.DisposeAsync();
 
-        var response = await client.GetAsync(
-            AgentCoreHostEndpointExtensions.HealthPattern,
-            TestContext.Current.CancellationToken);
+            // The container built this factory, so nothing else can be holding its providers.
+            _ = Assert.Throws<ObjectDisposedException>(() => loggers.CreateLogger("after"));
+        }
 
-        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
-    }
+        // ---------------------------------------------------------------------------------------------
+        // The routes. Mapping is the other half: the registrations above answer nothing on their own.
+        // ---------------------------------------------------------------------------------------------
 
-    /// <summary>The default Responses route, with the document's one entry filled in.</summary>
-    private const string MainResponses = "/v1/main/responses";
+        [Fact]
+        public async Task HealthAnswersOnTheMappedRoute()
+        {
+            await using WebApplication app = await StartMappedAsync();
+            using HttpClient client = new() { BaseAddress = Address(app) };
 
-    [Fact]
-    public async Task ResponsesAnswersOnTheDefaultRoute()
-    {
-        await using var app = await StartMappedAsync();
-        using HttpClient client = new() { BaseAddress = Address(app) };
+            HttpResponseMessage response = await client.GetAsync(
+                AgentCoreHostEndpointExtensions.HealthPattern,
+                TestContext.Current.CancellationToken);
 
-        // No user message is a caller mistake this endpoint names, and naming it proves the route
-        // reached the endpoint rather than the 404 handler.
-        var response = await PostEmptyAsync(client, MainResponses);
+            Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+        }
 
-        Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
-    }
+        /// <summary>The default Responses route, with the document's one entry filled in.</summary>
+        private const string MainResponses = "/v1/main/responses";
 
-    [Fact]
-    public async Task ResponsesRefusesAnEntryTheDocumentDoesNotDeclare()
-    {
-        await using var app = await StartMappedAsync();
-        using HttpClient client = new() { BaseAddress = Address(app) };
+        [Fact]
+        public async Task ResponsesAnswersOnTheDefaultRoute()
+        {
+            await using WebApplication app = await StartMappedAsync();
+            using HttpClient client = new() { BaseAddress = Address(app) };
 
-        var response = await PostEmptyAsync(client, "/v1/nobody/responses");
+            // No user message is a caller mistake this endpoint names, and naming it proves the route
+            // reached the endpoint rather than the 404 handler.
+            HttpResponseMessage response = await PostEmptyAsync(client, MainResponses);
 
-        Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
-        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
-        Assert.Contains("\"code\":\"unknown_entry\"", body);
-        Assert.Contains("Valid entries: main", body);
-    }
+            Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
+        }
 
-    [Fact]
-    public async Task ResponsesMovesWhenTheHostNamesAnotherRoute()
-    {
-        // A host that mounts a second Responses surface of its own needs this one out of the
-        // way, and it must actually leave the default route behind when it moves.
-        await using var app = await StartMappedAsync("/agentcore/v1/{entry}/responses");
-        using HttpClient client = new() { BaseAddress = Address(app) };
+        [Fact]
+        public async Task ResponsesRefusesAnEntryTheDocumentDoesNotDeclare()
+        {
+            await using WebApplication app = await StartMappedAsync();
+            using HttpClient client = new() { BaseAddress = Address(app) };
 
-        Assert.Equal(
-            System.Net.HttpStatusCode.BadRequest,
-            (await PostEmptyAsync(client, "/agentcore/v1/main/responses")).StatusCode);
-        Assert.Equal(
-            System.Net.HttpStatusCode.NotFound,
-            (await PostEmptyAsync(client, MainResponses)).StatusCode);
-    }
+            HttpResponseMessage response = await PostEmptyAsync(client, "/v1/nobody/responses");
 
-    [Fact]
-    public async Task ConversationRefusesAnEntryTheDocumentDoesNotDeclare()
-    {
-        await using var app = await StartMappedAsync();
-        using HttpClient client = new() { BaseAddress = Address(app) };
+            Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
+            string body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+            Assert.Contains("\"code\":\"unknown_entry\"", body);
+            Assert.Contains("Valid entries: main", body);
+        }
 
-        var response = await client.GetAsync("/v1/nobody/call", TestContext.Current.CancellationToken);
+        [Fact]
+        public async Task ResponsesMovesWhenTheHostNamesAnotherRoute()
+        {
+            // A host that mounts a second Responses surface of its own needs this one out of the
+            // way, and it must actually leave the default route behind when it moves.
+            await using WebApplication app = await StartMappedAsync("/agentcore/v1/{entry}/responses");
+            using HttpClient client = new() { BaseAddress = Address(app) };
 
-        Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
-        Assert.Contains(
-            "Valid entries: main",
-            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
-    }
+            Assert.Equal(
+                System.Net.HttpStatusCode.BadRequest,
+                (await PostEmptyAsync(client, "/agentcore/v1/main/responses")).StatusCode);
+            Assert.Equal(
+                System.Net.HttpStatusCode.NotFound,
+                (await PostEmptyAsync(client, MainResponses)).StatusCode);
+        }
 
-    [Fact]
-    public async Task ResponsesRefusesARouteWithNoEntryParameter()
-    {
-        await using var app = await BuildAsync();
+        [Fact]
+        public async Task ConversationRefusesAnEntryTheDocumentDoesNotDeclare()
+        {
+            await using WebApplication app = await StartMappedAsync();
+            using HttpClient client = new() { BaseAddress = Address(app) };
 
-        var failure = Assert.Throws<ArgumentException>(() => app.MapAgentCoreHost("/v1/responses"));
+            HttpResponseMessage response = await client.GetAsync("/v1/nobody/call", TestContext.Current.CancellationToken);
 
-        Assert.Contains("{entry}", failure.Message);
-    }
+            Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
+            Assert.Contains(
+                "Valid entries: main",
+                await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        }
 
-    // ---------------------------------------------------------------------------------------------
-    // Helpers.
-    // ---------------------------------------------------------------------------------------------
+        [Fact]
+        public async Task ResponsesRefusesARouteWithNoEntryParameter()
+        {
+            await using WebApplication app = await BuildAsync();
 
-    /// <summary>The smallest document the schema accepts: one agent, one model, and the required pair.</summary>
-    /// <remarks>
-    /// A document that writes a <c>providers</c> block at all must write <c>conversation</c> and
-    /// <c>speech</c> too, and both speech roles must name the same vendor the conversation does. Those kinds
-    /// resolve here because the default list this library registers already names that transport —
-    /// which is the point: a test writes no vendor of its own except the model.
-    /// </remarks>
-    private const string Document = """
+            ArgumentException failure = Assert.Throws<ArgumentException>(() => app.MapAgentCoreHost("/v1/responses"));
+
+            Assert.Contains("{entry}", failure.Message);
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // Helpers.
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>The smallest document the schema accepts: one agent, one model, and the required pair.</summary>
+        /// <remarks>
+        /// A document that writes a <c>providers</c> block at all must write <c>conversation</c> and
+        /// <c>speech</c> too, and both speech roles must name the same vendor the conversation does. Those kinds
+        /// resolve here because the default list this library registers already names that transport —
+        /// which is the point: a test writes no vendor of its own except the model.
+        /// </remarks>
+        private const string Document = """
         apiVersion: agentcore/v1
         agents:
           items:
@@ -432,255 +437,279 @@ public sealed class AgentCoreHostTests
             - { kind: fake, model: fake-model, as: reply }
         """;
 
-    /// <summary>The <c>providers</c> line that asks for the durable audit vendor.</summary>
-    private const string Audit = "  audit: { kind: postgres }";
+        /// <summary>The <c>providers</c> line that asks for the durable audit vendor.</summary>
+        private const string Audit = "  audit: { kind: postgres }";
 
-    /// <summary>The <c>providers</c> line that asks for the durable transcript vendor.</summary>
+        /// <summary>The <c>providers</c> line that asks for the durable transcript vendor.</summary>
 
-    /// <summary>The <c>providers</c> line that asks for the durable conversation store vendor.</summary>
-    private const string Conversations = "  conversations: { kind: postgres }";
+        /// <summary>The <c>providers</c> line that asks for the durable conversation store vendor.</summary>
+        private const string Conversations = "  conversations: { kind: postgres }";
 
-    /// <summary>
-    /// The <c>providers</c> lines for a knowledge store on an endpoint nothing listens on, so the
-    /// only question a test against it can settle is whether the analyzer resolved.
-    /// </summary>
-    private const string Knowledge =
-        "  embeddings: { kind: " + FakeEmbeddingAdapter.ProviderKind + ", model: n/a }\n"
-        + "  knowledge: { kind: qdrant, endpoint: \"https://127.0.0.1:1\", collection: \"missing\", "
-        + "analyzer: " + StubQueryAnalyzer.AnalyzerName + " }";
+        /// <summary>
+        /// The <c>providers</c> lines for a knowledge store on an endpoint nothing listens on, so the
+        /// only question a test against it can settle is whether the analyzer resolved.
+        /// </summary>
+        private const string Knowledge =
+            "  embeddings: { kind: " + FakeEmbeddingAdapter.ProviderKind + ", model: n/a }\n"
+            + "  knowledge: { kind: qdrant, endpoint: \"https://127.0.0.1:1\", collection: \"missing\", "
+            + "analyzer: " + StubQueryAnalyzer.AnalyzerName + " }";
 
-    /// <summary>Like <see cref="Knowledge"/>, but naming a mapper instead of an analyzer.</summary>
-    private const string KnowledgeMapper =
-        "  embeddings: { kind: " + FakeEmbeddingAdapter.ProviderKind + ", model: n/a }\n"
-        + "  knowledge: { kind: qdrant, endpoint: \"https://127.0.0.1:1\", collection: \"missing\", "
-        + "mapper: " + StubPointMapper.MapperName + " }";
+        /// <summary>Like <see cref="Knowledge"/>, but naming a mapper instead of an analyzer.</summary>
+        private const string KnowledgeMapper =
+            "  embeddings: { kind: " + FakeEmbeddingAdapter.ProviderKind + ", model: n/a }\n"
+            + "  knowledge: { kind: qdrant, endpoint: \"https://127.0.0.1:1\", collection: \"missing\", "
+            + "mapper: " + StubPointMapper.MapperName + " }";
 
-    /// <summary>Builds a host the way a deployable does, over a fake model and no key.</summary>
-    /// <param name="configure">Anything else the test says on the options.</param>
-    /// <param name="providers">A further line under <c>providers</c>, or null for the document above.</param>
-    /// <returns>The built host, not started.</returns>
-    private static async Task<WebApplication> BuildAsync(
-        Action<AgentCoreOptions>? configure = null,
-        string? providers = null)
-    {
-        var builder = WebApplication.CreateSlimBuilder();
-        builder.WebHost.UseUrls("http://127.0.0.1:0");
-        builder.Logging.ClearProviders();
-
-        var document = providers is null ? Document : Document + Environment.NewLine + providers;
-
-        builder.AddAgentCoreHost(options =>
+        /// <summary>Builds a host the way a deployable does, over a fake model and no key.</summary>
+        /// <param name="configure">Anything else the test says on the options.</param>
+        /// <param name="providers">A further line under <c>providers</c>, or null for the document above.</param>
+        /// <returns>The built host, not started.</returns>
+        private static async Task<WebApplication> BuildAsync(
+            Action<AgentCoreOptions>? configure = null,
+            string? providers = null)
         {
-            options.Configuration = ConfigurationLoader.LoadYaml(document);
-            options.UseChatClients(_ => new RecordingChatClientFactory(new FakeChatClient()));
-            configure?.Invoke(options);
-        });
+            WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
+            _ = builder.WebHost.UseUrls("http://127.0.0.1:0");
+            _ = builder.Logging.ClearProviders();
 
-        return builder.Build();
-    }
+            string document = providers is null ? Document : Document + Environment.NewLine + providers;
 
-    /// <summary>Starts a host and reads its container, with nothing mapped and nothing listening.</summary>
-    /// <param name="configure">Anything else the test says on the options.</param>
-    /// <param name="providers">A further line under <c>providers</c>, or null for the plain document.</param>
-    /// <returns>The started host.</returns>
-    /// <remarks>
-    /// It really starts: the document is read, and every adapter it names is opened, by the hosted
-    /// lifecycle service the composition root registers. Building alone opens nothing.
-    /// </remarks>
-    private static async Task<WebApplication> StartAsync(
-        Action<AgentCoreOptions>? configure = null,
-        string? providers = null)
-    {
-        var app = await BuildAsync(configure, providers);
-
-        try
-        {
-            await app.StartAsync(TestContext.Current.CancellationToken);
-        }
-        catch
-        {
-            // A failed start never stops what started, so disposal is the only cleanup path — and it
-            // is the one a real host takes too, inside RunAsync's own finally.
-            await app.DisposeAsync();
-            throw;
-        }
-
-        return app;
-    }
-
-    /// <summary>A chain that holds the connection string and answers nothing for it.</summary>
-    /// <remarks>
-    /// A held-but-blank name fails without falling back, so these tests reach the same failure on a
-    /// machine that happens to export POSTGRES_CONNECTION_STRING.
-    /// </remarks>
-    private sealed class EmptySecretResolver : ISecretResolverPort
-    {
-        public ValueTask<string?> TryResolveAsync(string name, CancellationToken cancellationToken = default)
-            => ValueTask.FromResult<string?>(
-                string.Equals(name, KnownSecrets.PostgresConnectionString.Name, StringComparison.Ordinal)
-                    ? string.Empty
-                    : null);
-    }
-
-    /// <summary>An audit vendor answering to the same kind the default list names.</summary>
-    private sealed class FakeSinkAdapter : IAuditSinkAdapter
-    {
-        public string Kind => PostgresAuditSinkAdapter.ProviderKind;
-
-        public ValueTask<IAuditSinkPort> OpenAsync(
-            VendorProviderConfiguration entry,
-            ISecretResolverPort? secrets,
-            CancellationToken cancellationToken = default)
-            => ValueTask.FromResult<IAuditSinkPort>(new InMemoryAuditSink());
-    }
-
-
-    /// <summary>A conversation store vendor answering to the same kind the default list names.</summary>
-    private sealed class FakeConversationStoreAdapter : IConversationStoreAdapter
-    {
-        public string Kind => PostgresConversationStoreAdapter.ProviderKind;
-
-        public ValueTask<IConversationStore> OpenAsync(
-            VendorProviderConfiguration entry,
-            ISecretResolverPort? secrets,
-            CancellationToken cancellationToken = default)
-            => ValueTask.FromResult<IConversationStore>(new InMemoryConversationStore());
-    }
-
-    /// <summary>An embedding vendor whose generator is never actually asked to embed anything.</summary>
-    /// <remarks>
-    /// <c>QdrantKnowledgeAdapter.CreateSearchAsync</c> only needs a non-null generator to get past
-    /// its own <c>providers.embeddings</c> check; the analyzer resolves right after, and every test
-    /// using this adapter fails before either could reach the generator itself.
-    /// </remarks>
-    private sealed class FakeEmbeddingAdapter : IEmbeddingGeneratorAdapter
-    {
-        public const string ProviderKind = "hosting-tests-embed";
-
-        public string Kind => ProviderKind;
-
-        public ValueTask<IEmbeddingGenerator<string, Embedding<float>>> CreateGeneratorAsync(
-            EmbeddingProviderConfiguration entry,
-            ISecretResolverPort? secrets,
-            CancellationToken cancellationToken = default)
-            => ValueTask.FromResult<IEmbeddingGenerator<string, Embedding<float>>>(new NeverUsedEmbeddingGenerator());
-
-        private sealed class NeverUsedEmbeddingGenerator : IEmbeddingGenerator<string, Embedding<float>>
-        {
-            public Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
-                IEnumerable<string> values,
-                EmbeddingGenerationOptions? options = null,
-                CancellationToken cancellationToken = default)
-                => throw new InvalidOperationException("Nothing in these tests should ever embed a query.");
-
-            public object? GetService(Type serviceType, object? serviceKey = null) => null;
-
-            public void Dispose()
+            _ = builder.AddAgentCoreHost(options =>
             {
+                options.Configuration = ConfigurationLoader.LoadYaml(document);
+                _ = options.UseChatClients(_ => new RecordingChatClientFactory(new FakeChatClient()));
+                configure?.Invoke(options);
+            });
+
+            return builder.Build();
+        }
+
+        /// <summary>Starts a host and reads its container, with nothing mapped and nothing listening.</summary>
+        /// <param name="configure">Anything else the test says on the options.</param>
+        /// <param name="providers">A further line under <c>providers</c>, or null for the plain document.</param>
+        /// <returns>The started host.</returns>
+        /// <remarks>
+        /// It really starts: the document is read, and every adapter it names is opened, by the hosted
+        /// lifecycle service the composition root registers. Building alone opens nothing.
+        /// </remarks>
+        private static async Task<WebApplication> StartAsync(
+            Action<AgentCoreOptions>? configure = null,
+            string? providers = null)
+        {
+            WebApplication app = await BuildAsync(configure, providers);
+
+            try
+            {
+                await app.StartAsync(TestContext.Current.CancellationToken);
+            }
+            catch
+            {
+                // A failed start never stops what started, so disposal is the only cleanup path — and it
+                // is the one a real host takes too, inside RunAsync's own finally.
+                await app.DisposeAsync();
+                throw;
+            }
+
+            return app;
+        }
+
+        /// <summary>A chain that holds the connection string and answers nothing for it.</summary>
+        /// <remarks>
+        /// A held-but-blank name fails without falling back, so these tests reach the same failure on a
+        /// machine that happens to export POSTGRES_CONNECTION_STRING.
+        /// </remarks>
+        private sealed class EmptySecretResolver : ISecretResolverPort
+        {
+            public ValueTask<string?> TryResolveAsync(string name, CancellationToken cancellationToken = default)
+            {
+                return ValueTask.FromResult(
+                                string.Equals(name, KnownSecrets.PostgresConnectionString.Name, StringComparison.Ordinal)
+                                    ? string.Empty
+                                    : null);
             }
         }
-    }
 
-    /// <summary>An analyzer a host registers by name, distinct from either built-in.</summary>
-    private sealed class StubQueryAnalyzer : IKnowledgeQueryAnalyzer
-    {
-        public const string AnalyzerName = "hosting-tests-stub-analyzer";
-
-        public string Name => AnalyzerName;
-
-        public IReadOnlyList<string> RequiredTerms(string query) => [];
-    }
-
-    /// <summary>A mapper a host registers by name, distinct from either built-in.</summary>
-    private sealed class StubPointMapper : IKnowledgePointMapper
-    {
-        public const string MapperName = "hosting-tests-stub-mapper";
-
-        public string Name => MapperName;
-
-        public KnowledgeCard? Map(KnowledgePoint point) => null;
-    }
-
-    /// <summary>Builds a host, maps every route, and puts it on a real socket.</summary>
-    /// <param name="responsesPattern">The route the Responses endpoint answers on, or null for the default.</param>
-    /// <returns>The started host.</returns>
-    private static async Task<WebApplication> StartMappedAsync(string? responsesPattern = null)
-    {
-        var app = await BuildAsync();
-        app.MapAgentCoreHost(responsesPattern);
-        await app.StartAsync(TestContext.Current.CancellationToken);
-        return app;
-    }
-
-    /// <summary>Reads the address Kestrel took, since the tests ask for port zero.</summary>
-    /// <param name="app">The started host.</param>
-    /// <returns>The base address.</returns>
-    private static Uri Address(WebApplication app)
-        => new(app.Services
-            .GetRequiredService<Microsoft.AspNetCore.Hosting.Server.IServer>()
-            .Features
-            .Get<Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>()!
-            .Addresses
-            .First(), UriKind.Absolute);
-
-    /// <summary>Posts a request with no user message, which every mapped route answers 400 to.</summary>
-    /// <param name="client">The client that speaks to the host.</param>
-    /// <param name="route">The route to post to.</param>
-    /// <returns>The answer.</returns>
-    private static Task<HttpResponseMessage> PostEmptyAsync(HttpClient client, string route)
-        => client.PostAsync(
-            route,
-            new StringContent("{\"input\":[]}", System.Text.Encoding.UTF8, "application/json"),
-            TestContext.Current.CancellationToken);
-
-    // ---------------------------------------------------------------------------------------------
-    // A transport: http MCP server is reached on this host's own pipeline, minus the one part of it
-    // that does not apply to a stream.
-    // ---------------------------------------------------------------------------------------------
-
-    [Fact]
-    public async Task AnMcpServerIsReachedOnThePipelinesOwnHandlerChain()
-    {
-        CountingHandler primary = new();
-        using AgentCoreHttpClients pipeline = new(primary);
-
-        using var client = AgentCoreHostBuilderExtensions.McpHttpClient(pipeline);
-        await client.GetAsync(new Uri("https://mcp.example.com/"), TestContext.Current.CancellationToken);
-
-        // The request reached the handler the pipeline was built around, so MCP shares its proxy
-        // settings, certificate configuration and logging rather than a client of its own.
-        Assert.Equal(1, primary.Sends);
-    }
-
-    /// <summary>
-    /// MCP over HTTP holds a stream open for the life of the session, so the pipeline's own
-    /// hundred-second request deadline would sever it every hundred seconds.
-    /// </summary>
-    [Fact]
-    public void AnMcpServersClientCarriesNoRequestDeadline()
-    {
-        CountingHandler primary = new();
-        using AgentCoreHttpClients pipeline = new(primary);
-
-        using var mcp = AgentCoreHostBuilderExtensions.McpHttpClient(pipeline);
-        using var ordinary = pipeline.CreateClient("agentcore.tools");
-
-        Assert.Equal(Timeout.InfiniteTimeSpan, mcp.Timeout);
-        Assert.Equal(AgentCoreHttpClients.RequestDeadline, ordinary.Timeout);
-    }
-
-    /// <summary>Answers everything, and counts how often it was asked.</summary>
-    private sealed class CountingHandler : HttpMessageHandler
-    {
-        private int _sends;
-
-        public int Sends => Volatile.Read(ref _sends);
-
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken)
+        /// <summary>An audit vendor answering to the same kind the default list names.</summary>
+        private sealed class FakeSinkAdapter : IAuditSinkAdapter
         {
-            Interlocked.Increment(ref _sends);
-            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK));
+            public string Kind => PostgresAuditSinkAdapter.ProviderKind;
+
+            public ValueTask<IAuditSinkPort> OpenAsync(
+                VendorProviderConfiguration entry,
+                ISecretResolverPort? secrets,
+                CancellationToken cancellationToken = default)
+            {
+                return ValueTask.FromResult<IAuditSinkPort>(new InMemoryAuditSink());
+            }
+        }
+
+
+        /// <summary>A conversation store vendor answering to the same kind the default list names.</summary>
+        private sealed class FakeConversationStoreAdapter : IConversationStoreAdapter
+        {
+            public string Kind => PostgresConversationStoreAdapter.ProviderKind;
+
+            public ValueTask<IConversationStore> OpenAsync(
+                VendorProviderConfiguration entry,
+                ISecretResolverPort? secrets,
+                CancellationToken cancellationToken = default)
+            {
+                return ValueTask.FromResult<IConversationStore>(new InMemoryConversationStore());
+            }
+        }
+
+        /// <summary>An embedding vendor whose generator is never actually asked to embed anything.</summary>
+        /// <remarks>
+        /// <c>QdrantKnowledgeAdapter.CreateSearchAsync</c> only needs a non-null generator to get past
+        /// its own <c>providers.embeddings</c> check; the analyzer resolves right after, and every test
+        /// using this adapter fails before either could reach the generator itself.
+        /// </remarks>
+        private sealed class FakeEmbeddingAdapter : IEmbeddingGeneratorAdapter
+        {
+            public const string ProviderKind = "hosting-tests-embed";
+
+            public string Kind => ProviderKind;
+
+            public ValueTask<IEmbeddingGenerator<string, Embedding<float>>> CreateGeneratorAsync(
+                EmbeddingProviderConfiguration entry,
+                ISecretResolverPort? secrets,
+                CancellationToken cancellationToken = default)
+            {
+                return ValueTask.FromResult<IEmbeddingGenerator<string, Embedding<float>>>(new NeverUsedEmbeddingGenerator());
+            }
+
+            private sealed class NeverUsedEmbeddingGenerator : IEmbeddingGenerator<string, Embedding<float>>
+            {
+                public Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
+                    IEnumerable<string> values,
+                    EmbeddingGenerationOptions? options = null,
+                    CancellationToken cancellationToken = default)
+                {
+                    throw new InvalidOperationException("Nothing in these tests should ever embed a query.");
+                }
+
+                public object? GetService(Type serviceType, object? serviceKey = null)
+                {
+                    return null;
+                }
+
+                public void Dispose()
+                {
+                }
+            }
+        }
+
+        /// <summary>An analyzer a host registers by name, distinct from either built-in.</summary>
+        private sealed class StubQueryAnalyzer : IKnowledgeQueryAnalyzer
+        {
+            public const string AnalyzerName = "hosting-tests-stub-analyzer";
+
+            public string Name => AnalyzerName;
+
+            public IReadOnlyList<string> RequiredTerms(string query)
+            {
+                return [];
+            }
+        }
+
+        /// <summary>A mapper a host registers by name, distinct from either built-in.</summary>
+        private sealed class StubPointMapper : IKnowledgePointMapper
+        {
+            public const string MapperName = "hosting-tests-stub-mapper";
+
+            public string Name => MapperName;
+
+            public KnowledgeCard? Map(KnowledgePoint point)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>Builds a host, maps every route, and puts it on a real socket.</summary>
+        /// <param name="responsesPattern">The route the Responses endpoint answers on, or null for the default.</param>
+        /// <returns>The started host.</returns>
+        private static async Task<WebApplication> StartMappedAsync(string? responsesPattern = null)
+        {
+            WebApplication app = await BuildAsync();
+            _ = app.MapAgentCoreHost(responsesPattern);
+            await app.StartAsync(TestContext.Current.CancellationToken);
+            return app;
+        }
+
+        /// <summary>Reads the address Kestrel took, since the tests ask for port zero.</summary>
+        /// <param name="app">The started host.</param>
+        /// <returns>The base address.</returns>
+        private static Uri Address(WebApplication app)
+        {
+            return new(app.Services
+                        .GetRequiredService<Microsoft.AspNetCore.Hosting.Server.IServer>()
+                        .Features
+                        .Get<Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>()!
+                        .Addresses
+                        .First(), UriKind.Absolute);
+        }
+
+        /// <summary>Posts a request with no user message, which every mapped route answers 400 to.</summary>
+        /// <param name="client">The client that speaks to the host.</param>
+        /// <param name="route">The route to post to.</param>
+        /// <returns>The answer.</returns>
+        private static Task<HttpResponseMessage> PostEmptyAsync(HttpClient client, string route)
+        {
+            return client.PostAsync(
+                        route,
+                        new StringContent(/*lang=json,strict*/ "{\"input\":[]}", System.Text.Encoding.UTF8, "application/json"),
+                        TestContext.Current.CancellationToken);
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // A transport: http MCP server is reached on this host's own pipeline, minus the one part of it
+        // that does not apply to a stream.
+        // ---------------------------------------------------------------------------------------------
+
+        [Fact]
+        public async Task AnMcpServerIsReachedOnThePipelinesOwnHandlerChain()
+        {
+            CountingHandler primary = new();
+            using AgentCoreHttpClients pipeline = new(primary);
+
+            using HttpClient client = AgentCoreHostBuilderExtensions.McpHttpClient(pipeline);
+            _ = await client.GetAsync(new Uri("https://mcp.example.com/"), TestContext.Current.CancellationToken);
+
+            // The request reached the handler the pipeline was built around, so MCP shares its proxy
+            // settings, certificate configuration and logging rather than a client of its own.
+            Assert.Equal(1, primary.Sends);
+        }
+
+        /// <summary>
+        /// MCP over HTTP holds a stream open for the life of the session, so the pipeline's own
+        /// hundred-second request deadline would sever it every hundred seconds.
+        /// </summary>
+        [Fact]
+        public void AnMcpServersClientCarriesNoRequestDeadline()
+        {
+            CountingHandler primary = new();
+            using AgentCoreHttpClients pipeline = new(primary);
+
+            using HttpClient mcp = AgentCoreHostBuilderExtensions.McpHttpClient(pipeline);
+            using HttpClient ordinary = pipeline.CreateClient("agentcore.tools");
+
+            Assert.Equal(Timeout.InfiniteTimeSpan, mcp.Timeout);
+            Assert.Equal(AgentCoreHttpClients.RequestDeadline, ordinary.Timeout);
+        }
+
+        /// <summary>Answers everything, and counts how often it was asked.</summary>
+        private sealed class CountingHandler : HttpMessageHandler
+        {
+            private int _sends;
+
+            public int Sends => Volatile.Read(ref _sends);
+
+            protected override Task<HttpResponseMessage> SendAsync(
+                HttpRequestMessage request, CancellationToken cancellationToken)
+            {
+                _ = Interlocked.Increment(ref _sends);
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK));
+            }
         }
     }
 }

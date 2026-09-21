@@ -1,200 +1,209 @@
 using System.Text.Json.Nodes;
 
-namespace AgentCore.Application.Tests.Policy;
-
-/// <summary>The stage of a service call. The stage set of <c>spike/callpolicy</c>.</summary>
-internal enum ConversationStage
+namespace AgentCore.Application.Tests.Policy
 {
-    Greeting,
-    Identify,
-    Classify,
-    Resolve,
-    Escalate,
-    Close,
-}
-
-/// <summary>
-/// Everything the turn loop learned about the conversation so far. The externalized, typed state.
-/// </summary>
-internal sealed record CallFacts
-{
-    public static readonly CallFacts Empty = new();
-
-    public string? Model { get; init; }
-
-    public string? Serial { get; init; }
-
-    public string? FaultCode { get; init; }
-
-    public bool ProblemDescribed { get; init; }
-
-    public bool Resolved { get; init; }
-
-    public bool CallerAskedForHuman { get; init; }
-
-    public bool CallerSaidGoodbye { get; init; }
-
-    public int FailedResolveTurns { get; init; }
-
-    public bool MachineIdentified => Model is not null && Serial is not null;
-
-    public bool ProblemKnown => FaultCode is not null || ProblemDescribed;
-
-    /// <summary>Writes the facts as the state snapshot a configuration-declared guard reads.</summary>
-    public IReadOnlyDictionary<string, JsonNode?> ToSnapshot(string stage, int turnIndex)
-        => new Dictionary<string, JsonNode?>(StringComparer.Ordinal)
-        {
-            ["model"] = Model is null ? null : JsonValue.Create(Model),
-            ["serial"] = Serial is null ? null : JsonValue.Create(Serial),
-            ["faultCode"] = FaultCode is null ? null : JsonValue.Create(FaultCode),
-            ["problemDescribed"] = JsonValue.Create(ProblemDescribed),
-            ["resolved"] = JsonValue.Create(Resolved),
-            ["callerAskedForHuman"] = JsonValue.Create(CallerAskedForHuman),
-            ["callerSaidGoodbye"] = JsonValue.Create(CallerSaidGoodbye),
-            ["failedResolveTurns"] = JsonValue.Create(FailedResolveTurns),
-            ["stage"] = JsonValue.Create(stage),
-            ["turnIndex"] = JsonValue.Create(turnIndex),
-            ["conversationDurationSeconds"] = JsonValue.Create(0d),
-        };
-}
-
-/// <summary>
-/// The hand-written transition table of <c>spike/callpolicy</c>, copied unchanged.
-/// </summary>
-/// <remarks>
-/// Rule 15 of section 11: the six golden conversations replay against a configuration-declared policy and
-/// reproduce this machine exactly. Nothing else in the test holds a transition rule, so the
-/// comparison stays about the runtime and not about the rules.
-/// </remarks>
-internal static class Transitions
-{
-    public const int EscalateAfterTurns = 3;
-
-    public static ConversationStage Next(ConversationStage current, CallFacts f) => current switch
+    /// <summary>The stage of a service call. The stage set of <c>spike/callpolicy</c>.</summary>
+    internal enum ConversationStage
     {
-        ConversationStage.Greeting => ConversationStage.Identify,
-
-        ConversationStage.Identify when f.CallerSaidGoodbye => ConversationStage.Close,
-        ConversationStage.Identify when f.CallerAskedForHuman => ConversationStage.Escalate,
-        ConversationStage.Identify when f.MachineIdentified => ConversationStage.Classify,
-        ConversationStage.Identify => ConversationStage.Identify,
-
-        ConversationStage.Classify when f.CallerSaidGoodbye => ConversationStage.Close,
-        ConversationStage.Classify when f.CallerAskedForHuman => ConversationStage.Escalate,
-        ConversationStage.Classify when f.ProblemKnown => ConversationStage.Resolve,
-        ConversationStage.Classify => ConversationStage.Classify,
-
-        ConversationStage.Resolve when f.CallerSaidGoodbye => ConversationStage.Close,
-        ConversationStage.Resolve when f.CallerAskedForHuman => ConversationStage.Escalate,
-        ConversationStage.Resolve when f.Resolved => ConversationStage.Close,
-        ConversationStage.Resolve when f.FailedResolveTurns >= EscalateAfterTurns => ConversationStage.Escalate,
-        ConversationStage.Resolve => ConversationStage.Resolve,
-
-        ConversationStage.Escalate => ConversationStage.Close,
-        ConversationStage.Close => ConversationStage.Close,
-
-        _ => throw new ArgumentOutOfRangeException(nameof(current), current, null),
-    };
-
-    /// <summary>Maps one stage to the id the configuration declares.</summary>
-    public static string ToStageId(ConversationStage stage) => stage switch
-    {
-        ConversationStage.Greeting => "greeting",
-        ConversationStage.Identify => "identify",
-        ConversationStage.Classify => "classify",
-        ConversationStage.Resolve => "resolve",
-        ConversationStage.Escalate => "escalate",
-        _ => "close",
-    };
-}
-
-/// <summary>One caller turn: the facts the turn loop observed after it ended.</summary>
-internal sealed record GoldenTurn(string Label, CallFacts Facts);
-
-/// <summary>One whole conversation, replayed against a policy.</summary>
-internal sealed record GoldenConversation(string Name, IReadOnlyList<GoldenTurn> Turns);
-
-/// <summary>
-/// The six deterministic conversation scenarios of <c>spike/callpolicy</c>. No model runs.
-/// </summary>
-internal static class GoldenSet
-{
-    public static IReadOnlyList<GoldenConversation> Conversations { get; } =
-    [
-        new("happy-path-fault-code",
-        [
-            new("caller says hello", CallFacts.Empty),
-            new("gives model and serial", new CallFacts { Model = "F85", Serial = "SF240117" }),
-            new("reads the fault code", new CallFacts { Model = "F85", Serial = "SF240117", FaultCode = "E7" }),
-            new("follows the fix", new CallFacts { Model = "F85", Serial = "SF240117", FaultCode = "E7", Resolved = true }),
-        ]),
-
-        new("slow-identification",
-        [
-            new("caller says hello", CallFacts.Empty),
-            new("gives model only", new CallFacts { Model = "F80" }),
-            new("cannot find the serial", new CallFacts { Model = "F80" }),
-            new("finds the serial", new CallFacts { Model = "F80", Serial = "SF230902" }),
-            new("describes a noise", new CallFacts { Model = "F80", Serial = "SF230902", ProblemDescribed = true }),
-            new("fix works", new CallFacts { Model = "F80", Serial = "SF230902", ProblemDescribed = true, Resolved = true }),
-        ]),
-
-        new("escalate-after-three-failures",
-        [
-            new("caller says hello", CallFacts.Empty),
-            new("gives model and serial", new CallFacts { Model = "TT8", Serial = "SF251103" }),
-            new("describes the problem", new CallFacts { Model = "TT8", Serial = "SF251103", ProblemDescribed = true }),
-            new("fix 1 fails", new CallFacts { Model = "TT8", Serial = "SF251103", ProblemDescribed = true, FailedResolveTurns = 1 }),
-            new("fix 2 fails", new CallFacts { Model = "TT8", Serial = "SF251103", ProblemDescribed = true, FailedResolveTurns = 2 }),
-            new("fix 3 fails", new CallFacts { Model = "TT8", Serial = "SF251103", ProblemDescribed = true, FailedResolveTurns = 3 }),
-            new("transfer completes", new CallFacts { Model = "TT8", Serial = "SF251103", ProblemDescribed = true, FailedResolveTurns = 3 }),
-        ]),
-
-        new("caller-demands-a-human-immediately",
-        [
-            new("caller says hello", CallFacts.Empty),
-            new("asks for a person", new CallFacts { CallerAskedForHuman = true }),
-            new("transfer completes", new CallFacts { CallerAskedForHuman = true }),
-        ]),
-
-        new("caller-hangs-up-mid-diagnosis",
-        [
-            new("caller says hello", CallFacts.Empty),
-            new("gives model and serial", new CallFacts { Model = "F63", Serial = "SF221201" }),
-            new("says goodbye", new CallFacts { Model = "F63", Serial = "SF221201", CallerSaidGoodbye = true }),
-        ]),
-
-        new("human-request-beats-a-resolved-fix",
-        [
-            new("caller says hello", CallFacts.Empty),
-            new("gives model and serial", new CallFacts { Model = "E95", Serial = "SF260401" }),
-            new("gives the fault code", new CallFacts { Model = "E95", Serial = "SF260401", FaultCode = "E1" }),
-
-            // Both Resolved and CallerAskedForHuman are true. Precedence must be deterministic.
-            new("fixed but still wants a person",
-                new CallFacts { Model = "E95", Serial = "SF260401", FaultCode = "E1", Resolved = true, CallerAskedForHuman = true }),
-        ]),
-    ];
-
-    /// <summary>Replays one conversation against the hand-written table.</summary>
-    public static IReadOnlyList<ConversationStage> ReplayHandWritten(GoldenConversation conversation)
-    {
-        var stage = ConversationStage.Greeting;
-        List<ConversationStage> stages = new(conversation.Turns.Count);
-        foreach (var turn in conversation.Turns)
-        {
-            stage = Transitions.Next(stage, turn.Facts);
-            stages.Add(stage);
-        }
-
-        return stages;
+        Greeting,
+        Identify,
+        Classify,
+        Resolve,
+        Escalate,
+        Close,
     }
 
     /// <summary>
-    /// The same six stages, declared in configuration. This is the document rule 15 replays against.
+    /// Everything the turn loop learned about the conversation so far. The externalized, typed state.
     /// </summary>
-    public const string Yaml =
-        """
+    internal sealed record CallFacts
+    {
+        public static readonly CallFacts Empty = new();
+
+        public string? Model { get; init; }
+
+        public string? Serial { get; init; }
+
+        public string? FaultCode { get; init; }
+
+        public bool ProblemDescribed { get; init; }
+
+        public bool Resolved { get; init; }
+
+        public bool CallerAskedForHuman { get; init; }
+
+        public bool CallerSaidGoodbye { get; init; }
+
+        public int FailedResolveTurns { get; init; }
+
+        public bool MachineIdentified => Model is not null && Serial is not null;
+
+        public bool ProblemKnown => FaultCode is not null || ProblemDescribed;
+
+        /// <summary>Writes the facts as the state snapshot a configuration-declared guard reads.</summary>
+        public IReadOnlyDictionary<string, JsonNode?> ToSnapshot(string stage, int turnIndex)
+        {
+            return new Dictionary<string, JsonNode?>(StringComparer.Ordinal)
+            {
+                ["model"] = Model is null ? null : JsonValue.Create(Model),
+                ["serial"] = Serial is null ? null : JsonValue.Create(Serial),
+                ["faultCode"] = FaultCode is null ? null : JsonValue.Create(FaultCode),
+                ["problemDescribed"] = JsonValue.Create(ProblemDescribed),
+                ["resolved"] = JsonValue.Create(Resolved),
+                ["callerAskedForHuman"] = JsonValue.Create(CallerAskedForHuman),
+                ["callerSaidGoodbye"] = JsonValue.Create(CallerSaidGoodbye),
+                ["failedResolveTurns"] = JsonValue.Create(FailedResolveTurns),
+                ["stage"] = JsonValue.Create(stage),
+                ["turnIndex"] = JsonValue.Create(turnIndex),
+                ["conversationDurationSeconds"] = JsonValue.Create(0d),
+            };
+        }
+    }
+
+    /// <summary>
+    /// The hand-written transition table of <c>spike/callpolicy</c>, copied unchanged.
+    /// </summary>
+    /// <remarks>
+    /// Rule 15 of section 11: the six golden conversations replay against a configuration-declared policy and
+    /// reproduce this machine exactly. Nothing else in the test holds a transition rule, so the
+    /// comparison stays about the runtime and not about the rules.
+    /// </remarks>
+    internal static class Transitions
+    {
+        public const int EscalateAfterTurns = 3;
+
+        public static ConversationStage Next(ConversationStage current, CallFacts f)
+        {
+            return current switch
+            {
+                ConversationStage.Greeting => ConversationStage.Identify,
+
+                ConversationStage.Identify when f.CallerSaidGoodbye => ConversationStage.Close,
+                ConversationStage.Identify when f.CallerAskedForHuman => ConversationStage.Escalate,
+                ConversationStage.Identify when f.MachineIdentified => ConversationStage.Classify,
+                ConversationStage.Identify => ConversationStage.Identify,
+
+                ConversationStage.Classify when f.CallerSaidGoodbye => ConversationStage.Close,
+                ConversationStage.Classify when f.CallerAskedForHuman => ConversationStage.Escalate,
+                ConversationStage.Classify when f.ProblemKnown => ConversationStage.Resolve,
+                ConversationStage.Classify => ConversationStage.Classify,
+
+                ConversationStage.Resolve when f.CallerSaidGoodbye => ConversationStage.Close,
+                ConversationStage.Resolve when f.CallerAskedForHuman => ConversationStage.Escalate,
+                ConversationStage.Resolve when f.Resolved => ConversationStage.Close,
+                ConversationStage.Resolve when f.FailedResolveTurns >= EscalateAfterTurns => ConversationStage.Escalate,
+                ConversationStage.Resolve => ConversationStage.Resolve,
+
+                ConversationStage.Escalate => ConversationStage.Close,
+                ConversationStage.Close => ConversationStage.Close,
+
+                _ => throw new ArgumentOutOfRangeException(nameof(current), current, null),
+            };
+        }
+
+        /// <summary>Maps one stage to the id the configuration declares.</summary>
+        public static string ToStageId(ConversationStage stage)
+        {
+            return stage switch
+            {
+                ConversationStage.Greeting => "greeting",
+                ConversationStage.Identify => "identify",
+                ConversationStage.Classify => "classify",
+                ConversationStage.Resolve => "resolve",
+                ConversationStage.Escalate => "escalate",
+                ConversationStage.Close => "close",
+                _ => throw new ArgumentOutOfRangeException(nameof(stage), stage, null),
+            };
+        }
+    }
+
+    /// <summary>One caller turn: the facts the turn loop observed after it ended.</summary>
+    internal sealed record GoldenTurn(string Label, CallFacts Facts);
+
+    /// <summary>One whole conversation, replayed against a policy.</summary>
+    internal sealed record GoldenConversation(string Name, IReadOnlyList<GoldenTurn> Turns);
+
+    /// <summary>
+    /// The six deterministic conversation scenarios of <c>spike/callpolicy</c>. No model runs.
+    /// </summary>
+    internal static class GoldenSet
+    {
+        public static IReadOnlyList<GoldenConversation> Conversations { get; } =
+        [
+            new("happy-path-fault-code",
+            [
+                new("caller says hello", CallFacts.Empty),
+                new("gives model and serial", new CallFacts { Model = "F85", Serial = "SF240117" }),
+                new("reads the fault code", new CallFacts { Model = "F85", Serial = "SF240117", FaultCode = "E7" }),
+                new("follows the fix", new CallFacts { Model = "F85", Serial = "SF240117", FaultCode = "E7", Resolved = true }),
+            ]),
+
+            new("slow-identification",
+            [
+                new("caller says hello", CallFacts.Empty),
+                new("gives model only", new CallFacts { Model = "F80" }),
+                new("cannot find the serial", new CallFacts { Model = "F80" }),
+                new("finds the serial", new CallFacts { Model = "F80", Serial = "SF230902" }),
+                new("describes a noise", new CallFacts { Model = "F80", Serial = "SF230902", ProblemDescribed = true }),
+                new("fix works", new CallFacts { Model = "F80", Serial = "SF230902", ProblemDescribed = true, Resolved = true }),
+            ]),
+
+            new("escalate-after-three-failures",
+            [
+                new("caller says hello", CallFacts.Empty),
+                new("gives model and serial", new CallFacts { Model = "TT8", Serial = "SF251103" }),
+                new("describes the problem", new CallFacts { Model = "TT8", Serial = "SF251103", ProblemDescribed = true }),
+                new("fix 1 fails", new CallFacts { Model = "TT8", Serial = "SF251103", ProblemDescribed = true, FailedResolveTurns = 1 }),
+                new("fix 2 fails", new CallFacts { Model = "TT8", Serial = "SF251103", ProblemDescribed = true, FailedResolveTurns = 2 }),
+                new("fix 3 fails", new CallFacts { Model = "TT8", Serial = "SF251103", ProblemDescribed = true, FailedResolveTurns = 3 }),
+                new("transfer completes", new CallFacts { Model = "TT8", Serial = "SF251103", ProblemDescribed = true, FailedResolveTurns = 3 }),
+            ]),
+
+            new("caller-demands-a-human-immediately",
+            [
+                new("caller says hello", CallFacts.Empty),
+                new("asks for a person", new CallFacts { CallerAskedForHuman = true }),
+                new("transfer completes", new CallFacts { CallerAskedForHuman = true }),
+            ]),
+
+            new("caller-hangs-up-mid-diagnosis",
+            [
+                new("caller says hello", CallFacts.Empty),
+                new("gives model and serial", new CallFacts { Model = "F63", Serial = "SF221201" }),
+                new("says goodbye", new CallFacts { Model = "F63", Serial = "SF221201", CallerSaidGoodbye = true }),
+            ]),
+
+            new("human-request-beats-a-resolved-fix",
+            [
+                new("caller says hello", CallFacts.Empty),
+                new("gives model and serial", new CallFacts { Model = "E95", Serial = "SF260401" }),
+                new("gives the fault code", new CallFacts { Model = "E95", Serial = "SF260401", FaultCode = "E1" }),
+
+                // Both Resolved and CallerAskedForHuman are true. Precedence must be deterministic.
+                new("fixed but still wants a person",
+                    new CallFacts { Model = "E95", Serial = "SF260401", FaultCode = "E1", Resolved = true, CallerAskedForHuman = true }),
+            ]),
+        ];
+
+        /// <summary>Replays one conversation against the hand-written table.</summary>
+        public static IReadOnlyList<ConversationStage> ReplayHandWritten(GoldenConversation conversation)
+        {
+            ConversationStage stage = ConversationStage.Greeting;
+            List<ConversationStage> stages = new(conversation.Turns.Count);
+            foreach (GoldenTurn turn in conversation.Turns)
+            {
+                stage = Transitions.Next(stage, turn.Facts);
+                stages.Add(stage);
+            }
+
+            return stages;
+        }
+
+        /// <summary>
+        /// The same six stages, declared in configuration. This is the document rule 15 replays against.
+        /// </summary>
+        public const string Yaml =
+            """
           apiVersion: agentcore/v1
 
           state:
@@ -317,4 +326,5 @@ internal static class GoldenSet
               - { kind: openai, model: gpt-4.1-mini, as: reply }
               - { kind: openai, model: gpt-5.4-nano, as: fill }
           """;
-  }
+    }
+}

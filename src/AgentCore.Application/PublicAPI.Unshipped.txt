@@ -1153,7 +1153,7 @@ AgentCore.Application.Providers.VendorSeam.VendorSeam(string! DocumentPath, stri
 AgentCore.Application.Providers.VendorSeam.VendorSeam(string! documentPath, string! pointer, string! registrationHint) -> void
 AgentCore.Application.Runtime.AgentCoreAgent
 AgentCore.Application.Runtime.AgentCoreAgent.AgentCoreAgent(AgentCore.Application.Ports.IConversationSessionFactory! sessions, string! entryName, string? description = null) -> void
-AgentCore.Application.Runtime.AgentCoreAgent.CreateSessionAsync(string! conversationId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Agents.AI.AgentSession!>
+AgentCore.Application.Runtime.AgentCoreAgent.CreateSessionAsync(string! conversationId) -> System.Threading.Tasks.ValueTask<Microsoft.Agents.AI.AgentSession!>
 AgentCore.Application.Runtime.AgentCoreAgent.EntryName.get -> string!
 AgentCore.Application.Runtime.ConversationEvent
 AgentCore.Application.Runtime.ConversationEvent.<Clone>$() -> AgentCore.Application.Runtime.ConversationEvent!

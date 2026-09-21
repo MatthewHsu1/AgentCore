@@ -6,20 +6,20 @@ using AgentCore.AspNetCore.Tests.Fakes;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentCore.AspNetCore.Tests.Endpoints;
-
-/// <summary>
-/// The whole wire a source travels: a producer, the conversation's sources, and one extra SSE field.
-/// </summary>
-/// <remarks>
-/// Retrieval is the first producer of a source and this test deliberately does not use it. The
-/// channel belongs to anything that can name what it read, so what is proved here is that a plain
-/// bound tool can cite one and have it reach the browser.
-/// </remarks>
-public sealed class SourceWireTests
+namespace AgentCore.AspNetCore.Tests.Endpoints
 {
-    private const string SourceYaml =
-        """
+    /// <summary>
+    /// The whole wire a source travels: a producer, the conversation's sources, and one extra SSE field.
+    /// </summary>
+    /// <remarks>
+    /// Retrieval is the first producer of a source and this test deliberately does not use it. The
+    /// channel belongs to anything that can name what it read, so what is proved here is that a plain
+    /// bound tool can cite one and have it reach the browser.
+    /// </remarks>
+    public sealed class SourceWireTests
+    {
+        private const string SourceYaml =
+            """
           apiVersion: agentcore/v1
           tools:
             - id: look_it_up
@@ -48,228 +48,233 @@ public sealed class SourceWireTests
               - { kind: openai, model: gpt-4.1-mini, as: reply }
           """;
 
-      [Fact]
-      public async Task AToolThatCites_ReachesTheBrowserOnItsOwnFieldAndNotInTheReply()
-      {
-          await using var host = await ResponsesHost.StartAsync(
-              SourceYaml,
-              new SourceCitingChatClient(),
-              configure: options => options.Bind("LookItUp", (TurnInvocation? turn) =>
-              {
-                  turn?.Sources?.Publish(new SourceReference
-                  {
-                      SourceId = "card-42",
-                      Kind = SourceKind.Document,
-                      Title = "Spirit CT900 owner's manual",
-                      Origin = "knowledge",
-                      Locator = "p.27",
-                  });
+        [Fact]
+        public async Task AToolThatCites_ReachesTheBrowserOnItsOwnFieldAndNotInTheReply()
+        {
+            await using ResponsesHost host = await ResponsesHost.StartAsync(
+                SourceYaml,
+                new SourceCitingChatClient(),
+                configure: options => options.Bind("LookItUp", (TurnInvocation? turn) =>
+                {
+                    turn?.Sources?.Publish(new SourceReference
+                    {
+                        SourceId = "card-42",
+                        Kind = SourceKind.Document,
+                        Title = "Spirit CT900 owner's manual",
+                        Origin = "knowledge",
+                        Locator = "p.27",
+                    });
 
-                  return ValueTask.FromResult<object?>("E03 is an overcurrent trip.");
-              }));
+                    return ValueTask.FromResult<object?>("E03 is an overcurrent trip.");
+                }));
 
-          using var response = await PostStreamAsync(host, "what is E03");
-          var events = await ResponsesHost.ReadEventsAsync(response);
+            using HttpResponseMessage response = await PostStreamAsync(host, "what is E03");
+            List<string> events = await ResponsesHost.ReadEventsAsync(response);
 
-          var cited = events
-              .Select(text => JsonDocument.Parse(text).RootElement)
-              .Where(chunk => chunk.TryGetProperty("agentcore_source", out var source)
-                  && source.ValueKind != JsonValueKind.Null)
-              .ToList();
+            List<JsonElement> cited = [.. events
+                .Select(text => JsonDocument.Parse(text).RootElement)
+                .Where(chunk => chunk.TryGetProperty("agentcore_source", out JsonElement source)
+                    && source.ValueKind != JsonValueKind.Null)];
 
-          var chunk = Assert.Single(cited).GetProperty("agentcore_source");
+            JsonElement chunk = Assert.Single(cited).GetProperty("agentcore_source");
 
-          Assert.Equal("card-42", chunk.GetProperty("id").GetString());
-          Assert.Equal("document", chunk.GetProperty("source_type").GetString());
-          Assert.Equal("Spirit CT900 owner's manual", chunk.GetProperty("title").GetString());
-          Assert.Equal("p.27", chunk.GetProperty("locator").GetString());
-          Assert.Equal("knowledge", chunk.GetProperty("origin").GetString());
-          Assert.False(string.IsNullOrEmpty(chunk.GetProperty("call_id").GetString()));
+            Assert.Equal("card-42", chunk.GetProperty("id").GetString());
+            Assert.Equal("document", chunk.GetProperty("source_type").GetString());
+            Assert.Equal("Spirit CT900 owner's manual", chunk.GetProperty("title").GetString());
+            Assert.Equal("p.27", chunk.GetProperty("locator").GetString());
+            Assert.Equal("knowledge", chunk.GetProperty("origin").GetString());
+            Assert.False(string.IsNullOrEmpty(chunk.GetProperty("call_id").GetString()));
 
-          // And it is not in what the caller is told. The spoken reply is what the transcript keeps.
-          var spoken = string.Concat(ResponsesHost.TextDeltas(events));
+            // And it is not in what the caller is told. The spoken reply is what the transcript keeps.
+            string spoken = string.Concat(ResponsesHost.TextDeltas(events));
 
-          Assert.DoesNotContain("card-42", spoken, StringComparison.Ordinal);
-      }
+            Assert.DoesNotContain("card-42", spoken, StringComparison.Ordinal);
+        }
 
-      [Fact]
-      public async Task AToolThatCitesNothing_WritesNoSourceField()
-      {
-          await using var host = await ResponsesHost.StartAsync(
-              SourceYaml,
-              new SourceCitingChatClient(),
-              configure: options => options.Bind("LookItUp", (_, _) =>
-                  ValueTask.FromResult<object?>("nothing to cite")));
+        [Fact]
+        public async Task AToolThatCitesNothing_WritesNoSourceField()
+        {
+            await using ResponsesHost host = await ResponsesHost.StartAsync(
+                SourceYaml,
+                new SourceCitingChatClient(),
+                configure: options => options.Bind("LookItUp", (_, _) =>
+                    ValueTask.FromResult<object?>("nothing to cite")));
 
-          using var response = await PostStreamAsync(host, "what is E03");
-          var events = await ResponsesHost.ReadEventsAsync(response);
+            using HttpResponseMessage response = await PostStreamAsync(host, "what is E03");
+            List<string> events = await ResponsesHost.ReadEventsAsync(response);
 
-          Assert.DoesNotContain(events, text => text.Contains("agentcore_source", StringComparison.Ordinal));
-      }
+            Assert.DoesNotContain(events, text => text.Contains("agentcore_source", StringComparison.Ordinal));
+        }
 
-      [Fact]
-      public async Task AToolThatCitesUnderTwoParallelCalls_StampsEachSourceWithItsOwnCallId()
-      {
-          // FunctionInvokingChatClient batches every parallel call's results of one round onto ONE
-          // message (and this endpoint turns that message into ONE update), so a fix that reads the
-          // call id off "the first FunctionResultContent on the update" rather than off the source
-          // itself would silently stamp the second source with the first conversation's id. This is the
-          // regression test for exactly that.
-          await using var host = await ResponsesHost.StartAsync(
-              SourceYaml,
-              new TwoParallelConversationsChatClient(),
-              configure: options => options.Bind("LookItUp", (string? what, TurnInvocation? turn) =>
-              {
-                  turn?.Sources?.Publish(new SourceReference
-                  {
-                      SourceId = what == "left" ? "card-left" : "card-right",
-                      Kind = SourceKind.Document,
-                      Title = what == "left" ? "Left manual" : "Right manual",
-                      Origin = "knowledge",
-                  });
+        [Fact]
+        public async Task AToolThatCitesUnderTwoParallelCalls_StampsEachSourceWithItsOwnCallId()
+        {
+            // FunctionInvokingChatClient batches every parallel call's results of one round onto ONE
+            // message (and this endpoint turns that message into ONE update), so a fix that reads the
+            // call id off "the first FunctionResultContent on the update" rather than off the source
+            // itself would silently stamp the second source with the first conversation's id. This is the
+            // regression test for exactly that.
+            await using ResponsesHost host = await ResponsesHost.StartAsync(
+                SourceYaml,
+                new TwoParallelConversationsChatClient(),
+                configure: options => options.Bind("LookItUp", (string? what, TurnInvocation? turn) =>
+                {
+                    turn?.Sources?.Publish(new SourceReference
+                    {
+                        SourceId = what == "left" ? "card-left" : "card-right",
+                        Kind = SourceKind.Document,
+                        Title = what == "left" ? "Left manual" : "Right manual",
+                        Origin = "knowledge",
+                    });
 
-                  return ValueTask.FromResult<object?>("looked up " + what);
-              }));
+                    return ValueTask.FromResult<object?>("looked up " + what);
+                }));
 
-          using var response = await PostStreamAsync(host, "what is E03");
-          var events = await ResponsesHost.ReadEventsAsync(response);
+            using HttpResponseMessage response = await PostStreamAsync(host, "what is E03");
+            List<string> events = await ResponsesHost.ReadEventsAsync(response);
 
-          var cited = events
-              .Select(text => JsonDocument.Parse(text).RootElement)
-              .Where(chunk => chunk.TryGetProperty("agentcore_source", out var source)
-                  && source.ValueKind != JsonValueKind.Null)
-              .Select(chunk => chunk.GetProperty("agentcore_source"))
-              .ToList();
+            List<JsonElement> cited = [.. events
+                .Select(text => JsonDocument.Parse(text).RootElement)
+                .Where(chunk => chunk.TryGetProperty("agentcore_source", out JsonElement source)
+                    && source.ValueKind != JsonValueKind.Null)
+                .Select(chunk => chunk.GetProperty("agentcore_source"))];
 
-          Assert.Equal(2, cited.Count);
+            Assert.Equal(2, cited.Count);
 
-          var left = Assert.Single(cited, source => source.GetProperty("id").GetString() == "card-left");
-          var right = Assert.Single(cited, source => source.GetProperty("id").GetString() == "card-right");
+            JsonElement left = Assert.Single(cited, source => source.GetProperty("id").GetString() == "card-left");
+            JsonElement right = Assert.Single(cited, source => source.GetProperty("id").GetString() == "card-right");
 
-          Assert.Equal("conversation_1", left.GetProperty("call_id").GetString());
-          Assert.Equal("conversation_2", right.GetProperty("call_id").GetString());
-      }
+            Assert.Equal("conversation_1", left.GetProperty("call_id").GetString());
+            Assert.Equal("conversation_2", right.GetProperty("call_id").GetString());
+        }
 
-      /// <summary>Sends one turn of words and reads the answer as it arrives.</summary>
-      /// <remarks>
-      /// The dialect member opts the stream into the browser parts: without it the frames carry
-      /// text alone and a citation would never reach the browser.
-      /// </remarks>
-      private static Task<HttpResponseMessage> PostStreamAsync(ResponsesHost host, string text, string? conversation = null)
-          => host.PostAsync(conversation is { Length: > 0 }
-              ? $$"""{ "stream": true, "conversation": "{{conversation}}", "input": "{{text}}", "agentcore": { "message_id": "m1" } }"""
-              : $$"""{ "stream": true, "input": "{{text}}", "agentcore": { "message_id": "m1" } }""");
+        /// <summary>Sends one turn of words and reads the answer as it arrives.</summary>
+        /// <remarks>
+        /// The dialect member opts the stream into the browser parts: without it the frames carry
+        /// text alone and a citation would never reach the browser.
+        /// </remarks>
+        private static Task<HttpResponseMessage> PostStreamAsync(ResponsesHost host, string text, string? conversation = null)
+        {
+            return host.PostAsync(conversation is { Length: > 0 }
+                        ? $$"""{ "stream": true, "conversation": "{{conversation}}", "input": "{{text}}", "agentcore": { "message_id": "m1" } }"""
+                        : $$"""{ "stream": true, "input": "{{text}}", "agentcore": { "message_id": "m1" } }""");
+        }
 
-      /// <summary>Calls the first tool it is offered, once, then answers in words.</summary>
-      /// <remarks>
-      /// Copied from the render chat client in ResponsesTests — that class is private to its own file,
-      /// so this test needs its own copy of the same shape rather than sharing the type.
-      /// </remarks>
-      private sealed class SourceCitingChatClient : IChatClient
-      {
-          public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-              IEnumerable<ChatMessage> messages,
-              ChatOptions? options = null,
-              [EnumeratorCancellation] CancellationToken cancellationToken = default)
-          {
-              await Task.Yield();
+        /// <summary>Calls the first tool it is offered, once, then answers in words.</summary>
+        /// <remarks>
+        /// Copied from the render chat client in ResponsesTests — that class is private to its own file,
+        /// so this test needs its own copy of the same shape rather than sharing the type.
+        /// </remarks>
+        private sealed class SourceCitingChatClient : IChatClient
+        {
+            public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+                IEnumerable<ChatMessage> messages,
+                ChatOptions? options = null,
+                [EnumeratorCancellation] CancellationToken cancellationToken = default)
+            {
+                await Task.Yield();
 
-              var alreadyCited = messages.Any(message => message.Contents.OfType<FunctionResultContent>().Any());
+                bool alreadyCited = messages.Any(message => message.Contents.OfType<FunctionResultContent>().Any());
 
-              if (!alreadyCited && options?.Tools?.OfType<AIFunction>().FirstOrDefault() is { } tool)
-              {
-                  yield return new ChatResponseUpdate(
-                      ChatRole.Assistant,
-                      [new FunctionCallContent(
-                          "conversation_1",
-                          tool.Name,
-                          new Dictionary<string, object?>(StringComparer.Ordinal) { ["what"] = "E03" })]);
-                  yield break;
-              }
-
-              yield return new ChatResponseUpdate(ChatRole.Assistant, "it is an overcurrent trip.");
-          }
-
-          public async Task<ChatResponse> GetResponseAsync(
-              IEnumerable<ChatMessage> messages,
-              ChatOptions? options = null,
-              CancellationToken cancellationToken = default)
-          {
-              List<ChatResponseUpdate> updates = [];
-              await foreach (var update in GetStreamingResponseAsync(messages, options, cancellationToken)
-                  .ConfigureAwait(false))
-              {
-                  updates.Add(update);
-              }
-
-              return updates.ToChatResponse();
-          }
-
-          public object? GetService(Type serviceType, object? serviceKey = null)
-              => serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
-
-          public void Dispose()
-          {
-          }
-      }
-
-      /// <summary>Calls the tool it is offered twice in one round — two parallel calls — then answers in words.</summary>
-      /// <remarks>
-      /// This is the shape a real model routinely produces and the single-conversation fakes above cannot
-      /// exercise: <c>FunctionInvokingChatClient</c> batches both tool results of one round onto ONE
-      /// message before this endpoint ever sees it.
-      /// </remarks>
-      private sealed class TwoParallelConversationsChatClient : IChatClient
-      {
-          public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-              IEnumerable<ChatMessage> messages,
-              ChatOptions? options = null,
-              [EnumeratorCancellation] CancellationToken cancellationToken = default)
-          {
-              await Task.Yield();
-
-              var alreadyCited = messages.Any(message => message.Contents.OfType<FunctionResultContent>().Any());
-
-              if (!alreadyCited && options?.Tools?.OfType<AIFunction>().FirstOrDefault() is { } tool)
-              {
-                  yield return new ChatResponseUpdate(
-                      ChatRole.Assistant,
-                      [
-                          new FunctionCallContent(
+                if (!alreadyCited && options?.Tools?.OfType<AIFunction>().FirstOrDefault() is { } tool)
+                {
+                    yield return new ChatResponseUpdate(
+                        ChatRole.Assistant,
+                        [new FunctionCallContent(
                               "conversation_1",
                               tool.Name,
-                              new Dictionary<string, object?>(StringComparer.Ordinal) { ["what"] = "left" }),
-                          new FunctionCallContent(
-                              "conversation_2",
-                              tool.Name,
-                              new Dictionary<string, object?>(StringComparer.Ordinal) { ["what"] = "right" }),
-                      ]);
-                  yield break;
-              }
+                              new Dictionary<string, object?>(StringComparer.Ordinal) { ["what"] = "E03" })]);
+                    yield break;
+                }
 
-              yield return new ChatResponseUpdate(ChatRole.Assistant, "looked up both.");
-          }
+                yield return new ChatResponseUpdate(ChatRole.Assistant, "it is an overcurrent trip.");
+            }
 
-          public async Task<ChatResponse> GetResponseAsync(
-              IEnumerable<ChatMessage> messages,
-              ChatOptions? options = null,
-              CancellationToken cancellationToken = default)
-          {
-              List<ChatResponseUpdate> updates = [];
-              await foreach (var update in GetStreamingResponseAsync(messages, options, cancellationToken)
-                  .ConfigureAwait(false))
-              {
-                  updates.Add(update);
-              }
+            public async Task<ChatResponse> GetResponseAsync(
+                IEnumerable<ChatMessage> messages,
+                ChatOptions? options = null,
+                CancellationToken cancellationToken = default)
+            {
+                List<ChatResponseUpdate> updates = [];
+                await foreach (ChatResponseUpdate? update in GetStreamingResponseAsync(messages, options, cancellationToken)
+                    .ConfigureAwait(false))
+                {
+                    updates.Add(update);
+                }
 
-              return updates.ToChatResponse();
-          }
+                return updates.ToChatResponse();
+            }
 
-          public object? GetService(Type serviceType, object? serviceKey = null)
-              => serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
+            public object? GetService(Type serviceType, object? serviceKey = null)
+            {
+                return serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
+            }
 
-          public void Dispose()
-          {
-          }
-      }
-  }
+            public void Dispose()
+            {
+            }
+        }
+
+        /// <summary>Calls the tool it is offered twice in one round — two parallel calls — then answers in words.</summary>
+        /// <remarks>
+        /// This is the shape a real model routinely produces and the single-conversation fakes above cannot
+        /// exercise: <c>FunctionInvokingChatClient</c> batches both tool results of one round onto ONE
+        /// message before this endpoint ever sees it.
+        /// </remarks>
+        private sealed class TwoParallelConversationsChatClient : IChatClient
+        {
+            public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+                IEnumerable<ChatMessage> messages,
+                ChatOptions? options = null,
+                [EnumeratorCancellation] CancellationToken cancellationToken = default)
+            {
+                await Task.Yield();
+
+                bool alreadyCited = messages.Any(message => message.Contents.OfType<FunctionResultContent>().Any());
+
+                if (!alreadyCited && options?.Tools?.OfType<AIFunction>().FirstOrDefault() is { } tool)
+                {
+                    yield return new ChatResponseUpdate(
+                        ChatRole.Assistant,
+                        [
+                            new FunctionCallContent(
+                                  "conversation_1",
+                                  tool.Name,
+                                  new Dictionary<string, object?>(StringComparer.Ordinal) { ["what"] = "left" }),
+                              new FunctionCallContent(
+                                  "conversation_2",
+                                  tool.Name,
+                                  new Dictionary<string, object?>(StringComparer.Ordinal) { ["what"] = "right" }),
+                        ]);
+                    yield break;
+                }
+
+                yield return new ChatResponseUpdate(ChatRole.Assistant, "looked up both.");
+            }
+
+            public async Task<ChatResponse> GetResponseAsync(
+                IEnumerable<ChatMessage> messages,
+                ChatOptions? options = null,
+                CancellationToken cancellationToken = default)
+            {
+                List<ChatResponseUpdate> updates = [];
+                await foreach (ChatResponseUpdate? update in GetStreamingResponseAsync(messages, options, cancellationToken)
+                    .ConfigureAwait(false))
+                {
+                    updates.Add(update);
+                }
+
+                return updates.ToChatResponse();
+            }
+
+            public object? GetService(Type serviceType, object? serviceKey = null)
+            {
+                return serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
+            }
+
+            public void Dispose()
+            {
+            }
+        }
+    }
+}

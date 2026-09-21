@@ -1,37 +1,38 @@
 using AgentCore.Application.Configuration.Schema;
 
-namespace AgentCore.Application.State;
-
-/// <summary>
-/// Writer 4 of section 8.3. It fills a slot from a fixed value.
-/// </summary>
-/// <remarks>
-/// A constant never changes, so this writer runs once, when the conversation starts.
-/// </remarks>
-public static class ConstStateWriter
+namespace AgentCore.Application.State
 {
-    /// <summary>Fills every <c>writer: const</c> slot from its <c>value:</c>.</summary>
-    /// <param name="state">The state of one conversation.</param>
-    /// <returns>The number of slots this writer filled.</returns>
-    public static int Apply(StateDocument state)
+    /// <summary>
+    /// Writer 4 of section 8.3. It fills a slot from a fixed value.
+    /// </summary>
+    /// <remarks>
+    /// A constant never changes, so this writer runs once, when the conversation starts.
+    /// </remarks>
+    public static class ConstStateWriter
     {
-        ArgumentNullException.ThrowIfNull(state);
-
-        var filled = 0;
-        foreach (var (name, slot) in state.Configuration.State)
+        /// <summary>Fills every <c>writer: const</c> slot from its <c>value:</c>.</summary>
+        /// <param name="state">The state of one conversation.</param>
+        /// <returns>The number of slots this writer filled.</returns>
+        public static int Apply(StateDocument state)
         {
-            if (slot.Writer != StateWriter.Const)
+            ArgumentNullException.ThrowIfNull(state);
+
+            int filled = 0;
+            foreach ((string? name, StateSlotConfiguration? slot) in state.Configuration.State)
             {
-                continue;
+                if (slot.Writer != StateWriter.Const)
+                {
+                    continue;
+                }
+
+                // A value that does not coerce leaves the slot at its default. Section 8.3.
+                if (state.TryWrite(name, slot.Value?.DeepClone()))
+                {
+                    filled++;
+                }
             }
 
-            // A value that does not coerce leaves the slot at its default. Section 8.3.
-            if (state.TryWrite(name, slot.Value?.DeepClone()))
-            {
-                filled++;
-            }
+            return filled;
         }
-
-        return filled;
     }
 }

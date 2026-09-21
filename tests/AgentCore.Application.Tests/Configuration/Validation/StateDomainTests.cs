@@ -3,43 +3,45 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Configuration.Validation;
-
-/// <summary>
-/// The state-domain enumeration of check 5, section 8.5.
-/// </summary>
-public sealed class StateDomainTests
+namespace AgentCore.Application.Tests.Configuration.Validation
 {
-    [Fact]
-    public void Points_EnumSlotWithNoDefault_IncludesTheUnfilledPoint()
+    /// <summary>
+    /// The state-domain enumeration of check 5, section 8.5.
+    /// </summary>
+    public sealed class StateDomainTests
     {
-        AgentCoreConfiguration configuration = new()
+        [Fact]
+        public void Points_EnumSlotWithNoDefault_IncludesTheUnfilledPoint()
         {
-            ApiVersion = "agentcore/v1",
-            Agents = new AgentsConfiguration { Items = [] }, Entries = new Dictionary<string, EntryConfiguration>(),
-            State = new Dictionary<string, StateSlotConfiguration>(StringComparer.Ordinal)
+            AgentCoreConfiguration configuration = new()
             {
-                ["applies_to"] = new()
+                ApiVersion = "agentcore/v1",
+                Agents = new AgentsConfiguration { Items = [] },
+                Entries = new Dictionary<string, EntryConfiguration>(),
+                State = new Dictionary<string, StateSlotConfiguration>(StringComparer.Ordinal)
                 {
-                    Type = StateSlotType.String,
-                    Writer = StateWriter.Extractor,
-                    EnumValues = [JsonValue.Create("f63")!, JsonValue.Create("f65")!],
+                    ["applies_to"] = new()
+                    {
+                        Type = StateSlotType.String,
+                        Writer = StateWriter.Extractor,
+                        EnumValues = [JsonValue.Create("f63")!, JsonValue.Create("f65")!],
+                    },
                 },
-            },
-        };
+            };
 
-        var points = Points(configuration, "applies_to");
+            IReadOnlyList<JsonNode?> points = Points(configuration, "applies_to");
 
-        Assert.Contains(points, point => point is null);
-        Assert.Equal(3, points.Count);
-    }
+            Assert.Contains(points, point => point is null);
+            Assert.Equal(3, points.Count);
+        }
 
-    private static IReadOnlyList<JsonNode?> Points(AgentCoreConfiguration configuration, string slotName)
-    {
-        var facts = new GuardRuleFacts();
-        facts.Collect(new JsonObject { ["var"] = slotName });
+        private static IReadOnlyList<JsonNode?> Points(AgentCoreConfiguration configuration, string slotName)
+        {
+            GuardRuleFacts facts = new();
+            facts.Collect(new JsonObject { ["var"] = slotName });
 
-        var domains = StateDomain.Build(facts, configuration.State, new Dictionary<string, JsonNode?>(StringComparer.Ordinal));
-        return domains.Single(domain => domain.Name == slotName).Points;
+            List<SlotDomain> domains = StateDomain.Build(facts, configuration.State, new Dictionary<string, JsonNode?>(StringComparer.Ordinal));
+            return domains.Single(domain => domain.Name == slotName).Points;
+        }
     }
 }

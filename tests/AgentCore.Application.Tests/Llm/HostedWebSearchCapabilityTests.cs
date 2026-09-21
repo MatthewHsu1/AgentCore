@@ -4,49 +4,55 @@ using AgentCore.Application.Ports;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentCore.Application.Tests.Llm;
-
-/// <summary>
-/// Which vendors resolve a hosted marker, and the operator's per-entry veto.
-/// </summary>
-public sealed class HostedWebSearchCapabilityTests
+namespace AgentCore.Application.Tests.Llm
 {
-    [Fact]
-    public void Adapter_DefaultMember_AnswersNull()
+    /// <summary>
+    /// Which vendors resolve a hosted marker, and the operator's per-entry veto.
+    /// </summary>
+    public sealed class HostedWebSearchCapabilityTests
     {
-        // A host that wrote an adapter before this member existed keeps compiling, and keeps
-        // answering null, so its models never meet a tool they cannot call.
-        IChatClientAdapter adapter = new SilentAdapter();
+        [Fact]
+        public void Adapter_DefaultMember_AnswersNull()
+        {
+            // A host that wrote an adapter before this member existed keeps compiling, and keeps
+            // answering null, so its models never meet a tool they cannot call.
+            IChatClientAdapter adapter = new SilentAdapter();
 
-        Assert.Null(adapter.ResolveHostedTool(new HostedWebSearchTool(), Entry(webSearch: null)));
-    }
+            Assert.Null(adapter.ResolveHostedTool(new HostedWebSearchTool(), Entry(webSearch: null)));
+        }
 
-    [Fact]
-    public void Factory_UnknownReference_AnswersNull()
-    {
-        // A reference the document does not declare must not throw here. The compiler asks this
-        // question while deciding whether to add a tool, and a missing model is reported elsewhere.
-        // The interface default is under test; it is reachable only through the interface type.
-        Assert.Null(((IChatClientFactory)new RecordingChatClientFactory())
-            .ResolveHostedTool(new HostedWebSearchTool(), new ModelReference { Ref = "absent" }));
-    }
+        [Fact]
+        public void Factory_UnknownReference_AnswersNull()
+        {
+            // A reference the document does not declare must not throw here. The compiler asks this
+            // question while deciding whether to add a tool, and a missing model is reported elsewhere.
+            // The interface default is under test; it is reachable only through the interface type.
+            Assert.Null(((IChatClientFactory)new RecordingChatClientFactory())
+                .ResolveHostedTool(new HostedWebSearchTool(), new ModelReference { Ref = "absent" }));
+        }
 
-    private static LlmProviderConfiguration Entry(bool? webSearch) => new()
-    {
-        Kind = "silent",
-        Model = "m",
-        As = "reply",
-        WebSearch = webSearch,
-    };
+        private static LlmProviderConfiguration Entry(bool? webSearch)
+        {
+            return new()
+            {
+                Kind = "silent",
+                Model = "m",
+                As = "reply",
+                WebSearch = webSearch,
+            };
+        }
 
-    private sealed class SilentAdapter : IChatClientAdapter
-    {
-        public string Kind => "silent";
+        private sealed class SilentAdapter : IChatClientAdapter
+        {
+            public string Kind => "silent";
 
-        public ValueTask<IChatClient> CreateClientAsync(
-            LlmProviderConfiguration entry,
-            ISecretResolverPort? secrets,
-            CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
+            public ValueTask<IChatClient> CreateClientAsync(
+                LlmProviderConfiguration entry,
+                ISecretResolverPort? secrets,
+                CancellationToken cancellationToken = default)
+            {
+                throw new NotSupportedException();
+            }
+        }
     }
 }

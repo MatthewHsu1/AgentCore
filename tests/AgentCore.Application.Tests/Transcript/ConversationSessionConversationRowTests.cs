@@ -6,17 +6,17 @@ using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
-using AgentCore.Application.Tests.Runtime;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Configuration.Schema;
 
-namespace AgentCore.Application.Tests.Transcript;
-
-/// <summary>A conversation's row exists before its first word does.</summary>
-public sealed class ConversationSessionConversationRowTests
+namespace AgentCore.Application.Tests.Transcript
 {
-    private const string OneAgentYaml = """
+    /// <summary>A conversation's row exists before its first word does.</summary>
+    public sealed class ConversationSessionConversationRowTests
+    {
+        private const string OneAgentYaml = """
         apiVersion: agentcore/v1
         agents:
           items:
@@ -26,66 +26,69 @@ public sealed class ConversationSessionConversationRowTests
             agent: only
         """;
 
-    /// <summary>A store 0 that is down: it takes no row, so no word may follow.</summary>
-    private sealed class RefusingCreate(IConversationStore inner) : DelegatingConversationStore(inner)
-    {
-        public override ValueTask<ConversationRecord> CreateAsync(
-            string conversationId, CancellationToken cancellationToken = default)
-            => throw new InvalidOperationException("store 0 is down.");
-    }
-
-    [Fact]
-    public async Task ATurn_CreatesTheConversationRow_BeforeItWritesAnyWord()
-    {
-        // Arrange
-        InMemoryConversationStore store = new();
-        using ScriptedChatClient reply = new("hello");
-        var session = CreateSession(OneAgentYaml, reply, store);
-
-        // Act
-        await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
-
-        // Assert
-        await session.FlushTranscriptAsync();
-        Assert.NotNull(await store.GetAsync(session.ConversationId, TestContext.Current.CancellationToken));
-        Assert.NotEmpty(await store.ReadAllAsync(session.ConversationId, TestContext.Current.CancellationToken));
-    }
-
-    [Fact]
-    public async Task ATurn_WhenStoreZeroRefusesTheRow_FailsAndWritesNoWords()
-    {
-        // Arrange
-        InMemoryConversationStore inner = new();
-        RefusingCreate store = new(inner);
-        using ScriptedChatClient reply = new("hello");
-        var session = CreateSession(OneAgentYaml, reply, store);
-
-        // Act
-        var fault = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => session.RunTurnAsync("hi", TestContext.Current.CancellationToken));
-
-        // Assert
-        Assert.Equal("store 0 is down.", fault.Message);
-        Assert.Empty(await inner.ReadAllAsync(session.ConversationId, TestContext.Current.CancellationToken));
-    }
-
-    private static ConversationSession CreateSession(string yaml, IChatClient reply, IConversationStore store)
-    {
-        var document = ConfigurationLoader.LoadYaml(yaml);
-        var chatClients = new FakeChatClientFactory(reply);
-        var compiled = ConfigurationCompiler.CompileAll(
-            document,
-            new AgentCompilationContext(chatClients)
+        /// <summary>A store 0 that is down: it takes no row, so no word may follow.</summary>
+        private sealed class RefusingCreate(IConversationStore inner) : DelegatingConversationStore(inner)
+        {
+            public override ValueTask<ConversationRecord> CreateAsync(
+                string conversationId, CancellationToken cancellationToken = default)
             {
-                ConversationStore = store,
-                Tools = TestToolRegistry.From(document, null, TestContext.Current.CancellationToken),
-            })["main"];
+                throw new InvalidOperationException("store 0 is down.");
+            }
+        }
 
-        var factory = new ConversationSessionFactory(
-            compiled,
-            new GuardEvaluator(compiled.Configuration.Guards),
-            extractor: null);
+        [Fact]
+        public async Task ATurn_CreatesTheConversationRow_BeforeItWritesAnyWord()
+        {
+            // Arrange
+            InMemoryConversationStore store = new();
+            using ScriptedChatClient reply = new("hello");
+            ConversationSession session = CreateSession(OneAgentYaml, reply, store);
 
-        return factory.Create();
+            // Act
+            _ = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+
+            // Assert
+            await session.FlushTranscriptAsync();
+            Assert.NotNull(await store.GetAsync(session.ConversationId, TestContext.Current.CancellationToken));
+            Assert.NotEmpty(await store.ReadAllAsync(session.ConversationId, TestContext.Current.CancellationToken));
+        }
+
+        [Fact]
+        public async Task ATurn_WhenStoreZeroRefusesTheRow_FailsAndWritesNoWords()
+        {
+            // Arrange
+            InMemoryConversationStore inner = new();
+            RefusingCreate store = new(inner);
+            using ScriptedChatClient reply = new("hello");
+            ConversationSession session = CreateSession(OneAgentYaml, reply, store);
+
+            // Act
+            InvalidOperationException fault = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => session.RunTurnAsync("hi", TestContext.Current.CancellationToken));
+
+            // Assert
+            Assert.Equal("store 0 is down.", fault.Message);
+            Assert.Empty(await inner.ReadAllAsync(session.ConversationId, TestContext.Current.CancellationToken));
+        }
+
+        private static ConversationSession CreateSession(string yaml, IChatClient reply, IConversationStore store)
+        {
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(yaml);
+            FakeChatClientFactory chatClients = new(reply);
+            CompiledAgent compiled = ConfigurationCompiler.CompileAll(
+                document,
+                new AgentCompilationContext(chatClients)
+                {
+                    ConversationStore = store,
+                    Tools = TestToolRegistry.From(document, null, TestContext.Current.CancellationToken),
+                })["main"];
+
+            ConversationSessionFactory factory = new(
+                compiled,
+                new GuardEvaluator(compiled.Configuration.Guards),
+                extractor: null);
+
+            return factory.Create();
+        }
     }
 }
