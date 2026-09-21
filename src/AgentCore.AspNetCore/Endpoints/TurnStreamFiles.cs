@@ -25,7 +25,7 @@ namespace AgentCore.AspNetCore.Endpoints
         /// <param name="conversationId">The conversation that owns the files.</param>
         /// <param name="cancellationToken">Cancels the lookups.</param>
         /// <returns>One part for each file the store holds.</returns>
-        internal async IAsyncEnumerable<TurnStreamFile> ResolveAsync(
+        internal async IAsyncEnumerable<TurnStreamPart> ResolveAsync(
             Conversations conversations,
             string conversationId,
             [EnumeratorCancellation] CancellationToken cancellationToken)
@@ -41,7 +41,7 @@ namespace AgentCore.AspNetCore.Endpoints
 
             foreach ((BlobRef? blob, Uri? url) in links)
             {
-                yield return new TurnStreamFile(new FilePayload
+                yield return new TurnStreamPart(TurnStreamPart.File, new FilePayload
                 {
                     Name = blob.Name,
                     Title = _files.LastOrDefault(file => string.Equals(file.Name, blob.Name, StringComparison.Ordinal))?.Title,

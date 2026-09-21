@@ -268,14 +268,6 @@ namespace AgentCore.Application.Runtime
         }
 
         /// <summary>
-        /// Gives this conversation the screen its tools draw on, or takes it away.
-        /// </summary>
-        public void SetHasScreen(bool hasScreen)
-        {
-            Runner.SetHasScreen(hasScreen);
-        }
-
-        /// <summary>
         /// Runs one turn end to end, and returns what it did.
         /// </summary>
         public Task<TurnResult> RunTurnAsync(string userInput, CancellationToken cancellationToken = default)

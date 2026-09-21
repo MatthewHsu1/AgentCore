@@ -6,6 +6,7 @@ using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Transcript;
+using AgentCore.Domain.Sources;
 using AgentCore.TestSupport;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -35,10 +36,10 @@ namespace AgentCore.Application.Tests.Configuration.Compilation
         """;
 
         [Fact]
-        public async Task TheSecondRoundOfACompiledAgent_NeverForwardsARenderContentTheFirstRoundsToolAttached()
+        public async Task TheSecondRoundOfACompiledAgent_NeverForwardsASourceContentTheFirstRoundsToolAttached()
         {
-            TurnRenders renders = new();
-            TurnInvocation turn = new() { ConversationId = "conversation", TurnIndex = 0, Stage = "", Renders = renders };
+            TurnSources sources = new();
+            TurnInvocation turn = new() { ConversationId = "conversation", TurnIndex = 0, Stage = "", Sources = sources };
 
             RequestCapturingChatClient recorder = new(new ToolCallingChatClient("done."));
             AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(Yaml);
@@ -62,7 +63,7 @@ namespace AgentCore.Application.Tests.Configuration.Compilation
             Assert.Equal(2, recorder.Requests.Count);
             Assert.DoesNotContain(
                 recorder.Requests[1],
-                message => message.Contents.Any(content => content is RenderContent));
+                message => message.Contents.Any(content => content is SourceContent));
         }
 
         private static AIFunction DrawCard()
@@ -70,7 +71,7 @@ namespace AgentCore.Application.Tests.Configuration.Compilation
             return AIFunctionFactory.Create(
                         (TurnInvocation? turn) =>
                         {
-                            turn!.Renders!.Publish("card", "card-1", new { text = "hi" });
+                            turn!.Sources!.Publish(new SourceReference { SourceId = "card-1", Kind = SourceKind.Document, Title = "hi", Origin = "test.draw" });
                             return "drawn.";
                         },
                         new AIFunctionFactoryOptions

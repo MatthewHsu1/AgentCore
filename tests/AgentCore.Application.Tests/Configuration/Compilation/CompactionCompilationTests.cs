@@ -1,4 +1,3 @@
-using System.Text.Json;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
@@ -51,12 +50,6 @@ namespace AgentCore.Application.Tests.Configuration.Compilation
 
             ChatMessage published = new(ChatRole.Tool, [new FunctionResultContent("call-1", "published")]);
             published.Contents.Add(new FileContent { Name = "report.md", FileId = "out/report.md", Kept = true });
-            published.Contents.Add(new RenderContent
-            {
-                Name = "card",
-                RenderId = "card-1",
-                Data = JsonSerializer.SerializeToElement(new { title = "Report" }),
-            });
             published.Contents.Add(new SourceContent
             {
                 Source = new SourceReference { SourceId = "doc-1", Kind = SourceKind.Document, Title = "Doc", Origin = "knowledge" },
@@ -74,7 +67,7 @@ namespace AgentCore.Application.Tests.Configuration.Compilation
 
             Assert.DoesNotContain(
                 reply.Requests[^1].SelectMany(message => message.Contents),
-                content => content is FileContent or RenderContent or SourceContent);
+                content => content is FileContent or SourceContent);
         }
 
         private static CompiledAgent CompileOneAgent(SequencedChatClient reply)

@@ -13,7 +13,7 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
     /// <remarks>
     /// <para>
     /// This endpoint owns the tool loop, so the caller never runs a tool and must never be asked to.
-    /// The facts of the loop ride their own <c>agentcore_tool</c> field, beside <c>agentcore_data</c>,
+    /// The facts of the loop ride their own <c>agentcore_tool</c> field, beside the other dialect fields,
     /// where a client that does not know the field ignores it and the browser that does can draw the loop.
     /// </para>
     /// <para>

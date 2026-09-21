@@ -89,7 +89,8 @@ namespace AgentCore.Application.Tests.Transcript
             CapturingChatClient summariser = new(_ => Task.CompletedTask, "the gist of it");
             CompactionStages stages = new(
                 new ToolResultCapProvider(CompactionTriggers.Always, keepTurns: 0, maxResultChars: 3),
-                new SummarizationCompactionStrategy(summariser, CompactionTriggers.Always, minimumPreservedGroups: 3));
+                summariser,
+                client => new SummarizationCompactionStrategy(client, CompactionTriggers.Always, minimumPreservedGroups: 3));
             ConversationSession session = CreateSession(new ScriptedChatClient("a3"), store, conversationId: "c1", compaction: stages);
 
             _ = await session.RunTurnAsync("q3", TestContext.Current.CancellationToken);
@@ -114,7 +115,8 @@ namespace AgentCore.Application.Tests.Transcript
             CapturingChatClient reply = new(_ => Task.CompletedTask, "a2");
             CompactionStages stages = new(
                 new ToolResultCapProvider(CompactionTriggers.Always, keepTurns: 0, maxResultChars: 3),
-                new SummarizationCompactionStrategy(new ScriptedChatClient("never"), CompactionTriggers.Never));
+                new ScriptedChatClient("never"),
+                client => new SummarizationCompactionStrategy(client, CompactionTriggers.Never));
             ConversationSession session = CreateSession(reply, store, conversationId: "c1", compaction: stages);
 
             _ = await session.RunTurnAsync("q2", TestContext.Current.CancellationToken);

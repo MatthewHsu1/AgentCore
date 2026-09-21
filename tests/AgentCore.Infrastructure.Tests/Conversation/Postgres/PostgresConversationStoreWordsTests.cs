@@ -1,8 +1,8 @@
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Transcript;
 using AgentCore.Domain.Audit;
+using AgentCore.Domain.Sources;
 using AgentCore.Infrastructure.Audit.Postgres;
 using AgentCore.Infrastructure.Conversation.Postgres;
 using AgentCore.Infrastructure.Tests.Database.Postgres;
@@ -334,13 +334,13 @@ namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
         }
 
         [PostgresFact]
-        public async Task ReadSpokenTurnsAsync_AToolCallingTurnThatAlsoDrew_MatchesTheHashTheChainHolds()
+        public async Task ReadSpokenTurnsAsync_AToolCallingTurnThatAlsoCited_MatchesTheHashTheChainHolds()
         {
-            // Arrange — a RenderContent rides the tool-result message alongside its FunctionResultContent.
+            // Arrange — a SourceContent rides the tool-result message alongside its FunctionResultContent.
             // The verify query never looks at that row's role, but jsonb round-tripping a second content
             // type on it must not upset the DISTINCT ON guard or the hash comparison.
             PostgresConversationStore store = await OpenAsync();
-            _ = await WriteToolCallingTurnAsync(store, "C1", turnIndex: 0, spoken: "Order 41 ships Friday.", drew: true);
+            _ = await WriteToolCallingTurnAsync(store, "C1", turnIndex: 0, spoken: "Order 41 ships Friday.", cited: true);
 
             // Act
             IReadOnlyList<TranscriptTurnDigest> turns = await store.ReadSpokenTurnsAsync("C1", Token);
@@ -400,16 +400,21 @@ namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
 
         /// <summary>Writes a tool-calling turn to store 1 and its <c>turn.completed</c> row to store 3.</summary>
         private async Task<Guid> WriteToolCallingTurnAsync(
-            PostgresConversationStore store, string conversationId, int turnIndex, string spoken, bool drew = false)
+            PostgresConversationStore store, string conversationId, int turnIndex, string spoken, bool cited = false)
         {
             List<AIContent> toolResultContents = [new FunctionResultContent("id1", "Friday")];
-            if (drew)
+            if (cited)
             {
-                toolResultContents.Add(new RenderContent
+                toolResultContents.Add(new SourceContent
                 {
-                    Name = "generative-ui",
-                    RenderId = "chart-1",
-                    Data = JsonSerializer.SerializeToElement(new { title = "Q3 revenue" }),
+                    Source = new SourceReference
+                    {
+                        SourceId = "card-42",
+                        Kind = SourceKind.Document,
+                        Title = "Order lookup",
+                        Origin = "knowledge",
+                    },
+                    CallId = "id1",
                 });
             }
 

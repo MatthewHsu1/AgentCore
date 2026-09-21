@@ -53,13 +53,30 @@ namespace AgentCore.Application.Tests.Transcript
         /// <summary>Stages whose cap never fires and whose summary always does.</summary>
         internal static CompactionStages Summary(IChatClient summariser, int minimumPreservedGroups)
         {
-            return SummaryOnly(new SummarizationCompactionStrategy(summariser, CompactionTriggers.Always, minimumPreservedGroups));
+            return SummaryOnly(summariser, client => new SummarizationCompactionStrategy(client, CompactionTriggers.Always, minimumPreservedGroups));
         }
 
-        /// <summary>Stages whose cap never fires.</summary>
+        /// <summary>Stages whose cap never fires, over a bespoke strategy that answers no client of its own.</summary>
         internal static CompactionStages SummaryOnly(CompactionStrategy summary)
         {
-            return new(new ToolResultCapProvider(CompactionTriggers.Never, keepTurns: 0, maxResultChars: 1), summary);
+            return SummaryOnly(new ScriptedChatClient("unused"), _ => summary);
+        }
+
+        /// <summary>Stages whose cap never fires, built from the summariser and the strategy factory the provider itself wraps.</summary>
+        internal static CompactionStages SummaryOnly(IChatClient summariser, Func<IChatClient, CompactionStrategy> summary)
+        {
+            return new(new ToolResultCapProvider(CompactionTriggers.Never, keepTurns: 0, maxResultChars: 1), summariser, summary);
+        }
+
+        /// <summary>A store holding conversation <c>c1</c> with three plain turns, enough for a summary pass to have something to fold.</summary>
+        internal static async Task<InMemoryConversationStore> SeededStoreAsync()
+        {
+            InMemoryConversationStore store = new();
+            _ = await store.CreateAsync("c1", TestContext.Current.CancellationToken);
+            await SeedPlainTurnAsync(store, 0, "q0", "a0");
+            await SeedPlainTurnAsync(store, 1, "q1", "a1");
+            await SeedPlainTurnAsync(store, 2, "q2", "a2");
+            return store;
         }
 
         /// <summary>Seeds one turn of a plain question and reply, two rows.</summary>

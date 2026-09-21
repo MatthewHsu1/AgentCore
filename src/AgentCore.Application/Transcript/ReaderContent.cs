@@ -5,14 +5,11 @@ namespace AgentCore.Application.Transcript
 {
     /// <summary>
     /// The content types AgentCore adds to a message for the person reading the transcript, not for
-    /// the model: a drawing, a citation, a published file. This is the one list of them. It decides
+    /// the model: a citation, a published file. This is the one list of them. It decides
     /// how a store encodes them and what is stripped before a message reaches the model.
     /// </summary>
     internal static class ReaderContent
     {
-        /// <summary>The discriminator a stored RenderContent is written with. It is a wire format.</summary>
-        private const string RenderContentTypeId = "agentcore.render";
-
         /// <summary>The discriminator a stored SourceContent is written with. It is a wire format.</summary>
         private const string SourceContentTypeId = "agentcore.source";
 
@@ -23,7 +20,7 @@ namespace AgentCore.Application.Transcript
         /// <param name="content">The content to test.</param>
         public static bool Is(AIContent content)
         {
-            return content is RenderContent or SourceContent or FileContent;
+            return content is SourceContent or FileContent;
         }
 
         /// <summary>Teaches <paramref name="options"/> to encode and decode every reader content type.</summary>
@@ -32,7 +29,6 @@ namespace AgentCore.Application.Transcript
         {
             ArgumentNullException.ThrowIfNull(options);
 
-            options.AddAIContentType<RenderContent>(RenderContentTypeId);
             options.AddAIContentType<SourceContent>(SourceContentTypeId);
             options.AddAIContentType<FileContent>(FileContentTypeId);
         }

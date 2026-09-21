@@ -1,4 +1,3 @@
-using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime.Harness;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.State;
@@ -52,17 +51,16 @@ namespace AgentCore.Application.Runtime
         /// <summary>Gets the conversation's logger, or <see langword="null"/> to log nowhere.</summary>
         public ILogger? Logger { get; init; }
 
-        /// <summary>Gets the screen this conversation draws on, or <see langword="null"/> when it has none.</summary>
-        public IRenderPort? Screen { get; init; }
-
         /// <summary>Gets what the turn cites into. Never <see langword="null"/> on a loop-built turn.</summary>
         public TurnSources? Sources { get; init; }
 
-        /// <summary>Gets what the turn draws into, or <see langword="null"/> when it has no screen.</summary>
-        public TurnRenders? Renders { get; init; }
-
         /// <summary>Gets what the turn's tools answer into. Never <see langword="null"/> on a loop-built turn.</summary>
         public TurnResults? Results { get; init; }
+
+        /// <summary>
+        /// Gets the turn's out-of-band channel to its own streaming consumer, or <see langword="null"/>.
+        /// </summary>
+        public TurnNotices? Notices { get; init; }
 
         /// <summary>Gets what the turn publishes files into. Never <see langword="null"/> on a loop-built turn.</summary>
         public TurnFiles? Files { get; init; }
@@ -73,7 +71,7 @@ namespace AgentCore.Application.Runtime
         /// </summary>
         internal IReadOnlyList<ITurnAttachments> Attachments()
         {
-            return [.. new ITurnAttachments?[] { Renders, Sources, Files }.OfType<ITurnAttachments>()];
+            return [.. new ITurnAttachments?[] { Sources, Files }.OfType<ITurnAttachments>()];
         }
 
         /// <summary>Gets the tools a delegated run of this conversation is offered, or <see langword="null"/> for none.</summary>

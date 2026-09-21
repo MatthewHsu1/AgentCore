@@ -21,16 +21,21 @@ namespace AgentCore.Application.Runtime.Compaction
     {
         private readonly AgentCoreChatHistoryProvider _history;
 
-        private readonly CompactionStrategy _summary;
+        private readonly IChatClient _summariser;
+
+        private readonly Func<IChatClient, CompactionStrategy> _summary;
 
         /// <param name="history">Store 1, which says what a compaction may cover and takes the row.</param>
-        /// <param name="summary">The strategy that replaces the oldest messages with one summary. One model call.</param>
-        public SummaryRowProvider(AgentCoreChatHistoryProvider history, CompactionStrategy summary)
+        /// <param name="summariser">The chat client the strategy calls. Wrapped fresh each invocation, so the notice tracks the call it actually makes.</param>
+        /// <param name="summary">Builds the strategy that replaces the oldest messages with one summary, over the client it is handed.</param>
+        public SummaryRowProvider(AgentCoreChatHistoryProvider history, IChatClient summariser, Func<IChatClient, CompactionStrategy> summary)
         {
             ArgumentNullException.ThrowIfNull(history);
+            ArgumentNullException.ThrowIfNull(summariser);
             ArgumentNullException.ThrowIfNull(summary);
 
             _history = history;
+            _summariser = summariser;
             _summary = summary;
         }
 
@@ -47,7 +52,7 @@ namespace AgentCore.Application.Runtime.Compaction
             }
 
             IReadOnlyList<ChatMessage> messages = input.Messages as IReadOnlyList<ChatMessage> ?? [.. input.Messages];
-            if (!Leads(floor.Messages, messages))
+            if (!SummaryRowShape.Leads(floor.Messages, messages))
             {
                 return input;
             }
@@ -55,39 +60,46 @@ namespace AgentCore.Application.Runtime.Compaction
             TurnInvocation? turn = TurnRegistry.For(session);
             ILogger logger = turn?.Logger ?? NullLogger.Instance;
 
-            // The stages before this one strip and cap by making new instances, so the view the
-            // strategy runs over is the model-bound prefix, not the floor's own messages; the floor
-            // lines up with it by index and lends it the ordinals.
             List<ChatMessage> view = [.. messages.Take(floor.Messages.Count)];
+
+            NoticingChatClient client = new(_summariser, turn?.Notices);
+            CompactionStrategy strategy = _summary(client);
 
             try
             {
-                List<ChatMessage> output = [.. await CompactionProvider.CompactAsync(_summary, view, logger, cancellationToken).ConfigureAwait(false)];
+                List<ChatMessage> output = [.. await CompactionProvider.CompactAsync(strategy, view, logger, cancellationToken).ConfigureAwait(false)];
 
                 if (output.Count == view.Count && output.Zip(view).All(pair => ReferenceEquals(pair.First, pair.Second)))
                 {
+                    PostEnd(turn, client, "unchanged");
                     return input;
                 }
 
-                if (Kept(view, output) is not { } kept)
+                if (SummaryRowShape.Kept(view, output) is not { } kept)
                 {
                     if (turn is not null)
                     {
                         Log.TranscriptCompactionUnsupported(logger, turn.ConversationId, turn.TurnIndex);
                     }
 
+                    PostEnd(turn, client, "unchanged");
                     return input;
                 }
 
                 int coversUpTo = floor.Messages[kept - 1].LastOrdinal;
-                return coversUpTo <= floor.CoversUpTo || !_history.Compact(session, output[0], coversUpTo, floor.Revision)
-                    ? input
-                    : new AIContext
-                    {
-                        Instructions = input.Instructions,
-                        Messages = [output[0], .. messages.Skip(kept)],
-                        Tools = input.Tools,
-                    };
+                if (coversUpTo <= floor.CoversUpTo || !_history.Compact(session, output[0], coversUpTo, floor.Revision))
+                {
+                    PostEnd(turn, client, "unchanged");
+                    return input;
+                }
+
+                PostEnd(turn, client, "compacted");
+                return new AIContext
+                {
+                    Instructions = input.Instructions,
+                    Messages = [output[0], .. messages.Skip(kept)],
+                    Tools = input.Tools,
+                };
             }
 #pragma warning disable CA1031 // A strategy that throws never ends a conversation: the session keeps the view it had.
             catch (Exception exception) when (exception is not OperationCanceledException)
@@ -98,52 +110,18 @@ namespace AgentCore.Application.Runtime.Compaction
                     Log.TranscriptCompactionFailed(logger, turn.ConversationId, turn.TurnIndex, exception);
                 }
 
+                PostEnd(turn, client, "failed");
                 return input;
             }
         }
 
-        /// <summary>Whether the floor's rows lead the model-bound list, id for id.</summary>
-        private static bool Leads(IReadOnlyList<ViewMessage> floor, IReadOnlyList<ChatMessage> messages)
+        /// <summary>Posts the end notice, but only when the summariser was actually called: no call, no flicker.</summary>
+        private static void PostEnd(TurnInvocation? turn, NoticingChatClient client, string outcome)
         {
-            if (floor.Count > messages.Count)
+            if (client.Called)
             {
-                return false;
+                turn?.Notices?.Post(new CompactionContent(CompactionContent.EndPhase, outcome));
             }
-
-            for (int index = 0; index < floor.Count; index++)
-            {
-                if (!string.Equals(floor[index].Message.MessageId, messages[index].MessageId, StringComparison.Ordinal))
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Reads the strategy's output as one new message over a prefix of the view, and names where the
-        /// kept tail starts. The output must be one new message, then the view from that index on, the
-        /// very instances in order; anything else is not a shape one summary row can stand for.
-        /// </summary>
-        /// <returns>The index of the first kept message, or <see langword="null"/>. The view's count when nothing was kept.</returns>
-        private static int? Kept(List<ChatMessage> view, List<ChatMessage> output)
-        {
-            if (output.Count == 0 || output.Count > view.Count || view.Any(message => ReferenceEquals(message, output[0])))
-            {
-                return null;
-            }
-
-            int kept = view.Count - (output.Count - 1);
-            for (int index = 1; index < output.Count; index++)
-            {
-                if (!ReferenceEquals(output[index], view[kept + index - 1]))
-                {
-                    return null;
-                }
-            }
-
-            return kept;
         }
     }
 #pragma warning restore MAAI001

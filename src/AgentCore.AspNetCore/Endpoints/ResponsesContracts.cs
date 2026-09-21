@@ -204,6 +204,17 @@ namespace AgentCore.AspNetCore.Endpoints
         public required string Origin { get; init; }
     }
 
+    /// <summary>One compaction notice, as the browser reads it.</summary>
+    internal sealed record CompactionPayload
+    {
+        /// <summary>Gets whether this notice opens or closes a compaction pass: <c>start</c> or <c>end</c>.</summary>
+        public required string Phase { get; init; }
+
+        /// <summary>Gets how an <c>end</c> notice's pass went: <c>compacted</c>, <c>unchanged</c>, or
+        /// <c>failed</c>. Never carried on <c>start</c>.</summary>
+        public string? Outcome { get; init; }
+    }
+
     /// <summary>One file the model published from the workspace and the store kept, as the browser reads it.</summary>
     internal sealed record FilePayload
     {
@@ -221,15 +232,5 @@ namespace AgentCore.AspNetCore.Endpoints
 
         /// <summary>Gets the link to fetch it from, or <see langword="null"/> when the store has no web door.</summary>
         public string? Url { get; init; }
-    }
-
-    /// <summary>One thing a stream asks the browser to draw.</summary>
-    internal sealed record RenderedPayload
-    {
-        /// <summary>Gets the renderer the browser looks up.</summary>
-        public required string Name { get; init; }
-
-        /// <summary>Gets the payload that renderer reads.</summary>
-        public required JsonElement Data { get; init; }
     }
 }

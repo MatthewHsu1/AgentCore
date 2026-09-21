@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Transcript;
+using AgentCore.Domain.Sources;
 using Microsoft.Extensions.AI;
 using Xunit;
 
@@ -15,20 +16,23 @@ namespace AgentCore.Application.Tests.Transcript
         [Fact]
         public void Options_RoundTripsAMessageWithOutOfOrderTypeDiscriminators()
         {
-            // Arrange
-            JsonElement data = JsonSerializer.SerializeToElement(new
-            {
-                orderId = "41",
-                widget = new Dictionary<string, object?> { ["$type"] = "custom-widget", ["label"] = "Order #41" },
-            });
-
+            // Arrange — the nested "$type" key inside the tool result is unrelated user data, and must
+            // survive reordering untouched, alongside the outer array's own discriminators.
             ChatMessage message = new(ChatRole.Assistant,
             [
                 new TextContent("here's your order"),
                 new FunctionCallContent("conversation-1", "lookup_order", new Dictionary<string, object?> { ["orderId"] = "41" }),
-                new FunctionResultContent("conversation-1", new { status = "shipped" }),
+                new FunctionResultContent("conversation-1", new
+                {
+                    status = "shipped",
+                    widget = new Dictionary<string, object?> { ["$type"] = "custom-widget", ["label"] = "Order #41" },
+                }),
                 new UsageContent(new UsageDetails { InputTokenCount = 10, OutputTokenCount = 5 }),
-                new RenderContent { Name = "order-card", RenderId = "order-41", Data = data },
+                new SourceContent
+                {
+                    Source = new SourceReference { SourceId = "order-41", Kind = SourceKind.Document, Title = "Order #41", Origin = "knowledge" },
+                    CallId = "conversation-1",
+                },
             ]);
 
             string json = JsonSerializer.Serialize(message, TranscriptJson.Options);
@@ -40,10 +44,14 @@ namespace AgentCore.Application.Tests.Transcript
             // Assert
             Assert.Equal(5, result.Contents.Count);
 
-            RenderContent render = Assert.Single(result.Contents.OfType<RenderContent>());
-            Assert.Equal("order-card", render.Name);
-            Assert.Equal("order-41", render.RenderId);
-            Assert.True(JsonNode.DeepEquals(JsonNode.Parse(data.GetRawText()), JsonNode.Parse(render.Data.GetRawText())));
+            SourceContent source = Assert.Single(result.Contents.OfType<SourceContent>());
+            Assert.Equal("order-41", source.Source.SourceId);
+            Assert.Equal("conversation-1", source.CallId);
+
+            FunctionResultContent tool = Assert.Single(result.Contents.OfType<FunctionResultContent>());
+            JsonNode? toolResult = JsonSerializer.SerializeToNode(tool.Result);
+            Assert.Equal("shipped", toolResult!["status"]!.GetValue<string>());
+            Assert.Equal("custom-widget", toolResult["widget"]!["$type"]!.GetValue<string>());
         }
 
         /// <summary>Rewrites every object in the tree so a <c>$type</c> key, if present, comes back last.</summary>

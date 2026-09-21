@@ -12,7 +12,7 @@ namespace AgentCore.Application.Transcript
         {
             ArgumentNullException.ThrowIfNull(message);
 
-            if (!message.Contents.Any(static content => content is RenderContent or SourceContent))
+            if (!message.Contents.Any(static content => content is SourceContent))
             {
                 return message;
             }
@@ -22,7 +22,7 @@ namespace AgentCore.Application.Transcript
             // CreatedAt, RawRepresentation.
             return new ChatMessage(
                 message.Role,
-                [.. message.Contents.Where(static content => content is not (RenderContent or SourceContent))])
+                [.. message.Contents.Where(static content => content is not SourceContent)])
             {
                 AdditionalProperties = message.AdditionalProperties,
                 MessageId = message.MessageId,

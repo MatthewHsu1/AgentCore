@@ -9,7 +9,7 @@ namespace AgentCore.Application.Runtime
     // The turn's working set, carried from preparation through commit. Built once per turn in
     // ConversationTurnRunner.BeginTurn for the same reason Activity is: ConversationTurnStream reopens the state
     // scope on every step of a streaming turn, and collectors built per step would lose whatever an
-    // earlier step drew before a later step could attach it to a message.
+    // earlier step cited or published before a later step could attach it to a message.
     internal sealed record ConversationTurn(
         AIAgent Agent,
         AgentSession Session,
@@ -20,7 +20,6 @@ namespace AgentCore.Application.Runtime
         int Index,
         Activity? Activity,
         long StartedAt,
-        TurnRenders? Renders,
         TurnSources Sources,
         TurnResults Results,
         TurnFiles Files,

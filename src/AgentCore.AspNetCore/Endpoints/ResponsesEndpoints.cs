@@ -290,11 +290,6 @@ namespace AgentCore.AspNetCore.Endpoints
             bool streaming = body.TryGetProperty("stream", out JsonElement streamFlag)
                 && streamFlag.ValueKind == JsonValueKind.True;
 
-            // Only the stream has a frame to carry a drawing, so only the stream gets a screen. Binding
-            // one on the whole-reply branch would let the tool report a picture the caller never sees.
-            // Set per request, not once: the session outlives a request and the branch can differ per turn.
-            turn.Conversation.SetHasScreen(streaming);
-
             if (CallerTimeZone.Parse(http.Request.Headers[TimeZoneHeaderName]) is { } zone)
             {
                 CallerTimeZone.Set(turn.Session, zone);

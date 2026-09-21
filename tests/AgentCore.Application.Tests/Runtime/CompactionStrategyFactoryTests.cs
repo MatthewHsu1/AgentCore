@@ -41,7 +41,7 @@ namespace AgentCore.Application.Tests.Runtime
             List<ChatMessage> view = Conversation(pairs: 20, charsPerMessage: 76);
 
             List<ChatMessage> compacted = [.. await CompactionProvider.CompactAsync(
-                stages.Summary, view, cancellationToken: TestContext.Current.CancellationToken)];
+                stages.Summary(stages.Summariser), view, cancellationToken: TestContext.Current.CancellationToken)];
 
             AssertSummaryThenTail(view, compacted);
         }
@@ -58,7 +58,7 @@ namespace AgentCore.Application.Tests.Runtime
             List<ChatMessage> view = Conversation(pairs: 20, charsPerMessage: 20_004);
 
             List<ChatMessage> compacted = [.. await CompactionProvider.CompactAsync(
-                stages.Summary, view, cancellationToken: TestContext.Current.CancellationToken)];
+                stages.Summary(stages.Summariser), view, cancellationToken: TestContext.Current.CancellationToken)];
 
             AssertSummaryThenTail(view, compacted);
         }
@@ -75,7 +75,7 @@ namespace AgentCore.Application.Tests.Runtime
             List<ChatMessage> view = Conversation(pairs: 20, charsPerMessage: 74);
 
             List<ChatMessage> compacted = [.. await CompactionProvider.CompactAsync(
-                stages.Summary, view, cancellationToken: TestContext.Current.CancellationToken)];
+                stages.Summary(stages.Summariser), view, cancellationToken: TestContext.Current.CancellationToken)];
 
             Assert.Equal(view.Count, compacted.Count);
             for (int index = 0; index < view.Count; index++)

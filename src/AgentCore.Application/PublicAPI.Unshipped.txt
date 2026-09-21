@@ -1121,8 +1121,6 @@ AgentCore.Application.Ports.IKnowledgeStoreAdapter.CanServeSearch.get -> bool
 AgentCore.Application.Ports.IKnowledgeStoreAdapter.CreateSearchAsync(AgentCore.Application.Configuration.Schema.KnowledgeProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, Microsoft.Extensions.AI.IEmbeddingGenerator<string!, Microsoft.Extensions.AI.Embedding<float>!>? embeddings, bool requireScope, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.IKnowledgeRetrievalPort!>
 AgentCore.Application.Ports.IModerationAdapter
 AgentCore.Application.Ports.IModerationAdapter.CreateAsync(AgentCore.Application.Configuration.Schema.VendorProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.Evaluation.IEvaluator!>
-AgentCore.Application.Ports.IRenderPort
-AgentCore.Application.Ports.IRenderPort.Publish(string! name, string! renderId, object! data, bool transient = false) -> void
 AgentCore.Application.Ports.ISecretResolverPort
 AgentCore.Application.Ports.ISecretResolverPort.TryResolveAsync(string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string?>
 AgentCore.Application.Ports.ISourcePort
@@ -1210,7 +1208,6 @@ AgentCore.Application.Runtime.ConversationSession.RunTurnStreamingAtOriginAsync(
 AgentCore.Application.Runtime.ConversationSession.Scope.get -> AgentCore.Domain.Knowledge.KnowledgeScope?
 AgentCore.Application.Runtime.ConversationSession.Scope.set -> void
 AgentCore.Application.Runtime.ConversationSession.SetDelegatedTools(string! delegatingToolId, System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.AITool!>! tools) -> void
-AgentCore.Application.Runtime.ConversationSession.SetHasScreen(bool hasScreen) -> void
 AgentCore.Application.Runtime.ConversationSession.Stage.get -> string!
 AgentCore.Application.Runtime.ConversationSession.State.get -> AgentCore.Application.State.StateDocument!
 AgentCore.Application.Runtime.ConversationSession.Transcript.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatMessage!>!
@@ -1436,14 +1433,6 @@ AgentCore.Application.Transcript.ConversationMessageDraft.MessageId.init -> void
 AgentCore.Application.Transcript.ConversationMessageDraft.TurnIndex.get -> int?
 AgentCore.Application.Transcript.ConversationMessageDraft.TurnIndex.init -> void
 AgentCore.Application.Transcript.ConversationMessageIds
-AgentCore.Application.Transcript.RenderContent
-AgentCore.Application.Transcript.RenderContent.Data.get -> System.Text.Json.JsonElement
-AgentCore.Application.Transcript.RenderContent.Data.set -> void
-AgentCore.Application.Transcript.RenderContent.Name.get -> string!
-AgentCore.Application.Transcript.RenderContent.Name.set -> void
-AgentCore.Application.Transcript.RenderContent.RenderContent() -> void
-AgentCore.Application.Transcript.RenderContent.RenderId.get -> string!
-AgentCore.Application.Transcript.RenderContent.RenderId.set -> void
 AgentCore.Application.Transcript.SourceContent
 AgentCore.Application.Transcript.SourceContent.CallId.get -> string!
 AgentCore.Application.Transcript.SourceContent.CallId.set -> void
@@ -2339,3 +2328,11 @@ static AgentCore.Application.Transcript.ConversationCut.operator ==(AgentCore.Ap
 static AgentCore.Application.Transcript.ConversationCut.operator !=(AgentCore.Application.Transcript.ConversationCut left, AgentCore.Application.Transcript.ConversationCut right) -> bool
 static AgentCore.Application.Transcript.WithdrawnTurns.operator ==(AgentCore.Application.Transcript.WithdrawnTurns left, AgentCore.Application.Transcript.WithdrawnTurns right) -> bool
 static AgentCore.Application.Transcript.WithdrawnTurns.operator !=(AgentCore.Application.Transcript.WithdrawnTurns left, AgentCore.Application.Transcript.WithdrawnTurns right) -> bool
+AgentCore.Application.Runtime.Compaction.CompactionContent
+AgentCore.Application.Runtime.Turn.NoticeContent
+AgentCore.Application.Runtime.Turn.NoticeContent.NoticeContent() -> void
+AgentCore.Application.Runtime.Compaction.CompactionContent.CompactionContent(string! phase, string? outcome = null) -> void
+AgentCore.Application.Runtime.Compaction.CompactionContent.Outcome.get -> string?
+AgentCore.Application.Runtime.Compaction.CompactionContent.Phase.get -> string!
+const AgentCore.Application.Runtime.Compaction.CompactionContent.EndPhase = "end" -> string!
+const AgentCore.Application.Runtime.Compaction.CompactionContent.StartPhase = "start" -> string!

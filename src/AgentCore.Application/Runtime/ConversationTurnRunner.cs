@@ -19,8 +19,6 @@ namespace AgentCore.Application.Runtime
 
         private (string ToolId, IReadOnlyList<AITool> Tools)? _delegatedTools;
 
-        private bool _hasScreen;
-
         private TimeZoneInfo? _timeZone;
 
         internal ConversationTurnRunner(ConversationSession session)
@@ -41,14 +39,6 @@ namespace AgentCore.Application.Runtime
             ArgumentNullException.ThrowIfNull(tools);
 
             _delegatedTools = (delegatingToolId, tools);
-        }
-
-        /// <summary>
-        /// Gives this conversation the screen its tools draw on, or takes it away.
-        /// </summary>
-        internal void SetHasScreen(bool hasScreen)
-        {
-            _hasScreen = hasScreen;
         }
 
         /// <summary>
@@ -196,7 +186,6 @@ namespace AgentCore.Application.Runtime
                     _session.State.TurnIndex,
                     activity,
                     _session.Time.GetTimestamp(),
-                    _hasScreen ? new TurnRenders() : null,
                     new TurnSources(),
                     new TurnResults(),
                     new TurnFiles(),
@@ -303,9 +292,7 @@ namespace AgentCore.Application.Runtime
                 Clarifications = _session.Clarifications,
                 CarriesHistory = _session.SessionCarriesHistory,
                 Logger = _session.Logger,
-                Screen = turn.Renders,
                 Sources = turn.Sources,
-                Renders = turn.Renders,
                 Results = turn.Results,
                 Files = turn.Files,
                 OnToolFailure = failure => _session.Events.RaiseToolFailure(turn.Index, failure),

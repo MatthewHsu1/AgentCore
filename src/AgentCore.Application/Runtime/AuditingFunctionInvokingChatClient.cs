@@ -1,10 +1,10 @@
+using System.Collections.Concurrent;
 using System.Net.Sockets;
 using System.Security.Authentication;
-using AgentCore.Domain.Audit;
-using AgentCore.Application.Tools;
-using Microsoft.Extensions.AI;
-using System.Collections.Concurrent;
 using AgentCore.Application.Runtime.Turn;
+using AgentCore.Application.Tools;
+using AgentCore.Domain.Audit;
+using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Runtime
 {
@@ -182,7 +182,7 @@ namespace AgentCore.Application.Runtime
 
         /// <summary>
         /// Builds the messages the model reads, reports every tool it could not find, and attaches
-        /// whatever this turn drew, cited, or published to the tool-result message it belongs to.
+        /// whatever this turn cited or published to the tool-result message it belongs to.
         /// </summary>
         protected override IList<ChatMessage> CreateResponseMessages(ReadOnlySpan<FunctionInvocationResult> results)
         {
@@ -196,18 +196,11 @@ namespace AgentCore.Application.Runtime
             return messages;
         }
 
-        /// <summary>Appends what each tool result in one message drew, cited, or published.</summary>
+        /// <summary>Appends what each tool result in one message cited or published.</summary>
         private void Attach(IList<AIContent> contents)
         {
-            // Materialised before the loop below adds to the very list this reads: Contents is a
-            // List<AIContent> underneath, and its enumerator throws on the next MoveNext once
-            // anything has been appended, even where nothing further was left to enumerate.
             foreach (string? callId in contents.OfType<FunctionResultContent>().Select(r => r.CallId).ToList())
             {
-                // A nested loop's calls drain nothing: their ids were registered under the
-                // stripped copy, so removing the entry without draining keeps the outer drain
-                // from attaching a nested drawing to a message that never reaches the caller.
-                // Only the outermost loop's own calls attach what they drew or cited.
                 if (_drains.TryRemove(callId, out Drain? drain) && !drain.Nested)
                 {
                     foreach (AIContent attached in drain.TakeFor(callId))

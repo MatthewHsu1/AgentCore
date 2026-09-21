@@ -338,53 +338,6 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             Assert.Contains(thirdRequest, m => m.Text.Contains("corrected question", StringComparison.Ordinal));
         }
 
-        [Fact]
-        public async Task DialectStream_WritesRendersAsTheirOwnEvents()
-        {
-            await using ResponsesHost host = await ResponsesHost.StartAsync(
-                RenderYaml,
-                new RenderChatClient(),
-                configure: options => options.Bind("DrawIt", (Application.Runtime.TurnInvocation? turn) =>
-                {
-                    turn?.Screen?.Publish("generative-ui", "chart-1", new { title = "Q3 revenue" });
-                    return ValueTask.FromResult<object?>("drew a Card; buttons: none");
-                }));
-
-            using HttpResponseMessage response = await host.PostAsync(
-                                     /*lang=json,strict*/
-                                     """{ "stream": true, "input": "show me revenue", "agentcore": { "message_id": "m1" } }""");
-            List<string> events = await ResponsesHost.ReadEventsAsync(response);
-
-            List<JsonElement> chunks = [.. events.Select(text => JsonDocument.Parse(text).RootElement)];
-            JsonElement drawing = Assert.Single(chunks, static chunk => chunk.TryGetProperty("agentcore_data", out JsonElement data)
-                && data.ValueKind != JsonValueKind.Null);
-            Assert.Equal("generative-ui", drawing.GetProperty("agentcore_data").GetProperty("name").GetString());
-            Assert.Equal(
-                "Q3 revenue",
-                drawing.GetProperty("agentcore_data").GetProperty("data").GetProperty("title").GetString());
-        }
-
-        [Fact]
-        public async Task PureStream_WritesNoDialectEvents()
-        {
-            await using ResponsesHost host = await ResponsesHost.StartAsync(
-                RenderYaml,
-                new RenderChatClient(),
-                configure: options => options.Bind("DrawIt", (Application.Runtime.TurnInvocation? turn) =>
-                {
-                    turn?.Screen?.Publish("generative-ui", "chart-1", new { title = "Q3 revenue" });
-                    return ValueTask.FromResult<object?>("drew a Card; buttons: none");
-                }));
-
-            using HttpResponseMessage response = await host.PostAsync(/*lang=json,strict*/ """{ "stream": true, "input": "show me revenue" }""");
-            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-            List<string> events = await ResponsesHost.ReadEventsAsync(response);
-
-            Assert.DoesNotContain(events
-                .Select(text => JsonDocument.Parse(text).RootElement),
-                static chunk => chunk.TryGetProperty("agentcore_data", out JsonElement data)
-                    && data.ValueKind != JsonValueKind.Null);
-        }
         private const string TerminalYaml =
             """
           apiVersion: agentcore/v1
@@ -427,36 +380,6 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
           main:
             agent: greeter
         """;
-
-        private const string RenderYaml =
-            """
-          apiVersion: agentcore/v1
-          tools:
-            - id: draw_it
-              kind: binding
-              binds: DrawIt
-              description: Draw something for the caller.
-          agents:
-            defaults:
-              model: { ref: reply }
-            items:
-              - { id: greeter, instructions: "greet the caller", tools: [ draw_it ] }
-              - { id: closer,  instructions: "close the conversation",   tools: [ draw_it ] }
-          entries:
-            main:
-              policy:
-                initial: greeting
-                stages:
-                  - { id: greeting, agent: greeter, to: [ { stage: close } ] }
-                  - { id: close,    agent: closer,  to: [ { stage: greeting } ] }
-          providers:
-            conversation:   { kind: telnyx-relay }
-            speech:
-              stt: { kind: telnyx-relay }
-              tts: { kind: telnyx-relay }
-            llm:
-              - { kind: openai, model: gpt-4.1-mini, as: reply }
-          """;
 
         private static ApprovalRequiredAIFunction GatedSendEmail(Action onSend)
         {
@@ -533,56 +456,6 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             }
         }
 
-        /// <summary>Calls the first tool it is offered, once, then answers in words.</summary>
-        private sealed class RenderChatClient : IChatClient
-        {
-            public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-                IEnumerable<ChatMessage> messages,
-                ChatOptions? options = null,
-                [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-            {
-                await Task.Yield();
-
-                bool alreadyDrew = messages.Any(message => message.Contents.OfType<FunctionResultContent>().Any());
-
-                if (!alreadyDrew && options?.Tools?.OfType<AIFunction>().FirstOrDefault() is { } tool)
-                {
-                    yield return new ChatResponseUpdate(
-                        ChatRole.Assistant,
-                        [new FunctionCallContent(
-                              "conversation_1",
-                              tool.Name,
-                              new Dictionary<string, object?>(StringComparer.Ordinal) { ["what"] = "a card" })]);
-                    yield break;
-                }
-
-                yield return new ChatResponseUpdate(ChatRole.Assistant, "here it is.");
-            }
-
-            public async Task<ChatResponse> GetResponseAsync(
-                IEnumerable<ChatMessage> messages,
-                ChatOptions? options = null,
-                CancellationToken cancellationToken = default)
-            {
-                List<ChatResponseUpdate> updates = [];
-                await foreach (ChatResponseUpdate? update in GetStreamingResponseAsync(messages, options, cancellationToken)
-                    .ConfigureAwait(false))
-                {
-                    updates.Add(update);
-                }
-
-                return updates.ToChatResponse();
-            }
-
-            public object? GetService(Type serviceType, object? serviceKey = null)
-            {
-                return serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
-            }
-
-            public void Dispose()
-            {
-            }
-        }
     }
 
     /// <summary>Reads what one Responses answer carries.</summary>

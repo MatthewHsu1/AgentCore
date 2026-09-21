@@ -1,4 +1,3 @@
-using System.Text.Json;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
@@ -6,6 +5,7 @@ using AgentCore.Application.Runtime;
 using AgentCore.Application.State;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Transcript;
+using AgentCore.Domain.Sources;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
@@ -14,9 +14,9 @@ namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
     /// <c>ConversationSessionFactory.CreateExtractor</c> is the third site that must strip a
-    /// <see cref="RenderContent"/> before a model reads it — <c>ConversationSession.ExtractAsync</c> hands the
+    /// <see cref="SourceContent"/> before a model reads it — <c>ConversationSession.ExtractAsync</c> hands the
     /// extractor <c>[turn.Spoken, .. response.Messages]</c>, and <c>response.Messages</c> is exactly the
-    /// list a drawing tool attaches to. This proves the extractor <see cref="ConversationSessionFactory"/> builds,
+    /// list a citing tool attaches to. This proves the extractor <see cref="ConversationSessionFactory"/> builds,
     /// not a hand-constructed <c>ModelFacingChatClient</c>.
     /// </summary>
     public sealed class ConversationSessionFactoryModelFacingTests
@@ -38,7 +38,7 @@ namespace AgentCore.Application.Tests.Runtime
         """;
 
         [Fact]
-        public async Task TheExtractorTheFactoryBuilds_NeverForwardsARenderContentTheTurnAttached()
+        public async Task TheExtractorTheFactoryBuilds_NeverForwardsASourceContentTheTurnAttached()
         {
             AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(Yaml);
             CompiledAgent compiled = ConfigurationCompiler.CompileAll(
@@ -52,20 +52,23 @@ namespace AgentCore.Application.Tests.Runtime
 
             Assert.NotNull(extractor);
 
-            JsonElement payload = JsonDocument.Parse("""{"x":1}""").RootElement.Clone();
-            ChatMessage drew = new(ChatRole.Assistant,
+            ChatMessage cited = new(ChatRole.Assistant,
             [
                 new TextContent("here's the order."),
-                new RenderContent { Name = "order-card", RenderId = "order-41", Data = payload },
+                new SourceContent
+                {
+                    Source = new SourceReference { SourceId = "order-41", Kind = SourceKind.Document, Title = "Order #41", Origin = "knowledge" },
+                    CallId = "call-1",
+                },
             ]);
 
             _ = await extractor!.ExtractAsync(
                 new StateDocument(compiled.Configuration),
-                [new ChatMessage(ChatRole.User, "show me the order"), drew],
+                [new ChatMessage(ChatRole.User, "show me the order"), cited],
                 TestContext.Current.CancellationToken);
 
             IReadOnlyList<ChatMessage> forwarded = Assert.Single(recorder.Requests);
-            Assert.DoesNotContain(forwarded, message => message.Contents.Any(content => content is RenderContent));
+            Assert.DoesNotContain(forwarded, message => message.Contents.Any(content => content is SourceContent));
         }
     }
 }

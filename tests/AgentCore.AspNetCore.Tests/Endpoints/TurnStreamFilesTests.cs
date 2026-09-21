@@ -36,14 +36,16 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             files.Note(UpdateWith(refused));
 
             // Act
-            List<TurnStreamFile> parts = await files.ResolveAsync(conversations, "conversation-1", TestContext.Current.CancellationToken).ToListAsync(TestContext.Current.CancellationToken);
+            List<TurnStreamPart> parts = await files.ResolveAsync(conversations, "conversation-1", TestContext.Current.CancellationToken).ToListAsync(TestContext.Current.CancellationToken);
 
             // Assert: once, linked, and the refused file is not there.
-            TurnStreamFile part = Assert.Single(parts);
-            Assert.Equal("chart.png", part.Payload.Name);
-            Assert.Equal("image/png", part.Payload.MediaType);
-            Assert.Equal(48213, part.Payload.Length);
-            Assert.Equal("https://blobs.test/conversation-1/chart.png?ttl=900", part.Payload.Url);
+            TurnStreamPart part = Assert.Single(parts);
+            Assert.Equal(TurnStreamPart.File, part.Member);
+            FilePayload payload = Assert.IsType<FilePayload>(part.Payload);
+            Assert.Equal("chart.png", payload.Name);
+            Assert.Equal("image/png", payload.MediaType);
+            Assert.Equal(48213, payload.Length);
+            Assert.Equal("https://blobs.test/conversation-1/chart.png?ttl=900", payload.Url);
         }
 
         [Fact]
@@ -55,10 +57,10 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             files.Note(UpdateWith(Kept("rows.csv", "text/csv", 8)));
 
             // Act
-            List<TurnStreamFile> parts = await files.ResolveAsync(conversations, "conversation-1", TestContext.Current.CancellationToken).ToListAsync(TestContext.Current.CancellationToken);
+            List<TurnStreamPart> parts = await files.ResolveAsync(conversations, "conversation-1", TestContext.Current.CancellationToken).ToListAsync(TestContext.Current.CancellationToken);
 
             // Assert
-            Assert.Null(Assert.Single(parts).Payload.Url);
+            Assert.Null(Assert.IsType<FilePayload>(Assert.Single(parts).Payload).Url);
         }
 
         [Fact]
@@ -68,7 +70,7 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             Conversations conversations = new(new InMemoryConversationStore(), blobs: null);
 
             // Act
-            List<TurnStreamFile> parts = await new TurnStreamFiles().ResolveAsync(conversations, "conversation-1", TestContext.Current.CancellationToken).ToListAsync(TestContext.Current.CancellationToken);
+            List<TurnStreamPart> parts = await new TurnStreamFiles().ResolveAsync(conversations, "conversation-1", TestContext.Current.CancellationToken).ToListAsync(TestContext.Current.CancellationToken);
 
             // Assert
             Assert.Empty(parts);

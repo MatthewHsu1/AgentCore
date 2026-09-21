@@ -26,7 +26,7 @@ namespace AgentCore.Application.Runtime.Compaction
         /// <summary>Builds the stages off an explicit trigger. A test passes <c>Always</c> or <c>Never</c> here.</summary>
         /// <param name="summariser">The chat client the summary stage calls.</param>
         /// <param name="fire">When a stage applies, judged over everything bound for the model.</param>
-        /// <returns>A <see cref="ToolResultCapProvider"/> and a <see cref="SummarizationCompactionStrategy"/>, on the same trigger.</returns>
+        /// <returns>A <see cref="ToolResultCapProvider"/> and a <see cref="SummarizationCompactionStrategy"/> factory, on the same trigger.</returns>
         public static CompactionStages Create(IChatClient summariser, CompactionTrigger fire)
         {
             ArgumentNullException.ThrowIfNull(summariser);
@@ -34,11 +34,12 @@ namespace AgentCore.Application.Runtime.Compaction
 
             return new CompactionStages(
                 new ToolResultCapProvider(fire, CompactionDefaults.Keep, CompactionDefaults.CapResultChars),
-                new SummarizationCompactionStrategy(summariser, fire, CompactionDefaults.Keep, target: CompactionTriggers.Never));
+                summariser,
+                client => new SummarizationCompactionStrategy(client, fire, CompactionDefaults.Keep, target: CompactionTriggers.Never));
         }
 
         /// <summary>Builds the providers in chain order: the cap always runs, the summary needs history to persist its row.</summary>
-        /// <param name="stages">The cap provider and the strategy the summary provider runs.</param>
+        /// <param name="stages">The cap provider and what the summary provider builds its strategy from.</param>
         /// <param name="history">Store 1, or <see langword="null"/> when the session carries no history.</param>
         /// <returns>The cap, then the summary when there is somewhere to write it.</returns>
         public static AIContextProvider[] BuildProviders(CompactionStages stages, AgentCoreChatHistoryProvider? history)
@@ -47,7 +48,7 @@ namespace AgentCore.Application.Runtime.Compaction
 
             return history is null
                 ? [stages.Cap]
-                : [stages.Cap, new SummaryRowProvider(history, stages.Summary)];
+                : [stages.Cap, new SummaryRowProvider(history, stages.Summariser, stages.Summary)];
         }
     }
 #pragma warning restore MAAI001

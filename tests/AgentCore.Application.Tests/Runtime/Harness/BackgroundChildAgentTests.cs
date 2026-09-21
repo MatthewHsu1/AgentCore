@@ -67,14 +67,14 @@ namespace AgentCore.Application.Tests.Runtime.Harness
             BackgroundChildAgent child = new(new ChatClientAgent(new ScriptedChatClient("child")));
             SessionCreatingProvider creating = new(child);
             ChatClientAgent parent = new(new ScriptedChatClient("parent"), new ChatClientAgentOptions { AIContextProviders = [creating] });
-            TurnRenders renders = new();
+            TurnSources sources = new();
             TurnInvocation turn = new()
             {
                 ConversationId = "conversation-9",
                 TurnIndex = 0,
                 Stage = "s",
                 Workspace = "/work/conversation-9",
-                Renders = renders,
+                Sources = sources,
             };
 
             // Act
@@ -87,7 +87,7 @@ namespace AgentCore.Application.Tests.Runtime.Harness
             Assert.Equal("/work/conversation-9", filed.Workspace);
             Assert.Equal("conversation-9", filed.ConversationId);
             Assert.True(filed.Nested);
-            Assert.Null(filed.Renders);
+            Assert.Null(filed.Sources);
         }
 
         [Fact]

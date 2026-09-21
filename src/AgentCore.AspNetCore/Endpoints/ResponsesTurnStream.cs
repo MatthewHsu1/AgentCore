@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Conversation;
+using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tools;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Hosting.OpenAI;
@@ -17,13 +18,6 @@ namespace AgentCore.AspNetCore.Endpoints
     internal static class ResponsesTurnStream
     {
         /// <summary>Runs one turn and writes one Responses event for each update, filed under its ids.</summary>
-        /// <remarks>
-        /// The session is filed after the enumeration ends, because the turn commits —
-        /// and the session only holds the turn — once the last update has left it.
-        /// The framework's frames carry text alone; when the request spoke the dialect,
-        /// each update's browser parts ride beside them as <c>agentcore_*</c> members, so drawings,
-        /// citations, tool halves, and approval asks stream.
-        /// </remarks>
         internal static async Task WriteAsync(
             HttpContext http,
             ResponsesTurn turn,
@@ -56,10 +50,6 @@ namespace AgentCore.AspNetCore.Endpoints
         }
 
         /// <summary>Runs one streaming turn on the conversation, wrapping each update with the agent's id.</summary>
-        /// <remarks>
-        /// The framework converter sees every update untouched: it ignores the contents it
-        /// knows nothing of, so dialect lines duplicate nothing and pure streams lose nothing.
-        /// </remarks>
         private static async IAsyncEnumerable<AgentResponseUpdate> StreamAgentUpdatesAsync(
             HttpContext http,
             ResponsesTurn turn,
@@ -73,6 +63,8 @@ namespace AgentCore.AspNetCore.Endpoints
                 .RunTurnMessageStreamingAtOriginAsync(turn.Input, turn.Origin, cancellationToken)
                 .ConfigureAwait(false))
             {
+                bool isNotice = update.Contents.OfType<NoticeContent>().Any();
+
                 if (dialect)
                 {
                     foreach (TurnStreamPart part in TurnStreamParts.From(update, toolNames))
@@ -80,7 +72,15 @@ namespace AgentCore.AspNetCore.Endpoints
                         await WritePartLineAsync(http, part, cancellationToken).ConfigureAwait(false);
                     }
 
-                    files.Note(update);
+                    if (!isNotice)
+                    {
+                        files.Note(update);
+                    }
+                }
+
+                if (isNotice)
+                {
+                    continue;
                 }
 
                 yield return new AgentResponseUpdate(update) { AgentId = turn.Agent.Id };
@@ -92,7 +92,7 @@ namespace AgentCore.AspNetCore.Endpoints
                 // inside it: by here the bytes are in the store or never will be.
                 Conversations conversations = http.RequestServices.GetRequiredService<Conversations>();
 
-                await foreach (TurnStreamFile? part in files.ResolveAsync(conversations, turn.Conversation.ConversationId, cancellationToken).ConfigureAwait(false))
+                await foreach (TurnStreamPart part in files.ResolveAsync(conversations, turn.Conversation.ConversationId, cancellationToken).ConfigureAwait(false))
                 {
                     await WritePartLineAsync(http, part, cancellationToken).ConfigureAwait(false);
                 }
@@ -103,19 +103,9 @@ namespace AgentCore.AspNetCore.Endpoints
         private static async Task WritePartLineAsync(
             HttpContext http, TurnStreamPart part, CancellationToken cancellationToken)
         {
-            JsonObject line = part switch
+            JsonObject line = new()
             {
-                TurnStreamRender render
-                    => new JsonObject { ["agentcore_data"] = JsonSerializer.SerializeToNode(render.Payload, ResponsesJson.Options) },
-                TurnStreamSource source
-                    => new JsonObject { ["agentcore_source"] = JsonSerializer.SerializeToNode(source.Payload, ResponsesJson.Options) },
-                TurnStreamTool tool
-                    => new JsonObject { ["agentcore_tool"] = JsonSerializer.SerializeToNode(tool.Payload, ResponsesJson.Options) },
-                TurnStreamApproval approval
-                    => new JsonObject { ["agentcore_approval"] = JsonSerializer.SerializeToNode(approval.Payload, ResponsesJson.Options) },
-                TurnStreamFile file
-                    => new JsonObject { ["agentcore_file"] = JsonSerializer.SerializeToNode(file.Payload, ResponsesJson.Options) },
-                _ => throw new InvalidOperationException($"Unknown stream part: {part.GetType()}."),
+                [part.Member] = JsonSerializer.SerializeToNode(part.Payload, part.Payload.GetType(), ResponsesJson.Options),
             };
 
             await http.Response.WriteAsync("data: ", cancellationToken).ConfigureAwait(false);

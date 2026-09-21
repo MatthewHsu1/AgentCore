@@ -1,5 +1,5 @@
-using System.Text.Json;
 using AgentCore.Application.Transcript;
+using AgentCore.Domain.Sources;
 using Microsoft.Extensions.AI;
 using Xunit;
 
@@ -8,17 +8,19 @@ namespace AgentCore.Application.Tests.Transcript
     /// <summary>Pins the rules of store 1: ordinals, which reply a barge-in cuts, and what a cut keeps.</summary>
     public sealed class ConversationTranscriptTests
     {
-        private static readonly JsonElement Payload = JsonDocument.Parse("""{"x":1}""").RootElement.Clone();
-
         [Fact]
-        public void Append_ToolResultCarriesARender_RowKeepsItAndMessagesStripsIt()
+        public void Append_ToolResultCarriesASource_RowKeepsItAndMessagesStripsIt()
         {
             // Arrange
             ConversationTranscript transcript = new() { ConversationId = "conversation-1" };
-            RenderContent render = new() { Name = "order-card", RenderId = "order-41", Data = Payload };
+            SourceContent cited = new()
+            {
+                Source = new SourceReference { SourceId = "order-41", Kind = SourceKind.Document, Title = "Order #41", Origin = "knowledge" },
+                CallId = "conversation-1",
+            };
             ChatMessage toolResult = new(
                 ChatRole.Tool,
-                [new FunctionResultContent("conversation-1", "50"), render]);
+                [new FunctionResultContent("conversation-1", "50"), cited]);
             ChatMessage plain = Assistant("the price is fifty");
 
             // Act
@@ -28,12 +30,12 @@ namespace AgentCore.Application.Tests.Transcript
             ChatMessage storedToolResult = transcript.Messages[0].Message;
 
             // The row is untouched: Append never rebuilds the message it hands to the store, so the
-            // row is the exact original object, drawing and tool result both.
+            // row is the exact original object, citation and tool result both.
             Assert.Same(toolResult, rows[0].Content);
-            Assert.Contains(render, rows[0].Content.Contents);
+            Assert.Contains(cited, rows[0].Content.Contents);
             _ = Assert.Single(rows[0].Content.Contents.OfType<FunctionResultContent>());
 
-            Assert.DoesNotContain(storedToolResult.Contents, content => content is RenderContent);
+            Assert.DoesNotContain(storedToolResult.Contents, content => content is SourceContent);
             _ = Assert.Single(storedToolResult.Contents.OfType<FunctionResultContent>());
             Assert.Equal(rows[0].Content.Role, storedToolResult.Role);
             Assert.Equal(rows[0].Ordinal, transcript.Messages[0].Ordinal);

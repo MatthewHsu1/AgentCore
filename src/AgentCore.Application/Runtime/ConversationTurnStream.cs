@@ -49,17 +49,20 @@ namespace AgentCore.Application.Runtime
                 List<AgentResponseUpdate> updates = [];
                 string? toolFault = null;
 
-                TurnInvocation invocation = _session.Runner.TurnInvocationOf(turn);
+                TurnInvocation invocation = _session.Runner.TurnInvocationOf(turn) with { Notices = new TurnNotices() };
                 AgentSession runSession = await _session.Runner.OpenRunAsync(turn, cancellation.Token).ConfigureAwait(false);
 
                 TurnRegistry.Set(runSession, invocation);
 
-                IAsyncEnumerator<AgentResponseUpdate> stream = turn.Agent
+                IAsyncEnumerable<AgentResponseUpdate> runStream = turn.Agent
                     .RunStreamingAsync(
                         turn.Request,
                         runSession,
                         invocation.RunOptions(),
-                        cancellationToken: cancellation.Token)
+                        cancellationToken: cancellation.Token);
+
+                IAsyncEnumerator<AgentResponseUpdate> stream = TurnUpdateMerge
+                    .RunAsync(runStream, invocation.Notices, cancellation.Token)
                     .GetAsyncEnumerator(cancellation.Token);
 
                 try
@@ -88,9 +91,17 @@ namespace AgentCore.Application.Runtime
                             break;
                         }
 
+                        if (update.Contents.OfType<NoticeContent>().Any())
+                        {
+                            yield return update.AsChatResponseUpdate();
+
+                            continue;
+                        }
+
                         updates.Add(update);
 
                         ChatResponseUpdate content = update.AsChatResponseUpdate();
+                        
                         if (TurnMessages.CarriesContent(content) && Speaks(update))
                         {
                             _session.Interruptions.RunIsAudible = true;
