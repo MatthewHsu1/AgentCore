@@ -1,4 +1,5 @@
 using AgentCore.Application.Ports;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -13,7 +14,7 @@ namespace AgentCore.AspNetCore.Conversation
     /// calling <c>AddConversationSweep</c>. Without that call, conversations are kept forever.
     /// </remarks>
     public sealed class ConversationSweeper(
-        IConversations conversations,
+        IServiceProvider services,
         IOptions<ConversationSweepOptions> options,
         TimeProvider timeProvider,
         ILogger<ConversationSweeper> logger) : BackgroundService
@@ -22,6 +23,9 @@ namespace AgentCore.AspNetCore.Conversation
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             ConversationSweepOptions settings = options.Value;
+
+            // Hosted service is constructed before AgentCore's own boot has not finished.
+            IConversations conversations = services.GetRequiredService<IConversations>();
 
             using PeriodicTimer timer = new(settings.Interval, timeProvider);
 
