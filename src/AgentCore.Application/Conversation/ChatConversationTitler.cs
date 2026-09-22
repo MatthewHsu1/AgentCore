@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text;
+using AgentCore.Application.Llm;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Transcript;
 using Microsoft.Extensions.AI;
@@ -99,10 +100,20 @@ namespace AgentCore.Application.Conversation
                 new ChatMessage(ChatRole.User, Transcript(messages.Take(MaxMessages))),
             ];
 
+            // The title runs outside a turn, so the stamp that tags turn requests never sees it. Adapters
+            // that route on the conversation id (OpenCode Go refuses a request without one) read this.
+            ChatOptions options = new()
+            {
+                AdditionalProperties = new AdditionalPropertiesDictionary
+                {
+                    [ChatRequestProperties.ConversationId] = conversationId,
+                },
+            };
+
             StringBuilder title = new();
 
             await foreach (ChatResponseUpdate? update in client
-                .GetStreamingResponseAsync(prompt, options: null, cancellationToken)
+                .GetStreamingResponseAsync(prompt, options, cancellationToken)
                 .ConfigureAwait(false))
             {
                 string piece = update.Text;

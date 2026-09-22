@@ -24,21 +24,36 @@ namespace AgentCore.Infrastructure.Tests.Llm.OpenCodeGo
     {
         private const string ApiKey = "sk-test-not-a-real-key";
 
+        /// <summary>A real Responses API body from opencode.ai (2026-09-21), trimmed to what the SDK reads.</summary>
         private const string Answer =
             /*lang=json,strict*/
             """
         {
-          "id": "gen-test",
-          "object": "chat.completion",
-          "created": 1790012523,
-          "model": "kimi-k2.6",
-          "choices": [
+          "id": "resp_6ab1bca48e6d09672c4f4283",
+          "object": "response",
+          "created_at": 1790033060,
+          "status": "completed",
+          "model": "muse-spark-1.3-contributor",
+          "error": null,
+          "incomplete_details": null,
+          "output": [
             {
-              "index": 0,
-              "finish_reason": "stop",
-              "message": { "role": "assistant", "content": "OK" }
+              "id": "msg_5e6ea904-c9e3-4047-b4eb-9836a61b656b",
+              "type": "message",
+              "status": "completed",
+              "role": "assistant",
+              "content": [
+                { "type": "output_text", "text": "OK", "annotations": [], "logprobs": [] }
+              ]
             }
-          ]
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 148,
+            "total_tokens": 160,
+            "input_tokens_details": { "cached_tokens": 0 },
+            "output_tokens_details": { "reasoning_tokens": 137 }
+          }
         }
         """;
 
@@ -98,7 +113,7 @@ namespace AgentCore.Infrastructure.Tests.Llm.OpenCodeGo
         }
 
         [Fact]
-        public async Task EveryRequest_PostsToTheOpenCodeGoChatCompletionsRoute()
+        public async Task EveryRequest_PostsToTheOpenCodeGoResponsesRoute()
         {
             StubHttpMessageHandler endpoint = StubHttpMessageHandler.Answering(HttpStatusCode.OK, Answer);
             IChatClient client = await BuildClientAsync(new StubHandlerFactory(endpoint));
@@ -108,7 +123,7 @@ namespace AgentCore.Infrastructure.Tests.Llm.OpenCodeGo
             HttpRequestMessage request = Assert.Single(endpoint.Requests);
             Assert.Equal(HttpMethod.Post, request.Method);
             Assert.Equal("https://opencode.ai", request.RequestUri!.GetLeftPart(UriPartial.Authority));
-            Assert.Equal("/zen/go/v1/chat/completions", request.RequestUri.AbsolutePath);
+            Assert.Equal("/zen/go/v1/responses", request.RequestUri.AbsolutePath);
         }
 
         [Fact]

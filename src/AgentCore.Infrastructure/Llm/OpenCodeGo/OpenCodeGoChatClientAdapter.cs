@@ -14,8 +14,7 @@ using AgentCore.Application.Secrets;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using OpenAI;
-using ChatCompletionOptions = OpenAI.Chat.ChatCompletionOptions;
-using ChatReasoningEffortLevel = OpenAI.Chat.ChatReasoningEffortLevel;
+using OpenAI.Responses;
 
 namespace AgentCore.Infrastructure.Llm.OpenCodeGo
 {
@@ -120,12 +119,15 @@ namespace AgentCore.Infrastructure.Llm.OpenCodeGo
                 () => BuildClientFor(entry.Model, entry.ReasoningEffort), _currentSessionId);
         }
 
-        /// <summary>Gets the vendor client of one model, built fresh over the one shared vendor connection.</summary>
+        /// <summary>
+        /// Gets the vendor client of one model, built fresh over the one shared vendor connection.
+        /// It speaks the Responses API: OpenCode Go serves some models on that route only.
+        /// </summary>
         private IChatClient BuildClientFor(string model, string? effort)
         {
             _vendorClient ??= CreateVendorClient();
 
-            return WithReasoningEffort(_vendorClient.GetChatClient(model).AsIChatClient(), effort);
+            return WithResponseDefaults(_vendorClient.GetResponsesClient().AsIChatClient(model), effort);
         }
 
         /// <summary>Builds the one vendor connection every model shares, with the session header wired to <see cref="_currentSessionId"/>.</summary>
@@ -142,15 +144,14 @@ namespace AgentCore.Infrastructure.Llm.OpenCodeGo
             return new OpenAIClient(_credential!, options);
         }
 
-        /// <summary>Puts <c>reasoning_effort</c> on every request this client sends, unless the caller already set one.</summary>
-        internal static IChatClient WithReasoningEffort(IChatClient client, string? effort)
+        /// <summary>
+        /// Puts <c>store: false</c> and <c>reasoning.effort</c> on every request this client sends, unless the
+        /// caller already set them. Without <c>store: false</c> the vendor client reads the response id as a
+        /// server-side conversation, which clashes with the history AgentCore keeps itself.
+        /// </summary>
+        internal static IChatClient WithResponseDefaults(IChatClient client, string? effort)
         {
-            ChatReasoningEffortLevel? level = effort is { Length: > 0 } value ? Level(value) : (ChatReasoningEffortLevel?)null;
-
-            if (level is not { } chosen)
-            {
-                return client;
-            }
+            ResponseReasoningEffortLevel? level = effort is { Length: > 0 } value ? Level(value) : (ResponseReasoningEffortLevel?)null;
 
             return client
                 .AsBuilder()
@@ -160,12 +161,20 @@ namespace AgentCore.Infrastructure.Llm.OpenCodeGo
 
                     options.RawRepresentationFactory = inner =>
                     {
-                        if (caller?.Invoke(inner) is not ChatCompletionOptions raw)
+                        if (caller?.Invoke(inner) is not CreateResponseOptions raw)
                         {
-                            raw = new ChatCompletionOptions();
+                            raw = new CreateResponseOptions();
                         }
 
-                        raw.ReasoningEffortLevel ??= chosen;
+                        raw.StoredOutputEnabled ??= false;
+
+                        if (level is { } chosen)
+                        {
+                            raw.ReasoningOptions ??= new ResponseReasoningOptions
+                            {
+                                ReasoningEffortLevel = chosen,
+                            };
+                        }
 
                         return raw;
                     };
@@ -177,15 +186,15 @@ namespace AgentCore.Infrastructure.Llm.OpenCodeGo
         /// <param name="effort">The value the document wrote.</param>
         /// <returns>The vendor level.</returns>
         /// <exception cref="ConfigurationLoadException">The value is not one this vendor knows.</exception>
-        private static ChatReasoningEffortLevel Level(string effort)
+        private static ResponseReasoningEffortLevel Level(string effort)
         {
             return effort.ToLowerInvariant() switch
             {
-                "none" => ChatReasoningEffortLevel.None,
-                "minimal" => ChatReasoningEffortLevel.Minimal,
-                "low" => ChatReasoningEffortLevel.Low,
-                "medium" => ChatReasoningEffortLevel.Medium,
-                "high" => ChatReasoningEffortLevel.High,
+                "none" => ResponseReasoningEffortLevel.None,
+                "minimal" => ResponseReasoningEffortLevel.Minimal,
+                "low" => ResponseReasoningEffortLevel.Low,
+                "medium" => ResponseReasoningEffortLevel.Medium,
+                "high" => ResponseReasoningEffortLevel.High,
                 _ => throw new ConfigurationLoadException(new ConfigurationError
                 {
                     Pointer = "/providers/llm",

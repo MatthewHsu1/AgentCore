@@ -9,7 +9,7 @@ using AgentCore.Infrastructure.Tests.Fakes;
 using AgentCore.Infrastructure.Tests.Tools;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
-using OpenAI.Chat;
+using OpenAI.Responses;
 using Xunit;
 
 namespace AgentCore.Infrastructure.Tests.Llm.OpenCodeGo
@@ -20,7 +20,7 @@ namespace AgentCore.Infrastructure.Tests.Llm.OpenCodeGo
     /// </summary>
     /// <remarks>
     /// OpenCode Go's own docs are silent on the wire field; a real request against the live
-    /// endpoint (2026-09-21) confirmed <c>reasoning_effort</c> on the chat-completions body, honoured
+    /// endpoint (2026-09-21) confirmed <c>reasoning.effort</c> on the Responses body, honoured
     /// by at least one hosted model (reasoning token count moved with the level). These tests pin
     /// that shape offline; none of them reach the network.
     /// </remarks>
@@ -28,21 +28,36 @@ namespace AgentCore.Infrastructure.Tests.Llm.OpenCodeGo
     {
         private const string ApiKey = "sk-test-not-a-real-key";
 
+        /// <summary>A real Responses API body from opencode.ai (2026-09-21), trimmed to what the SDK reads.</summary>
         private const string Answer =
             /*lang=json,strict*/
             """
         {
-          "id": "gen-test",
-          "object": "chat.completion",
-          "created": 1790012523,
-          "model": "kimi-k2.6",
-          "choices": [
+          "id": "resp_6ab1bca48e6d09672c4f4283",
+          "object": "response",
+          "created_at": 1790033060,
+          "status": "completed",
+          "model": "muse-spark-1.3-contributor",
+          "error": null,
+          "incomplete_details": null,
+          "output": [
             {
-              "index": 0,
-              "finish_reason": "stop",
-              "message": { "role": "assistant", "content": "OK" }
+              "id": "msg_5e6ea904-c9e3-4047-b4eb-9836a61b656b",
+              "type": "message",
+              "status": "completed",
+              "role": "assistant",
+              "content": [
+                { "type": "output_text", "text": "OK", "annotations": [], "logprobs": [] }
+              ]
             }
-          ]
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 148,
+            "total_tokens": 160,
+            "input_tokens_details": { "cached_tokens": 0 },
+            "output_tokens_details": { "reasoning_tokens": 137 }
+          }
         }
         """;
 
@@ -58,51 +73,53 @@ namespace AgentCore.Infrastructure.Tests.Llm.OpenCodeGo
         {
             CapturingChatClient inner = new();
 
-            IChatClient client = OpenCodeGoChatClientAdapter.WithReasoningEffort(inner, effort);
+            IChatClient client = OpenCodeGoChatClientAdapter.WithResponseDefaults(inner, effort);
             _ = await client.GetResponseAsync("hi", cancellationToken: Token);
 
-            ChatCompletionOptions raw = Assert.IsType<ChatCompletionOptions>(
+            CreateResponseOptions raw = Assert.IsType<CreateResponseOptions>(
                 inner.Seen!.RawRepresentationFactory!(inner));
 
-            Assert.Equal(effort, raw.ReasoningEffortLevel.ToString());
+            Assert.Equal(effort, raw.ReasoningOptions!.ReasoningEffortLevel.ToString());
         }
 
         [Fact]
-        public async Task AnEntryThatNamesNoEffort_SendsNoReasoningValueAtAll()
+        public async Task AnEntryThatNamesNoEffort_SendsNoReasoningValueButStillTurnsStoreOff()
         {
             CapturingChatClient inner = new();
 
-            IChatClient client = OpenCodeGoChatClientAdapter.WithReasoningEffort(inner, effort: null);
+            IChatClient client = OpenCodeGoChatClientAdapter.WithResponseDefaults(inner, effort: null);
             _ = await client.GetResponseAsync("hi", cancellationToken: Token);
 
-            // No wrapper was applied at all: the caller's own client, unmodified, saw the request.
-            Assert.Same(inner, client);
-            Assert.Null(inner.Seen);
+            CreateResponseOptions raw = Assert.IsType<CreateResponseOptions>(
+                inner.Seen!.RawRepresentationFactory!(inner));
+
+            Assert.Null(raw.ReasoningOptions);
+            Assert.False(raw.StoredOutputEnabled);
         }
 
         [Fact]
         public async Task RawOptionsTheCallerBuiltItself_KeepTheValueItAlreadyHolds()
         {
             CapturingChatClient inner = new();
-            ChatCompletionOptions mine = new()
+            CreateResponseOptions mine = new()
             {
-                ReasoningEffortLevel = ChatReasoningEffortLevel.High,
+                ReasoningOptions = new ResponseReasoningOptions { ReasoningEffortLevel = ResponseReasoningEffortLevel.High },
                 MaxOutputTokenCount = 42,
             };
 
-            IChatClient client = OpenCodeGoChatClientAdapter.WithReasoningEffort(inner, "low");
+            IChatClient client = OpenCodeGoChatClientAdapter.WithResponseDefaults(inner, "low");
             _ = await client.GetResponseAsync(
                 "hi",
                 new ChatOptions { RawRepresentationFactory = _ => mine },
                 Token);
 
             Assert.Same(mine, inner.Seen!.RawRepresentationFactory!(inner));
-            Assert.Equal(ChatReasoningEffortLevel.High, mine.ReasoningEffortLevel);
+            Assert.Equal(ResponseReasoningEffortLevel.High, mine.ReasoningOptions.ReasoningEffortLevel);
             Assert.Equal(42, mine.MaxOutputTokenCount);
         }
 
         [Fact]
-        public async Task AnEntryWithAnEffort_PutsReasoningEffortOnTheRequestTheVendorSees()
+        public async Task AnEntryWithAnEffort_PutsReasoningEffortAndStoreFalseOnTheRequestTheVendorSees()
         {
             string? body = null;
             StubHttpMessageHandler endpoint = new(request =>
@@ -121,7 +138,7 @@ namespace AgentCore.Infrastructure.Tests.Llm.OpenCodeGo
                 new LlmProviderConfiguration
                 {
                     Kind = OpenCodeGoChatClientAdapter.ProviderKind,
-                    Model = "kimi-k2.6",
+                    Model = "muse-spark-1.3-contributor",
                     As = "reply",
                     ReasoningEffort = "high",
                 },
@@ -140,14 +157,15 @@ namespace AgentCore.Infrastructure.Tests.Llm.OpenCodeGo
                 Token);
 
             Assert.Single(endpoint.Requests);
-            Assert.Contains("\"reasoning_effort\":\"high\"", body, StringComparison.Ordinal);
+            Assert.Contains("\"reasoning\":{\"effort\":\"high\"}", body, StringComparison.Ordinal);
+            Assert.Contains("\"store\":false", body, StringComparison.Ordinal);
         }
 
         [Fact]
         public void AValueThisVendorDoesNotKnow_FailsAndSaysWhatIsAllowed()
         {
             ConfigurationLoadException failure = Assert.Throws<ConfigurationLoadException>(
-                () => OpenCodeGoChatClientAdapter.WithReasoningEffort(new CapturingChatClient(), "exhaustive"));
+                () => OpenCodeGoChatClientAdapter.WithResponseDefaults(new CapturingChatClient(), "exhaustive"));
 
             Assert.Contains(failure.Errors, error => error.Pointer == "/providers/llm");
             Assert.Contains("exhaustive", failure.Message, StringComparison.Ordinal);

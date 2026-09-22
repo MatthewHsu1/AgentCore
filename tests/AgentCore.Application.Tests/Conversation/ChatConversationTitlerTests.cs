@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Conversation.Memory;
+using AgentCore.Application.Llm;
 using AgentCore.Application.Transcript;
 using Microsoft.Extensions.AI;
 using Xunit;
@@ -196,6 +197,24 @@ namespace AgentCore.Application.Tests.Conversation
                 });
         }
 
+        [Fact]
+        public async Task EveryRequest_CarriesTheConversationIdAnAdapterRoutesOn()
+        {
+            // Arrange: the title runs outside a turn, so nothing else stamps the id on the request.
+            InMemoryConversationStore conversations = new();
+            _ = await conversations.CreateAsync("c1", Token);
+            StubChatClient client = new("title");
+            ChatConversationTitler titler = new(conversations, client);
+
+            // Act
+            _ = await CollectAsync(titler.GenerateFromAsync("c1", Said("my belt squeaks"), Token));
+
+            // Assert
+            Assert.True(client.SeenOptions!.AdditionalProperties!.TryGetValue(
+                ChatRequestProperties.ConversationId, out string? conversationId));
+            Assert.Equal("c1", conversationId);
+        }
+
         private static List<ChatMessage> Said(string words)
         {
             return [new ChatMessage(ChatRole.User, words)];
@@ -229,6 +248,8 @@ namespace AgentCore.Application.Tests.Conversation
         {
             public List<ChatMessage> Seen { get; } = [];
 
+            public ChatOptions? SeenOptions { get; private set; }
+
             public Task<ChatResponse> GetResponseAsync(
                 IEnumerable<ChatMessage> messages,
                 ChatOptions? options = null,
@@ -243,6 +264,7 @@ namespace AgentCore.Application.Tests.Conversation
                 [EnumeratorCancellation] CancellationToken cancellationToken = default)
             {
                 Seen.AddRange(messages);
+                SeenOptions = options;
 
                 foreach (string piece in pieces)
                 {
