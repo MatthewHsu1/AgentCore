@@ -53,6 +53,26 @@ namespace AgentCore.Application.Diagnostics
             unit: "s",
             description: "How long one turn took, from the caller's words to the spoken line.");
 
+        private static readonly Histogram<double> TimeToFirstToken = Instruments.CreateHistogram<double>(
+            "agentcore.turn.time_to_first_token",
+            unit: "s",
+            description: "From the transport handing over the caller's words to the model's first update.");
+
+        private static readonly Histogram<double> TimeToFirstSpeech = Instruments.CreateHistogram<double>(
+            "agentcore.turn.time_to_first_speech",
+            unit: "s",
+            description: "From the transport handing over the caller's words to the first fragment handed back to it.");
+
+        private static readonly Histogram<double> TimeToReplyEnd = Instruments.CreateHistogram<double>(
+            "agentcore.turn.time_to_reply_end",
+            unit: "s",
+            description: "From the transport handing over the caller's words to the last fragment of a reply nothing cut short.");
+
+        private static readonly Histogram<double> BargeInLatency = Instruments.CreateHistogram<double>(
+            "agentcore.barge_in.latency",
+            unit: "s",
+            description: "From the transport reporting a barge-in to the reply behind it being dropped.");
+
         private static readonly Counter<long> TurnFailures = Instruments.CreateCounter<long>(
             "agentcore.turn.failures",
             unit: "{failure}",
@@ -125,6 +145,42 @@ namespace AgentCore.Application.Diagnostics
                 // and the reason names the row of section 8.7 it met.
                 _ = activity.SetStatus(ActivityStatusCode.Error, failure);
             }
+        }
+
+        /// <summary>Records how long the model took to say its first word of one turn.</summary>
+        /// <param name="elapsed">Time since the transport handed over the caller's words.</param>
+        internal static void RecordTimeToFirstToken(TimeSpan elapsed)
+        {
+            TimeToFirstToken.Record(elapsed.TotalSeconds);
+        }
+
+        /// <summary>Records how long one turn took to hand its first fragment back to the transport.</summary>
+        /// <param name="elapsed">Time since the transport handed over the caller's words.</param>
+        /// <remarks>
+        /// This is the last point the library can see. A transport that synthesises the audio itself
+        /// adds its own time to first sound on top, and no number here can reach it.
+        /// </remarks>
+        internal static void RecordTimeToFirstSpeech(TimeSpan elapsed)
+        {
+            TimeToFirstSpeech.Record(elapsed.TotalSeconds);
+        }
+
+        /// <summary>Records how long one whole reply took to hand over.</summary>
+        /// <param name="elapsed">Time since the transport handed over the caller's words.</param>
+        /// <remarks>
+        /// Only replies that ended on their own are recorded. A barge-in ends a turn before its close,
+        /// so an interrupted turn contributes nothing and cannot pull the distribution down.
+        /// </remarks>
+        internal static void RecordTimeToReplyEnd(TimeSpan elapsed)
+        {
+            TimeToReplyEnd.Record(elapsed.TotalSeconds);
+        }
+
+        /// <summary>Records how long a barge-in took to take effect.</summary>
+        /// <param name="elapsed">Time from the transport reporting the barge-in to the queued reply being dropped.</param>
+        internal static void RecordBargeInLatency(TimeSpan elapsed)
+        {
+            BargeInLatency.Record(elapsed.TotalSeconds);
         }
 
         /// <summary>Counts one turn that met a section 8.7 failure row.</summary>

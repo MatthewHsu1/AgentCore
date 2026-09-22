@@ -34,6 +34,21 @@ namespace AgentCore.TestSupport
             }
         }
 
+        /// <remarks>
+        /// Overridden with <see cref="GetTimestamp"/>, because the base implementation reads
+        /// <see cref="System.Diagnostics.Stopwatch"/> and would leave every elapsed-time measurement
+        /// taken against this fake running on the real clock underneath it.
+        /// </remarks>
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
+        public override long GetTimestamp()
+        {
+            lock (_gate)
+            {
+                return _now.UtcTicks;
+            }
+        }
+
         public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
         {
             ArgumentNullException.ThrowIfNull(callback);
