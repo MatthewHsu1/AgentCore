@@ -1089,7 +1089,6 @@ AgentCore.Application.Ports.IConversationTitler.GenerateAsync(string! conversati
 AgentCore.Application.Ports.IConversationTitler.GenerateFromAsync(string! conversationId, System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatMessage!>! messages, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<string!>!
 AgentCore.Application.Ports.IChatClientAdapter
 AgentCore.Application.Ports.IChatClientAdapter.CreateClientAsync(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.IChatClient!>
-AgentCore.Application.Ports.IChatClientAdapter.GetContextWindow(AgentCore.Application.Configuration.Schema.LlmProviderConfiguration! entry) -> int?
 AgentCore.Application.Ports.IChatClientAdapter.ResolveHostedTool(Microsoft.Extensions.AI.AITool! marker, AgentCore.Application.Configuration.Schema.LlmProviderConfiguration! entry) -> Microsoft.Extensions.AI.AITool?
 AgentCore.Application.Ports.IChatClientFactory
 AgentCore.Application.Ports.IChatClientFactory.GetChatClient(AgentCore.Application.Configuration.Schema.ModelReference? model) -> Microsoft.Extensions.AI.IChatClient!
@@ -1959,7 +1958,7 @@ static AgentCore.Application.Knowledge.KnowledgeCitationFormatterFactory.Resolve
 static AgentCore.Application.Knowledge.KnowledgePoint.operator !=(AgentCore.Application.Knowledge.KnowledgePoint? left, AgentCore.Application.Knowledge.KnowledgePoint? right) -> bool
 static AgentCore.Application.Knowledge.KnowledgePoint.operator ==(AgentCore.Application.Knowledge.KnowledgePoint? left, AgentCore.Application.Knowledge.KnowledgePoint? right) -> bool
 static AgentCore.Application.Knowledge.KnowledgeRetrievalPortExtensions.GetService<TService>(this AgentCore.Application.Ports.IKnowledgeRetrievalPort! port, object? serviceKey = null) -> TService?
-static AgentCore.Application.Llm.CompositeChatClientFactory.CreateAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.IChatClientAdapter!>! adapters, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Llm.CompositeChatClientFactory!>
+static AgentCore.Application.Llm.CompositeChatClientFactory.CreateAsync(AgentCore.Application.Configuration.Schema.AgentCoreConfiguration! configuration, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.IChatClientAdapter!>! adapters, AgentCore.Application.Ports.IModelCatalogPort? catalog = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Llm.CompositeChatClientFactory!>
 static AgentCore.Application.Providers.VendorAdapterSelector.Select<TAdapter>(string! kind, System.Collections.Generic.IReadOnlyList<TAdapter>! adapters, AgentCore.Application.Providers.VendorSeam seam) -> TAdapter
 static AgentCore.Application.Providers.VendorSeam.operator !=(AgentCore.Application.Providers.VendorSeam left, AgentCore.Application.Providers.VendorSeam right) -> bool
 static AgentCore.Application.Providers.VendorSeam.operator ==(AgentCore.Application.Providers.VendorSeam left, AgentCore.Application.Providers.VendorSeam right) -> bool
@@ -2337,3 +2336,20 @@ AgentCore.Application.Runtime.Compaction.CompactionContent.Outcome.get -> string
 AgentCore.Application.Runtime.Compaction.CompactionContent.Phase.get -> string!
 const AgentCore.Application.Runtime.Compaction.CompactionContent.EndPhase = "end" -> string!
 const AgentCore.Application.Runtime.Compaction.CompactionContent.StartPhase = "start" -> string!
+AgentCore.Application.Llm.ModelCatalogEntry
+AgentCore.Application.Llm.ModelCatalogEntry.<Clone>$() -> AgentCore.Application.Llm.ModelCatalogEntry!
+AgentCore.Application.Llm.ModelCatalogEntry.ModelCatalogEntry(int ContextWindow) -> void
+AgentCore.Application.Llm.ModelCatalogEntry.ContextWindow.get -> int
+AgentCore.Application.Llm.ModelCatalogEntry.ContextWindow.init -> void
+AgentCore.Application.Llm.ModelCatalogEntry.Deconstruct(out int ContextWindow) -> void
+AgentCore.Application.Llm.ModelCatalogEntry.Equals(AgentCore.Application.Llm.ModelCatalogEntry? other) -> bool
+override AgentCore.Application.Llm.ModelCatalogEntry.Equals(object? obj) -> bool
+override AgentCore.Application.Llm.ModelCatalogEntry.GetHashCode() -> int
+override AgentCore.Application.Llm.ModelCatalogEntry.ToString() -> string!
+static AgentCore.Application.Llm.ModelCatalogEntry.operator ==(AgentCore.Application.Llm.ModelCatalogEntry? left, AgentCore.Application.Llm.ModelCatalogEntry? right) -> bool
+static AgentCore.Application.Llm.ModelCatalogEntry.operator !=(AgentCore.Application.Llm.ModelCatalogEntry? left, AgentCore.Application.Llm.ModelCatalogEntry? right) -> bool
+AgentCore.Application.Ports.IModelCatalogPort
+AgentCore.Application.Ports.IModelCatalogPort.LookupAsync(string! provider, string! model, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Llm.ModelCatalogEntry?>
+const AgentCore.Application.Secrets.KnownSecrets.OpenCodeGoApiKeyName = "opencode-go-api-key" -> string!
+const AgentCore.Application.Secrets.KnownSecrets.OpenCodeGoApiKeyVariable = "OPENCODE_GO_API_KEY" -> string!
+static readonly AgentCore.Application.Secrets.KnownSecrets.OpenCodeGo -> AgentCore.Application.Secrets.SecretName!

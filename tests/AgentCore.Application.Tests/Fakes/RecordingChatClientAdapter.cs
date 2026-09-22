@@ -15,9 +15,6 @@ namespace AgentCore.Application.Tests.Fakes
 
         public string Kind { get; } = kind;
 
-        /// <summary>Gets or sets the value <see cref="GetContextWindow"/> answers, or <see langword="null"/>.</summary>
-        public int? ContextWindow { get; set; }
-
         /// <summary>Gets the <c>as</c> names this adapter built a client for, in build order.</summary>
         public IReadOnlyList<string> BuiltNames => _builtNames;
 
@@ -49,11 +46,6 @@ namespace AgentCore.Application.Tests.Fakes
             RecordingChatClient client = new();
             _clients[entry.As] = client;
             return ValueTask.FromResult<IChatClient>(client);
-        }
-
-        public int? GetContextWindow(LlmProviderConfiguration entry)
-        {
-            return ContextWindow;
         }
     }
 

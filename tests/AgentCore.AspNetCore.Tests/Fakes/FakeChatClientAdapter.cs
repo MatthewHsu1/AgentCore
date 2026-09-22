@@ -20,10 +20,5 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         {
             return ValueTask.FromResult(_client());
         }
-
-        public int? GetContextWindow(LlmProviderConfiguration entry)
-        {
-            return 128_000;
-        }
     }
 }

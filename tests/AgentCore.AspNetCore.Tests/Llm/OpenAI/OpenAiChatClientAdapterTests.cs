@@ -108,7 +108,7 @@ namespace AgentCore.AspNetCore.Tests.Llm.OpenAI
                 Document(),
                 resolver,
                 [new OpenAiChatClientAdapter()],
-                TestContext.Current.CancellationToken);
+                cancellationToken: TestContext.Current.CancellationToken);
 
             IChatClient reply = factory.GetChatClient(new ModelReference { Ref = "reply" });
 

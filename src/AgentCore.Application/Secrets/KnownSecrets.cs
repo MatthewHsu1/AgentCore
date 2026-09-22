@@ -11,6 +11,12 @@ namespace AgentCore.Application.Secrets
         /// <summary>The standard OpenAI environment variable, read when the chain holds no name.</summary>
         public const string OpenAiApiKeyVariable = "OPENAI_API_KEY";
 
+        /// <summary>The <c>${secret:name}</c> name the OpenCode Go key resolves under.</summary>
+        public const string OpenCodeGoApiKeyName = "opencode-go-api-key";
+
+        /// <summary>The environment variable OpenCode Go's own docs name, read when the chain holds no name.</summary>
+        public const string OpenCodeGoApiKeyVariable = "OPENCODE_GO_API_KEY";
+
         /// <summary>The <c>${secret:name}</c> name the Qdrant key resolves under.</summary>
         public const string QdrantApiKeyName = "qdrant-api-key";
 
@@ -49,6 +55,9 @@ namespace AgentCore.Application.Secrets
 
         /// <summary>The one OpenAI credential, which chat, embedding, and moderation all read.</summary>
         public static readonly SecretName OpenAi = new(OpenAiApiKeyName, OpenAiApiKeyVariable);
+
+        /// <summary>The OpenCode Go credential, which the chat adapter sends as its bearer token.</summary>
+        public static readonly SecretName OpenCodeGo = new(OpenCodeGoApiKeyName, OpenCodeGoApiKeyVariable);
 
         /// <summary> The Qdrant API key the vector store sends on every conversation. </summary>
         public static readonly SecretName Qdrant = new(QdrantApiKeyName, QdrantApiKeyVariable);
