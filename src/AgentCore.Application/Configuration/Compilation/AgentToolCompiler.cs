@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace AgentCore.Application.Configuration.Compilation
 {
+#pragma warning disable MAAI001 // BackgroundAgentsProvider is evaluation-only in Microsoft.Agents.AI 1.21.0.
     internal static class AgentToolCompiler
     {
         public static List<AITool>? Build(
@@ -16,7 +17,8 @@ namespace AgentCore.Application.Configuration.Compilation
             Dictionary<string, ToolConfiguration> declared,
             AgentCompilationContext context,
             string pointer,
-            Func<string, AIAgent?> resolveAgent)
+            Func<string, AIAgent?> resolveAgent,
+            IReadOnlyList<BackgroundAgentsProvider> backgroundProviders)
         {
             if (item.Tools.Count == 0)
             {
@@ -30,7 +32,7 @@ namespace AgentCore.Application.Configuration.Compilation
                 string toolPointer = ConfigurationError.AppendPointer(
                     ConfigurationError.AppendPointer(pointer, "tools"), index);
 
-                if (Resolve(id, declared, context.Tools, resolveAgent, toolPointer) is { } tool)
+                if (Resolve(id, declared, context.Tools, resolveAgent, backgroundProviders, toolPointer) is { } tool)
                 {
                     Add(tools, tool, item.Id, id, model, context);
                 }
@@ -45,6 +47,7 @@ namespace AgentCore.Application.Configuration.Compilation
             Dictionary<string, ToolConfiguration> declared,
             ToolRegistry? registry,
             Func<string, AIAgent?> resolveAgent,
+            IReadOnlyList<BackgroundAgentsProvider> backgroundProviders,
             string pointer)
         {
             if (!declared.TryGetValue(id, out ToolConfiguration? tool))
@@ -54,9 +57,7 @@ namespace AgentCore.Application.Configuration.Compilation
 
             if (tool.Kind == ToolKind.Agent)
             {
-                // A kind: agent tool needs no tool factory. Section 7 says section 8 adds no port,
-                // and this kind adds none either: the inner agent is already in the document.
-                return AgentDelegationTool.Create(tool, ResolveInner(tool, resolveAgent, pointer));
+                return AgentDelegationTool.Create(tool, ResolveInner(tool, resolveAgent, pointer), backgroundProviders);
             }
 
             return Declared(id, registry, pointer);
@@ -67,7 +68,6 @@ namespace AgentCore.Application.Configuration.Compilation
         {
             if (registry is null)
             {
-                // No factory, so nothing could have been built anyway.
                 return null;
             }
 
@@ -88,10 +88,6 @@ namespace AgentCore.Application.Configuration.Compilation
         }
 
         /// <summary>Adds one tool, unless it is a hosted marker its agent's model cannot run.</summary>
-        /// <remarks>
-        /// Tested by type and not by the builtin name, so a hosted marker a host supplies through
-        /// its own <c>IToolSource</c> is covered by the same rule.
-        /// </remarks>
         private static void Add(
             List<AITool> tools,
             AITool tool,
@@ -105,6 +101,7 @@ namespace AgentCore.Application.Configuration.Compilation
                 if (context.ChatClients.ResolveHostedTool(tool, model) is not { } resolved)
                 {
                     ILogger logger = context.Loggers?.CreateLogger(typeof(AgentToolCompiler)) ?? NullLogger.Instance;
+                    
                     string modelDescription = model is { Ref.Length: > 0 } ? $"the model '{model.Ref}'" : "this agent's default model";
 
                     Log.HostedToolDropped(logger, agentId, toolId, tool.GetType().Name, modelDescription);
@@ -129,4 +126,5 @@ namespace AgentCore.Application.Configuration.Compilation
                     $"the tool '{tool.Id}' delegates to the agent '{id}', which agents.items does not declare.");
         }
     }
+#pragma warning restore MAAI001
 }

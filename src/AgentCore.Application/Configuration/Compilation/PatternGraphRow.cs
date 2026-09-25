@@ -1,12 +1,13 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Runtime;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 
 namespace AgentCore.Application.Configuration.Compilation
 {
     /// <summary>
-    /// Row 3: the entry holds <c>graph:</c> with <c>pattern:</c>. It builds
+    /// Entry holds <c>graph:</c> with <c>pattern:</c>. It builds
     /// <c>AgentWorkflowBuilder.BuildSequential</c>, <c>BuildConcurrent</c>,
     /// <c>CreateHandoffBuilderWith</c>, or <c>CreateGroupChatBuilderWith</c>.
     /// </summary>
@@ -22,7 +23,8 @@ namespace AgentCore.Application.Configuration.Compilation
             EntryConfiguration entry,
             string entryPointer,
             Dictionary<string, AIAgent> agents,
-            AgentCompilationContext context)
+            AgentCompilationContext context,
+            bool reusesGraphSession)
         {
             GraphConfiguration graph = entry.Graph!;
             string graphPointer = ConfigurationError.AppendPointer(entryPointer, "graph");
@@ -37,6 +39,11 @@ namespace AgentCore.Application.Configuration.Compilation
                     throw ConfigurationCompiler.Fail(
                         ConfigurationError.AppendPointer(agentsPointer, index),
                         $"the graph names the agent '{id}', which agents.items does not declare.");
+                }
+
+                if (ConfigurationCompiler.AgentDeclaresBackground(configuration, id))
+                {
+                    throw ConfigurationCompiler.FailBackgroundInGraph(ConfigurationError.AppendPointer(agentsPointer, index), id, entryName);
                 }
 
                 participants.Add(agent);
@@ -56,7 +63,7 @@ namespace AgentCore.Application.Configuration.Compilation
                 _ => throw new ArgumentOutOfRangeException(nameof(entry), graph.Pattern, "The graph pattern vocabulary is closed, and this value is not in it."),
             };
 
-            return new EntryBuild(workflow.AsAIAgent(name: entryName), NoStages());
+            return new EntryBuild(new GraphFaultAgent(workflow.AsAIAgent(name: entryName), drain: reusesGraphSession), NoStages());
         }
 
         /// <remarks>

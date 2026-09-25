@@ -1365,6 +1365,62 @@
           "minimum": 1,
           "maximum": 2147483647,
           "description": "The largest inbound frame the socket accepts. The ceiling is int.MaxValue, which is the largest buffer length the socket can be given."
+        },
+        "userAway": {
+          "type": ["object", "null"],
+          "description": "When the caller counts as away, and what the agent says once they do. Voice conversations only. Omit the key to keep the shipped default (15 s, \"Are you still there?\"); write null to turn the away prompt off.",
+          "required": ["timeoutSeconds", "say"],
+          "additionalProperties": false,
+          "properties": {
+            "timeoutSeconds": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "How long both sides must stay idle before the caller is marked away."
+            },
+            "say": {
+              "type": "string",
+              "minLength": 1,
+              "description": "What the agent says once the caller is marked away."
+            }
+          }
+        },
+        "filler": {
+          "type": "object",
+          "description": "The filler each tool id opens while its call is running, keyed by tool id. Voice conversations only. A tool id this block does not name gets no filler.",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/voiceFiller"
+          }
+        }
+      }
+    },
+    "voiceFiller": {
+      "type": "object",
+      "description": "What one tool id's filler says while its step runs, and how often.",
+      "required": ["say", "delaySeconds"],
+      "additionalProperties": false,
+      "properties": {
+        "say": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What the agent says while the tool call runs."
+        },
+        "delaySeconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "How long the session must stay continuously idle before the first fire."
+        },
+        "intervalSeconds": {
+          "type": ["number", "null"],
+          "exclusiveMinimum": 0,
+          "description": "The cooldown after a fire before the dwell restarts. Omitted or null fires at most once."
+        },
+        "maxSteps": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "The most fires across the tool call's lifetime. Omitted or null means no limit."
         }
       }
     },

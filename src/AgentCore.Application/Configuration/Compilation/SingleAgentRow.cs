@@ -5,7 +5,7 @@ using Microsoft.Agents.AI;
 namespace AgentCore.Application.Configuration.Compilation
 {
     /// <summary>
-    /// Row 1: the entry holds <c>agent:</c>. The named <c>agents.items</c> entry is the
+    /// Entry holds <c>agent:</c>. The named <c>agents.items</c> entry is the
     /// entry, and its run's own last message is the reply.
     /// </summary>
     internal sealed class SingleAgentRow : CompileTableRow
@@ -22,7 +22,8 @@ namespace AgentCore.Application.Configuration.Compilation
             EntryConfiguration entry,
             string entryPointer,
             Dictionary<string, AIAgent> agents,
-            AgentCompilationContext context)
+            AgentCompilationContext context,
+            bool reusesGraphSession)
         {
             string agentPointer = ConfigurationError.AppendPointer(entryPointer, "agent");
 

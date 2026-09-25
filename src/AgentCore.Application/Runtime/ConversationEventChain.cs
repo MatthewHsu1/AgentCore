@@ -89,13 +89,15 @@ namespace AgentCore.Application.Runtime
 
         /// <summary>Raises the durable facts of one finished turn, in the order they happened.</summary>
         /// <param name="result">The turn that just spoke: its index, stages, the text the caller heard, when it ended, and how far it played.</param>
-        /// <param name="spokenReply">The whole reply the model produced.</param>
+        /// <param name="generatedText">The words <c>turn.completed</c> proves.</param>
+        /// <param name="heard">The words a cut turn's <c>reply.interrupted</c> proves.</param>
         /// <param name="toolFault">The message of the fault, or <see langword="null"/>.</param>
+        /// <param name="played">How much of a cut reply played, or <see langword="null"/> when no voice layer knows it.</param>
         /// <returns>
         /// The identity of the <c>turn.completed</c> fact, so a barge-in that arrives after this turn
         /// already ended can name it through <see cref="ConversationEvent.AmendsEventId"/>.
         /// </returns>
-        internal Guid WriteTurnEvents(TurnResult result, string spokenReply, string? toolFault)
+        internal Guid WriteTurnEvents(TurnResult result, string generatedText, string heard, string? toolFault, TimeSpan? played)
         {
             (int turnIndex, DateTimeOffset endedAt) = (result.TurnIndex, result.EndedAt);
 
@@ -117,14 +119,14 @@ namespace AgentCore.Application.Runtime
                 turnIndex,
                 payload: new Dictionary<string, string>(StringComparer.Ordinal)
                 {
-                    [AuditPayloadKeys.ReplyTextSha256] = AuditHash.OfText(spokenReply).Value,
+                    [AuditPayloadKeys.ReplyTextSha256] = AuditHash.OfText(generatedText).Value,
                     [AuditPayloadKeys.StageBefore] = result.StageBefore,
                     [AuditPayloadKeys.StageAfter] = result.StageAfter,
                 });
 
-            if (result.InterruptedAfter is { } played)
+            if (result.Cut is not null)
             {
-                RaiseReplyInterrupted(turnIndex, endedAt, completed, result.ReplyText, played);
+                RaiseReplyInterrupted(turnIndex, endedAt, completed, heard, played);
             }
 
             return completed;
@@ -135,25 +137,29 @@ namespace AgentCore.Application.Runtime
         /// <param name="occurredAt">When the cut was recorded.</param>
         /// <param name="amendsEventId">The identity of the <c>turn.completed</c> fact it corrects.</param>
         /// <param name="heard">The text the caller actually heard.</param>
-        /// <param name="played">How much of the reply played, as the relay reported it.</param>
+        /// <param name="played">
+        /// How much of the reply played, as the relay reported it, or <see langword="null"/> when nothing played it:
+        /// the payload then omits the duration (design section 7, item 5).
+        /// </param>
         internal void RaiseReplyInterrupted(
             int turnIndex,
             DateTimeOffset occurredAt,
             Guid amendsEventId,
             string heard,
-            TimeSpan played)
+            TimeSpan? played)
         {
-            _ = Raise(
-                        ConversationEventKind.ReplyInterrupted,
-                        occurredAt,
-                        turnIndex,
-                        amends: amendsEventId,
-                        payload: new Dictionary<string, string>(StringComparer.Ordinal)
-                        {
-                            [AuditPayloadKeys.UtteranceUntilInterruptSha256] = AuditHash.OfText(heard).Value,
-                            [AuditPayloadKeys.DurationUntilInterruptMs] =
-                                ((long)played.TotalMilliseconds).ToString(CultureInfo.InvariantCulture),
-                        });
+            Dictionary<string, string> payload = new(StringComparer.Ordinal)
+            {
+                [AuditPayloadKeys.UtteranceUntilInterruptSha256] = AuditHash.OfText(heard).Value,
+            };
+
+            if (played is { } duration)
+            {
+                payload[AuditPayloadKeys.DurationUntilInterruptMs] =
+                    ((long)duration.TotalMilliseconds).ToString(CultureInfo.InvariantCulture);
+            }
+
+            _ = Raise(ConversationEventKind.ReplyInterrupted, occurredAt, turnIndex, amends: amendsEventId, payload: payload);
         }
 
         /// <summary>Raises the moderation facts of one turn, before the turn's own events.</summary>

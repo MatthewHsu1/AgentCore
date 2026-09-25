@@ -1,5 +1,7 @@
 using AgentCore.Application.Conversation;
+using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Runtime.Turn;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Microsoft.Agents.AI;
@@ -11,42 +13,6 @@ namespace AgentCore.Application.Runtime
     /// <summary>
     /// The whole turn loop of this library, behind the framework's own agent abstraction.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <see cref="ConversationSession"/> is the turn loop — moderation, the stage machine, the writers, the audit
-    /// chain, barge-in — and its seam is <see cref="IConversationPort"/>, which only this library's
-    /// own adapters read. This shim puts the same loop behind <see cref="AIAgent"/>, the seam the wider
-    /// ecosystem reads: anything that drives an <c>AIAgent</c> — the framework's protocol hosts (A2A,
-    /// AG-UI, the OpenAI-compatible endpoints, all prerelease as of Microsoft.Agents.AI 1.17.0),
-    /// <c>AsAIFunction()</c>, an evaluation harness — can drive a conversation without learning one AgentCore
-    /// type beyond this one.
-    /// </para>
-    /// <para>
-    /// One <see cref="AgentSession"/> is one conversation. <see cref="AIAgent.CreateSessionAsync(CancellationToken)"/>
-    /// starts the conversation, and every run with that session is one turn of it. The session wraps the
-    /// <see cref="ConversationSession"/>, and a host that needs the parts of the loop the <c>AIAgent</c> surface
-    /// does not carry — <see cref="ConversationSession.Interrupt"/>,
-    /// <see cref="ConversationSession.EndConversation(Domain.Audit.ConversationEndReason)"/>, the stage,
-    /// the transcript — asks the session for it: <c>session.GetService&lt;ConversationSession&gt;()</c>.
-    /// </para>
-    /// <para>
-    /// <b>The session owns the transcript, so a run takes one user message and not a history.</b> The
-    /// run reads the text of the LAST user message and ignores everything in front of it, which is the
-    /// same rule the <c>/v1/responses</c> endpoint applies to its <c>input</c>: an earlier message
-    /// of the conversation is already in the session. A host must not replay history here — replaying it would
-    /// put every turn in the transcript twice.
-    /// </para>
-    /// <para>
-    /// <see cref="AgentRunOptions"/> is accepted and ignored. The compiled document owns the model, the
-    /// tools, and the response shape, and the framework's contract lets an implementation ignore options
-    /// it cannot honor.
-    /// </para>
-    /// <para>
-    /// This agent is a process singleton, like the compiled agent it runs: everything per conversation lives in
-    /// the session. It holds no lock and no state of its own, so 26 concurrent conversations are 26 sessions
-    /// over one instance.
-    /// </para>
-    /// </remarks>
     public sealed class AgentCoreAgent : AIAgent
     {
         private readonly IConversationSessionFactory _sessions;
@@ -81,13 +47,6 @@ namespace AgentCore.Application.Runtime
         /// <summary>Starts one conversation under the id the host names.</summary>
         /// <param name="conversationId">The id the host gives the conversation. The vendor's conversation id belongs here.</param>
         /// <returns>The session of the new conversation, with no turn run yet.</returns>
-        /// <remarks>
-        /// <see cref="AIAgent.CreateSessionAsync(CancellationToken)"/> makes an id up, exactly as
-        /// <see cref="IConversationSessionFactory.Create"/> does when it is handed none. A voice host has the
-        /// vendor's conversation id before the first turn, and the audit chain of the conversation should carry it, so
-        /// this overload exists for the same reason <c>ChatClientAgent.CreateSessionAsync(string)</c>
-        /// does.
-        /// </remarks>
         /// <exception cref="ArgumentException"><paramref name="conversationId"/> is null or empty.</exception>
         public ValueTask<AgentSession> CreateSessionAsync(string conversationId)
         {
@@ -102,39 +61,11 @@ namespace AgentCore.Application.Runtime
         }
 
         /// <inheritdoc />
-        /// <remarks>
-        /// <para>
-        /// What travels is the conversation's id and what its session alone holds: the stage, whether the
-        /// machine finished, and the slots the writers filled. That is a <see cref="ConversationSessionState"/>
-        /// under the id it belongs to — the same pairing <c>ChatClientAgentSession</c> writes as
-        /// <c>{ conversationId, stateBag }</c>, and for the same reason. State that travelled without
-        /// its id would come back on a conversation that has none of its words behind it.
-        /// </para>
-        /// <para>
-        /// <b>The words are not here.</b> They are store 1, which is durable already, so a checkpoint
-        /// that carried them would give one conversation two records and one chance to disagree. The
-        /// price is that this is a key and not a copy: a host moving a session between processes still
-        /// needs the shared store behind it, or the revived conversation answers with an empty transcript.
-        /// </para>
-        /// <para>
-        /// <b>This blob is not store 0's.</b> A host's <paramref name="jsonSerializerOptions"/> reach
-        /// the nested <c>state</c> member too, not the envelope alone, so that member is encoded to the
-        /// host's rules and not to <see cref="ConversationStateJson.Options"/>, which every store agrees on. It
-        /// is harmless while the member stays inside the envelope, because this seam and its reader are
-        /// symmetric. Lifting it out and writing it to store 0 is what would not be.
-        /// </para>
-        /// </remarks>
         protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
             AgentSession session,
             JsonSerializerOptions? jsonSerializerOptions = null,
             CancellationToken cancellationToken = default)
         {
-            // Refused, where a run answers a null session by making one. The fabricated conversation is the
-            // framework's one-shot shape for a RUN — one turn of a conversation nothing continues — and there is
-            // no such thing as a one-shot serialize: what it would write is an envelope naming a fresh
-            // random id beside an empty state, and a host would keep that as its checkpoint and never
-            // learn it points at nothing. The parameter is not nullable, so this only catches a caller
-            // that went around the type.
             ArgumentNullException.ThrowIfNull(session);
             ConversationSession conversation = Resolve(session);
 
@@ -144,37 +75,6 @@ namespace AgentCore.Application.Runtime
         }
 
         /// <inheritdoc />
-        /// <remarks>
-        /// <para>
-        /// Reads back what <see cref="SerializeSessionCoreAsync"/> wrote — see its remarks for what the
-        /// blob does and does not carry. It is host-facing, so what arrives is not necessarily anything
-        /// this library wrote, and it stays lenient about that: a blob that names no conversation gets a new id,
-        /// exactly as <see cref="AIAgent.CreateSessionAsync(CancellationToken)"/> does, and state the
-        /// document no longer allows is dropped slot by slot with a diagnostic rather than refusing the
-        /// conversation. That second contract is <see cref="ConversationSession.Resume"/>'s and this method does not
-        /// double it.
-        /// </para>
-        /// <para>
-        /// The one blob it refuses carries neither member. That is not a validation layer over
-        /// <see cref="ConversationSession.Resume"/> but a guard against one specific confusion this library
-        /// creates itself: a bare <see cref="ConversationSessionState"/> is the literal value in store 0's
-        /// <c>conversation.state</c> column, so a host reaching for "the state of this conversation" reaches for the
-        /// wrong one of two shapes. Read as an envelope it names no conversation and holds no state, and the
-        /// failure is silent and total — a new random id, and the transcript orphaned behind it.
-        /// <see cref="SerializeSessionCoreAsync"/> can never write that blob, so refusing it costs the
-        /// lenient path nothing.
-        /// </para>
-        /// <para>
-        /// <b>Store 0 outranks what arrives here.</b> The state travels with the conversation's id, and the
-        /// first turn of the revived conversation reads store 0 under that id; where store 0 holds state of its
-        /// own it wins outright, because its blob rides the same batch as the words. So this decides
-        /// only a conversation store 0 does not know, or knows without state. See
-        /// <see cref="ConversationSession.Resume"/>.
-        /// </para>
-        /// </remarks>
-        /// <exception cref="ArgumentException">
-        /// <paramref name="serializedState"/> names no conversation and holds no state.
-        /// </exception>
         protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
             JsonElement serializedState,
             JsonSerializerOptions? jsonSerializerOptions = null,
@@ -211,15 +111,27 @@ namespace AgentCore.Application.Runtime
         {
             ArgumentNullException.ThrowIfNull(messages);
 
-            ConversationSession conversation = Resolve(session);
-            TurnResult turn = await conversation.RunTurnMessageAsync(UserMessage(messages), cancellationToken).ConfigureAwait(false);
+            bool minted = session is null;
+            session ??= await CreateSessionAsync(cancellationToken).ConfigureAwait(false);
 
-            return new AgentResponse(new ChatMessage(ChatRole.Assistant, turn.ReplyText))
+            try
             {
-                AgentId = Id,
-                ResponseId = Guid.NewGuid().ToString("N"),
-                CreatedAt = turn.EndedAt,
-            };
+                TurnResult turn = await Resolve(session).RunTurnMessageAsync(UserMessage(messages), cancellationToken).ConfigureAwait(false);
+
+                return new AgentResponse(new ChatMessage(ChatRole.Assistant, turn.ReplyText))
+                {
+                    AgentId = Id,
+                    ResponseId = Guid.NewGuid().ToString("N"),
+                    CreatedAt = turn.EndedAt,
+                };
+            }
+            finally
+            {
+                if (minted)
+                {
+                    DisposeInBackground(Resolve(session));
+                }
+            }
         }
 
         /// <inheritdoc />
@@ -234,39 +146,70 @@ namespace AgentCore.Application.Runtime
             return RunCoreStreamingCoreAsync(messages, session, cancellationToken);
         }
 
-        /// <summary>Streams one turn of the resolved conversation, wrapping each update with this agent's id.</summary>
+        /// <summary>Streams one turn, wrapping each update with this agent's id.</summary>
         private async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingCoreAsync(
             IEnumerable<ChatMessage> messages,
             AgentSession? session,
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
-            ConversationSession conversation = Resolve(session);
+            bool minted = session is null;
+            session ??= await CreateSessionAsync(cancellationToken).ConfigureAwait(false);
 
-            // The stream is already filtered: ConversationSession drops the lifecycle updates, so every update
-            // here carries content. The wrap changes the type and nothing else.
-            await foreach (ChatResponseUpdate? update in conversation.RunTurnMessageStreamingAsync(UserMessage(messages), cancellationToken)
-                .ConfigureAwait(false))
+            try
             {
-                yield return new AgentResponseUpdate(update) { AgentId = Id };
+                IAsyncEnumerable<ChatResponseUpdate> turn = Resolve(session).RunTurnMessageStreamingAsync(UserMessage(messages), cancellationToken);
+
+                await foreach (ChatResponseUpdate? update in turn.ConfigureAwait(false))
+                {
+                    if (update.Contents.OfType<TurnCommittedContent>().Any())
+                    {
+                        continue;
+                    }
+
+                    yield return new AgentResponseUpdate(update) { AgentId = Id };
+                }
+            }
+            finally
+            {
+                if (minted)
+                {
+                    DisposeInBackground(Resolve(session));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Starts disposing a minted session off the caller's path, and logs its outcome. Nothing here awaits
+        /// the disposal, so an exception from it — including <see cref="Harness.BackgroundSessionRelease"/>'s timeout —
+        /// can never mask the turn's own result or throw out of a run that already returned.
+        /// </summary>
+        private static void DisposeInBackground(ConversationSession conversation)
+        {
+            _ = Task.Run(() => DisposeLoggingFailureAsync(conversation));
+        }
+
+        private static async Task DisposeLoggingFailureAsync(ConversationSession conversation)
+        {
+            try
+            {
+                await conversation.DisposeAsync().ConfigureAwait(false);
+            }
+#pragma warning disable CA1031 // Nothing awaits this disposal once the run returns, so nothing may escape it.
+            catch (Exception exception)
+#pragma warning restore CA1031
+            {
+                Log.BackgroundReleaseFailed(conversation.Logger, conversation.ConversationId, exception);
             }
         }
 
         /// <summary>Finds the conversation a run belongs to.</summary>
-        /// <param name="session">The session the caller passed, or <see langword="null"/>.</param>
+        /// <param name="session">The session the caller passed.</param>
         /// <returns>The conversation to run the turn on.</returns>
-        /// <remarks>
-        /// A <see langword="null"/> session is the framework's one-shot shape — <c>ChatClientAgent</c>
-        /// answers it with a session it throws away — so it runs one turn of a conversation nothing can continue.
-        /// A session another agent created is refused, in the framework's own words: every
-        /// <c>AIAgent</c> implementation measured (ChatClientAgent, the workflow host) refuses a foreign
-        /// session rather than guessing at its state.
-        /// </remarks>
         /// <exception cref="ArgumentException"><paramref name="session"/> belongs to another agent type.</exception>
-        private ConversationSession Resolve(AgentSession? session)
+        private static ConversationSession Resolve(AgentSession session)
         {
             return session switch
             {
-                null => _sessions.Create(),
                 AgentCoreAgentSession own => own.Conversation,
                 _ => throw new ArgumentException(
                     $"Incompatible session type: {session.GetType()} (expecting {typeof(AgentCoreAgentSession)}). "
@@ -278,15 +221,11 @@ namespace AgentCore.Application.Runtime
         /// <summary>Reads what the caller said or answered out of the run's messages.</summary>
         /// <param name="messages">The messages the caller passed to the run.</param>
         /// <returns>The last user message that carries words or an approval answer.</returns>
-        /// <remarks>
-        /// The same rule the <c>/v1/responses</c> endpoint applies: the session owns the
-        /// transcript, so an earlier message of the conversation is already in the session, and only the last
-        /// user message is new. See the remarks on <see cref="AgentCoreAgent"/>.
-        /// </remarks>
         /// <exception cref="ArgumentException">No user message carries words or an answer, so there is no turn to run.</exception>
         private static ChatMessage UserMessage(IEnumerable<ChatMessage> messages)
         {
             ChatMessage? picked = null;
+
             foreach (ChatMessage message in messages)
             {
                 if (message.Role == ChatRole.User
@@ -307,44 +246,6 @@ namespace AgentCore.Application.Runtime
         /// <param name="ConversationId">The id of the conversation. Store 1 is keyed by it, so it is the half that finds the words.</param>
         /// <param name="State">What the session alone held, or <see langword="null"/> when the blob named none.</param>
         /// <param name="Entry">The entry that wrote the blob. A key minted by one entry never reads on another.</param>
-        /// <remarks>
-        /// A separate shape from <see cref="ConversationSessionState"/> on purpose. That one is the value store 0
-        /// writes under a <c>conversation_id</c> column, so putting the id inside it would give one fact two
-        /// homes; here there is no column, so the envelope carries the key beside the value instead.
-        /// Internal because it is a wire shape and not a promise: D15 makes every public type permanent.
-        /// </remarks>
         internal sealed record SerializedSession(string? ConversationId, ConversationSessionState? State, string? Entry);
-
-        /// <summary>One conversation, as the framework sees it.</summary>
-        /// <remarks>
-        /// It stays internal: a host reaches the call through <c>GetService&lt;ConversationSession&gt;()</c> on
-        /// the <see cref="AgentSession"/> base, and D15 makes every public type a permanent promise this
-        /// wrapper does not need to be.
-        /// </remarks>
-        internal sealed class AgentCoreAgentSession : AgentSession
-        {
-            internal AgentCoreAgentSession(ConversationSession conversation)
-            {
-                Conversation = conversation;
-            }
-
-            /// <summary>Gets the conversation this session carries.</summary>
-            internal ConversationSession Conversation { get; }
-
-            /// <inheritdoc />
-            /// <remarks>
-            /// Answers the <see cref="ConversationSession"/> (and its <see cref="IConversationPort"/>
-            /// seam), so a host holding only the framework types reaches barge-in, the stage, and the
-            /// transcript without a cast.
-            /// </remarks>
-            public override object? GetService(Type serviceType, object? serviceKey = null)
-            {
-                ArgumentNullException.ThrowIfNull(serviceType);
-
-                return serviceKey is null && serviceType.IsInstanceOfType(Conversation)
-                    ? Conversation
-                    : base.GetService(serviceType, serviceKey);
-            }
-        }
     }
 }

@@ -71,20 +71,20 @@ namespace AgentCore.Application.Ports
         /// alone. It rides with the words on purpose: a crash between the two would leave the stage
         /// behind the words it belongs to. For the same reason, a non-<see langword="null"/> state is
         /// silently dropped when <paramref name="messages"/> is empty: an empty turn writes no words for
-        /// it to ride with, so there is nothing to write it beside.
+        /// it to ride with, so there is nothing to write it beside. It is also dropped, while the words
+        /// land, when its <see cref="ConversationSessionState.NextTurnIndex"/> is behind the stored state's:
+        /// a state never replaces a newer one.
         /// </param>
         /// <param name="cancellationToken">Cancels the write.</param>
         /// <returns>
         /// The rows as written, in the order given, each with its ordinal and its turn index.
         /// </returns>
-        /// <remarks>
-        /// The store numbers every row from the conversation's own counter, in one atomic step, so two writers on
-        /// two machines never collide on an ordinal — one from the conversation's live session, the other from a
-        /// host appending outside any turn.
-        /// </remarks>
         /// <exception cref="InvalidOperationException">
         /// The conversation named by <paramref name="conversationId"/> does not exist. A row is never written against a
         /// conversation that has no row of its own.
+        /// </exception>
+        /// <exception cref="ConversationTurnConflictException">
+        /// A message names a turn the conversation already saved. Nothing of the append is written: no row, and no state.
         /// </exception>
         ValueTask<IReadOnlyList<ConversationMessage>> AppendAsync(
             string conversationId,
@@ -126,6 +126,18 @@ namespace AgentCore.Application.Ports
             string conversationId,
             string messageId,
             ChatMessage content,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Deletes one already-written message, on a barge-in that leaves it saying and doing nothing. The rows
+        /// around it keep their ordinals.
+        /// </summary>
+        /// <param name="conversationId">The conversation the message belongs to.</param>
+        /// <param name="messageId">The message to delete. A message the conversation does not hold is no error.</param>
+        /// <param name="cancellationToken">Cancels the delete.</param>
+        ValueTask DeleteMessageAsync(
+            string conversationId,
+            string messageId,
             CancellationToken cancellationToken = default);
 
         /// <summary>
@@ -198,6 +210,38 @@ namespace AgentCore.Application.Ports
             int batchSize = 500,
             CancellationToken cancellationToken = default);
 
+        /// <summary>
+        /// Puts a holder's busy mark on a conversation, or extends the mark the holder already has, unless another
+        /// holder's mark is still live. The mark is a lease: it lapses <paramref name="lease"/> after it was last put,
+        /// so a holder that crashed frees the conversation by itself.
+        /// </summary>
+        /// <param name="conversationId">
+        /// The conversation to mark. Its row need not exist: the first turn of a conversation marks it before making it.
+        /// </param>
+        /// <param name="holder">An opaque id of whoever holds the mark, the same on every renewal.</param>
+        /// <param name="lease">How long the mark lives from now, on the store's own clock.</param>
+        /// <param name="cancellationToken">Cancels the write.</param>
+        /// <returns>
+        /// <see langword="true"/> when <paramref name="holder"/> now holds the mark; <see langword="false"/> when
+        /// another holder's mark is still live, which is then left as it is.
+        /// </returns>
+        ValueTask<bool> TryMarkBusyAsync(
+            string conversationId,
+            string holder,
+            TimeSpan lease,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Takes a holder's busy mark off a conversation. A mark another holder has put since is left as it is.
+        /// </summary>
+        /// <param name="conversationId">The conversation to clear.</param>
+        /// <param name="holder">The id the mark was put under.</param>
+        /// <param name="cancellationToken">Cancels the write.</param>
+        ValueTask ClearBusyAsync(
+            string conversationId,
+            string holder,
+            CancellationToken cancellationToken = default);
+
         /// <summary>Gives a principal a claim on a conversation.</summary>
         /// <param name="conversationId">The conversation to claim.</param>
         /// <param name="principalKey">The opaque key that claims it.</param>
@@ -223,10 +267,6 @@ namespace AgentCore.Application.Ports
         /// <param name="conversationId">The conversation the continuation belongs to.</param>
         /// <param name="envelope">The serialized session, as the agent wrote it.</param>
         /// <param name="cancellationToken">Cancels the write.</param>
-        /// <remarks>
-        /// The continuation names a conversation whose words live in store 1, so the map lives in this store:
-        /// a resume must never find the key without the words.
-        /// </remarks>
         ValueTask SaveContinuationAsync(
             string continuationId,
             string conversationId,

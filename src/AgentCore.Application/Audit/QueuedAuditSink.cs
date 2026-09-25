@@ -1,9 +1,12 @@
+using System.Data.Common;
 using System.Threading.Channels;
 using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Audit;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Polly;
+using Polly.Retry;
 
 namespace AgentCore.Application.Audit
 {
@@ -18,9 +21,21 @@ namespace AgentCore.Application.Audit
         /// <summary>The most events the writer hands the store in one conversation.</summary>
         public const int DefaultBatchSize = 100;
 
+        /// <summary>How many times a batch the store refused with a transient fault is handed to it again.</summary>
+        private const int MaxRetryAttempts = 3;
+
+        /// <summary>The median wait before the first retry. Each later wait doubles it, with jitter.</summary>
+        private static readonly TimeSpan FirstRetryDelay = TimeSpan.FromMilliseconds(200);
+
+        /// <summary>The longest any one wait between retries can be.</summary>
+        private static readonly TimeSpan MaxRetryDelay = TimeSpan.FromSeconds(2);
+
         /// <summary>How long <see cref="Dispose"/> waits for the drain before it gives up.</summary>
         private static readonly TimeSpan DisposeTimeout = TimeSpan.FromSeconds(5);
+
         private readonly ILogger _logger;
+
+        private readonly ResiliencePipeline _retry;
 
         private readonly Channel<AuditEvent> _queue;
 
@@ -50,6 +65,9 @@ namespace AgentCore.Application.Audit
         /// <param name="batchSize">
         /// The most events one call to the store carries, or <see cref="DefaultBatchSize"/>.
         /// </param>
+        /// <param name="timeProvider">
+        /// The clock the waits between retries run on, or <see langword="null"/> for <see cref="TimeProvider.System"/>.
+        /// </param>
         /// <exception cref="ArgumentNullException"><paramref name="inner"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentOutOfRangeException">
         /// <paramref name="capacity"/> or <paramref name="batchSize"/> is less than one.
@@ -58,7 +76,8 @@ namespace AgentCore.Application.Audit
             IAuditSinkPort inner,
             ILogger? logger = null,
             int capacity = DefaultCapacity,
-            int batchSize = DefaultBatchSize)
+            int batchSize = DefaultBatchSize,
+            TimeProvider? timeProvider = null)
         {
             ArgumentNullException.ThrowIfNull(inner);
             ArgumentOutOfRangeException.ThrowIfLessThan(capacity, 1);
@@ -69,6 +88,8 @@ namespace AgentCore.Application.Audit
             _logger = logger ?? NullLogger.Instance;
 
             _batchSize = batchSize;
+
+            _retry = RetryPipeline(timeProvider ?? TimeProvider.System);
 
             _queue = Channel.CreateBounded<AuditEvent>(new BoundedChannelOptions(capacity)
             {
@@ -118,20 +139,13 @@ namespace AgentCore.Application.Audit
         /// <returns>A task that completes when the drain is done.</returns>
         public async ValueTask DisposeAsync()
         {
-            // A container captures this once per service type it is registered under, and it answers to
-            // two. Without this guard the second close cancels a CancellationTokenSource the first one
-            // already disposed.
             if (Interlocked.Exchange(ref _closed, 1) != 0)
             {
                 return;
             }
 
-            // Completing the writer is what ends the drain loop, and it is also what makes every later
-            // TryWrite return false. The queue keeps whatever is already in it, so the drain is honest.
             _ = _queue.Writer.TryComplete();
 
-            // Bounded on purpose. A host that stops is never held by a store that will not answer, and a
-            // store that does answer gets the whole window to write what it already accepted.
             if (!await DrainedAsync().ConfigureAwait(false))
             {
                 await _stopping.CancelAsync().ConfigureAwait(false);
@@ -190,14 +204,35 @@ namespace AgentCore.Application.Audit
             }
         }
 
-        /// <summary>Hands one batch to the store, and reports whatever it refuses.</summary>
+        /// <summary>Builds the retry a refused batch goes through before it is dropped.</summary>
+        /// <param name="timeProvider">The clock the waits between attempts run on.</param>
+        /// <returns>The pipeline.</returns>
+        private static ResiliencePipeline RetryPipeline(TimeProvider timeProvider)
+        {
+            return new ResiliencePipelineBuilder { TimeProvider = timeProvider }
+                .AddRetry(new RetryStrategyOptions
+                {
+                    ShouldHandle = new PredicateBuilder().Handle<DbException>(exception => exception.IsTransient),
+                    MaxRetryAttempts = MaxRetryAttempts,
+                    BackoffType = DelayBackoffType.Exponential,
+                    UseJitter = true,
+                    Delay = FirstRetryDelay,
+                    MaxDelay = MaxRetryDelay,
+                })
+                .Build();
+        }
+
+        /// <summary>Hands one batch to the store, retries a transient fault, and reports a batch it drops.</summary>
         /// <param name="batch">The events to write, in the order they were accepted.</param>
         /// <returns>A task that always completes, and never faults.</returns>
         private async Task AppendBatchAsync(List<AuditEvent> batch)
         {
             try
             {
-                await Store.AppendManyAsync([.. batch], _stopping.Token).ConfigureAwait(false);
+                await _retry.ExecuteAsync(
+                    static (state, cancellationToken) => state.Store.AppendManyAsync(state.Events, cancellationToken),
+                    (Store, Events: (IReadOnlyList<AuditEvent>)[.. batch]),
+                    _stopping.Token).ConfigureAwait(false);
             }
 #pragma warning disable CA1031 // The store is a record of the conversation and never a part of it.
             catch (Exception exception)

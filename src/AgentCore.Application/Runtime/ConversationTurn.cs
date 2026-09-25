@@ -13,7 +13,6 @@ namespace AgentCore.Application.Runtime
     internal sealed record ConversationTurn(
         AIAgent Agent,
         AgentSession Session,
-        List<ChatMessage> Request,
         ChatMessage Spoken,
         string? Reminder,
         string StageBefore,
@@ -24,5 +23,5 @@ namespace AgentCore.Application.Runtime
         TurnResults Results,
         TurnFiles Files,
         KnowledgeScope? Knowledge,
-        string? MessageId);
+        ConversationTurnOrigin? Origin);
 }

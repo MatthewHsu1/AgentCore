@@ -44,6 +44,11 @@ namespace AgentCore.Application.Configuration.Validation
             return new() { Pointer = pointer, Message = message, Check = ConfigurationCheck.GraphWellFormedness };
         }
 
+        public static ConfigurationError GraphNodeBackground(string pointer, string message)
+        {
+            return new() { Pointer = pointer, Message = message, Check = ConfigurationCheck.GraphNodeBackground };
+        }
+
         /// <summary>Refuses a count or an interval that falls outside the range the runtime accepts.</summary>
         /// <param name="value">The configured value.</param>
         /// <param name="min">The lowest accepted value, inclusive.</param>

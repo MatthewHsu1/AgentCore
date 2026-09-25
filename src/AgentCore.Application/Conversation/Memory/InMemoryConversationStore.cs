@@ -25,6 +25,8 @@ namespace AgentCore.Application.Conversation.Memory
 
         private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
 
+        private readonly InMemoryConversationBusyMarks _busy = new(timeProvider ?? TimeProvider.System);
+
         /// <inheritdoc />
         public ValueTask<ConversationRecord> CreateAsync(string conversationId, CancellationToken cancellationToken = default)
         {
@@ -152,6 +154,20 @@ namespace AgentCore.Application.Conversation.Memory
         }
 
         /// <inheritdoc />
+        public ValueTask<bool> TryMarkBusyAsync(
+            string conversationId, string holder, TimeSpan lease, CancellationToken cancellationToken = default)
+        {
+            return ValueTask.FromResult(_busy.TryMark(conversationId, holder, lease));
+        }
+
+        /// <inheritdoc />
+        public ValueTask ClearBusyAsync(string conversationId, string holder, CancellationToken cancellationToken = default)
+        {
+            _busy.Clear(conversationId, holder);
+            return default;
+        }
+
+        /// <inheritdoc />
         public ValueTask AttachPrincipalAsync(
             string conversationId, string principalKey, string role, CancellationToken cancellationToken = default)
         {
@@ -205,12 +221,18 @@ namespace AgentCore.Application.Conversation.Memory
                 }
 
                 int fallbackTurnIndex = _state.GetValueOrDefault(conversationId)?.NextTurnIndex ?? 0;
+                if (messages.Min(message => message.TurnIndex) is { } named && named < fallbackTurnIndex)
+                {
+                    throw new ConversationTurnConflictException(
+                        $"Conversation '{conversationId}' already saved turn {named} and takes turn {fallbackTurnIndex} next, so nothing was written.");
+                }
+
                 IReadOnlyList<ConversationMessage> rows = _words.Append(conversationId, messages, fallbackTurnIndex);
 
                 DateTimeOffset now = _time.GetUtcNow();
                 _conversations[conversationId] = conversation with { LastMessageAt = now };
 
-                if (state is not null)
+                if (state is not null && state.NextTurnIndex >= fallbackTurnIndex)
                 {
                     _state[conversationId] = state;
                 }
@@ -230,6 +252,20 @@ namespace AgentCore.Application.Conversation.Memory
             lock (_lock)
             {
                 _words.Rewrite(conversationId, messageId, content);
+            }
+
+            return default;
+        }
+
+        /// <inheritdoc />
+        public ValueTask DeleteMessageAsync(string conversationId, string messageId, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(conversationId);
+            ArgumentException.ThrowIfNullOrEmpty(messageId);
+
+            lock (_lock)
+            {
+                _words.Delete(conversationId, messageId);
             }
 
             return default;

@@ -187,6 +187,12 @@ namespace AgentCore.Application.Conversation
         }
 
         /// <inheritdoc />
+        public ValueTask DeleteMessageAsync(string conversationId, string messageId, CancellationToken cancellationToken = default)
+        {
+            return Store.DeleteMessageAsync(conversationId, messageId, cancellationToken);
+        }
+
+        /// <inheritdoc />
         public ValueTask<IReadOnlyList<ConversationMessage>> ReadForSessionAsync(string conversationId, CancellationToken cancellationToken = default)
         {
             return Store.ReadForSessionAsync(conversationId, cancellationToken);
@@ -220,6 +226,18 @@ namespace AgentCore.Application.Conversation
         public ValueTask<int> SweepAsync(TimeSpan retention, int batchSize = 500, CancellationToken cancellationToken = default)
         {
             return Store.SweepAsync(retention, batchSize, cancellationToken);
+        }
+
+        /// <inheritdoc />
+        public ValueTask<bool> TryMarkBusyAsync(string conversationId, string holder, TimeSpan lease, CancellationToken cancellationToken = default)
+        {
+            return Store.TryMarkBusyAsync(conversationId, holder, lease, cancellationToken);
+        }
+
+        /// <inheritdoc />
+        public ValueTask ClearBusyAsync(string conversationId, string holder, CancellationToken cancellationToken = default)
+        {
+            return Store.ClearBusyAsync(conversationId, holder, cancellationToken);
         }
 
         /// <inheritdoc />

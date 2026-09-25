@@ -7,59 +7,26 @@ namespace AgentCore.Application.Runtime
     /// <summary>
     /// Answers a run that threw, or one that spoke no words at all, with the spoken fallback.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// R1: a tool that fails four times in a row throws out of the run, and section 8.7 says that must
-    /// never kill the conversation. R2: at 40 tool rounds the framework sends request 41 with no tools and
-    /// returns quietly, with no exception — on a voice conversation that silence is the failure, so an empty
-    /// reply is read rather than trusting the absence of an error. Both end here, and both leave the
-    /// turn an ordinary successful run.
-    /// </para>
-    /// <para>
-    /// <b>A cancel is not a fault.</b> <see cref="OperationCanceledException"/> is never swallowed: a
-    /// barge-in ends the turn on the caller's terms and the turn loop records what was heard.
-    /// </para>
-    /// <para>
-    /// <b>It wraps an AGENT and not a chat client.</b> One turn is one run of one agent on every row of
-    /// the compile table. A chat-pipeline layer would answer each graph node separately, and a node that
-    /// went quiet would then speak the fallback INTO the graph — which is exactly the silent graph
-    /// failure section 8.2 refuses to ship, hidden rather than raised.
-    /// </para>
-    /// <para>
-    /// A run that threw carries no messages out, because the fault ended it. An empty run keeps the
-    /// messages it did produce, so a tool pair that finished stays visible to the next turn.
-    /// </para>
-    /// <para>
-    /// <b>On a graph row the emptiness that matters is the OUTPUT node's, not the run's.</b> Measured on
-    /// Microsoft.Agents.AI 1.17.0: a sequential graph whose last node answers with whitespace returns one
-    /// message, and it is the node BEFORE it. Reading the run as "it produced text" would put the graph's
-    /// own deliberation in the caller's ear. The constructor's <c>spokenBy</c> set names the agents whose
-    /// reply the caller hears, so a quiet output node reads as the silence it is.
-    /// </para>
-    /// <para>
-    /// It holds no per-call state: one instance is compiled once and shared by every conversation under T44 and
-    /// R7.
-    /// </para>
-    /// </remarks>
     internal sealed class FallbackAgent : DelegatingAIAgent
     {
         private readonly string _fallbackReply;
-        private readonly IReadOnlySet<string>? _spokenBy;
+
+        private readonly IReadOnlySet<string>? _outputAgents;
 
         /// <summary>Puts the fallback in front of one turn agent.</summary>
         /// <param name="inner">The agent a turn runs.</param>
         /// <param name="fallbackReply">What a failed turn speaks.</param>
-        /// <param name="spokenBy">
+        /// <param name="outputAgents">
         /// The <c>agents.items</c> ids whose reply the caller hears, or <see langword="null"/> when the
         /// last thing the run produced is that reply. It is null for rows 1 and 2, which run one agent,
         /// and for the graph patterns where any participant may answer last.
         /// </param>
-        public FallbackAgent(AIAgent inner, string fallbackReply, IReadOnlySet<string>? spokenBy = null)
+        public FallbackAgent(AIAgent inner, string fallbackReply, IReadOnlySet<string>? outputAgents = null)
             : base(inner)
         {
             ArgumentNullException.ThrowIfNull(fallbackReply);
             _fallbackReply = fallbackReply;
-            _spokenBy = spokenBy;
+            _outputAgents = outputAgents;
         }
 
         /// <inheritdoc />
@@ -76,12 +43,12 @@ namespace AgentCore.Application.Runtime
                     .ConfigureAwait(false);
             }
 #pragma warning disable CA1031 // Section 8.7, row six: the run throws, the turn ends, and the conversation lives.
-            catch (Exception exception) when (exception is not OperationCanceledException)
+            catch (Exception exception) when (IsFault(exception, cancellationToken))
 #pragma warning restore CA1031
             {
                 AgentResponse spoken = new(new ChatMessage(ChatRole.Assistant, _fallbackReply));
                 spoken.AdditionalProperties ??= [];
-                spoken.AdditionalProperties.Add(Disposition(FallbackCause.Faulted, exception.Message));
+                spoken.AdditionalProperties.Add(Disposition(FallbackCause.Faulted, exception));
                 return spoken;
             }
 
@@ -112,7 +79,7 @@ namespace AgentCore.Application.Runtime
 
             bool spokeText = false;
             FallbackCause cause = FallbackCause.None;
-            string? reason = null;
+            Exception? reason = null;
 
             try
             {
@@ -127,11 +94,11 @@ namespace AgentCore.Application.Runtime
                         }
                     }
 #pragma warning disable CA1031 // Section 8.7, row six. See the buffered path above.
-                    catch (Exception exception) when (exception is not OperationCanceledException)
+                    catch (Exception exception) when (IsFault(exception, cancellationToken))
 #pragma warning restore CA1031
                     {
                         cause = FallbackCause.Faulted;
-                        reason = exception.Message;
+                        reason = exception;
                     }
 
                     if (cause is not FallbackCause.None || current is null)
@@ -139,7 +106,7 @@ namespace AgentCore.Application.Runtime
                         break;
                     }
 
-                    spokeText = spokeText || HasApprovalRequest(current) || (Speaks(current.AuthorName) && !string.IsNullOrWhiteSpace(current.Text));
+                    spokeText = spokeText || HasApprovalRequest(current) || (IsOutput(current.AuthorName) && !string.IsNullOrWhiteSpace(current.Text));
                     yield return current;
                 }
             }
@@ -162,14 +129,21 @@ namespace AgentCore.Application.Runtime
             }
         }
 
+        /// <summary>
+        /// Distinguishes a caller cancel from every other <see cref="OperationCanceledException"/>: only the
+        /// former is not a fault.
+        /// </summary>
+        /// <param name="exception">What the run or the stream threw.</param>
+        /// <param name="cancellationToken">The token this run was cancelled by, if the caller cancelled it.</param>
+        /// <returns><see langword="true"/> when the turn should take the fallback rather than propagate.</returns>
+        private static bool IsFault(Exception exception, CancellationToken cancellationToken)
+        {
+            return exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested;
+        }
+
         /// <summary>Reads whether the run asks the caller to approve a tool call.</summary>
         /// <param name="messages">What the inner agent answered.</param>
         /// <returns>Whether any message carries an approval request.</returns>
-        /// <remarks>
-        /// A request-only reply carries no text, so without this the run reads as silence and takes
-        /// the fallback. An approval the caller never hears is a tool that never runs, so a request
-        /// counts as spoken whoever authored it.
-        /// </remarks>
         private static bool HasApprovalRequest(IEnumerable<ChatMessage> messages)
         {
             return messages.Any(message => HasApprovalRequest(message.Contents));
@@ -193,21 +167,21 @@ namespace AgentCore.Application.Runtime
         /// <returns>The spoken text, or an empty string when nothing the caller hears was produced.</returns>
         private string SpokenText(AgentResponse response)
         {
-            return SpokenReply.From(response.Messages, _spokenBy);
+            return ReplyText.From(response.Messages, _outputAgents);
         }
 
         /// <summary>Reads whether the caller hears what this author said.</summary>
         /// <param name="authorName">The node that produced the message or the update, if any.</param>
         /// <returns><see langword="true"/> when the text counts as the reply.</returns>
-        private bool Speaks(string? authorName)
+        private bool IsOutput(string? authorName)
         {
-            return _spokenBy is null || (authorName is not null && _spokenBy.Contains(authorName));
+            return _outputAgents is null || (authorName is not null && _outputAgents.Contains(authorName));
         }
 
         /// <summary>
         /// What this layer alone knows. <see cref="ModerationAgent"/> folds its own verdict in above.
         /// </summary>
-        private static TurnDisposition Disposition(FallbackCause cause, string? reason)
+        private static TurnDisposition Disposition(FallbackCause cause, Exception? reason)
         {
             return new(Moderation: null, FlaggedCategories: null, cause, reason, ModerationReason: null);
         }

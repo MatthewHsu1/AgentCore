@@ -16,7 +16,7 @@ namespace AgentCore.Application.Runtime.Turn
         /// <summary>
         /// What names the caller in that message.
         /// </summary>
-        internal const string CallerLinePrefix = "Caller: ";
+        internal const string UserLinePrefix = "User: ";
 
         /// <summary>
         /// What names this agent in that message.
@@ -40,7 +40,7 @@ namespace AgentCore.Application.Runtime.Turn
                 }
 
                 _ = rendered
-                    .Append(message.Role == ChatRole.User ? CallerLinePrefix : AgentLinePrefix)
+                    .Append(message.Role == ChatRole.User ? UserLinePrefix : AgentLinePrefix)
                     .Append(text)
                     .Append('\n');
             }
@@ -58,10 +58,10 @@ namespace AgentCore.Application.Runtime.Turn
             return update.Contents.Any(content => content is not TextContent text || text.Text.Length > 0);
         }
 
-        /// <summary>Keeps the tool calls whose results arrived, and drops every unpaired call and every word.</summary>
+        /// <summary>Keeps the words and the tool calls whose results arrived, and drops every unpaired call.</summary>
         /// <param name="messages">Every message the round produced.</param>
-        /// <returns>The tool content that carries a complete call-and-result pair, in its original order.</returns>
-        internal static List<ChatMessage> FinishedToolMessages(IList<ChatMessage> messages)
+        /// <returns>The words and the complete call-and-result pairs, in their original order.</returns>
+        internal static List<ChatMessage> FinishedMessages(IList<ChatMessage> messages)
         {
             HashSet<string> answered = [];
             foreach (ChatMessage message in messages)
@@ -82,16 +82,16 @@ namespace AgentCore.Application.Runtime.Turn
                 [
                     .. message.Contents.Where(content => content switch
                     {
-                        TextContent => false,
                         FunctionCallContent call => answered.Contains(call.CallId),
                         _ => true,
                     }),
                 ];
 
-                if (!tools.Any(content => content is FunctionCallContent or FunctionResultContent or ToolApprovalRequestContent))
+                if (!tools.Any(content => content is FunctionCallContent or FunctionResultContent or ToolApprovalRequestContent
+                    || content is TextContent { Text.Length: > 0 }))
                 {
-                    // Plain prose, or a message whose every call is still in flight. Neither belongs in
-                    // the next turn.
+                    // A message whose every call is still in flight, with no words beside them. It does not
+                    // belong in the next turn.
                     continue;
                 }
 
@@ -109,6 +109,21 @@ namespace AgentCore.Application.Runtime.Turn
             }
 
             return kept;
+        }
+
+        /// <summary>
+        /// The whole reply a turn's run produced, every step's text in order.
+        /// </summary>
+        /// <param name="messages">Every message the round produced.</param>
+        /// <returns>
+        /// Every step's text, concatenated with no separator between steps — the same rule
+        /// <see cref="AgentCore.Application.Transcript.ShownWords.Lay"/> reconstructs a cut reply's shown text against, so a
+        /// multi-step reply's hash and its transcript rows never disagree over where one step ends and
+        /// the next begins.
+        /// </returns>
+        internal static string AllText(IList<ChatMessage> messages)
+        {
+            return string.Concat(FinishedMessages(messages).Select(message => message.Text));
         }
     }
 }

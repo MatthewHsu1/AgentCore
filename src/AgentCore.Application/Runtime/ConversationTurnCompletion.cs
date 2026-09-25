@@ -1,6 +1,7 @@
-using System.Text.Json;
+using System.Diagnostics;
+using System.Globalization;
 using AgentCore.Application.Diagnostics;
-using AgentCore.Application.Runtime.Turn;
+using AgentCore.Application.Transcript;
 using AgentCore.Domain;
 using AgentCore.Domain.Audit;
 using Microsoft.Agents.AI;
@@ -8,91 +9,111 @@ using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Runtime
 {
-    internal sealed class ConversationTurnCompletion
+    /// <summary>
+    /// The conversation's side of one turn's seal: it decides the turn after its run, and publishes it once
+    /// <see cref="ConversationTurnAgent"/> committed the words. One instance serves one turn.
+    /// </summary>
+    internal sealed class ConversationTurnCompletion : ITurnCompleter
     {
         private readonly ConversationSession _session;
 
+        private readonly ConversationTurn _turn;
+
         private readonly ConversationTurnCommit _commit;
 
-        internal ConversationTurnCompletion(ConversationSession session)
+        private ReplyOutcome? _outcome;
+
+        private TurnResult? _decided;
+
+        private TurnCut? _cut;
+
+        /// <summary>Creates the completion of one turn.</summary>
+        /// <param name="session">The conversation.</param>
+        /// <param name="turn">The turn it completes.</param>
+        internal ConversationTurnCompletion(ConversationSession session, ConversationTurn turn)
         {
             ArgumentNullException.ThrowIfNull(session);
+            ArgumentNullException.ThrowIfNull(turn);
             _session = session;
+            _turn = turn;
             _commit = new ConversationTurnCommit(session);
         }
 
+        /// <summary>Gets the finished turn, or <see langword="null"/> until the turn is published.</summary>
+        internal TurnResult? Result { get; private set; }
+
+        /// <inheritdoc />
+        public void Superseded(WithdrawnTurns withdrawn)
+        {
+            _session.Clarifications.Withdraw();
+
+            _ = _session.Events.Raise(
+                ConversationEventKind.TurnSuperseded,
+                _session.Time.GetUtcNow(),
+                _session.State.TurnIndex,
+                payload: new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [AuditPayloadKeys.WithdrewFromTurnIndex] =
+                        withdrawn.First.ToString(CultureInfo.InvariantCulture),
+                    [AuditPayloadKeys.WithdrewThroughTurnIndex] =
+                        withdrawn.Last.ToString(CultureInfo.InvariantCulture),
+                });
+        }
+
         /// <summary>Runs every writer, then lets the machine pick the stage of the next turn.</summary>
-        /// <param name="turn">The turn that just spoke.</param>
-        /// <param name="response">What the agent answered.</param>
-        /// <param name="toolFault">
-        /// The message of the fault that threw out of the run, or <see langword="null"/> when nothing
-        /// threw. Section 8.7, row six.
-        /// </param>
-        /// <param name="cancellationToken">Cancels the extractor call.</param>
-        /// <returns>The finished turn.</returns>
-        /// <param name="disposition">
-        /// What <see cref="ModerationAgent"/> and <see cref="FallbackAgent"/> reported about
-        /// this turn, or <see langword="null"/> when neither layer marked it. A flagged turn skips the
+        /// <param name="sealing">
+        /// The turn as the layer saw it end. Its disposition is what <see cref="ModerationAgent"/> and
+        /// <see cref="FallbackAgent"/> reported. A flagged turn skips the
         /// extractor: the words moderation flagged are its only input, and a slot filled from them would
         /// carry the flagged content into the state document and into every later prompt. Everything else
         /// about a refused turn is ordinary, so the refusal enters the transcript, the stage machine
         /// advances, and <c>turn.completed</c> proves the refusal under
         /// <see cref="AuditPayloadKeys.ReplyTextSha256"/>.
         /// </param>
-        internal async Task<TurnResult> CompleteTurnAsync(
-            ConversationTurn turn,
-            AgentResponse response,
-            string? toolFault,
-            TurnDisposition? disposition,
-            CancellationToken cancellationToken)
+        /// <param name="fault">
+        /// The fault that threw out of the run, or <see langword="null"/> when nothing threw. Section 8.7,
+        /// row six.
+        /// </param>
+        /// <returns>The commit, with the state after the stage advance and the line the record holds.</returns>
+        public async ValueTask<TurnCommit> CompleteAsync(TurnCommit sealing, Exception? fault)
         {
-            // Sweep drain state for tool calls whose round never reached the client's drain: the
-            // round that ends a turn attaches nothing, so turn-scoped records would otherwise
-            // leave entries sitting on the shared clients.
+            ArgumentNullException.ThrowIfNull(sealing);
+
+            Activity.Current = _turn.Activity;
+
+            ConversationTurn turn = _turn;
+
+            AgentResponse response = sealing.Seen ?? new AgentResponse();
+
+            TurnDisposition? disposition = sealing.Disposition;
+
+            _cut = sealing.Cut;
+
             turn.Results.Sweep();
 
-            // Calls the model named that no tool answered never reach the invoking client, so no
-            // per-call state names them. The turn's own record does: every id the model gave minus
-            // every id a tool ran under. Reported here, at the same turn end that sweeps the drain.
             ReportUndeclaredToolCalls(turn, response);
 
-            ConversationInterruptionTracker.Interruption? interruption = _session.Interruptions.CurrentInterruption();
-
-            // The moderation facts of this turn, raised before the turn's own events so the flag still
-            // takes the lower ordinal. The verdict is known before the model runs, which is the one rule
-            // that separates prompt.flagged from reply.interrupted: it amends nothing.
             bool refused = disposition?.Moderation is ModerationOutcome.Flagged;
+
             _session.Events.RaiseModeration(turn.Index, disposition);
 
-            ReplyOutcome outcome = ResolveReply(turn, response, interruption, disposition, toolFault);
-            TranscriptEntry addition = TranscriptAddition(response, outcome);
-
-            // The per-turn writers run from here, in the order the constructor documents: tool results
-            // first.
+            ReplyOutcome outcome = TurnReplyResolution.Resolve(_session, turn, response, _cut, disposition, fault, sealing.CallerFacing);
             _session.Writers.ApplyToolResults(response.Messages);
 
-            // A refused turn runs no extractor. The words moderation flagged are the extractor's only
-            // input, so a slot filled from them would carry the flagged content into the state document
-            // and into every later prompt. The refusal itself says nothing worth extracting either, and
-            // the extractor costs a model call, so this also spends nothing on a turn nobody answered.
-            // A pending turn runs none either: the run suspended instead of answering, so there is
-            // nothing decided to read.
             string? extractionFailure = refused || outcome.Approvals.Count > 0
                 ? null
-                : await ExtractAsync(turn, response, cancellationToken).ConfigureAwait(false);
+                : await ExtractAsync(turn, response).ConfigureAwait(false);
 
-            // The clock fields write next. The clock comes from the injected provider, so a test owns
-            // it. The same read stamps every audit event of this turn.
             DateTimeOffset endedAt = _session.Time.GetUtcNow();
+
             _session.State.TurnIndex++;
             _session.State.ConversationDurationSeconds = (endedAt - _session.StartedAt).TotalSeconds;
 
-            // The counters write last.
             _ = _session.Counters.Apply(_session.State);
 
             string stageAfter = AdvanceStage(turn);
 
-            TurnResult result = new(
+            _decided = new(
                 _session.ConversationId,
                 turn.Index,
                 turn.StageBefore,
@@ -106,146 +127,109 @@ namespace AgentCore.Application.Runtime
             {
                 Approvals = outcome.Approvals,
             };
+            _outcome = outcome;
 
-            // A graph row that reuses its session persists it here, before the commit below reads
-            // it into store 0: the next turn resumes from these checkpoints, and a resumed conversation
-            // rebuilds them. Rows 1 and 2 need nothing — their session outlives the conversation.
             if (_session.ReusesGraphSession && _session.GraphSession is { } shared)
             {
-                _session.GraphBlob = await turn.Agent.SerializeSessionAsync(shared, cancellationToken: cancellationToken).ConfigureAwait(false);
+                _session.GraphBlob = await turn.Agent.SerializeSessionAsync(shared).ConfigureAwait(false);
             }
 
-            result = _commit.Publish(turn, outcome, addition, result, interruption);
+            return sealing with
+            {
+                Completed = outcome.InterruptedAfter is null && outcome.Failure is null,
+                Reply = outcome.Reply,
+                State = _session.Snapshot(),
+            };
+        }
+
+        /// <inheritdoc />
+        public async ValueTask<bool> RefusedAsync(Task<bool> refused)
+        {
+            if (!await _commit.RefusedAsync(refused).ConfigureAwait(false))
+            {
+                return false;
+            }
+
+            TurnRefusals.Raise(_session, _turn.Index, TurnRefusals.Conflict);
 
             AgentCoreTelemetry.EndTurn(
-                turn.Activity,
-                _session.Time.GetElapsedTime(turn.StartedAt),
-                Outcome(result.Failure, result.InterruptedAfter),
-                stageAfter,
-                result.Failure);
+                _turn.Activity,
+                _session.Time.GetElapsedTime(_turn.StartedAt),
+                AgentCoreTelemetry.OutcomeFailed,
+                _turn.StageBefore,
+                ConversationTurnCommit.RefusedReason);
 
-            await _commit.EndConversationIfOverAsync(endedAt, stageAfter).ConfigureAwait(false);
-
-            return result;
+            return true;
         }
 
-        private ReplyOutcome ResolveReply(
-            ConversationTurn turn,
-            AgentResponse response,
-            ConversationInterruptionTracker.Interruption? interruption,
-            TurnDisposition? disposition,
-            string? toolFault)
+        /// <inheritdoc />
+        public void Committed((string UserMessageId, string? ReplyMessageId)? ids, string spoken, TurnCut? late, TurnCut? recut)
         {
-            // R1 reaches the turn through the fallback layer, and a fault above every chat client — a
-            // graph that matched no edge — still reaches the catch in the run methods. Both are the
-            // same row-six fact.
-            toolFault ??= disposition is { Fallback: FallbackCause.Faulted, FallbackReason: { } caught }
-                ? caught
-                : null;
-
-            string reply = SpokenReply.From(response.Messages);
-            string spokenReply = reply;
-            TimeSpan? interruptedAfter = null;
-            string? failure = toolFault is null ? null : ConversationSession.ToolFailureReason + " " + toolFault;
-
-            // The tool calls still waiting on a human answer. A pending turn is not a failure: the
-            // run suspended instead of answering, so the empty-reply substitution below is skipped,
-            // the extractor has nothing decided to read, and the requests ride TurnResult to the host.
-            List<PendingApproval> approvals = ApprovalRequestsOf(response);
-
-            if (interruption is { } cut)
+            if (_outcome is not { } outcome || _decided is not { } decided)
             {
-                // Item 6a. The record holds the text the caller heard, not the text the model produced.
-                // A trailing space is not speech, so it is trimmed: pipecat pins the same rule in its
-                // aggregator test, where the model sent "Hello " and the record holds "Hello".
-                reply = cut.HeardText.Trim();
-                interruptedAfter = cut.PlayedDuration;
-            }
-            else if (approvals.Count == 0 && (failure is not null
-                || string.IsNullOrWhiteSpace(reply)
-                || disposition?.Fallback is FallbackCause.EmptyReply))
-            {
-                // Section 8.7, last row. A quiet run is silence on a voice conversation, so an empty reply is a
-                // failure even though nothing threw.
-                failure ??= ConversationSession.EmptyReplyReason;
-                reply = _session.Compiled.FallbackReply;
-                spokenReply = reply;
+                throw new InvalidOperationException("The turn was committed before it was completed.");
             }
 
-            // Section 8.7, last row, raised once for the turn. It is diagnostic only, so it takes no
-            // ordinal and no row records it; the turn.completed event of this same turn carries the
-            // fallback the caller actually heard. The tool fault of row six is raised in
-            // WriteTurnEvents instead, because the chain stores that one and its row is stamped with
-            // the same endedAt every other event of the turn carries.
-            if (toolFault is null && failure is not null)
-            {
-                _session.Events.RaiseDiagnostic(ConversationEventKind.EmptyReply, _session.Time.GetUtcNow(), turn.Index);
-            }
-
-            return new ReplyOutcome(reply, spokenReply, failure, toolFault, interruptedAfter, approvals);
+            // A barge-in after the seal amends the reply just written, unless a cut already shaped it; a recut
+            // amends the reply that cut shaped.
+            Result = _commit.Publish(ids, spoken, outcome, decided, _cut, _cut is null ? late : recut);
         }
 
-        // Built before the writers run and committed at the end of the turn, in one lock with the rest
-        // of what a late barge-in may still amend: the transcript span, the ordinal the amendment must
-        // reference, and LastTurn itself. Nothing in between reads the transcript — the extractor reads
-        // the finished turn, and the writers read the state document — so building it early and
-        // committing it once costs nothing.
-        private TranscriptEntry TranscriptAddition(AgentResponse response, ReplyOutcome outcome)
+        /// <inheritdoc />
+        public async ValueTask FinishAsync()
         {
-            // A barge-in inside the first 100 ms leaves no heard text, and an empty assistant message
-            // teaches the model nothing. pipecat and livekit both guard this. Both row shapes read this
-            // one value, so what counts as words the caller heard is decided once.
-            ChatMessage? heard = outcome.Reply.Length > 0 ? new ChatMessage(ChatRole.Assistant, outcome.Reply) : null;
-
-            // Rows 3 and 4 record the caller-facing turn alone, so `written` stays empty for them: a
-            // node's tool pair and a node's line to the next node are neither said nor heard, and the
-            // commit takes the heard reply straight.
-            if (!_session.SessionCarriesHistory)
+            if (Result is not { } result)
             {
-                return new TranscriptEntry(heard, []);
+                throw new InvalidOperationException("The turn was finished before it was committed.");
             }
 
-            if (outcome.InterruptedAfter is null && outcome.Failure is null)
-            {
-                return new TranscriptEntry(heard, [.. response.Messages]);
-            }
+            AgentCoreTelemetry.EndTurn(
+                _turn.Activity,
+                _session.Time.GetElapsedTime(_turn.StartedAt),
+                Outcome(result.Failure, result.Cut),
+                result.StageAfter,
+                result.Failure,
+                ErrorType(result.Failure));
 
-            // The transcript holds what the caller heard. A run that stopped mid-round would
-            // otherwise leave a tool call with no result behind, and the next turn would send
-            // it. So the pairs that finished are kept and only an unpaired call is dropped: a
-            // side effect that ran must stay visible to the next turn. livekit/agents fixed the
-            // same defect in issue 3702.
-            List<ChatMessage> written = [.. TurnMessages.FinishedToolMessages(response.Messages)];
-            if (heard is not null)
-            {
-                written.Add(heard);
-            }
+            await _commit.EndConversationIfOverAsync(result.StageAfter).ConfigureAwait(false);
+        }
 
-            return new TranscriptEntry(heard, written);
+        /// <summary>Reads the <c>error.type</c> value a failed turn's span carries. The metric point keeps its outcome alone.</summary>
+        /// <param name="failure">The reason the record itself holds, or <see langword="null"/> when the turn answered.</param>
+        /// <returns>
+        /// The exception's own type when <see cref="TurnReplyResolution.Resolve"/> caught one, the closed
+        /// empty-reply token when it did not, or <see langword="null"/> when the turn did not fail. Never
+        /// the exception's message: that can carry caller or model text, and <paramref name="failure"/>
+        /// already holds it for whoever reads <see cref="TurnResult"/> itself.
+        /// </returns>
+        private string? ErrorType(string? failure)
+        {
+            return (failure, _outcome?.Fault) switch
+            {
+                (null, _) => null,
+                (_, { } fault) => fault.GetType().FullName,
+                _ => AgentCoreTelemetry.FailureEmptyReply,
+            };
         }
 
         // The extractor's deadline is here and not on the whole turn, because the raise of the turn's
         // events and the stage advance must always run.
-        private async Task<string?> ExtractAsync(ConversationTurn turn, AgentResponse response, CancellationToken cancellationToken)
+        private async Task<string?> ExtractAsync(ConversationTurn turn, AgentResponse response)
         {
             string? extractionFailure;
 
-            using CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            deadline.CancelAfter(ConversationSession.TurnCompletionTimeout);
+            using CancellationTokenSource deadline = new(ConversationSession.TurnCompletionTimeout, _session.Time);
             try
             {
                 extractionFailure = await _session.Writers.ExtractAsync(turn, response, deadline.Token).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested)
             {
                 extractionFailure = ConversationSession.ExtractionTimedOutReason;
             }
 
             if (extractionFailure is not null)
             {
-                // Section 8.7, row two: leave the slots unchanged, report once for the turn, and continue
-                // the conversation. State extraction must never drop a conversation. The reason rides on the event
-                // because the line an operator reads is the same one the turn loop used to write itself.
                 _session.Events.RaiseDiagnostic(
                     ConversationEventKind.ExtractionFailed,
                     _session.Time.GetUtcNow(),
@@ -284,31 +268,6 @@ namespace AgentCore.Application.Runtime
                 (_, not null) => AgentCoreTelemetry.OutcomeInterrupted,
                 _ => AgentCoreTelemetry.OutcomeCompleted,
             };
-        }
-
-        /// <summary>Reads the approval requests one finished turn still waits on.</summary>
-        /// <param name="response">What the agent answered.</param>
-        /// <returns>One entry per request content, oldest first; empty when the turn asked nothing.</returns>
-        private static List<PendingApproval> ApprovalRequestsOf(AgentResponse response)
-        {
-            List<PendingApproval> approvals = [];
-            foreach (ToolApprovalRequestContent request in response.Messages
-                .SelectMany(message => message.Contents)
-                .OfType<ToolApprovalRequestContent>())
-            {
-                if (request.ToolCall is not FunctionCallContent call)
-                {
-                    continue;
-                }
-
-                approvals.Add(new PendingApproval(
-                    request.RequestId,
-                    call.Name,
-                    JsonSerializer.SerializeToElement(
-                        call.Arguments ?? new Dictionary<string, object?>(StringComparer.Ordinal))));
-            }
-
-            return approvals;
         }
 
         /// <summary>Reports calls the model named that no tool answered.</summary>

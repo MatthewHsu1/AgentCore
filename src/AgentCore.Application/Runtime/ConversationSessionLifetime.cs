@@ -1,5 +1,7 @@
+using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Runtime.Harness;
 using AgentCore.Domain.Audit;
+using Microsoft.Agents.AI;
 
 namespace AgentCore.Application.Runtime
 {
@@ -7,9 +9,11 @@ namespace AgentCore.Application.Runtime
     {
         private readonly ConversationSession _session;
 
-        // The background release runs once per conversation: both DisposeAsync and the turn-end path reach
-        // it, and a second release would re-cancel children that already went away.
+        private readonly Lock _replacedGate = new();
+
         private int _backgroundReleased;
+
+        private Task _replacedReleases = Task.CompletedTask;
 
         internal ConversationSessionLifetime(ConversationSession session)
         {
@@ -28,10 +32,10 @@ namespace AgentCore.Application.Runtime
         /// </exception>
         internal bool EndConversation(ConversationEndReason reason)
         {
-            // The event is written before the flag moves. A value outside the closed set therefore ends
-            // no conversation and writes nothing.
             bool wrote = _session.Events.EndConversation(reason, _session.Time.GetUtcNow());
+
             _session.IsComplete = true;
+
             DeleteWorkspace();
             return wrote;
         }
@@ -46,13 +50,59 @@ namespace AgentCore.Application.Runtime
         }
 
         /// <summary>
-        /// Disposes this conversation's background sessions and shell executors. Idempotent: a session already
-        /// disposed, or one that never had either, disposes nothing.
+        /// Refuses every later turn, waits for a turn still holding the conversation to end, then disposes this
+        /// conversation's background sessions and shell executors, and waits for the release of every session a
+        /// catch-up replaced. Idempotent: a session already disposed, or one that never had either, disposes nothing.
         /// </summary>
         internal async ValueTask DisposeAsync()
         {
+            await _session.Cuts.CloseTurnsAsync().ConfigureAwait(false);
             await ReleaseBackgroundSessionsAsync().ConfigureAwait(false);
+            await ReplacedReleases().ConfigureAwait(false);
             await DisposeShellsAsync().ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Starts the release of a session a catch-up replaced, off the turn path, and keeps it for
+        /// <see cref="DisposeAsync"/> to wait for. Its outcome is logged, never thrown.
+        /// </summary>
+        /// <param name="replaced">The session the catch-up swapped out. Nothing may read it any more.</param>
+        internal void ReleaseReplaced(AgentSession replaced)
+        {
+            if (_session.Compiled.BackgroundProviders.Count == 0)
+            {
+                return;
+            }
+
+            Task release = Task.Run(() => ReleaseReplacedAsync(replaced));
+
+            lock (_replacedGate)
+            {
+                _replacedReleases = Task.WhenAll(_replacedReleases, release);
+            }
+        }
+
+        private async Task ReleaseReplacedAsync(AgentSession replaced)
+        {
+            try
+            {
+                await BackgroundSessionRelease.ReleaseAsync(
+                    _session.Compiled.BackgroundProviders, replaced, _session.ConversationId, _session.Logger, CancellationToken.None).ConfigureAwait(false);
+            }
+#pragma warning disable CA1031 // Nothing awaits this release until the conversation is disposed, so nothing may escape it.
+            catch (Exception exception)
+#pragma warning restore CA1031
+            {
+                Log.BackgroundReleaseFailed(_session.Logger, _session.ConversationId, exception);
+            }
+        }
+
+        private Task ReplacedReleases()
+        {
+            lock (_replacedGate)
+            {
+                return _replacedReleases;
+            }
         }
 
         /// <summary>

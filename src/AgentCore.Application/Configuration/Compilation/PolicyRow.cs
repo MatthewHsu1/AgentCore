@@ -5,7 +5,7 @@ using Microsoft.Agents.AI;
 namespace AgentCore.Application.Configuration.Compilation
 {
     /// <summary>
-    /// Row 2: the entry holds <c>policy:</c>. The machine picks a stage each turn, the stage names
+    /// Entry holds <c>policy:</c>. The machine picks a stage each turn, the stage names
     /// one agent, and that agent's run answers the caller. Runtime is <c>Stateless</c>.
     /// </summary>
     internal sealed class PolicyRow : CompileTableRow
@@ -25,7 +25,8 @@ namespace AgentCore.Application.Configuration.Compilation
             EntryConfiguration entry,
             string entryPointer,
             Dictionary<string, AIAgent> agents,
-            AgentCompilationContext context)
+            AgentCompilationContext context,
+            bool reusesGraphSession)
         {
             PolicyConfiguration policy = entry.Policy!;
             string policyPointer = ConfigurationError.AppendPointer(entryPointer, "policy");
@@ -37,6 +38,7 @@ namespace AgentCore.Application.Configuration.Compilation
                 StageConfiguration stage = policy.Stages[index];
                 string stagePointer = ConfigurationError.AppendPointer(
                     ConfigurationError.AppendPointer(policyPointer, "stages"), index);
+                    
                 if (stage.Agent is not { } agentId)
                 {
                     stages[stage.Id] = NoAgentId;

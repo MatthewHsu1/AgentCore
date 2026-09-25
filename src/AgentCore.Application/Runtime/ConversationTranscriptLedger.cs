@@ -1,6 +1,4 @@
 using AgentCore.Application.Conversation;
-using AgentCore.Application.Diagnostics;
-using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime.Harness;
 using AgentCore.Application.Transcript;
 using Microsoft.Agents.AI;
@@ -16,26 +14,187 @@ namespace AgentCore.Application.Runtime
         {
             ArgumentNullException.ThrowIfNull(session);
             _session = session;
+            Reads = new ConversationStoreReads(session);
+        }
+
+        /// <summary>Gets the reads of what store 1 holds beyond the session's words, and the count of its lost writes.</summary>
+        internal ConversationStoreReads Reads { get; }
+
+        /// <summary>
+        /// Opens the session for one turn, and reads what store 1 holds beyond its words. Changes no words the
+        /// session already holds: the turn is not admitted yet, and a refused turn must leave them as they are.
+        /// </summary>
+        /// <param name="cancellationToken">Cancels the open and the reads.</param>
+        /// <returns>
+        /// The session, and what <see cref="CatchUpAsync"/> brings in once the turn is admitted: <see langword="null"/>
+        /// for a session opened just now, or one whose words store 1 already matches.
+        /// </returns>
+        internal async ValueTask<(AgentSession Session, TranscriptCatchUp? CatchUp)> OpenForTurnAsync(CancellationToken cancellationToken)
+        {
+            if (Session() is { } opened)
+            {
+                return (opened, await Reads.ReadAsync(opened, cancellationToken).ConfigureAwait(false));
+            }
+
+            return (await OpenSessionAsync(cancellationToken).ConfigureAwait(false), null);
         }
 
         /// <summary>
-        /// Opens the session of this conversation, once, and re-syncs it with store 0 before handing it to every
-        /// later turn.
+        /// Brings an admitted turn's session in line with what store 1 held. A read made before the turn was admitted
+        /// is stale once the session's own words moved, say because the turn before committed, so it is made again: no
+        /// turn can commit now, and the words are never replaced by rows that lack them.
         /// </summary>
+        /// <param name="opened">The session of this conversation.</param>
+        /// <param name="catchUp">What <see cref="OpenForTurnAsync"/> read, or <see langword="null"/>.</param>
+        /// <param name="cancellationToken">Cancels the reads.</param>
+        /// <exception cref="InvalidOperationException">Another session's turn ended the conversation.</exception>
+        internal async ValueTask CatchUpAsync(AgentSession opened, TranscriptCatchUp? catchUp, CancellationToken cancellationToken)
+        {
+            if (catchUp is not null)
+            {
+                await BringInAsync(opened, catchUp, cancellationToken).ConfigureAwait(false);
+            }
+
+            _session.Runner.RefuseIfComplete();
+        }
+
+        private async ValueTask BringInAsync(AgentSession opened, TranscriptCatchUp catchUp, CancellationToken cancellationToken)
+        {
+            if (!await TakeStoredAsync(opened, catchUp, StateToTake(catchUp), cancellationToken).ConfigureAwait(false))
+            {
+                if (await Reads.ReadAsync(opened, cancellationToken).ConfigureAwait(false) is not { } again
+                    || !await TakeStoredAsync(opened, again, StateToTake(again), cancellationToken).ConfigureAwait(false))
+                {
+                    return;
+                }
+
+                catchUp = again;
+            }
+
+            Reads.CaughtUp(catchUp);
+        }
+
+        /// <summary>The state another session stored that this one takes, or <see langword="null"/> when it keeps its own.</summary>
+        private ConversationSessionState? StateToTake(TranscriptCatchUp catchUp)
+        {
+            return catchUp.State is { } stored && (catchUp.Overtaken || stored.NextTurnIndex > _session.State.TurnIndex) ? stored : null;
+        }
+
+        /// <summary>
+        /// Takes the words store 1 holds, with the turn index, the stage, the slots, and the harness providers' state or
+        /// a graph row's workflow another session stored beside them.
+        /// </summary>
+        /// <param name="opened">The session of this conversation.</param>
+        /// <param name="catchUp">What store 1 held.</param>
+        /// <param name="stored">The state to take, or <see langword="null"/> when the session keeps its own.</param>
+        /// <param name="cancellationToken">Cancels the session's rebuild.</param>
+        /// <returns><see langword="false"/> when the session's words moved since the read and nothing was taken.</returns>
+        private async ValueTask<bool> TakeStoredAsync(
+            AgentSession opened, TranscriptCatchUp catchUp, ConversationSessionState? stored, CancellationToken cancellationToken)
+        {
+            if (stored is { Version: ConversationSessionState.CurrentVersion } current
+                && _session.SessionCarriesHistory && _session.Compiled.HarnessStateKeys.Count > 0)
+            {
+                return await RebuildAsync(opened, catchUp, current, cancellationToken).ConfigureAwait(false);
+            }
+
+            ConversationSessionState? workflow = _session.ReusesGraphSession && stored is { Version: ConversationSessionState.CurrentVersion }
+                ? stored
+                : null;
+            AgentSession? graph = workflow is null ? null : await GraphSessionFromAsync(workflow, cancellationToken).ConfigureAwait(false);
+
+            if (!_session.History.TryResync(opened, catchUp))
+            {
+                return false;
+            }
+
+            lock (_session.TurnLock)
+            {
+                if (workflow is not null)
+                {
+                    _session.GraphSession = graph;
+                    _session.GraphBlob = workflow.WorkflowState;
+                }
+
+                TakeState(catchUp, stored);
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Replaces the session with one read from the state another session stored, holding the words store 1 read,
+        /// and releases the old one.
+        /// </summary>
+        /// <param name="opened">The session of this conversation.</param>
+        /// <param name="catchUp">What store 1 held.</param>
+        /// <param name="stored">The state store 0 holds.</param>
+        /// <param name="cancellationToken">Cancels the read of the new session.</param>
+        /// <returns><see langword="false"/> when the old session's words moved since the read and it was kept.</returns>
+        private async ValueTask<bool> RebuildAsync(
+            AgentSession opened, TranscriptCatchUp catchUp, ConversationSessionState stored, CancellationToken cancellationToken)
+        {
+            if (_session.History.Position(opened).Revision != catchUp.Revision)
+            {
+                return false;
+            }
+
+            AgentSession rebuilt = await SessionFromAsync(stored, cancellationToken).ConfigureAwait(false);
+
+            lock (_session.TurnLock)
+            {
+                if (_session.History.Position(opened).Revision != catchUp.Revision)
+                {
+                    return false;
+                }
+
+                _ = _session.History.BeginConversation(
+                    rebuilt,
+                    _session.ConversationId,
+                    catchUp.Rows,
+                    Reads,
+                    new TranscriptMarks(catchUp.NextOrdinal, stored.NextTurnIndex));
+
+                _session.AgentSession = rebuilt;
+                TakeState(catchUp, stored);
+            }
+
+            _session.Lifetime.ReleaseReplaced(opened);
+
+            return true;
+        }
+
+        /// <summary>
+        /// Moves the turn index on past the turns store 1 holds, and takes the stage and slots another session stored.
+        /// The caller holds <see cref="ConversationSession.TurnLock"/>, and swaps the session or the workflow in the same
+        /// section: a snapshot must never pair one session's providers with another's turn index.
+        /// </summary>
+        /// <param name="catchUp">What store 1 held.</param>
+        /// <param name="stored">The state to take, or <see langword="null"/> when the session keeps its own.</param>
+        private void TakeState(TranscriptCatchUp catchUp, ConversationSessionState? stored)
+        {
+            if (stored is not null)
+            {
+                _session.States.CatchUp(stored);
+            }
+
+            _session.State.TurnIndex = Math.Max(_session.State.TurnIndex, catchUp.NextTurnIndex);
+        }
+
+        /// <summary>Opens the session of this conversation, once, and hands the same session to every later caller.</summary>
         /// <param name="cancellationToken">Cancels the open.</param>
         /// <returns>The session.</returns>
         internal async ValueTask<AgentSession> OpenSessionAsync(CancellationToken cancellationToken)
         {
             if (Session() is { } opened)
             {
-                await ResyncTranscriptAsync(opened, cancellationToken).ConfigureAwait(false);
                 return opened;
             }
 
             ConversationRecord record = await _session.Compiled.ConversationStore.CreateAsync(_session.ConversationId, cancellationToken).ConfigureAwait(false);
 
             ConversationSessionState? checkpoint;
-            lock (_session.InterruptLock)
+            lock (_session.TurnLock)
             {
                 checkpoint = _session.Checkpoint;
             }
@@ -45,10 +204,7 @@ namespace AgentCore.Application.Runtime
             AgentSession session;
             if (_session.SessionCarriesHistory)
             {
-                session = stored is { Version: ConversationSessionState.CurrentVersion, Providers.Count: > 0 }
-                    ? await _session.Compiled.TurnAgent.DeserializeSessionAsync(
-                        HarnessSessionState.Wrap(stored.Providers), cancellationToken: cancellationToken).ConfigureAwait(false)
-                    : await _session.Compiled.TurnAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
+                session = await SessionFromAsync(stored, cancellationToken).ConfigureAwait(false);
             }
             else
             {
@@ -56,9 +212,7 @@ namespace AgentCore.Application.Runtime
 
                 if (_session.ReusesGraphSession)
                 {
-                    _session.GraphSession = stored is { Version: ConversationSessionState.CurrentVersion, WorkflowState: { } blob }
-                        ? await _session.Compiled.TurnAgent.DeserializeSessionAsync(blob, cancellationToken: cancellationToken).ConfigureAwait(false)
-                        : await _session.Compiled.TurnAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
+                    _session.GraphSession = await GraphSessionFromAsync(stored, cancellationToken).ConfigureAwait(false);
                 }
             }
 
@@ -66,7 +220,7 @@ namespace AgentCore.Application.Runtime
                 ? []
                 : await _session.Compiled.ConversationStore.ReadForSessionAsync(_session.ConversationId, cancellationToken).ConfigureAwait(false);
 
-            lock (_session.InterruptLock)
+            lock (_session.TurnLock)
             {
                 if (_session.AgentSession is null)
                 {
@@ -76,7 +230,7 @@ namespace AgentCore.Application.Runtime
                         session,
                         _session.ConversationId,
                         spoken,
-                        _session.Events.RaiseDroppedTranscriptWrite,
+                        Reads,
                         new TranscriptMarks(record.NextOrdinal, stored?.NextTurnIndex ?? 0));
 
                     if (stored is { } s)
@@ -89,88 +243,21 @@ namespace AgentCore.Application.Runtime
             }
         }
 
-        /// <summary>
-        /// Brings the session's words back in line with store 1 before a turn after the first, when and
-        /// only when someone else wrote to the conversation in between.
-        /// </summary>
-        /// <param name="opened">The session of this conversation.</param>
-        /// <param name="cancellationToken">Cancels the reads.</param>
-        private async ValueTask ResyncTranscriptAsync(AgentSession opened, CancellationToken cancellationToken)
+        /// <summary>The session a conversation that carries its history runs on: one read from the stored state, or a fresh one.</summary>
+        private async ValueTask<AgentSession> SessionFromAsync(ConversationSessionState? stored, CancellationToken cancellationToken)
         {
-            await _session.History.DrainAsync(opened).ConfigureAwait(false);
-
-            try
-            {
-                ConversationRecord refreshed = await RecordAsync("resync against", cancellationToken).ConfigureAwait(false);
-
-                if (refreshed.NextOrdinal == _session.History.NextOrdinal(opened))
-                {
-                    return;
-                }
-
-                IReadOnlyList<ConversationMessage> rows = await _session.Compiled.ConversationStore.ReadForSessionAsync(
-                    _session.ConversationId, cancellationToken).ConfigureAwait(false);
-
-                _session.History.Resync(opened, rows, refreshed.NextOrdinal);
-            }
-#pragma warning disable CA1031 // A store that cannot be read never ends a conversation: the turn runs on the words the session holds.
-            catch (Exception exception) when (exception is not OperationCanceledException)
-#pragma warning restore CA1031
-            {
-                Log.TranscriptResyncFailed(_session.Logger, _session.ConversationId, _session.State.TurnIndex, exception);
-                _session.Events.RaiseFailedTranscriptResync(_session.State.TurnIndex, exception);
-            }
+            return stored is { Version: ConversationSessionState.CurrentVersion, Providers.Count: > 0 }
+                ? await _session.Compiled.TurnAgent.DeserializeSessionAsync(
+                    HarnessSessionState.Wrap(stored.Providers), cancellationToken: cancellationToken).ConfigureAwait(false)
+                : await _session.Compiled.TurnAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        /// <summary>
-        /// Cuts an edit that reaches under the summary: the parent is a row the summary stands in for,
-        /// or the edit takes the whole conversation. The caller asks
-        /// <see cref="AgentCoreChatHistoryProvider.CanTruncateFrom"/> first and comes here when it says no.
-        /// </summary>
-        /// <param name="opened">The session of this conversation.</param>
-        /// <param name="parentMessageId">The message the edit hangs off, or <see langword="null"/> for the whole conversation.</param>
-        /// <param name="cancellationToken">Cancels the cut.</param>
-        /// <returns>The turns the cut withdrew, or <see langword="null"/> when nothing went.</returns>
-        internal async ValueTask<WithdrawnTurns?> CutUnderSummaryAsync(
-            AgentSession opened, string? parentMessageId, CancellationToken cancellationToken)
+        /// <summary>The workflow session a graph row that reuses one resumes from: the stored one, or a fresh one.</summary>
+        private async ValueTask<AgentSession> GraphSessionFromAsync(ConversationSessionState? stored, CancellationToken cancellationToken)
         {
-            IConversationStore store = _session.Compiled.ConversationStore;
-
-            await _session.History.DrainAsync(opened).ConfigureAwait(false);
-
-            int from;
-            if (parentMessageId is null)
-            {
-                from = 0;
-            }
-            else if (await store.OrdinalOfAsync(_session.ConversationId, parentMessageId, cancellationToken).ConfigureAwait(false) is { } parent)
-            {
-                from = parent + 1;
-            }
-            else
-            {
-                return null;
-            }
-
-            ConversationCut cut = await store.TruncateAsync(_session.ConversationId, from, cancellationToken).ConfigureAwait(false);
-            Log.ConversationTruncated(_session.Logger, _session.ConversationId, from, _session.State.TurnIndex);
-
-            ConversationRecord refreshed = await RecordAsync("edit", cancellationToken).ConfigureAwait(false);
-            IReadOnlyList<ConversationMessage> rows = await store.ReadForSessionAsync(_session.ConversationId, cancellationToken).ConfigureAwait(false);
-
-            _session.History.Resync(opened, rows, refreshed.NextOrdinal);
-
-            return cut.Turns;
-        }
-
-        /// <summary>Store 0's record of this conversation, which must exist for a session that already opened it.</summary>
-        /// <param name="purpose">What the session is about to do with it, for the error.</param>
-        /// <param name="cancellationToken">Cancels the read.</param>
-        private async ValueTask<ConversationRecord> RecordAsync(string purpose, CancellationToken cancellationToken)
-        {
-            return await _session.Compiled.ConversationStore.GetAsync(_session.ConversationId, cancellationToken).ConfigureAwait(false)
-                    ?? throw new InvalidOperationException(
-                        $"Store 0 holds no conversation '{_session.ConversationId}' for its own session to {purpose}.");
+            return stored is { Version: ConversationSessionState.CurrentVersion, WorkflowState: { } blob }
+                ? await _session.Compiled.TurnAgent.DeserializeSessionAsync(blob, cancellationToken: cancellationToken).ConfigureAwait(false)
+                : await _session.Compiled.TurnAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -179,14 +266,14 @@ namespace AgentCore.Application.Runtime
         /// <returns>The session.</returns>
         internal AgentSession? Session()
         {
-            lock (_session.InterruptLock)
+            lock (_session.TurnLock)
             {
                 return _session.AgentSession;
             }
         }
 
         /// <summary>
-        /// Waits for every store 1 write this conversation has queued.
+        /// Waits for every store write this conversation has queued.
         /// </summary>
         /// <returns>A task that completes when the words of the conversation are durable.</returns>
         internal async Task FlushTranscriptAsync()
