@@ -1,47 +1,49 @@
-using AgentCore.Domain.Audit;
 using System.Collections.Concurrent;
+using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
+using AgentCore.Domain.Audit;
 
 namespace AgentCore.Application.Sessions.Memory
 {
     /// <summary>
     /// The default <see cref="IConversationSessions"/>. It holds every session in this process.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This does not survive a restart and does not span instances. A process that stops loses every
-    /// call it was holding, and a second instance behind a load balancer never sees the sessions of the
-    /// first. A deployment that needs either registers another <see cref="IConversationSessions"/> before
-    /// <c>AddAgentCore</c>, and this steps aside.
-    /// </para>
-    /// <para>
-    /// A session is dropped when it has been untouched for the idle timeout. The voice path does not
-    /// wait for that — the socket closing is a real end, and it closes the conversation itself. The timeout is
-    /// for the text path, where a caller who simply stops replying never reaches a terminal stage and
-    /// would otherwise be held for the life of the process.
-    /// </para>
-    /// </remarks>
-    public sealed class InMemoryConversationSessions : IConversationSessions
+    public sealed class InMemoryConversationSessions : IConversationSessions, IDisposable
     {
         /// <summary>The idle timeout a host gets when it names none.</summary>
         public static readonly TimeSpan DefaultIdleTimeout = TimeSpan.FromMinutes(30);
 
-        private readonly ConcurrentDictionary<string, Entry> _sessions = new(StringComparer.Ordinal);
+        // The longest due time ITimer.Change accepts.
+        private static readonly TimeSpan MaxIdleTimeout = TimeSpan.FromMilliseconds(uint.MaxValue - 1);
+
+        private readonly ConcurrentDictionary<string, HeldSession> _sessions = new(StringComparer.Ordinal);
+
         private readonly IConversationSessionFactory _factory;
+
         private readonly TimeSpan _idleTimeout;
+
         private readonly TimeProvider _time;
+
+        private volatile bool _disposed;
 
         /// <summary>Creates the store.</summary>
         /// <param name="factory">Builds the session of a conversation that is not held yet.</param>
-        /// <param name="idleTimeout">How long an untouched session is kept. It slides on every read.</param>
-        /// <param name="timeProvider">The clock the idle timeout is measured on.</param>
+        /// <param name="idleTimeout">
+        /// How long an untouched session is kept. It slides on every read, and restarts when a running turn ends.
+        /// At most about 49 days.
+        /// </param>
+        /// <param name="timeProvider">The clock the idle timers run on.</param>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// <paramref name="idleTimeout"/> is not positive, or is longer than a timer can wait.
+        /// </exception>
         public InMemoryConversationSessions(
             IConversationSessionFactory factory, TimeSpan idleTimeout, TimeProvider timeProvider)
         {
             ArgumentNullException.ThrowIfNull(factory);
             ArgumentNullException.ThrowIfNull(timeProvider);
             ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(idleTimeout, TimeSpan.Zero);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(idleTimeout, MaxIdleTimeout);
 
             _factory = factory;
             _idleTimeout = idleTimeout;
@@ -52,12 +54,30 @@ namespace AgentCore.Application.Sessions.Memory
         public int Count => _sessions.Count;
 
         /// <inheritdoc />
+        /// <exception cref="ObjectDisposedException">This store was disposed.</exception>
         public ValueTask<ConversationSession> OpenAsync(string? conversationId, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            ObjectDisposedException.ThrowIf(_disposed, this);
 
             ConversationSession session = _factory.Create(conversationId);
-            _sessions[session.ConversationId] = new Entry(session, _time.GetUtcNow());
+            HeldSession held = new(session, _idleTimeout, _time, Expire);
+            HeldSession? replaced = null;
+
+            _ = _sessions.AddOrUpdate(session.ConversationId, held, (_, old) =>
+            {
+                replaced = old;
+                return held;
+            });
+
+            replaced?.Dispose();
+
+            // A Dispose that ran between the check above and the add did not see this timer.
+            if (_disposed)
+            {
+                held.Dispose();
+            }
+
             return ValueTask.FromResult(session);
         }
 
@@ -67,13 +87,8 @@ namespace AgentCore.Application.Sessions.Memory
             ArgumentNullException.ThrowIfNull(conversationId);
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (!_sessions.TryGetValue(conversationId, out Entry? entry))
-            {
-                return ValueTask.FromResult<ConversationSession?>(null);
-            }
-
-            _ = _sessions.TryUpdate(conversationId, entry with { Touched = _time.GetUtcNow() }, entry);
-            return ValueTask.FromResult<ConversationSession?>(entry.Session);
+            return ValueTask.FromResult(
+                _sessions.TryGetValue(conversationId, out HeldSession? held) && held.TryTouch() ? held.Session : null);
         }
 
         /// <inheritdoc />
@@ -83,80 +98,71 @@ namespace AgentCore.Application.Sessions.Memory
 
             // Taken out first so a second caller cannot be handed a session that is already draining,
             // then flushed while this method still holds the only reference to it.
-            if (_sessions.TryRemove(conversationId, out Entry? entry))
+            if (_sessions.TryRemove(conversationId, out HeldSession? held))
             {
-                // A store that throws on flush must not leave the session's shells running with
-                // nothing left to hold a reference to them.
-                try
-                {
-                    await entry.Session.FlushTranscriptAsync().ConfigureAwait(false);
-                }
-                finally
-                {
-                    await entry.Session.DisposeAsync().ConfigureAwait(false);
-                }
+                held.End();
+                await CloseSessionAsync(held.Session).ConfigureAwait(false);
             }
         }
 
-        /// <summary>Closes every session that has been untouched for the idle timeout.</summary>
-        /// <param name="cancellationToken">Cancels the sweep.</param>
-        /// <returns>A task that completes once every expired session is closed.</returns>
-        /// <exception cref="AggregateException">
-        /// One or more sessions could not be ended. The sweep still visited every other session first.
-        /// </exception>
-        /// <remarks>
-        /// This goes through <see cref="CloseAsync"/> and not the dictionary, so an expiring session
-        /// hands over its words on the way out exactly as one the host closed by hand.
-        /// </remarks>
-        public async ValueTask SweepAsync(CancellationToken cancellationToken = default)
+        /// <summary>Stops every idle timer.</summary>
+        public void Dispose()
         {
-            DateTimeOffset cutoff = _time.GetUtcNow() - _idleTimeout;
-            List<Exception>? faults = null;
+            _disposed = true;
 
-            foreach ((string? conversationId, Entry? entry) in _sessions.ToArray())
+            foreach (HeldSession held in _sessions.Values)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                if (entry.Touched > cutoff)
-                {
-                    continue;
-                }
-
-                // One session that will not end must not leave every session after it in the
-                // dictionary for the life of the process, which is the leak this sweep exists to stop.
-                try
-                {
-                    await ExpireAsync(conversationId, entry.Session, cancellationToken).ConfigureAwait(false);
-                }
-                catch (Exception fault) when (fault is not OperationCanceledException)
-                {
-                    (faults ??= []).Add(fault);
-                }
+                held.Dispose();
             }
+        }
 
-            if (faults is not null)
+        private static async ValueTask CloseSessionAsync(ConversationSession session)
+        {
+            // A store that throws on flush must not leave the session's shells running with
+            // nothing left to hold a reference to them.
+            try
             {
-                throw new AggregateException(faults);
+                await session.FlushTranscriptAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                await session.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>Takes one expired session out, unless a newer session replaced it or the host closed it first.</summary>
+        private void Expire(HeldSession held)
+        {
+            if (_sessions.TryRemove(KeyValuePair.Create(held.Session.ConversationId, held)))
+            {
+                _ = ExpireAsync(held.Session);
             }
         }
 
         /// <summary>Ends one expired conversation, chain first and session second.</summary>
-        /// <remarks>
-        /// §11 item 6 makes <c>conversation.ended</c> the last event of every conversation, and expiry is a way a conversation
-        /// ends. Nothing else writes it here: the relay closes its own chain from the socket and the
-        /// turn loop closes its own from a terminal stage, so a caller who simply stops replying is the
-        /// one ending that would otherwise leave a chain with no end. <see cref="ConversationSession.EndConversation(ConversationEndReason)"/>
-        /// is idempotent, so a session that already closed its chain keeps the reason it wrote.
-        /// The reason is <see cref="ConversationEndReason.Faulted"/> because the closed set of §6 holds no
-        /// reason for an abandoned conversation; see the amendment owed on that enum.
-        /// </remarks>
-        private async ValueTask ExpireAsync(
-            string conversationId, ConversationSession session, CancellationToken cancellationToken)
+        private static async Task ExpireAsync(ConversationSession session)
         {
-            _ = session.EndConversation(ConversationEndReason.Faulted);
-            await CloseAsync(conversationId, cancellationToken).ConfigureAwait(false);
-        }
+            // Nothing awaits an expiry, so nothing may escape it. The session is already out of the dictionary,
+            // so a chain that fails to end must not stop the close that releases its shells.
+#pragma warning disable CA1031
+            try
+            {
+                _ = session.EndConversation(ConversationEndReason.Faulted);
+            }
+            catch (Exception exception)
+            {
+                Log.SessionExpiryFailed(session.Logger, session.ConversationId, exception);
+            }
 
-        private sealed record Entry(ConversationSession Session, DateTimeOffset Touched);
+            try
+            {
+                await CloseSessionAsync(session).ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                Log.SessionExpiryFailed(session.Logger, session.ConversationId, exception);
+            }
+#pragma warning restore CA1031
+        }
     }
 }

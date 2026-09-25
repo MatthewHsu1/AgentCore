@@ -136,12 +136,6 @@ namespace AgentCore.Application.State
 
         /// <summary>Reads the declared slots a writer has actually filled, for the durable blob.</summary>
         /// <returns>A copy. An unfilled slot is absent, which is what keeps unfilled and filled-default apart.</returns>
-        /// <remarks>
-        /// Not <see cref="Snapshot"/>: that one fills every declared slot with its default and adds the
-        /// three reserved slots, which is right for a guard and wrong for a blob. Restoring a default as
-        /// though a writer had chosen it would lose the difference <see cref="IsUnfilled(string)"/>
-        /// exists to keep.
-        /// </remarks>
         public IReadOnlyDictionary<string, JsonNode?> WrittenSlots()
         {
             Dictionary<string, JsonNode?> written = new(_written.Count, StringComparer.Ordinal);
@@ -152,6 +146,12 @@ namespace AgentCore.Application.State
             }
 
             return written;
+        }
+
+        /// <summary>Empties every declared slot a writer filled, so each reads as its declared default again.</summary>
+        internal void ClearWrittenSlots()
+        {
+            _written.Clear();
         }
 
         private JsonValue? ReadReserved(string slot)

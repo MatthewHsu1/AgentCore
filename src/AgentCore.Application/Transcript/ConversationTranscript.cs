@@ -73,9 +73,6 @@ namespace AgentCore.Application.Transcript
             NextOrdinal = nextOrdinal;
             Revision++;
 
-            // Without this a caller who barges in on the first reply of a resumed session is not heard:
-            // TruncateLastReply finds no ordinal to cut at and returns nothing, and the provider reports
-            // that as a write it declined rather than as a cut it lost.
             RestoreLastAssistantOrdinal();
         }
 
@@ -126,7 +123,7 @@ namespace AgentCore.Application.Transcript
             int last = int.MinValue;
             foreach (StoredMessage stored in Messages)
             {
-                if (stored.Ordinal < fromOrdinal || stored.CoversUpTo is not null)
+                if (!Withdrawn(stored, fromOrdinal))
                 {
                     continue;
                 }
@@ -140,10 +137,21 @@ namespace AgentCore.Application.Transcript
                 return null;
             }
 
-            _ = Messages.RemoveAll(stored => stored.Ordinal >= fromOrdinal && stored.CoversUpTo is null);
+            _ = Messages.RemoveAll(stored => Withdrawn(stored, fromOrdinal));
             RestoreLastAssistantOrdinal();
             Revision++;
             return new WithdrawnTurns(first, last);
+        }
+
+        /// <summary>The ids of the rows <see cref="TruncateFrom"/> withdraws from <paramref name="fromOrdinal"/> on.</summary>
+        public IReadOnlyList<string> IdsFrom(int fromOrdinal)
+        {
+            return [.. Messages.Where(stored => Withdrawn(stored, fromOrdinal)).Select(static stored => stored.MessageId)];
+        }
+
+        private static bool Withdrawn(StoredMessage stored, int fromOrdinal)
+        {
+            return stored.Ordinal >= fromOrdinal && stored.CoversUpTo is null;
         }
 
         private void RestoreLastAssistantOrdinal()
@@ -286,46 +294,61 @@ namespace AgentCore.Application.Transcript
         }
 
         /// <summary>Cuts the turn the caller was hearing down to the words the caller actually heard.</summary>
-        public IReadOnlyList<ConversationMessage> TruncateLastReply(string heard)
+        /// <param name="heard">The words the caller heard, across every step of the turn's reply.</param>
+        /// <param name="turnIndex">The turn the last reply must belong to, or <see langword="null"/> for whichever turn it is.</param>
+        /// <returns>
+        /// The rows rewritten in place, and the rows removed because the cut left them carrying nothing, by the
+        /// same rule a running turn's cut drops them (<see cref="TurnWords.Carries"/>).
+        /// </returns>
+        public ReplyRewrite RewriteReply(string heard, int? turnIndex = null)
         {
             ArgumentNullException.ThrowIfNull(heard);
 
             if (LastAssistantOrdinal is not int ordinal
-                || Messages.Find(message => message.Ordinal == ordinal) is not { } spoken)
+                || Messages.Find(message => message.Ordinal == ordinal) is not { } spoken
+                || (turnIndex is { } wanted && spoken.TurnIndex != wanted))
             {
-                return [];
+                return new ReplyRewrite([], []);
             }
+
+            List<StoredMessage> replies = Messages.FindAll(stored =>
+                stored.TurnIndex == spoken.TurnIndex && stored.Message.Role == ChatRole.Assistant && stored.CoversUpTo is null);
+            List<ChatMessage> laid = ShownWords.Lay([.. replies.Select(stored => stored.Message)], heard);
 
             List<ConversationMessage> rows = [];
-            foreach (StoredMessage stored in Messages)
+            List<ConversationMessage> removed = [];
+            for (int index = 0; index < replies.Count; index++)
             {
-                if (stored.TurnIndex != spoken.TurnIndex || stored.Message.Role != ChatRole.Assistant || stored.CoversUpTo is not null)
+                StoredMessage stored = replies[index];
+                if (ReferenceEquals(laid[index], stored.Message) && stored.Ordinal != ordinal)
                 {
                     continue;
                 }
 
-                bool isReply = stored.Ordinal == ordinal;
-                if (!isReply && !stored.Message.Contents.Any(content => content is TextContent))
+                ConversationMessage row = new(ConversationId, stored.Ordinal, stored.TurnIndex, laid[index], stored.MessageId);
+                if (!TurnWords.Carries(laid[index]))
                 {
+                    _ = Messages.Remove(stored);
+                    removed.Add(row);
                     continue;
                 }
 
-                List<AIContent> kept = [.. stored.Message.Contents.Where(content => content is not TextContent)];
-
-                ChatMessage corrected = stored.Message.Clone();
-                corrected.Contents = isReply && heard.Length > 0 ? [new TextContent(heard), .. kept] : kept;
-                stored.Message = corrected;
-
-                rows.Add(new ConversationMessage(
-                    ConversationId, stored.Ordinal, stored.TurnIndex, corrected, stored.MessageId));
+                stored.Message = laid[index];
+                rows.Add(row);
             }
 
-            if (rows.Count > 0)
+            ReplyRewrite rewrite = new(rows, removed);
+            if (removed.Count > 0)
+            {
+                RestoreLastAssistantOrdinal();
+            }
+
+            if (rewrite.Changed)
             {
                 Revision++;
             }
 
-            return rows;
+            return rewrite;
         }
 
         /// <summary>Mints a name for a row the caller had no name for.</summary>

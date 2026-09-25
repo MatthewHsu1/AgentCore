@@ -37,29 +37,20 @@ namespace AgentCore.Application.Runtime
     /// The moderation endpoint's order, unmodified, or <see langword="null"/> when nothing was flagged.
     /// </param>
     /// <param name="Fallback">Why the fallback layer spoke, or <see cref="FallbackCause.None"/>.</param>
-    /// <param name="FallbackReason">
-    /// The message of the fault the fallback layer caught, or <see langword="null"/>. The turn's
-    /// <c>tool.failed</c> row carries this text, so it is the exception's message and not its type name.
+    /// <param name="FallbackFault">
+    /// The exception the fallback layer caught, or <see langword="null"/>. Kept live and not flattened to a
+    /// message here: the turn's <c>tool.failed</c> row needs the message, and the span and the Error log
+    /// each need a different cut of it (type only, and the full object), so the decision of which text goes
+    /// where stays with the turn loop, not with this layer.
     /// </param>
     /// <param name="ModerationReason">
     /// Why the endpoint did not answer, in the words the turn loop logs, or <see langword="null"/>. It
     /// is set only when <paramref name="Moderation"/> is <see cref="ModerationOutcome.Unavailable"/>.
     /// </param>
-    /// <remarks>
-    /// <para>
-    /// Carried on <see cref="AgentResponse.AdditionalProperties"/> when buffered, and on a leading
-    /// <see cref="AgentResponseUpdate"/> when streaming — update-level properties do not survive
-    /// streaming coalescing, so the streaming reader must take it off the update, not the folded run.
-    /// </para>
-    /// <para>
-    /// It is attached and read with <see cref="AdditionalPropertiesExtensions"/>, which keys on the full
-    /// type name, so nothing else in the pipeline can collide with it.
-    /// </para>
-    /// </remarks>
     internal sealed record TurnDisposition(
         ModerationOutcome? Moderation,
         string? FlaggedCategories,
         FallbackCause Fallback,
-        string? FallbackReason,
+        Exception? FallbackFault,
         string? ModerationReason);
 }
