@@ -16,12 +16,8 @@ namespace AgentCore.Application.Tests.Transcript
     {
         internal const string ConversationId = "conversation-1";
 
-        /// <summary>
-        /// The provider's MAF-default state key: its own type name. The transcript no longer files
-        /// under it — or anywhere in the bag — and a change still renames what the collision checks
-        /// compare, so it stays pinned here rather than inlined.
-        /// </summary>
-        internal const string StateKey = "AgentCoreChatHistoryProvider";
+        /// <summary>The key that binds a session to its conversation (design section 2, "StateKeys").</summary>
+        internal const string StateKey = "agentcore.history";
 
         /// <summary>
         /// Opens one conversation on a fresh session, the way <c>ConversationSession</c> does at conversation start: the row is
@@ -38,7 +34,7 @@ namespace AgentCore.Application.Tests.Transcript
             return (provider, store, session);
         }
 
-        /// <summary>Writes one turn the way <c>ConversationSession</c> does: name the turn, then append it.</summary>
+        /// <summary>Writes one turn the way <c>ConversationTurnAgent</c> does: name the turn, then commit it.</summary>
         internal static void AppendTurn(
             AgentCoreChatHistoryProvider provider,
             AgentSession session,
@@ -47,9 +43,9 @@ namespace AgentCore.Application.Tests.Transcript
             string replied)
         {
             provider.BeginTurn(session, turnIndex);
-            _ = provider.AppendTurn(
+            _ = provider.CommitTurn(
                 session,
-                [new ChatMessage(ChatRole.User, said), new ChatMessage(ChatRole.Assistant, replied)]);
+                new TurnCommit(new ChatMessage(ChatRole.User, said)) { Seen = new AgentResponse(new ChatMessage(ChatRole.Assistant, replied)) });
         }
 
 

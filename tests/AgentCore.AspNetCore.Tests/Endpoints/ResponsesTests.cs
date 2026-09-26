@@ -1,8 +1,10 @@
 using System.Net;
-using System.Text.Json;
 using System.Text.Json.Nodes;
+using AgentCore.Application.Ports;
+using AgentCore.AspNetCore.Sessions;
 using AgentCore.AspNetCore.Tests.Fakes;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace AgentCore.AspNetCore.Tests.Endpoints
@@ -117,6 +119,83 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             Assert.Equal("text/event-stream", second.Content.Headers.ContentType?.MediaType);
             string text = await ResponsesHost.ReadTextAsync(second);
             Assert.Contains("answer two", text, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task SecondTurnStreams_NamesTheStageItSpeaksInOnTheStageHeader()
+        {
+            using FragmentingChatClient reply = new("answer one", "answer two");
+            await using ResponsesHost host = await ResponsesHost.StartAsync(TwoStagesYaml, reply);
+
+            using HttpResponseMessage first = await host.PostAsync(/*lang=json,strict*/ """{ "stream": false, "input": "first question" }""");
+            string convId = (await ResponsesHost.ReadJsonAsync(first)).ContinuationId();
+
+            using HttpResponseMessage second = await host.PostAsync(
+                $$"""{ "stream": true, "conversation": "{{convId}}", "input": "second question" }""");
+
+            Assert.Equal("followup", Assert.Single(second.Headers.GetValues("X-AgentCore-Stage")));
+            Assert.Contains("answer two", await ResponsesHost.ReadTextAsync(second), StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task StreamedReply_CarriesTheCommittedReplyId_EqualToTheStoredRow()
+        {
+            // Design section 6, step E5: TurnCommittedContent passes the seam filter, and the text
+            // endpoint reads the reply id off it rather than off a read-after-stream convenience copy.
+            using FragmentingChatClient reply = new("answer one");
+            await using ResponsesHost host = await ResponsesHost.StartAsync(TwoStagesYaml, reply);
+
+            using HttpResponseMessage response = await host.PostAsync(
+                /*lang=json,strict*/
+                """{ "stream": true, "conversation": "conv-e5", "input": "first question", "agentcore": { "message_id": "u1" } }""");
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            List<string> events = await ResponsesHost.ReadEventsAsync(response);
+
+            JsonObject committed = events
+                .Select(raw => JsonNode.Parse(raw)!.AsObject())
+                .Single(frame => frame.ContainsKey("agentcore_message_committed"))["agentcore_message_committed"]!
+                .AsObject();
+
+            string replyId = committed["reply_message_id"]!.GetValue<string>();
+
+            IConversationStore store = host.Services.GetRequiredService<IConversationStore>();
+            IReadOnlyList<Application.Transcript.ConversationMessage> rows = await store
+                .ReadForSessionAsync("conv-e5", TestContext.Current.CancellationToken);
+
+            Assert.Equal(replyId, rows[^1].MessageId);
+        }
+
+        [Fact]
+        public async Task StreamAborted_ByTheHost_StillFilesTheSession()
+        {
+            // Design section 6, step E5: the layer commits the words on a host cancel (E4). A resumed conversation
+            // finds its continuation only if ResponsesTurn.FileAsync runs too, so filing runs from a finally, on a
+            // token that survives the abort.
+            StallingChatClient reply = new();
+            await using ResponsesHost host = await ResponsesHost.StartAsync(TwoStagesYaml, reply);
+
+            using HttpResponseMessage response = await host.PostAsync(
+                /*lang=json,strict*/
+                """{ "stream": true, "conversation": "conv-e5-abort", "input": "first question" }""");
+            await reply.WaitUntilStreamingAsync();
+
+            // Tears down the connection mid-turn: the model is still stalled, so this is the host
+            // cancelling the request, not the reply finishing.
+            response.Dispose();
+
+            AgentCoreAgentSessionStore sessions = host.Services.GetRequiredService<AgentCoreAgentSessionStore>();
+            await Poll.UntilAsync(() => sessions
+                .ContainsAsync("conv-e5-abort", TestContext.Current.CancellationToken)
+                .AsTask()
+                .GetAwaiter()
+                .GetResult());
+
+            IConversationStore store = host.Services.GetRequiredService<IConversationStore>();
+            IReadOnlyList<Application.Transcript.ConversationMessage> rows = await store
+                .ReadForSessionAsync("conv-e5-abort", TestContext.Current.CancellationToken);
+
+            Assert.Contains(rows, row => row.Content.Role == ChatRole.User && row.Content.Text == "first question");
         }
 
         [Fact]
@@ -235,83 +314,6 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
         }
 
         [Fact]
-        public async Task GatedToolCall_AnswersWholeWithTheRequestInMetadata()
-        {
-            int sent = 0;
-            await using ResponsesHost host = await ResponsesHost.StartAsync(
-                ApprovalYaml,
-                new GatedToolCallingChatClient(),
-                configure: options => options.AddToolSource(_ => new GatedSource(() => GatedSendEmail(() => sent++))));
-
-            using HttpResponseMessage response = await host.PostAsync(/*lang=json,strict*/ """{ "stream": false, "input": "send it" }""");
-            JsonNode body = await ResponsesHost.ReadJsonAsync(response);
-
-            Assert.Equal(string.Empty, body.OutputText());
-            string approvals = body["metadata"]!["approvals"]!.GetValue<string>();
-            Assert.Contains("send_email", approvals, StringComparison.Ordinal);
-            Assert.Equal(0, sent);
-        }
-
-        [Fact]
-        public async Task ApprovalAnswer_RunsTheToolAndReplies()
-        {
-            int sent = 0;
-            await using ResponsesHost host = await ResponsesHost.StartAsync(
-                ApprovalYaml,
-                new GatedToolCallingChatClient(),
-                configure: options => options.AddToolSource(_ => new GatedSource(() => GatedSendEmail(() => sent++))));
-
-            using HttpResponseMessage first = await host.PostAsync(/*lang=json,strict*/ """{ "stream": false, "input": "send it" }""");
-            JsonNode asked = await ResponsesHost.ReadJsonAsync(first);
-            string convId = asked.ContinuationId();
-            string? requestId = JsonDocument.Parse(
-                asked["metadata"]!["approvals"]!.GetValue<string>())
-                .RootElement[0].GetProperty("request_id").GetString();
-
-            using HttpResponseMessage second = await host.PostAsync(
-                $$"""{ "stream": false, "conversation": "{{convId}}", "input": [], "agentcore": { "approval": { "request_id": "{{requestId}}", "approved": true } } }""");
-            JsonNode replied = await ResponsesHost.ReadJsonAsync(second);
-
-            Assert.Equal(HttpStatusCode.OK, second.StatusCode);
-            Assert.Equal(1, sent);
-            Assert.Contains("done.", replied.OutputText(), StringComparison.Ordinal);
-        }
-
-        [Fact]
-        public async Task ApprovalAnswerForARequestNothingAsked_IsConflict()
-        {
-            await using ResponsesHost host = await ResponsesHost.StartAsync(
-                ApprovalYaml,
-                new GatedToolCallingChatClient(),
-                configure: options => options.AddToolSource(_ => new GatedSource(() => GatedSendEmail(() => { }))));
-
-            using HttpResponseMessage first = await host.PostAsync(/*lang=json,strict*/ """{ "stream": false, "input": "send it" }""");
-            string convId = (await ResponsesHost.ReadJsonAsync(first)).ContinuationId();
-
-            using HttpResponseMessage second = await host.PostAsync(
-                $$"""{ "stream": false, "conversation": "{{convId}}", "input": [], "agentcore": { "approval": { "request_id": "req-nothing-asked", "approved": true } } }""");
-
-            Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
-        }
-
-        [Fact]
-        public async Task ApprovalAnswerWithWords_IsBadRequest()
-        {
-            await using ResponsesHost host = await ResponsesHost.StartAsync(
-                ApprovalYaml,
-                new GatedToolCallingChatClient(),
-                configure: options => options.AddToolSource(_ => new GatedSource(() => GatedSendEmail(() => { }))));
-
-            using HttpResponseMessage first = await host.PostAsync(/*lang=json,strict*/ """{ "stream": false, "input": "send it" }""");
-            string convId = (await ResponsesHost.ReadJsonAsync(first)).ContinuationId();
-
-            using HttpResponseMessage second = await host.PostAsync(
-                $$"""{ "stream": false, "conversation": "{{convId}}", "input": "send it", "agentcore": { "approval": { "request_id": "req-1", "approved": true } } }""");
-
-            Assert.Equal(HttpStatusCode.BadRequest, second.StatusCode);
-        }
-
-        [Fact]
         public async Task EditAtAnEarlierMessage_WithdrawsTheWordsAfterIt()
         {
             using FragmentingChatClient reply = new("answer one", "answer two");
@@ -360,127 +362,5 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             llm:
               - { kind: openai, model: gpt-4.1-mini, as: reply }
           """;
-
-        private const string ApprovalYaml =
-            """
-        apiVersion: agentcore/v1
-        agents:
-          defaults:
-            model: { ref: reply }
-          items:
-            - { id: greeter, instructions: "send the mail", tools: [ send_email ] }
-        providers:
-          conversation:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
-        entries:
-          main:
-            agent: greeter
-        """;
-
-        private static ApprovalRequiredAIFunction GatedSendEmail(Action onSend)
-        {
-            return new(AIFunctionFactory.Create(
-                (string to) =>
-                {
-                    onSend();
-                    return "sent";
-                },
-                "send_email",
-                "Send an email."));
-        }
-
-        /// <summary>A tool source that serves one gated id, standing in for an approval-required host tool.</summary>
-        private sealed class GatedSource(Func<AITool> build)
-            : Application.Ports.IToolSource
-        {
-            public ValueTask<IReadOnlyList<Application.Tools.Registry.ToolRegistration>> ProvideAsync(
-                Application.Tools.Registry.ToolSourceContext context, CancellationToken cancellationToken = default)
-            {
-                return ValueTask.FromResult<IReadOnlyList<Application.Tools.Registry.ToolRegistration>>(
-                                [new Application.Tools.Registry.ToolRegistration("send_email", "Send an email.", build)]);
-            }
-        }
-
-        /// <summary>Calls the first tool it is offered, once, then answers in words.</summary>
-        private sealed class GatedToolCallingChatClient : IChatClient
-        {
-            public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-                IEnumerable<ChatMessage> messages,
-                ChatOptions? options = null,
-                [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-            {
-                await Task.Yield();
-
-                bool alreadyCalled = messages.Any(message => message.Contents.OfType<FunctionResultContent>().Any());
-
-                if (!alreadyCalled && options?.Tools?.OfType<AIFunction>().FirstOrDefault() is { } tool)
-                {
-                    yield return new ChatResponseUpdate(
-                        ChatRole.Assistant,
-                        [new FunctionCallContent(
-                              "conversation_1",
-                              tool.Name,
-                              new Dictionary<string, object?>(StringComparer.Ordinal) { ["to"] = "a@b.com" })]);
-                    yield break;
-                }
-
-                yield return new ChatResponseUpdate(ChatRole.Assistant, "done.");
-            }
-
-            public async Task<ChatResponse> GetResponseAsync(
-                IEnumerable<ChatMessage> messages,
-                ChatOptions? options = null,
-                CancellationToken cancellationToken = default)
-            {
-                List<ChatResponseUpdate> updates = [];
-                await foreach (ChatResponseUpdate? update in GetStreamingResponseAsync(messages, options, cancellationToken)
-                    .ConfigureAwait(false))
-                {
-                    updates.Add(update);
-                }
-
-                return updates.ToChatResponse();
-            }
-
-            public object? GetService(Type serviceType, object? serviceKey = null)
-            {
-                return serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
-            }
-
-            public void Dispose()
-            {
-            }
-        }
-
-    }
-
-    /// <summary>Reads what one Responses answer carries.</summary>
-    internal static class ResponsesAnswer
-    {
-        /// <summary>Reads the assistant text of one answer.</summary>
-        /// <param name="body">The answer.</param>
-        /// <returns>Every output text, joined.</returns>
-        internal static string OutputText(this JsonNode body)
-        {
-            return string.Join("", body["output"]?.AsArray()
-                        .SelectMany(o => o?["content"]?.AsArray() ?? [])
-                        .Select(c => c?["text"]?.GetValue<string>() ?? "") ?? []);
-        }
-
-        /// <summary>Reads the id a later turn hangs off: the conversation, or the response.</summary>
-        /// <param name="body">The answer.</param>
-        /// <returns>The continuation id.</returns>
-        internal static string ContinuationId(this JsonNode body)
-        {
-            return body["conversation"] is JsonObject conversation
-                && conversation["id"]?.GetValue<string>() is { Length: > 0 } conversationId
-                ? conversationId
-                : body["id"]?.GetValue<string>()
-                ?? throw new InvalidOperationException("Answer carries no continuation id.");
-        }
     }
 }

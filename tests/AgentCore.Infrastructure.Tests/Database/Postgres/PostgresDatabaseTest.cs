@@ -58,6 +58,22 @@ namespace AgentCore.Infrastructure.Tests.Database.Postgres
             _ = await command.ExecuteNonQueryAsync(Token);
         }
 
+        /// <summary>Opens a pool that logs in as an ordinary member of <c>agentcore_writer</c>.</summary>
+        protected async Task<NpgsqlDataSource> OpenAsWriterAsync()
+        {
+            string login = "agentcore_member_" + Guid.NewGuid().ToString("n");
+
+            await ExecuteAsync($"CREATE ROLE \"{login}\" LOGIN PASSWORD 'member' NOSUPERUSER NOCREATEDB NOCREATEROLE");
+            await ExecuteAsync($"GRANT agentcore_writer TO \"{login}\"");
+
+            return NpgsqlDataSource.Create(
+                new NpgsqlConnectionStringBuilder(Database.ConnectionString)
+                {
+                    Username = login,
+                    Password = "member",
+                });
+        }
+
         /// <summary>Runs a statement and reads its first value.</summary>
         protected async Task<T> ScalarAsync<T>(string sql)
         {

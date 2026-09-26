@@ -284,7 +284,7 @@ namespace AgentCore.Application.Tests.Diagnostics
         /// One turn makes two model calls, and both of them emit a chat span.
         /// </summary>
         /// <remarks>
-        /// <c>ConversationSessionTests.ATurn_MakesTwoModelCalls_TheReplyAndTheExtractor</c> proves the two conversations
+        /// <c>ConversationSessionTranscriptTests.ATurn_MakesTwoModelCalls_TheReplyAndTheExtractor</c> proves the two conversations
         /// happen. This proves both are instrumented. Until <c>ConversationSessionFactory.CreateExtractor</c>
         /// wrapped the client it resolves, only the reply had a span: the extractor's duration, its token
         /// usage, and its failures reached no exporter at all, so a two-turn conversation reported half the model

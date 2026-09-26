@@ -149,13 +149,10 @@ namespace AgentCore.Application.Tests.Tools
             Assert.True(JsonNode.DeepEquals(CreateCase.Parameters, JsonNode.Parse(function.JsonSchema.GetRawText())));
         }
 
-        // ---------------------------------------------------------------------------------------------
-        // Section 8.7: a tool returns an error result and does not throw. Task 7a moved the
-        // classification that makes that true off DeclaredTool and into
-        // AuditingFunctionInvokingChatClient, so calling the bare tool directly now sees the exception
-        // the host delegate threw. See AuditingFunctionInvokingChatClientErrorPolicyTests and
-        // ConversationSessionTests for the end-to-end guarantee.
-        // ---------------------------------------------------------------------------------------------
+        // Section 8.7: a tool returns an error result and does not throw. AuditingFunctionInvokingChatClient
+        // makes that true, not DeclaredTool, so calling the bare tool directly sees the exception the host
+        // delegate threw. See AuditingFunctionInvokingChatClientErrorPolicyTests and
+        // ConversationSessionToolFailureTests for the end-to-end guarantee.
         [Fact]
         public async Task AHostDelegateThatThrows_PropagatesForTheMiddlewareToClassify()
         {

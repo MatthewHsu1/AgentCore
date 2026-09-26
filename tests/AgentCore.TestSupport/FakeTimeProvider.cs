@@ -14,16 +14,17 @@ namespace AgentCore.TestSupport
     /// due timer synchronously, with no wall-clock wait at all.
     /// </para>
     /// <para>
-    /// Every timer this class hands out is one-shot in practice — the idle deadline is the only
-    /// production caller today, and it always asks for <see cref="Timeout.InfiniteTimeSpan"/> as its
-    /// period — but <see cref="Advance"/> still reschedules a periodic timer for its next due time,
-    /// so a future caller that does ask for a period is not silently starved.
+    /// A timer behaves as <see cref="System.Threading.Timer"/> does. A one-shot timer that fired, or one
+    /// armed with <see cref="Timeout.InfiniteTimeSpan"/>, is not scheduled but not disposed either:
+    /// <see cref="ITimer.Change"/> arms it again. <see cref="Advance"/> reschedules a periodic timer for its
+    /// next due time. The timer counts only include scheduled timers.
     /// </para>
     /// </remarks>
     public sealed class FakeTimeProvider(DateTimeOffset start) : TimeProvider
     {
         private readonly Lock _gate = new();
         private readonly List<FakeTimer> _timers = [];
+        private readonly List<(DateTimeOffset? DueAt, int Count, TaskCompletionSource Reached)> _waiters = [];
         private DateTimeOffset _now = start;
 
         public override DateTimeOffset GetUtcNow()
@@ -54,14 +55,40 @@ namespace AgentCore.TestSupport
             ArgumentNullException.ThrowIfNull(callback);
 
             FakeTimer timer = new(this, callback, state);
+            Schedule(timer, dueTime, period);
+            return timer;
+        }
+
+        /// <summary>Waits until exactly <paramref name="count"/> live timers are due at <paramref name="dueAt"/>.</summary>
+        /// <param name="dueAt">The instant the timers are due.</param>
+        /// <param name="count">How many live timers to wait for.</param>
+        /// <returns>A task that completes once the count matches.</returns>
+        public Task WaitForTimersAsync(DateTimeOffset dueAt, int count)
+        {
+            return WaitForCountAsync(dueAt, count);
+        }
+
+        /// <summary>Waits until exactly <paramref name="count"/> live timers exist, whenever they are due.</summary>
+        /// <param name="count">How many live timers to wait for.</param>
+        /// <returns>A task that completes once the count matches.</returns>
+        public Task WaitForTimersAsync(int count)
+        {
+            return WaitForCountAsync(null, count);
+        }
+
+        private Task WaitForCountAsync(DateTimeOffset? dueAt, int count)
+        {
             lock (_gate)
             {
-                timer.DueAt = _now + dueTime;
-                timer.Period = period;
-                _timers.Add(timer);
-            }
+                if (CountLocked(dueAt) == count)
+                {
+                    return Task.CompletedTask;
+                }
 
-            return timer;
+                TaskCompletionSource reached = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                _waiters.Add((dueAt, count, reached));
+                return reached.Task;
+            }
         }
 
         /// <summary>Moves the clock forward, and fires every timer whose due time this reaches or passes.</summary>
@@ -87,12 +114,72 @@ namespace AgentCore.TestSupport
             }
         }
 
+        private void Schedule(FakeTimer timer, TimeSpan dueTime, TimeSpan period)
+        {
+            lock (_gate)
+            {
+                timer.Period = period;
+                if (dueTime == Timeout.InfiniteTimeSpan)
+                {
+                    _ = _timers.Remove(timer);
+                }
+                else
+                {
+                    timer.DueAt = _now + dueTime;
+                    if (!_timers.Contains(timer))
+                    {
+                        _timers.Add(timer);
+                    }
+                }
+
+                ReleaseWaitersLocked();
+            }
+        }
+
+        /// <summary>
+        /// Claims one firing of a timer that is still scheduled and due. A timer changed or disposed after
+        /// <see cref="Advance"/> picked it does not fire.
+        /// </summary>
+        private bool TryTakeDue(FakeTimer timer)
+        {
+            lock (_gate)
+            {
+                if (timer.Disposed || timer.DueAt > _now || !_timers.Contains(timer))
+                {
+                    return false;
+                }
+
+                if (timer.Period == Timeout.InfiniteTimeSpan || timer.Period == TimeSpan.Zero)
+                {
+                    _ = _timers.Remove(timer);
+                }
+                else
+                {
+                    timer.DueAt = _now + timer.Period;
+                }
+
+                ReleaseWaitersLocked();
+                return true;
+            }
+        }
+
         private void Remove(FakeTimer timer)
         {
             lock (_gate)
             {
                 _ = _timers.Remove(timer);
+                ReleaseWaitersLocked();
             }
+        }
+
+        private int CountLocked(DateTimeOffset? dueAt)
+        {
+            return _timers.Count(timer => !timer.Disposed && (dueAt is null || timer.DueAt == dueAt));
+        }
+
+        private void ReleaseWaitersLocked()
+        {
+            _ = _waiters.RemoveAll(waiter => CountLocked(waiter.DueAt) == waiter.Count && waiter.Reached.TrySetResult());
         }
 
         private sealed class FakeTimer(FakeTimeProvider owner, TimerCallback callback, object? state) : ITimer
@@ -106,22 +193,10 @@ namespace AgentCore.TestSupport
             /// <summary>Runs the callback, and reschedules only when this timer asked for a period.</summary>
             public void Fire()
             {
-                if (Disposed)
+                if (owner.TryTakeDue(this))
                 {
-                    return;
+                    callback(state);
                 }
-
-                if (Period == Timeout.InfiniteTimeSpan || Period == TimeSpan.Zero)
-                {
-                    owner.Remove(this);
-                    Disposed = true;
-                }
-                else
-                {
-                    DueAt = owner.GetUtcNow() + Period;
-                }
-
-                callback(state);
             }
 
             public bool Change(TimeSpan dueTime, TimeSpan period)
@@ -131,8 +206,7 @@ namespace AgentCore.TestSupport
                     return false;
                 }
 
-                DueAt = owner.GetUtcNow() + dueTime;
-                Period = period;
+                owner.Schedule(this, dueTime, period);
                 return true;
             }
 

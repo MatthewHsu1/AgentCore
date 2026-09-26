@@ -13,8 +13,8 @@ namespace AgentCore.Application.Tests.Runtime.Harness
 
     /// <summary>
     /// <see cref="ConversationFilesProvider"/> as a unit: it serves the framework's file tools rooted at the
-    /// workspace of the turn filed for the invoking session, and refuses to serve any when no turn
-    /// is filed.
+    /// workspace of the turn filed for the invoking session, and serves an empty context when no turn
+    /// is filed (a delegated agent's run, design §6.3#6, inverse of probe P11c).
     /// </summary>
     public sealed class ConversationFilesProviderTests : IDisposable
     {
@@ -46,16 +46,16 @@ namespace AgentCore.Application.Tests.Runtime.Harness
             Assert.NotEmpty(context.Tools);
         }
 
+        // Inverse of P11c (design §6.3#6): a run with no filed turn gets an empty context, not a throw.
         [Fact]
-        public async Task InvokingAsync_WithoutATurn_ThrowsInvalidOperationException()
+        public async Task InvokingAsync_WithoutATurn_ServesAnEmptyContext()
         {
             using ConversationFilesProvider provider = new(_root, Options());
 
-            InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
-                () => provider.InvokingAsync(
-                    Invoking(new StubSession()), TestContext.Current.CancellationToken).AsTask());
+            AIContext context = await provider.InvokingAsync(
+                Invoking(new StubSession()), TestContext.Current.CancellationToken);
 
-            Assert.Contains("files: tool", exception.Message, StringComparison.Ordinal);
+            Assert.Null(context.Tools);
         }
 
         private static FileAccessProviderOptions Options()

@@ -450,22 +450,10 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
         {
             using StartedHost provider = await BuildAsync(OneAgentYaml);
 
-            IConversationSessions sessions = provider.GetRequiredService<EntryRegistry>().ForSessions("main");
+            IConversationSessions sessions = provider.GetRequiredService<EntryRegistry>().Sessions;
 
             _ = Assert.IsType<InMemoryConversationSessions>(sessions);
-            Assert.Same(sessions, provider.GetRequiredService<EntryRegistry>().ForSessions("main"));
-        }
-
-        [Fact]
-        public async Task AddAgentCore_RunsTheIdleSweepForTheDefaultSessions()
-        {
-            // Expiry needs something to drive it. Without this the idle timeout never fires and the
-            // text path holds every conversation a caller walked away from for the life of the process.
-            using StartedHost provider = await BuildAsync(OneAgentYaml);
-
-            Assert.Contains(
-                provider.GetServices<IHostedService>(),
-                service => service is ConversationSessionSweeper);
+            Assert.Same(sessions, provider.GetRequiredService<EntryRegistry>().Sessions);
         }
 
         /// <summary>
@@ -494,50 +482,51 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
             CountingConversationSessions mine = new();
 
             using StartedHost provider = await BuildAsync(
-                OneAgentYaml, options => options.UseConversationSessions((_, _) => mine));
+                OneAgentYaml, options => options.UseConversationSessions(_ => mine));
 
-            // A distributed store replaces the default one, and the default steps aside.
-            Assert.Same(mine, provider.GetRequiredService<EntryRegistry>().ForSessions("main"));
+            // A distributed owner replaces the default one, and the default steps aside.
+            Assert.Same(mine, provider.GetRequiredService<EntryRegistry>().Sessions);
         }
 
         [Fact]
-        public async Task AddAgentCore_OpensOneStorePerEntry()
+        public async Task AddAgentCore_BuildsOneOwnerOverEveryEntrysFactory()
         {
-            // A vendor call id arriving on two entries opens two isolated conversations. That holds only when
-            // each entry has its own store, so the host's opener runs once per entry and is told which.
-            List<string> opened = [];
+            // The owner is opened once for the whole app, not once per entry: the opener sees every entry's
+            // factory in one call, and every entry reads and writes through the one owner it returns.
+            List<IReadOnlyDictionary<string, IConversationSessionFactory>> opened = [];
 
             using StartedHost provider = await BuildAsync(TwoEntryYaml, options => options.UseConversationSessions(
-                (entry, factory) =>
+                factories =>
                 {
-                    opened.Add(entry);
+                    opened.Add(factories);
                     return new InMemoryConversationSessions(
-                        factory, InMemoryConversationSessions.DefaultIdleTimeout, TimeProvider.System);
+                        factories, InMemoryConversationSessions.DefaultIdleTimeout, TimeProvider.System);
                 }));
 
             IConversationSessionRegistry registry = provider.GetRequiredService<IConversationSessionRegistry>();
 
-            Assert.Equal(["main", "other"], opened.Order(StringComparer.Ordinal));
-            Assert.NotSame(registry.ForSessions("main"), registry.ForSessions("other"));
+            IReadOnlyDictionary<string, IConversationSessionFactory> factories = Assert.Single(opened);
+            Assert.Equal(["main", "other"], factories.Keys.Order(StringComparer.Ordinal));
+
+            // One owner, not one per entry: a session "main" opened is seen as held — and "other" refused —
+            // through the very same registry.Sessions. Two separate owners would let "other" open it too.
+            _ = await registry.Sessions.GetOrOpenAsync("main", "conversation-one-owner", null, TestContext.Current.CancellationToken);
+            _ = await Assert.ThrowsAsync<ConversationInUseException>(
+                () => registry.Sessions.GetOrOpenAsync("other", "conversation-one-owner", null, TestContext.Current.CancellationToken).AsTask());
         }
 
         [Fact]
         public async Task AddAgentCore_RegistersTheSessionRegistryAsAPublicPort()
         {
-            // A consumer reaches an entry's store through the port, never through the internal
-            // registry, and never through a bare IConversationSessions: no store spans the whole host.
+            // A consumer reaches the one owner through the port, never through the internal registry, and
+            // never through a bare IConversationSessions registration of its own.
             using StartedHost provider = await BuildAsync(OneAgentYaml);
 
             IConversationSessionRegistry registry = provider.GetRequiredService<IConversationSessionRegistry>();
 
             Assert.Equal(["main"], registry.Entries);
-            Assert.Same(
-                provider.GetRequiredService<EntryRegistry>().ForSessions("main"),
-                registry.ForSessions("main"));
+            Assert.Same(provider.GetRequiredService<EntryRegistry>().Sessions, registry.Sessions);
             Assert.Null(provider.GetService<IConversationSessions>());
-
-            InvalidOperationException failure = Assert.Throws<InvalidOperationException>(() => registry.ForSessions("missing"));
-            Assert.Contains("main", failure.Message, StringComparison.Ordinal);
         }
 
         // -------------------------------------------------------------------------------------------
@@ -2176,17 +2165,17 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
         /// <summary>Sessions a host registers in place of the default ones.</summary>
         private sealed class CountingConversationSessions : IConversationSessions
         {
-            public ValueTask<ConversationSession> OpenAsync(string? conversationId, CancellationToken cancellationToken = default)
+            public ValueTask<ConversationSession> GetOrOpenAsync(string entry, string? conversationId, ConversationSessionState? state, CancellationToken cancellationToken = default)
             {
                 throw new NotSupportedException();
             }
 
-            public ValueTask<ConversationSession?> TryGetAsync(string conversationId, CancellationToken cancellationToken = default)
+            public ValueTask<ConversationSession?> TryGetAsync(string entry, string conversationId, CancellationToken cancellationToken = default)
             {
                 return ValueTask.FromResult<ConversationSession?>(null);
             }
 
-            public ValueTask CloseAsync(string conversationId, CancellationToken cancellationToken = default)
+            public ValueTask CloseAsync(string entry, string conversationId, CancellationToken cancellationToken = default)
             {
                 return ValueTask.CompletedTask;
             }

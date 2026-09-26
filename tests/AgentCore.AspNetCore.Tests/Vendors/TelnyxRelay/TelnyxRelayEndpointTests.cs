@@ -76,10 +76,11 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
             // Error level ReadLoopFaulted uses for an unhandled defect.
             using FragmentingChatClient reply = new("hello");
             EventObservedLoggerProvider capture = new("RelayProtocolViolation");
+            EventObservedLoggerProvider defect = new("ReadLoopFaulted");
             await using TelnyxRelayHost host = await TelnyxRelayHost.StartAsync(
                 TelnyxRelayTurnTests.PolicyYaml,
                 reply,
-                logging: logging => logging.AddProvider(capture));
+                logging: logging => logging.AddProvider(capture).AddProvider(defect));
             await using FakeRelayClient relay = await host.ConnectAsync();
 
             await relay.SendRawAsync("{ this is not JSON");
@@ -97,7 +98,11 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
                 Assert.Fail("the connection never logged the protocol violation within ten seconds.");
             }
 
+            // The close goes out only once teardown has logged every loop's fault, so a defect line would be in by now.
+            _ = await relay.ReadCloseAsync();
+
             Assert.Equal(LogLevel.Warning, capture.Level);
+            Assert.False(defect.Observed.IsCompleted, "the protocol violation was also logged as a read-loop defect.");
         }
 
         [Fact(Timeout = 30_000)]

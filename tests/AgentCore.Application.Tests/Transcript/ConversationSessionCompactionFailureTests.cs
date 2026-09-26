@@ -105,7 +105,7 @@ namespace AgentCore.Application.Tests.Transcript
             ConversationSession? session = null;
             BargingCompactionStrategy strategy = new(
                 new SummarizationCompactionStrategy(new ScriptedChatClient("the gist of it"), CompactionTriggers.Always, minimumPreservedGroups: 0),
-                () => session!.Compiled.History.AppendTurn(session.AgentSession!, [new ChatMessage(ChatRole.User, "barged in")]));
+                () => _ = session!.Compiled.History.CommitTurn(session.AgentSession!, new TurnCommit(new ChatMessage(ChatRole.User, "barged in"))));
             session = CreateSession(new ScriptedChatClient("a3"), store, conversationId: "c1", compaction: SummaryOnly(strategy));
 
             TurnResult result = await session.RunTurnAsync("q3", TestContext.Current.CancellationToken);

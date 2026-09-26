@@ -1,3 +1,4 @@
+using AgentCore.Infrastructure.Conversation.Postgres;
 using AgentCore.Infrastructure.Database.Postgres;
 using Npgsql;
 using Xunit;
@@ -18,6 +19,7 @@ namespace AgentCore.Infrastructure.Tests.Database.Postgres
         [InlineData("agentcore.conversation_message")]
         [InlineData("agentcore.audit_event")]
         [InlineData("agentcore.schema_migration")]
+        [InlineData("agentcore.conversation_busy")]
         public async Task ApplyAsync_FreshDatabase_CreatesTheTable(string table)
         {
             // Arrange
@@ -218,9 +220,41 @@ namespace AgentCore.Infrastructure.Tests.Database.Postgres
         }
 
         [PostgresFact]
-        public async Task Versions_AreTheOneMigrationThisAssemblyCarries()
+        public async Task Versions_AreTheMigrationsThisAssemblyCarries_InOrder()
         {
-            Assert.Equal(["001_agentcore"], PostgresSchema.Versions);
+            Assert.Equal(["001_agentcore", "002_conversation_busy"], PostgresSchema.Versions);
+        }
+
+        [PostgresFact]
+        public async Task ConversationBusy_TheWriterRole_MarksRenewsAndClears()
+        {
+            // Arrange
+            _ = await PostgresSchema.ApplyAsync(DataSource, Token);
+            await using NpgsqlDataSource asWriter = await OpenAsWriterAsync();
+            PostgresConversationStore store = new(asWriter);
+
+            // Act
+            bool marked = await store.TryMarkBusyAsync("c1", "host-a", TimeSpan.FromMinutes(1), Token);
+            bool renewed = await store.TryMarkBusyAsync("c1", "host-a", TimeSpan.FromMinutes(1), Token);
+            await store.ClearBusyAsync("c1", "host-a", Token);
+
+            // Assert
+            Assert.Equal((true, true), (marked, renewed));
+            Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM agentcore.conversation_busy"));
+        }
+
+        [PostgresFact]
+        public async Task ConversationBusy_IsUnlogged_SoAMarkNeverWaitsForAWalFlush()
+        {
+            // Arrange
+            _ = await PostgresSchema.ApplyAsync(DataSource, Token);
+
+            // Act
+            string persistence = await ScalarAsync<string>(
+                "SELECT relpersistence::text FROM pg_class WHERE oid = 'agentcore.conversation_busy'::regclass");
+
+            // Assert
+            Assert.Equal("u", persistence);
         }
 
         [PostgresFact]
@@ -272,22 +306,5 @@ namespace AgentCore.Infrastructure.Tests.Database.Postgres
         VALUES ('C1', gen_random_uuid(), 1, 'conversation.started', now())
         """);
         }
-
-        /// <summary>Opens a pool that logs in as an ordinary member of <c>agentcore_writer</c>.</summary>
-        private async Task<NpgsqlDataSource> OpenAsWriterAsync()
-        {
-            string login = "agentcore_member_" + Guid.NewGuid().ToString("n");
-
-            await ExecuteAsync($"CREATE ROLE \"{login}\" LOGIN PASSWORD 'member' NOSUPERUSER NOCREATEDB NOCREATEROLE");
-            await ExecuteAsync($"GRANT agentcore_writer TO \"{login}\"");
-
-            return NpgsqlDataSource.Create(
-                new NpgsqlConnectionStringBuilder(Database.ConnectionString)
-                {
-                    Username = login,
-                    Password = "member",
-                });
-        }
-
     }
 }

@@ -7,6 +7,7 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Sessions.Memory;
 using AgentCore.Application.Tests.Fakes;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -85,15 +86,63 @@ namespace AgentCore.Application.Tests.Runtime.Harness
         }
 
         [Fact]
+        public async Task ASessionThatCaughtUpOnAnotherHostsTurn_RunsOnTheTodoThatTurnStored_AndKeepsIt()
+        {
+            InMemoryConversationStore store = new();
+            SequencedChatClient hostA = new("a0", "a2");
+            CompiledAgent compiledA = Compile(TodosYaml, hostA, store);
+            CompiledAgent compiledB = Compile(TodosYaml, new TodoAddThenTextChatClient(), store);
+            ConversationSession a = new ConversationSessionFactory(compiledA, new GuardEvaluator(compiledA.Configuration.Guards)).Create("conversation-1");
+            ConversationSession b = new ConversationSessionFactory(compiledB, new GuardEvaluator(compiledB.Configuration.Guards)).Create("conversation-1");
+
+            _ = await a.RunTurnAsync("hello", TestContext.Current.CancellationToken);
+            _ = await b.RunTurnAsync("please track this", TestContext.Current.CancellationToken);
+            _ = await a.RunTurnAsync("what's on my list", TestContext.Current.CancellationToken);
+            await a.FlushTranscriptAsync();
+
+            Assert.Contains(hostA.Requests[^1], message => message.Text.Contains("buy milk", StringComparison.Ordinal));
+            ConversationRecord? record = await store.GetAsync("conversation-1", TestContext.Current.CancellationToken);
+            Assert.Equal(3, record?.State?.NextTurnIndex);
+            Assert.Contains("buy milk", record!.State!.Providers[new TodoProvider().StateKeys[0]].GetRawText(), StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task ASessionWhoseTurnTheStoreDropped_RunsOnTheTodoAnotherHostSavedUnderThatTurn_AndKeepsIt()
+        {
+            FlakyAppendConversationStore store = new();
+            SequencedChatClient hostA = new("a0", "a1", "a2");
+            CompiledAgent compiledA = Compile(TodosYaml, hostA, store);
+            CompiledAgent compiledB = Compile(TodosYaml, new TodoAddThenTextChatClient(), store);
+            ConversationSession a = new ConversationSessionFactory(compiledA, new GuardEvaluator(compiledA.Configuration.Guards)).Create("conversation-1");
+            ConversationSession b = new ConversationSessionFactory(compiledB, new GuardEvaluator(compiledB.Configuration.Guards)).Create("conversation-1");
+
+            _ = await a.RunTurnAsync("hello", TestContext.Current.CancellationToken);
+            store.Down = true;
+            _ = await a.RunTurnAsync("this turn is lost", TestContext.Current.CancellationToken);
+            await a.FlushTranscriptAsync();
+            store.Down = false;
+
+            // B opens on the store, which never saw A's turn 1, so B saves its own turn 1.
+            _ = await b.RunTurnAsync("please track this", TestContext.Current.CancellationToken);
+            _ = await a.RunTurnAsync("what's on my list", TestContext.Current.CancellationToken);
+            await a.FlushTranscriptAsync();
+
+            Assert.Contains(hostA.Requests[^1], message => message.Text.Contains("buy milk", StringComparison.Ordinal));
+            ConversationRecord? record = await store.GetAsync("conversation-1", TestContext.Current.CancellationToken);
+            Assert.Equal(3, record?.State?.NextTurnIndex);
+            Assert.Contains("buy milk", record!.State!.Providers[new TodoProvider().StateKeys[0]].GetRawText(), StringComparison.Ordinal);
+        }
+
+        [Fact]
         public async Task AResumeFromAHostCheckpoint_ThroughAgentCoreAgent_ReInjectsTheTodo()
         {
             InMemoryConversationStore firstStore = new();
             TodoAddThenTextChatClient firstChatClient = new();
             CompiledAgent firstCompiled = Compile(TodosYaml, firstChatClient, firstStore);
-            AgentCoreAgent firstAgent = new(
-                new ConversationSessionFactory(firstCompiled, new GuardEvaluator(firstCompiled.Configuration.Guards)), "main");
+            AgentCoreAgent firstAgent = AgentOver(
+                new ConversationSessionFactory(firstCompiled, new GuardEvaluator(firstCompiled.Configuration.Guards)));
 
-            AgentSession firstSession = await firstAgent.CreateSessionAsync("conversation-1");
+            AgentSession firstSession = await firstAgent.CreateSessionAsync("conversation-1", TestContext.Current.CancellationToken);
             _ = await firstAgent.RunAsync(
                 "please track this", firstSession, cancellationToken: TestContext.Current.CancellationToken);
 
@@ -105,8 +154,8 @@ namespace AgentCore.Application.Tests.Runtime.Harness
             InMemoryConversationStore secondStore = new();
             SequencedChatClient secondChatClient = new("hello there.");
             CompiledAgent secondCompiled = Compile(TodosYaml, secondChatClient, secondStore);
-            AgentCoreAgent secondAgent = new(
-                new ConversationSessionFactory(secondCompiled, new GuardEvaluator(secondCompiled.Configuration.Guards)), "main");
+            AgentCoreAgent secondAgent = AgentOver(
+                new ConversationSessionFactory(secondCompiled, new GuardEvaluator(secondCompiled.Configuration.Guards)));
 
             AgentSession revived = await secondAgent.DeserializeSessionAsync(
                 serialized, cancellationToken: TestContext.Current.CancellationToken);
@@ -168,6 +217,16 @@ namespace AgentCore.Application.Tests.Runtime.Harness
             return ConfigurationCompiler.CompileAll(
                         ConfigurationLoader.LoadYaml(yaml),
                         new AgentCompilationContext(new FakeChatClientFactory(chatClient)) { ConversationStore = store })["main"];
+        }
+
+        private static AgentCoreAgent AgentOver(IConversationSessionFactory factory)
+        {
+            InMemoryConversationSessions sessions = new(
+                new Dictionary<string, IConversationSessionFactory>(StringComparer.Ordinal) { ["main"] = factory },
+                TimeSpan.FromMinutes(30),
+                TimeProvider.System);
+
+            return new AgentCoreAgent(sessions, "main");
         }
 
         /// <summary>

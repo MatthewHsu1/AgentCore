@@ -10,6 +10,7 @@ using AgentCore.TestSupport;
 using Microsoft.Agents.AI.Tools.Shell;
 using Microsoft.Extensions.AI;
 using Xunit;
+using static AgentCore.Application.Tests.Sessions.ConversationSessionsFixture;
 
 namespace AgentCore.Application.Tests.Runtime.Harness
 {
@@ -119,16 +120,60 @@ namespace AgentCore.Application.Tests.Runtime.Harness
         {
             ShellScriptedClient client = new(RunShellToolName, "pwd", "rm -rf x", "echo $$");
             ConversationSessionFactory factory = BuildFactory(ShellYaml, client);
-            InMemoryConversationSessions sessions = new(factory, TimeSpan.FromMinutes(30), TimeProvider.System);
+            InMemoryConversationSessions sessions = new(SingleEntrySessionFactories.Of(factory), TimeSpan.FromMinutes(30), TimeProvider.System);
 
-            ConversationSession session = await sessions.OpenAsync("conversation-1", TestContext.Current.CancellationToken);
+            ConversationSession session = await sessions.GetOrOpenAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", null, TestContext.Current.CancellationToken);
             _ = await session.RunTurnAsync("go", TestContext.Current.CancellationToken);
 
-            int pid = ParsePid(client.ToolResults[2]);
+            int pid = ProcHelpers.ParsePid(client.ToolResults[2]);
             Assert.True(Directory.Exists($"/proc/{pid}"), "the bash should be alive before the conversation closes");
 
-            await sessions.CloseAsync("conversation-1", TestContext.Current.CancellationToken);
+            await sessions.CloseAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", TestContext.Current.CancellationToken);
 
+            await ProcHelpers.AssertGoneAsync(pid, TestContext.Current.CancellationToken);
+        }
+
+        [Fact]
+        public async Task AfterTheConversationIsClosed_ItsWorkspaceFolderIsGone()
+        {
+            // CloseAsync must delete the folder by itself: a caller may close without ending the conversation.
+            ShellScriptedClient client = new(RunShellToolName, "echo $$");
+            ConversationSessionFactory factory = BuildFactory(ShellYaml, client);
+            InMemoryConversationSessions sessions = new(SingleEntrySessionFactories.Of(factory), TimeSpan.FromMinutes(30), TimeProvider.System);
+
+            ConversationSession session = await sessions.GetOrOpenAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", null, TestContext.Current.CancellationToken);
+            string workspace = session.Workspace!;
+            Assert.True(Directory.Exists(workspace));
+            _ = await session.RunTurnAsync("go", TestContext.Current.CancellationToken);
+
+            await sessions.CloseAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", TestContext.Current.CancellationToken);
+
+            Assert.False(Directory.Exists(workspace));
+        }
+
+        [Fact]
+        public async Task AnIdleUnload_DisposesTheShellAndDeletesTheWorkspaceFolder()
+        {
+            ShellScriptedClient client = new(RunShellToolName, "echo $$");
+            ConversationSessionFactory factory = BuildFactory(ShellYaml, client);
+            FakeTimeProvider clock = Clock();
+            InMemoryConversationSessions sessions = new(
+                SingleEntrySessionFactories.Of(factory), InMemoryConversationSessions.DefaultIdleTimeout, clock);
+
+            ConversationSession session = await sessions.GetOrOpenAsync(
+                SingleEntrySessionFactories.MainEntry, "conversation-1", null, TestContext.Current.CancellationToken);
+            _ = await session.RunTurnAsync("go", TestContext.Current.CancellationToken);
+
+            int pid = ProcHelpers.ParsePid(client.ToolResults[0]);
+            string workspace = session.Workspace!;
+            Assert.True(Directory.Exists(workspace));
+
+            clock.Advance(InMemoryConversationSessions.DefaultIdleTimeout);
+
+            // The idle timer starts the unload on a background task that this call does not await.
+            // Wait for the teardown itself first — the workspace delete is its last step — then give
+            // the pid its own short budget for the OS to reap it, rather than race the two.
+            await EventuallyAsync(() => !Directory.Exists(workspace));
             await ProcHelpers.AssertGoneAsync(pid, TestContext.Current.CancellationToken);
         }
 
@@ -136,7 +181,7 @@ namespace AgentCore.Application.Tests.Runtime.Harness
         public async Task CloseAsync_WhenTheStoreThrowsOnFlush_StillDisposesTheShell()
         {
             // AgentCoreChatHistoryProvider.WriteAfterAsync catches every exception a store write
-            // raises and reports it through TranscriptWriteDropped, whose own contract is that it
+            // raises and reports it through ITranscriptLossCounter.Dropped, whose own contract is that it
             // never throws back out — "the conversation outlives a store that refuses" — so FlushTranscriptAsync
             // itself surfaces nothing here, which is today's behaviour: CloseAsync completes rather than
             // throw. What this proves is the part that used to be at risk: even though the flush ate the
@@ -150,15 +195,17 @@ namespace AgentCore.Application.Tests.Runtime.Harness
                 new AgentCompilationContext(chatClients) { WorkspaceRoot = _root, ConversationStore = store })["main"];
             ConversationSessionFactory factory = new(
                 compiled, new GuardEvaluator(compiled.Configuration.Guards), workspaceRoot: _root);
-            InMemoryConversationSessions sessions = new(factory, TimeSpan.FromMinutes(30), TimeProvider.System);
+            InMemoryConversationSessions sessions = new(SingleEntrySessionFactories.Of(factory), TimeSpan.FromMinutes(30), TimeProvider.System);
 
-            ConversationSession session = await sessions.OpenAsync("conversation-1", TestContext.Current.CancellationToken);
+            ConversationSession session = await sessions.GetOrOpenAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", null, TestContext.Current.CancellationToken);
+            string workspace = session.Workspace!;
             _ = await session.RunTurnAsync("go", TestContext.Current.CancellationToken);
-            int pid = ParsePid(client.ToolResults[0]);
+            int pid = ProcHelpers.ParsePid(client.ToolResults[0]);
 
-            await sessions.CloseAsync("conversation-1", TestContext.Current.CancellationToken);
+            await sessions.CloseAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", TestContext.Current.CancellationToken);
 
             await ProcHelpers.AssertGoneAsync(pid, TestContext.Current.CancellationToken);
+            Assert.False(Directory.Exists(workspace), "a close over a store that refuses its writes must still delete the workspace folder");
         }
 
         [Fact]
@@ -174,8 +221,8 @@ namespace AgentCore.Application.Tests.Runtime.Harness
             await using ConversationSession sessionB = factory.Create("conversation-b");
             _ = await sessionB.RunTurnAsync("go", TestContext.Current.CancellationToken);
 
-            int pidA = ParsePid(client.ToolResults[0]);
-            int pidB = ParsePid(client.ToolResults[1]);
+            int pidA = ProcHelpers.ParsePid(client.ToolResults[0]);
+            int pidB = ProcHelpers.ParsePid(client.ToolResults[1]);
 
             Assert.NotEqual(pidA, pidB);
         }
@@ -205,7 +252,7 @@ namespace AgentCore.Application.Tests.Runtime.Harness
             TurnResult turn = await session.RunTurnAsync("go", TestContext.Current.CancellationToken);
             Assert.True(turn.IsTerminal);
 
-            int pid = ParsePid(client.ToolResults[0]);
+            int pid = ProcHelpers.ParsePid(client.ToolResults[0]);
 
             await ProcHelpers.AssertGoneAsync(pid, TestContext.Current.CancellationToken);
         }
@@ -244,15 +291,6 @@ namespace AgentCore.Application.Tests.Runtime.Harness
             Assert.DoesNotContain(sessionB.Workspace!, instructionsA, StringComparison.Ordinal);
         }
 
-        /// <summary>
-        /// Reads the pid off the first line of a <c>run_shell</c> tool result: MAF's own formatting
-        /// appends an <c>exit_code:</c> line after the command's stdout.
-        /// </summary>
-        private static int ParsePid(string toolResult)
-        {
-            return int.Parse(toolResult.Split('\n', StringSplitOptions.TrimEntries)[0]);
-        }
-
         private static string ToolName()
         {
             string workspace = Directory.CreateTempSubdirectory("shell-tool-name-").FullName;
@@ -284,6 +322,5 @@ namespace AgentCore.Application.Tests.Runtime.Harness
                 new GuardEvaluator(compiled.Configuration.Guards),
                 workspaceRoot: _root);
         }
-
     }
 }

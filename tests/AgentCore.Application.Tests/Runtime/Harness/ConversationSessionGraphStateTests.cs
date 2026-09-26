@@ -97,6 +97,26 @@ namespace AgentCore.Application.Tests.Runtime.Harness
         }
 
         [Fact]
+        public async Task ASessionThatCaughtUpOnAnotherSessionsTurn_ResumesTheWorkflowThatTurnStored_AndKeepsIt()
+        {
+            InMemoryConversationStore store = new();
+            RequestCapturingChatClient adder = new(new TodoFromCallerChatClient());
+            ConversationSessionFactory factory = Build(TodosYaml, store, adder, new ScriptedToolCallingChatClient() { FinalText = "echo" });
+            ConversationSession a = factory.Create("conversation-1");
+            ConversationSession b = factory.Create("conversation-1");
+
+            _ = await a.RunTurnAsync("add buy milk", TestContext.Current.CancellationToken);
+            _ = await b.RunTurnAsync("add call the bank", TestContext.Current.CancellationToken);
+            _ = await a.RunTurnAsync("anything new?", TestContext.Current.CancellationToken);
+            await a.FlushTranscriptAsync();
+
+            Assert.Contains(adder.Requests[^1], message => message.Text.Contains("call the bank", StringComparison.Ordinal));
+            ConversationRecord? record = await store.GetAsync("conversation-1", TestContext.Current.CancellationToken);
+            Assert.Equal(3, record?.State?.NextTurnIndex);
+            Assert.Contains("call the bank", record!.State!.WorkflowState!.Value.GetRawText(), StringComparison.Ordinal);
+        }
+
+        [Fact]
         public async Task NoHarnessSwitch_AfterATurn_Store0HoldsNeitherBlobNorProviders()
         {
             InMemoryConversationStore store = new();

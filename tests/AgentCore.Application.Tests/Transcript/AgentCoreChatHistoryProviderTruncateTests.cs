@@ -1,6 +1,7 @@
 using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Transcript;
 using AgentCore.TestSupport;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
 using static AgentCore.Application.Tests.Transcript.AgentCoreChatHistoryProviderTestSupport;
@@ -14,7 +15,7 @@ namespace AgentCore.Application.Tests.Transcript
     public sealed class AgentCoreChatHistoryProviderTruncateTests
     {
         [Fact]
-        public async Task TruncateLastReply_LastAssistantMessage_RewritesOnlyThatMessage()
+        public async Task RewriteReply_LastAssistantMessage_RewritesOnlyThatMessage()
         {
             // Arrange
             (AgentCoreChatHistoryProvider? provider, Fakes.RecordingConversationStore? store, StubSession? session) = await NewConversation();
@@ -22,7 +23,7 @@ namespace AgentCore.Application.Tests.Transcript
             AppendTurn(provider, session, turnIndex: 1, "order 41?", "it ships Friday from the depot");
 
             // Act
-            bool cut = provider.TruncateLastReply(session, "it ships", TimeSpan.FromMilliseconds(420));
+            bool cut = provider.RewriteReply(session, 1, "it ships");
 
             // Assert
             Assert.True(cut);
@@ -42,7 +43,7 @@ namespace AgentCore.Application.Tests.Transcript
             AppendTurn(provider, session, turnIndex: 0, "order 41?", "it ships Friday from the depot");
 
             // Act
-            _ = provider.TruncateLastReply(session, "it ships Fri", TimeSpan.FromMilliseconds(300));
+            _ = provider.RewriteReply(session, 0, "it ships Fri");
 
             // Assert
             IReadOnlyList<ChatMessage> history = await ProvideAsync(provider, session);
@@ -55,7 +56,7 @@ namespace AgentCore.Application.Tests.Transcript
         /// and leave the record holding words the caller never heard.
         /// </summary>
         [Fact]
-        public async Task TruncateLastReply_WhileTheAppendIsStillWriting_ReachesTheStoreAfterIt()
+        public async Task RewriteReply_WhileTheAppendIsStillWriting_ReachesTheStoreAfterIt()
         {
             // Arrange
             BlockingConversationStore store = new();
@@ -70,7 +71,7 @@ namespace AgentCore.Application.Tests.Transcript
             await store.Entered;
 
             // Act
-            bool cut = provider.TruncateLastReply(session, "it ships", TimeSpan.FromMilliseconds(90));
+            bool cut = provider.RewriteReply(session, 1, "it ships");
             store.Release();
             await provider.DrainAsync(session);
 
@@ -82,35 +83,12 @@ namespace AgentCore.Application.Tests.Transcript
         }
 
         /// <summary>
-        /// The held prompt of item 6a: the vendor is still speaking turn 0 when turn 1 begins, so the
-        /// reply the caller was hearing belongs to the turn before the one now open. ConversationSession decides
-        /// that a barge-in reaches it; the provider must not refuse because the turn moved on.
+        /// A model routinely writes a line and puts the tool call it announces on the same message, then
+        /// answers in a second step. The first step's words stay before their tool call and only the second
+        /// step is cut to what was heard (owner ruling 2026-09-23).
         /// </summary>
         [Fact]
-        public async Task TruncateLastReply_AfterTheNextTurnOpened_CutsTheReplyTheCallerWasHearing()
-        {
-            // Arrange
-            (AgentCoreChatHistoryProvider? provider, Fakes.RecordingConversationStore _, StubSession? session) = await NewConversation();
-            AppendTurn(provider, session, turnIndex: 0, "hello", "hi there caller");
-            provider.BeginTurn(session, turnIndex: 1);
-
-            // Act
-            bool cut = provider.TruncateLastReply(session, "hi there", TimeSpan.FromMilliseconds(300));
-
-            // Assert
-            Assert.True(cut);
-            IReadOnlyList<ChatMessage> history = await ProvideAsync(provider, session);
-            Assert.Equal(["hello", "hi there"], history.Select(message => message.Text));
-        }
-
-        /// <summary>
-        /// A model routinely writes a line and puts the tool call it announces on the same message, and a
-        /// graph row writes one reply for each node. The caller heard as much of the turn as the vendor
-        /// played and nothing else, so no earlier word of that turn may survive the cut as text the
-        /// caller is recorded as having heard.
-        /// </summary>
-        [Fact]
-        public async Task TruncateLastReply_TurnWithProseBesideAToolCall_DropsEveryWordButTheHeardOnes()
+        public async Task RewriteReply_TurnWithProseBesideAToolCall_KeepsTheProseAndCutsTheLastStep()
         {
             // Arrange
             (AgentCoreChatHistoryProvider? provider, Fakes.RecordingConversationStore? store, StubSession? session) = await NewConversation();
@@ -118,45 +96,98 @@ namespace AgentCore.Application.Tests.Transcript
             ChatMessage announced = new(
                 ChatRole.Assistant,
                 [new TextContent("Let me check that for you"), new FunctionCallContent("conversation-1", "lookup")]);
-            _ = provider.AppendTurn(
+            _ = provider.CommitTurn(
                 session,
-                [
-                    new ChatMessage(ChatRole.User, "how much?"),
-                    announced,
-                    new ChatMessage(ChatRole.Tool, [new FunctionResultContent("conversation-1", "50")]),
-                    new ChatMessage(ChatRole.Assistant, "the price is fifty"),
-                ]);
+                new TurnCommit(new ChatMessage(ChatRole.User, "how much?"))
+                {
+                    Seen = new AgentResponse(
+                    [
+                        announced,
+                        new ChatMessage(ChatRole.Tool, [new FunctionResultContent("conversation-1", "50")]),
+                        new ChatMessage(ChatRole.Assistant, "the price is fifty"),
+                    ]),
+                });
 
             // Act
-            bool cut = provider.TruncateLastReply(session, "the price", TimeSpan.FromMilliseconds(400));
+            bool cut = provider.RewriteReply(session, 0, "Let me check that for youthe price");
 
             // Assert
             Assert.True(cut);
             IReadOnlyList<ChatMessage> history = await ProvideAsync(provider, session);
-            Assert.Equal(["how much?", string.Empty, string.Empty, "the price"], history.Select(m => m.Text));
+            Assert.Equal(["how much?", "Let me check that for you", string.Empty, "the price"], history.Select(m => m.Text));
 
             // The side effect ran, so the pair stays. That is the rule the cut must not break.
             Assert.Contains(history, m => m.Contents.OfType<FunctionCallContent>().Any());
             Assert.Contains(history, m => m.Contents.OfType<FunctionResultContent>().Any());
 
             await provider.DrainAsync(session);
-            Assert.Equal([1, 3], store.Rewrites.Select(rewrite => rewrite.Ordinal));
+            Assert.Equal([3], store.Rewrites.Select(rewrite => rewrite.Ordinal));
         }
 
         [Fact]
-        public async Task TruncateLastReply_BeforeAnyReplyExists_NoOps()
+        public async Task RewriteReply_BeforeAnyReplyExists_NoOps()
         {
             // Arrange
             (AgentCoreChatHistoryProvider? provider, Fakes.RecordingConversationStore? store, StubSession? session) = await NewConversation();
             provider.BeginTurn(session, turnIndex: 0);
 
             // Act
-            bool cut = provider.TruncateLastReply(session, "nothing was said", TimeSpan.Zero);
+            bool cut = provider.RewriteReply(session, 0, "nothing was said");
 
             // Assert
             Assert.False(cut);
             Assert.Empty(store.Rewrites);
             Assert.Empty(await ProvideAsync(provider, session));
+        }
+
+        [Fact]
+        public async Task TruncateFrom_AMessageTheSessionDoesNotHold_WithdrawsNothing()
+        {
+            // Arrange
+            (AgentCoreChatHistoryProvider? provider, Fakes.RecordingConversationStore? store, StubSession? session) = await NewConversation();
+            AppendTurn(provider, session, turnIndex: 0, "hello", "hi there");
+
+            // Act
+            WithdrawnTurns? withdrawn = await provider.TruncateFromAsync(session, "no-such-message", TestContext.Current.CancellationToken);
+            await provider.DrainAsync(session);
+
+            // Assert
+            Assert.Null(withdrawn);
+            Assert.Equal(["hello", "hi there"], (await ProvideAsync(provider, session)).Select(message => message.Text));
+            Assert.Equal(["hello", "hi there"], store.Live(ConversationId).Select(row => row.Content.Text));
+        }
+
+        /// <summary>
+        /// An edit under the summary cuts the store itself, so it waits for every write already queued: a cut that
+        /// overtook a pending append would leave the rows it withdrew to land after it.
+        /// </summary>
+        [Fact]
+        public async Task CutUnderSummary_WhileAnAppendIsStillWriting_CutsTheRowsThatAppendWrites()
+        {
+            // Arrange
+            BlockingConversationStore store = new();
+            _ = await store.CreateAsync(ConversationId, TestContext.Current.CancellationToken);
+            AgentCoreChatHistoryProvider provider = new(store);
+            StubSession session = new();
+            _ = provider.BeginConversation(session, ConversationId, []);
+            AppendTurn(provider, session, turnIndex: 0, "hello", "hi there");
+            await provider.DrainAsync(session);
+            string parent = (await store.ReadAllAsync(ConversationId, TestContext.Current.CancellationToken))[1].MessageId;
+            store.BlockNextAppend();
+            AppendTurn(provider, session, turnIndex: 1, "order 41?", "it ships Friday");
+            await store.Entered;
+
+            // Act
+            ValueTask<WithdrawnTurns?> cut = provider.CutUnderSummaryAsync(session, parent, TestContext.Current.CancellationToken);
+            store.Release();
+            _ = await cut;
+            await provider.DrainAsync(session);
+
+            // Assert
+            Assert.Equal(
+                ["hello", "hi there"],
+                (await store.ReadAllAsync(ConversationId, TestContext.Current.CancellationToken)).Select(row => row.Content.Text));
+            Assert.Equal(["hello", "hi there"], (await ProvideAsync(provider, session)).Select(message => message.Text));
         }
 
         [Fact]
@@ -171,7 +202,7 @@ namespace AgentCore.Application.Tests.Transcript
             AppendTurn(provider, session, turnIndex: 0, "order 41?", "it ships Friday from the depot");
 
             // Act
-            _ = provider.TruncateLastReply(session, "it ships", TimeSpan.FromMilliseconds(200));
+            _ = provider.RewriteReply(session, 0, "it ships");
 
             // Assert
             await provider.DrainAsync(session);

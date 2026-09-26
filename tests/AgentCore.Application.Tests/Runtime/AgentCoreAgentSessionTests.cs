@@ -3,6 +3,7 @@ using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Transcript;
+using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -45,7 +46,7 @@ namespace AgentCore.Application.Tests.Runtime
         public async Task SerializeSessionAsync_NamesTheConversationTheStateBelongsTo()
         {
             AgentCoreAgent agent = BuildAgent(new SequencedChatClient("a reply"), out _);
-            AgentSession session = await agent.CreateSessionAsync("conversation-42");
+            AgentSession session = await agent.CreateSessionAsync("conversation-42", TestContext.Current.CancellationToken);
 
             JsonElement serialized = await agent.SerializeSessionAsync(
                 session, cancellationToken: TestContext.Current.CancellationToken);
@@ -60,19 +61,38 @@ namespace AgentCore.Application.Tests.Runtime
         {
             AgentCoreAgent agent = BuildAgent(new SequencedChatClient("a reply"), out _);
 
-            // A run answers a null session by making one — the framework's one-shot shape, a conversation nothing
-            // continues. There is no one-shot serialize: the envelope would name a fresh random id beside
-            // an empty state, and a host would keep that as its checkpoint and never learn it points at
-            // nothing.
+            // A run with no session ends its conversation with the run, so there is nothing to serialize: the
+            // envelope would name a fresh random id beside an empty state, and a host would keep that as its
+            // checkpoint and never learn it points at nothing.
             _ = await Assert.ThrowsAsync<ArgumentNullException>(async () =>
                 await agent.SerializeSessionAsync(null!, cancellationToken: TestContext.Current.CancellationToken));
+        }
+
+        [Fact]
+        public async Task SerializeSessionAsync_AfterItsConversationHasUnloaded_WritesTheIdWithNoState()
+        {
+            FakeTimeProvider clock = new(DateTimeOffset.UtcNow);
+            AgentCoreAgent agent = BuildAgent(new SequencedChatClient("a reply"), out _, timeProvider: clock, idleTimeout: TimeSpan.FromMinutes(1));
+
+            AgentSession session = await agent.CreateSessionAsync("conversation-42", TestContext.Current.CancellationToken);
+            _ = await agent.RunAsync("hello", session, cancellationToken: TestContext.Current.CancellationToken);
+
+            clock.Advance(TimeSpan.FromMinutes(1) + TimeSpan.FromSeconds(1));
+
+            JsonElement serialized = await agent.SerializeSessionAsync(
+                session, cancellationToken: TestContext.Current.CancellationToken);
+
+            // Store 0's own copy of the state outranks whatever this session held before it unloaded, so
+            // the blob carries only the id: a live session's snapshot would be stale the moment it wrote.
+            Assert.Equal("conversation-42", serialized.GetProperty("conversationId").GetString());
+            Assert.Equal(JsonValueKind.Null, serialized.GetProperty("state").ValueKind);
         }
 
         [Fact]
         public async Task ARoundTrip_ComesBackOnTheSameConversation()
         {
             AgentCoreAgent agent = BuildAgent(new SequencedChatClient("a reply", "another reply"), out _);
-            AgentSession session = await agent.CreateSessionAsync("conversation-42");
+            AgentSession session = await agent.CreateSessionAsync("conversation-42", TestContext.Current.CancellationToken);
             _ = await agent.RunAsync("hello", session, cancellationToken: TestContext.Current.CancellationToken);
 
             JsonElement serialized = await agent.SerializeSessionAsync(
@@ -327,7 +347,7 @@ namespace AgentCore.Application.Tests.Runtime
         public async Task ARoundTripOfATerminalConversation_ComesBackTerminalAndRefusesItsTurn()
         {
             AgentCoreAgent agent = BuildAgent(new SequencedChatClient("a reply"), out _, TerminalAgentYaml);
-            AgentSession session = await agent.CreateSessionAsync("conversation-42");
+            AgentSession session = await agent.CreateSessionAsync("conversation-42", TestContext.Current.CancellationToken);
 
             _ = await agent.RunAsync("hello", session, cancellationToken: TestContext.Current.CancellationToken);
             Assert.True(session.GetService<ConversationSession>()!.IsComplete);

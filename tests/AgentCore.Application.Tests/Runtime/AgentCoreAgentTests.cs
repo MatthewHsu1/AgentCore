@@ -1,5 +1,8 @@
+using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Runtime;
+using AgentCore.Domain.Audit;
+using AgentCore.TestSupport;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
@@ -93,17 +96,51 @@ namespace AgentCore.Application.Tests.Runtime
         }
 
         [Fact]
-        public async Task RunAsync_WithNoSession_RunsOneShotConversations()
+        public async Task RunAsync_WithNoSession_RunsANormalTurnAndLeavesTheConversationOpen()
         {
             SequencedChatClient reply = new("one", "two");
-            AgentCoreAgent agent = BuildAgent(reply, out _);
+            InMemoryAuditSink sink = new();
+            AgentCoreAgent agent = BuildAgent(reply, out _, observers: ConversationObservers.Standard(sink, logger: null));
 
-            _ = await agent.RunAsync("first", cancellationToken: TestContext.Current.CancellationToken);
-            _ = await agent.RunAsync("second", cancellationToken: TestContext.Current.CancellationToken);
+            AgentResponse first = await agent.RunAsync("first", cancellationToken: TestContext.Current.CancellationToken);
 
-            // No session, no continuity: the second run is a new conversation and saw nothing of the first.
-            Assert.DoesNotContain(reply.Requests[1], message => message.Text == "first");
-            Assert.DoesNotContain(reply.Requests[1], message => message.Text == "one");
+            Assert.Equal("one", first.Text);
+            AuditEvent started = Assert.Single(sink.Events, e => e.Kind == AuditEventKind.ConversationStarted);
+            Assert.DoesNotContain(sink.Events, e => e.Kind == AuditEventKind.ConversationEnded);
+
+            // A caller that later names the minted id explicitly (the only way MAF lets one recover it) finds
+            // the same conversation still open, with the first turn's exchange in front of the second.
+            AgentSession resumed = await agent.CreateSessionAsync(started.ConversationId, TestContext.Current.CancellationToken);
+            AgentResponse second = await agent.RunAsync("second", resumed, cancellationToken: TestContext.Current.CancellationToken);
+
+            Assert.Equal("two", second.Text);
+            Assert.Equal("second", reply.LastUserText(1));
+            Assert.Contains(reply.Requests[1], message => message.Role == ChatRole.User && message.Text == "first");
+            Assert.Contains(reply.Requests[1], message => message.Role == ChatRole.Assistant && message.Text == "one");
+        }
+
+        [Fact]
+        public async Task RunAsync_OnAHeldSessionAfterItsConversationUnloaded_StillRuns()
+        {
+            SequencedChatClient reply = new("first reply", "second reply");
+            FakeTimeProvider clock = new(DateTimeOffset.UtcNow);
+            AgentCoreAgent agent = BuildAgent(reply, out _, timeProvider: clock, idleTimeout: TimeSpan.FromMinutes(1));
+
+            AgentSession session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+            AgentResponse first = await agent.RunAsync("hello", session, cancellationToken: TestContext.Current.CancellationToken);
+            Assert.Equal("first reply", first.Text);
+
+            // Past the idle timeout: the owner has unloaded the conversation this session names, but the
+            // caller still holds the MAF AgentSession object from before that happened.
+            clock.Advance(TimeSpan.FromMinutes(1) + TimeSpan.FromSeconds(1));
+
+            AgentResponse second = await agent.RunAsync("and again", session, cancellationToken: TestContext.Current.CancellationToken);
+
+            Assert.Equal("second reply", second.Text);
+
+            // History survived the unload: the rebuilt session re-read the transcript store 0 still holds.
+            Assert.Contains(reply.Requests[1], message => message.Role == ChatRole.User && message.Text == "hello");
+            Assert.Contains(reply.Requests[1], message => message.Role == ChatRole.Assistant && message.Text == "first reply");
         }
 
         [Fact]
@@ -126,7 +163,7 @@ namespace AgentCore.Application.Tests.Runtime
         {
             AgentCoreAgent agent = BuildAgent(new SequencedChatClient("unused"), out _);
 
-            AgentSession session = await agent.CreateSessionAsync("conversation-42");
+            AgentSession session = await agent.CreateSessionAsync("conversation-42", TestContext.Current.CancellationToken);
 
             Assert.Equal("conversation-42", session.GetService<ConversationSession>()?.ConversationId);
         }

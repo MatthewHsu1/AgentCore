@@ -79,14 +79,9 @@ namespace AgentCore.Application.Tests.Transcript
                 store.Rows.Select(row => row.Content.Text));
         }
 
-        /// <summary>
-        /// The framework offers to store a finished run, and this provider declines. Measured on
-        /// Microsoft.Agents.AI 1.17.0, that hook stores the request verbatim — reminder and all — and is
-        /// never called at all for a run the caller cut short, which is every barge-in. ConversationSession
-        /// writes the turn it shaped instead.
-        /// </summary>
+        // Design section 2: the hook stages and writes nothing durable; section 7 item 1: a read never returns staged messages.
         [Fact]
-        public async Task StoreChatHistory_FinishedRun_StoresNothing()
+        public async Task StoreChatHistory_FinishedRun_StagesTheResponseAndStoresNothing()
         {
             // Arrange
             (AgentCoreChatHistoryProvider? provider, RecordingConversationStore? store, StubSession? session) = await NewConversation();
@@ -107,6 +102,7 @@ namespace AgentCore.Application.Tests.Transcript
             await provider.DrainAsync(session);
             Assert.Empty(store.Rows);
             Assert.Empty(await ProvideAsync(provider, session));
+            Assert.Equal(["it ships Friday"], provider.Staged(session).Select(message => message.Text));
         }
 
         [Fact]
@@ -121,12 +117,12 @@ namespace AgentCore.Application.Tests.Transcript
                     async () =>
                     {
                         await start.Task;
-                        _ = provider.AppendTurn(
+                        _ = provider.CommitTurn(
                             session,
-                            [
-                                new ChatMessage(ChatRole.User, $"said {index}"),
-                                new ChatMessage(ChatRole.Assistant, $"replied {index}"),
-                            ]);
+                            new TurnCommit(new ChatMessage(ChatRole.User, $"said {index}"))
+                            {
+                                Seen = new AgentResponse(new ChatMessage(ChatRole.Assistant, $"replied {index}")),
+                            });
                     },
                     TestContext.Current.CancellationToken))];
 
@@ -159,14 +155,9 @@ namespace AgentCore.Application.Tests.Transcript
             Assert.Equal(["b said", "b heard"], (await ProvideAsync(provider, second)).Select(message => message.Text));
         }
 
-        /// <summary>
-        /// The framework validates this set at agent construction and again on every run, and refuses a
-        /// collision. The value is MAF's default — the provider's own type name — and nothing files
-        /// under it anymore, but a change still renames what the collision checks compare, so it stays
-        /// pinned rather than inlined.
-        /// </summary>
+        // Design section 2: StateKeys = ["agentcore.history"].
         [Fact]
-        public void StateKeys_IsTheSingleProviderTypeNameKey()
+        public void StateKeys_IsTheConversationKey()
         {
             // Arrange
             AgentCoreChatHistoryProvider provider = new();
@@ -175,8 +166,9 @@ namespace AgentCore.Application.Tests.Transcript
             Assert.Equal([StateKey], provider.StateKeys);
         }
 
+        // Design section 2: BeginConversation files the conversation id under the provider's key, and nothing else enters the bag.
         [Fact]
-        public async Task AppendTurn_LeavesTheSessionStateBagEmpty()
+        public async Task AppendTurn_LeavesOnlyTheConversationKeyInTheStateBag()
         {
             // Arrange
             (AgentCoreChatHistoryProvider? provider, RecordingConversationStore _, StubSession? session) = await NewConversation();
@@ -185,7 +177,9 @@ namespace AgentCore.Application.Tests.Transcript
             AppendTurn(provider, session, turnIndex: 0, "order 41?", "it ships Friday");
 
             // Assert
-            Assert.Equal(0, session.StateBag.Count);
+            Assert.Equal(1, session.StateBag.Count);
+            Assert.True(session.StateBag.TryGetValue(StateKey, out string? conversationId));
+            Assert.Equal(ConversationId, conversationId);
             Assert.Equal(["order 41?", "it ships Friday"], provider.Read(session).Select(message => message.Text));
         }
 
@@ -234,15 +228,38 @@ namespace AgentCore.Application.Tests.Transcript
             // Arrange
             AgentCoreChatHistoryProvider provider = new(new ThrowingConversationStore());
             StubSession session = new();
-            List<int> dropped = [];
-            _ = provider.BeginConversation(session, ConversationId, [], (turnIndex, _) => dropped.Add(turnIndex));
+            DroppedTurns dropped = new();
+            _ = provider.BeginConversation(session, ConversationId, [], dropped);
 
             // Act
             AppendTurn(provider, session, turnIndex: 3, "hello", "hi there");
 
             // Assert
             await provider.DrainAsync(session);
-            Assert.Equal([3], dropped);
+            Assert.Equal([3], dropped.Turns);
+        }
+
+        private sealed class DroppedTurns : ITranscriptLossCounter
+        {
+            public List<int> Turns { get; } = [];
+
+            public void Dropped(int turnIndex, IReadOnlyList<string> appended, Exception exception)
+            {
+                Turns.Add(turnIndex);
+            }
+
+            public void Withdrew(IReadOnlyList<string> messageIds)
+            {
+            }
+
+            public ValueTask<TranscriptLossVerdict?> JudgeAsync(AgentSession session, CancellationToken cancellationToken)
+            {
+                return ValueTask.FromResult<TranscriptLossVerdict?>(null);
+            }
+
+            public void Realigned(TranscriptLossVerdict verdict)
+            {
+            }
         }
     }
 }

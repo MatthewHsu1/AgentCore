@@ -6,6 +6,7 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Domain.Audit;
 using Microsoft.Extensions.AI;
@@ -181,6 +182,29 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(Spoken, string.Concat(spoken));
             Assert.NotNull(session.LastTurn);
             Assert.Null(session.LastTurn.Failure);
+        }
+
+        [Fact]
+        public async Task Streaming_GraphRow_EndsWithTheIdsOfItsAppend()
+        {
+            // Arrange. Design section 6, step E5: the committed ids ride the turn's last update, on a row whose
+            // output is filtered to its final node as on any other.
+            using ScriptedChatClient researcher = new(Thinking);
+            using ScriptedChatClient responder = new(Spoken);
+            ConversationSession session = Build(GraphYaml, researcher, responder, new InMemoryAuditSink()).Create("conversation-ids");
+
+            // Act.
+            List<ChatResponseUpdate> updates = [];
+            await foreach (ChatResponseUpdate update in session.RunTurnStreamingAsync(
+                "where is my order", TestContext.Current.CancellationToken))
+            {
+                updates.Add(update);
+            }
+
+            // Assert. The last update names what the append wrote, and the reply id is the last message written.
+            TurnCommittedContent committed = Assert.Single(updates[^1].Contents.OfType<TurnCommittedContent>());
+            Assert.NotNull(committed.ReplyMessageId);
+            Assert.Equal(session.LastReplyMessageId, committed.ReplyMessageId);
         }
 
         /// <summary>Compiles one configuration over offline models and returns the session factory.</summary>

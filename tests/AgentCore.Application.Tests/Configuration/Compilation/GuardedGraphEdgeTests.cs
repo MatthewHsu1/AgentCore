@@ -137,22 +137,31 @@ namespace AgentCore.Application.Tests.Configuration.Compilation
         {
             using Harness harness = new();
             CancellationToken token = TestContext.Current.CancellationToken;
-            using Barrier gate = new(FanOut);
 
-            IEnumerable<Task<(bool Escalate, string ReplyText)>> conversations = Enumerable.Range(0, FanOut).Select(index => Task.Run(
-                async () =>
+            // An async rendezvous, not a Barrier: 26 real thread-pool threads parked in
+            // Barrier.SignalAndWait starved the pool under a small MinThreads setting. Every
+            // conversation here runs on whatever thread its continuations land on, and none of
+            // the 26 blocks a thread while it waits for the other 25 to arrive.
+            TaskCompletionSource released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            int arrived = 0;
+
+            IEnumerable<Task<(bool Escalate, string ReplyText)>> conversations = Enumerable.Range(0, FanOut).Select(async index =>
+            {
+                bool escalate = index % 2 == 0;
+                ConversationSession session = harness.NewSession();
+                _ = session.State.TryWrite("escalate", escalate);
+
+                // Nothing runs its turn until all 26 are ready, so the fan-out is really simultaneous.
+                if (Interlocked.Increment(ref arrived) == FanOut)
                 {
-                    bool escalate = index % 2 == 0;
-                    ConversationSession session = harness.NewSession();
-                    _ = session.State.TryWrite("escalate", escalate);
+                    released.SetResult();
+                }
 
-                    // Nothing starts until all 26 are ready, so the fan-out is really simultaneous.
-                    gate.SignalAndWait(token);
+                await released.Task.WaitAsync(TimeSpan.FromSeconds(30), token).ConfigureAwait(false);
 
-                    TurnResult turn = await session.RunTurnAsync($"conversation {index}", token).ConfigureAwait(false);
-                    return (Escalate: escalate, turn.ReplyText);
-                },
-                token));
+                TurnResult turn = await session.RunTurnAsync($"conversation {index}", token).ConfigureAwait(false);
+                return (Escalate: escalate, turn.ReplyText);
+            });
 
             (bool Escalate, string ReplyText)[] results = await Task.WhenAll(conversations);
 

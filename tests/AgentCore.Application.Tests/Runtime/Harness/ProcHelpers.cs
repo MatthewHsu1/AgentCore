@@ -28,9 +28,27 @@ namespace AgentCore.Application.Tests.Runtime.Harness
             Assert.True(IsGone(pid), $"the bash pid {pid} should be gone (or a zombie) within {Timeout}");
         }
 
+        /// <summary>
+        /// Reads the pid off the first line of a <c>run_shell</c> tool result: MAF's own formatting
+        /// appends an <c>exit_code:</c> line after the command's stdout.
+        /// </summary>
+        public static int ParsePid(string toolResult)
+        {
+            return int.Parse(toolResult.Split('\n', StringSplitOptions.TrimEntries)[0]);
+        }
+
         private static bool IsGone(int pid)
         {
-            return !Directory.Exists($"/proc/{pid}") || File.ReadAllText($"/proc/{pid}/stat").Contains(" Z ");
+            // A single read, not an existence check followed by a read: the pid can vanish between the
+            // two, and the kernel then fails the read (ESRCH) instead of returning ENOENT for it.
+            try
+            {
+                return File.ReadAllText($"/proc/{pid}/stat").Contains(" Z ");
+            }
+            catch (IOException)
+            {
+                return true;
+            }
         }
     }
 }

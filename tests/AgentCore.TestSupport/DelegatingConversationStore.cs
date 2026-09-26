@@ -92,6 +92,13 @@ namespace AgentCore.TestSupport
         }
 
         /// <inheritdoc />
+        public virtual ValueTask DeleteMessageAsync(
+            string conversationId, string messageId, CancellationToken cancellationToken = default)
+        {
+            return Inner.DeleteMessageAsync(conversationId, messageId, cancellationToken);
+        }
+
+        /// <inheritdoc />
         public virtual ValueTask<IReadOnlyList<ConversationMessage>> ReadForSessionAsync(
             string conversationId, CancellationToken cancellationToken = default)
         {
@@ -131,6 +138,20 @@ namespace AgentCore.TestSupport
             TimeSpan retention, int batchSize = 500, CancellationToken cancellationToken = default)
         {
             return Inner.SweepAsync(retention, batchSize, cancellationToken);
+        }
+
+        /// <inheritdoc />
+        public virtual ValueTask<bool> TryMarkBusyAsync(
+            string conversationId, string holder, TimeSpan lease, CancellationToken cancellationToken = default)
+        {
+            return Inner.TryMarkBusyAsync(conversationId, holder, lease, cancellationToken);
+        }
+
+        /// <inheritdoc />
+        public virtual ValueTask ClearBusyAsync(
+            string conversationId, string holder, CancellationToken cancellationToken = default)
+        {
+            return Inner.ClearBusyAsync(conversationId, holder, cancellationToken);
         }
 
         /// <inheritdoc />

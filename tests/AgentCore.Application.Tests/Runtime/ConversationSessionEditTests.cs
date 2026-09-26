@@ -146,6 +146,32 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.DoesNotContain(observer.Events, raised => raised.Kind == ConversationEventKind.TurnSuperseded);
         }
 
+        // Clarifications.Withdraw: an edit-and-resend takes back what was last named to the caller, and leaves
+        // the ask counter alone.
+        [Fact]
+        public async Task AnEdit_TakesBackWhatWasLastNamedToTheCaller()
+        {
+            using ScriptedChatClient reply = new("an answer.");
+            ConversationSession session = CreateSession(OneAgentYaml, reply);
+            _ = await session.RunTurnAsync("q1", TestContext.Current.CancellationToken);
+            string? firstReply = session.LastReplyMessageId;
+            _ = await session.RunTurnAsync("q2", TestContext.Current.CancellationToken);
+            session.Clarifications.Update("brand", slot =>
+            {
+                slot.LastNamed = Clarifications.LastNamed.Of(new HashSet<string>(StringComparer.Ordinal) { "ct900" });
+                slot.ProbeAsks = 2;
+            });
+
+            _ = await session.RunTurnAtOriginAsync(
+                "q2, rewritten",
+                new ConversationTurnOrigin("caller-3", firstReply) { NamesParent = true },
+                TestContext.Current.CancellationToken);
+
+            Clarifications.SlotSnapshot after = session.Clarifications.Read("brand");
+            Assert.Equal(Clarifications.LastNamed.None, after.LastNamed);
+            Assert.Equal(2, after.ProbeAsks);
+        }
+
         private static ConversationSession CreateSession(
             string yaml, IChatClient reply, IConversationObserver? observer = null)
         {

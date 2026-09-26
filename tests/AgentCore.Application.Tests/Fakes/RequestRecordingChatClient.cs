@@ -1,10 +1,11 @@
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Tests.Fakes
 {
     /// <summary>Answers each request in turn, and keeps what it was asked.</summary>
     /// <remarks>
-    /// It drives the buffered path only. <see cref="Requests"/> is what a fact about the prompt reads:
+    /// A streamed request is answered in one piece. <see cref="Requests"/> is what a fact about the prompt reads:
     /// one role-prefixed line per message, in the order the run sent them.
     /// </remarks>
     internal sealed class RequestRecordingChatClient(params string[] replies) : IChatClient
@@ -29,12 +30,16 @@ namespace AgentCore.Application.Tests.Fakes
                 new ChatResponse(new ChatMessage(ChatRole.Assistant, _replies[Requests.Count - 1])));
         }
 
-        public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            throw new NotSupportedException("These facts drive the buffered path only.");
+            ChatResponse response = await GetResponseAsync(messages, options, cancellationToken).ConfigureAwait(false);
+            foreach (ChatResponseUpdate update in response.ToChatResponseUpdates())
+            {
+                yield return update;
+            }
         }
 
         public object? GetService(Type serviceType, object? serviceKey = null)
