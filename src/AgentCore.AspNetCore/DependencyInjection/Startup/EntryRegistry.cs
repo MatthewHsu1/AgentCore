@@ -3,33 +3,34 @@ using AgentCore.Application.Runtime;
 
 namespace AgentCore.AspNetCore.DependencyInjection.Startup
 {
-    /// <summary>One factory, one agent shim, and one session store per entry.</summary>
+    /// <summary>One factory and one agent shim per entry, over the one session owner shared by every entry.</summary>
     /// <remarks>
-    /// Each entry compiles its own shape over the shared pool, so each entry gets its own
-    /// session factory and its own store: a vendor call id arriving on two routes opens two
-    /// isolated conversations rather than one conversation read through two shapes. The audit chain, the
-    /// observers, and the workspace root are shared across entries, because they describe the
-    /// deployment rather than the shape. Agents are named by entry key.
+    /// Each entry compiles its own shape over the shared pool, so each entry gets its own session factory.
+    /// The session owner is shared, because it is the one dictionary, keyed by conversation id, that knows
+    /// which entry holds a conversation live: a vendor call id arriving on a second route is refused while
+    /// the first route still holds it. The audit chain, the observers, and the workspace root are shared
+    /// across entries too, because they describe the deployment rather than the shape. Agents are named by
+    /// entry key.
     /// </remarks>
     internal sealed class EntryRegistry : IConversationSessionRegistry
     {
-        /// <summary>Creates the registry over the per-entry seams.</summary>
+        /// <summary>Creates the registry over the per-entry seams and the one session owner.</summary>
         /// <param name="factories">The session factories, keyed by entry name.</param>
         /// <param name="agents">The agent shims, keyed by entry name.</param>
-        /// <param name="conversationSessions">The session stores, keyed by entry name.</param>
+        /// <param name="sessions">The one session owner, shared by every entry.</param>
         public EntryRegistry(
             IReadOnlyDictionary<string, IConversationSessionFactory> factories,
             IReadOnlyDictionary<string, AgentCoreAgent> agents,
-            IReadOnlyDictionary<string, IConversationSessions> conversationSessions)
+            IConversationSessions sessions)
         {
             ArgumentNullException.ThrowIfNull(factories);
             ArgumentNullException.ThrowIfNull(agents);
-            ArgumentNullException.ThrowIfNull(conversationSessions);
+            ArgumentNullException.ThrowIfNull(sessions);
 
             Factories = factories;
             Agents = agents;
-            ConversationSessions = conversationSessions;
-            Entries = [.. conversationSessions.Keys];
+            Sessions = sessions;
+            Entries = [.. factories.Keys];
         }
 
         /// <summary>Gets the session factories, keyed by entry name.</summary>
@@ -38,8 +39,8 @@ namespace AgentCore.AspNetCore.DependencyInjection.Startup
         /// <summary>Gets the agent shims, keyed by entry name.</summary>
         public IReadOnlyDictionary<string, AgentCoreAgent> Agents { get; }
 
-        /// <summary>Gets the session stores, keyed by entry name.</summary>
-        public IReadOnlyDictionary<string, IConversationSessions> ConversationSessions { get; }
+        /// <inheritdoc/>
+        public IConversationSessions Sessions { get; }
 
         /// <inheritdoc/>
         public IReadOnlyCollection<string> Entries { get; }
@@ -60,12 +61,6 @@ namespace AgentCore.AspNetCore.DependencyInjection.Startup
         public AgentCoreAgent ForAgent(string entry)
         {
             return For(Agents, entry);
-        }
-
-        /// <inheritdoc/>
-        public IConversationSessions ForSessions(string entry)
-        {
-            return For(ConversationSessions, entry);
         }
 
         /// <summary>Builds the failure text for an entry nothing declares, in one place.</summary>

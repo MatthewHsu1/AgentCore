@@ -1,13 +1,10 @@
-namespace AgentCore.AspNetCore.Conversation
+namespace AgentCore.AspNetCore.Voice
 {
     /// <summary>Which task an observer is watching, so it logs the right line.</summary>
     internal enum ConnectionTaskKind
     {
         /// <summary>The loop that reads the transport.</summary>
         ReadLoop,
-
-        /// <summary>The task running one turn.</summary>
-        Turn,
 
         /// <summary>The loop that writes the transport.</summary>
         WriteLoop,
@@ -17,7 +14,7 @@ namespace AgentCore.AspNetCore.Conversation
     }
 
     /// <summary>
-    /// Awaits the loops and turns of one connection, and never lets a fault go unobserved.
+    /// Awaits the loops and the session close of one connection, and never lets a fault go unobserved.
     /// </summary>
     /// <param name="conversationId">Names the conversation in a log line. A function, because the id arrives mid-conversation.</param>
     /// <param name="logTimeout">Logs that a task passed its teardown deadline.</param>
@@ -33,19 +30,14 @@ namespace AgentCore.AspNetCore.Conversation
         Action<ConnectionTaskKind, string, Exception> logFault,
         Func<Exception, ConnectionTaskKind, string, bool> classify)
     {
-        /// <summary>Awaits a loop or a turn task, and never lets its fault go unobserved.</summary>
-        /// <param name="task">The read loop's task, the write loop's task, or a turn's task.</param>
+        /// <summary>Awaits a loop or the session close, and never lets its fault go unobserved.</summary>
+        /// <param name="task">The read loop's task, the write loop's task, or the session close.</param>
         /// <param name="kind">Which log line names the fault, if there is one.</param>
         /// <param name="timeout">
         /// How long to wait before giving up on <paramref name="task"/>, or <see langword="null"/> to
         /// wait for it unconditionally.
         /// </param>
         /// <returns>A task that completes once <paramref name="task"/> has been observed.</returns>
-        /// <remarks>
-        /// A cancellation raised by the connection's own token is teardown that connection asked for
-        /// itself, so it stays quiet. Anything else is the silence a voice conversation must never answer with,
-        /// per the house rule in <see cref="Application.Diagnostics.Log"/>.
-        /// </remarks>
         public async Task ObserveAsync(Task task, ConnectionTaskKind kind, TimeSpan? timeout = null)
         {
             try
@@ -101,13 +93,6 @@ namespace AgentCore.AspNetCore.Conversation
 
         /// <summary>Runs one log conversation, and never lets it break the teardown sequence around it.</summary>
         /// <param name="log">The conversation to make, already bound to its logger and its arguments.</param>
-        /// <remarks>
-        /// <see cref="Microsoft.Extensions.Logging"/> aggregates and rethrows a provider's own fault, so
-        /// even a line whose only job is to report a defect can itself throw. Every log conversation teardown
-        /// makes — cancelling the token, the close, an observed fault, a teardown timeout — sits behind
-        /// this guard for that reason; logging exists to help diagnose a defect, and must never become a
-        /// second one that stops the store removal or the rest of teardown from running.
-        /// </remarks>
         public static void SafeLog(Action log)
         {
             try
@@ -128,7 +113,6 @@ namespace AgentCore.AspNetCore.Conversation
             return kind switch
             {
                 ConnectionTaskKind.ReadLoop => "the read loop",
-                ConnectionTaskKind.Turn => "the last turn",
                 ConnectionTaskKind.WriteLoop => "the write loop",
                 ConnectionTaskKind.SessionClose => "the session close",
                 _ => "a task",
@@ -138,12 +122,6 @@ namespace AgentCore.AspNetCore.Conversation
         /// <summary>Hands a fault to <c>logFault</c>, whichever <paramref name="kind"/> names.</summary>
         /// <param name="kind">Which task faulted.</param>
         /// <param name="fault">The cause, or <see langword="null"/> when none was available.</param>
-        /// <remarks>
-        /// Called from <see cref="ObserveAsync"/> directly, and from the fault-only continuation it
-        /// attaches on a timeout. The continuation runs with nothing above it to catch a throw, so the
-        /// <see cref="SafeLog"/> guard here is what keeps this method from ever throwing, not the
-        /// caller.
-        /// </remarks>
         private void LogFault(ConnectionTaskKind kind, Exception? fault)
         {
             if (fault is null)
@@ -162,11 +140,6 @@ namespace AgentCore.AspNetCore.Conversation
         /// <see langword="true"/> when the adapter handled <paramref name="fault"/> itself, and
         /// <see langword="false"/> when it did not — including when it threw.
         /// </returns>
-        /// <remarks>
-        /// An adapter's classifier is another adapter's code running inside this connection's teardown,
-        /// and teardown must finish whatever that code does. A classifier that throws has handled
-        /// nothing, so the fault falls through to <c>logFault</c> exactly as an unrecognised one does.
-        /// </remarks>
         private bool SafeClassify(Exception fault, ConnectionTaskKind kind, string id)
         {
             try

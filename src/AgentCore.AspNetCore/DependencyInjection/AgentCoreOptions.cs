@@ -4,6 +4,7 @@ using AgentCore.Application.Llm;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Tools.Binding;
+using AgentCore.AspNetCore.Voice;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
@@ -102,18 +103,18 @@ namespace AgentCore.AspNetCore.DependencyInjection
         /// <summary>Gets the observers the host registered, in the order it registered them.</summary>
         internal IReadOnlyList<IConversationObserver> Observers => _observers;
 
-        /// <summary>Gets the store opener the host bound, or <see langword="null"/> for the in-memory default.</summary>
-        internal Func<string, IConversationSessionFactory, IConversationSessions>? ConversationSessions { get; private set; }
+        /// <summary>Gets the owner opener the host bound, or <see langword="null"/> for the in-memory default.</summary>
+        internal Func<IReadOnlyDictionary<string, IConversationSessionFactory>, IConversationSessions>? ConversationSessions { get; private set; }
 
-        /// <summary>Binds the session store, one per entry.</summary>
+        /// <summary>Binds the one session owner for the whole app, in place of the in-memory default.</summary>
         /// <param name="open">
-        /// Opens the store for one entry. It takes the entry name and the factory that builds that
-        /// entry's sessions, and it runs once per entry the document declares. Each conversation must return a
-        /// distinct store: two entries that share one store let a vendor call id arriving on both
-        /// entries read one call through two shapes.
+        /// Opens the owner. It takes every entry's session factory, keyed by entry name, and runs once for the
+        /// whole app. The owner's dictionary is keyed by conversation id alone, so one id is one conversation
+        /// across every entry: while one entry holds it live, an open from another entry is refused.
         /// </param>
         /// <returns>These options, so a host chains its conversations.</returns>
-        public AgentCoreOptions UseConversationSessions(Func<string, IConversationSessionFactory, IConversationSessions> open)
+        public AgentCoreOptions UseConversationSessions(
+            Func<IReadOnlyDictionary<string, IConversationSessionFactory>, IConversationSessions> open)
         {
             ArgumentNullException.ThrowIfNull(open);
             ConversationSessions = open;
@@ -335,7 +336,7 @@ namespace AgentCore.AspNetCore.DependencyInjection
 
         /// <summary>
         /// Binds the folder under which every conversation gets its own workspace directory,
-        /// <c>&lt;root&gt;/&lt;conversationId&gt;/</c>, created with the conversation and deleted when the conversation ends.
+        /// <c>&lt;root&gt;/&lt;conversationId&gt;/</c>, created with the conversation's session and deleted when the session unloads or the conversation ends.
         /// </summary>
         public AgentCoreOptions UseWorkspace(string root)
         {

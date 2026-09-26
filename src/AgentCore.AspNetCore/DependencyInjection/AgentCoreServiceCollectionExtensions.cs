@@ -11,8 +11,6 @@ using Microsoft.Agents.AI.Hosting;
 using Microsoft.AspNetCore.WebSockets;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace AgentCore.AspNetCore.DependencyInjection
@@ -76,12 +74,6 @@ namespace AgentCore.AspNetCore.DependencyInjection
             services.TryAddSingleton(provider =>
                 provider.GetRequiredService<IOptions<AgentCoreOptions>>().Value.Cache
                 ?? PassThroughHybridCache.Instance);
-
-            _ = services.AddHostedService(provider => new ConversationSessionSweeper(
-                provider,
-                provider.GetRequiredService<TimeProvider>(),
-                provider.GetService<ILoggerFactory>()?.CreateLogger<ConversationSessionSweeper>()
-                    ?? NullLogger<ConversationSessionSweeper>.Instance));
 
             services.TryAddSingleton<IConversationTitler>(provider => new ChatConversationTitler(
                 provider.GetRequiredService<IConversationStore>(),

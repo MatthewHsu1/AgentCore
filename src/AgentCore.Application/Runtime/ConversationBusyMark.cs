@@ -6,7 +6,9 @@ namespace AgentCore.Application.Runtime
     /// <summary>
     /// The conversation's busy mark in the store.
     /// </summary>
+#pragma warning disable CA1001 // _requests never hands out its wait handle, so it holds nothing to dispose.
     internal sealed class ConversationBusyMark
+#pragma warning restore CA1001
     {
         /// <summary>
         /// How long a mark lives after it was last put. A host that crashed frees the conversation this long after
@@ -15,9 +17,9 @@ namespace AgentCore.Application.Runtime
         internal static readonly TimeSpan Lease = TimeSpan.FromSeconds(10);
 
         /// <summary>
-        /// How long a turn waits for another session's mark before it is refused. It covers a stopped turn's work after
-        /// the reply and the filing after the abort, each bounded by <see cref="ConversationSession.TurnCompletionTimeout"/>,
-        /// and the <see cref="Lease"/> of a holder that crashed.
+        /// How long a turn waits for another session's mark, or a host request for this session's earlier request, before
+        /// it is refused. It covers a stopped turn's work after the reply and the filing after the abort, each bounded by
+        /// <see cref="ConversationSession.TurnCompletionTimeout"/>, and the <see cref="Lease"/> of a holder that crashed.
         /// </summary>
         internal static readonly TimeSpan WaitLimit = TimeSpan.FromSeconds(15);
 
@@ -33,6 +35,9 @@ namespace AgentCore.Application.Runtime
         private readonly string _holder = Guid.NewGuid().ToString("N");
 
         private readonly Lock _gate = new();
+
+        // One host request at a time: requests of one live session share its holder, so the store mark alone lets them all in.
+        private readonly SemaphoreSlim _requests = new(1, 1);
 
         // Guarded by _gate. _holds counts the holders that entered and have not left, waiting ones included.
         private int _holds;
@@ -56,7 +61,12 @@ namespace AgentCore.Application.Runtime
         /// </summary>
         /// <param name="cancellationToken">Cancels the wait.</param>
         /// <exception cref="ConversationTurnConflictException">Another session held the mark past the limit.</exception>
-        internal async ValueTask EnterAsync(CancellationToken cancellationToken)
+        internal ValueTask EnterAsync(CancellationToken cancellationToken)
+        {
+            return HoldAsync(_session.Time.GetTimestamp(), cancellationToken);
+        }
+
+        private async ValueTask HoldAsync(long started, CancellationToken cancellationToken)
         {
             lock (_gate)
             {
@@ -70,7 +80,7 @@ namespace AgentCore.Application.Runtime
             // Two turns of one session that take at once both succeed: they mark under the same holder.
             try
             {
-                await TakeAsync(cancellationToken).ConfigureAwait(false);
+                await TakeAsync(started, cancellationToken).ConfigureAwait(false);
 
                 lock (_gate)
                 {
@@ -82,6 +92,77 @@ namespace AgentCore.Application.Runtime
             {
                 _ = Exit();
                 throw;
+            }
+        }
+
+        /// <summary>
+        /// Holds the mark for one host request: waits for this session's earlier request, if any, to leave, holds the
+        /// mark as <see cref="EnterAsync"/> does, then waits for a turn another door started on this session to end. All
+        /// the waits together last at most <see cref="WaitLimit"/> from <paramref name="started"/>. Each call is paired
+        /// with one <see cref="ExitRequestAsync"/>, made only once this returned.
+        /// </summary>
+        /// <param name="started">The <see cref="TimeProvider.GetTimestamp"/> at which the request began to wait.</param>
+        /// <param name="cancellationToken">Cancels the wait.</param>
+        /// <exception cref="ConversationTurnConflictException">An earlier request, a turn or another session held on past the limit.</exception>
+        internal async ValueTask EnterRequestAsync(long started, CancellationToken cancellationToken)
+        {
+            TimeSpan left = WaitLimit - _session.Time.GetElapsedTime(started);
+            
+            if (left <= TimeSpan.Zero)
+            {
+                throw Refuse(_session);
+            }
+
+            using (CancellationTokenSource limit = new(left, _session.Time))
+            using (CancellationTokenSource wait = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, limit.Token))
+            {
+                try
+                {
+                    await _requests.WaitAsync(wait.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    TurnRefusals.Raise(_session, turnIndex: null, TurnRefusals.Gone);
+                    throw;
+                }
+                catch (OperationCanceledException)
+                {
+                    throw Refuse(_session);
+                }
+            }
+
+            try
+            {
+                await HoldAsync(started, cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                _ = _requests.Release();
+                throw;
+            }
+
+            try
+            {
+                await _session.Cuts.WaitForNoTurnAsync(started, cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                await ExitRequestAsync().ConfigureAwait(false);
+                throw;
+            }
+        }
+
+        /// <summary>Releases the hold of one host request, and lets the next request of this session in once the mark is clear.</summary>
+        /// <returns>The clear, as <see cref="Exit"/> returns it. It never faults.</returns>
+        internal async Task ExitRequestAsync()
+        {
+            try
+            {
+                await Exit().ConfigureAwait(false);
+            }
+            finally
+            {
+                _ = _requests.Release();
             }
         }
 
@@ -104,9 +185,8 @@ namespace AgentCore.Application.Runtime
             return Enqueue(ClearAsync);
         }
 
-        private async Task TakeAsync(CancellationToken cancellationToken)
+        private async Task TakeAsync(long started, CancellationToken cancellationToken)
         {
-            long started = _session.Time.GetTimestamp();
             TimeSpan poll = FirstPoll;
 
             try
@@ -116,10 +196,7 @@ namespace AgentCore.Application.Runtime
                     TimeSpan left = WaitLimit - _session.Time.GetElapsedTime(started);
                     if (left <= TimeSpan.Zero)
                     {
-                        TurnRefusals.Raise(_session, turnIndex: null, TurnRefusals.Busy);
-                        throw new ConversationTurnConflictException(
-                            $"Another request still held conversation '{_session.ConversationId}' after {WaitLimit.TotalSeconds:0} s, "
-                            + "so this turn was refused before it ran.");
+                        throw Refuse(_session);
                     }
 
                     await Task.Delay(poll < left ? poll : left, _session.Time, cancellationToken).ConfigureAwait(false);
@@ -131,6 +208,17 @@ namespace AgentCore.Application.Runtime
                 TurnRefusals.Raise(_session, turnIndex: null, TurnRefusals.Gone);
                 throw;
             }
+        }
+
+        /// <summary>Refuses a turn that waited <see cref="WaitLimit"/> for the conversation, and raises its busy refusal.</summary>
+        /// <param name="session">The conversation the turn waited for.</param>
+        /// <returns>The exception to throw.</returns>
+        internal static ConversationTurnConflictException Refuse(ConversationSession session)
+        {
+            TurnRefusals.Raise(session, turnIndex: null, TurnRefusals.Busy);
+            return new ConversationTurnConflictException(
+                $"Another request still held conversation '{session.ConversationId}' after {WaitLimit.TotalSeconds:0} s, "
+                + "so this turn was refused before it ran.");
         }
 
         private async Task<bool> MarkAsync(CancellationToken cancellationToken)

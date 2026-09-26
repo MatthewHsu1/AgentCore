@@ -1,6 +1,6 @@
 using AgentCore.Application.Providers;
 
-namespace AgentCore.AspNetCore.Conversation
+namespace AgentCore.AspNetCore.Voice
 {
     /// <summary>The names the conversation seam uses in every failure it raises.</summary>
     internal static class ConversationSeams

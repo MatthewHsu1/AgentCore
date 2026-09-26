@@ -1,4 +1,4 @@
-namespace AgentCore.AspNetCore.Conversation
+namespace AgentCore.AspNetCore.Voice
 {
     /// <summary>What reading one inbound message produced.</summary>
     /// <param name="Frame">The parsed frame, or <see langword="null"/> when none was read.</param>

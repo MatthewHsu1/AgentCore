@@ -105,6 +105,78 @@ namespace AgentCore.Application.Runtime
             return slot;
         }
 
+        /// <summary>
+        /// Takes the turn slot, waiting for a running turn of this conversation to free it, up to
+        /// <see cref="ConversationBusyMark.WaitLimit"/> counted from <paramref name="started"/>.
+        /// </summary>
+        /// <param name="started">The <see cref="TimeProvider.GetTimestamp"/> at which the wait for the conversation began.</param>
+        /// <param name="cancellationToken">Cancels the wait.</param>
+        /// <exception cref="ObjectDisposedException">The conversation was disposed.</exception>
+        /// <exception cref="Conversation.ConversationTurnConflictException">Another turn still ran past the limit.</exception>
+        internal Task EnterTurnAsync(long started, CancellationToken cancellationToken)
+        {
+            return WaitForSlotAsync(take: true, started, cancellationToken);
+        }
+
+        /// <summary>
+        /// Waits, as <see cref="EnterTurnAsync"/> does, until no turn holds the slot, without taking it.
+        /// </summary>
+        /// <param name="started">The <see cref="TimeProvider.GetTimestamp"/> at which the wait for the conversation began.</param>
+        /// <param name="cancellationToken">Cancels the wait.</param>
+        /// <exception cref="Conversation.ConversationTurnConflictException">Another turn still ran past the limit.</exception>
+        internal Task WaitForNoTurnAsync(long started, CancellationToken cancellationToken)
+        {
+            return WaitForSlotAsync(take: false, started, cancellationToken);
+        }
+
+        private async Task WaitForSlotAsync(bool take, long started, CancellationToken cancellationToken)
+        {
+            while (true)
+            {
+                if (take && TryEnterTurn())
+                {
+                    return;
+                }
+
+                Task freed;
+                lock (_session.TurnLock)
+                {
+                    if (!_running)
+                    {
+                        // The turn ended since the take above failed: take again, or refuse a disposed conversation.
+                        if (take)
+                        {
+                            continue;
+                        }
+
+                        return;
+                    }
+
+                    freed = FreedLocked();
+                }
+
+                TimeSpan left = ConversationBusyMark.WaitLimit - _session.Time.GetElapsedTime(started);
+                try
+                {
+                    if (left <= TimeSpan.Zero)
+                    {
+                        throw new TimeoutException();
+                    }
+
+                    await freed.WaitAsync(left, _session.Time, cancellationToken).ConfigureAwait(false);
+                }
+                catch (TimeoutException)
+                {
+                    throw ConversationBusyMark.Refuse(_session);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    TurnRefusals.Raise(_session, turnIndex: null, TurnRefusals.Gone);
+                    throw;
+                }
+            }
+        }
+
         /// <summary>Takes the turn slot, unless a turn of this conversation is still running.</summary>
         /// <returns><see langword="false"/> when another turn holds the slot.</returns>
         /// <exception cref="ObjectDisposedException">The conversation was disposed.</exception>

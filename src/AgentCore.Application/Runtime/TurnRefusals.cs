@@ -17,9 +17,6 @@ namespace AgentCore.Application.Runtime
         /// <summary>The client left while the turn waited for the conversation.</summary>
         internal const string Gone = "gone";
 
-        /// <summary>This session was still running a turn.</summary>
-        internal const string Running = "running";
-
         /// <summary>The caller disposed the turn's run before it read the reply, so the model never ran.</summary>
         internal const string Dropped = "dropped";
 

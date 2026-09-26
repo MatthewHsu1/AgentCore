@@ -302,7 +302,7 @@ namespace AgentCore.Application.Runtime
         /// <summary>Runs one turn and streams the reply as it arrives.</summary>
         /// <returns>The reply, one update at a time. Every update carries content.</returns>
         /// <exception cref="InvalidOperationException">
-        /// The conversation already reached a terminal stage, another turn of this conversation is still running, or the
+        /// The conversation already reached a terminal stage, another turn of this conversation still ran after the wait limit, or the
         /// stage the machine holds names no agent.
         /// </exception>
         public IAsyncEnumerable<ChatResponseUpdate> RunTurnStreamingAsync(
@@ -314,7 +314,7 @@ namespace AgentCore.Application.Runtime
         /// <summary>Runs one turn from a message the caller built and streams the reply as it arrives.</summary>
         /// <returns>The reply, one update at a time. Every update carries content.</returns>
         /// <exception cref="InvalidOperationException">
-        /// The conversation already reached a terminal stage, another turn of this conversation is still running, or the
+        /// The conversation already reached a terminal stage, another turn of this conversation still ran after the wait limit, or the
         /// stage the machine holds names no agent.
         /// </exception>
         public IAsyncEnumerable<ChatResponseUpdate> RunTurnMessageStreamingAsync(

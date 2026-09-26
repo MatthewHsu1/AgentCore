@@ -24,11 +24,17 @@ namespace AgentCore.AspNetCore.Endpoints
         string ResponseId,
         string? ConversationId)
     {
-        /// <summary>Files the session, under every id that names it now.</summary>
+        /// <summary>
+        /// Files the session, under every id that names it now. A session whose turn the store refused is never
+        /// filed: the ids already name the session that saved that turn, and filing this one would replace it. One whose
+        /// write merely failed is filed: nothing else holds its ids, and store 0 outranks the filed state on resume.
+        /// </summary>
         public Task FileAsync(CancellationToken cancellationToken)
         {
-            return ResponsesSessionFiling.SaveAsync(
-                Sessions, Agent, Session, ResponseId, ConversationId, Conversation.ConversationId, cancellationToken);
+            return Conversation.Ledger.Reads.Refused
+                ? Task.CompletedTask
+                : ResponsesSessionFiling.SaveAsync(
+                    Sessions, Agent, Session, ResponseId, ConversationId, Conversation.ConversationId, cancellationToken);
         }
     }
 }

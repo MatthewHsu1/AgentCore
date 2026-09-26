@@ -95,6 +95,8 @@ namespace AgentCore.Application.Runtime
         private async Task<(ConversationTurn Turn, TurnCutSlot Slot)> StartAsync(
             ChatMessage userInput, ConversationTurnOrigin? origin, CancellationToken cancellationToken)
         {
+            long started = _session.Time.GetTimestamp();
+
             // The mark comes before every read: a turn of another session still filing its words holds it, and the
             // reads below must see those words and the turn index after them.
             await _session.Busy.EnterAsync(cancellationToken).ConfigureAwait(false);
@@ -102,7 +104,8 @@ namespace AgentCore.Application.Runtime
             {
                 (AgentSession session, TranscriptCatchUp? catchUp) = await _session.Ledger.OpenForTurnAsync(cancellationToken).ConfigureAwait(false);
 
-                _session.Runner.AdmitTurn();
+                // A turn another door started on this session waits here; the catch-up below reads what it committed.
+                await _session.Runner.AdmitTurnAsync(started, cancellationToken).ConfigureAwait(false);
                 try
                 {
                     await _session.Ledger.CatchUpAsync(session, catchUp, cancellationToken).ConfigureAwait(false);

@@ -1,5 +1,4 @@
 using AgentCore.Application.Conversation;
-using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime.Turn;
 using System.Runtime.CompilerServices;
@@ -15,17 +14,17 @@ namespace AgentCore.Application.Runtime
     /// </summary>
     public sealed class AgentCoreAgent : AIAgent
     {
-        private readonly IConversationSessionFactory _sessions;
+        private readonly IConversationSessions _sessions;
 
         private readonly string? _description;
 
         /// <summary>Creates the shim over one compiled entry's turn loop.</summary>
-        /// <param name="sessions">The factory that starts one <see cref="ConversationSession"/> for each conversation.</param>
+        /// <param name="sessions">The owner that holds this entry's conversations live, shared by every entry.</param>
         /// <param name="entryName">The entry this agent serves. Reported as <see cref="Name"/>.</param>
         /// <param name="description">The description the agent reports, or <see langword="null"/>.</param>
         /// <exception cref="ArgumentNullException"><paramref name="sessions"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="entryName"/> is null or empty.</exception>
-        public AgentCoreAgent(IConversationSessionFactory sessions, string entryName, string? description = null)
+        public AgentCoreAgent(IConversationSessions sessions, string entryName, string? description = null)
         {
             ArgumentNullException.ThrowIfNull(sessions);
             ArgumentException.ThrowIfNullOrEmpty(entryName);
@@ -44,38 +43,55 @@ namespace AgentCore.Application.Runtime
         /// <inheritdoc />
         public override string? Description => _description;
 
-        /// <summary>Starts one conversation under the id the host names.</summary>
+        /// <summary>Starts, or resumes, one conversation under the id the host names.</summary>
         /// <param name="conversationId">The id the host gives the conversation. The vendor's conversation id belongs here.</param>
-        /// <returns>The session of the new conversation, with no turn run yet.</returns>
+        /// <param name="cancellationToken">Cancels the open.</param>
+        /// <returns>The live session of the conversation: the one this entry already holds, or a freshly opened one.</returns>
         /// <exception cref="ArgumentException"><paramref name="conversationId"/> is null or empty.</exception>
-        public ValueTask<AgentSession> CreateSessionAsync(string conversationId)
+        /// <exception cref="ConversationInUseException">Another entry holds this id live.</exception>
+        public async ValueTask<AgentSession> CreateSessionAsync(string conversationId, CancellationToken cancellationToken = default)
         {
             ArgumentException.ThrowIfNullOrEmpty(conversationId);
-            return new(new AgentCoreAgentSession(_sessions.Create(conversationId)));
+
+            ConversationSession conversation = await _sessions
+                .GetOrOpenAsync(EntryName, conversationId, state: null, cancellationToken)
+                .ConfigureAwait(false);
+
+            return new AgentCoreAgentSession(conversation);
         }
 
         /// <inheritdoc />
-        protected override ValueTask<AgentSession> CreateSessionCoreAsync(CancellationToken cancellationToken = default)
+        protected override async ValueTask<AgentSession> CreateSessionCoreAsync(CancellationToken cancellationToken = default)
         {
-            return new(new AgentCoreAgentSession(_sessions.Create()));
+            ConversationSession conversation = await _sessions
+                .GetOrOpenAsync(EntryName, conversationId: null, state: null, cancellationToken)
+                .ConfigureAwait(false);
+
+            return new AgentCoreAgentSession(conversation);
         }
 
         /// <inheritdoc />
-        protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
+        protected override async ValueTask<JsonElement> SerializeSessionCoreAsync(
             AgentSession session,
             JsonSerializerOptions? jsonSerializerOptions = null,
             CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(session);
-            ConversationSession conversation = Resolve(session);
+            ConversationSession conversation = ResolveOwn(session).Conversation;
 
-            return new(JsonSerializer.SerializeToElement(
-                new SerializedSession(conversation.ConversationId, conversation.Snapshot(), EntryName),
-                jsonSerializerOptions ?? ConversationStateJson.Options));
+            // A session this entry no longer holds live was unloaded: store 0's own copy of its state
+            // outranks whatever this blob would otherwise carry, so the state travels as null.
+            ConversationSession? live = await _sessions
+                .TryGetAsync(EntryName, conversation.ConversationId, cancellationToken)
+                .ConfigureAwait(false);
+
+            return JsonSerializer.SerializeToElement(
+                new SerializedSession(conversation.ConversationId, live?.Snapshot(), EntryName),
+                jsonSerializerOptions ?? ConversationStateJson.Options);
         }
 
         /// <inheritdoc />
-        protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
+        protected override async ValueTask<AgentSession> DeserializeSessionCoreAsync(
             JsonElement serializedState,
             JsonSerializerOptions? jsonSerializerOptions = null,
             CancellationToken cancellationToken = default)
@@ -93,13 +109,11 @@ namespace AgentCore.Application.Runtime
                     nameof(serializedState));
             }
 
-            if (stored.Entry is { Length: > 0 } entry && !string.Equals(entry, EntryName, StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException(
-                    $"The session names entry '{stored.Entry}' and this agent serves entry '{EntryName}'.");
-            }
+            ConversationSession conversation = await _sessions
+                .GetOrOpenAsync(EntryName, stored.ConversationId, stored.State, cancellationToken)
+                .ConfigureAwait(false);
 
-            return new(new AgentCoreAgentSession(_sessions.Create(stored.ConversationId, stored.State)));
+            return new AgentCoreAgentSession(conversation);
         }
 
         /// <inheritdoc />
@@ -111,27 +125,18 @@ namespace AgentCore.Application.Runtime
         {
             ArgumentNullException.ThrowIfNull(messages);
 
-            bool minted = session is null;
-            session ??= await CreateSessionAsync(cancellationToken).ConfigureAwait(false);
+            AgentCoreAgentSession own = session is null
+                ? (AgentCoreAgentSession)await CreateSessionAsync(cancellationToken).ConfigureAwait(false)
+                : await ResolveLiveAsync(session, cancellationToken).ConfigureAwait(false);
 
-            try
-            {
-                TurnResult turn = await Resolve(session).RunTurnMessageAsync(UserMessage(messages), cancellationToken).ConfigureAwait(false);
+            TurnResult turn = await own.Conversation.RunTurnMessageAsync(UserMessage(messages), cancellationToken).ConfigureAwait(false);
 
-                return new AgentResponse(new ChatMessage(ChatRole.Assistant, turn.ReplyText))
-                {
-                    AgentId = Id,
-                    ResponseId = Guid.NewGuid().ToString("N"),
-                    CreatedAt = turn.EndedAt,
-                };
-            }
-            finally
+            return new AgentResponse(new ChatMessage(ChatRole.Assistant, turn.ReplyText))
             {
-                if (minted)
-                {
-                    DisposeInBackground(Resolve(session));
-                }
-            }
+                AgentId = Id,
+                ResponseId = Guid.NewGuid().ToString("N"),
+                CreatedAt = turn.EndedAt,
+            };
         }
 
         /// <inheritdoc />
@@ -152,53 +157,61 @@ namespace AgentCore.Application.Runtime
             AgentSession? session,
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
-            bool minted = session is null;
-            session ??= await CreateSessionAsync(cancellationToken).ConfigureAwait(false);
+            AgentCoreAgentSession own = session is null
+                ? (AgentCoreAgentSession)await CreateSessionAsync(cancellationToken).ConfigureAwait(false)
+                : await ResolveLiveAsync(session, cancellationToken).ConfigureAwait(false);
 
-            try
+            IAsyncEnumerable<ChatResponseUpdate> turn = own.Conversation.RunTurnMessageStreamingAsync(UserMessage(messages), cancellationToken);
+
+            await foreach (ChatResponseUpdate? update in turn.ConfigureAwait(false))
             {
-                IAsyncEnumerable<ChatResponseUpdate> turn = Resolve(session).RunTurnMessageStreamingAsync(UserMessage(messages), cancellationToken);
-
-                await foreach (ChatResponseUpdate? update in turn.ConfigureAwait(false))
+                if (update.Contents.OfType<TurnCommittedContent>().Any())
                 {
-                    if (update.Contents.OfType<TurnCommittedContent>().Any())
-                    {
-                        continue;
-                    }
+                    continue;
+                }
 
-                    yield return new AgentResponseUpdate(update) { AgentId = Id };
-                }
-            }
-            finally
-            {
-                if (minted)
-                {
-                    DisposeInBackground(Resolve(session));
-                }
+                yield return new AgentResponseUpdate(update) { AgentId = Id };
             }
         }
 
         /// <summary>
-        /// Starts disposing a minted session off the caller's path, and logs its outcome. Nothing here awaits
-        /// the disposal, so an exception from it — including <see cref="Harness.BackgroundSessionRelease"/>'s timeout —
-        /// can never mask the turn's own result or throw out of a run that already returned.
+        /// Holds a session's live conversation for one host request, as <see cref="ConversationBusyMark.EnterRequestAsync"/>
+        /// does. A conversation closed while the request waited is asked for again through the owner, and the request
+        /// waits on the new session instead, so it never runs on a disposed one. Pair it with one
+        /// <see cref="ConversationBusyMark.ExitRequestAsync"/> on the conversation it returns.
         /// </summary>
-        private static void DisposeInBackground(ConversationSession conversation)
+        /// <param name="session">A session this agent created.</param>
+        /// <param name="cancellationToken">Cancels the waits.</param>
+        /// <returns>The live conversation now held; the session's own <c>GetService</c> answers it too.</returns>
+        /// <exception cref="Conversation.ConversationTurnConflictException">The conversation stayed busy past the wait limit.</exception>
+        internal async ValueTask<ConversationSession> EnterRequestAsync(AgentSession session, CancellationToken cancellationToken)
         {
-            _ = Task.Run(() => DisposeLoggingFailureAsync(conversation));
-        }
+            AgentCoreAgentSession own = ResolveOwn(session);
+            ConversationSession held = own.Conversation;
+            long started = held.Time.GetTimestamp();
 
-        private static async Task DisposeLoggingFailureAsync(ConversationSession conversation)
-        {
-            try
+            while (true)
             {
-                await conversation.DisposeAsync().ConfigureAwait(false);
-            }
-#pragma warning disable CA1031 // Nothing awaits this disposal once the run returns, so nothing may escape it.
-            catch (Exception exception)
-#pragma warning restore CA1031
-            {
-                Log.BackgroundReleaseFailed(conversation.Logger, conversation.ConversationId, exception);
+                await held.Busy.EnterRequestAsync(started, cancellationToken).ConfigureAwait(false);
+
+                ConversationSession live;
+                try
+                {
+                    live = await own.ResolveAsync(_sessions, EntryName, cancellationToken).ConfigureAwait(false);
+                }
+                catch
+                {
+                    await held.Busy.ExitRequestAsync().ConfigureAwait(false);
+                    throw;
+                }
+
+                if (ReferenceEquals(live, held))
+                {
+                    return held;
+                }
+
+                await held.Busy.ExitRequestAsync().ConfigureAwait(false);
+                held = live;
             }
         }
 
@@ -206,16 +219,28 @@ namespace AgentCore.Application.Runtime
         /// <param name="session">The session the caller passed.</param>
         /// <returns>The conversation to run the turn on.</returns>
         /// <exception cref="ArgumentException"><paramref name="session"/> belongs to another agent type.</exception>
-        private static ConversationSession Resolve(AgentSession session)
+        private static AgentCoreAgentSession ResolveOwn(AgentSession session)
         {
             return session switch
             {
-                AgentCoreAgentSession own => own.Conversation,
+                AgentCoreAgentSession own => own,
                 _ => throw new ArgumentException(
                     $"Incompatible session type: {session.GetType()} (expecting {typeof(AgentCoreAgentSession)}). "
                     + "Only a session this agent created can carry one of its conversations.",
                     nameof(session)),
             };
+        }
+
+        /// <summary>
+        /// Resolves a caller-supplied session's live conversation through the owner, so the run touches its
+        /// idle clock and a session that was unloaded since the caller last used it comes back rebuilt, with
+        /// its history intact, rather than running a turn on a disposed instance.
+        /// </summary>
+        private async ValueTask<AgentCoreAgentSession> ResolveLiveAsync(AgentSession session, CancellationToken cancellationToken)
+        {
+            AgentCoreAgentSession own = ResolveOwn(session);
+            _ = await own.ResolveAsync(_sessions, EntryName, cancellationToken).ConfigureAwait(false);
+            return own;
         }
 
         /// <summary>Reads what the caller said or answered out of the run's messages.</summary>
@@ -242,10 +267,13 @@ namespace AgentCore.Application.Runtime
                 nameof(messages));
         }
 
-        /// <summary>One serialized session: the conversation it is, the entry it belongs to, and the state it held.</summary>
+        /// <summary>One serialized session: the conversation it is, the entry that wrote it, and the state it held.</summary>
         /// <param name="ConversationId">The id of the conversation. Store 1 is keyed by it, so it is the half that finds the words.</param>
         /// <param name="State">What the session alone held, or <see langword="null"/> when the blob named none.</param>
-        /// <param name="Entry">The entry that wrote the blob. A key minted by one entry never reads on another.</param>
+        /// <param name="Entry">
+        /// The entry that wrote the blob. Written on every serialize and never read back: any entry may resume a
+        /// conversation from a blob another entry wrote.
+        /// </param>
         internal sealed record SerializedSession(string? ConversationId, ConversationSessionState? State, string? Entry);
     }
 }

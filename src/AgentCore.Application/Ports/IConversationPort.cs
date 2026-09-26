@@ -31,7 +31,7 @@ namespace AgentCore.Application.Ports
         /// <param name="cancellationToken">Cancels the model calls.</param>
         /// <returns>The finished turn. It always carries a spoken line.</returns>
         /// <exception cref="InvalidOperationException">
-        /// The conversation already ended, or another turn of this conversation is still running.
+        /// The conversation already ended, or another turn of this conversation still ran after the wait limit.
         /// </exception>
         Task<TurnResult> RunTurnAsync(string userInput, CancellationToken cancellationToken = default);
 
@@ -40,7 +40,7 @@ namespace AgentCore.Application.Ports
         /// <param name="cancellationToken">Cancels the model calls.</param>
         /// <returns>The finished turn. Its reply is empty while approval requests are pending.</returns>
         /// <exception cref="InvalidOperationException">
-        /// The conversation already ended, or another turn of this conversation is still running.
+        /// The conversation already ended, or another turn of this conversation still ran after the wait limit.
         /// </exception>
         Task<TurnResult> RunTurnMessageAsync(ChatMessage userInput, CancellationToken cancellationToken);
 
@@ -54,7 +54,7 @@ namespace AgentCore.Application.Ports
         /// 40-fragment reply, and an adapter must not have to filter them again.
         /// </remarks>
         /// <exception cref="InvalidOperationException">
-        /// The conversation already ended, or another turn of this conversation is still running.
+        /// The conversation already ended, or another turn of this conversation still ran after the wait limit.
         /// </exception>
         IAsyncEnumerable<ChatResponseUpdate> RunTurnStreamingAsync(
             string userInput,
@@ -65,7 +65,7 @@ namespace AgentCore.Application.Ports
         /// <param name="cancellationToken">Cancels the model calls.</param>
         /// <returns>The reply, one update at a time. Every update carries content.</returns>
         /// <exception cref="InvalidOperationException">
-        /// The conversation already ended, or another turn of this conversation is still running.
+        /// The conversation already ended, or another turn of this conversation still ran after the wait limit.
         /// </exception>
         IAsyncEnumerable<ChatResponseUpdate> RunTurnMessageStreamingAsync(
             ChatMessage userInput,
@@ -81,7 +81,7 @@ namespace AgentCore.Application.Ports
         /// the conversation is freed when the reply is read to the end or the run is disposed.
         /// </returns>
         /// <exception cref="InvalidOperationException">
-        /// The conversation already ended, or another turn of this conversation is still running.
+        /// The conversation already ended, or another turn of this conversation still ran after the wait limit.
         /// </exception>
         Task<TurnRun> StartTurnAsync(
             ChatMessage userInput, ConversationTurnOrigin? origin, CancellationToken cancellationToken = default);

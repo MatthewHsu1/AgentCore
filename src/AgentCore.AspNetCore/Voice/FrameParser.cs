@@ -1,4 +1,4 @@
-namespace AgentCore.AspNetCore.Conversation
+namespace AgentCore.AspNetCore.Voice
 {
     /// <summary>Reads one reassembled inbound message into a <see cref="FrameOutcome"/>.</summary>
     /// <param name="utf8">The whole message, already reassembled.</param>

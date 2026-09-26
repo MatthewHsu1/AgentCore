@@ -41,12 +41,22 @@ namespace AgentCore.Application.Runtime
         }
 
         /// <summary>
-        /// Deletes this conversation's workspace, if it has one. Called once the chain has recorded why the
-        /// conversation ended, from every path that can end it.
+        /// Deletes this conversation's workspace, if it has one. Called when the conversation ends, and by the
+        /// session owner when it closes or unloads the session.
         /// </summary>
         internal void DeleteWorkspace()
         {
             _session.WorkspaceRoot?.Delete(_session.Logger);
+        }
+
+        /// <summary>
+        /// Stamps this conversation's workspace with now, if it has one. Called at the start of every turn, and by
+        /// the held-session idle poll while a running turn or a background child keeps the session alive past its
+        /// idle timeout, so a boot sweep sharing the workspace root never mistakes an active folder for a dead one.
+        /// </summary>
+        internal void TouchWorkspace()
+        {
+            _session.WorkspaceRoot?.Touch(_session.Time, _session.Logger);
         }
 
         /// <summary>
@@ -93,7 +103,7 @@ namespace AgentCore.Application.Runtime
             catch (Exception exception)
 #pragma warning restore CA1031
             {
-                Log.BackgroundReleaseFailed(_session.Logger, _session.ConversationId, exception);
+                SessionOwnerLog.BackgroundReleaseFailed(_session.Logger, _session.ConversationId, exception);
             }
         }
 
@@ -132,5 +142,53 @@ namespace AgentCore.Application.Runtime
         {
             return _session.Shells?.DisposeAsync() ?? ValueTask.CompletedTask;
         }
+
+        /// <summary>
+        /// Gets whether this conversation's document declares any <c>background:</c> children at all, whether or
+        /// not one has ever actually run. The held-session idle check reads this to decide whether it must poll
+        /// for a running child at all, or can keep the single sleep to the idle timeout it always had.
+        /// </summary>
+        internal bool MayHaveBackgroundChildren => _session.Compiled.BackgroundProviders.Count > 0;
+
+        /// <summary>
+        /// Gets whether a <c>background:</c> child this conversation started is still running. The held-session
+        /// idle check polls this to keep the session while a child outlives the turn that started it (issue #31).
+        /// </summary>
+        /// <remarks>
+        /// <see cref="BackgroundAgentsProvider.GetIncompleteTasks"/> is a snapshot, not something a caller can
+        /// await, so this only answers "right now": the poller in <c>HeldSession</c> calls it again later. A
+        /// provider that cannot read its own session state — a state bag shaped for a different provider version,
+        /// say — throws instead of answering; that is read as "still running" rather than let the idle timer
+        /// unload a session out from under a child that, for all this can tell, is still there.
+        /// </remarks>
+#pragma warning disable MAAI001 // BackgroundAgentsProvider is evaluation-only in Microsoft.Agents.AI 1.21.0.
+        internal bool HasRunningBackgroundChild()
+        {
+            if (_session.Compiled.BackgroundProviders.Count == 0 || _session.Ledger.Session() is not { } session)
+            {
+                return false;
+            }
+
+            foreach (BackgroundAgentsProvider provider in _session.Compiled.BackgroundProviders)
+            {
+                try
+                {
+                    if (provider.GetIncompleteTasks(session).Count > 0)
+                    {
+                        return true;
+                    }
+                }
+#pragma warning disable CA1031 // The idle timer thread must never crash on a provider's snapshot fault.
+                catch (Exception exception)
+#pragma warning restore CA1031
+                {
+                    SessionOwnerLog.BackgroundChildCheckFailed(_session.Logger, _session.ConversationId, exception);
+                    return true;
+                }
+            }
+
+            return false;
+        }
+#pragma warning restore MAAI001
     }
 }

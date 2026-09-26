@@ -60,12 +60,12 @@ namespace AgentCore.Application.Runtime.Harness
                     // MAF gives up on a child that ignores its cancel without saying so; the full wait is the only sign.
                     if (Stopwatch.GetElapsedTime(started) >= ReleaseTimeout - TimerSlack)
                     {
-                        Log.BackgroundReleaseTimedOut(logger, conversationId, ReleaseTimeout.TotalSeconds);
+                        SessionOwnerLog.BackgroundReleaseTimedOut(logger, conversationId, ReleaseTimeout.TotalSeconds);
                     }
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
-                    Log.BackgroundReleaseFailed(logger, conversationId, exception);
+                    SessionOwnerLog.BackgroundReleaseFailed(logger, conversationId, exception);
                 }
             }
         }

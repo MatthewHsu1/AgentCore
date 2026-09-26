@@ -27,5 +27,18 @@ namespace AgentCore.AspNetCore.DependencyInjection
                 + "and no retention window applies to it. Name a durable providers.conversations.kind, or write "
                 + "kind: memory to say this was meant.")]
         public static partial void ConversationStoreDefaulted(ILogger logger);
+
+        /// <summary>A <c>providers.conversation.filler</c> key names no tool the registry serves.</summary>
+        /// <param name="logger">The boot's own logger.</param>
+        /// <param name="pointer">The JSON Pointer to the filler key.</param>
+        /// <param name="toolId">The key, as the document wrote it.</param>
+        [LoggerMessage(
+            EventId = 4,
+            Level = LogLevel.Warning,
+            Message = "{Pointer}: the filler key '{ToolId}' names no tool the registry serves, so its filler never "
+                + "fires unless a tool of that name is added at run time. The shell, files, memory, skills, and "
+                + "search providers name their tools only while a turn runs, so this check cannot see them. Check "
+                + "the key for a typo.")]
+        public static partial void FillerToolUnknown(ILogger logger, string pointer, string toolId);
     }
 }

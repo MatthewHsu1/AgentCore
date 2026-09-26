@@ -8,7 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace AgentCore.AspNetCore.Conversation
+namespace AgentCore.AspNetCore.Voice
 {
     /// <summary>
     /// Maps the inbound conversation route, with the URL naming the entry, onto whichever transport the
@@ -64,9 +64,6 @@ namespace AgentCore.AspNetCore.Conversation
 
         private static Task DispatchAsync(HttpContext http, string pattern)
         {
-            // GetService and never GetRequiredService, on purpose. A host may map this route with no
-            // AgentCore registration at all, and such a host must get a readable reason rather than a
-            // resolution failure.
             if (http.RequestServices.GetService<AgentCoreBoot>() is not { } boot)
             {
                 return NotRoutedAsync(http, pattern, "this host registered no AgentCore services");
@@ -79,7 +76,7 @@ namespace AgentCore.AspNetCore.Conversation
 
             string entry = EntryOf(http);
 
-            return boot.Entries.ConversationSessions.ContainsKey(entry)
+            return boot.Entries.Entries.Contains(entry, StringComparer.Ordinal)
                 ? handler(http)
                 : UnknownEntryAsync(http, EntryRegistry.UnknownEntryMessage(entry, boot.Entries.Entries));
         }

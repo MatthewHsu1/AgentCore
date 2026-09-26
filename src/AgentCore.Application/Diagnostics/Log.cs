@@ -5,7 +5,9 @@ using Microsoft.Extensions.Logging;
 namespace AgentCore.Application.Diagnostics
 {
     /// <summary>
-    /// Every line the library writes. Three of them are the "log once" rows of section 8.7.
+    /// Every line the turn loop writes: extraction, moderation, the transcript, and knowledge retrieval. Three
+    /// of them are the "log once" rows of section 8.7. The session owner's own lines — its workspace folder,
+    /// and its close and idle-expiry routine — are <see cref="SessionOwnerLog"/>.
     /// </summary>
     internal static partial class Log
     {
@@ -253,36 +255,6 @@ namespace AgentCore.Application.Diagnostics
                 + "turn since the last read is not among them.")]
         public static partial void TranscriptResyncFailed(ILogger logger, string conversationId, int turnIndex, Exception exception);
 
-        /// <summary>A conversation's workspace folder could not be deleted when the conversation ended.</summary>
-        /// <param name="logger">The logger of the session.</param>
-        /// <param name="path">The folder that could not be deleted.</param>
-        /// <param name="exception">The cause.</param>
-        [LoggerMessage(
-            EventId = 20,
-            Level = LogLevel.Warning,
-            Message = "Could not delete the conversation workspace at '{Path}'.")]
-        public static partial void WorkspaceDeleteFailed(ILogger logger, string path, Exception exception);
-
-        /// <summary>A conversation's shell executor could not be disposed when the conversation ended.</summary>
-        /// <param name="logger">The logger of the session.</param>
-        /// <param name="workspace">The conversation's workspace folder, whose shell failed to dispose.</param>
-        /// <param name="exception">The cause.</param>
-        [LoggerMessage(
-            EventId = 21,
-            Level = LogLevel.Warning,
-            Message = "Could not dispose a shell: executor of the conversation at workspace '{Workspace}'.")]
-        public static partial void ShellDisposeFailed(ILogger logger, string workspace, Exception exception);
-
-        /// <summary>A conversation's background agent sessions could not be released when the conversation ended.</summary>
-        /// <param name="logger">The logger of the session.</param>
-        /// <param name="conversationId">The id of the conversation whose children were being released.</param>
-        /// <param name="exception">The cause.</param>
-        [LoggerMessage(
-            EventId = 22,
-            Level = LogLevel.Warning,
-            Message = "Could not release the background agent sessions of the conversation '{ConversationId}'.")]
-        public static partial void BackgroundReleaseFailed(ILogger logger, string conversationId, Exception exception);
-
         /// <summary>A workspace file could not be published: the run had no call to own it.</summary>
         /// <param name="logger">The logger of the tool.</param>
         /// <param name="tool">The tool the model called.</param>
@@ -367,26 +339,5 @@ namespace AgentCore.Application.Diagnostics
                 + "session took it. The store refuses whichever of the two turns saves second.")]
         public static partial void BusyMarkLost(ILogger logger, string conversationId);
 
-        /// <summary>A background provider's release waited its whole timeout: a child did not acknowledge its cancel.</summary>
-        /// <param name="logger">The logger of the session.</param>
-        /// <param name="conversationId">The id of the conversation whose children were being released.</param>
-        /// <param name="timeoutSeconds">How long the release waited, in seconds.</param>
-        [LoggerMessage(
-            EventId = 43,
-            Level = LogLevel.Warning,
-            Message = "A background child of the conversation '{ConversationId}' did not stop within {TimeoutSeconds} s "
-                + "of its cancel. The session was released anyway, and the child may still be running.")]
-        public static partial void BackgroundReleaseTimedOut(ILogger logger, string conversationId, double timeoutSeconds);
-
-        /// <summary>A session that expired could not be ended, or could not be closed.</summary>
-        /// <param name="logger">The logger of the session.</param>
-        /// <param name="conversationId">The id of the conversation that expired.</param>
-        /// <param name="exception">The cause.</param>
-        [LoggerMessage(
-            EventId = 44,
-            Level = LogLevel.Error,
-            Message = "The idle conversation '{ConversationId}' did not end cleanly. It is no longer held, but its "
-                + "conversation.ended event or its last words may be missing.")]
-        public static partial void SessionExpiryFailed(ILogger logger, string conversationId, Exception exception);
     }
 }

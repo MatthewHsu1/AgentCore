@@ -46,26 +46,39 @@ namespace AgentCore.Application.Runtime
         }
 
         /// <summary>
-        /// Admits one turn: refuses a terminal, running or disposed conversation. <see cref="BeginTurn"/> follows, from
-        /// the same frame. The turn's edit runs later, in <see cref="ConversationTurnAgent"/>.
+        /// Admits one turn: refuses a terminal or disposed conversation, and waits for a running turn of this
+        /// conversation to end, up to <see cref="ConversationBusyMark.WaitLimit"/> counted from <paramref name="started"/>.
+        /// <see cref="BeginTurn"/> follows. The turn's edit runs later, in <see cref="ConversationTurnAgent"/>.
         /// </summary>
+        /// <param name="started">The <see cref="TimeProvider.GetTimestamp"/> at which the turn began to wait for the conversation.</param>
+        /// <param name="cancellationToken">Cancels the wait.</param>
         /// <exception cref="ObjectDisposedException">The conversation was disposed.</exception>
-        /// <exception cref="InvalidOperationException">The conversation is terminal, or runs another turn.</exception>
-        internal void AdmitTurn()
+        /// <exception cref="InvalidOperationException">The conversation is terminal.</exception>
+        /// <exception cref="Conversation.ConversationTurnConflictException">Another turn still ran past the limit.</exception>
+        internal async Task AdmitTurnAsync(long started, CancellationToken cancellationToken)
+        {
+            RefuseIfTerminal();
+            await _session.Cuts.EnterTurnAsync(started, cancellationToken).ConfigureAwait(false);
+
+            try
+            {
+                RefuseIfTerminal();
+            }
+            catch
+            {
+                _session.Cuts.ReleaseTurn();
+                throw;
+            }
+
+            _session.Clarifications.BeginTurn();
+        }
+
+        private void RefuseIfTerminal()
         {
             if (!_session.Ledger.Reads.Diverged || _session.Events.HasEnded)
             {
                 RefuseIfComplete();
             }
-
-            if (!_session.Cuts.TryEnterTurn())
-            {
-                TurnRefusals.Raise(_session, _session.State.TurnIndex, TurnRefusals.Running);
-                throw new InvalidOperationException(
-                    $"A turn of the conversation '{_session.ConversationId}' is still running. One conversation runs one turn at a time.");
-            }
-
-            _session.Clarifications.BeginTurn();
         }
 
         /// <summary>Refuses a turn on a conversation that reached a terminal stage.</summary>
@@ -80,7 +93,7 @@ namespace AgentCore.Application.Runtime
         }
 
         /// <summary>
-        /// Picks the agent and takes the turn <see cref="AdmitTurn"/> admitted.
+        /// Picks the agent and takes the turn <see cref="AdmitTurnAsync"/> admitted.
         /// Synchronous on purpose: the turn span it opens must be the ambient activity of the caller's
         /// frame, and an async method hands no <see cref="Activity.Current"/> back.
         /// </summary>
@@ -93,6 +106,8 @@ namespace AgentCore.Application.Runtime
             Activity? activity = null;
             try
             {
+                _session.Lifetime.TouchWorkspace();
+
                 AIAgent agent = ResolveAgent();
 
                 string? reminder = _session.Policy is null ? null : UnfilledSlotReminder.Build(_session.State, _session.Policy.CurrentStage);

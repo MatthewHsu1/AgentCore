@@ -1,34 +1,12 @@
-using AgentCore.Application.Conversation;
-using AgentCore.Application.Ports;
+using AgentCore.AspNetCore.Voice;
 
 namespace AgentCore.AspNetCore.Vendors.TelnyxRelay
 {
-    /// <summary>Opens a Telnyx relay channel, where one connection is both halves.</summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Which of the two shapes this is, and why.</b> A relay connection is born from an accepted
-    /// WebSocket rather than from a caller, so there is no moment at which something above asks this
-    /// factory to go and open a conversation: by the time a channel could exist, the socket is already up and
-    /// the connection already owns it. The other shape on offer was to reach the connection through
-    /// <see cref="ConversationChannelContext"/>, and that context carries a conversation id and the host's own
-    /// per-conversation values and no vendor field at all — which is exactly what makes D8 hold, and exactly
-    /// why it cannot smuggle a connection through. So the entry point stays
-    /// <see cref="TelnyxRelayConnection.RunAsync(Microsoft.AspNetCore.Http.HttpContext, System.Net.WebSockets.WebSocket, TelnyxRelayOptions)"/>,
-    /// <c>app.MapCall()</c> is untouched, and this factory is built with the connection it hands out.
-    /// </para>
-    /// <para>
-    /// Nothing wires it into the container yet, and nothing can even construct it yet: the connection
-    /// it takes has a private constructor and <see cref="TelnyxRelayConnection.RunAsync(Microsoft.AspNetCore.Http.HttpContext, System.Net.WebSockets.WebSocket, TelnyxRelayOptions)"/>
-    /// keeps the only instance to itself. That is deliberate, not an oversight. The caller that will
-    /// need a factory is the split adapter — a recognizer on one side and a synthesizer on the other —
-    /// which does open its channel on request; whichever of the two arrives first, that adapter or a
-    /// reason for this connection to hand itself out, is the change that gives this type its first
-    /// caller. It exists now so that adapter meets an interface with a bundled implementation already
-    /// behind it, and so the bundled case is written down as the ordinary one rather than the exception.
-    /// </para>
-    /// </remarks>
-    /// <param name="connection">The connection that accepted this conversation's socket, and that is both halves of it.</param>
-    internal sealed class TelnyxRelayConversationChannelFactory(TelnyxRelayConnection connection) : IConversationChannelFactory
+    /// <summary>Opens a Telnyx relay channel over the two halves of one connection.</summary>
+    /// <param name="input">The caller half of the connection that accepted this conversation's socket.</param>
+    /// <param name="output">The reply half of the same connection.</param>
+    internal sealed class TelnyxRelayConversationChannelFactory(TelnyxRelayInput input, TelnyxRelayOutput output)
+        : IConversationChannelFactory
     {
         /// <inheritdoc />
         /// <remarks>
@@ -41,8 +19,7 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay
             ConversationChannelContext context,
             CancellationToken cancellationToken = default)
         {
-            // The same object in both slots. Nothing above this line can tell, and nothing may ask.
-            return ValueTask.FromResult(new ConversationChannel(connection, connection));
+            return ValueTask.FromResult(new ConversationChannel(input, output));
         }
     }
 }

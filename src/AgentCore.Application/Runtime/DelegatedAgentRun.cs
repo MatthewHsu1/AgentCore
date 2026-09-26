@@ -103,7 +103,7 @@ namespace AgentCore.Application.Runtime
             catch (Exception exception)
 #pragma warning restore CA1031
             {
-                Log.BackgroundReleaseFailed(logger, conversationId, exception);
+                SessionOwnerLog.BackgroundReleaseFailed(logger, conversationId, exception);
             }
         }
     }

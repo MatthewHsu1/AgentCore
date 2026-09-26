@@ -1,6 +1,6 @@
 using System.Net.WebSockets;
 
-namespace AgentCore.AspNetCore.Conversation
+namespace AgentCore.AspNetCore.Voice
 {
     /// <summary>What one pump may do, and for how long.</summary>
     /// <param name="MaxFrameBytes">The largest inbound message the pump accepts, in bytes.</param>

@@ -1,8 +1,7 @@
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Ports;
 using Microsoft.AspNetCore.Http;
 
-namespace AgentCore.AspNetCore.Conversation
+namespace AgentCore.AspNetCore.Voice
 {
     /// <summary>
     /// A conversation vendor this process is dialled <b>in</b> to, which therefore owns an inbound route.
