@@ -25,6 +25,7 @@ AgentCore.Domain.Audit.AuditEventKind.ReplyInterrupted = 2 -> AgentCore.Domain.A
 AgentCore.Domain.Audit.AuditEventKind.ToolFailed = 3 -> AgentCore.Domain.Audit.AuditEventKind
 AgentCore.Domain.Audit.AuditEventKind.TurnCompleted = 1 -> AgentCore.Domain.Audit.AuditEventKind
 AgentCore.Domain.Audit.AuditEventKind.TurnSuperseded = 7 -> AgentCore.Domain.Audit.AuditEventKind
+AgentCore.Domain.Audit.AuditEventKind.TurnRefused = 8 -> AgentCore.Domain.Audit.AuditEventKind
 AgentCore.Domain.Audit.AuditEventKinds
 AgentCore.Domain.Audit.AuditEventVocabulary
 AgentCore.Domain.Audit.AuditHash
@@ -114,7 +115,9 @@ AgentCore.Domain.TurnResult.Approvals.get -> System.Collections.Generic.IReadOnl
 AgentCore.Domain.TurnResult.Approvals.init -> void
 AgentCore.Domain.TurnResult.ConversationId.get -> string!
 AgentCore.Domain.TurnResult.ConversationId.init -> void
-AgentCore.Domain.TurnResult.Deconstruct(out string! ConversationId, out int TurnIndex, out string! StageBefore, out string! StageAfter, out string! ReplyText, out bool IsTerminal, out string? ExtractionFailure, out string? Failure, out System.TimeSpan? InterruptedAfter, out System.DateTimeOffset EndedAt) -> void
+AgentCore.Domain.TurnResult.Cut.get -> System.TimeSpan?
+AgentCore.Domain.TurnResult.Cut.init -> void
+AgentCore.Domain.TurnResult.Deconstruct(out string! ConversationId, out int TurnIndex, out string! StageBefore, out string! StageAfter, out string! ReplyText, out bool IsTerminal, out string? ExtractionFailure, out string? Failure, out System.TimeSpan? Cut, out System.DateTimeOffset EndedAt) -> void
 AgentCore.Domain.TurnResult.EndedAt.get -> System.DateTimeOffset
 AgentCore.Domain.TurnResult.EndedAt.init -> void
 AgentCore.Domain.TurnResult.Equals(AgentCore.Domain.TurnResult? other) -> bool
@@ -122,8 +125,6 @@ AgentCore.Domain.TurnResult.ExtractionFailure.get -> string?
 AgentCore.Domain.TurnResult.ExtractionFailure.init -> void
 AgentCore.Domain.TurnResult.Failure.get -> string?
 AgentCore.Domain.TurnResult.Failure.init -> void
-AgentCore.Domain.TurnResult.InterruptedAfter.get -> System.TimeSpan?
-AgentCore.Domain.TurnResult.InterruptedAfter.init -> void
 AgentCore.Domain.TurnResult.IsTerminal.get -> bool
 AgentCore.Domain.TurnResult.IsTerminal.init -> void
 AgentCore.Domain.TurnResult.ReplyText.get -> string!
@@ -134,7 +135,7 @@ AgentCore.Domain.TurnResult.StageBefore.get -> string!
 AgentCore.Domain.TurnResult.StageBefore.init -> void
 AgentCore.Domain.TurnResult.TurnIndex.get -> int
 AgentCore.Domain.TurnResult.TurnIndex.init -> void
-AgentCore.Domain.TurnResult.TurnResult(string! ConversationId, int TurnIndex, string! StageBefore, string! StageAfter, string! ReplyText, bool IsTerminal, string? ExtractionFailure, string? Failure = null, System.TimeSpan? InterruptedAfter = null, System.DateTimeOffset EndedAt = default(System.DateTimeOffset)) -> void
+AgentCore.Domain.TurnResult.TurnResult(string! ConversationId, int TurnIndex, string! StageBefore, string! StageAfter, string! ReplyText, bool IsTerminal, string? ExtractionFailure, string? Failure = null, System.TimeSpan? Cut = null, System.DateTimeOffset EndedAt = default(System.DateTimeOffset)) -> void
 const AgentCore.Domain.Audit.AuditHash.Length = 64 -> int
 const AgentCore.Domain.Audit.AuditPayloadKeys.DurationUntilInterruptMs = "durationUntilInterruptMs" -> string!
 const AgentCore.Domain.Audit.AuditPayloadKeys.EndReason = "endReason" -> string!
@@ -149,6 +150,7 @@ const AgentCore.Domain.Audit.AuditPayloadKeys.ToolName = "toolName" -> string!
 const AgentCore.Domain.Audit.AuditPayloadKeys.UtteranceUntilInterruptSha256 = "utteranceUntilInterruptSha256" -> string!
 const AgentCore.Domain.Audit.AuditPayloadKeys.WithdrewFromTurnIndex = "withdrewFromTurnIndex" -> string!
 const AgentCore.Domain.Audit.AuditPayloadKeys.WithdrewThroughTurnIndex = "withdrewThroughTurnIndex" -> string!
+const AgentCore.Domain.Audit.AuditPayloadKeys.RefusedReason = "refusedReason" -> string!
 override AgentCore.Domain.Audit.AuditEvent.Equals(object? obj) -> bool
 override AgentCore.Domain.Audit.AuditEvent.GetHashCode() -> int
 override AgentCore.Domain.Audit.AuditEvent.ToString() -> string!

@@ -10,7 +10,6 @@ namespace AgentCore.Application.Sessions.Memory
     /// <summary>
     /// The default <see cref="IConversationSessions"/>. It holds every session in this process.
     /// </summary>
-    /// </remarks>
     public sealed class InMemoryConversationSessions : IConversationSessions, IDisposable
     {
         /// <summary>The idle timeout a host gets when it names none.</summary>

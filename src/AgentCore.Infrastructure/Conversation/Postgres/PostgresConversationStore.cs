@@ -191,6 +191,32 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
         }
 
         /// <inheritdoc />
+        public async ValueTask<bool> TryMarkBusyAsync(
+            string conversationId, string holder, TimeSpan lease, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(conversationId);
+            ArgumentNullException.ThrowIfNull(holder);
+
+            await using NpgsqlCommand command = _dataSource.CreateCommand(MarkBusySql);
+            _ = command.Parameters.Add(new NpgsqlParameter { Value = conversationId });
+            _ = command.Parameters.Add(new NpgsqlParameter { Value = holder });
+            _ = command.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Interval, Value = lease });
+            return await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is true;
+        }
+
+        /// <inheritdoc />
+        public async ValueTask ClearBusyAsync(string conversationId, string holder, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(conversationId);
+            ArgumentNullException.ThrowIfNull(holder);
+
+            await using NpgsqlCommand command = _dataSource.CreateCommand(ClearBusySql);
+            _ = command.Parameters.Add(new NpgsqlParameter { Value = conversationId });
+            _ = command.Parameters.Add(new NpgsqlParameter { Value = holder });
+            _ = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
         public async ValueTask AttachPrincipalAsync(
             string conversationId, string principalKey, string role, CancellationToken cancellationToken = default)
         {
@@ -249,6 +275,12 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
             string conversationId, string messageId, ChatMessage content, CancellationToken cancellationToken = default)
         {
             return _words.RewriteAsync(conversationId, messageId, content, cancellationToken);
+        }
+
+        /// <inheritdoc />
+        public ValueTask DeleteMessageAsync(string conversationId, string messageId, CancellationToken cancellationToken = default)
+        {
+            return _words.DeleteMessageAsync(conversationId, messageId, cancellationToken);
         }
 
         /// <inheritdoc />

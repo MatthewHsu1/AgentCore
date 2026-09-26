@@ -53,8 +53,14 @@ namespace AgentCore.Infrastructure.Database.Postgres
         /// <returns>The versions this conversation applied, oldest first. Empty when the schema was current.</returns>
         /// <remarks>
         /// The connecting role also needs <c>CREATEROLE</c> the first time, because migration 001 creates
-        /// <c>agentcore_writer</c>. The running system connects as a member of that role, not as this one.
+        /// <c>agentcore_writer</c>. The running system connects as a member of that role, not as this one, so a
+        /// release that adds a migration is applied by the owning role before the running system starts on it.
         /// </remarks>
+        /// <exception cref="InvalidOperationException">
+        /// A migration is pending and this connection's role may not apply it, as a member of
+        /// <c>agentcore_writer</c> may not. Nothing was applied, and nothing is skipped: the message names the
+        /// pending migrations and the role that must apply them. The inner exception is the database's refusal.
+        /// </exception>
         public static async Task<IReadOnlyList<string>> ApplyAsync(
             NpgsqlDataSource dataSource,
             CancellationToken cancellationToken = default)
@@ -72,6 +78,47 @@ namespace AgentCore.Infrastructure.Database.Postgres
                 _ = await serialise.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             }
 
+            // Until the ledger is read, every migration is pending as far as this connection knows.
+            IReadOnlyList<string> pending = Versions;
+            try
+            {
+                pending = await PendingAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
+
+                foreach (string version in pending)
+                {
+                    await ExecuteAsync(connection, transaction, Read(version), cancellationToken).ConfigureAwait(false);
+
+                    await using NpgsqlCommand record = new(
+                        $"INSERT INTO {LedgerName} (version) VALUES ($1)", connection, transaction);
+                    _ = record.Parameters.AddWithValue(version);
+                    _ = await record.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                }
+            }
+            catch (PostgresException refusal) when (refusal.SqlState == PostgresErrorCodes.InsufficientPrivilege)
+            {
+                string applier = pending.Contains(Versions[0])
+                    ? $"a role that may create the '{SchemaName}' schema in this database, and may create roles if "
+                        + "agentcore_writer does not exist yet"
+                    : $"the role that applied {Versions[0]}, the owner of the '{SchemaName}' schema";
+
+                throw new InvalidOperationException(
+                    $"The database is missing the AgentCore schema migration(s) {string.Join(", ", pending)}, and the role "
+                    + $"'{connection.UserName}' may not apply them, so this host will not start on it. Apply them as "
+                    + $"{applier}: call PostgresSchema.ApplyAsync with a data source that connects as that role, or start "
+                    + "one host with that role's connection string. Then start this host again.",
+                    refusal);
+            }
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return pending;
+        }
+
+        /// <summary>Creates the schema and the ledger when they are missing, and reads which migrations are not applied yet.</summary>
+        private static async Task<List<string>> PendingAsync(
+            NpgsqlConnection connection,
+            NpgsqlTransaction transaction,
+            CancellationToken cancellationToken)
+        {
             bool schemaExists = await ScalarAsync<bool>(
                 connection, transaction, $"SELECT to_regnamespace('{SchemaName}') IS NOT NULL", cancellationToken).ConfigureAwait(false);
 
@@ -93,27 +140,8 @@ namespace AgentCore.Infrastructure.Database.Postgres
             }
 
             HashSet<string> applied = await ReadAppliedAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
-            List<string> ran = [];
 
-            foreach (string version in Versions)
-            {
-                if (applied.Contains(version))
-                {
-                    continue;
-                }
-
-                await ExecuteAsync(connection, transaction, Read(version), cancellationToken).ConfigureAwait(false);
-
-                await using NpgsqlCommand record = new(
-                    $"INSERT INTO {LedgerName} (version) VALUES ($1)", connection, transaction);
-                _ = record.Parameters.AddWithValue(version);
-                _ = await record.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-
-                ran.Add(version);
-            }
-
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-            return ran;
+            return [.. Versions.Where(version => !applied.Contains(version))];
         }
 
         private static async Task<HashSet<string>> ReadAppliedAsync(

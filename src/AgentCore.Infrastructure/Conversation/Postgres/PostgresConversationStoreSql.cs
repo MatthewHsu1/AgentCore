@@ -30,6 +30,9 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
         ) m ON true
         """;
 
+        /// <summary>The turn a conversation takes next, read off its stored state.</summary>
+        private const string NextTurnIndex = "coalesce((state ->> 'nextTurnIndex')::int, 0)";
+
         internal const string CreateSql =
             $"INSERT INTO {Schema}.conversation (conversation_id) VALUES ($1) ON CONFLICT (conversation_id) DO NOTHING";
 
@@ -37,8 +40,21 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
         internal static readonly string GetSql =
             $"SELECT {Projection}, c.state, c.next_ordinal FROM {Schema}.conversation c {ActivityJoin} WHERE c.conversation_id = $1";
 
-        internal const string StateSql =
-            $"UPDATE {Schema}.conversation SET state = $2, updated_at = now() WHERE conversation_id = $1";
+        /// <summary>
+        /// Writes the state a turn's append carries, under the same turn check as <see cref="AppendSql"/>: it runs in
+        /// the append's batch, after it, so a refused append refuses its state too. A state whose next turn is behind
+        /// the stored one's is never written, so no append puts back a state older than the one it replaces.
+        /// </summary>
+        internal static readonly string StateSql =
+            $"""
+        UPDATE {Schema}.conversation SET state = $2, updated_at = now()
+         WHERE conversation_id = $1 AND {TurnUnsaved(3)}
+           AND {NextTurnIndex} <= ($2::jsonb ->> 'nextTurnIndex')::int
+        """;
+
+        /// <summary>Reads the turn a conversation takes next, to tell a refused append from a missing conversation.</summary>
+        internal const string NextTurnIndexSql =
+            $"SELECT {NextTurnIndex} FROM {Schema}.conversation WHERE conversation_id = $1";
 
         internal const string RenameSql =
             $"UPDATE {Schema}.conversation SET title = $2, updated_at = now() WHERE conversation_id = $1";
@@ -86,15 +102,16 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
         /// <c>next_ordinal</c>, so subtracting that same count back off it gives the first one this batch
         /// may use. A null element of <c>$2</c> (turn_index) takes the conversation's own next turn index instead
         /// of naming one, which is what an append from outside any turn asks for. <c>$6</c> is the
-        /// <c>covers_up_to</c> of each row: null for every row somebody said.
+        /// <c>covers_up_to</c> of each row: null for every row somebody said. <c>$7</c> is the lowest turn index
+        /// the batch names, or null when it names none; see <see cref="TurnUnsaved"/>.
         /// </summary>
-        internal const string AppendSql = $"""
+        internal static readonly string AppendSql = $"""
         WITH mark AS (
             UPDATE {Schema}.conversation
                SET next_ordinal = next_ordinal + cardinality($5::text[]), updated_at = now()
-             WHERE conversation_id = $1
+             WHERE conversation_id = $1 AND {TurnUnsaved(7)}
          RETURNING next_ordinal - cardinality($5::text[]) AS first,
-                   coalesce((state ->> 'nextTurnIndex')::int, 0) AS next_turn_index
+                   {NextTurnIndex} AS next_turn_index
         )
         INSERT INTO {Schema}.conversation_message (conversation_id, ordinal, turn_index, role, content, message_id, covers_up_to)
         SELECT $1, mark.first + d.position - 1, coalesce(d.turn_index, mark.next_turn_index), d.role, d.content, d.message_id, d.covers_up_to
@@ -170,6 +187,8 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
          WHERE conversation_id = $1 AND message_id = $2
         """;
 
+        internal const string DeleteMessageSql = $"DELETE FROM {Schema}.conversation_message WHERE conversation_id = $1 AND message_id = $2";
+
         internal const string EraseSql = $"DELETE FROM {Schema}.conversation_message WHERE conversation_id = $1";
 
         /// <summary>Files one session envelope under one continuation id, replacing any envelope already there.</summary>
@@ -191,9 +210,8 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
         /// Reads what store 1 holds for each spoken turn of one conversation, beside what store 3 proves.
         /// </summary>
         internal const string VerifySql = $$"""
-        WITH spoken AS (
-            SELECT DISTINCT ON (conversation_id, turn_index)
-                   conversation_id, turn_index,
+        WITH rows AS (
+            SELECT conversation_id, turn_index, ordinal,
                    (SELECT coalesce(string_agg(part ->> 'text', '' ORDER BY position), '')
                       FROM jsonb_array_elements(content -> 'contents')
                            WITH ORDINALITY AS element(part, position)
@@ -203,18 +221,49 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
                AND role = 'assistant'
                AND covers_up_to IS NULL
                AND content -> 'contents' @> '[{"$type": "text"}]'
-             ORDER BY conversation_id, turn_index, ordinal DESC
+        ),
+        spoken AS (
+            SELECT conversation_id, turn_index, string_agg(words, '' ORDER BY ordinal) AS words
+              FROM rows
+             GROUP BY conversation_id, turn_index
         ),
         completed AS (
             SELECT DISTINCT ON (conversation_id, turn_index) conversation_id, turn_index, payload
               FROM {{Schema}}.audit_event
              WHERE conversation_id = $1 AND kind = 'turn.completed'
              ORDER BY conversation_id, turn_index, sequence DESC
+        ),
+        interrupted AS (
+            SELECT DISTINCT ON (conversation_id, turn_index) conversation_id, turn_index, payload
+              FROM {{Schema}}.audit_event
+             WHERE conversation_id = $1 AND kind = 'reply.interrupted'
+             ORDER BY conversation_id, turn_index, sequence DESC
         )
-        SELECT m.turn_index, m.words, a.payload ->> 'replyTextSha256'
-          FROM spoken m JOIN completed a USING (conversation_id, turn_index)
+        SELECT m.turn_index, m.words,
+               coalesce(i.payload ->> 'utteranceUntilInterruptSha256', a.payload ->> 'replyTextSha256')
+          FROM spoken m
+          JOIN completed a USING (conversation_id, turn_index)
+          LEFT JOIN interrupted i USING (conversation_id, turn_index)
          ORDER BY m.turn_index
         """;
+
+        /// <summary>
+        /// Puts or extends a holder's busy mark, unless another holder's mark is still live. The conflict arm's
+        /// <c>WHERE</c> leaves a live mark of another holder as it is and returns no row. Lapse times are on the
+        /// database's clock, so hosts whose clocks disagree still agree on when a mark lapsed.
+        /// </summary>
+        internal const string MarkBusySql =
+            $"""
+        INSERT INTO {Schema}.conversation_busy AS b (conversation_id, holder, busy_until)
+        VALUES ($1, $2, now() + $3)
+        ON CONFLICT (conversation_id) DO UPDATE
+           SET holder = excluded.holder, busy_until = excluded.busy_until
+         WHERE b.holder = excluded.holder OR b.busy_until <= now()
+        RETURNING true
+        """;
+
+        internal const string ClearBusySql =
+            $"DELETE FROM {Schema}.conversation_busy WHERE conversation_id = $1 AND holder = $2";
 
         /// <summary>
         /// Deletes one batch of continuation rows that have gone untouched past the retention window.
@@ -230,5 +279,18 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
            LIMIT $2
         )
         """;
+
+        /// <summary>
+        /// Holds when a batch names no turn, or only turns the conversation has not saved. It is a condition on the
+        /// conversation row the statement updates, so under READ COMMITTED PostgreSQL re-checks it against the
+        /// newest row version after waiting out another writer's lock. A NOT EXISTS over the message rows would
+        /// read the snapshot taken before that wait and miss the other writer's turn. The parameter is the batch's
+        /// lowest named turn index.
+        /// </summary>
+        /// <param name="parameter">The position of that parameter in the statement.</param>
+        private static string TurnUnsaved(int parameter)
+        {
+            return $"(${parameter}::int IS NULL OR {NextTurnIndex} <= ${parameter})";
+        }
     }
 }

@@ -20,6 +20,7 @@ namespace AgentCore.Domain.Audit
                 AuditEventKind.ConversationEnded => "conversation.ended",
                 AuditEventKind.PromptFlagged => "prompt.flagged",
                 AuditEventKind.TurnSuperseded => "turn.superseded",
+                AuditEventKind.TurnRefused => "turn.refused",
                 _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "The audit event vocabulary is closed, and this value is not in it."),
             };
         }
@@ -39,6 +40,7 @@ namespace AgentCore.Domain.Audit
                 case "conversation.ended": kind = AuditEventKind.ConversationEnded; return true;
                 case "prompt.flagged": kind = AuditEventKind.PromptFlagged; return true;
                 case "turn.superseded": kind = AuditEventKind.TurnSuperseded; return true;
+                case "turn.refused": kind = AuditEventKind.TurnRefused; return true;
                 default: kind = default; return false;
             }
         }
