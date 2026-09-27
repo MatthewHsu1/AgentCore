@@ -1,5 +1,6 @@
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
+using AgentCore.AspNetCore.Endpoints;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -11,8 +12,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace AgentCore.AspNetCore.Voice
 {
     /// <summary>
-    /// Maps the inbound conversation route, with the URL naming the entry, onto whichever transport the
-    /// document names.
+    /// Maps the inbound conversation route onto whichever transport the document names.
     /// </summary>
     public static class ConversationEndpointRouteBuilderExtensions
     {
@@ -30,55 +30,66 @@ namespace AgentCore.AspNetCore.Voice
             return endpoints.MapCall(DefaultPattern);
         }
 
-        /// <summary>Maps every entry on one route, with the URL naming the entry.</summary>
+        /// <summary>Maps every entry on one route.</summary>
         /// <param name="endpoints">The route builder of the host.</param>
-        /// <param name="pattern">The route to answer on. It must carry the <c>{entry}</c> parameter.</param>
+        /// <param name="pattern">
+        /// The route to answer on. It carries the <c>{entry}</c> parameter, or the host attaches an
+        /// <see cref="IEntrySelector"/> with <see cref="EntrySelectorEndpointConventionBuilderExtensions.SelectEntry{TSelector}"/>.
+        /// Startup fails when it has neither.
+        /// </param>
         /// <returns>The mapped endpoint, so a host adds its own conventions.</returns>
-        /// <exception cref="ArgumentException"><paramref name="pattern"/> carries no <c>{entry}</c>.</exception>
         public static IEndpointConventionBuilder MapCall(this IEndpointRouteBuilder endpoints, string pattern)
         {
             ArgumentNullException.ThrowIfNull(endpoints);
             ArgumentException.ThrowIfNullOrEmpty(pattern);
 
-            if (!pattern.Contains("{" + EntryRouteParameter + "}", StringComparison.Ordinal))
-            {
-                throw new ArgumentException(
-                    $"The pattern '{pattern}' carries no {{{EntryRouteParameter}}} parameter, so no URL can name "
-                    + "an entry.",
-                    nameof(pattern));
-            }
-
             // Map, and not MapGet. An HTTP/2 WebSocket arrives as CONNECT rather than GET, and MapGet
             // would answer 405 to it.
-            return endpoints.Map(pattern, http => DispatchAsync(http, pattern));
+            return endpoints.Map(pattern, http => DispatchAsync(http, pattern)).WithMetadata(AgentCoreRouteMetadata.Instance);
         }
 
-        /// <summary>Reads the entry the URL names, off the <c>{entry}</c> route parameter.</summary>
+        /// <summary>Reads the entry this request runs.</summary>
         /// <param name="http">The request on a conversation route.</param>
-        /// <returns>The entry key, or the empty string when the route carries none.</returns>
+        /// <returns>
+        /// The entry <see cref="AgentCoreEntries.ResolveAsync"/> kept, else the <c>{entry}</c> route value, else the
+        /// empty string.
+        /// </returns>
         public static string EntryOf(HttpContext http)
         {
             ArgumentNullException.ThrowIfNull(http);
-            return http.Request.RouteValues[EntryRouteParameter] as string ?? string.Empty;
+            return http.Features.Get<IEntryFeature>()?.Entry
+                ?? http.Request.RouteValues[EntryRouteParameter] as string
+                ?? string.Empty;
         }
 
-        private static Task DispatchAsync(HttpContext http, string pattern)
+        private static async Task DispatchAsync(HttpContext http, string pattern)
         {
             if (http.RequestServices.GetService<AgentCoreBoot>() is not { } boot)
             {
-                return NotRoutedAsync(http, pattern, "this host registered no AgentCore services");
+                await NotRoutedAsync(http, pattern, "this host registered no AgentCore services").ConfigureAwait(false);
+                return;
             }
 
             if (boot.ConversationHandler is not { } handler)
             {
-                return NotRoutedAsync(http, pattern, boot.ConversationUnroutable ?? "this host routes no inbound conversation");
+                await NotRoutedAsync(http, pattern, boot.ConversationUnroutable ?? "this host routes no inbound conversation")
+                    .ConfigureAwait(false);
+                return;
             }
 
-            string entry = EntryOf(http);
+            // Before the handler, so a refused caller never gets a socket upgrade.
+            if (await AgentCoreEntries.ResolveAsync(http, http.RequestAborted).ConfigureAwait(false) is not { } entry)
+            {
+                await WriteProblemAsync(
+                    http, StatusCodes.Status403Forbidden, "This route runs no entry for this caller.",
+                    "entry_refused: the route's entry selector refused this caller.", http.Request.Path)
+                    .ConfigureAwait(false);
+                return;
+            }
 
-            return boot.Entries.Entries.Contains(entry, StringComparer.Ordinal)
+            await (boot.Entries.Entries.Contains(entry, StringComparer.Ordinal)
                 ? handler(http)
-                : UnknownEntryAsync(http, EntryRegistry.UnknownEntryMessage(entry, boot.Entries.Entries));
+                : UnknownEntryAsync(http, EntryRegistry.UnknownEntryMessage(entry, boot.Entries.Entries))).ConfigureAwait(false);
         }
 
         private static async Task NotRoutedAsync(HttpContext http, string pattern, string reason)

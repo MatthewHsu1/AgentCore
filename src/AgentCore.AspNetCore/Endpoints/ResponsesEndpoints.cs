@@ -44,33 +44,36 @@ namespace AgentCore.AspNetCore.Endpoints
             return endpoints.MapResponses(DefaultPattern);
         }
 
-        /// <summary>Maps every entry on one route, with the URL naming the entry.</summary>
+        /// <summary>Maps every entry on one route.</summary>
         /// <param name="endpoints">The route builder of the host.</param>
-        /// <param name="pattern">The route to answer on. It must carry the <c>{entry}</c> parameter.</param>
+        /// <param name="pattern">
+        /// The route to answer on. It carries the <c>{entry}</c> parameter, or the host attaches an
+        /// <see cref="IEntrySelector"/> with <see cref="EntrySelectorEndpointConventionBuilderExtensions.SelectEntry{TSelector}"/>.
+        /// Startup fails when it has neither.
+        /// </param>
         /// <returns>The mapped endpoint, so a host adds its own conventions.</returns>
-        /// <exception cref="ArgumentException"><paramref name="pattern"/> carries no <c>{entry}</c>.</exception>
         public static IEndpointConventionBuilder MapResponses(this IEndpointRouteBuilder endpoints, string pattern)
         {
             ArgumentNullException.ThrowIfNull(endpoints);
             ArgumentException.ThrowIfNullOrEmpty(pattern);
 
-            return !pattern.Contains("{" + EntryRouteParameter + "}", StringComparison.Ordinal)
-                ? throw new ArgumentException(
-                    $"The pattern '{pattern}' carries no {{{EntryRouteParameter}}} parameter, so no URL can name "
-                    + "an entry.",
-                    nameof(pattern))
-                : endpoints.MapPost(pattern, HandleAsync);
+            return endpoints.MapPost(pattern, HandleAsync).WithMetadata(AgentCoreRouteMetadata.Instance);
         }
 
         /// <summary>Runs one turn of one conversation, and files the session under the ids the answer carries.</summary>
-        /// <remarks>
-        /// Every step answers its own refusal and returns <see langword="null"/>, so this reads as
-        /// the happy path alone.
-        /// </remarks>
         private static async Task HandleAsync(HttpContext http)
         {
             CancellationToken cancellationToken = http.RequestAborted;
-            string entry = http.Request.RouteValues[EntryRouteParameter] as string ?? string.Empty;
+            if (await AgentCoreEntries.ResolveAsync(http, cancellationToken).ConfigureAwait(false) is not { } entry)
+            {
+                await ResponsesRequestReader.WriteErrorAsync(
+                    http,
+                    StatusCodes.Status403Forbidden,
+                    "this route runs no entry for this caller.",
+                    "entry_refused",
+                    cancellationToken).ConfigureAwait(false);
+                return;
+            }
 
             if (await ResponsesRequestReader.ReadBodyAsync(http, cancellationToken).ConfigureAwait(false) is not { } body)
             {

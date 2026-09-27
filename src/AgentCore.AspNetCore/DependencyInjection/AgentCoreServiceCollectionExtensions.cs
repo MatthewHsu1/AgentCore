@@ -8,6 +8,7 @@ using AgentCore.AspNetCore.Conversation;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.AspNetCore.Sessions;
 using Microsoft.Agents.AI.Hosting;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.WebSockets;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -42,6 +43,7 @@ namespace AgentCore.AspNetCore.DependencyInjection
 
             _ = services.AddSingleton<AgentCoreBoot>();
             _ = services.AddHostedService<AgentCoreBootService>();
+            services.TryAddEnumerable(ServiceDescriptor.Transient<IStartupFilter, EntryRouteCheck>());
             _ = services.AddSingleton(Boot(boot => boot.Configuration));
             _ = services.AddSingleton(Boot(boot => boot.Secrets));
             _ = services.AddSingleton(Boot(boot => boot.Bindings));

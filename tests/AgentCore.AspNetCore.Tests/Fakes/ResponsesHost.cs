@@ -44,9 +44,15 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         /// <param name="yaml">The document, as YAML.</param>
         /// <param name="reply">The model behind every name the routing factory does not hold.</param>
         /// <param name="configure">Anything else the test binds on the options.</param>
+        /// <param name="services">Anything else the test registers, such as an entry selector.</param>
+        /// <param name="map">Maps the routes, or <see langword="null"/> for the default Responses route.</param>
         /// <returns>The started host.</returns>
         public static async Task<ResponsesHost> StartAsync(
-            string yaml, IChatClient reply, Action<AgentCoreOptions>? configure = null)
+            string yaml,
+            IChatClient reply,
+            Action<AgentCoreOptions>? configure = null,
+            Action<IServiceCollection>? services = null,
+            Action<WebApplication>? map = null)
         {
             WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
             _ = builder.WebHost.UseUrls("http://127.0.0.1:0");
@@ -59,8 +65,18 @@ namespace AgentCore.AspNetCore.Tests.Fakes
                 configure?.Invoke(options);
             });
 
+            services?.Invoke(builder.Services);
+
             WebApplication app = builder.Build();
-            _ = app.MapResponses();
+            if (map is null)
+            {
+                _ = app.MapResponses();
+            }
+            else
+            {
+                map(app);
+            }
+
             await app.StartAsync();
 
             string address = app.Services

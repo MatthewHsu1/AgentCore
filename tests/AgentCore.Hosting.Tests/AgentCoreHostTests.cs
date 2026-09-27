@@ -41,36 +41,6 @@ namespace AgentCore.Hosting.Tests
     /// </remarks>
     public sealed class AgentCoreHostTests
     {
-        /// <summary>A model that says one thing, which is all the compile table asks for.</summary>
-        private sealed class FakeChatClient : IChatClient
-        {
-            public Task<ChatResponse> GetResponseAsync(
-                IEnumerable<ChatMessage> messages,
-                ChatOptions? options = null,
-                CancellationToken cancellationToken = default)
-            {
-                return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, "hello")));
-            }
-
-            public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-                IEnumerable<ChatMessage> messages,
-                ChatOptions? options = null,
-                [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-            {
-                await Task.CompletedTask.ConfigureAwait(false);
-                yield return new ChatResponseUpdate(ChatRole.Assistant, "hello");
-            }
-
-            public object? GetService(Type serviceType, object? serviceKey = null)
-            {
-                return null;
-            }
-
-            public void Dispose()
-            {
-            }
-        }
-
         // ---------------------------------------------------------------------------------------------
         // Who wins. The host does, on every seam, because its callback runs last.
         // ---------------------------------------------------------------------------------------------
@@ -321,121 +291,9 @@ namespace AgentCore.Hosting.Tests
             // The container built this factory, so nothing else can be holding its providers.
             _ = Assert.Throws<ObjectDisposedException>(() => loggers.CreateLogger("after"));
         }
-
-        // ---------------------------------------------------------------------------------------------
-        // The routes. Mapping is the other half: the registrations above answer nothing on their own.
-        // ---------------------------------------------------------------------------------------------
-
-        [Fact]
-        public async Task HealthAnswersOnTheMappedRoute()
-        {
-            await using WebApplication app = await StartMappedAsync();
-            using HttpClient client = new() { BaseAddress = Address(app) };
-
-            HttpResponseMessage response = await client.GetAsync(
-                AgentCoreHostEndpointExtensions.HealthPattern,
-                TestContext.Current.CancellationToken);
-
-            Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
-        }
-
-        /// <summary>The default Responses route, with the document's one entry filled in.</summary>
-        private const string MainResponses = "/v1/main/responses";
-
-        [Fact]
-        public async Task ResponsesAnswersOnTheDefaultRoute()
-        {
-            await using WebApplication app = await StartMappedAsync();
-            using HttpClient client = new() { BaseAddress = Address(app) };
-
-            // No user message is a caller mistake this endpoint names, and naming it proves the route
-            // reached the endpoint rather than the 404 handler.
-            HttpResponseMessage response = await PostEmptyAsync(client, MainResponses);
-
-            Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
-        }
-
-        [Fact]
-        public async Task ResponsesRefusesAnEntryTheDocumentDoesNotDeclare()
-        {
-            await using WebApplication app = await StartMappedAsync();
-            using HttpClient client = new() { BaseAddress = Address(app) };
-
-            HttpResponseMessage response = await PostEmptyAsync(client, "/v1/nobody/responses");
-
-            Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
-            string body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
-            Assert.Contains("\"code\":\"unknown_entry\"", body);
-            Assert.Contains("Valid entries: main", body);
-        }
-
-        [Fact]
-        public async Task ResponsesMovesWhenTheHostNamesAnotherRoute()
-        {
-            // A host that mounts a second Responses surface of its own needs this one out of the
-            // way, and it must actually leave the default route behind when it moves.
-            await using WebApplication app = await StartMappedAsync("/agentcore/v1/{entry}/responses");
-            using HttpClient client = new() { BaseAddress = Address(app) };
-
-            Assert.Equal(
-                System.Net.HttpStatusCode.BadRequest,
-                (await PostEmptyAsync(client, "/agentcore/v1/main/responses")).StatusCode);
-            Assert.Equal(
-                System.Net.HttpStatusCode.NotFound,
-                (await PostEmptyAsync(client, MainResponses)).StatusCode);
-        }
-
-        [Fact]
-        public async Task ConversationRefusesAnEntryTheDocumentDoesNotDeclare()
-        {
-            await using WebApplication app = await StartMappedAsync();
-            using HttpClient client = new() { BaseAddress = Address(app) };
-
-            HttpResponseMessage response = await client.GetAsync("/v1/nobody/call", TestContext.Current.CancellationToken);
-
-            Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
-            Assert.Contains(
-                "Valid entries: main",
-                await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
-        }
-
-        [Fact]
-        public async Task ResponsesRefusesARouteWithNoEntryParameter()
-        {
-            await using WebApplication app = await BuildAsync();
-
-            ArgumentException failure = Assert.Throws<ArgumentException>(() => app.MapAgentCoreHost("/v1/responses"));
-
-            Assert.Contains("{entry}", failure.Message);
-        }
-
         // ---------------------------------------------------------------------------------------------
         // Helpers.
         // ---------------------------------------------------------------------------------------------
-
-        /// <summary>The smallest document the schema accepts: one agent, one model, and the required pair.</summary>
-        /// <remarks>
-        /// A document that writes a <c>providers</c> block at all must write <c>conversation</c> and
-        /// <c>speech</c> too, and both speech roles must name the same vendor the conversation does. Those kinds
-        /// resolve here because the default list this library registers already names that transport —
-        /// which is the point: a test writes no vendor of its own except the model.
-        /// </remarks>
-        private const string Document = """
-        apiVersion: agentcore/v1
-        agents:
-          items:
-            - { id: only, instructions: "I answer everything" }
-        entries:
-          main:
-            agent: only
-        providers:
-          conversation:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-          llm:
-            - { kind: fake, model: fake-model, as: reply }
-        """;
 
         /// <summary>The <c>providers</c> line that asks for the durable audit vendor.</summary>
         private const string Audit = "  audit: { kind: postgres }";
@@ -460,30 +318,6 @@ namespace AgentCore.Hosting.Tests
             + "  knowledge: { kind: qdrant, endpoint: \"https://127.0.0.1:1\", collection: \"missing\", "
             + "mapper: " + StubPointMapper.MapperName + " }";
 
-        /// <summary>Builds a host the way a deployable does, over a fake model and no key.</summary>
-        /// <param name="configure">Anything else the test says on the options.</param>
-        /// <param name="providers">A further line under <c>providers</c>, or null for the document above.</param>
-        /// <returns>The built host, not started.</returns>
-        private static async Task<WebApplication> BuildAsync(
-            Action<AgentCoreOptions>? configure = null,
-            string? providers = null)
-        {
-            WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
-            _ = builder.WebHost.UseUrls("http://127.0.0.1:0");
-            _ = builder.Logging.ClearProviders();
-
-            string document = providers is null ? Document : Document + Environment.NewLine + providers;
-
-            _ = builder.AddAgentCoreHost(options =>
-            {
-                options.Configuration = ConfigurationLoader.LoadYaml(document);
-                _ = options.UseChatClients(_ => new RecordingChatClientFactory(new FakeChatClient()));
-                configure?.Invoke(options);
-            });
-
-            return builder.Build();
-        }
-
         /// <summary>Starts a host and reads its container, with nothing mapped and nothing listening.</summary>
         /// <param name="configure">Anything else the test says on the options.</param>
         /// <param name="providers">A further line under <c>providers</c>, or null for the plain document.</param>
@@ -496,7 +330,7 @@ namespace AgentCore.Hosting.Tests
             Action<AgentCoreOptions>? configure = null,
             string? providers = null)
         {
-            WebApplication app = await BuildAsync(configure, providers);
+            WebApplication app = await HostingTestHost.BuildAsync(configure, providers);
 
             try
             {
@@ -625,43 +459,6 @@ namespace AgentCore.Hosting.Tests
             }
         }
 
-        /// <summary>Builds a host, maps every route, and puts it on a real socket.</summary>
-        /// <param name="responsesPattern">The route the Responses endpoint answers on, or null for the default.</param>
-        /// <returns>The started host.</returns>
-        private static async Task<WebApplication> StartMappedAsync(string? responsesPattern = null)
-        {
-            WebApplication app = await BuildAsync();
-            _ = app.MapAgentCoreHost(responsesPattern);
-            await app.StartAsync(TestContext.Current.CancellationToken);
-            return app;
-        }
-
-        /// <summary>Reads the address Kestrel took, since the tests ask for port zero.</summary>
-        /// <param name="app">The started host.</param>
-        /// <returns>The base address.</returns>
-        private static Uri Address(WebApplication app)
-        {
-            return new(app.Services
-                        .GetRequiredService<Microsoft.AspNetCore.Hosting.Server.IServer>()
-                        .Features
-                        .Get<Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>()!
-                        .Addresses
-                        .First(), UriKind.Absolute);
-        }
-
-        /// <summary>Posts a request with no user message, which every mapped route answers 400 to.</summary>
-        /// <param name="client">The client that speaks to the host.</param>
-        /// <param name="route">The route to post to.</param>
-        /// <returns>The answer.</returns>
-        private static Task<HttpResponseMessage> PostEmptyAsync(HttpClient client, string route)
-        {
-            return client.PostAsync(
-                        route,
-                        new StringContent(/*lang=json,strict*/ "{\"input\":[]}", System.Text.Encoding.UTF8, "application/json"),
-                        TestContext.Current.CancellationToken);
-        }
-
-        // ---------------------------------------------------------------------------------------------
         // A transport: http MCP server is reached on this host's own pipeline, minus the one part of it
         // that does not apply to a stream.
         // ---------------------------------------------------------------------------------------------

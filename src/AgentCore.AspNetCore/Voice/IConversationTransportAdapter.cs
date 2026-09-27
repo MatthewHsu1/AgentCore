@@ -11,7 +11,7 @@ namespace AgentCore.AspNetCore.Voice
         /// <summary>Builds the handler the conversation route answers every entry with.</summary>
         /// <param name="configuration">The <c>providers.conversation</c> block, including its limits.</param>
         /// <returns>
-        /// The delegate the conversation route runs. The URL names the entry, and the route has already
+        /// The delegate the conversation route runs. The route has already picked the entry and
         /// refused one the document does not declare; the handler reads it with
         /// <see cref="ConversationEndpointRouteBuilderExtensions.EntryOf"/>.
         /// </returns>
