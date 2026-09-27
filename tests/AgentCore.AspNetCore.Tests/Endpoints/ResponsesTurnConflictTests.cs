@@ -1,5 +1,4 @@
 using System.Net;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Audit;
 using AgentCore.Application.Audit.Memory;
@@ -102,7 +101,7 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
 
             // The refused session is never filed, not even under the response id only its own stream named.
             string lostResponseId = lost[0]["response"]!["id"]!.GetValue<string>();
-            Assert.Null(await store.GetContinuationAsync(lostResponseId, TestContext.Current.CancellationToken));
+            Assert.Null(await store.FindContinuationAsync(lostResponseId, TestContext.Current.CancellationToken));
 
             string winner = string.Concat(ResponsesHost.TextDeltas(won.Select(frame => frame.ToJsonString())))["reply to ".Length..];
             string responseId = won[0]["response"]!["id"]!.GetValue<string>();
@@ -170,9 +169,9 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
         {
             string loser = winner == "race A" ? "race B" : "race A";
 
-            JsonElement? pointer = await loserHost.Services.GetRequiredService<IConversationStore>()
-                .GetContinuationAsync(conversation, TestContext.Current.CancellationToken);
-            Assert.Contains(winnerResponseId, pointer?.GetRawText(), StringComparison.Ordinal);
+            string? owner = await loserHost.Services.GetRequiredService<IConversationStore>()
+                .FindContinuationAsync(winnerResponseId, TestContext.Current.CancellationToken);
+            Assert.Equal(conversation, owner);
 
             List<ConversationMessage> rows = await StoredRows.SettleAsync(loserHost.Services, conversation, 4);
             Assert.Equal(

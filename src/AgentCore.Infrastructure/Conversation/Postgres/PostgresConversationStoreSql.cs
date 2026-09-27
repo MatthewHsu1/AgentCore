@@ -191,18 +191,21 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
 
         internal const string EraseSql = $"DELETE FROM {Schema}.conversation_message WHERE conversation_id = $1";
 
-        /// <summary>Files one session envelope under one continuation id, replacing any envelope already there.</summary>
+        /// <summary>
+        /// Records that one response id continues one conversation. A response id is written once, in the
+        /// turn's own commit, and never rewritten, so a row already on file is left as it is.
+        /// </summary>
         internal const string SaveContinuationSql =
             $"""
-        INSERT INTO {Schema}.response_continuation (store_id, conversation_id, envelope) VALUES ($1, $2, $3)
-        ON CONFLICT (store_id) DO UPDATE SET envelope = EXCLUDED.envelope, updated_at = now()
+        INSERT INTO {Schema}.response_continuation (store_id, conversation_id) VALUES ($1, $2)
+        ON CONFLICT (store_id) DO NOTHING
         """;
 
-        /// <summary>Reads the envelope one continuation id names.</summary>
-        internal const string GetContinuationSql =
-            $"SELECT envelope FROM {Schema}.response_continuation WHERE store_id = $1";
+        /// <summary>Finds the conversation one response id continues.</summary>
+        internal const string FindContinuationSql =
+            $"SELECT conversation_id FROM {Schema}.response_continuation WHERE store_id = $1";
 
-        /// <summary>Withdraws whatever one continuation id names, if anything.</summary>
+        /// <summary>Withdraws one response id, if it names a row.</summary>
         internal const string DeleteContinuationSql =
             $"DELETE FROM {Schema}.response_continuation WHERE store_id = $1";
 
@@ -266,16 +269,17 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
             $"DELETE FROM {Schema}.conversation_busy WHERE conversation_id = $1 AND holder = $2";
 
         /// <summary>
-        /// Deletes one batch of continuation rows that have gone untouched past the retention window.
-        /// Conversations are never swept: a chat id and every response id it ever advanced age out
-        /// on their own, independently of whether the conversation itself is still open.
+        /// Deletes one batch of response ids that have gone untouched past the retention window. A
+        /// response id is written once and never rewritten, so this ages a row out from when it was
+        /// created. Conversations are never swept: a chat id and every response id it ever advanced age
+        /// out on their own, independently of whether the conversation itself is still open.
         /// </summary>
         internal static readonly string SweepContinuationsSql =
             $"""
         DELETE FROM {Schema}.response_continuation
         WHERE store_id IN (
           SELECT store_id FROM {Schema}.response_continuation
-           WHERE updated_at < now() - $1
+           WHERE created_at < now() - $1
            LIMIT $2
         )
         """;

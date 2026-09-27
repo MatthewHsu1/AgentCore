@@ -103,7 +103,7 @@ namespace AgentCore.AspNetCore.Endpoints
 
             AgentCoreAgentSessionStore sessions = http.RequestServices.GetRequiredService<AgentCoreAgentSessionStore>();
 
-            (AgentSession Session, string? ConversationId)? opened = await OpenSessionAsync(http, agent, sessions, run, approving: approval is not null, cancellationToken)
+            (AgentSession Session, string ConversationId)? opened = await OpenSessionAsync(http, agent, sessions, run, approving: approval is not null, cancellationToken)
                 .ConfigureAwait(false);
 
             if (opened is null)
@@ -111,7 +111,7 @@ namespace AgentCore.AspNetCore.Endpoints
                 return;
             }
 
-            (AgentSession? session, string? conversationId) = opened.Value;
+            (AgentSession session, string conversationId) = opened.Value;
 
             if (!await CheckInputAsync(http, approval, run.Messages, cancellationToken).ConfigureAwait(false))
             {
@@ -138,7 +138,7 @@ namespace AgentCore.AspNetCore.Endpoints
         /// The session and the conversation id it runs under, or <see langword="null"/> once a
         /// refusal has been answered.
         /// </returns>
-        private static async Task<(AgentSession Session, string? ConversationId)?> OpenSessionAsync(
+        private static async Task<(AgentSession Session, string ConversationId)?> OpenSessionAsync(
             HttpContext http,
             AgentCoreAgent agent,
             AgentCoreAgentSessionStore sessions,
@@ -149,8 +149,10 @@ namespace AgentCore.AspNetCore.Endpoints
             string? key = run.ContinuationKey;
             string? conversationId = run.ConversationId;
 
-            bool known = key is not null
-                && await sessions.ContainsAsync(key, cancellationToken).ConfigureAwait(false);
+            string? resolved = key is null
+                ? null
+                : await sessions.ResolveConversationIdAsync(key, cancellationToken).ConfigureAwait(false);
+            bool known = resolved is not null;
 
             bool namesNewConversation = key is not null
                 && !known
@@ -180,17 +182,11 @@ namespace AgentCore.AspNetCore.Endpoints
 
                 if (namesNewConversation)
                 {
-                    // Unknown conversation with words: start the conversation under that id, so the conversation
-                    // and the continuation key are one id. Unknown response ids stay 404 below: they name
-                    // a turn, not a conversation.
-                    return (await agent.CreateSessionAsync(key, cancellationToken).ConfigureAwait(false), conversationId);
+                    return (await agent.CreateSessionAsync(key, cancellationToken).ConfigureAwait(false), conversationId!);
                 }
 
                 if (!known)
                 {
-                    // Either an unknown response id — a turn no answer ever carried — or an unknown
-                    // conversation beside an approval-only body the parse refused. A conversation with words
-                    // reaches the namesNewConversation branch; an approval never starts a conversation.
                     await ResponsesRequestReader.WriteErrorAsync(
                         http,
                         StatusCodes.Status404NotFound,
@@ -201,13 +197,10 @@ namespace AgentCore.AspNetCore.Endpoints
                     return null;
                 }
 
-                return (await sessions.GetSessionAsync(agent, key, cancellationToken).ConfigureAwait(false), conversationId);
+                return (await sessions.GetSessionForConversationAsync(agent, resolved!, cancellationToken).ConfigureAwait(false), resolved!);
             }
             catch (ConversationInUseException failure)
             {
-                // Another entry holds this conversation live (U9: block, not switch). Distinct from the
-                // busy/turn-conflict 409s: this request never reached a turn, and the other entry's
-                // session was left running, untouched.
                 await ResponsesRequestReader.WriteErrorAsync(
                     http,
                     StatusCodes.Status409Conflict,
@@ -218,7 +211,6 @@ namespace AgentCore.AspNetCore.Endpoints
             }
             catch (InvalidOperationException failure)
             {
-                // A key minted by another entry is unknown to this one, never a cross-entry read.
                 await ResponsesRequestReader.WriteErrorAsync(
                     http,
                     StatusCodes.Status404NotFound,

@@ -1,5 +1,4 @@
 using System.Net;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Audit;
 using AgentCore.Application.Audit.Memory;
@@ -82,9 +81,8 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             Assert.Contains(won, frame => frame.ContainsKey(TurnStreamPart.MessageCommitted));
 
             IConversationStore stored = host.Services.GetRequiredService<IConversationStore>();
-            Assert.Null(await stored.GetContinuationAsync(ResponseId(lost), Ct));
-            JsonElement? pointer = await stored.GetContinuationAsync(conversation, Ct);
-            Assert.Contains(ResponseId(won), pointer?.GetRawText(), StringComparison.Ordinal);
+            Assert.Null(await stored.FindContinuationAsync(ResponseId(lost), Ct));
+            Assert.Equal(conversation, await stored.FindContinuationAsync(ResponseId(won), Ct));
 
             Assert.Equal([0, 1], [.. (await TurnCompletedIndexesAsync(host, conversation)).Concat(await TurnCompletedIndexesAsync(other, conversation)).Order()]);
         }
@@ -113,7 +111,7 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             Assert.Equal("response.completed", Type(events[^1]));
             Assert.Contains(events, frame => frame.ContainsKey(TurnStreamPart.MessageCommitted));
             IConversationStore stored = host.Services.GetRequiredService<IConversationStore>();
-            Assert.NotNull(await stored.GetContinuationAsync(ResponseId(events), Ct));
+            Assert.Equal(conversation, await stored.FindContinuationAsync(ResponseId(events), Ct));
             Assert.Equal([0, 1], await TurnCompletedIndexesAsync(host, conversation));
         }
 

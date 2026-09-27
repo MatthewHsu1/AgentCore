@@ -40,6 +40,9 @@ namespace AgentCore.AspNetCore.DependencyInjection
         /// </summary>
         public HybridCache? Cache { get; set; }
 
+        /// <summary> Gets or sets how long a response id is kept before the retention sweep deletes it. </summary>
+        public TimeSpan? ResponseRetention { get; set; } = TimeSpan.FromDays(30);
+
         /// <summary>Gets the map from a <c>binds:</c> name to the host delegate behind it.</summary>
         public ToolBindingRegistry Bindings { get; } = new();
 

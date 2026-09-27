@@ -193,18 +193,18 @@ namespace AgentCore.Application.Ports
         ValueTask<int> EraseAsync(string conversationId, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// Deletes every continuation row untouched past the retention window.
+        /// Deletes every response id written past the retention window.
         /// </summary>
         /// <param name="retention">
-        /// How long a continuation row is kept, measured from when it was last written. The window belongs
-        /// to a deployment: it is not a schema key, and nothing here defaults it.
+        /// How long a response id is kept, measured from when it was written. The window belongs to a
+        /// deployment: it is not a schema key, and nothing here defaults it.
         /// </param>
         /// <param name="batchSize">
-        /// How many continuation rows one transaction may delete. The sweep loops until a batch deletes
+        /// How many response ids one transaction may delete. The sweep loops until a batch deletes
         /// nothing, so this bounds one transaction and never the work.
         /// </param>
         /// <param name="cancellationToken">Cancels the sweep between batches, and inside one.</param>
-        /// <returns>How many continuation rows went, over every batch.</returns>
+        /// <returns>How many response ids went, over every batch.</returns>
         ValueTask<int> SweepAsync(
             TimeSpan retention,
             int batchSize = 500,
@@ -212,8 +212,7 @@ namespace AgentCore.Application.Ports
 
         /// <summary>
         /// Puts a holder's busy mark on a conversation, or extends the mark the holder already has, unless another
-        /// holder's mark is still live. The mark is a lease: it lapses <paramref name="lease"/> after it was last put,
-        /// so a holder that crashed frees the conversation by itself.
+        /// holder's mark is still live.
         /// </summary>
         /// <param name="conversationId">
         /// The conversation to mark. Its row need not exist: the first turn of a conversation marks it before making it.
@@ -262,30 +261,30 @@ namespace AgentCore.Application.Ports
             string principalKey,
             CancellationToken cancellationToken = default);
 
-        /// <summary>Files one session envelope under one continuation id, replacing any envelope already there.</summary>
-        /// <param name="continuationId">The continuation id: a conversation id or a response id.</param>
-        /// <param name="conversationId">The conversation the continuation belongs to.</param>
-        /// <param name="envelope">The serialized session, as the agent wrote it.</param>
+        /// <summary>
+        /// Records that one response id continues one conversation.
+        /// </summary>
+        /// <param name="responseId">The response id to record.</param>
+        /// <param name="conversationId">The conversation the response id continues.</param>
         /// <param name="cancellationToken">Cancels the write.</param>
         ValueTask SaveContinuationAsync(
-            string continuationId,
+            string responseId,
             string conversationId,
-            JsonElement envelope,
             CancellationToken cancellationToken = default);
 
-        /// <summary>Reads the envelope one continuation id names.</summary>
-        /// <param name="continuationId">The continuation id to look up.</param>
+        /// <summary>Finds the conversation one response id continues.</summary>
+        /// <param name="responseId">The response id to look up.</param>
         /// <param name="cancellationToken">Cancels the read.</param>
-        /// <returns>The envelope, or <see langword="null"/> when nothing is filed under that id.</returns>
-        ValueTask<JsonElement?> GetContinuationAsync(
-            string continuationId,
+        /// <returns>The conversation id, or <see langword="null"/> when no row names that response id.</returns>
+        ValueTask<string?> FindContinuationAsync(
+            string responseId,
             CancellationToken cancellationToken = default);
 
-        /// <summary>Withdraws whatever one continuation id names, if anything.</summary>
-        /// <param name="continuationId">The continuation id to forget.</param>
+        /// <summary>Withdraws one response id, if it names a row.</summary>
+        /// <param name="responseId">The response id to forget.</param>
         /// <param name="cancellationToken">Cancels the delete.</param>
         ValueTask DeleteContinuationAsync(
-            string continuationId,
+            string responseId,
             CancellationToken cancellationToken = default);
     }
 }

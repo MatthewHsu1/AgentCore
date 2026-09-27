@@ -170,23 +170,23 @@ namespace AgentCore.TestSupport
 
         /// <inheritdoc />
         public virtual ValueTask SaveContinuationAsync(
-            string continuationId, string conversationId, JsonElement envelope, CancellationToken cancellationToken = default)
+            string responseId, string conversationId, CancellationToken cancellationToken = default)
         {
-            return Inner.SaveContinuationAsync(continuationId, conversationId, envelope, cancellationToken);
+            return Inner.SaveContinuationAsync(responseId, conversationId, cancellationToken);
         }
 
         /// <inheritdoc />
-        public virtual ValueTask<JsonElement?> GetContinuationAsync(
-            string continuationId, CancellationToken cancellationToken = default)
+        public virtual ValueTask<string?> FindContinuationAsync(
+            string responseId, CancellationToken cancellationToken = default)
         {
-            return Inner.GetContinuationAsync(continuationId, cancellationToken);
+            return Inner.FindContinuationAsync(responseId, cancellationToken);
         }
 
         /// <inheritdoc />
         public virtual ValueTask DeleteContinuationAsync(
-            string continuationId, CancellationToken cancellationToken = default)
+            string responseId, CancellationToken cancellationToken = default)
         {
-            return Inner.DeleteContinuationAsync(continuationId, cancellationToken);
+            return Inner.DeleteContinuationAsync(responseId, cancellationToken);
         }
     }
 }

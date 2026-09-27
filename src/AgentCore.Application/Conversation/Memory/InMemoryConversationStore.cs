@@ -332,38 +332,38 @@ namespace AgentCore.Application.Conversation.Memory
         }
 
         /// <inheritdoc />
-        public ValueTask SaveContinuationAsync(string continuationId, string conversationId, JsonElement envelope, CancellationToken cancellationToken = default)
+        public ValueTask SaveContinuationAsync(string responseId, string conversationId, CancellationToken cancellationToken = default)
         {
-            ArgumentNullException.ThrowIfNull(continuationId);
+            ArgumentNullException.ThrowIfNull(responseId);
             ArgumentNullException.ThrowIfNull(conversationId);
 
             lock (_lock)
             {
-                _continuations.Save(continuationId, conversationId, envelope, _time.GetUtcNow());
+                _continuations.Save(responseId, conversationId, _time.GetUtcNow());
             }
 
             return default;
         }
 
         /// <inheritdoc />
-        public ValueTask<JsonElement?> GetContinuationAsync(string continuationId, CancellationToken cancellationToken = default)
+        public ValueTask<string?> FindContinuationAsync(string responseId, CancellationToken cancellationToken = default)
         {
-            ArgumentNullException.ThrowIfNull(continuationId);
+            ArgumentNullException.ThrowIfNull(responseId);
 
             lock (_lock)
             {
-                return ValueTask.FromResult(_continuations.Get(continuationId));
+                return ValueTask.FromResult(_continuations.Find(responseId));
             }
         }
 
         /// <inheritdoc />
-        public ValueTask DeleteContinuationAsync(string continuationId, CancellationToken cancellationToken = default)
+        public ValueTask DeleteContinuationAsync(string responseId, CancellationToken cancellationToken = default)
         {
-            ArgumentNullException.ThrowIfNull(continuationId);
+            ArgumentNullException.ThrowIfNull(responseId);
 
             lock (_lock)
             {
-                _continuations.Forget(continuationId);
+                _continuations.Forget(responseId);
             }
 
             return default;

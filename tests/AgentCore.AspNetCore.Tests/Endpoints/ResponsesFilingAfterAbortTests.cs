@@ -1,4 +1,3 @@
-using System.Text.Json;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
@@ -67,15 +66,16 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
                 TimeProvider.System);
             AgentCoreAgent agent = new(sessions, "main");
             AgentSession session = await agent.CreateSessionAsync(ct);
+            ConversationSession conversation = session.GetService<ConversationSession>()!;
             ResponsesTurn turn = new(
                 agent,
                 new AgentCoreAgentSessionStore(store),
                 session,
-                session.GetService<ConversationSession>()!,
+                conversation,
                 new ChatMessage(ChatRole.User, "hi"),
                 Origin: null,
                 ResponseId: "resp-aborted",
-                ConversationId: null);
+                ConversationId: conversation.ConversationId);
             DefaultHttpContext http = new() { RequestServices = new ServiceCollection().BuildServiceProvider() };
             http.Response.Body = new MemoryStream();
             using CancellationTokenSource aborted = new();
@@ -84,7 +84,7 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(
                 () => ResponsesTurnStream.WriteAsync(http, turn, dialect: false, aborted.Token));
 
-            Assert.NotNull(await store.GetContinuationAsync("resp-aborted", ct));
+            Assert.Equal(conversation.ConversationId, await store.FindContinuationAsync("resp-aborted", ct));
         }
 
         [Fact]
@@ -102,10 +102,10 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
         private sealed class TokenHonouringStore() : DelegatingConversationStore(new InMemoryConversationStore())
         {
             public override ValueTask SaveContinuationAsync(
-                string continuationId, string conversationId, JsonElement envelope, CancellationToken cancellationToken = default)
+                string responseId, string conversationId, CancellationToken cancellationToken = default)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                return base.SaveContinuationAsync(continuationId, conversationId, envelope, cancellationToken);
+                return base.SaveContinuationAsync(responseId, conversationId, cancellationToken);
             }
         }
     }

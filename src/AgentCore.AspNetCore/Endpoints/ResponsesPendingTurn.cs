@@ -12,7 +12,7 @@ namespace AgentCore.AspNetCore.Endpoints
     /// <param name="Words">The user words the turn runs on, or <see langword="null"/> for an approval answer.</param>
     /// <param name="Approval">The approval answer the turn runs on, or <see langword="null"/> for words.</param>
     /// <param name="Origin">Where the request said the turn came from, or <see langword="null"/>.</param>
-    /// <param name="ConversationId">The id of the conversation, or <see langword="null"/> when none names it.</param>
+    /// <param name="ConversationId">The id of the conversation the turn runs on.</param>
     internal sealed record ResponsesPendingTurn(
         AgentCoreAgent Agent,
         AgentCoreAgentSessionStore Sessions,
@@ -20,5 +20,5 @@ namespace AgentCore.AspNetCore.Endpoints
         ChatMessage? Words,
         ResponsesApprovalAnswer? Approval,
         ConversationTurnOrigin? Origin,
-        string? ConversationId);
+        string ConversationId);
 }

@@ -1,3 +1,4 @@
+using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.Application.Ports;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -7,34 +8,38 @@ using Microsoft.Extensions.Options;
 namespace AgentCore.AspNetCore.Conversation
 {
     /// <summary>
-    /// Runs the retention sweep of <see cref="IConversations"/> for as long as the host is up.
+    /// Runs the retention sweep of response ids for as long as the host is up.
     /// </summary>
-    /// <remarks>
-    /// AgentCore never registers this on its own: a host that wants old conversations erased opts in by
-    /// calling <c>AddConversationSweep</c>. Without that call, conversations are kept forever.
-    /// </remarks>
     public sealed class ConversationSweeper(
         IServiceProvider services,
-        IOptions<ConversationSweepOptions> options,
+        IOptions<AgentCoreOptions> options,
         TimeProvider timeProvider,
         ILogger<ConversationSweeper> logger) : BackgroundService
     {
+        private static readonly TimeSpan Interval = TimeSpan.FromHours(1);
+
+        private const int BatchSize = 500;
+
         /// <inheritdoc />
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            ConversationSweepOptions settings = options.Value;
+            TimeSpan? retention = options.Value.ResponseRetention;
 
-            // Hosted service is constructed before AgentCore's own boot has not finished.
+            if (retention is null)
+            {
+                return;
+            }
+
             IConversations conversations = services.GetRequiredService<IConversations>();
 
-            using PeriodicTimer timer = new(settings.Interval, timeProvider);
+            using PeriodicTimer timer = new(Interval, timeProvider);
 
             while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
             {
                 try
                 {
                     int swept = await conversations
-                        .SweepAsync(settings.Retention, settings.BatchSize, stoppingToken)
+                        .SweepAsync(retention.Value, BatchSize, stoppingToken)
                         .ConfigureAwait(false);
 
                     ConversationSweeperLog.Swept(logger, swept);
@@ -52,11 +57,11 @@ namespace AgentCore.AspNetCore.Conversation
     {
         /// <summary>One sweep pass finished.</summary>
         /// <param name="logger">The logger of the sweeper.</param>
-        /// <param name="count">How many conversations the pass erased.</param>
+        /// <param name="count">How many response ids the pass deleted.</param>
         [LoggerMessage(
             EventId = 1,
             Level = LogLevel.Debug,
-            Message = "the retention sweep erased {Count} conversation(s).")]
+            Message = "the retention sweep deleted {Count} response id(s).")]
         public static partial void Swept(ILogger logger, int count);
 
         /// <summary>A sweep pass could not finish.</summary>

@@ -222,7 +222,7 @@ namespace AgentCore.Infrastructure.Tests.Database.Postgres
         [PostgresFact]
         public async Task Versions_AreTheMigrationsThisAssemblyCarries_InOrder()
         {
-            Assert.Equal(["001_agentcore", "002_conversation_busy"], PostgresSchema.Versions);
+            Assert.Equal(["001_agentcore", "002_conversation_busy", "003_response_continuation"], PostgresSchema.Versions);
         }
 
         [PostgresFact]

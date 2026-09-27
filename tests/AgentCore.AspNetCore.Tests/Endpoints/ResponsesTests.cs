@@ -1,7 +1,7 @@
 using System.Net;
+using System.Text;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Ports;
-using AgentCore.AspNetCore.Sessions;
 using AgentCore.AspNetCore.Tests.Fakes;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -169,9 +169,9 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
         [Fact]
         public async Task StreamAborted_ByTheHost_StillFilesTheSession()
         {
-            // Design section 6, step E5: the layer commits the words on a host cancel (E4). A resumed conversation
-            // finds its continuation only if ResponsesTurn.FileAsync runs too, so filing runs from a finally, on a
-            // token that survives the abort.
+            // Design section 6, step E5: the layer commits the words on a host cancel (E4). Resuming by
+            // this response id finds its conversation only if ResponsesTurn.FileAsync runs too, so filing
+            // runs from a finally, on a token that survives the abort.
             StallingChatClient reply = new();
             await using ResponsesHost host = await ResponsesHost.StartAsync(TwoStagesYaml, reply);
 
@@ -179,23 +179,48 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
                 /*lang=json,strict*/
                 """{ "stream": true, "conversation": "conv-e5-abort", "input": "first question" }""");
             await reply.WaitUntilStreamingAsync();
+            string responseId = await ReadFirstEventResponseIdAsync(response);
 
             // Tears down the connection mid-turn: the model is still stalled, so this is the host
             // cancelling the request, not the reply finishing.
             response.Dispose();
 
-            AgentCoreAgentSessionStore sessions = host.Services.GetRequiredService<AgentCoreAgentSessionStore>();
-            await Poll.UntilAsync(() => sessions
-                .ContainsAsync("conv-e5-abort", TestContext.Current.CancellationToken)
+            IConversationStore store = host.Services.GetRequiredService<IConversationStore>();
+            await Poll.UntilAsync(() => store
+                .ReadForSessionAsync("conv-e5-abort", TestContext.Current.CancellationToken)
                 .AsTask()
                 .GetAwaiter()
-                .GetResult());
+                .GetResult()
+                .Any(row => row.Content.Role == ChatRole.User && row.Content.Text == "first question"));
 
-            IConversationStore store = host.Services.GetRequiredService<IConversationStore>();
             IReadOnlyList<Application.Transcript.ConversationMessage> rows = await store
                 .ReadForSessionAsync("conv-e5-abort", TestContext.Current.CancellationToken);
-
             Assert.Contains(rows, row => row.Content.Role == ChatRole.User && row.Content.Text == "first question");
+
+            await Poll.UntilAsync(() => store
+                .FindContinuationAsync(responseId, TestContext.Current.CancellationToken)
+                .AsTask()
+                .GetAwaiter()
+                .GetResult() == "conv-e5-abort");
+        }
+
+        /// <summary>Reads the response id off the first SSE frame, before the stream ever finishes.</summary>
+        private static async Task<string> ReadFirstEventResponseIdAsync(HttpResponseMessage response)
+        {
+            await using Stream body = await response.Content.ReadAsStreamAsync(TestContext.Current.CancellationToken);
+            using StreamReader reader = new(body, Encoding.UTF8);
+
+            while (await reader.ReadLineAsync(TestContext.Current.CancellationToken) is { } line)
+            {
+                if (line.StartsWith("data: ", StringComparison.Ordinal)
+                    && JsonNode.Parse(line["data: ".Length..])!.AsObject() is { } frame
+                    && frame["response"]?["id"]?.GetValue<string>() is { } id)
+                {
+                    return id;
+                }
+            }
+
+            throw new InvalidOperationException("The stream ended before any event carried a response id.");
         }
 
         [Fact]

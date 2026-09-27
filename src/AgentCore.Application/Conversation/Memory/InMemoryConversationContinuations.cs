@@ -1,70 +1,70 @@
-using System.Text.Json;
-
 namespace AgentCore.Application.Conversation.Memory
 {
     /// <summary>
-    /// One serialized agent session per continuation id, held beside the in-memory store's conversations.
-    /// Every member runs under the owning store's lock; nothing here takes one.
+    /// One row per response id, held beside the in-memory store's conversations.
     /// </summary>
     internal sealed class InMemoryConversationContinuations
     {
-        private readonly Dictionary<string, (string ConversationId, JsonElement Envelope, DateTimeOffset UpdatedAt)> _envelopes = [];
+        private readonly Dictionary<string, (string ConversationId, DateTimeOffset CreatedAt)> _rows = [];
 
-        /// <summary>Files one session envelope under one continuation id, replacing any envelope already there.</summary>
-        /// <param name="continuationId">The continuation id: a conversation id or a response id.</param>
-        /// <param name="conversationId">The conversation the continuation belongs to.</param>
-        /// <param name="envelope">The serialized session, as the agent wrote it.</param>
-        /// <param name="updatedAt">When this write happened. A rewrite of the same id resets its retention clock.</param>
-        public void Save(string continuationId, string conversationId, JsonElement envelope, DateTimeOffset updatedAt)
+        /// <summary>
+        /// Records that one response id continues one conversation.
+        /// </summary>
+        /// <param name="responseId">The response id to record.</param>
+        /// <param name="conversationId">The conversation the response id continues.</param>
+        /// <param name="createdAt">When this row was written, for the retention sweep.</param>
+        public void Save(string responseId, string conversationId, DateTimeOffset createdAt)
         {
-            _envelopes[continuationId] = (conversationId, envelope.Clone(), updatedAt);
+            if (!_rows.ContainsKey(responseId))
+            {
+                _rows[responseId] = (conversationId, createdAt);
+            }
         }
 
-        /// <summary>Reads the envelope one continuation id names.</summary>
-        /// <param name="continuationId">The continuation id to look up.</param>
-        /// <returns>The envelope, or <see langword="null"/> when nothing is filed under that id.</returns>
-        public JsonElement? Get(string continuationId)
+        /// <summary>Finds the conversation one response id continues.</summary>
+        /// <param name="responseId">The response id to look up.</param>
+        /// <returns>The conversation id, or <see langword="null"/> when no row names that response id.</returns>
+        public string? Find(string responseId)
         {
-            return _envelopes.TryGetValue(continuationId, out (string ConversationId, JsonElement Envelope, DateTimeOffset UpdatedAt) row)
-                ? row.Envelope
+            return _rows.TryGetValue(responseId, out (string ConversationId, DateTimeOffset CreatedAt) row)
+                ? row.ConversationId
                 : null;
         }
 
-        /// <summary>Withdraws whatever one continuation id names, if anything.</summary>
-        /// <param name="continuationId">The continuation id to forget.</param>
-        public void Forget(string continuationId)
+        /// <summary>Withdraws one response id, if it names a row.</summary>
+        /// <param name="responseId">The response id to forget.</param>
+        public void Forget(string responseId)
         {
-            _ = _envelopes.Remove(continuationId);
+            _ = _rows.Remove(responseId);
         }
 
-        /// <summary>Withdraws every continuation filed under one conversation, however it was keyed.</summary>
-        /// <param name="conversationId">The conversation whose continuations are gone.</param>
+        /// <summary>Withdraws every response id filed under one conversation.</summary>
+        /// <param name="conversationId">The conversation whose response ids are gone.</param>
         public void ForgetConversation(string conversationId)
         {
-            foreach (string continuationId in _envelopes
+            foreach (string responseId in _rows
                 .Where(pair => pair.Value.ConversationId == conversationId)
                 .Select(pair => pair.Key)
                 .ToList())
             {
-                _ = _envelopes.Remove(continuationId);
+                _ = _rows.Remove(responseId);
             }
         }
 
         /// <summary>
-        /// Withdraws every continuation row untouched since before the cutoff, whichever conversation
-        /// it belongs to.
+        /// Withdraws every response id written before the cutoff, whichever conversation it continues.
         /// </summary>
         /// <param name="cutoff">The point in time a row must have been written on or after, to stay.</param>
         /// <returns>How many rows went.</returns>
         public int Sweep(DateTimeOffset cutoff)
         {
-            List<string> going = [.. _envelopes
-                .Where(pair => pair.Value.UpdatedAt < cutoff)
+            List<string> going = [.. _rows
+                .Where(pair => pair.Value.CreatedAt < cutoff)
                 .Select(pair => pair.Key)];
 
-            foreach (string continuationId in going)
+            foreach (string responseId in going)
             {
-                _ = _envelopes.Remove(continuationId);
+                _ = _rows.Remove(responseId);
             }
 
             return going.Count;

@@ -318,43 +318,35 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
         }
 
         /// <inheritdoc />
-        public async ValueTask SaveContinuationAsync(string continuationId, string conversationId, JsonElement envelope, CancellationToken cancellationToken = default)
+        public async ValueTask SaveContinuationAsync(string responseId, string conversationId, CancellationToken cancellationToken = default)
         {
-            ArgumentNullException.ThrowIfNull(continuationId);
+            ArgumentNullException.ThrowIfNull(responseId);
             ArgumentNullException.ThrowIfNull(conversationId);
 
             await using NpgsqlCommand command = _dataSource.CreateCommand(SaveContinuationSql);
-            _ = command.Parameters.Add(new NpgsqlParameter { Value = continuationId });
+            _ = command.Parameters.Add(new NpgsqlParameter { Value = responseId });
             _ = command.Parameters.Add(new NpgsqlParameter { Value = conversationId });
-            _ = command.Parameters.Add(new NpgsqlParameter
-            {
-                NpgsqlDbType = NpgsqlDbType.Jsonb,
-                Value = envelope.GetRawText(),
-            });
             _ = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
-        public async ValueTask<JsonElement?> GetContinuationAsync(string continuationId, CancellationToken cancellationToken = default)
+        public async ValueTask<string?> FindContinuationAsync(string responseId, CancellationToken cancellationToken = default)
         {
-            ArgumentNullException.ThrowIfNull(continuationId);
+            ArgumentNullException.ThrowIfNull(responseId);
 
-            await using NpgsqlCommand command = _dataSource.CreateCommand(GetContinuationSql);
-            _ = command.Parameters.Add(new NpgsqlParameter { Value = continuationId });
+            await using NpgsqlCommand command = _dataSource.CreateCommand(FindContinuationSql);
+            _ = command.Parameters.Add(new NpgsqlParameter { Value = responseId });
 
-            await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-            return !await reader.ReadAsync(cancellationToken).ConfigureAwait(false)
-                ? null
-                : JsonDocument.Parse(reader.GetString(0)).RootElement.Clone();
+            return await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) as string;
         }
 
         /// <inheritdoc />
-        public async ValueTask DeleteContinuationAsync(string continuationId, CancellationToken cancellationToken = default)
+        public async ValueTask DeleteContinuationAsync(string responseId, CancellationToken cancellationToken = default)
         {
-            ArgumentNullException.ThrowIfNull(continuationId);
+            ArgumentNullException.ThrowIfNull(responseId);
 
             await using NpgsqlCommand command = _dataSource.CreateCommand(DeleteContinuationSql);
-            _ = command.Parameters.Add(new NpgsqlParameter { Value = continuationId });
+            _ = command.Parameters.Add(new NpgsqlParameter { Value = responseId });
             _ = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
