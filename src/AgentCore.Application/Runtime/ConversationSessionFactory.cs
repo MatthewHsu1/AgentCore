@@ -69,7 +69,9 @@ namespace AgentCore.Application.Runtime
         {
             string resolvedConversationId = string.IsNullOrWhiteSpace(conversationId) ? Guid.NewGuid().ToString("N") : conversationId;
 
-            ConversationWorkspace? workspace = _workspaceRoot is null ? null : ConversationWorkspace.Create(_workspaceRoot, resolvedConversationId);
+            ConversationWorkspace? workspace = _workspaceRoot is null
+                ? null
+                : ConversationWorkspace.Create(_workspaceRoot, resolvedConversationId, _seams.Time, _seams.Logger);
 
             ConversationSession session = new(
                 resolvedConversationId,

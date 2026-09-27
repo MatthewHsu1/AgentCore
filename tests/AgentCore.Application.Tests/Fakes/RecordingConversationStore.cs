@@ -17,6 +17,15 @@ namespace AgentCore.Application.Tests.Fakes
         /// <summary>Gets every row the provider appended, in the order it appended them.</summary>
         public List<ConversationMessage> Rows { get; } = [];
 
+        /// <summary>Gets how many appends reached the store. One append is one batch, however many rows it holds.</summary>
+        public int Appends { get; private set; }
+
+        /// <summary>Gets the state each append carried, one entry per append, in order.</summary>
+        public List<ConversationSessionState?> States { get; } = [];
+
+        /// <summary>Gets or sets a log that every append writes <c>append</c> to, for a test that orders it against other steps.</summary>
+        public List<string>? Log { get; set; }
+
         /// <summary>Gets every rewrite the provider asked for, in order.</summary>
         public List<ConversationMessage> Rewrites { get; } = [];
 
@@ -44,6 +53,9 @@ namespace AgentCore.Application.Tests.Fakes
 
             lock (_lock)
             {
+                Appends++;
+                States.Add(state);
+                Log?.Add("append");
                 Rows.AddRange(rows);
                 foreach (ConversationMessage row in rows)
                 {
@@ -73,6 +85,25 @@ namespace AgentCore.Application.Tests.Fakes
                     _rows[pair.Key] = rewritten;
                     Rewrites.Add(rewritten);
                     break;
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public override async ValueTask DeleteMessageAsync(
+            string conversationId, string messageId, CancellationToken cancellationToken = default)
+        {
+            await base.DeleteMessageAsync(conversationId, messageId, cancellationToken).ConfigureAwait(false);
+
+            lock (_lock)
+            {
+                foreach ((string ConversationId, int Ordinal) key in _rows.Keys)
+                {
+                    if (key.ConversationId == conversationId && _rows[key].MessageId == messageId)
+                    {
+                        _ = _rows.Remove(key);
+                        break;
+                    }
                 }
             }
         }

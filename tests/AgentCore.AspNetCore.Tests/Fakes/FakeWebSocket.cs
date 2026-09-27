@@ -3,7 +3,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Threading.Channels;
 using AgentCore.Application.Configuration.Parsing;
-using AgentCore.AspNetCore.Conversation;
+using AgentCore.AspNetCore.Voice;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
 using Microsoft.AspNetCore.Http;
@@ -36,8 +36,8 @@ namespace AgentCore.AspNetCore.Tests.Fakes
     /// a status still reaches a test after a real socket would already have aborted.
     /// </description></item>
     /// <item><description>
-    /// <b>A faulting send.</b> <see cref="FailEverySend"/> makes the write loop throw on demand, which
-    /// nothing on a healthy loopback socket does.
+    /// <b>A faulting send, receive or close.</b> <see cref="FailEverySend"/>, <see cref="FailReceive"/> and
+    /// <see cref="FailClose"/> make the socket throw on demand, which nothing on a healthy loopback socket does.
     /// </description></item>
     /// </list>
     /// <para>
@@ -47,6 +47,8 @@ namespace AgentCore.AspNetCore.Tests.Fakes
     /// </remarks>
     internal sealed class FakeWebSocket : WebSocket
     {
+        private static readonly byte[] ReceiveFaultMarker = [];
+
         private readonly Channel<byte[]?> _inbound = Channel.CreateUnbounded<byte[]?>(
             new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
 
@@ -54,13 +56,22 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         private readonly List<string> _sent = [];
         private readonly TaskCompletionSource _parked = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _sendStalled = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         private volatile bool _parkNextStateRead;
         private Exception? _sendFault;
+        private Exception? _receiveFault;
+        private Exception? _closeFault;
+        private WebSocketState? _goneOnSend;
+        private volatile bool _stallSends;
+        private bool _abortDuringClose;
         private WebSocketState _state = WebSocketState.Open;
 
         /// <summary>Gets a task that completes once the write loop parks inside <see cref="State"/>.</summary>
         public Task Parked => _parked.Task;
+
+        /// <summary>Gets a task that completes once a send is stalled by <see cref="StallSends"/>.</summary>
+        public Task SendStalled => _sendStalled.Task;
 
         /// <summary>Gets the status and description <c>CloseOutputAsync</c> was called with, or null.</summary>
         public (WebSocketCloseStatus Status, string? Description)? CloseSent { get; private set; }
@@ -138,11 +149,45 @@ namespace AgentCore.AspNetCore.Tests.Fakes
             _sendFault = fault;
         }
 
+        /// <summary>Makes the next send find the socket gone, as a managed socket does once the peer dropped or the close ran.</summary>
+        /// <param name="state">What the socket is by then: <see cref="WebSocketState.Aborted"/> or <see cref="WebSocketState.Closed"/>.</param>
+        public void GoneOnSend(WebSocketState state)
+        {
+            _goneOnSend = state;
+        }
+
+        /// <summary>Makes every send hang until its token is cancelled, as a send stuck on a peer that stopped reading.</summary>
+        public void StallSends()
+        {
+            _stallSends = true;
+        }
+
+        /// <summary>Makes the close find the socket aborted under it by a cancelled send, which surfaces as a cancellation.</summary>
+        public void AbortDuringClose()
+        {
+            _abortDuringClose = true;
+        }
+
         /// <summary>Queues one inbound message, exactly as the vendor would send it.</summary>
         /// <param name="json">The frame.</param>
         public void Queue(string json)
         {
             _ = _inbound.Writer.TryWrite(Encoding.UTF8.GetBytes(json));
+        }
+
+        /// <summary>Queues a receive that throws, after every message already queued, so the read loop faults.</summary>
+        /// <param name="fault">The cause the loop takes.</param>
+        public void FailReceive(Exception fault)
+        {
+            _receiveFault = fault;
+            _ = _inbound.Writer.TryWrite(ReceiveFaultMarker);
+        }
+
+        /// <summary>Makes the close throw.</summary>
+        /// <param name="fault">What <c>CloseOutputAsync</c> throws.</param>
+        public void FailClose(Exception fault)
+        {
+            _closeFault = fault;
         }
 
         /// <summary>Queues the vendor's own close frame, which ends the read loop.</summary>
@@ -157,6 +202,11 @@ namespace AgentCore.AspNetCore.Tests.Fakes
             CancellationToken cancellationToken)
         {
             byte[]? message = await _inbound.Reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+
+            if (ReferenceEquals(message, ReceiveFaultMarker))
+            {
+                throw _receiveFault!;
+            }
 
             if (message is null)
             {
@@ -189,6 +239,11 @@ namespace AgentCore.AspNetCore.Tests.Fakes
             bool endOfMessage,
             CancellationToken cancellationToken)
         {
+            if (_stallSends)
+            {
+                return StallAsync(cancellationToken);
+            }
+
             Record(buffer.AsMemory().Span);
             return Task.CompletedTask;
         }
@@ -201,6 +256,11 @@ namespace AgentCore.AspNetCore.Tests.Fakes
             bool endOfMessage,
             CancellationToken cancellationToken)
         {
+            if (_stallSends)
+            {
+                return new ValueTask(StallAsync(cancellationToken));
+            }
+
             Record(buffer.Span);
             return ValueTask.CompletedTask;
         }
@@ -214,9 +274,30 @@ namespace AgentCore.AspNetCore.Tests.Fakes
                 throw fault;
             }
 
+            if (_goneOnSend is { } gone)
+            {
+                _state = gone;
+                throw new WebSocketException(
+                    WebSocketError.InvalidState,
+                    $"The WebSocket is in an invalid state ('{gone}') for this operation. Valid states are: 'Open, CloseReceived'");
+            }
+
             lock (_gate)
             {
                 _sent.Add(Encoding.UTF8.GetString(buffer));
+            }
+        }
+
+        private async Task StallAsync(CancellationToken cancellationToken)
+        {
+            _ = _sendStalled.TrySetResult();
+            try
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                _state = WebSocketState.Aborted;
             }
         }
 
@@ -226,6 +307,17 @@ namespace AgentCore.AspNetCore.Tests.Fakes
             string? statusDescription,
             CancellationToken cancellationToken)
         {
+            if (_closeFault is { } fault)
+            {
+                throw fault;
+            }
+
+            if (_abortDuringClose)
+            {
+                _state = WebSocketState.Aborted;
+                throw new OperationCanceledException("the send the close waited behind was cancelled, and it aborted the socket.");
+            }
+
             CloseSent = (closeStatus, statusDescription);
             _state = WebSocketState.CloseSent;
             return Task.CompletedTask;
@@ -271,171 +363,6 @@ namespace AgentCore.AspNetCore.Tests.Fakes
             _state = WebSocketState.Closed;
             _ = _inbound.Writer.TryComplete();
             ReleaseParkedState();
-        }
-    }
-
-    /// <summary>
-    /// An application lifetime a test owns, so a test can stop the host without one.
-    /// </summary>
-    /// <remarks>
-    /// The connection links its own token to <see cref="ApplicationStopping"/> and reads that same token
-    /// again when it picks a close status, so this is the only seam a test needs to prove the
-    /// host-stopping path.
-    /// </remarks>
-    internal sealed class TestHostLifetime : IHostApplicationLifetime, IDisposable
-    {
-        private readonly CancellationTokenSource _started = new();
-        private readonly CancellationTokenSource _stopping = new();
-        private readonly CancellationTokenSource _stopped = new();
-
-        public CancellationToken ApplicationStarted => _started.Token;
-
-        public CancellationToken ApplicationStopping => _stopping.Token;
-
-        public CancellationToken ApplicationStopped => _stopped.Token;
-
-        public void StopApplication()
-        {
-            _stopping.Cancel();
-            _stopped.Cancel();
-        }
-
-        public void Dispose()
-        {
-            _started.Dispose();
-            _stopping.Dispose();
-            _stopped.Dispose();
-        }
-    }
-
-    /// <summary>
-    /// One <see cref="TelnyxRelayConnection"/> driven straight over a <see cref="FakeWebSocket"/>.
-    /// </summary>
-    /// <remarks>
-    /// <c>RunAsync</c> takes the abstract <see cref="WebSocket"/>, so nothing here needs Kestrel, a
-    /// port, or a client socket. The service provider is the real one <c>AddAgentCore</c> builds, so
-    /// the session factory, the store, and the clock behave exactly as they do on a live conversation.
-    /// </remarks>
-    internal sealed class RelayConnectionHarness : IAsyncDisposable
-    {
-        private readonly ServiceProvider _services;
-        private readonly TestHostLifetime _lifetime;
-
-        private RelayConnectionHarness(
-            ServiceProvider services,
-            TestHostLifetime lifetime,
-            FakeWebSocket socket,
-            Task connection)
-        {
-            _services = services;
-            _lifetime = lifetime;
-            Socket = socket;
-            Connection = connection;
-        }
-
-        /// <summary>Gets the socket a test queues frames on and reads sends off.</summary>
-        public FakeWebSocket Socket { get; }
-
-        /// <summary>Gets the container the connection resolves everything from.</summary>
-        /// <remarks>
-        /// The provider is the real one <c>AddAgentCore</c> builds, so a test reads the live session
-        /// store, the audit queue, and the store behind it exactly as the connection does. It is exposed
-        /// rather than mirrored in properties of this class, because what one test wants out of the
-        /// container is no business of the next one.
-        /// </remarks>
-        public IServiceProvider Services => _services;
-
-        /// <summary>Gets the task that completes when the connection has torn itself down.</summary>
-        public Task Connection { get; }
-
-        /// <summary>Starts one connection over one document and one fake model.</summary>
-        /// <param name="yaml">The document, as YAML.</param>
-        /// <param name="reply">The model behind every agent.</param>
-        /// <param name="logging">Anything a test adds to the logging pipeline.</param>
-        /// <param name="relay">Anything a test binds on the relay endpoint's own options.</param>
-        /// <param name="configure">
-        /// Anything else the test binds on the container's own options, for example the clock every
-        /// conversation and every connection then runs on.
-        /// </param>
-        /// <param name="services">
-        /// Anything a test registers over what <c>AddAgentCore</c> registered. It runs after that conversation,
-        /// so a registration here is the last one and the connection resolves it.
-        /// </param>
-        /// <returns>The running harness.</returns>
-        public static async Task<RelayConnectionHarness> StartAsync(
-            string yaml,
-            IChatClient reply,
-            Action<ILoggingBuilder>? logging = null,
-            Action<TelnyxRelayOptions>? relay = null,
-            Action<AgentCoreOptions>? configure = null,
-            Action<IServiceCollection>? services = null)
-        {
-            ServiceCollection collection = new();
-            _ = collection.AddLogging(builder =>
-            {
-                _ = builder.ClearProviders();
-                logging?.Invoke(builder);
-            });
-
-            TestHostLifetime lifetime = new();
-            _ = collection.AddSingleton<IHostApplicationLifetime>(lifetime);
-            _ = collection.AddAgentCore(options =>
-            {
-                options.Configuration = ConfigurationLoader.LoadYaml(yaml);
-                _ = options.UseChatClients(_ => new RoutingChatClientFactory(reply));
-                configure?.Invoke(options);
-            });
-
-            services?.Invoke(collection);
-
-            ServiceProvider provider = collection.BuildServiceProvider();
-
-            // There is no host here, so nothing else would run the boot. This is the same hook a host
-            // uses, in the same order, so the harness reaches a graph composed exactly as production
-            // composes it.
-            foreach (IHostedLifecycleService service in provider.GetServices<IHostedService>().OfType<IHostedLifecycleService>())
-            {
-                await service.StartingAsync(CancellationToken.None);
-            }
-
-            DefaultHttpContext http = new() { RequestServices = provider };
-            http.Request.RouteValues[ConversationEndpointRouteBuilderExtensions.EntryRouteParameter] = "main";
-
-            TelnyxRelayOptions options = new();
-            relay?.Invoke(options);
-
-            FakeWebSocket socket = new();
-            Task connection = TelnyxRelayConnection.RunAsync(http, socket, options);
-
-            return new RelayConnectionHarness(provider, lifetime, socket, connection);
-        }
-        /// <summary>Stops the host, which is what the <c>EndpointUnavailable</c> close status reports.</summary>
-        public void StopApplication()
-        {
-            _lifetime.StopApplication();
-        }
-
-        /// <summary>Ends the connection and releases everything behind it.</summary>
-        public async ValueTask DisposeAsync()
-        {
-            // A test that failed early may have left the write loop parked or the read loop waiting, so
-            // both are released here before anything waits on the connection task.
-            Socket.ReleaseParkedState();
-            Socket.QueueClose();
-
-            try
-            {
-                await Connection.WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
-            }
-            catch (Exception)
-            {
-                // The connection's own faults belong to whichever assertion a test already made about
-                // them. Disposal only has to stop waiting.
-            }
-
-            Socket.Dispose();
-            _lifetime.Dispose();
-            await _services.DisposeAsync().ConfigureAwait(false);
         }
     }
 }

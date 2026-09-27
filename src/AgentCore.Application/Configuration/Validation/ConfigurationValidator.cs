@@ -4,14 +4,20 @@ using AgentCore.Application.Configuration.Schema;
 namespace AgentCore.Application.Configuration.Validation
 {
     /// <summary>
-    /// Checks 2 to 8 of section 8.5, over one bound document. Each check lives in its own
-    /// <c>*Check</c> class in this folder; this type only orders them and shapes the result.
+    /// Finds the mistakes in a loaded document that the JSON Schema cannot catch, such as a name
+    /// that points to nothing or a stage that no path reaches.
     /// </summary>
     public static class ConfigurationValidator
     {
-        /// <summary>Runs checks 2 to 8 and returns everything they find.</summary>
-        /// <param name="configuration">The bound document.</param>
-        /// <returns>Every error and every partial-coverage warning.</returns>
+        /// <summary>
+        /// Runs <see cref="EvaluateStructure"/>, then checks each tool reference against the tools the
+        /// document declares. It never throws on a bad document; <see cref="Validate"/> does.
+        /// </summary>
+        /// <param name="configuration">The loaded document.</param>
+        /// <returns>
+        /// The errors, and the warnings. A warning does not stop the load. Some say a check had too
+        /// many cases to try them all, so it tried a random sample.
+        /// </returns>
         public static ConfigurationValidationResult Evaluate(AgentCoreConfiguration configuration)
         {
             ConfigurationValidationResult structural = EvaluateStructure(configuration);
@@ -30,21 +36,21 @@ namespace AgentCore.Application.Configuration.Validation
                 };
         }
 
-        /// <summary>Runs checks 2 to 8 and throws when any of them fails.</summary>
-        /// <param name="configuration">The bound document.</param>
-        /// <returns>The result, so a caller can read the partial-coverage warnings of check 5.</returns>
-        /// <exception cref="ConfigurationLoadException">The document fails one or more checks.</exception>
+        /// <summary>Runs <see cref="Evaluate"/> and throws when it finds an error.</summary>
+        /// <param name="configuration">The loaded document.</param>
+        /// <returns>The result, so the caller can read the warnings.</returns>
+        /// <exception cref="ConfigurationLoadException">The document has one or more errors.</exception>
         public static ConfigurationValidationResult Validate(AgentCoreConfiguration configuration)
         {
             return ThrowOnErrors(Evaluate(configuration));
         }
 
         /// <summary>
-        /// Runs every check of section 8.5 except tool-reference resolution, and returns everything they
-        /// find.
+        /// Runs every check that needs only the document, and returns what they find. It skips tool
+        /// references, because MCP tools are not known until the servers answer.
         /// </summary>
-        /// <param name="configuration">The bound document.</param>
-        /// <returns>Every error and every partial-coverage warning.</returns>
+        /// <param name="configuration">The loaded document.</param>
+        /// <returns>The errors and the warnings, as <see cref="Evaluate"/> describes them.</returns>
         public static ConfigurationValidationResult EvaluateStructure(AgentCoreConfiguration configuration)
         {
             ArgumentNullException.ThrowIfNull(configuration);
@@ -63,6 +69,7 @@ namespace AgentCore.Application.Configuration.Validation
             ExitExclusivityCheck.Run(configuration, errors, warnings);
             ReachabilityCheck.Run(configuration, errors);
             GraphWellFormednessCheck.Run(configuration, errors);
+            GraphNodeBackgroundCheck.Run(configuration, errors);
             DelegationCycleCheck.Run(configuration, errors);
             McpCheck.ServerIds(configuration, errors);
             McpCheck.SecretPlacement(configuration, errors);
@@ -76,23 +83,20 @@ namespace AgentCore.Application.Configuration.Validation
                 };
         }
 
-        /// <summary>
-        /// Runs every check of section 8.5 except tool-reference resolution, and throws when any of them
-        /// fails.
-        /// </summary>
-        /// <param name="configuration">The bound document.</param>
-        /// <returns>The result, so a caller can read the partial-coverage warnings of check 5.</returns>
-        /// <exception cref="ConfigurationLoadException">The document fails one or more checks.</exception>
+        /// <summary>Runs <see cref="EvaluateStructure"/> and throws when it finds an error.</summary>
+        /// <param name="configuration">The loaded document.</param>
+        /// <returns>The result, so the caller can read the warnings.</returns>
+        /// <exception cref="ConfigurationLoadException">The document has one or more errors.</exception>
         public static ConfigurationValidationResult ValidateStructure(AgentCoreConfiguration configuration)
         {
             return ThrowOnErrors(EvaluateStructure(configuration));
         }
 
         /// <summary>
-        /// Resolves every tool reference in the document against the ids the tool registry actually
-        /// serves, and throws when one names an id nothing serves.
+        /// Checks every tool reference against the tool ids the registry serves. Call it after the MCP
+        /// servers have listed their tools.
         /// </summary>
-        /// <param name="configuration">The bound document.</param>
+        /// <param name="configuration">The loaded document.</param>
         /// <param name="servedToolIds">Every tool id the registry serves, declared and MCP-discovered alike.</param>
         /// <exception cref="ConfigurationLoadException">A reference names a tool id nothing serves.</exception>
         public static void ValidateToolReferences(AgentCoreConfiguration configuration, IReadOnlySet<string> servedToolIds)
@@ -106,11 +110,10 @@ namespace AgentCore.Application.Configuration.Validation
         }
 
         /// <summary>
-        /// Resolves every <c>skills:</c> and <c>pinned:</c> entry against the names the bound skills
-        /// folder serves.
+        /// Checks every <c>skills:</c> and <c>pinned:</c> entry against the skills in the skills folder.
         /// </summary>
-        /// <param name="configuration">The bound document.</param>
-        /// <param name="servedSkillNames">Every skill name the bound folder serves.</param>
+        /// <param name="configuration">The loaded document.</param>
+        /// <param name="servedSkillNames">Every skill name in the skills folder.</param>
         /// <exception cref="ConfigurationLoadException">A reference names a skill nothing serves, or a skill is both pinned and loadable.</exception>
         public static void ValidateSkillReferences(AgentCoreConfiguration configuration, IReadOnlySet<string> servedSkillNames)
         {
@@ -124,11 +127,10 @@ namespace AgentCore.Application.Configuration.Validation
         }
 
         /// <summary>
-        /// Refuses a declared tool id that the skills provider also registers. The provider's tools are
-        /// added per agent and never pass through the tool registry, so a collision is invisible until
-        /// the model receives two tools of one name.
+        /// Refuses a declared tool id that has the same name as a skills tool. Skills tools do not go
+        /// through the tool registry, so without this check the model would get two tools with one name.
         /// </summary>
-        /// <param name="configuration">The bound document.</param>
+        /// <param name="configuration">The loaded document.</param>
         /// <exception cref="ConfigurationLoadException">A tool id collides with a skills tool name.</exception>
         public static void ValidateSkillToolNames(AgentCoreConfiguration configuration)
         {

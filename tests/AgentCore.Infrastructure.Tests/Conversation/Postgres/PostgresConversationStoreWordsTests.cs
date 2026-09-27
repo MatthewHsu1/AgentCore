@@ -1,9 +1,6 @@
 using System.Text.Json.Nodes;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Transcript;
-using AgentCore.Domain.Audit;
-using AgentCore.Domain.Sources;
-using AgentCore.Infrastructure.Audit.Postgres;
 using AgentCore.Infrastructure.Conversation.Postgres;
 using AgentCore.Infrastructure.Tests.Database.Postgres;
 using AgentCore.TestSupport;
@@ -299,92 +296,6 @@ namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
 
 
 
-        // ---------------------------------------------------------------------------------------------
-        // Store 1 against store 3.
-        // ---------------------------------------------------------------------------------------------
-        [PostgresFact]
-        public async Task ReadSpokenTurnsAsync_AToolCallingTurn_ReturnsOneRowForThatTurn()
-        {
-            // Arrange — the DISTINCT ON guard. The turn writes an assistant message carrying the tool
-            // conversation and another carrying the reply; without it both come back, and the textless one
-            // reports a false tamper on every tool-calling turn.
-            PostgresConversationStore store = await OpenAsync();
-            _ = await WriteToolCallingTurnAsync(store, "C1", turnIndex: 0, spoken: "Order 41 ships Friday.");
-
-            // Act
-            IReadOnlyList<TranscriptTurnDigest> turns = await store.ReadSpokenTurnsAsync("C1", Token);
-
-            // Assert
-            TranscriptTurnDigest turn = Assert.Single(turns);
-            Assert.Equal("Order 41 ships Friday.", turn.Spoken);
-        }
-
-        [PostgresFact]
-        public async Task ReadSpokenTurnsAsync_AToolCallingTurn_MatchesTheHashTheChainHolds()
-        {
-            // Arrange
-            PostgresConversationStore store = await OpenAsync();
-            _ = await WriteToolCallingTurnAsync(store, "C1", turnIndex: 0, spoken: "Order 41 ships Friday.");
-
-            // Act
-            IReadOnlyList<TranscriptTurnDigest> turns = await store.ReadSpokenTurnsAsync("C1", Token);
-
-            // Assert — what the nightly check does: hash the words store 1 holds, and compare.
-            Assert.Equal(AuditHash.OfText(turns[0].Spoken).Value, turns[0].ReplyTextSha256);
-        }
-
-        [PostgresFact]
-        public async Task ReadSpokenTurnsAsync_AToolCallingTurnThatAlsoCited_MatchesTheHashTheChainHolds()
-        {
-            // Arrange — a SourceContent rides the tool-result message alongside its FunctionResultContent.
-            // The verify query never looks at that row's role, but jsonb round-tripping a second content
-            // type on it must not upset the DISTINCT ON guard or the hash comparison.
-            PostgresConversationStore store = await OpenAsync();
-            _ = await WriteToolCallingTurnAsync(store, "C1", turnIndex: 0, spoken: "Order 41 ships Friday.", cited: true);
-
-            // Act
-            IReadOnlyList<TranscriptTurnDigest> turns = await store.ReadSpokenTurnsAsync("C1", Token);
-
-            // Assert
-            TranscriptTurnDigest turn = Assert.Single(turns);
-            Assert.Equal(AuditHash.OfText(turn.Spoken).Value, turn.ReplyTextSha256);
-        }
-
-        [PostgresFact]
-        public async Task ReadSpokenTurnsAsync_ATurnWhoseWordsWereErased_ReturnsNoRowForIt()
-        {
-            // Arrange — the erasure working, and not a tamper. The chain keeps its row and goes on
-            // proving what it proved.
-            PostgresConversationStore store = await OpenAsync();
-            _ = await WriteToolCallingTurnAsync(store, "C1", turnIndex: 0, spoken: "Order 41 ships Friday.");
-            _ = await store.EraseAsync("C1", Token);
-
-            // Act
-            IReadOnlyList<TranscriptTurnDigest> turns = await store.ReadSpokenTurnsAsync("C1", Token);
-
-            // Assert
-            Assert.Empty(turns);
-            Assert.Equal(1L, await ScalarAsync<long>("SELECT count(*) FROM agentcore.audit_event"));
-        }
-
-        [PostgresFact]
-        public async Task ReadSpokenTurnsAsync_ATurnAmendedInTheChain_ReturnsOneRowHoldingTheLatestHash()
-        {
-            // Arrange — a barge-in amends a turn, so the chain carries a second turn.completed for it.
-            // Without the guard on the chain side the join multiplies and one turn answers twice.
-            PostgresConversationStore store = await OpenAsync();
-            Guid firstEventId = await WriteToolCallingTurnAsync(store, "C1", turnIndex: 0, spoken: "Order 41 ships Friday.");
-            await store.RewriteAsync("C1", "m3", new ChatMessage(ChatRole.Assistant, "Order 41 sh"), Token);
-            await AmendTurnAsync("C1", turnIndex: 0, amends: firstEventId, spoken: "Order 41 sh");
-
-            // Act
-            IReadOnlyList<TranscriptTurnDigest> turns = await store.ReadSpokenTurnsAsync("C1", Token);
-
-            // Assert
-            TranscriptTurnDigest turn = Assert.Single(turns);
-            Assert.Equal(AuditHash.OfText("Order 41 sh").Value, turn.ReplyTextSha256);
-        }
-
         /// <summary>
         /// One ordinary turn: what the caller said, and what the caller heard. <paramref name="idSeed"/>
         /// only keeps message ids unique across appends to the same conversation — the store assigns the
@@ -396,80 +307,6 @@ namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
             new ConversationMessageDraft(turnIndex, new ChatMessage(ChatRole.User, "what about order 41"), $"m{idSeed}"),
             new ConversationMessageDraft(turnIndex, new ChatMessage(ChatRole.Assistant, "Order 41 ships Friday."), $"m{idSeed + 1}"),
         ];
-        }
-
-        /// <summary>Writes a tool-calling turn to store 1 and its <c>turn.completed</c> row to store 3.</summary>
-        private async Task<Guid> WriteToolCallingTurnAsync(
-            PostgresConversationStore store, string conversationId, int turnIndex, string spoken, bool cited = false)
-        {
-            List<AIContent> toolResultContents = [new FunctionResultContent("id1", "Friday")];
-            if (cited)
-            {
-                toolResultContents.Add(new SourceContent
-                {
-                    Source = new SourceReference
-                    {
-                        SourceId = "card-42",
-                        Kind = SourceKind.Document,
-                        Title = "Order lookup",
-                        Origin = "knowledge",
-                    },
-                    CallId = "id1",
-                });
-            }
-
-            _ = await store.AppendAsync(
-                conversationId,
-                [
-                    new ConversationMessageDraft(turnIndex, new ChatMessage(ChatRole.User, "what about order 41"), "m0"),
-                    new ConversationMessageDraft(turnIndex, new ChatMessage(
-                        ChatRole.Assistant, [new FunctionCallContent("id1", "lookup", null)]), "m1"),
-                    new ConversationMessageDraft(turnIndex, new ChatMessage(ChatRole.Tool, toolResultContents), "m2"),
-                    new ConversationMessageDraft(turnIndex, new ChatMessage(ChatRole.Assistant, spoken), "m3"),
-                ],
-                cancellationToken: Token);
-
-            // Not disposed: the sink would take the test's own pool with it.
-            Guid eventId = Guid.CreateVersion7();
-            PostgresAuditSink chain = new(DataSource);
-            await chain.AppendAsync(
-                new AuditEvent
-                {
-                    ConversationId = conversationId,
-                    EventId = eventId,
-                    Kind = AuditEventKind.TurnCompleted,
-                    OccurredAt = new DateTimeOffset(2026, 8, 19, 9, 0, 1, TimeSpan.Zero),
-                    TurnIndex = turnIndex,
-                    Payload = new Dictionary<string, string>(StringComparer.Ordinal)
-                    {
-                        [AuditPayloadKeys.ReplyTextSha256] = AuditHash.OfText(spoken).Value,
-                    },
-                },
-                Token);
-
-            return eventId;
-        }
-
-        /// <summary>Writes a second <c>turn.completed</c> that corrects the first, as a barge-in does.</summary>
-        private async Task AmendTurnAsync(string conversationId, int turnIndex, Guid amends, string spoken)
-        {
-            // Not disposed: the sink would take the test's own pool with it.
-            PostgresAuditSink chain = new(DataSource);
-            await chain.AppendAsync(
-                new AuditEvent
-                {
-                    ConversationId = conversationId,
-                    EventId = Guid.CreateVersion7(),
-                    Kind = AuditEventKind.TurnCompleted,
-                    OccurredAt = new DateTimeOffset(2026, 8, 19, 9, 0, 2, TimeSpan.Zero),
-                    TurnIndex = turnIndex,
-                    AmendsEventId = amends,
-                    Payload = new Dictionary<string, string>(StringComparer.Ordinal)
-                    {
-                        [AuditPayloadKeys.ReplyTextSha256] = AuditHash.OfText(spoken).Value,
-                    },
-                },
-                Token);
         }
     }
 }

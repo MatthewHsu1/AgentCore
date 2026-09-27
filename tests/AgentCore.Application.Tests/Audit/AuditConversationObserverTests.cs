@@ -16,7 +16,7 @@ namespace AgentCore.Application.Tests.Audit
 
         private static readonly DateTimeOffset Moment = new(2026, 8, 15, 9, 30, 0, TimeSpan.Zero);
 
-        /// <summary>The six kinds that are counted or logged or both, and stored nowhere.</summary>
+        /// <summary>The kinds that are counted or logged or both, and stored nowhere.</summary>
         public static TheoryData<ConversationEventKind> DiagnosticKinds =>
         [
             ConversationEventKind.ModerationUnavailable,
@@ -26,6 +26,7 @@ namespace AgentCore.Application.Tests.Audit
             ConversationEventKind.TranscriptWriteFailed,
             ConversationEventKind.StateRestorePartial,
             ConversationEventKind.TranscriptResyncFailed,
+            ConversationEventKind.RunFaulted,
         ];
 
         /// <summary>Every kind, once, across the two tables above.</summary>
@@ -41,7 +42,7 @@ namespace AgentCore.Application.Tests.Audit
             Assert.Equal([.. Enum.GetValues<ConversationEventKind>().Order()], [.. named.Order()]);
         }
 
-        /// <summary>The seven kinds the store keeps, beside the token each one writes.</summary>
+        /// <summary>The eight kinds the store keeps, beside the token each one writes.</summary>
         public static TheoryData<ConversationEventKind, AuditEventKind> StoredKinds =>
             new()
             {
@@ -52,6 +53,7 @@ namespace AgentCore.Application.Tests.Audit
                 { ConversationEventKind.ReplyInterrupted, AuditEventKind.ReplyInterrupted },
                 { ConversationEventKind.ConversationEnded, AuditEventKind.ConversationEnded },
                 { ConversationEventKind.TurnSuperseded, AuditEventKind.TurnSuperseded },
+                { ConversationEventKind.TurnRefused, AuditEventKind.TurnRefused },
             };
 
         [Theory]
@@ -262,9 +264,11 @@ namespace AgentCore.Application.Tests.Audit
                     or ConversationEventKind.ExtractionFailed
                     or ConversationEventKind.TurnCompleted
                     or ConversationEventKind.TurnSuperseded
+                    or ConversationEventKind.TurnRefused
                     or ConversationEventKind.TranscriptWriteFailed
                     or ConversationEventKind.StateRestorePartial
-                    or ConversationEventKind.TranscriptResyncFailed => new Dictionary<string, string>(StringComparer.Ordinal),
+                    or ConversationEventKind.TranscriptResyncFailed
+                    or ConversationEventKind.RunFaulted => new Dictionary<string, string>(StringComparer.Ordinal),
                 _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "The conversation event vocabulary is closed, and this value is not in it."),
             };
         }

@@ -37,7 +37,7 @@ namespace AgentCore.Domain
     /// <param name="ReplyText">
     /// The text the caller heard. It is what the agent spoke, the spoken fallback when
     /// <paramref name="Failure"/> is set, and the truncated reply when
-    /// <paramref name="InterruptedAfter"/> is set.
+    /// <paramref name="Cut"/> is set.
     /// </param>
     /// <param name="IsTerminal">Whether the stage after the turn ends the conversation.</param>
     /// <param name="ExtractionFailure">
@@ -47,9 +47,11 @@ namespace AgentCore.Domain
     /// The reason the turn spoke the fallback instead of a reply, or <see langword="null"/> when the turn
     /// answered. It names the row of section 8.7 that the turn met.
     /// </param>
-    /// <param name="InterruptedAfter">
-    /// How long the caller heard the reply before speaking over it, or <see langword="null"/> when the
-    /// caller did not interrupt. The relay reports it at 1 ms, so it is never estimated.
+    /// <param name="Cut">
+    /// <see langword="null"/> when the reply was not cut. A value when it was: how long the caller heard
+    /// the reply, as the relay reports it at 1 ms. <see cref="TimeSpan.Zero"/> also means the play time is
+    /// unknown, as on every text abort. The audit record keeps the real "unknown": its
+    /// <c>reply.interrupted</c> event then carries no <c>durationUntilInterruptMs</c>.
     /// </param>
     /// <param name="EndedAt">
     /// The moment the turn ended, read from the clock the turn loop was given. The audit chain of D23
@@ -68,7 +70,7 @@ namespace AgentCore.Domain
         bool IsTerminal,
         string? ExtractionFailure,
         string? Failure = null,
-        TimeSpan? InterruptedAfter = null,
+        TimeSpan? Cut = null,
         DateTimeOffset EndedAt = default)
     {
         /// <summary>

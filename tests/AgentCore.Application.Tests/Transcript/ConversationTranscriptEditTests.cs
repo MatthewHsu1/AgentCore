@@ -108,10 +108,10 @@ namespace AgentCore.Application.Tests.Transcript
         }
 
         [Fact]
-        public void Resume_ThenTruncateLastReply_ActuallyCuts()
+        public void Resume_ThenRewriteReply_ActuallyCuts()
         {
             // A resumed conversation has to know which reply a barge-in aims at. With no ordinal to aim at,
-            // TruncateLastReply returns an empty list, which the provider reports as a write it declined
+            // RewriteReply returns an empty list, which the provider reports as a write it declined
             // rather than as a cut it lost — so the caller is silently not heard.
             ConversationTranscript transcript = new() { ConversationId = "conversation-1" };
             _ = transcript.Resume(
@@ -121,7 +121,7 @@ namespace AgentCore.Application.Tests.Transcript
                 ],
                 new TranscriptMarks(NextOrdinal: 2, NextTurnIndex: 1));
 
-            IReadOnlyList<ConversationMessage> rows = transcript.TruncateLastReply("it ships");
+            IReadOnlyList<ConversationMessage> rows = transcript.RewriteReply("it ships").Rewritten;
 
             _ = Assert.Single(rows);
             Assert.Equal("it ships", rows[0].Content.Text);

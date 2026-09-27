@@ -7,6 +7,7 @@ using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Diagnostics;
 using AgentCore.Application.Tests.Evaluation.Fakes;
 using AgentCore.Application.Tests.Runtime;
@@ -68,9 +69,7 @@ namespace AgentCore.Application.Tests.Audit
             agent: only
         """;
 
-        // -------------------------------------------------------------------------------------------
         // A flagged prompt.
-        // -------------------------------------------------------------------------------------------
         [Fact]
         public async Task AFlaggedPrompt_WritesTheFlagBeforeTheTurnEvent()
         {
@@ -204,9 +203,7 @@ namespace AgentCore.Application.Tests.Audit
             Assert.All(events, AuditEventVocabulary.Validate);
         }
 
-        // -------------------------------------------------------------------------------------------
         // A clean prompt, and the fail-open rule.
-        // -------------------------------------------------------------------------------------------
         [Fact]
         public async Task ACleanPrompt_ReachesTheModelAndWritesNoFlag()
         {
@@ -297,9 +294,7 @@ namespace AgentCore.Application.Tests.Audit
             Assert.Equal(2, sink.EventsOf("conversation-1").Count);
         }
 
-        // -------------------------------------------------------------------------------------------
         // The streaming path takes the same decision.
-        // -------------------------------------------------------------------------------------------
         [Fact]
         public async Task AFlaggedPrompt_StreamsTheRefusalAndOpensNoModelStream()
         {
@@ -311,6 +306,12 @@ namespace AgentCore.Application.Tests.Audit
             List<string> spoken = [];
             await foreach (ChatResponseUpdate update in session.RunTurnStreamingAsync("...", TestContext.Current.CancellationToken))
             {
+                // The trailing update is the turn's committed ids (design section 6, step E5), not text.
+                if (update.Contents.OfType<TurnCommittedContent>().Any())
+                {
+                    continue;
+                }
+
                 spoken.Add(update.Text);
             }
 
@@ -333,9 +334,7 @@ namespace AgentCore.Application.Tests.Audit
             Assert.Equal(1, model.Calls);
         }
 
-        // -------------------------------------------------------------------------------------------
         // Helpers.
-        // -------------------------------------------------------------------------------------------
         private static ConversationSessionFactory Build(
             string yaml,
             IChatClient reply,
@@ -344,11 +343,10 @@ namespace AgentCore.Application.Tests.Audit
             ILogger? logger = null,
             ScriptedModerationEvaluator? moderation = null)
         {
-            // There is always a sink now: ConversationObservers.Standard takes a required one, because the
-            // composition root resolves providers.audit for every host and falls back to the in-process
-            // memory kind. An optional parameter has to be a compile-time constant, so the default is
-            // spelled here instead — a fact that does not care where its events land gets a fresh
-            // in-memory sink and reads exactly as it did when it passed nothing.
+            // ConversationObservers.Standard takes a required sink, because the composition root resolves
+            // providers.audit for every host and falls back to the in-process memory kind. An optional
+            // parameter has to be a compile-time constant, so the default is spelled here instead — a fact
+            // that does not care where its events land gets a fresh in-memory sink.
             IAuditSinkPort auditSink = sink ?? new InMemoryAuditSink();
 
             AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(yaml);

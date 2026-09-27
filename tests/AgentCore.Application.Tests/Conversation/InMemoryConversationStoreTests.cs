@@ -4,7 +4,6 @@ using AgentCore.Application.Transcript;
 using AgentCore.Application.Tests.Runtime;
 using Microsoft.Extensions.AI;
 using Xunit;
-using System.Text.Json;
 
 namespace AgentCore.Application.Tests.Conversation
 {
@@ -248,34 +247,32 @@ namespace AgentCore.Application.Tests.Conversation
         }
 
         [Fact]
-        public async Task DeleteAsync_AConversation_TakesItsSameIdContinuationWithIt()
+        public async Task DeleteAsync_AConversation_TakesItsResponseContinuationsWithIt()
         {
-            // Arrange — one id plays three roles now: the conversation, the conversation, and the continuation
-            // key. Deleting the conversation must forget the key or the next thread turn resumes the dead conversation.
+            // Arrange — a response id's row hangs off the conversation it continues; deleting the
+            // conversation must forget it too, or a later turn under a reused id could resolve a dead one.
             InMemoryConversationStore store = new();
             _ = await store.CreateAsync("c1", Token);
-            using JsonDocument document = JsonDocument.Parse("""{ "conversationId": "c1" }""");
-            await store.SaveContinuationAsync("c1", "c1", document.RootElement, Token);
+            await store.SaveContinuationAsync("resp_1", "c1", Token);
 
             // Act
             await store.DeleteAsync("c1", Token);
 
             // Assert
-            Assert.Null(await store.GetContinuationAsync("c1", Token));
+            Assert.Null(await store.FindContinuationAsync("resp_1", Token));
         }
 
         [Fact]
-        public async Task SweepAsync_AContinuationPastRetention_TakesTheRowOnly()
+        public async Task SweepAsync_AResponseIdPastRetention_TakesTheRowOnly()
         {
-            // Arrange — retention ages out resume state, not the conversation it resumes: the words and
-            // the slots the extractor filled stay, the same way a stale response id stops resolving with
-            // most providers while the conversation itself lives on.
+            // Arrange — retention ages out response ids, not the conversation they continue: the words and
+            // the slots the extractor filled stay, the same way a stale response id stops resolving while
+            // the conversation itself lives on.
             TestTimeProvider clock = new();
             InMemoryConversationStore store = new(clock);
             _ = await store.CreateAsync("c1", Token);
             _ = await store.AppendAsync("c1", [Word()], new ConversationSessionState { Stage = "collecting" }, Token);
-            using JsonDocument document = JsonDocument.Parse("""{ "state": {} }""");
-            await store.SaveContinuationAsync("c1", "c1", document.RootElement, Token);
+            await store.SaveContinuationAsync("resp_1", "c1", Token);
 
             // Act
             clock.Advance(TimeSpan.FromDays(2));
@@ -283,8 +280,21 @@ namespace AgentCore.Application.Tests.Conversation
 
             // Assert
             Assert.Equal(1, swept);
-            Assert.Null(await store.GetContinuationAsync("c1", Token));
+            Assert.Null(await store.FindContinuationAsync("resp_1", Token));
             Assert.NotNull(await store.GetAsync("c1", Token));
+        }
+
+        [Fact]
+        public async Task FindContinuationAsync_AConversationIdWithNoResponseRow_IsNull()
+        {
+            // Arrange — D3: a conversation id is never itself a response_continuation row, so resolving one
+            // to "its own" continuation finds nothing; a caller falls back to GetAsync for that.
+            InMemoryConversationStore store = new();
+            _ = await store.CreateAsync("c1", Token);
+            await store.SaveContinuationAsync("resp_1", "c1", Token);
+
+            // Act & Assert
+            Assert.Null(await store.FindContinuationAsync("c1", Token));
         }
 
         private static ConversationMessageDraft Word()

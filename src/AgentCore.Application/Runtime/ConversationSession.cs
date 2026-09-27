@@ -1,16 +1,16 @@
 using System.Text.Json;
-using AgentCore.Application.Conversation;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Conversation;
 using AgentCore.Application.Policy;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime.Harness;
 using AgentCore.Application.State;
 using AgentCore.Application.Transcript;
 using AgentCore.Domain;
-using AgentCore.Domain.Knowledge;
 using AgentCore.Domain.Audit;
+using AgentCore.Domain.Knowledge;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -39,6 +39,13 @@ namespace AgentCore.Application.Runtime
         public const string ToolFailureReason = "a tool failed four times in a row, so the turn spoke the fallback.";
 
         /// <summary>
+        /// The reason a turn whose run faulted outside every tool reports, before the message of the fault: a model
+        /// endpoint that did not answer, or a graph that matched no edge. No tool let the fault out, so this is never
+        /// <see cref="ToolFailureReason"/>'s wording.
+        /// </summary>
+        public const string RunFaultReason = "the turn's run faulted, so it spoke the fallback.";
+
+        /// <summary>
         /// The failure the turn records when the completion work passes its deadline.
         /// </summary>
         internal const string ExtractionTimedOutReason = "the turn completion passed its deadline.";
@@ -58,9 +65,6 @@ namespace AgentCore.Application.Runtime
         /// </summary>
         internal static readonly TimeSpan TurnCompletionTimeout = TimeSpan.FromSeconds(5);
 
-        // Phase 1 seam: one live-state owner, verb-split operators. The helpers below hold this
-        // session and operate on the same fields under the same lock; only ownership of the verbs
-        // moved, so every commit protocol is byte-identical to the single-file shape.
         internal StagePolicy? Policy { get; }
 
         internal StateExtractor? Extractor { get; }
@@ -79,7 +83,7 @@ namespace AgentCore.Application.Runtime
 
         internal ILogger Logger { get; }
 
-        internal Lock InterruptLock { get; } = new();
+        internal Lock TurnLock { get; } = new();
 
         internal ConversationShells? Shells { get; }
 
@@ -100,11 +104,10 @@ namespace AgentCore.Application.Runtime
         /// </summary>
         internal JsonElement? GraphBlob { get; set; }
 
-        internal CancellationTokenSource? RunCancellation { get; set; }
-
-        internal ConversationInterruptionTracker.Interruption? Interruption { get; set; }
-
         internal Guid? AmendableEventId { get; set; }
+
+        /// <summary>The words the rows of the turn <see cref="AmendableEventId"/> names say now.</summary>
+        internal string? AmendableText { get; set; }
 
         internal ConversationSessionState? Checkpoint { get; set; }
 
@@ -114,17 +117,17 @@ namespace AgentCore.Application.Runtime
 
         internal ConversationTurnStream Stream { get; }
 
-        internal ConversationTurnCompletion Completion { get; }
-
         internal ConversationTurnWriters Writers { get; }
 
-        internal ConversationInterruptionTracker Interruptions { get; }
+        internal ConversationCutTracker Cuts { get; }
 
         internal ConversationTranscriptLedger Ledger { get; }
 
         internal ConversationSessionStateStore States { get; }
 
         internal ConversationSessionLifetime Lifetime { get; }
+
+        internal ConversationBusyMark Busy { get; }
 
         /// <summary>
         /// Creates the session of one conversation.
@@ -160,43 +163,33 @@ namespace AgentCore.Application.Runtime
 
             Time = timeProvider;
 
-            // The seam is optional and it has a working default. A host that binds nothing to watch the
-            // conversation still answers it, and the library never throws for want of an observer.
             Events = new ConversationEventChain(conversationId, observers ?? new ConversationObserverDispatcher([]), timeProvider);
 
             StartedAt = timeProvider.GetUtcNow();
 
-            // An entry with no policy: has no stage machine. The single-agent row and both graph rows
-            // read that way, and neither of them ever ends a conversation by itself.
             Policy = compiled.Policy is null ? null : compiled.CreatePolicy(guards);
 
             State = new StateDocument(compiled.Configuration, Policy?.Stage);
 
-            // The writers run in a fixed order, and this is its only record: const slots land before
-            // any turn, then each turn applies tool results, the extractor, the clock fields and the
-            // counters, in CompleteTurnAsync. Guards read the finished document, so the order is
-            // load-bearing.
             _ = ConstStateWriter.Apply(State);
 
-            // The first fact of this SESSION, and not necessarily of the conversation: a resumed conversation raises a
-            // second one, behind the turns of the session before it. Nothing allocates a position here
-            // any more — store 3 assigns the sequence — so a second one collides with nothing, and it is
-            // raised rather than suppressed because a session picking the conversation up is a fact that
-            // happened and the chain is where facts that happened go. Suppressing it is also not
-            // available from here: knowing whether the conversation already has words needs the store read that
-            // only OpenSessionAsync can do, and moving the raise there would let a conversation opened, never
-            // spoken to, and then ended through EndConversation write a conversation.ended with no conversation.started in front
-            // of it.
             _ = Events.Raise(ConversationEventKind.ConversationStarted, StartedAt, turnIndex: null);
 
             Runner = new ConversationTurnRunner(this);
+
             Stream = new ConversationTurnStream(this);
-            Completion = new ConversationTurnCompletion(this);
+
             Writers = new ConversationTurnWriters(this);
-            Interruptions = new ConversationInterruptionTracker(this);
+
+            Cuts = new ConversationCutTracker(this);
+
             Ledger = new ConversationTranscriptLedger(this);
+
             States = new ConversationSessionStateStore(this);
+
             Lifetime = new ConversationSessionLifetime(this);
+
+            Busy = new ConversationBusyMark(this);
         }
 
         /// <summary>
@@ -291,7 +284,7 @@ namespace AgentCore.Application.Runtime
         {
             ArgumentNullException.ThrowIfNull(userInput);
 
-            return Runner.RunTurnCoreAsync(new ChatMessage(ChatRole.User, userInput), origin, cancellationToken);
+            return Stream.RunTurnCoreAsync(new ChatMessage(ChatRole.User, userInput), origin, cancellationToken);
         }
 
         /// <summary>
@@ -303,13 +296,13 @@ namespace AgentCore.Application.Runtime
         {
             ArgumentNullException.ThrowIfNull(userInput);
 
-            return Runner.RunTurnCoreAsync(userInput, origin, cancellationToken);
+            return Stream.RunTurnCoreAsync(userInput, origin, cancellationToken);
         }
 
         /// <summary>Runs one turn and streams the reply as it arrives.</summary>
         /// <returns>The reply, one update at a time. Every update carries content.</returns>
         /// <exception cref="InvalidOperationException">
-        /// The conversation already reached a terminal stage, another turn of this conversation is still running, or the
+        /// The conversation already reached a terminal stage, another turn of this conversation still ran after the wait limit, or the
         /// stage the machine holds names no agent.
         /// </exception>
         public IAsyncEnumerable<ChatResponseUpdate> RunTurnStreamingAsync(
@@ -321,7 +314,7 @@ namespace AgentCore.Application.Runtime
         /// <summary>Runs one turn from a message the caller built and streams the reply as it arrives.</summary>
         /// <returns>The reply, one update at a time. Every update carries content.</returns>
         /// <exception cref="InvalidOperationException">
-        /// The conversation already reached a terminal stage, another turn of this conversation is still running, or the
+        /// The conversation already reached a terminal stage, another turn of this conversation still ran after the wait limit, or the
         /// stage the machine holds names no agent.
         /// </exception>
         public IAsyncEnumerable<ChatResponseUpdate> RunTurnMessageStreamingAsync(
@@ -376,15 +369,23 @@ namespace AgentCore.Application.Runtime
             return Stream.RunTurnStreamingCoreAsync(userInput, origin, cancellationToken);
         }
 
-        /// <summary>
-        /// Ends the running turn where the caller cut the reply off.
-        /// </summary>
-        public bool Interrupt(
-            string utteranceUntilInterrupt,
-            TimeSpan durationUntilInterrupt,
-            bool cutsRunningTurn = true)
+        /// <inheritdoc />
+        public Task<TurnRun> StartTurnAsync(
+            ChatMessage userInput, ConversationTurnOrigin? origin, CancellationToken cancellationToken = default)
         {
-            return Interruptions.Interrupt(utteranceUntilInterrupt, durationUntilInterrupt, cutsRunningTurn);
+            return Stream.StartTurnAsync(userInput, origin, cancellationToken);
+        }
+
+        /// <inheritdoc />
+        public bool Cut(int turnIndex, TurnCut cut)
+        {
+            return Cuts.Cut(turnIndex, cut);
+        }
+
+        /// <inheritdoc />
+        public bool Recut(int turnIndex, TurnCut cut)
+        {
+            return Cuts.Recut(turnIndex, cut);
         }
 
         /// <summary>Closes the conversation, and writes the last event of its chain.</summary>
@@ -394,8 +395,8 @@ namespace AgentCore.Application.Runtime
         }
 
         /// <summary>
-        /// Disposes this conversation's background sessions and shell executors. Idempotent: a session already
-        /// disposed, or one that never had either, disposes nothing.
+        /// Refuses every later turn, waits for a running one to end, and disposes this conversation's background sessions
+        /// and shell executors. Idempotent: a session already disposed, or one that never had either, disposes nothing.
         /// </summary>
         public ValueTask DisposeAsync()
         {
@@ -411,10 +412,10 @@ namespace AgentCore.Application.Runtime
         }
 
         /// <summary>
-        /// Reads the state this conversation would resume from, as it stands right now. The provider state is
-        /// read off the live bag with no turn lock around it, so a host serializing mid-turn gets the
-        /// bag as it stands at that instant, not a turn-boundary snapshot. A graph row that reuses
-        /// its session instead attaches that session's last turn-end serialization.
+        /// Reads the state this conversation would resume from, as it stands right now. A host serializing mid-turn
+        /// gets the provider state off the live bag at that instant, not a turn-boundary snapshot, read under the turn
+        /// lock so it never falls inside a catch-up's swap. A graph row that reuses its session instead attaches that
+        /// session's last turn-end serialization.
         /// </summary>
         internal ConversationSessionState Snapshot()
         {

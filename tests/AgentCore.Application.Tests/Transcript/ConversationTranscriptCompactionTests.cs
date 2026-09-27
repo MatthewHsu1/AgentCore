@@ -157,7 +157,7 @@ namespace AgentCore.Application.Tests.Transcript
         }
 
         [Fact]
-        public void TruncateLastReply_NeverRewritesTheSummary()
+        public void RewriteReply_NeverRewritesTheSummary()
         {
             // The summary is an assistant message with text, in the same turn as the reply. A barge-in
             // must cut the reply and leave the summary whole.
@@ -166,7 +166,7 @@ namespace AgentCore.Application.Tests.Transcript
             _ = transcript.Compact(Assistant("past"), coversUpTo: 3, transcript.Revision);
             _ = transcript.Append([User("q5"), Assistant("a5 in full")]);
 
-            IReadOnlyList<ConversationMessage> rows = transcript.TruncateLastReply("a5");
+            IReadOnlyList<ConversationMessage> rows = transcript.RewriteReply("a5").Rewritten;
 
             Assert.Equal("a5", Assert.Single(rows).Content.Text);
             Assert.Equal("past", transcript.Summary?.Message.Text);

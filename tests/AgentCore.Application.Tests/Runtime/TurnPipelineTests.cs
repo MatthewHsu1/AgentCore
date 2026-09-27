@@ -22,10 +22,9 @@ namespace AgentCore.Application.Tests.Runtime
     /// </summary>
     /// <remarks>
     /// <para>
-    /// R1, R2 and R3 used to be branches of the turn loop. They are two chat pipeline layers now:
-    /// <c>ModerationChatClient</c> refuses a flagged turn before the model runs, and
-    /// <c>FallbackChatClient</c> answers a run that threw or produced no text. Both report what they did
-    /// on a <c>TurnDisposition</c>, and the turn loop reads it to raise the rows it always raised.
+    /// R1, R2 and R3 are two pipeline layers: <c>ModerationAgent</c> refuses a flagged turn before the model
+    /// runs, and <c>FallbackAgent</c> answers a run that threw or produced no text. Both report what they did
+    /// on a <c>TurnDisposition</c>, and the turn loop reads it to raise the turn's rows.
     /// </para>
     /// <para>Every test here runs offline. There is no network conversation and no API key in this file.</para>
     /// </remarks>
@@ -200,7 +199,7 @@ namespace AgentCore.Application.Tests.Runtime
         }
 
         [Fact]
-        public async Task Run_ThrownOutcome_RaisesSameAuditRowsAsBefore()
+        public async Task Run_ThrownOutcome_WritesNoToolFailedRow()
         {
             // Arrange.
             InMemoryAuditSink sink = new();
@@ -208,15 +207,14 @@ namespace AgentCore.Application.Tests.Runtime
             ConversationSession session = Build(PlainYaml, model, sink: sink).Create("conversation-1");
 
             // Act.
-            _ = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
+            TurnResult turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
 
-            // Assert. The turn-altitude tool.failed row still names the fault, and still precedes the
-            // turn.completed of the same turn.
+            // Assert. The model threw, not a tool, so the turn fails as a run fault and names no tool.
             IReadOnlyList<AuditEvent> events = sink.EventsOf("conversation-1");
             Assert.Equal(
-                [AuditEventKind.ConversationStarted, AuditEventKind.ToolFailed, AuditEventKind.TurnCompleted],
+                [AuditEventKind.ConversationStarted, AuditEventKind.TurnCompleted],
                 events.Select(entry => entry.Kind));
-            Assert.Contains("the vendor is down", events[1].Payload[AuditPayloadKeys.ToolError], StringComparison.Ordinal);
+            Assert.Equal("the turn's run faulted, so it spoke the fallback. the vendor is down", turn.Failure);
         }
 
         // -------------------------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.AspNetCore.Conversation;
+using AgentCore.AspNetCore.Voice;
 using Microsoft.AspNetCore.Http;
 
 namespace AgentCore.AspNetCore.Vendors.TelnyxRelay
@@ -23,15 +23,6 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay
     {
         /// <summary>The one <c>providers.conversation.kind</c> value this vendor answers to.</summary>
         public const string TelnyxRelayKind = "telnyx-relay";
-
-        /// <summary>The longest delay <c>Task.Delay</c>, <c>CancelAfter</c>, and <c>Task.WaitAsync</c> all accept.</summary>
-        /// <remarks>
-        /// One millisecond short of <see cref="uint.MaxValue"/> — about 49.7 days — confirmed on net10
-        /// for all three. The schema caps the document at 4294967 whole seconds for the same reason;
-        /// this check stays because the schema cannot express the ceiling without duplicating the
-        /// runtime constant.
-        /// </remarks>
-        private static readonly TimeSpan MaximumBoundedDelay = TimeSpan.FromMilliseconds(uint.MaxValue - 1);
 
         /// <inheritdoc/>
         public string Kind => TelnyxRelayKind;
@@ -90,6 +81,8 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay
                 options.CloseTimeout = ToTimeSpan("closeTimeoutSeconds", close);
             }
 
+            options.Voice = VoiceOptionsBinder.Build(configuration);
+
             return options;
         }
 
@@ -110,12 +103,12 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay
             }
 
             TimeSpan value = TimeSpan.FromSeconds(seconds);
-            return value <= MaximumBoundedDelay
+            return value <= BoundedTimerLimits.MaximumBoundedDelay
                 ? value
                 : throw Fail(
                     field,
                     $"is {seconds} seconds, which Task.Delay, CancelAfter, and Task.WaitAsync all "
-                    + $"refuse at run time. The longest a timer can hold is {MaximumBoundedDelay}.");
+                    + $"refuse at run time. The longest a timer can hold is {BoundedTimerLimits.MaximumBoundedDelay}.");
         }
 
         /// <summary>Builds the one failure every check here raises, pointed at the field.</summary>

@@ -22,7 +22,7 @@ namespace AgentCore.Application.Tests.Knowledge
     /// </summary>
     /// <remarks>
     /// Every test drives the search tool <c>KnowledgeProviderFactory</c> offers, the same way
-    /// <c>KnowledgeProviderFactoryTests</c> does, rather than through <c>ConversationSession</c>: the probe reads
+    /// <c>KnowledgeProviderFactorySearchTests</c> does, rather than through <c>ConversationSession</c>: the probe reads
     /// only the turn (<see cref="Clarifications"/>, the knowledge scope, the history flag) and the
     /// resolved <c>knowledge:</c> block, so filing exactly those by hand proves the same mechanism a
     /// real conversation would exercise, at a fraction of the setup. The genuinely two-turn and

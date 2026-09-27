@@ -80,7 +80,7 @@ namespace AgentCore.Application.Configuration.Compilation
         /// <summary>
         /// Gets the agents whose reply the caller hears, or <see langword="null"/> for all of them.
         /// </summary>
-        internal IReadOnlySet<string>? SpokenBy => _layers.SpokenBy;
+        internal IReadOnlySet<string>? OutputAgents => _layers.OutputAgents;
 
         /// <summary>
         /// Gets store 1 of every conversation this agent answers.

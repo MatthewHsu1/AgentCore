@@ -5,8 +5,7 @@ using Microsoft.Agents.AI;
 namespace AgentCore.Application.Configuration.Compilation
 {
     /// <summary>
-    /// One row of the section 8.2 compile table. The row owns everything the compiler decides per
-    /// shape, so adding a shape is one new row and nothing else.
+    /// Turns one entry into the agent a turn runs.
     /// </summary>
     internal abstract class CompileTableRow
     {
@@ -14,7 +13,6 @@ namespace AgentCore.Application.Configuration.Compilation
         internal abstract CompiledAgentShape Shape { get; }
 
         /// <summary>Gets whether the row answers its runs out of store 1 on its own session.</summary>
-        /// <remarks>Rows 1 and 2 ride the session. A graph run rides the request messages.</remarks>
         internal virtual bool SessionCarriesHistory => false;
 
         /// <summary>Builds the entry agent of one entry, and the stage table when the row has one.</summary>
@@ -24,6 +22,11 @@ namespace AgentCore.Application.Configuration.Compilation
         /// <param name="entryPointer">The JSON Pointer to the entry, <c>/entries/&lt;name&gt;</c>.</param>
         /// <param name="agents">The compiled <c>agents.items</c> entries, keyed by id.</param>
         /// <param name="context">The seams the document names.</param>
+        /// <param name="reusesGraphSession">
+        /// <see langword="true"/> when a conversation on this entry keeps one MAF session across turns
+        /// (<c>!SessionCarriesHistory &amp;&amp; HarnessStateKeys.Count &gt; 0</c>, the same test
+        /// <see cref="AgentCore.Application.Runtime.ConversationSession.ReusesGraphSession"/> runs). Only the graph rows read it.
+        /// </param>
         /// <returns>The agent a turn runs, and the agent id each <c>policy.stages</c> entry names.</returns>
         /// <exception cref="ConfigurationLoadException">The entry does not compile through this row.</exception>
         internal abstract EntryBuild BuildEntry(
@@ -32,7 +35,8 @@ namespace AgentCore.Application.Configuration.Compilation
             EntryConfiguration entry,
             string entryPointer,
             Dictionary<string, AIAgent> agents,
-            AgentCompilationContext context);
+            AgentCompilationContext context,
+            bool reusesGraphSession);
 
         /// <summary>Names the agents whose reply the caller actually hears.</summary>
         /// <param name="configuration">The loaded document.</param>

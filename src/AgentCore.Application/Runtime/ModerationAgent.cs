@@ -14,7 +14,9 @@ namespace AgentCore.Application.Runtime
         internal static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(2);
 
         private readonly PromptModerator _moderator;
+
         private readonly string _refusalReply;
+
         private readonly TimeSpan _timeout;
 
         /// <summary>Puts moderation in front of one turn agent.</summary>
@@ -85,10 +87,6 @@ namespace AgentCore.Application.Runtime
                 yield break;
             }
 
-            // A leading update with EMPTY contents. Empty contents contribute no text, so the caller's
-            // audio is untouched and the turn seam drops the update before the host ever sees it.
-            // Update-level properties do not survive streaming coalescing, which is why the marker rides
-            // an update of its own rather than the assistant message the updates fold into.
             AgentResponseUpdate marker = new() { Role = ChatRole.Assistant };
             Attach(marker.AdditionalProperties ??= [], verdict);
             yield return marker;
@@ -170,7 +168,7 @@ namespace AgentCore.Application.Runtime
         {
             if (properties.TryGetValue(out TurnDisposition? existing) && existing is not null)
             {
-                verdict = verdict with { Fallback = existing.Fallback, FallbackReason = existing.FallbackReason };
+                verdict = verdict with { Fallback = existing.Fallback, FallbackFault = existing.FallbackFault };
                 _ = properties.Remove<TurnDisposition>();
             }
 

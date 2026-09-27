@@ -1,3 +1,7 @@
+using System.Collections.ObjectModel;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace AgentCore.Application.Configuration.Schema
 {
     /// <summary>
@@ -16,5 +20,18 @@ namespace AgentCore.Application.Configuration.Schema
 
         /// <summary>Gets the largest inbound frame the socket accepts, in bytes, or null for the adapter's default.</summary>
         public int? MaxFrameBytes { get; init; }
+
+        /// <summary>
+        /// Gets the caller-away prompt a voice adapter opens: <c>{ timeoutSeconds, say }</c>. Voice conversations only.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public JsonElement UserAway { get; init; }
+
+        /// <summary>
+        /// Gets the filler each tool id opens while its call is running, keyed by tool id. Voice
+        /// conversations only. A tool id this does not name opens no filler.
+        /// </summary>
+        public IReadOnlyDictionary<string, VoiceFillerConfiguration> Filler { get; init; } =
+            ReadOnlyDictionary<string, VoiceFillerConfiguration>.Empty;
     }
 }

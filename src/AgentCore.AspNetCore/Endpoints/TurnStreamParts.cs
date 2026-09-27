@@ -58,6 +58,15 @@ namespace AgentCore.AspNetCore.Endpoints
                     yield return part;
                 }
             }
+
+            foreach (TurnCommittedContent committed in update.Contents.OfType<TurnCommittedContent>())
+            {
+                yield return new TurnStreamPart(TurnStreamPart.MessageCommitted, new MessageCommittedPayload
+                {
+                    UserMessageId = committed.UserMessageId,
+                    ReplyMessageId = committed.ReplyMessageId,
+                });
+            }
         }
 
         /// <summary>Frames one notice for the browser, or <see langword="null"/> for a kind it does not show.</summary>
@@ -163,5 +172,8 @@ namespace AgentCore.AspNetCore.Endpoints
 
         /// <summary>One file the turn produced: a <see cref="FilePayload"/>.</summary>
         public const string File = "agentcore_file";
+
+        /// <summary>The ids one turn's commit wrote: a <see cref="MessageCommittedPayload"/>.</summary>
+        public const string MessageCommitted = "agentcore_message_committed";
     }
 }

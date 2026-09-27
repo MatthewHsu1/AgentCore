@@ -1,14 +1,9 @@
 using AgentCore.TestSupport;
 using AgentCore.Application.Sessions.Memory;
-using AgentCore.Application.Configuration.Compilation;
-using AgentCore.Application.Configuration.Parsing;
-using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
-using Microsoft.Extensions.AI;
-using Xunit;
 using AgentCore.Domain;
-using AgentCore.Application.Configuration.Schema;
+using Xunit;
+using static AgentCore.Application.Tests.Sessions.ConversationSessionsFixture;
 
 namespace AgentCore.Application.Tests.Sessions
 {
@@ -17,16 +12,34 @@ namespace AgentCore.Application.Tests.Sessions
     /// </summary>
     public sealed class ConversationSessionsTests
     {
-        private static CancellationToken Token => TestContext.Current.CancellationToken;
-
         [Fact]
         public async Task ASessionThatWasOpenedIsFoundAgainUnderItsConversationId()
         {
-            InMemoryConversationSessions sessions = new(Factory(), TimeSpan.FromMinutes(30), Clock());
+            using InMemoryConversationSessions sessions = new(SingleEntrySessionFactories.Of(Factory()), TimeSpan.FromMinutes(30), Clock());
 
-            ConversationSession opened = await sessions.OpenAsync("conversation-1", Token);
+            ConversationSession opened = await sessions.GetOrOpenAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", null, Token);
 
-            Assert.Same(opened, await sessions.TryGetAsync("conversation-1", Token));
+            Assert.Same(opened, await sessions.TryGetAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", Token));
+        }
+
+        [Fact]
+        public async Task OpeningTheSameIdAgainUnderTheSameEntryReturnsTheLiveSessionAndOneCloseReleasesIt()
+        {
+            // Two opens of the same id under the same entry share one build and return the same session.
+            using GatedSessionFactory factory = new(Factory());
+            factory.Release();
+            using InMemoryConversationSessions sessions = new(SingleEntrySessionFactories.Of(factory), TimeSpan.FromMinutes(30), Clock());
+
+            ConversationSession first = await sessions.GetOrOpenAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", null, Token);
+            ConversationSession second = await sessions.GetOrOpenAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", null, Token);
+
+            Assert.Same(first, second);
+            Assert.Equal(1, factory.Calls);
+
+            await sessions.CloseAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", Token);
+
+            Assert.Equal(0, sessions.Count);
+            _ = await Assert.ThrowsAsync<ObjectDisposedException>(() => first.RunTurnAsync("hello", Token));
         }
 
         [Fact]
@@ -35,13 +48,13 @@ namespace AgentCore.Application.Tests.Sessions
             // A real store answers over a network, so a write outlives the turn that queued it. This
             // session is the only thing that can wait for it, and closing is the last moment anything can.
             ParkingConversationStore transcript = new();
-            InMemoryConversationSessions sessions = new(Factory(transcript), TimeSpan.FromMinutes(30), Clock());
-            ConversationSession session = await sessions.OpenAsync("conversation-1", Token);
+            using InMemoryConversationSessions sessions = new(SingleEntrySessionFactories.Of(Factory(transcript)), TimeSpan.FromMinutes(30), Clock());
+            ConversationSession session = await sessions.GetOrOpenAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", null, Token);
 
             Task<TurnResult> turn = session.RunTurnAsync("hello", Token);
             await transcript.Parked;
 
-            Task closing = sessions.CloseAsync("conversation-1", Token).AsTask();
+            Task closing = sessions.CloseAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", Token).AsTask();
             bool returnedEarly = await Task.WhenAny(closing, Task.Delay(200, Token)) == closing;
             Assert.False(returnedEarly);
 
@@ -49,174 +62,33 @@ namespace AgentCore.Application.Tests.Sessions
             await closing;
 
             Assert.True(transcript.Landed);
-            Assert.Null(await sessions.TryGetAsync("conversation-1", Token));
+            Assert.Null(await sessions.TryGetAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", Token));
             _ = await turn;
         }
 
         [Fact]
-        public async Task ASessionNobodyTouchedPastTheIdleTimeoutIsClosed()
+        public async Task ASecondCloseOnTheSameIdWaitsForTheFirstsTeardownBeforeReturning()
         {
-            FakeTimeProvider clock = Clock();
-            InMemoryConversationSessions sessions = new(Factory(), TimeSpan.FromMinutes(30), clock);
-            _ = await sessions.OpenAsync("conversation-1", Token);
-
-            clock.Advance(TimeSpan.FromMinutes(31));
-            await sessions.SweepAsync(Token);
-
-            // A caller that abandons a text conversation never reaches a terminal stage, so nothing else would
-            // ever drop this session and the process would hold it for its whole life.
-            Assert.Null(await sessions.TryGetAsync("conversation-1", Token));
-            Assert.Equal(0, sessions.Count);
-        }
-
-        [Fact]
-        public async Task ReadingASessionPutsItsIdleClockBackToZero()
-        {
-            FakeTimeProvider clock = Clock();
-            InMemoryConversationSessions sessions = new(Factory(), TimeSpan.FromMinutes(30), clock);
-            _ = await sessions.OpenAsync("conversation-1", Token);
-
-            clock.Advance(TimeSpan.FromMinutes(20));
-            Assert.NotNull(await sessions.TryGetAsync("conversation-1", Token));
-
-            // Forty minutes since it was opened, twenty since it was last read. A conversation still being had
-            // must not be dropped out from under the caller.
-            clock.Advance(TimeSpan.FromMinutes(20));
-            await sessions.SweepAsync(Token);
-
-            Assert.NotNull(await sessions.TryGetAsync("conversation-1", Token));
-        }
-
-        [Fact]
-        public async Task AnExpiringSessionStillHandsOverTheWordsItOwed()
-        {
-            // The reason expiry goes through CloseAsync. An evictor that dropped the entry on its own
-            // would return with the write still in flight, and nothing left able to wait for it.
             ParkingConversationStore transcript = new();
-            FakeTimeProvider clock = Clock();
-            InMemoryConversationSessions sessions = new(Factory(transcript), TimeSpan.FromMinutes(30), clock);
-            ConversationSession session = await sessions.OpenAsync("conversation-1", Token);
+            using InMemoryConversationSessions sessions = new(SingleEntrySessionFactories.Of(Factory(transcript)), TimeSpan.FromMinutes(30), Clock());
+            ConversationSession session = await sessions.GetOrOpenAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", null, Token);
 
             Task<TurnResult> turn = session.RunTurnAsync("hello", Token);
             await transcript.Parked;
-            clock.Advance(TimeSpan.FromMinutes(31));
 
-            Task sweeping = sessions.SweepAsync(Token).AsTask();
-            bool returnedEarly = await Task.WhenAny(sweeping, Task.Delay(200, Token)) == sweeping;
-            Assert.False(returnedEarly);
+            Task first = sessions.CloseAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", Token).AsTask();
+            Task second = sessions.CloseAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", Token).AsTask();
+
+            bool secondReturnedEarly = await Task.WhenAny(second, Task.Delay(200, Token)) == second;
+            Assert.False(secondReturnedEarly, "the second close must wait for the first's teardown, not return on its own.");
 
             transcript.Release();
-            await sweeping;
-
-            Assert.True(transcript.Landed);
-            Assert.Equal(0, sessions.Count);
+            await first;
+            await second;
             _ = await turn;
+
+            Assert.True(transcript.Landed, "the second close returned before the teardown it waited for was done.");
+            Assert.Null(await sessions.TryGetAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", Token));
         }
-
-        [Fact]
-        public async Task AnExpiringSessionWritesTheLastEventOfItsChain()
-        {
-            // §11 item 6 makes conversation.ended the last event of every conversation. A caller who simply stops
-            // replying closes no socket and reaches no terminal stage, so expiry is the only thing left
-            // that can write it, and a chain with no end is a permanent gap in the record of D23.
-            RecordingConversationObserver observer = new();
-            FakeTimeProvider clock = Clock();
-            InMemoryConversationSessions sessions = new(
-                Factory(observer: observer), TimeSpan.FromMinutes(30), clock);
-            _ = await sessions.OpenAsync("conversation-1", Token);
-
-            clock.Advance(TimeSpan.FromMinutes(31));
-            await sessions.SweepAsync(Token);
-
-            Assert.Contains(observer.Kinds, kind => kind == ConversationEventKind.ConversationEnded);
-        }
-
-
-        private static FakeTimeProvider Clock()
-        {
-            return new(new DateTimeOffset(2026, 8, 20, 12, 0, 0, TimeSpan.Zero));
-        }
-
-        private const string Document = """
-        apiVersion: agentcore/v1
-        agents:
-          items:
-            - { id: only, instructions: "ok" }
-        entries:
-          main:
-            agent: only
-        """;
-
-        private static ConversationSessionFactory Factory(
-            IConversationStore? transcript = null,
-            string? yaml = null,
-            IChatClient? reply = null,
-            IConversationObserver? observer = null)
-        {
-            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(yaml ?? Document);
-            RoutingChatClientFactory chatClients = new(reply ?? new StubChatClient());
-            CompiledAgent compiled = ConfigurationCompiler.CompileAll(
-                document,
-                new AgentCompilationContext(chatClients) { ConversationStore = transcript })["main"];
-
-            return new ConversationSessionFactory(
-                compiled,
-                new GuardEvaluator(compiled.Configuration.Guards),
-                ConversationSessionFactory.CreateExtractor(compiled, chatClients),
-                observers: observer is null ? null : [observer]);
-        }
-
-        private sealed class StubChatClient : IChatClient
-        {
-            public Task<ChatResponse> GetResponseAsync(
-                IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken ct = default)
-            {
-                return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, "hello")));
-            }
-
-            public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-                IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken ct = default)
-            {
-                throw new NotSupportedException();
-            }
-
-            public object? GetService(Type serviceType, object? serviceKey = null)
-            {
-                return null;
-            }
-
-            public void Dispose()
-            {
-            }
-        }
-
-        /// <summary>Records the kind of every event one conversation raised.</summary>
-        private sealed class RecordingConversationObserver : IConversationObserver
-        {
-            private readonly List<ConversationEventKind> _kinds = [];
-
-            public IReadOnlyList<ConversationEventKind> Kinds
-            {
-                get
-                {
-                    lock (_kinds)
-                    {
-                        return [.. _kinds];
-                    }
-                }
-            }
-
-            public ValueTask OnConversationEventAsync(ConversationEvent conversationEvent, CancellationToken cancellationToken = default)
-            {
-                lock (_kinds)
-                {
-                    _kinds.Add(conversationEvent.Kind);
-                }
-
-                return ValueTask.CompletedTask;
-            }
-        }
-
-        /// <summary>The default store, counting the reads that keep a conversation out of the idle sweep.</summary>
     }
 }

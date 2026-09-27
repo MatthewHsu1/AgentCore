@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Conversation;
+using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tools;
 using Microsoft.Agents.AI;
@@ -8,6 +9,8 @@ using Microsoft.Agents.AI.Hosting.OpenAI;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AgentCore.AspNetCore.Endpoints
 {
@@ -24,46 +27,108 @@ namespace AgentCore.AspNetCore.Endpoints
             bool dialect,
             CancellationToken cancellationToken)
         {
+            // Started before the headers: only a started turn has opened its stored state and caught up on
+            // other sessions', so only then does the stage name the one the turn speaks in.
+            await using TurnRun run = await turn.Conversation
+                .StartTurnAsync(turn.Input, turn.Origin, cancellationToken).ConfigureAwait(false);
+
             http.Response.StatusCode = StatusCodes.Status200OK;
             http.Response.ContentType = "text/event-stream";
             http.Response.Headers.CacheControl = "no-cache";
-
-            // The headers leave before the turn ends, so this one names the stage the turn speaks in.
             http.Response.Headers[ResponsesEndpointRouteBuilderExtensions.StageHeaderName] = turn.Conversation.Stage;
 
             // One turn's worth of ids: the pairing dies with the stream.
             ToolCallNames toolNames = new();
 
-            IAsyncEnumerable<AgentResponseUpdate> updates = StreamAgentUpdatesAsync(http, turn, dialect, toolNames, cancellationToken);
+            IAsyncEnumerable<AgentResponseUpdate> updates = StreamAgentUpdatesAsync(http, turn, run, dialect, toolNames, cancellationToken);
+            string? lastFrame = null;
 
-            await foreach (string? frame in OpenAIResponses
-                .WriteResponseStreamAsync(updates, turn.ResponseId, turn.ConversationId, cancellationToken)
-                .ConfigureAwait(false))
+            try
             {
-                await http.Response.WriteAsync(frame, cancellationToken).ConfigureAwait(false);
+                await foreach (string? frame in OpenAIResponses
+                    .WriteResponseStreamAsync(updates, turn.ResponseId, turn.ConversationId, cancellationToken)
+                    .ConfigureAwait(false))
+                {
+                    await http.Response.WriteAsync(frame, cancellationToken).ConfigureAwait(false);
 
-                // Without this the reply arrives in one piece, which defeats the whole streaming path.
-                await http.Response.Body.FlushAsync(cancellationToken).ConfigureAwait(false);
+                    // Without this the reply arrives in one piece, which defeats the whole streaming path.
+                    await http.Response.Body.FlushAsync(cancellationToken).ConfigureAwait(false);
+                    lastFrame = frame;
+                }
             }
-
-            await turn.FileAsync(cancellationToken).ConfigureAwait(false);
+            catch (ConversationTurnConflictException) when (!cancellationToken.IsCancellationRequested)
+            {
+                // The reply already streamed, so the refusal can only end the stream, never set its status.
+                await ResponsesTurnConflict.WriteEventAsync(http, lastFrame, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                // The turn commits its words even when the host cancels mid-stream (design section 3), so the
+                // session still needs filing here, on a token that outlives the abort that cancelled the one above.
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    await FileAfterAbortAsync(
+                            turn.FileAsync,
+                            turn.Conversation.ConversationId,
+                            turn.Conversation.Time,
+                            http.RequestServices.GetService<ILoggerFactory>()?.CreateLogger(typeof(ResponsesTurnStream))
+                                ?? NullLogger.Instance)
+                        .ConfigureAwait(false);
+                }
+                else
+                {
+                    await turn.FileAsync(cancellationToken).ConfigureAwait(false);
+                }
+            }
         }
 
-        /// <summary>Runs one streaming turn on the conversation, wrapping each update with the agent's id.</summary>
+        /// <summary>
+        /// Files the session of a turn whose client has gone, within
+        /// <see cref="ConversationSession.TurnCompletionTimeout"/>: the same bound the rest of the work after
+        /// the reply runs under once the host's token no longer counts.
+        /// </summary>
+        /// <param name="file">Files the session; it reads the bound's token.</param>
+        /// <param name="conversationId">The conversation being filed, for the log.</param>
+        /// <param name="time">The clock the bound runs on.</param>
+        /// <param name="logger">Where a filing that outruns the bound is reported.</param>
+        /// <remarks>
+        /// The wait ends at the bound even when <paramref name="file"/> ignores its token. A filing that
+        /// outruns it is logged and dropped, not thrown: the client that could read the error is gone.
+        /// </remarks>
+        internal static async Task FileAfterAbortAsync(
+            Func<CancellationToken, Task> file, string conversationId, TimeProvider time, ILogger logger)
+        {
+            TimeSpan bound = ConversationSession.TurnCompletionTimeout;
+            using CancellationTokenSource deadline = new(bound, time);
+
+            try
+            {
+                await file(deadline.Token).WaitAsync(deadline.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested)
+            {
+                ResponsesTurnLog.FilingAfterAbortTimedOut(logger, conversationId, bound);
+            }
+        }
+
+        /// <summary>Reads one started turn's reply, wrapping each update with the agent's id.</summary>
         private static async IAsyncEnumerable<AgentResponseUpdate> StreamAgentUpdatesAsync(
             HttpContext http,
             ResponsesTurn turn,
+            TurnRun run,
             bool dialect,
             ToolCallNames toolNames,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
         {
             TurnStreamFiles files = new();
 
-            await foreach (ChatResponseUpdate? update in turn.Conversation
-                .RunTurnMessageStreamingAtOriginAsync(turn.Input, turn.Origin, cancellationToken)
-                .ConfigureAwait(false))
+            await foreach (ChatResponseUpdate? update in run.Updates.WithCancellation(cancellationToken).ConfigureAwait(false))
             {
                 bool isNotice = update.Contents.OfType<NoticeContent>().Any();
+
+                // Carries no text of its own (E5): the caller reads it off the agentcore_message_committed
+                // dialect part instead, never as spoken or output text.
+                bool isCommitted = update.Contents.OfType<TurnCommittedContent>().Any();
 
                 if (dialect)
                 {
@@ -72,13 +137,13 @@ namespace AgentCore.AspNetCore.Endpoints
                         await WritePartLineAsync(http, part, cancellationToken).ConfigureAwait(false);
                     }
 
-                    if (!isNotice)
+                    if (!isNotice && !isCommitted)
                     {
                         files.Note(update);
                     }
                 }
 
-                if (isNotice)
+                if (isNotice || isCommitted)
                 {
                     continue;
                 }

@@ -2,7 +2,7 @@ using AgentCore.TestSupport;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
-using AgentCore.AspNetCore.Conversation;
+using AgentCore.AspNetCore.Voice;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
@@ -47,7 +47,10 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         }
 
         /// <summary>Gets the sessions the host resolved, so a test reads the live ones.</summary>
-        public IConversationSessions Sessions => _app.Services.GetRequiredService<EntryRegistry>().ForSessions("main");
+        public IConversationSessions Sessions => _app.Services.GetRequiredService<EntryRegistry>().Sessions;
+
+        /// <summary>Gets the host's services, so a test reads the store the conversation wrote.</summary>
+        public IServiceProvider Services => _app.Services;
 
         /// <summary>Gets the <c>ws://</c> address of the relay route.</summary>
         /// <remarks>
@@ -227,7 +230,7 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         /// <returns>The session, or null.</returns>
         public async Task<ConversationSession?> FindSessionAsync(string conversationId)
         {
-            return await Sessions.TryGetAsync(conversationId, TestContext.Current.CancellationToken);
+            return await Sessions.TryGetAsync(SingleEntrySessionFactories.MainEntry, conversationId, TestContext.Current.CancellationToken);
         }
 
         /// <summary>Waits until the store no longer holds one conversation.</summary>

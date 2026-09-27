@@ -20,6 +20,7 @@ namespace AgentCore.Application.Tests.Runtime
                 { ConversationEventKind.ReplyInterrupted, AuditEventKind.ReplyInterrupted, "reply.interrupted" },
                 { ConversationEventKind.ConversationEnded, AuditEventKind.ConversationEnded, "conversation.ended" },
                 { ConversationEventKind.TurnSuperseded, AuditEventKind.TurnSuperseded, "turn.superseded" },
+                { ConversationEventKind.TurnRefused, AuditEventKind.TurnRefused, "turn.refused" },
             };
 
         /// <summary>Every diagnostic kind, beside the name a log line gives it.</summary>
@@ -32,7 +33,8 @@ namespace AgentCore.Application.Tests.Runtime
                 { ConversationEventKind.ExtractionFailed, "extraction.failed" },
                 { ConversationEventKind.TranscriptWriteFailed, "transcript.write.failed" },
                 { ConversationEventKind.StateRestorePartial, "state.restore.partial" },
-            { ConversationEventKind.TranscriptResyncFailed, "transcript.resync.failed" },
+                { ConversationEventKind.TranscriptResyncFailed, "transcript.resync.failed" },
+                { ConversationEventKind.RunFaulted, "run.faulted" },
             };
 
         [Theory]
@@ -63,8 +65,8 @@ namespace AgentCore.Application.Tests.Runtime
             int stored = Enum.GetValues<ConversationEventKind>()
                 .Count(kind => ConversationEventKinds.TryGetAuditKind(kind, out _));
 
-            Assert.Equal(14, Enum.GetValues<ConversationEventKind>().Length);
-            Assert.Equal(7, stored);
+            Assert.Equal(16, Enum.GetValues<ConversationEventKind>().Length);
+            Assert.Equal(8, stored);
         }
 
         [Fact]

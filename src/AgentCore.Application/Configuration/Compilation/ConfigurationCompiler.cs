@@ -10,7 +10,7 @@ using Microsoft.Extensions.AI;
 namespace AgentCore.Application.Configuration.Compilation
 {
     /// <summary>
-    /// The compile table of section 8.2. It is a table, not a heuristic.
+    /// Compiles a loaded document into one agent per entry.
     /// </summary>
     public static class ConfigurationCompiler
     {
@@ -104,13 +104,15 @@ namespace AgentCore.Application.Configuration.Compilation
                     built[key] = shared;
                 }
 
-                EntryBuild build = row.BuildEntry(configuration, entryName, entry, entryPointer, shared.Agents, context);
+                bool reusesGraphSession = !row.SessionCarriesHistory && shared.HarnessStateKeys.Count > 0;
+                EntryBuild build = row.BuildEntry(configuration, entryName, entry, entryPointer, shared.Agents, context, reusesGraphSession);
 
                 TurnLayers layers = new(
                     entry.FallbackReply ?? configuration.FallbackReply,
                     entry.RefusalReply ?? configuration.RefusalReply,
                     context.Moderation,
-                    row.SpokenAuthors(configuration, entry));
+                    row.SpokenAuthors(configuration, entry),
+                    document.History);
 
                 compiled[entryName] = new CompiledAgentBuilder
                 {
@@ -141,6 +143,7 @@ namespace AgentCore.Application.Configuration.Compilation
             Dictionary<string, AIAgent> agents = new(StringComparer.Ordinal);
             HashSet<string> harnessStateKeys = new(StringComparer.Ordinal);
             List<BackgroundAgentsProvider> backgroundProviders = [];
+
             if (configuration.Agents is not { } section)
             {
                 return new CompiledAgentSet(agents, harnessStateKeys, backgroundProviders);
@@ -208,13 +211,14 @@ namespace AgentCore.Application.Configuration.Compilation
                 harnessStateKeys.UnionWith(AgentHarnessProviders.StateKeysOf(providers));
 
                 List<AITool>? compiledTools = AgentToolCompiler.Build(
-                    item, item.Model ?? section.Defaults?.Model, tools, context, pointer, Resolve);
+                    item, item.Model ?? section.Defaults?.Model, tools, context, pointer, Resolve, backgroundProviders);
                 harnessStateKeys.UnionWith(AgentApproval.StateKeysFor(section.Defaults, item, compiledTools));
 
                 ChatClientAgent built = new(
                     WithToolFailureAuditing(context.ChatClients.GetChatClient(item.Model ?? section.Defaults?.Model)),
                     new ChatClientAgentOptions
                     {
+                        Id = GraphExecutorId(item.Id),
                         Name = item.Id,
                         Description = item.Description,
                         ChatOptions = new ChatOptions
@@ -241,6 +245,14 @@ namespace AgentCore.Application.Configuration.Compilation
         }
 #pragma warning restore MAAI001
 
+        /// <summary>
+        /// Encodes an <c>agents.items</c> id into MAF's executor-id alphabet.
+        /// </summary>
+        private static string GraphExecutorId(string id)
+        {
+            return Convert.ToHexStringLower(System.Text.Encoding.UTF8.GetBytes(id));
+        }
+
         /// <summary>Puts the auditing function-invocation loop into the pipeline of one agent.</summary>
         private static AuditingFunctionInvokingChatClient WithToolFailureAuditing(IChatClient model)
         {
@@ -249,6 +261,28 @@ namespace AgentCore.Application.Configuration.Compilation
                                 .ConfigureOptions(ConversationRequestStamp.Apply)
                                 .Use(static innerClient => new ModelFacingChatClient(innerClient))
                                 .Build());
+        }
+
+        /// <summary>
+        /// Whether the named <c>agents.items</c> entry declares <c>background:</c>.
+        /// </summary>
+        internal static bool AgentDeclaresBackground(AgentCoreConfiguration configuration, string agentId)
+        {
+            return configuration.Agents?.Items.Any(item => string.Equals(item.Id, agentId, StringComparison.Ordinal) && item.Background.Count > 0) == true;
+        }
+
+        /// <summary>
+        /// Builds check refusal for an agent that declares <c>background:</c> and is also used as a
+        /// graph node. Both graph rows raise this the same way, so the message lives once.
+        /// </summary>
+        internal static ConfigurationLoadException FailBackgroundInGraph(string pointer, string agentId, string entryName)
+        {
+            return Fail(
+                pointer,
+                $"the agent '{agentId}' declares background: and is also used as a node in the graph of "
+                + $"entry '{entryName}'. MAF has no way to release a graph node's session, so a "
+                + "background child started inside a node would keep running after the conversation "
+                + "ends. Remove background: from this agent, or stop using it as a graph node.");
         }
 
         internal static ConfigurationLoadException Fail(string pointer, string message)

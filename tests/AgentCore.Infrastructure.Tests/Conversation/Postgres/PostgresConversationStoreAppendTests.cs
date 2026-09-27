@@ -173,6 +173,25 @@ namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
         }
 
         [PostgresFact]
+        public async Task DeleteMessageAsync_OneRow_RemovesOnlyThatRow_AndTheOthersKeepTheirOrdinals()
+        {
+            // Arrange
+            IConversationStore store = new PostgresConversationStore(DataSource);
+            _ = await store.CreateAsync("c1", Token);
+            _ = await store.AppendMessageAsync("c1", new ChatMessage(ChatRole.User, "zero") { MessageId = "m0" }, Token);
+            _ = await store.AppendMessageAsync("c1", new ChatMessage(ChatRole.User, "one") { MessageId = "m1" }, Token);
+            _ = await store.AppendMessageAsync("c1", new ChatMessage(ChatRole.User, "two") { MessageId = "m2" }, Token);
+
+            // Act
+            await store.DeleteMessageAsync("c1", "m1", Token);
+            await store.DeleteMessageAsync("c1", "never-written", Token);
+
+            // Assert
+            IReadOnlyList<ConversationMessage> rows = await store.ReadAllAsync("c1", Token);
+            Assert.Equal([(0, "zero"), (2, "two")], rows.Select(row => (row.Ordinal, row.Content.Text)));
+        }
+
+        [PostgresFact]
         public async Task AppendAsync_AfterATruncate_NeverReusesTheOrdinalsItTook()
         {
             // Arrange

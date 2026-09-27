@@ -1,47 +1,64 @@
+using AgentCore.Application.Conversation;
 using AgentCore.Application.Runtime;
 
 namespace AgentCore.Application.Ports
 {
     /// <summary>
-    /// Owns the session of a conversation for as long as the conversation needs it.
+    /// Owns the session of a conversation for as long as the conversation needs it, for every entry the
+    /// document declares. One conversation id has at most one live session, under one entry.
     /// </summary>
-    /// <remarks>
-    /// A conversation runs over many turns and one request carries one turn, so something has to hold the
-    /// session in between. This is that seam, and it owns the whole life of the session rather than
-    /// only the holding: a caller asks for the session of a conversation and never builds one itself.
-    /// </remarks>
     public interface IConversationSessions
     {
-        /// <summary>Opens the session of one conversation.</summary>
+        /// <summary>
+        /// Returns the live session of one conversation under one entry, or opens it when none is held.
+        /// </summary>
+        /// <param name="entry">The entry the session is held under, or opens under.</param>
         /// <param name="conversationId">The id the host gives the conversation, or <see langword="null"/> to be given one.</param>
-        /// <param name="cancellationToken">Cancels the open.</param>
-        /// <returns>The session, ready for its first turn.</returns>
-        ValueTask<ConversationSession> OpenAsync(string? conversationId, CancellationToken cancellationToken = default);
+        /// <param name="state">
+        /// The stored state to build the session from. It is used only when this call builds the session; a live
+        /// session keeps its own state, and this is ignored.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// Cancels this caller's wait for a build or a close another caller started. That build or close runs on.
+        /// </param>
+        /// <returns>
+        /// The session, ready for its next turn. Two callers that ask for the same id under the same entry at once
+        /// get the same session, built once. When the id's session is closing, this waits until its teardown is
+        /// done (its last words flushed, its shells stopped, its workspace folder deleted), then opens a new one.
+        /// </returns>
+        /// <exception cref="ConversationInUseException">
+        /// <paramref name="conversationId"/> is held, or being opened, under another entry. Nothing was built, and
+        /// that entry's session is left running, untouched. Once that session is gone (closed or unloaded), this
+        /// entry may open the id and read its history.
+        /// </exception>
+        ValueTask<ConversationSession> GetOrOpenAsync(
+            string entry, string? conversationId, ConversationSessionState? state, CancellationToken cancellationToken = default);
 
-        /// <summary>Reads the session of one conversation, and marks the conversation as still live.</summary>
+        /// <summary>Reads the session of one conversation under one entry, and marks the conversation as still live.</summary>
+        /// <param name="entry">The entry the session must be held under.</param>
         /// <param name="conversationId">The id the request named. It is the <see cref="ConversationSession.ConversationId"/>.</param>
         /// <param name="cancellationToken">Cancels the read.</param>
-        /// <returns>The session, or <see langword="null"/> when this holds no such conversation.</returns>
-        /// <remarks>
-        /// A read is the only signal an implementation gets that a conversation is still being had, so an
-        /// implementation that expires an idle session must restart that session's clock here. A caller
-        /// that already holds the session for the whole conversation — the relay socket does — must therefore
-        /// still read it back on each turn, or its own conversation is the one that expires.
-        /// </remarks>
-        ValueTask<ConversationSession?> TryGetAsync(string conversationId, CancellationToken cancellationToken = default);
+        /// <returns>
+        /// The session, or <see langword="null"/> when this holds no usable session of that id under this entry:
+        /// none is held, it is held under another entry, or it is still being built or already closing. A lookup
+        /// never waits and never closes anything.
+        /// </returns>
+        ValueTask<ConversationSession?> TryGetAsync(string entry, string conversationId, CancellationToken cancellationToken = default);
 
-        /// <summary>Ends one conversation: waits for the words it still owes store 1, then drops it.</summary>
-        /// <param name="conversationId">The id of the conversation that ended.</param>
-        /// <param name="cancellationToken">Cancels the close.</param>
-        /// <returns>A task that completes once the session is gone and its writes are done.</returns>
-        /// <remarks>
-        /// The order is the contract. A turn queues its rows and speaks, so a conversation can end with its last
-        /// turn still in flight, and the session is the only thing that can wait for those writes — once
-        /// it is dropped nothing can, and the durable record loses the turn the caller just had with no
-        /// error anywhere to say so. Every way a session ends comes through here, expiry included, so
-        /// no path can be written that skips the wait. An implementation must also dispose the session:
-        /// it owns processes (a conversation's shell: executors) that a dropped reference would leak.
-        /// </remarks>
-        ValueTask CloseAsync(string conversationId, CancellationToken cancellationToken = default);
+        /// <summary>
+        /// Closes one conversation's session: waits for the words it still owes store 1, disposes its background
+        /// children and shells, then deletes its workspace folder. This writes no <c>conversation.ended</c>
+        /// event; a caller that wants the close to be a real end calls
+        /// <see cref="ConversationSession.EndConversation"/> itself, before this. The id stays taken until the
+        /// teardown is done, so an open of it waits rather than race the folder delete.
+        /// </summary>
+        /// <param name="entry">The entry the session must be held under.</param>
+        /// <param name="conversationId">The id of the conversation to close.</param>
+        /// <param name="cancellationToken">Cancels only a wait for a close another caller already started.</param>
+        /// <returns>
+        /// A task that completes once the session is gone and its writes are done. When this holds no live session
+        /// of that id under this entry, nothing is closed.
+        /// </returns>
+        ValueTask CloseAsync(string entry, string conversationId, CancellationToken cancellationToken = default);
     }
 }

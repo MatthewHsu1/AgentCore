@@ -1,4 +1,3 @@
-using System.Text.Json;
 using AgentCore.Application.Transcript;
 using AgentCore.Infrastructure.Conversation.Postgres;
 using AgentCore.Infrastructure.Tests.Database.Postgres;
@@ -8,7 +7,7 @@ using Xunit;
 namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
 {
     /// <summary>
-    /// Retention, which deletes stale continuation rows only. A conversation and its words are
+    /// Retention, which deletes stale response ids only. A conversation and its words are
     /// never swept: they stay whole for as long as the row lives, whether or not anything can
     /// still resume it.
     /// </summary>
@@ -19,37 +18,31 @@ namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
         /// <inheritdoc />
         protected override bool Migrated => true;
 
-        private static JsonElement Envelope()
-        {
-            using JsonDocument document = JsonDocument.Parse("""{ "state": {} }""");
-            return document.RootElement.Clone();
-        }
-
         [PostgresFact]
-        public async Task SweepAsync_AContinuationUntouchedPastTheWindow_TakesTheRow()
+        public async Task SweepAsync_AResponseIdUntouchedPastTheWindow_TakesTheRow()
         {
             // Arrange
             PostgresConversationStore store = new(DataSource);
             _ = await store.CreateAsync("c1", Token);
-            await store.SaveContinuationAsync("resp_1", "c1", Envelope(), Token);
-            await ExecuteAsync("UPDATE agentcore.response_continuation SET updated_at = now() - interval '90 days'");
+            await store.SaveContinuationAsync("resp_1", "c1", Token);
+            await ExecuteAsync("UPDATE agentcore.response_continuation SET created_at = now() - interval '90 days'");
 
             // Act
             int swept = await store.SweepAsync(Window, cancellationToken: Token);
 
             // Assert
             Assert.Equal(1, swept);
-            Assert.Null(await store.GetContinuationAsync("resp_1", Token));
+            Assert.Null(await store.FindContinuationAsync("resp_1", Token));
         }
 
         [PostgresFact]
-        public async Task SweepAsync_AContinuationUntouchedPastTheWindow_LeavesTheConversationAndItsWords()
+        public async Task SweepAsync_AResponseIdUntouchedPastTheWindow_LeavesTheConversationAndItsWords()
         {
             // Arrange
             PostgresConversationStore store = new(DataSource);
             _ = await store.CreateAsync("c1", Token);
-            await store.SaveContinuationAsync("c1", "c1", Envelope(), Token);
-            await ExecuteAsync("UPDATE agentcore.response_continuation SET updated_at = now() - interval '90 days'");
+            await store.SaveContinuationAsync("resp_1", "c1", Token);
+            await ExecuteAsync("UPDATE agentcore.response_continuation SET created_at = now() - interval '90 days'");
 
             // Act
             _ = await store.SweepAsync(Window, cancellationToken: Token);
@@ -61,7 +54,7 @@ namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
         [PostgresFact]
         public async Task SweepAsync_AConversationRowItself_IsNeverTaken()
         {
-            // Arrange — an old conversation with no continuation at all: nothing here for the sweep to find.
+            // Arrange — an old conversation with no response id at all: nothing here for the sweep to find.
             PostgresConversationStore store = new(DataSource);
             _ = await store.CreateAsync("old", Token);
             await ExecuteAsync("UPDATE agentcore.conversation SET created_at = now() - interval '400 days'");
@@ -75,42 +68,44 @@ namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
         }
 
         [PostgresFact]
-        public async Task SweepAsync_AContinuationWrittenInsideTheWindow_LeavesIt()
+        public async Task SweepAsync_AResponseIdWrittenInsideTheWindow_LeavesIt()
         {
             // Arrange
             PostgresConversationStore store = new(DataSource);
             _ = await store.CreateAsync("c1", Token);
-            await store.SaveContinuationAsync("resp_1", "c1", Envelope(), Token);
+            await store.SaveContinuationAsync("resp_1", "c1", Token);
 
             // Act
             int swept = await store.SweepAsync(Window, cancellationToken: Token);
 
             // Assert
             Assert.Equal(0, swept);
-            Assert.NotNull(await store.GetContinuationAsync("resp_1", Token));
+            Assert.Equal("c1", await store.FindContinuationAsync("resp_1", Token));
         }
 
         [PostgresFact]
-        public async Task SweepAsync_ARewrittenContinuation_ResetsItsRetentionClock()
+        public async Task SweepAsync_OneResponseIdInsideTheWindowAndOneOutsideIt_TakesOnlyTheOlderOne()
         {
-            // Arrange — the same id written twice: the old timestamp must not survive the second write,
-            // or an actively resumed conversation would still age out from under it.
+            // Arrange — proves the window is a real filter, not "sweep everything": the live probe report
+            // (Q3) had only ever exercised a single row.
             PostgresConversationStore store = new(DataSource);
             _ = await store.CreateAsync("c1", Token);
-            await store.SaveContinuationAsync("c1", "c1", Envelope(), Token);
-            await ExecuteAsync("UPDATE agentcore.response_continuation SET updated_at = now() - interval '90 days'");
-            await store.SaveContinuationAsync("c1", "c1", Envelope(), Token);
+            await store.SaveContinuationAsync("resp_old", "c1", Token);
+            await store.SaveContinuationAsync("resp_new", "c1", Token);
+            await ExecuteAsync(
+                "UPDATE agentcore.response_continuation SET created_at = now() - interval '90 days' WHERE store_id = 'resp_old'");
 
             // Act
             int swept = await store.SweepAsync(Window, cancellationToken: Token);
 
             // Assert
-            Assert.Equal(0, swept);
-            Assert.NotNull(await store.GetContinuationAsync("c1", Token));
+            Assert.Equal(1, swept);
+            Assert.Null(await store.FindContinuationAsync("resp_old", Token));
+            Assert.Equal("c1", await store.FindContinuationAsync("resp_new", Token));
         }
 
         [PostgresFact]
-        public async Task SweepAsync_MoreExpiredContinuationsThanOneBatch_LoopsUntilNoneAreLeft()
+        public async Task SweepAsync_MoreExpiredResponseIdsThanOneBatch_LoopsUntilNoneAreLeft()
         {
             // Arrange
             PostgresConversationStore store = new(DataSource);
@@ -118,10 +113,10 @@ namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
 
             for (int i = 0; i < 5; i++)
             {
-                await store.SaveContinuationAsync($"resp_{i}", "c1", Envelope(), Token);
+                await store.SaveContinuationAsync($"resp_{i}", "c1", Token);
             }
 
-            await ExecuteAsync("UPDATE agentcore.response_continuation SET updated_at = now() - interval '90 days'");
+            await ExecuteAsync("UPDATE agentcore.response_continuation SET created_at = now() - interval '90 days'");
 
             // Act
             int swept = await store.SweepAsync(Window, batchSize: 2, cancellationToken: Token);

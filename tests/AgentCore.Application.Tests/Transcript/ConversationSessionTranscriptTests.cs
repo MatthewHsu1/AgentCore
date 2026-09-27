@@ -86,7 +86,7 @@ namespace AgentCore.Application.Tests.Transcript
             await spoke;
 
             // Act
-            bool recorded = session.Interrupt("Hello", TimeSpan.FromMilliseconds(300));
+            bool recorded = session.Cut(0, new TurnCut("Hello", TimeSpan.FromMilliseconds(300)));
 
             // Assert
             reply.OpenGate();
@@ -112,7 +112,7 @@ namespace AgentCore.Application.Tests.Transcript
             await DrainAsync(session.RunTurnStreamingAsync("how much?", TestContext.Current.CancellationToken));
 
             // Act
-            bool recorded = session.Interrupt("the price", TimeSpan.FromMilliseconds(400));
+            bool recorded = session.Cut(0, new TurnCut("the price", TimeSpan.FromMilliseconds(400)));
 
             // Assert
             Assert.True(recorded);
@@ -133,7 +133,7 @@ namespace AgentCore.Application.Tests.Transcript
         /// <summary>
         /// Step 1's second failure mode: a cut that reached back a turn would replace a sentence the
         /// caller heard in full, and nothing would detect it. The guard is <c>ConversationSession</c>'s, so this
-        /// drives it through <see cref="ConversationSession.Interrupt"/> rather than through the provider.
+        /// drives it through <see cref="ConversationSession.Cut"/> rather than through the provider.
         /// </summary>
         [Fact]
         public async Task Interrupt_AfterASecondTurn_LeavesTheFirstTurnsReplyWhole()
@@ -146,7 +146,7 @@ namespace AgentCore.Application.Tests.Transcript
             _ = await session.RunTurnAsync("order 41?", TestContext.Current.CancellationToken);
 
             // Act
-            bool recorded = session.Interrupt("it ships", TimeSpan.FromMilliseconds(500));
+            bool recorded = session.Cut(1, new TurnCut("it ships", TimeSpan.FromMilliseconds(500)));
 
             // Assert
             Assert.True(recorded);

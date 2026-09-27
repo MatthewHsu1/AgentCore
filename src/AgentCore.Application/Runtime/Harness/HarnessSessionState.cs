@@ -12,6 +12,8 @@ namespace AgentCore.Application.Runtime.Harness
     /// </summary>
     internal static class HarnessSessionState
     {
+        private const string StateBagKey = "stateBag";
+
         private static readonly IReadOnlyDictionary<string, JsonElement> Empty =
             ReadOnlyDictionary<string, JsonElement>.Empty;
 
@@ -51,6 +53,13 @@ namespace AgentCore.Application.Runtime.Harness
         /// </summary>
         public static JsonElement Wrap(IReadOnlyDictionary<string, JsonElement> providers)
         {
+            JsonObject envelope = new() { [StateBagKey] = BagOf(providers) };
+
+            return JsonSerializer.SerializeToElement(envelope);
+        }
+
+        private static JsonObject BagOf(IReadOnlyDictionary<string, JsonElement> providers)
+        {
             JsonObject stateBag = [];
 
             foreach ((string? key, JsonElement element) in providers)
@@ -58,9 +67,7 @@ namespace AgentCore.Application.Runtime.Harness
                 stateBag[key] = JsonSerializer.SerializeToNode(element);
             }
 
-            JsonObject envelope = new() { ["stateBag"] = stateBag };
-
-            return JsonSerializer.SerializeToElement(envelope);
+            return stateBag;
         }
     }
 }

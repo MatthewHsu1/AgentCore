@@ -1,6 +1,8 @@
+using System.Collections.ObjectModel;
 using System.Diagnostics.Metrics;
 using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Runtime;
+using AgentCore.Domain.Audit;
 using Xunit;
 
 namespace AgentCore.Application.Tests.Diagnostics
@@ -8,20 +10,6 @@ namespace AgentCore.Application.Tests.Diagnostics
     /// <summary>
     /// The three counters of section 8.6, incremented from a fact instead of from the turn loop.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Nothing about the numbers changed when the conversation sites moved behind the hook, so these tests pin the
-    /// instrument, the attribute key, and the value each kind writes. T61 is why the values are closed and
-    /// why no conversation id appears among them: a cumulative series lives forever once it is created, and the
-    /// Grafana Cloud free tier binds at 10,000.
-    /// </para>
-    /// <para>
-    /// The meter is a process-wide singleton, so another test running beside this one measures on the same
-    /// instruments. Every assertion here is therefore about what the observer DID write, and the negative
-    /// side — which kinds are counted as audit events at all — is pinned on the mapping itself, in
-    /// <c>ConversationEventKindsTests</c>, where nothing else can add to the reading.
-    /// </para>
-    /// </remarks>
     public sealed class TelemetryConversationObserverTests
     {
         private const string FailureInstrument = "agentcore.turn.failures";
@@ -39,6 +27,7 @@ namespace AgentCore.Application.Tests.Diagnostics
                 { ConversationEventKind.ToolFailed, "tool" },
                 { ConversationEventKind.EmptyReply, "empty_reply" },
                 { ConversationEventKind.ExtractionFailed, "extraction" },
+                { ConversationEventKind.RunFaulted, "run" },
             };
 
         /// <summary>Each moderation verdict, beside the value an operator alerts on.</summary>
@@ -96,10 +85,29 @@ namespace AgentCore.Application.Tests.Diagnostics
                         await new TelemetryConversationObserver().OnConversationEventAsync(null!, TestContext.Current.CancellationToken));
         }
 
+        // A turn whose tool fails four times raises four per-call facts, each with a tool call id, and one
+        // turn-level fact with none. agentcore.turn.failures promises one count per failed turn, so only the
+        // turn-level fact moves it (audit finding E5, docs/probes/r2/audit/AUDIT.md).
+        [Fact]
+        public async Task APerCallToolFailure_MovesNothing_OnlyTheTurnLevelFactDoes()
+        {
+            List<Reading> perCall = await MeasureAsync(
+                ConversationEventKind.ToolFailed,
+                new Dictionary<string, string>(StringComparer.Ordinal) { [AuditPayloadKeys.ToolCallId] = "call-1" });
+
+            Assert.DoesNotContain(new Reading(FailureInstrument, FailureKey, "tool"), perCall);
+
+            List<Reading> turnLevel = await MeasureAsync(ConversationEventKind.ToolFailed);
+
+            Assert.Contains(new Reading(FailureInstrument, FailureKey, "tool"), turnLevel);
+        }
+
         /// <summary>Hands one fact to the observer and reads back what the meter saw.</summary>
         /// <param name="kind">What happened.</param>
+        /// <param name="payload">The fact's payload, or empty for a kind that carries none in this suite.</param>
         /// <returns>Every attribute of every measurement, as instrument, key, and value.</returns>
-        private static async Task<List<Reading>> MeasureAsync(ConversationEventKind kind)
+        private static async Task<List<Reading>> MeasureAsync(
+            ConversationEventKind kind, IReadOnlyDictionary<string, string>? payload = null)
         {
             List<Reading> readings = [];
             using MeterListener listener = new();
@@ -132,6 +140,7 @@ namespace AgentCore.Application.Tests.Diagnostics
                     OccurredAt = DateTimeOffset.UnixEpoch,
                     EventId = Guid.CreateVersion7(),
                     TurnIndex = 0,
+                    Payload = payload ?? ReadOnlyDictionary<string, string>.Empty,
                 },
                 TestContext.Current.CancellationToken);
 

@@ -70,6 +70,21 @@ namespace AgentCore.Application.Conversation.Memory
             }
         }
 
+        /// <summary>Deletes one row, by the name the caller knows it by. The rows around it keep their ordinals.</summary>
+        /// <param name="conversationId">The conversation the row belongs to.</param>
+        /// <param name="messageId">The row to delete.</param>
+        public void Delete(string conversationId, string messageId)
+        {
+            foreach ((string ConversationId, int Ordinal) key in _rows.Keys)
+            {
+                if (key.ConversationId == conversationId && _rows[key].MessageId == messageId)
+                {
+                    _ = _rows.Remove(key);
+                    break;
+                }
+            }
+        }
+
         private IReadOnlyList<ConversationMessage> Read(string conversationId)
         {
             return [.. Said(conversationId).OrderBy(row => row.Ordinal)];

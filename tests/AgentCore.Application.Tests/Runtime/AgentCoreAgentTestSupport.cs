@@ -4,6 +4,7 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
+using AgentCore.Application.Sessions.Memory;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using System.Text.Json;
@@ -72,14 +73,23 @@ namespace AgentCore.Application.Tests.Runtime
             out CompiledAgent compiled,
             string yaml = SingleAgentYaml,
             IConversationStore? store = null,
-            string entryName = "main")
+            string entryName = "main",
+            IEnumerable<IConversationObserver>? observers = null,
+            TimeProvider? timeProvider = null,
+            TimeSpan? idleTimeout = null)
         {
             AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(yaml);
-            compiled = ConfigurationCompiler.CompileAll(
+            IReadOnlyDictionary<string, CompiledAgent> entries = ConfigurationCompiler.CompileAll(
                 document,
-                new AgentCompilationContext(new RoutingChatClientFactory(reply)) { ConversationStore = store })[entryName];
+                new AgentCompilationContext(new RoutingChatClientFactory(reply)) { ConversationStore = store });
+            compiled = entries[entryName];
 
-            ConversationSessionFactory sessions = new(compiled, new GuardEvaluator(compiled.Configuration.Guards));
+            ConversationSessionFactory factory = new(compiled, new GuardEvaluator(compiled.Configuration.Guards), observers: observers);
+            InMemoryConversationSessions sessions = new(
+                new Dictionary<string, IConversationSessionFactory>(StringComparer.Ordinal) { [entryName] = factory },
+                idleTimeout ?? TimeSpan.FromMinutes(30),
+                timeProvider ?? TimeProvider.System);
+
             return new AgentCoreAgent(sessions, entryName);
         }
 

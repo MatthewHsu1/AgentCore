@@ -1,9 +1,7 @@
-using AgentCore.Application.Conversation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Ports;
 using AgentCore.Application.Providers;
-using AgentCore.AspNetCore.Conversation;
+using AgentCore.AspNetCore.Voice;
 using Microsoft.AspNetCore.Http;
 
 namespace AgentCore.AspNetCore.DependencyInjection.Startup

@@ -18,6 +18,7 @@
     <PackageReference Include="Microsoft.Agents.AI" />
     <PackageReference Include="Microsoft.Agents.AI.Workflows" />
     <PackageReference Include="Microsoft.Agents.AI.Tools.Shell" />
+    <PackageReference Include="Polly.Core" />
     <PackageReference Include="Stateless" />
     <PackageReference Include="YamlDotNet" />
     <PackageReference Include="JsonSchema.Net" />
@@ -39,6 +40,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="AgentCore.AspNetCore" />
     <InternalsVisibleTo Include="AgentCore.Application.Tests" />
     <InternalsVisibleTo Include="AgentCore.AspNetCore.Tests" />
   </ItemGroup>

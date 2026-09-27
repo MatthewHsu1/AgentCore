@@ -15,10 +15,14 @@ namespace AgentCore.AspNetCore.Tests.Fakes
     internal sealed class FragmentingChatClient(params string[] replies) : IChatClient
     {
         private readonly string[] _replies = replies;
+        private readonly TaskCompletionSource _streamed = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _calls;
 
         /// <summary>Gets how many requests this client answered.</summary>
         public int Calls => Volatile.Read(ref _calls);
+
+        /// <summary>Gets a task that completes once the reader has taken the last update of a streamed reply.</summary>
+        public Task Streamed => _streamed.Task;
 
         /// <summary>Gets the messages of the most recent request, oldest first, or null before any conversation.</summary>
         /// <remarks>
@@ -49,6 +53,8 @@ namespace AgentCore.AspNetCore.Tests.Fakes
                     MessageId = responseId,
                 };
             }
+
+            _ = _streamed.TrySetResult();
         }
 
         public async Task<ChatResponse> GetResponseAsync(
@@ -197,10 +203,8 @@ namespace AgentCore.AspNetCore.Tests.Fakes
     /// before it says a word.
     /// </summary>
     /// <remarks>
-    /// This is the shape a held prompt produces on a real conversation. Turn one pauses long enough for a
-    /// second final prompt to be held, then finishes streaming; <c>RunPendingPrompt</c> starts turn two
-    /// inside turn one's own <c>finally</c>; and the vendor is still speaking turn one while turn two
-    /// has produced nothing at all. No other fake here can hold the second turn apart from the first.
+    /// The vendor paces the audio, so it can still be speaking turn one while turn two has produced nothing
+    /// the caller hears. No other fake here can hold the second turn apart from the first.
     /// </remarks>
     internal sealed class HeldPromptChatClient(string first, string second) : IChatClient
     {
@@ -216,20 +220,10 @@ namespace AgentCore.AspNetCore.Tests.Fakes
 
         /// <summary>Gets whether the second turn opens with one update the relay can never speak.</summary>
         /// <remarks>
-        /// <para>
-        /// <c>ConversationSession</c> calls a run audible at its first piece of <i>content</i>, and content is not
-        /// the same thing as a word. A tool call, a tool result, and a line of reasoning all count, and
-        /// none of them carries text, so none of them ever reaches the vendor as a <c>text</c> frame. Set
-        /// this, and turn two yields exactly one such update — a <see cref="TextReasoningContent"/>, the
-        /// shape a reasoning model really does stream before its answer — and only then blocks. That is
-        /// the one window in which the core believes turn two is audible while the connection's own
-        /// <c>_spokenTurnId</c> still names turn one, which is the turn Telnyx is still speaking.
-        /// </para>
-        /// <para>
-        /// Left <see langword="false"/>, turn two says nothing whatever before it blocks, which is the
-        /// window <c>AnInterruptWhileAHeldTurnHasSaidNothing_LeavesThatTurnFreeToSpeak</c> already covers
-        /// and which both sides of the seam already agree about on their own.
-        /// </para>
+        /// Content is not the same thing as a word: a tool call, a tool result, and a line of reasoning carry
+        /// no text, so none of them reaches the vendor as a <c>text</c> frame. Set this, and turn two yields
+        /// exactly one such update — a <see cref="TextReasoningContent"/>, the shape a reasoning model really
+        /// does stream before its answer — and only then blocks.
         /// </remarks>
         public bool SecondTurnOpensWithUnspokenContent { get; init; }
 
@@ -267,10 +261,8 @@ namespace AgentCore.AspNetCore.Tests.Fakes
                 {
                     // Yielded before SecondTurnStarted is set, and the line after a yield only runs once
                     // the consumer comes back for the next update. Waiting on that signal therefore
-                    // proves this update has already travelled the whole way through ConversationSession — which
-                    // is where it raises the audible flag this fake exists to raise — and through the
-                    // connection's own update loop, which reads no text on it and so leaves
-                    // _spokenTurnId naming turn one.
+                    // proves this update has already travelled the whole way through ConversationSession and
+                    // the voice layer, which reads no text on it.
                     yield return new ChatResponseUpdate(ChatRole.Assistant, [new TextReasoningContent("thinking")])
                     {
                         ResponseId = responseId,

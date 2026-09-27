@@ -2,6 +2,8 @@ using System.Runtime.CompilerServices;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Conversation.Memory;
+using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Sessions.Memory;
 using AgentCore.Application.Tests.Fakes;
@@ -68,9 +70,10 @@ namespace AgentCore.Application.Tests.Runtime.Harness
                     ["description"] = "d",
                 });
             BlockingChatClient child = new();
-            InMemoryConversationSessions sessions = new(BuildFactory(LingeringChildYaml, parent, child), TimeSpan.FromMinutes(30), TimeProvider.System);
+            InMemoryConversationSessions sessions = new(
+                SingleEntrySessionFactories.Of(BuildFactory(LingeringChildYaml, parent, child)), TimeSpan.FromMinutes(30), TimeProvider.System);
 
-            ConversationSession session = await sessions.OpenAsync("conversation-1", token);
+            ConversationSession session = await sessions.GetOrOpenAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", null, token);
             _ = await session.RunTurnAsync("go", token);
 
             // The turn is over and the conversation is not, and the child is still in its model call: the
@@ -78,7 +81,7 @@ namespace AgentCore.Application.Tests.Runtime.Harness
             await child.Started.WaitAsync(TimeSpan.FromSeconds(10), token);
             Assert.False(child.Cancelled.IsCompleted);
 
-            await sessions.CloseAsync("conversation-1", token);
+            await sessions.CloseAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", token);
 
             await child.Cancelled.WaitAsync(TimeSpan.FromSeconds(10), token);
         }
@@ -106,14 +109,66 @@ namespace AgentCore.Application.Tests.Runtime.Harness
             await child.Cancelled.WaitAsync(TimeSpan.FromSeconds(10), token);
         }
 
-        private static ConversationSessionFactory BuildFactory(string yaml, IChatClient parent, IChatClient child)
+        [Fact]
+        public async Task ATurnOnTheSameHost_LeavesARunningChildAlone()
+        {
+            CancellationToken token = TestContext.Current.CancellationToken;
+            ToolCallingChatClient parent = new(
+                "started",
+                new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["agentName"] = "blocker",
+                    ["input"] = "work",
+                    ["description"] = "d",
+                });
+            BlockingChatClient child = new();
+            ConversationSession session = BuildFactory(LingeringChildYaml, parent, child, new InMemoryConversationStore()).Create("conversation-1");
+
+            _ = await session.RunTurnAsync("go", token);
+            await child.Started.WaitAsync(TimeSpan.FromSeconds(10), token);
+            _ = await session.RunTurnAsync("status?", token);
+
+            Assert.False(child.Cancelled.IsCompleted);
+
+            await session.DisposeAsync();
+            await child.Cancelled.WaitAsync(TimeSpan.FromSeconds(10), token);
+        }
+
+        [Fact]
+        public async Task ASessionThatCatchesUpOnAnotherHostsTurn_CancelsItsChildAtTheCatchUp()
+        {
+            CancellationToken token = TestContext.Current.CancellationToken;
+            InMemoryConversationStore store = new();
+            ToolCallingChatClient parent = new(
+                "started",
+                new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["agentName"] = "blocker",
+                    ["input"] = "work",
+                    ["description"] = "d",
+                });
+            BlockingChatClient child = new();
+            await using ConversationSession a = BuildFactory(LingeringChildYaml, parent, child, store).Create("conversation-1");
+            await using ConversationSession b = BuildFactory(LingeringChildYaml, new ScriptedChatClient("fine"), new BlockingChatClient(), store)
+                .Create("conversation-1");
+
+            _ = await a.RunTurnAsync("go", token);
+            await child.Started.WaitAsync(TimeSpan.FromSeconds(10), token);
+            _ = await b.RunTurnAsync("hello from the other host", token);
+            TurnResult caughtUp = await a.RunTurnAsync("status?", token);
+
+            Assert.Equal(2, caughtUp.TurnIndex);
+            await child.Cancelled.WaitAsync(TimeSpan.FromSeconds(10), token);
+        }
+
+        private static ConversationSessionFactory BuildFactory(string yaml, IChatClient parent, IChatClient child, IConversationStore? store = null)
         {
             RoutingChatClientFactory chatClients = new(parent);
             _ = chatClients.Route("parent", parent);
             _ = chatClients.Route("blocker", child);
 
             CompiledAgent compiled = ConfigurationCompiler.CompileAll(
-                ConfigurationLoader.LoadYaml(yaml), new AgentCompilationContext(chatClients))["main"];
+                ConfigurationLoader.LoadYaml(yaml), new AgentCompilationContext(chatClients) { ConversationStore = store })["main"];
 
             return new ConversationSessionFactory(compiled, new GuardEvaluator(compiled.Configuration.Guards));
         }

@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Runtime.Harness;
+using AgentCore.Application.State;
 
 namespace AgentCore.Application.Runtime
 {
@@ -87,31 +88,47 @@ namespace AgentCore.Application.Runtime
         }
 
         /// <summary>
-        /// Reads the state this conversation would resume from, as it stands right now. The provider state is
-        /// read off the live bag with no turn lock around it, so a host serializing mid-turn gets the
-        /// bag as it stands at that instant, not a turn-boundary snapshot. A graph row that reuses
-        /// its session instead attaches that session's last turn-end serialization.
+        /// Takes the state another session of this conversation stored after this one last ran a turn. The session
+        /// then holds what a session opened on that state now would: its stage, and its slots and no others.
+        /// </summary>
+        /// <param name="stored">The state store 0 holds, newer than this session's.</param>
+        internal void CatchUp(ConversationSessionState stored)
+        {
+            if (stored.Version == ConversationSessionState.CurrentVersion)
+            {
+                _session.State.ClearWrittenSlots();
+                _ = ConstStateWriter.Apply(_session.State);
+            }
+
+            Restore(stored);
+        }
+
+        /// <summary>
+        /// Reads the state this conversation would resume from, as it stands right now. A host serializing mid-turn
+        /// gets the provider state off the live bag at that instant, not a turn-boundary snapshot. The read holds the
+        /// turn lock so that it never falls inside a catch-up, which swaps the session and moves the turn index
+        /// together. A graph row that reuses its session instead attaches that session's last turn-end serialization.
         /// </summary>
         internal ConversationSessionState Snapshot()
         {
-            lock (_session.InterruptLock)
+            lock (_session.TurnLock)
             {
                 if (_session.AgentSession is null && _session.Checkpoint is { } held)
                 {
                     return held;
                 }
-            }
 
-            return new()
-            {
-                Stage = _session.State.Stage,
-                IsComplete = _session.IsComplete,
-                Slots = _session.State.WrittenSlots(),
-                NextTurnIndex = _session.State.TurnIndex,
-                Clarifications = _session.Clarifications.Spent(),
-                Providers = HarnessSessionState.Capture(_session.AgentSession, _session.Compiled.HarnessStateKeys),
-                WorkflowState = _session.GraphBlob,
-            };
+                return new()
+                {
+                    Stage = _session.State.Stage,
+                    IsComplete = _session.IsComplete,
+                    Slots = _session.State.WrittenSlots(),
+                    NextTurnIndex = _session.State.TurnIndex,
+                    Clarifications = _session.Clarifications.Spent(),
+                    Providers = HarnessSessionState.Capture(_session.AgentSession, _session.Compiled.HarnessStateKeys),
+                    WorkflowState = _session.GraphBlob,
+                };
+            }
         }
 
         /// <summary>Names the state this conversation resumes from when store 0 holds none of its own.</summary>
@@ -119,7 +136,7 @@ namespace AgentCore.Application.Runtime
         {
             ArgumentNullException.ThrowIfNull(stored);
 
-            lock (_session.InterruptLock)
+            lock (_session.TurnLock)
             {
                 if (_session.AgentSession is not null)
                 {

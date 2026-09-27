@@ -199,21 +199,19 @@ namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
         }
 
         [PostgresFact]
-        public async Task DeleteAsync_AConversation_TakesItsSameIdContinuationWithIt()
+        public async Task DeleteAsync_AConversation_TakesItsResponseContinuationsWithIt()
         {
-            // Arrange — one id plays three roles now, so the row delete takes the key with it. Per-turn
-            // response ids are gone with their own rows only through DeleteContinuationAsync; nothing
-            // here enumerates them.
+            // Arrange — a response id's row is FK'd to the conversation it continues (ON DELETE CASCADE),
+            // so deleting the conversation must take it too, or a reused id could resolve a dead conversation.
             PostgresConversationStore store = new(DataSource);
             _ = await store.CreateAsync("c1", Token);
-            using JsonDocument document = JsonDocument.Parse("""{ "conversationId": "c1" }""");
-            await store.SaveContinuationAsync("c1", "c1", document.RootElement, Token);
+            await store.SaveContinuationAsync("resp_1", "c1", Token);
 
             // Act
             await store.DeleteAsync("c1", Token);
 
             // Assert
-            Assert.Null(await store.GetContinuationAsync("c1", Token));
+            Assert.Null(await store.FindContinuationAsync("resp_1", Token));
         }
 
         [PostgresFact]

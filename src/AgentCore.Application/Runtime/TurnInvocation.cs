@@ -98,6 +98,30 @@ namespace AgentCore.Application.Runtime
         /// </summary>
         public StateDocument? State { get; init; }
 
+        /// <summary>
+        /// Gets the session the conversation's words live on, or <see langword="null"/> outside a conversation turn.
+        /// On a graph row it is not the session the run gets.
+        /// </summary>
+        public AgentSession? HistorySession { get; init; }
+
+        /// <summary>Gets the message the user sent this turn, or <see langword="null"/> outside a conversation turn.</summary>
+        public ChatMessage? User { get; init; }
+
+        /// <summary>Gets where the turn hangs in the conversation the user can see, or <see langword="null"/> when the caller did not say.</summary>
+        public ConversationTurnOrigin? Origin { get; init; }
+
+        /// <summary>
+        /// Gets whether the conversation so far rides the request as one system message, as on a graph row that
+        /// runs every turn on a fresh session.
+        /// </summary>
+        public bool RendersHistory { get; init; }
+
+        /// <summary>Gets the conversation's side of the turn's seal, or <see langword="null"/> outside a conversation turn.</summary>
+        public ITurnCompleter? Completer { get; init; }
+
+        /// <summary>Gets where a cut of the running turn waits for the seal, or <see langword="null"/> outside a conversation turn.</summary>
+        public TurnCutSlot? CutSlot { get; init; }
+
         /// <summary>Reads the turn filed on a run's options by <see cref="RunOptions"/>, or null when there is none.</summary>
         internal static TurnInvocation? From(AgentRunOptions? options)
         {

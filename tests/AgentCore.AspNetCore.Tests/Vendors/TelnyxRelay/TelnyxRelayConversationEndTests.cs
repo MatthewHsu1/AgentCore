@@ -4,6 +4,7 @@ using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Conversation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Sessions.Memory;
@@ -229,7 +230,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
             await WaitForTeardownAsync(harness);
 
             Assert.True(harness.Connection.IsCompletedSuccessfully);
-            Assert.Null(await Sessions(harness).TryGetAsync("conversation-broken-clock", TestContext.Current.CancellationToken));
+            Assert.Null(await Sessions(harness).TryGetAsync(SingleEntrySessionFactories.MainEntry, "conversation-broken-clock", TestContext.Current.CancellationToken));
         }
 
         [Fact(Timeout = 30_000)]
@@ -249,7 +250,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
                 TelnyxRelayTurnTests.PolicyYaml,
                 reply,
                 relay: options => options.CloseTimeout = TimeSpan.FromSeconds(30),
-                configure: options => options.UseConversationSessions((_, _) => sessions));
+                configure: options => options.UseConversationSessions(_ => sessions));
 
             harness.Socket.Queue(RelayFrames.Setup(conversationSessionId: "conversation-flush"));
             harness.Socket.Queue(RelayFrames.Prompt("when does my order ship?", last: true));
@@ -269,7 +270,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
             Assert.True(
                 sessions.TranscriptLandedAtClose,
                 "the close returned while store 1 still owed the conversation its last turn.");
-            Assert.Null(await sessions.TryGetAsync("conversation-flush", TestContext.Current.CancellationToken));
+            Assert.Null(await sessions.TryGetAsync(SingleEntrySessionFactories.MainEntry, "conversation-flush", TestContext.Current.CancellationToken));
         }
 
         [Fact(Timeout = 30_000)]
@@ -289,7 +290,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
                 TelnyxRelayTurnTests.PolicyYaml,
                 reply,
                 relay: options => options.CloseTimeout = TimeSpan.FromSeconds(30),
-                configure: options => options.UseConversationSessions((_, _) => sessions));
+                configure: options => options.UseConversationSessions(_ => sessions));
 
             harness.Socket.Queue(RelayFrames.Setup(conversationSessionId: "conversation-first"));
             harness.Socket.Queue(RelayFrames.Prompt("when does my order ship?", last: true));
@@ -327,7 +328,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
                 TelnyxRelayTurnTests.PolicyYaml,
                 reply,
                 logging: logging => logging.AddProvider(capture),
-                configure: options => options.UseConversationSessions((_, _) => sessions));
+                configure: options => options.UseConversationSessions(_ => sessions));
 
             harness.Socket.Queue(RelayFrames.Setup(conversationSessionId: "conversation-store-faulted"));
 
@@ -362,7 +363,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
                 reply,
                 logging: logging => logging.AddProvider(capture),
                 relay: options => options.CloseTimeout = TimeSpan.FromSeconds(1),
-                configure: options => options.UseConversationSessions((_, _) => sessions));
+                configure: options => options.UseConversationSessions(_ => sessions));
 
             harness.Socket.Queue(RelayFrames.Setup(conversationSessionId: "conversation-store-hung"));
 
@@ -415,7 +416,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
             RoutingChatClientFactory chatClients = new(reply);
             CompiledAgent compiled = ConfigurationCompiler.CompileAll(
                 document,
-                new AgentCompilationContext(chatClients) { ConversationStore = transcript })["main"];
+                new AgentCompilationContext(chatClients) { ConversationStore = transcript })[SingleEntrySessionFactories.MainEntry];
 
             return new ConversationSessionFactory(
                 compiled,
@@ -475,7 +476,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
         {
             for (int attempt = 0; attempt < 200; attempt++)
             {
-                if (await Sessions(harness).TryGetAsync(conversationId, TestContext.Current.CancellationToken) is not null)
+                if (await Sessions(harness).TryGetAsync(SingleEntrySessionFactories.MainEntry, conversationId, TestContext.Current.CancellationToken) is not null)
                 {
                     return;
                 }
@@ -494,7 +495,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
         {
             for (int attempt = 0; attempt < 400; attempt++)
             {
-                if (await Sessions(harness).TryGetAsync(conversationId, TestContext.Current.CancellationToken)
+                if (await Sessions(harness).TryGetAsync(SingleEntrySessionFactories.MainEntry, conversationId, TestContext.Current.CancellationToken)
                     is { IsComplete: true } session)
                 {
                     return session;
@@ -548,7 +549,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
         /// <summary>Reads back the live sessions.</summary>
         private static IConversationSessions Sessions(RelayConnectionHarness harness)
         {
-            return harness.Services.GetRequiredService<EntryRegistry>().ForSessions("main");
+            return harness.Services.GetRequiredService<EntryRegistry>().Sessions;
         }
     }
 
@@ -589,10 +590,17 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
     /// The live sessions, with a note of what store 1 had done by the time a close returned.
     /// </summary>
     internal sealed class OrderedConversationSessions(IConversationSessionFactory factory, Func<bool> transcriptLanded)
-        : IConversationSessions
+        : IConversationSessions, IDisposable
     {
-        private readonly InMemoryConversationSessions _inner =
-            new(factory, InMemoryConversationSessions.DefaultIdleTimeout, TimeProvider.System);
+        private readonly InMemoryConversationSessions _inner = new(
+            SingleEntrySessionFactories.Of(factory),
+            InMemoryConversationSessions.DefaultIdleTimeout,
+            TimeProvider.System);
+
+        public void Dispose()
+        {
+            _inner.Dispose();
+        }
 
         private readonly TaskCompletionSource _closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -603,21 +611,21 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
         public bool? TranscriptLandedAtClose { get; private set; }
 
         /// <inheritdoc />
-        public ValueTask<ConversationSession> OpenAsync(string? conversationId, CancellationToken cancellationToken = default)
+        public ValueTask<ConversationSession> GetOrOpenAsync(string entry, string? conversationId, ConversationSessionState? state, CancellationToken cancellationToken = default)
         {
-            return _inner.OpenAsync(conversationId, cancellationToken);
+            return _inner.GetOrOpenAsync(entry, conversationId, state, cancellationToken);
         }
 
         /// <inheritdoc />
-        public ValueTask<ConversationSession?> TryGetAsync(string conversationId, CancellationToken cancellationToken = default)
+        public ValueTask<ConversationSession?> TryGetAsync(string entry, string conversationId, CancellationToken cancellationToken = default)
         {
-            return _inner.TryGetAsync(conversationId, cancellationToken);
+            return _inner.TryGetAsync(entry, conversationId, cancellationToken);
         }
 
         /// <inheritdoc />
-        public async ValueTask CloseAsync(string conversationId, CancellationToken cancellationToken = default)
+        public async ValueTask CloseAsync(string entry, string conversationId, CancellationToken cancellationToken = default)
         {
-            await _inner.CloseAsync(conversationId, cancellationToken);
+            await _inner.CloseAsync(entry, conversationId, cancellationToken);
             TranscriptLandedAtClose ??= transcriptLanded();
             _ = _closed.TrySetResult();
         }
@@ -631,28 +639,35 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
     /// the two for teardown to catch: a synchronous throw out of a <see cref="ValueTask"/> method lands
     /// at the conversation site, not on the returned task.
     /// </remarks>
-    internal sealed class FaultingConversationSessions(IConversationSessionFactory factory, Exception fault) : IConversationSessions
+    internal sealed class FaultingConversationSessions(IConversationSessionFactory factory, Exception fault) : IConversationSessions, IDisposable
     {
-        private readonly InMemoryConversationSessions _inner =
-            new(factory, InMemoryConversationSessions.DefaultIdleTimeout, TimeProvider.System);
+        private readonly InMemoryConversationSessions _inner = new(
+            SingleEntrySessionFactories.Of(factory),
+            InMemoryConversationSessions.DefaultIdleTimeout,
+            TimeProvider.System);
+
+        public void Dispose()
+        {
+            _inner.Dispose();
+        }
 
         /// <summary>Gets whether teardown ever reached the close.</summary>
         public bool CloseAttempted { get; private set; }
 
         /// <inheritdoc />
-        public ValueTask<ConversationSession> OpenAsync(string? conversationId, CancellationToken cancellationToken = default)
+        public ValueTask<ConversationSession> GetOrOpenAsync(string entry, string? conversationId, ConversationSessionState? state, CancellationToken cancellationToken = default)
         {
-            return _inner.OpenAsync(conversationId, cancellationToken);
+            return _inner.GetOrOpenAsync(entry, conversationId, state, cancellationToken);
         }
 
         /// <inheritdoc />
-        public ValueTask<ConversationSession?> TryGetAsync(string conversationId, CancellationToken cancellationToken = default)
+        public ValueTask<ConversationSession?> TryGetAsync(string entry, string conversationId, CancellationToken cancellationToken = default)
         {
-            return _inner.TryGetAsync(conversationId, cancellationToken);
+            return _inner.TryGetAsync(entry, conversationId, cancellationToken);
         }
 
         /// <inheritdoc />
-        public ValueTask CloseAsync(string conversationId, CancellationToken cancellationToken = default)
+        public ValueTask CloseAsync(string entry, string conversationId, CancellationToken cancellationToken = default)
         {
             CloseAttempted = true;
             throw fault;
@@ -660,23 +675,30 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
     }
 
     /// <summary>Sessions whose close never answers until a test releases it.</summary>
-    internal sealed class HangingConversationSessions(IConversationSessionFactory factory) : IConversationSessions
+    internal sealed class HangingConversationSessions(IConversationSessionFactory factory) : IConversationSessions, IDisposable
     {
-        private readonly InMemoryConversationSessions _inner =
-            new(factory, InMemoryConversationSessions.DefaultIdleTimeout, TimeProvider.System);
+        private readonly InMemoryConversationSessions _inner = new(
+            SingleEntrySessionFactories.Of(factory),
+            InMemoryConversationSessions.DefaultIdleTimeout,
+            TimeProvider.System);
+
+        public void Dispose()
+        {
+            _inner.Dispose();
+        }
 
         private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         /// <inheritdoc />
-        public ValueTask<ConversationSession> OpenAsync(string? conversationId, CancellationToken cancellationToken = default)
+        public ValueTask<ConversationSession> GetOrOpenAsync(string entry, string? conversationId, ConversationSessionState? state, CancellationToken cancellationToken = default)
         {
-            return _inner.OpenAsync(conversationId, cancellationToken);
+            return _inner.GetOrOpenAsync(entry, conversationId, state, cancellationToken);
         }
 
         /// <inheritdoc />
-        public ValueTask<ConversationSession?> TryGetAsync(string conversationId, CancellationToken cancellationToken = default)
+        public ValueTask<ConversationSession?> TryGetAsync(string entry, string conversationId, CancellationToken cancellationToken = default)
         {
-            return _inner.TryGetAsync(conversationId, cancellationToken);
+            return _inner.TryGetAsync(entry, conversationId, cancellationToken);
         }
 
         /// <inheritdoc />
@@ -685,10 +707,10 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
         /// <see cref="CancellationToken.None"/> there, so a store that honoured a token would prove
         /// nothing about the bound teardown puts on the wait itself.
         /// </remarks>
-        public async ValueTask CloseAsync(string conversationId, CancellationToken cancellationToken = default)
+        public async ValueTask CloseAsync(string entry, string conversationId, CancellationToken cancellationToken = default)
         {
             await _release.Task;
-            await _inner.CloseAsync(conversationId, CancellationToken.None);
+            await _inner.CloseAsync(entry, conversationId, CancellationToken.None);
         }
 
         /// <summary>Lets the parked close finish.</summary>

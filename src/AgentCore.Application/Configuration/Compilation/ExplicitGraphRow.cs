@@ -8,7 +8,7 @@ using Microsoft.Agents.AI.Workflows;
 namespace AgentCore.Application.Configuration.Compilation
 {
     /// <summary>
-    /// Row 4: the entry holds <c>graph:</c> with <c>nodes:</c> and <c>edges:</c>. It builds a
+    /// Holds <c>graph:</c> with <c>nodes:</c> and <c>edges:</c>. It builds a
     /// <c>WorkflowBuilder</c>, binds the agents as executors, then <c>AsAIAgent()</c>.
     /// </summary>
     internal sealed class ExplicitGraphRow : CompileTableRow
@@ -23,15 +23,19 @@ namespace AgentCore.Application.Configuration.Compilation
             EntryConfiguration entry,
             string entryPointer,
             Dictionary<string, AIAgent> agents,
-            AgentCompilationContext context)
+            AgentCompilationContext context,
+            bool reusesGraphSession)
         {
             GraphConfiguration graph = entry.Graph!;
             string graphPointer = ConfigurationError.AppendPointer(entryPointer, "graph");
-            (Dictionary<string, ExecutorBinding>? nodes, string? start, List<ExecutorBinding>? outputs) = BindNodes(graph, ConfigurationError.AppendPointer(graphPointer, "nodes"), agents);
+
+            (Dictionary<string, ExecutorBinding>? nodes, string? start, List<ExecutorBinding>? outputs) = BindNodes(
+                configuration, entryName, graph, ConfigurationError.AppendPointer(graphPointer, "nodes"), agents);
 
             ExecutorBinding stateEntry = ExecutorBindingExtensions.BindExecutor(new GraphStateEntry());
 
             WorkflowBuilder builder = new(stateEntry);
+
             builder = builder.AddEdge(stateEntry, nodes[start]);
             (WorkflowBuilder? built, bool guarded) = AddEdges(builder, graph, ConfigurationError.AppendPointer(graphPointer, "edges"), nodes, context);
 
@@ -40,11 +44,12 @@ namespace AgentCore.Application.Configuration.Compilation
                 built = built.WithOutputFrom([.. outputs]);
             }
 
-            AIAgent compiled = built.WithName(entryName)
-                                .Build()
-                                .AsAIAgent(name: entryName);
+            AIAgent compiled = built
+                .WithName(entryName)
+                .Build()
+                .AsAIAgent(name: entryName);
 
-            AIAgent withOutputCheck = new RequireOutputAgent(compiled, entryName);
+            AIAgent withOutputCheck = new RequireOutputAgent(new GraphFaultAgent(compiled, drain: reusesGraphSession), entryName);
 
             return new EntryBuild(
                 guarded ? new GraphStateAgent(withOutputCheck, entryName) : withOutputCheck,
@@ -53,6 +58,8 @@ namespace AgentCore.Application.Configuration.Compilation
 
         /// <summary>Binds every node to its agent, and finds the one start node.</summary>
         private static (Dictionary<string, ExecutorBinding> Nodes, string Start, List<ExecutorBinding> Outputs) BindNodes(
+            AgentCoreConfiguration configuration,
+            string entryName,
             GraphConfiguration graph,
             string nodesPointer,
             Dictionary<string, AIAgent> agents)
@@ -64,7 +71,7 @@ namespace AgentCore.Application.Configuration.Compilation
             for (int index = 0; index < graph.Nodes.Count; index++)
             {
                 GraphNodeConfiguration node = graph.Nodes[index];
-                AIAgentBinding binding = BindNode(node, ConfigurationError.AppendPointer(nodesPointer, index), agents, nodes);
+                AIAgentBinding binding = BindNode(configuration, entryName, node, ConfigurationError.AppendPointer(nodesPointer, index), agents, nodes);
                 nodes[node.Id] = binding;
 
                 if (node.Start)
@@ -86,6 +93,8 @@ namespace AgentCore.Application.Configuration.Compilation
         }
 
         private static AIAgentBinding BindNode(
+            AgentCoreConfiguration configuration,
+            string entryName,
             GraphNodeConfiguration node,
             string pointer,
             Dictionary<string, AIAgent> agents,
@@ -105,8 +114,11 @@ namespace AgentCore.Application.Configuration.Compilation
                     $"the node id '{node.Id}' is declared twice.");
             }
 
-            // The measured shape: an agent binds as an executor, and the host emits update events so
-            // the wrapper can stream. Section 8.6.
+            if (ConfigurationCompiler.AgentDeclaresBackground(configuration, agentId))
+            {
+                throw ConfigurationCompiler.FailBackgroundInGraph(ConfigurationError.AppendPointer(pointer, "agent"), agentId, entryName);
+            }
+
             return new AIAgentBinding(agent, new AIAgentHostOptions { EmitAgentUpdateEvents = true });
         }
 

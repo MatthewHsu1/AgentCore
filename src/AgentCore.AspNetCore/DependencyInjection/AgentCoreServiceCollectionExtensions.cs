@@ -11,8 +11,6 @@ using Microsoft.Agents.AI.Hosting;
 using Microsoft.AspNetCore.WebSockets;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace AgentCore.AspNetCore.DependencyInjection
@@ -35,6 +33,11 @@ namespace AgentCore.AspNetCore.DependencyInjection
 
             _ = services.AddOptions();
             _ = services.Configure(configure);
+            _ = services.AddOptions<AgentCoreOptions>()
+                .Validate(
+                    static o => o.ResponseRetention is null || o.ResponseRetention >= TimeSpan.Zero,
+                    "AgentCoreOptions.ResponseRetention must be null or zero or greater.")
+                .ValidateOnStart();
             _ = services.AddLogging();
 
             _ = services.AddSingleton<AgentCoreBoot>();
@@ -62,6 +65,7 @@ namespace AgentCore.AspNetCore.DependencyInjection
 
             _ = services.AddSingleton<IAuditSinkPort>(provider => provider.GetRequiredService<QueuedAuditSink>());
 
+            _ = services.AddHostedService<ConversationSweeper>();
 
             _ = services.AddSingleton(Boot(boot => boot.Telemetry!));
             _ = services.AddSingleton(Boot(boot => boot.Knowledge!));
@@ -77,12 +81,6 @@ namespace AgentCore.AspNetCore.DependencyInjection
                 provider.GetRequiredService<IOptions<AgentCoreOptions>>().Value.Cache
                 ?? PassThroughHybridCache.Instance);
 
-            _ = services.AddHostedService(provider => new ConversationSessionSweeper(
-                provider,
-                provider.GetRequiredService<TimeProvider>(),
-                provider.GetService<ILoggerFactory>()?.CreateLogger<ConversationSessionSweeper>()
-                    ?? NullLogger<ConversationSessionSweeper>.Instance));
-
             services.TryAddSingleton<IConversationTitler>(provider => new ChatConversationTitler(
                 provider.GetRequiredService<IConversationStore>(),
                 provider.GetRequiredService<IChatClientFactory>()
@@ -95,30 +93,6 @@ namespace AgentCore.AspNetCore.DependencyInjection
                 ?? EvaluationConfiguration.DefaultSampleRate));
 
             services.TryAddSingleton<IEvaluationScorePublisher, InMemoryEvaluationScorePublisher>();
-
-            return services;
-        }
-
-        /// <summary>
-        /// Opts this host into the periodic retention sweep of stored conversations.
-        /// </summary>
-        /// <param name="services">The service collection of the host.</param>
-        /// <param name="configure">Sets the retention, the interval, and the batch size. Defaults live on <see cref="ConversationSweepOptions"/>.</param>
-        /// <returns>The same collection, so a host chains its conversations.</returns>
-        public static IServiceCollection AddConversationSweep(
-            this IServiceCollection services,
-            Action<ConversationSweepOptions>? configure = null)
-        {
-            ArgumentNullException.ThrowIfNull(services);
-
-            OptionsBuilder<ConversationSweepOptions> builder = services.AddOptions<ConversationSweepOptions>();
-
-            if (configure is not null)
-            {
-                _ = builder.Configure(configure);
-            }
-
-            _ = services.AddHostedService<ConversationSweeper>();
 
             return services;
         }

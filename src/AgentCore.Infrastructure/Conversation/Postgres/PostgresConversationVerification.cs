@@ -37,9 +37,18 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
 
     /// <summary>One spoken turn, as store 1 holds it and as store 3 proves it.</summary>
     /// <param name="TurnIndex">The turn, which is the join between the two stores.</param>
-    /// <param name="Spoken">The words store 1 holds. A barge-in cut them down to what the caller heard.</param>
+    /// <param name="Spoken">
+    /// Every step's text store 1 holds for the turn, concatenated in row order. A barge-in cuts these rows
+    /// down to what the caller heard, so for a cut turn this already holds the shown words, not the words
+    /// the model produced.
+    /// </param>
     /// <param name="ReplyTextSha256">
-    /// The digest the chain holds for the turn, or <see langword="null"/> when its event carried none.
+    /// The digest <paramref name="Spoken"/> should hash to: <c>turn.completed</c>'s
+    /// <see cref="AgentCore.Domain.Audit.AuditPayloadKeys.ReplyTextSha256"/> for a turn nothing cut, or the
+    /// amending <c>reply.interrupted</c>'s
+    /// <see cref="AgentCore.Domain.Audit.AuditPayloadKeys.UtteranceUntilInterruptSha256"/> for a turn one did —
+    /// the hash of the whole reply the model produced would not match rows that only hold what was shown.
+    /// Never <see langword="null"/>: every saved turn has a <c>turn.completed</c> event.
     /// </param>
     internal sealed record TranscriptTurnDigest(int TurnIndex, string Spoken, string? ReplyTextSha256);
 }

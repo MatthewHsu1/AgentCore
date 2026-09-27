@@ -89,7 +89,7 @@ namespace AgentCore.Application.Tests.Transcript
                 second,
                 message => message.Role == ChatRole.System
                     && message.Text.Contains(
-                        TurnMessages.HistoryPreamble + TurnMessages.CallerLinePrefix + "where is my order",
+                        TurnMessages.HistoryPreamble + TurnMessages.UserLinePrefix + "where is my order",
                         StringComparison.Ordinal)
                     && message.Text.Contains(TurnMessages.AgentLinePrefix + Spoken, StringComparison.Ordinal));
             Assert.DoesNotContain(second, message => message.Text.Contains(Thinking, StringComparison.Ordinal));
@@ -133,7 +133,7 @@ namespace AgentCore.Application.Tests.Transcript
             await spoke;
 
             // Act
-            bool recorded = session.Interrupt("Order 41", TimeSpan.FromMilliseconds(300));
+            bool recorded = session.Cut(0, new TurnCut("Order 41", TimeSpan.FromMilliseconds(300)));
 
             // Assert
             Assert.True(recorded);
@@ -161,7 +161,7 @@ namespace AgentCore.Application.Tests.Transcript
             await spoke;
 
             // Act
-            bool recorded = session.Interrupt(string.Empty, TimeSpan.FromMilliseconds(40));
+            bool recorded = session.Cut(0, new TurnCut(string.Empty, TimeSpan.FromMilliseconds(40)));
 
             // Assert
             Assert.True(recorded);

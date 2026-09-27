@@ -1,3 +1,4 @@
+using AgentCore.Application.Runtime;
 using AgentCore.Domain;
 using AgentCore.Domain.Knowledge;
 using Microsoft.Extensions.AI;
@@ -30,7 +31,7 @@ namespace AgentCore.Application.Ports
         /// <param name="cancellationToken">Cancels the model calls.</param>
         /// <returns>The finished turn. It always carries a spoken line.</returns>
         /// <exception cref="InvalidOperationException">
-        /// The conversation already ended, or another turn of this conversation is still running.
+        /// The conversation already ended, or another turn of this conversation still ran after the wait limit.
         /// </exception>
         Task<TurnResult> RunTurnAsync(string userInput, CancellationToken cancellationToken = default);
 
@@ -39,7 +40,7 @@ namespace AgentCore.Application.Ports
         /// <param name="cancellationToken">Cancels the model calls.</param>
         /// <returns>The finished turn. Its reply is empty while approval requests are pending.</returns>
         /// <exception cref="InvalidOperationException">
-        /// The conversation already ended, or another turn of this conversation is still running.
+        /// The conversation already ended, or another turn of this conversation still ran after the wait limit.
         /// </exception>
         Task<TurnResult> RunTurnMessageAsync(ChatMessage userInput, CancellationToken cancellationToken);
 
@@ -53,7 +54,7 @@ namespace AgentCore.Application.Ports
         /// 40-fragment reply, and an adapter must not have to filter them again.
         /// </remarks>
         /// <exception cref="InvalidOperationException">
-        /// The conversation already ended, or another turn of this conversation is still running.
+        /// The conversation already ended, or another turn of this conversation still ran after the wait limit.
         /// </exception>
         IAsyncEnumerable<ChatResponseUpdate> RunTurnStreamingAsync(
             string userInput,
@@ -64,39 +65,50 @@ namespace AgentCore.Application.Ports
         /// <param name="cancellationToken">Cancels the model calls.</param>
         /// <returns>The reply, one update at a time. Every update carries content.</returns>
         /// <exception cref="InvalidOperationException">
-        /// The conversation already ended, or another turn of this conversation is still running.
+        /// The conversation already ended, or another turn of this conversation still ran after the wait limit.
         /// </exception>
         IAsyncEnumerable<ChatResponseUpdate> RunTurnMessageStreamingAsync(
             ChatMessage userInput,
             CancellationToken cancellationToken);
 
-        /// <summary>Ends the running turn where the caller cut the reply off.</summary>
-        /// <param name="utteranceUntilInterrupt">The text the caller actually heard.</param>
-        /// <param name="durationUntilInterrupt">How much of the reply played, as the relay reported it.</param>
-        /// <param name="cutsRunningTurn">
-        /// Whether the turn running now is the turn the caller was hearing. An adapter that paces no
-        /// audio of its own leaves this at <see langword="true"/> and lets the implementation decide.
+        /// <summary>Starts one turn, and hands back its index and its reply as it arrives.</summary>
+        /// <param name="userInput">What the caller said or answered: words, an approval answer, or both.</param>
+        /// <param name="origin">Where the turn hangs in the conversation the caller can see, or <see langword="null"/>.</param>
+        /// <param name="cancellationToken">Cancels the turn, from the start through its last update.</param>
+        /// <returns>
+        /// The started turn. <see cref="Cut"/> reaches it by <see cref="TurnRun.TurnIndex"/> from now on. Enumerate
+        /// <see cref="TurnRun.Updates"/> once: the turn runs and commits only then. Dispose the run, read or not:
+        /// the conversation is freed when the reply is read to the end or the run is disposed.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// The conversation already ended, or another turn of this conversation still ran after the wait limit.
+        /// </exception>
+        Task<TurnRun> StartTurnAsync(
+            ChatMessage userInput, ConversationTurnOrigin? origin, CancellationToken cancellationToken = default);
+
+        /// <summary>Cuts one turn's reply where the user stopped seeing or hearing it (design section 3, the Cut rule).</summary>
+        /// <param name="turnIndex">The turn the user was seeing or hearing.</param>
+        /// <param name="cut">
+        /// What reached the user. <see cref="TurnCut.ShownText"/> <see langword="null"/> keeps everything the turn yielded.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> when the barge-in was recorded, either against the running turn or
-        /// against the turn that finished last, and <see langword="false"/> when there was nothing to
-        /// record it against.
+        /// <see langword="true"/> when the cut was recorded: a running turn stops and commits with it, and a committed
+        /// turn has its reply rewritten. <see langword="false"/> when the turn is unknown or already cut, or when it is
+        /// older than the newest turn started on this conversation: once a later turn starts, an earlier turn's reply
+        /// never changes, even while the later turn is still running.
         /// </returns>
-        /// <remarks>
-        /// <para>
-        /// Item 6a of section 11 asks the record to hold what the caller heard, not what the model
-        /// produced. Section 7.1 reports both values on the <c>interrupt</c> frame, at 1 ms, so an
-        /// adapter passes them through and never computes them. Item 6c forbids the estimator that would
-        /// otherwise stand here.
-        /// </para>
-        /// <para>
-        /// <paramref name="cutsRunningTurn"/> carries one domain fact and no frame schema, so D8 holds.
-        /// A vendor that paces the audio itself is still speaking one turn while the next one already
-        /// runs — a held prompt starts it inside the finished turn's own ending — and only that adapter
-        /// can tell the two apart. It answers <see langword="false"/> there, and the turn the caller was
-        /// actually hearing is the one the record corrects.
-        /// </para>
-        /// </remarks>
-        bool Interrupt(string utteranceUntilInterrupt, TimeSpan durationUntilInterrupt, bool cutsRunningTurn = true);
+        /// <exception cref="ArgumentOutOfRangeException"><see cref="TurnCut.Played"/> is negative.</exception>
+        bool Cut(int turnIndex, TurnCut cut);
+
+        /// <summary>Replaces the cut a turn already took with a later account of what reached the user.</summary>
+        /// <param name="turnIndex">The turn the user was seeing or hearing.</param>
+        /// <param name="cut">What reached the user, as it is now known.</param>
+        /// <returns>
+        /// <see langword="true"/> when the recut was recorded: the turn commits with it, or its committed reply is
+        /// rewritten to it. <see langword="false"/> when the turn is unknown or took no cut, or when it is older than
+        /// the newest turn started on this conversation, under the same rule as <see cref="Cut"/>.
+        /// </returns>
+        /// <exception cref="ArgumentOutOfRangeException"><see cref="TurnCut.Played"/> is negative.</exception>
+        bool Recut(int turnIndex, TurnCut cut);
     }
 }

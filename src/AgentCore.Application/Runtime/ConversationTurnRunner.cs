@@ -1,12 +1,8 @@
 using System.Diagnostics;
-using System.Globalization;
 using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.State;
-using AgentCore.Application.Transcript;
-using AgentCore.Domain;
-using AgentCore.Domain.Audit;
 using AgentCore.Domain.Knowledge;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -49,95 +45,55 @@ namespace AgentCore.Application.Runtime
             _timeZone = zone;
         }
 
-        /// <summary>Runs one turn of the conversation against the session the conversation holds.</summary>
-        /// <param name="userInput">What the caller said or answered.</param>
-        /// <param name="origin">Where the turn hangs, or null for a caller that does not say.</param>
-        /// <param name="cancellationToken">Cancels the turn.</param>
-        /// <returns>What the turn did.</returns>
-        internal async Task<TurnResult> RunTurnCoreAsync(
-            ChatMessage userInput, ConversationTurnOrigin? origin, CancellationToken cancellationToken)
+        /// <summary>
+        /// Admits one turn: refuses a terminal or disposed conversation, and waits for a running turn of this
+        /// conversation to end, up to <see cref="ConversationBusyMark.WaitLimit"/> counted from <paramref name="started"/>.
+        /// <see cref="BeginTurn"/> follows. The turn's edit runs later, in <see cref="ConversationTurnAgent"/>.
+        /// </summary>
+        /// <param name="started">The <see cref="TimeProvider.GetTimestamp"/> at which the turn began to wait for the conversation.</param>
+        /// <param name="cancellationToken">Cancels the wait.</param>
+        /// <exception cref="ObjectDisposedException">The conversation was disposed.</exception>
+        /// <exception cref="InvalidOperationException">The conversation is terminal.</exception>
+        /// <exception cref="Conversation.ConversationTurnConflictException">Another turn still ran past the limit.</exception>
+        internal async Task AdmitTurnAsync(long started, CancellationToken cancellationToken)
         {
-            AgentSession session = await _session.Ledger.OpenSessionAsync(cancellationToken).ConfigureAwait(false);
-
-            await AdmitTurnAsync(session, origin, cancellationToken).ConfigureAwait(false);
-            ConversationTurn turn = BeginTurn(userInput, session, origin);
-
-            CancellationTokenSource cancellation = _session.Interruptions.StartRun(cancellationToken);
+            RefuseIfTerminal();
+            await _session.Cuts.EnterTurnAsync(started, cancellationToken).ConfigureAwait(false);
 
             try
             {
-                TurnInvocation invocation = TurnInvocationOf(turn);
-
-                AgentSession runSession = await OpenRunAsync(turn, cancellation.Token).ConfigureAwait(false);
-
-                TurnRegistry.Set(runSession, invocation);
-
-                AgentResponse response;
-                string? toolFault = null;
-
-                try
-                {
-                    response = await turn.Agent
-                        .RunAsync(
-                            turn.Request,
-                            runSession,
-                            invocation.RunOptions(),
-                            cancellationToken: cancellation.Token)
-                        .ConfigureAwait(false);
-                }
-                catch (Exception exception) when (exception is not OperationCanceledException)
-                {
-                    toolFault = exception.Message;
-                    response = new AgentResponse();
-                }
-
-                return await _session.Completion.CompleteTurnAsync(turn, response, toolFault, ConversationTurnStream.ReadDisposition(response), cancellationToken)
-                    .ConfigureAwait(false);
+                RefuseIfTerminal();
             }
-            finally
+            catch
             {
-                _session.Interruptions.EndRun(cancellation);
-                turn.Activity?.Dispose();
+                _session.Cuts.ReleaseTurn();
+                throw;
+            }
+
+            _session.Clarifications.BeginTurn();
+        }
+
+        private void RefuseIfTerminal()
+        {
+            if (!_session.Ledger.Reads.Diverged || _session.Events.HasEnded)
+            {
+                RefuseIfComplete();
             }
         }
 
-        /// <summary>
-        /// Admits one turn: refuses a terminal or running conversation, then withdraws whatever the turn
-        /// replaces. <see cref="BeginTurn"/> follows, from the same frame.
-        /// </summary>
-        /// <param name="session">The session of this conversation.</param>
-        /// <param name="origin">Where the turn hangs, or null for a caller that does not say.</param>
-        /// <param name="cancellationToken">Cancels the withdrawal.</param>
-        internal async ValueTask AdmitTurnAsync(AgentSession session, ConversationTurnOrigin? origin, CancellationToken cancellationToken)
+        /// <summary>Refuses a turn on a conversation that reached a terminal stage.</summary>
+        /// <exception cref="InvalidOperationException">The conversation reached a terminal stage.</exception>
+        internal void RefuseIfComplete()
         {
             if (_session.IsComplete)
             {
                 throw new InvalidOperationException(
                     $"The conversation '{_session.ConversationId}' reached the terminal stage '{_session.Stage}', so it runs no further turn.");
             }
-
-            if (!_session.Interruptions.TryEnterTurn())
-            {
-                throw new InvalidOperationException(
-                    $"A turn of the conversation '{_session.ConversationId}' is still running. One conversation runs one turn at a time.");
-            }
-
-            try
-            {
-                _session.Clarifications.BeginTurn();
-
-                await WithdrawSupersededAsync(session, origin, cancellationToken).ConfigureAwait(false);
-            }
-            catch
-            {
-                _session.Interruptions.ReleaseTurn();
-
-                throw;
-            }
         }
 
         /// <summary>
-        /// Picks the agent, builds the model input, and takes the turn <see cref="AdmitTurnAsync"/> admitted.
+        /// Picks the agent and takes the turn <see cref="AdmitTurnAsync"/> admitted.
         /// Synchronous on purpose: the turn span it opens must be the ambient activity of the caller's
         /// frame, and an async method hands no <see cref="Activity.Current"/> back.
         /// </summary>
@@ -150,6 +106,8 @@ namespace AgentCore.Application.Runtime
             Activity? activity = null;
             try
             {
+                _session.Lifetime.TouchWorkspace();
+
                 AIAgent agent = ResolveAgent();
 
                 string? reminder = _session.Policy is null ? null : UnfilledSlotReminder.Build(_session.State, _session.Policy.CurrentStage);
@@ -157,14 +115,6 @@ namespace AgentCore.Application.Runtime
                 ChatMessage spoken = userInput;
 
                 _session.History.BeginTurn(session, _session.State.TurnIndex);
-
-                List<ChatMessage> request = [spoken];
-                if (!_session.SessionCarriesHistory
-                    && !_session.ReusesGraphSession
-                    && TurnMessages.GraphHistory(_session.History.Read(session)) is { } rendered)
-                {
-                    request = [rendered, spoken];
-                }
 
                 activity = AgentCoreTelemetry.StartTurn(_session.ConversationId, _session.State.TurnIndex, _session.State.Stage);
 
@@ -179,7 +129,6 @@ namespace AgentCore.Application.Runtime
                 return new ConversationTurn(
                     agent,
                     session,
-                    request,
                     spoken,
                     reminder,
                     _session.State.Stage,
@@ -190,48 +139,16 @@ namespace AgentCore.Application.Runtime
                     new TurnResults(),
                     new TurnFiles(),
                     knowledge,
-                    origin?.MessageId);
+                    origin);
             }
             catch
             {
                 activity?.Dispose();
 
-                _session.Interruptions.ReleaseTurn();
+                _session.Cuts.ReleaseTurn();
 
                 throw;
             }
-        }
-
-        /// <summary>Takes back everything the conversation said after the message this turn hangs off.</summary>
-        internal async ValueTask WithdrawSupersededAsync(AgentSession session, ConversationTurnOrigin? origin, CancellationToken cancellationToken)
-        {
-            if (origin is not { NamesParent: true })
-            {
-                return;
-            }
-
-            WithdrawnTurns? cut = _session.History.CanTruncateFrom(session, origin.ParentMessageId)
-                ? _session.History.TruncateFrom(session, origin.ParentMessageId)
-                : await _session.Ledger.CutUnderSummaryAsync(session, origin.ParentMessageId, cancellationToken).ConfigureAwait(false);
-
-            if (cut is not { } withdrawn)
-            {
-                return;
-            }
-
-            _session.Clarifications.Withdraw();
-
-            _ = _session.Events.Raise(
-                ConversationEventKind.TurnSuperseded,
-                _session.Time.GetUtcNow(),
-                _session.State.TurnIndex,
-                payload: new Dictionary<string, string>(StringComparer.Ordinal)
-                {
-                    [AuditPayloadKeys.WithdrewFromTurnIndex] =
-                        withdrawn.First.ToString(CultureInfo.InvariantCulture),
-                    [AuditPayloadKeys.WithdrewThroughTurnIndex] =
-                        withdrawn.Last.ToString(CultureInfo.InvariantCulture),
-                });
         }
 
         /// <summary>Picks the agent that speaks this turn.</summary>
@@ -274,10 +191,12 @@ namespace AgentCore.Application.Runtime
             return await turn.Agent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        /// <summary>Builds the invocation one turn hands its tools.</summary>
+        /// <summary>Builds the invocation one turn hands its layers and its tools.</summary>
         /// <param name="turn">The turn about to run.</param>
-        /// <returns>Everything a tool of this turn may need, as one explicit value.</returns>
-        internal TurnInvocation TurnInvocationOf(ConversationTurn turn)
+        /// <param name="completer">The conversation's side of the turn's seal.</param>
+        /// <param name="slot">Where a cut of the turn waits for the seal.</param>
+        /// <returns>Everything the seal and a tool of this turn may need, as one explicit value.</returns>
+        internal TurnInvocation TurnInvocationOf(ConversationTurn turn, ITurnCompleter completer, TurnCutSlot slot)
         {
             return new()
             {
@@ -299,6 +218,13 @@ namespace AgentCore.Application.Runtime
                 Tools = _delegatedTools?.Tools,
                 ToolsFor = _delegatedTools?.ToolId,
                 State = _session.State,
+                HistorySession = turn.Session,
+                User = turn.Spoken,
+                Origin = turn.Origin,
+                RendersHistory = !_session.SessionCarriesHistory && !_session.ReusesGraphSession,
+                Completer = completer,
+                CutSlot = slot,
+                Notices = new TurnNotices(),
             };
         }
     }

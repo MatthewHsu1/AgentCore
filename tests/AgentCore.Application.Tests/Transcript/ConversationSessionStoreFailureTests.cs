@@ -33,6 +33,22 @@ namespace AgentCore.Application.Tests.Transcript
             agent: only
         """;
 
+        private const string EndsOnTheSecondTurnYaml = """
+        apiVersion: agentcore/v1
+        guards:
+          secondTurn: { ">=": [ { var: turnIndex }, 2 ] }
+        agents:
+          items:
+            - { id: only, instructions: "ok" }
+        entries:
+          main:
+            policy:
+              initial: working
+              stages:
+                - { id: working, agent: only, to: [ { stage: done, when: secondTurn } ] }
+                - { id: done, agent: only, terminal: true }
+        """;
+
         /// <summary>
         /// The <c>reply.interrupted</c> row names a hash of the words the caller heard. Raised before
         /// store 1 holds them, it names a hash of words nothing holds.
@@ -53,7 +69,7 @@ namespace AgentCore.Application.Tests.Transcript
             await spoke;
 
             // Act
-            bool recorded = session.Interrupt("Hello", TimeSpan.FromMilliseconds(300));
+            bool recorded = session.Cut(0, new TurnCut("Hello", TimeSpan.FromMilliseconds(300)));
 
             // Assert
             reply.OpenGate();
@@ -136,6 +152,32 @@ namespace AgentCore.Application.Tests.Transcript
                 [ConversationEventKind.ConversationStarted, ConversationEventKind.TurnCompleted],
                 stored.Select(item => item.Kind).ToArray());
             Assert.Equal(stored.Length, stored.Select(item => item.EventId).Distinct().Count());
+        }
+
+        /// <summary>
+        /// A turn that ended the conversation ended it, even when the store dropped its words: the next turn is
+        /// refused, not run on the earlier stage the store still holds, because no row may follow <c>conversation.ended</c>.
+        /// </summary>
+        [Fact]
+        public async Task Append_StoreThrowsOnTheTurnThatEndsTheConversation_TheNextTurnIsRefused()
+        {
+            // Arrange
+            using RequestRecordingChatClient reply = new("hi there", "goodbye", "still here?");
+            FlakyAppendConversationStore store = new();
+            ConversationSession session = CreateSession(EndsOnTheSecondTurnYaml, reply, store);
+            Assert.False((await session.RunTurnAsync("hello", TestContext.Current.CancellationToken)).IsTerminal);
+            store.Down = true;
+            Assert.True((await session.RunTurnAsync("bye", TestContext.Current.CancellationToken)).IsTerminal);
+            await session.FlushTranscriptAsync();
+            store.Down = false;
+
+            // Act
+            InvalidOperationException refused = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => session.RunTurnAsync("one more", TestContext.Current.CancellationToken));
+
+            // Assert
+            Assert.Contains("runs no further turn", refused.Message, StringComparison.Ordinal);
+            Assert.Equal(2, reply.Requests.Count);
         }
 
         private static ConversationSession CreateSession(

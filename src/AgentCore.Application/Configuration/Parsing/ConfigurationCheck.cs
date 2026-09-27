@@ -39,5 +39,12 @@ namespace AgentCore.Application.Configuration.Parsing
         /// still carries a pointer into the document.
         /// </summary>
         ValueRange = 9,
+
+        /// <summary>
+        /// Check 10: an agent used as a graph node may not declare <c>background:</c>. MAF 1.21.0 gives a
+        /// workflow node's session no release hook, so a background child started inside a node would
+        /// outlive the conversation. This table row has no entry in section 8.5.
+        /// </summary>
+        GraphNodeBackground = 10,
     }
 }

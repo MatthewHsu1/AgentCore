@@ -1,11 +1,10 @@
-using System.Text.Json;
 using AgentCore.Infrastructure.Conversation.Postgres;
 using AgentCore.Infrastructure.Tests.Database.Postgres;
 using Xunit;
 
 namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
 {
-    /// <summary>The continuation map beside the conversations: one envelope per opaque id.</summary>
+    /// <summary>The continuation rows beside the conversations: one row per response id.</summary>
     public sealed class ContinuationStoreTests : PostgresDatabaseTest
     {
         /// <inheritdoc />
@@ -26,44 +25,50 @@ namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
         }
 
         [PostgresFact]
-        public async Task RoundTrip_SaveGetDelete()
+        public async Task RoundTrip_SaveFindDelete()
         {
             // Arrange
             PostgresConversationStore store = new(DataSource);
             _ = await store.CreateAsync("conv_1", Token);
-            using JsonDocument document = JsonDocument.Parse("""{ "conversationId": "c1", "state": {} }""");
 
             // Act
-            await store.SaveContinuationAsync("conv_1", "conv_1", document.RootElement, Token);
-            JsonElement? found = await store.GetContinuationAsync("conv_1", Token);
+            await store.SaveContinuationAsync("resp_1", "conv_1", Token);
+            string? found = await store.FindContinuationAsync("resp_1", Token);
 
             // Assert
-            _ = Assert.NotNull(found);
-            Assert.True(JsonElement.DeepEquals(document.RootElement, found.Value));
+            Assert.Equal("conv_1", found);
 
             // Act
-            using JsonDocument replacement = JsonDocument.Parse("{}");
-            await store.SaveContinuationAsync("conv_1", "conv_1", replacement.RootElement, Token);
-            JsonElement? replaced = await store.GetContinuationAsync("conv_1", Token);
+            await store.DeleteContinuationAsync("resp_1", Token);
 
             // Assert
-            Assert.Equal("{}", replaced?.GetRawText());
-
-            // Act
-            await store.DeleteContinuationAsync("conv_1", Token);
-
-            // Assert
-            Assert.Null(await store.GetContinuationAsync("conv_1", Token));
+            Assert.Null(await store.FindContinuationAsync("resp_1", Token));
         }
 
         [PostgresFact]
-        public async Task GetContinuation_UnknownId_AnswersNull()
+        public async Task SaveContinuation_TheSameResponseIdTwice_KeepsTheFirstConversation()
+        {
+            // Arrange — a response id is written once, in its turn's own commit, and never rewritten.
+            PostgresConversationStore store = new(DataSource);
+            _ = await store.CreateAsync("conv_1", Token);
+            _ = await store.CreateAsync("conv_2", Token);
+            await store.SaveContinuationAsync("resp_1", "conv_1", Token);
+
+            // Act
+            await store.SaveContinuationAsync("resp_1", "conv_2", Token);
+
+            // Assert
+            Assert.Equal("conv_1", await store.FindContinuationAsync("resp_1", Token));
+        }
+
+        [PostgresFact]
+        public async Task FindContinuation_UnknownId_AnswersNull()
         {
             // Arrange
             PostgresConversationStore store = new(DataSource);
 
             // Act
-            JsonElement? found = await store.GetContinuationAsync("conv_missing", Token);
+            string? found = await store.FindContinuationAsync("resp_missing", Token);
 
             // Assert
             Assert.Null(found);

@@ -4,16 +4,10 @@ using Microsoft.Agents.AI;
 namespace AgentCore.Application.Runtime.Harness
 {
     /// <summary>
-    /// The context provider behind an agent's <c>shell:</c> block: on every invocation it hands the
-    /// model this conversation's shell executor as MAF's own tool. No instructions of our own — MAF's tool
-    /// description is what the model reads — and no <c>StateKeys</c>, because the shell keeps no
-    /// session state.
+    /// The context provider behind an agent's <c>shell:</c> block.
     /// </summary>
     internal sealed class ConversationShellProvider : AIContextProvider
     {
-        private const string NoTurnMessage =
-            "A shell: tool runs only while a turn runs through a ConversationSession with a workspace root bound.";
-
         private readonly ConversationShellOptions _options;
 
         public ConversationShellProvider(ConversationShellOptions options)
@@ -22,16 +16,16 @@ namespace AgentCore.Application.Runtime.Harness
             _options = options;
         }
 
+        // A delegated agent's run files no turn on its own session, so the shell has no workspace to
+        // run in. The tool is simply absent rather than a thrown fault (design §6.3#6).
         protected override ValueTask<AIContext> ProvideAIContextAsync(
             InvokingContext context, CancellationToken cancellationToken = default)
         {
-            ConversationShells shells = TurnRegistry.For(context.Session)?.Shells
-                ?? throw new InvalidOperationException(NoTurnMessage);
+            ConversationShells? shells = TurnRegistry.For(context.Session)?.Shells;
 
-            return new ValueTask<AIContext>(new AIContext
-            {
-                Tools = [shells.Get(_options).AsAIFunction(requireApproval: false)],
-            });
+            return new ValueTask<AIContext>(shells is null
+                ? new AIContext()
+                : new AIContext { Tools = [shells.Get(_options).AsAIFunction(requireApproval: false)] });
         }
     }
 }

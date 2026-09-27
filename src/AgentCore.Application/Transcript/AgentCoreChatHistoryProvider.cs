@@ -1,7 +1,5 @@
-using System.Runtime.CompilerServices;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Conversation.Memory;
-using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Ports;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -11,21 +9,36 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace AgentCore.Application.Transcript
 {
     /// <summary>
-    /// Reports one store 1 write that was dropped, so the conversation can raise a diagnostic for it.
+    /// Store the words of a conversation, held for the session by the provider and written through to a backing store.
     /// </summary>
-    internal delegate void TranscriptWriteDropped(int turnIndex, Exception exception);
-
-    /// <summary>
-    /// Store 1: the words of a conversation, held for the session by the provider and written through to a backing store.
-    /// </summary>
-    /// <remarks>Creates the provider over a backing store.</remarks>
-    internal sealed class AgentCoreChatHistoryProvider(IConversationStore? store = null, ILogger? logger = null) : ChatHistoryProvider
+    internal sealed class AgentCoreChatHistoryProvider : ChatHistoryProvider
     {
-        private readonly ConditionalWeakTable<AgentSession, ConversationGate> _gates = [];
+        /// <summary>
+        /// The state bag key that binds a session to its conversation. A session without it reads nothing, stages
+        /// nothing and commits nothing, whatever else its bag carries (design probe G4).
+        /// </summary>
+        internal const string ConversationKey = "agentcore.history";
 
-        private readonly IConversationStore _store = store ?? new InMemoryConversationStore();
+        private static readonly IReadOnlyList<string> Keys = [ConversationKey];
 
-        private readonly ILogger _logger = logger ?? NullLogger.Instance;
+        private readonly ConversationGates _gates;
+
+        private readonly ConversationWrites _writes;
+
+        /// <summary>Creates the provider over a backing store.</summary>
+        /// <param name="store">Store 1, or <see langword="null"/> for one kept in this process.</param>
+        /// <param name="logger">Where refused writes and cuts are logged.</param>
+        public AgentCoreChatHistoryProvider(IConversationStore? store = null, ILogger? logger = null)
+            : base(storeInputRequestMessageFilter: ExternalOnly)
+        {
+            ILogger log = logger ?? NullLogger.Instance;
+            IConversationStore words = store ?? new InMemoryConversationStore();
+            _gates = new ConversationGates(words, log);
+            _writes = new ConversationWrites(_gates, words, log);
+        }
+
+        /// <inheritdoc />
+        public override IReadOnlyList<string> StateKeys => Keys;
 
         /// <summary>
         /// Opens a conversation on one session: names it, reads back what it already said, and says where a
@@ -37,7 +50,7 @@ namespace AgentCore.Application.Transcript
         /// What store 1 already holds for this conversation, which is empty for a conversation that is new. A second
         /// session of one conversation is handed the first session's words here, and nowhere else.
         /// </param>
-        /// <param name="report">Where a dropped store 1 write is reported, if anywhere.</param>
+        /// <param name="losses">Where a dropped store 1 write is counted, if anywhere.</param>
         /// <param name="marks">
         /// How far the conversation had got, from store 0's own counters — or the zero marks of a conversation that has
         /// never spoken. The words cannot say this on their own, because an edit deletes the rows that
@@ -48,50 +61,63 @@ namespace AgentCore.Application.Transcript
             AgentSession session,
             string conversationId,
             IReadOnlyList<ConversationMessage> spoken,
-            TranscriptWriteDropped? report = null,
+            ITranscriptLossCounter? losses = null,
             TranscriptMarks marks = default)
         {
             ArgumentNullException.ThrowIfNull(session);
             ArgumentException.ThrowIfNullOrEmpty(conversationId);
             ArgumentNullException.ThrowIfNull(spoken);
 
+            session.StateBag.SetValue(ConversationKey, conversationId);
+
             return UnderLock(
                 session,
                 (transcript, gate) =>
                 {
                     transcript.ConversationId = conversationId;
-                    gate.Dropped = report;
+                    gate.Losses = losses;
                     return transcript.Resume(spoken, marks);
                 });
         }
 
-        /// <summary>Reads the ordinal the session expects the conversation's next row to take.</summary>
+        /// <summary>Reads where the session's words stand: the writes queued so far, the revision, and the next ordinal, together.</summary>
         /// <param name="session">The session this conversation runs on.</param>
         /// <returns>
-        /// The next free ordinal as the session counts it. Equal to store 0's own counter unless a row was
-        /// written by someone else, or one of this session's own writes was dropped.
+        /// The position. Once <see cref="TranscriptPosition.Written"/> completes, store 0's counter equals
+        /// <see cref="TranscriptPosition.NextOrdinal"/> unless a row was written by someone else, or one of this
+        /// session's own writes was dropped.
         /// </returns>
-        public int NextOrdinal(AgentSession session)
+        public TranscriptPosition Position(AgentSession session)
         {
             ArgumentNullException.ThrowIfNull(session);
 
-            return UnderLock(session, static transcript => transcript.NextOrdinal);
+            return UnderLock(
+                session,
+                static (transcript, gate) => new TranscriptPosition(gate.Writes, transcript.Revision, transcript.NextOrdinal));
         }
 
-        /// <summary>Replaces the conversation's live history with what store 1 holds.</summary>
+        /// <summary>
+        /// Replaces the conversation's live history with what store 1 holds, unless the session's words moved since
+        /// the read began. Words that moved hold a write store 1 may not have yet, and replacing them would lose it.
+        /// </summary>
         /// <param name="session">The session this conversation runs on.</param>
-        /// <param name="rows">The rows store 1 read for the session, as <see cref="ConversationTranscript.Resync"/> takes them.</param>
-        /// <param name="nextOrdinal">The next free ordinal of the conversation, from store 0's own counter.</param>
-        public void Resync(AgentSession session, IReadOnlyList<ConversationMessage> rows, int nextOrdinal)
+        /// <param name="catchUp">What store 1 held, and the revision the read began at.</param>
+        /// <returns><see langword="false"/> when the words moved and nothing was replaced.</returns>
+        public bool TryResync(AgentSession session, TranscriptCatchUp catchUp)
         {
             ArgumentNullException.ThrowIfNull(session);
-            ArgumentNullException.ThrowIfNull(rows);
+            ArgumentNullException.ThrowIfNull(catchUp);
 
-            _ = UnderLock(
+            return UnderLock(
                 session,
                 transcript =>
                 {
-                    transcript.Resync(rows, nextOrdinal);
+                    if (transcript.Revision != catchUp.Revision)
+                    {
+                        return false;
+                    }
+
+                    transcript.Resync(catchUp.Rows, catchUp.NextOrdinal);
                     return true;
                 });
         }
@@ -130,25 +156,11 @@ namespace AgentCore.Application.Transcript
             ArgumentNullException.ThrowIfNull(session);
             ArgumentNullException.ThrowIfNull(summary);
 
-            return UnderLock(
-                session,
-                (transcript, gate) =>
-                {
-                    if (transcript.Compact(summary, coversUpTo, revision) is not { } row)
-                    {
-                        return false;
-                    }
-
-                    ConversationMessageDraft draft = new(row.TurnIndex, row.Content, row.MessageId) { CoversUpTo = row.CoversUpTo };
-                    gate.Enqueue(() => new ValueTask(_store.AppendAsync(
-                        transcript.ConversationId, [draft], state: null, CancellationToken.None).AsTask()));
-
-                    return true;
-                });
+            return _writes.Compact(session, summary, coversUpTo, revision);
         }
 
         /// <summary>
-        /// Whether <see cref="TruncateFrom"/> can cut an edit hanging off one message from what the session
+        /// Whether <see cref="TruncateFromAsync"/> can cut an edit hanging off one message from what the session
         /// holds. It cannot when the cut would reach a row the summary stands in for; every row must be read back first.
         /// </summary>
         /// <param name="session">The session this conversation runs on.</param>
@@ -161,7 +173,7 @@ namespace AgentCore.Application.Transcript
         }
 
         /// <summary>
-        /// Stamps the turn the next run belongs to.
+        /// Stamps the turn the next run belongs to, and drops anything an earlier turn staged and never committed.
         /// </summary>
         public void BeginTurn(AgentSession session, int turnIndex)
         {
@@ -169,9 +181,10 @@ namespace AgentCore.Application.Transcript
 
             _ = UnderLock(
                 session,
-                transcript =>
+                (transcript, gate) =>
                 {
                     transcript.BeginTurn(turnIndex);
+                    gate.Staged.Clear();
                     return true;
                 });
         }
@@ -186,47 +199,32 @@ namespace AgentCore.Application.Transcript
             return UnderLock(session, static transcript => transcript.Read());
         }
 
-        /// <summary>Adds one finished turn's messages to the conversation, and the state that follows them.</summary>
+        /// <summary>Reads what the framework staged for the running turn and no commit has taken yet, oldest first.</summary>
         /// <param name="session">The session this conversation runs on.</param>
-        /// <param name="messages">The messages the turn produced.</param>
-        /// <param name="state">
-        /// The state to store beside the words, or <see langword="null"/> to store none. A value, read
-        /// by the caller before it conversations: everything the turn writes to the state document — the clock
-        /// fields, the counters, the stage and whether the machine finished — is already final when the
-        /// caller enters its commit lock, and the late barge-in path that runs after this conversation amends
-        /// the record of the turn without touching any of it. So there is nothing later to wait for.
-        /// </param>
-        /// <param name="firstMessageId">
-        /// What the caller calls the first of these messages, or <see langword="null"/> to name it in the
-        /// append. Only the first: the rest are this conversation's own words, which no caller had a name for.
-        /// </param>
-        /// <returns>
-        /// The name the last of these messages was written under, so the caller can be told what to hang
-        /// its next edit off. It is <see langword="null"/> only when nothing was written.
-        /// </returns>
-        public string? AppendTurn(
-            AgentSession session,
-            IReadOnlyList<ChatMessage> messages,
-            ConversationSessionState? state = null,
-            string? firstMessageId = null)
+        public IReadOnlyList<ChatMessage> Staged(AgentSession session)
         {
             ArgumentNullException.ThrowIfNull(session);
-            ArgumentNullException.ThrowIfNull(messages);
 
-            return messages.Count == 0
-                ? null
-                : UnderLock(
-                session,
-                (transcript, gate) =>
-                {
-                    IReadOnlyList<ConversationMessage> rows = transcript.Append(messages, firstMessageId);
+            return UnderLock(session, static (_, gate) => (IReadOnlyList<ChatMessage>)[.. gate.Staged]);
+        }
 
-                    ConversationMessageDraft[] drafts = [.. rows.Select(row => new ConversationMessageDraft(row.TurnIndex, row.Content, row.MessageId))];
+        /// <summary>
+        /// Seals one turn: the one durable append of that turn, holding its words and the state that follows
+        /// them. Whatever the framework staged for the turn is taken here, and nothing stays staged.
+        /// </summary>
+        /// <param name="session">The session this conversation runs on.</param>
+        /// <param name="commit">The turn being sealed.</param>
+        /// <returns>
+        /// What the user's message and the last message were written under, and whether the store kept them, or
+        /// <see langword="null"/> when the session is bound to no conversation and nothing was written. The reply id
+        /// is <see langword="null"/> when the user's message is all the turn wrote.
+        /// </returns>
+        public TurnWrite? CommitTurn(AgentSession session, TurnCommit commit)
+        {
+            ArgumentNullException.ThrowIfNull(session);
+            ArgumentNullException.ThrowIfNull(commit);
 
-                    gate.Enqueue(() => new ValueTask(_store.AppendAsync(
-                        transcript.ConversationId, drafts, state, CancellationToken.None).AsTask()));
-                    return rows[^1].MessageId;
-                });
+            return IsBound(session) ? _writes.Commit(session, commit) : null;
         }
 
         /// <summary>Withdraws everything the conversation said after one message, because a caller replaced it.</summary>
@@ -236,6 +234,7 @@ namespace AgentCore.Application.Transcript
         /// <see langword="null"/> to withdraw the whole conversation, which is what an edit of its first message
         /// asks for.
         /// </param>
+        /// <param name="cancellationToken">Cancels the read that judges the session's lost writes before the cut.</param>
         /// <returns>
         /// The turns the withdrawal took, or <see langword="null"/> when nothing went. Nothing goes when
         /// the conversation holds no message of that name — a caller naming a message this host never stored —
@@ -245,91 +244,41 @@ namespace AgentCore.Application.Transcript
         /// The cut reaches a row the summary stands in for. Ask <see cref="CanTruncateFrom"/> first, and read every
         /// row back when it says no.
         /// </exception>
-        public WithdrawnTurns? TruncateFrom(AgentSession session, string? parentMessageId)
+        public ValueTask<WithdrawnTurns?> TruncateFromAsync(AgentSession session, string? parentMessageId, CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(session);
 
-            return UnderLock(
-                session,
-                (transcript, gate) =>
-                {
-                    int from;
-                    if (parentMessageId is null)
-                    {
-                        from = 0;
-                    }
-                    else if (transcript.OrdinalOf(parentMessageId) is { } parent)
-                    {
-                        from = parent + 1;
-                    }
-                    else
-                    {
-                        return (WithdrawnTurns?)null;
-                    }
-
-                    if (transcript.TruncateFrom(from) is not { } withdrawn)
-                    {
-                        return null;
-                    }
-
-                    Log.ConversationTruncated(_logger, transcript.ConversationId, from, transcript.TurnIndex);
-
-                    gate.Enqueue(() => new ValueTask(
-                        _store.TruncateAsync(transcript.ConversationId, from, CancellationToken.None).AsTask()));
-
-                    return withdrawn;
-                });
-        }
-
-        /// <summary>Adds the caller-facing turn of a graph row: what the caller said, and what it heard.</summary>
-        /// <param name="session">The session this conversation runs on.</param>
-        /// <param name="spoken">What the caller said.</param>
-        /// <param name="heard">What the caller heard, or <see langword="null"/> when it heard nothing.</param>
-        /// <param name="state">
-        /// The state to store beside the words, on the same terms as
-        /// <see cref="AppendTurn(AgentSession, IReadOnlyList{ChatMessage}, ConversationSessionState?, string?)"/>.
-        /// </param>
-        /// <param name="firstMessageId">What the caller calls the message it sent, if it named one.</param>
-        /// <inheritdoc cref="AppendTurn(AgentSession, IReadOnlyList{ChatMessage}, ConversationSessionState?, string?)" path="/returns"/>
-        public string? AppendCallerFacingTurn(
-            AgentSession session,
-            ChatMessage spoken,
-            ChatMessage? heard,
-            ConversationSessionState? state = null,
-            string? firstMessageId = null)
-        {
-            ArgumentNullException.ThrowIfNull(spoken);
-
-            return AppendTurn(session, heard is null ? [spoken] : [spoken, heard], state, firstMessageId);
+            return _writes.TruncateFromAsync(session, parentMessageId, cancellationToken);
         }
 
         /// <summary>
-        /// Replaces the reply the caller was hearing with the words the caller actually heard.
+        /// Withdraws an edit that reaches under the summary: the parent is a row the summary stands in for, or the
+        /// edit takes the whole conversation. The store cuts the rows, and the session reads every row back.
+        /// Ask <see cref="CanTruncateFrom"/> first, and come here when it says no.
         /// </summary>
-        public bool TruncateLastReply(AgentSession session, string heard, TimeSpan played)
+        /// <param name="session">The session this conversation runs on.</param>
+        /// <param name="parentMessageId">The message the edit hangs off, or <see langword="null"/> for the whole conversation.</param>
+        /// <param name="cancellationToken">Cancels the cut.</param>
+        /// <returns>The turns the cut withdrew, or <see langword="null"/> when nothing went.</returns>
+        public ValueTask<WithdrawnTurns?> CutUnderSummaryAsync(
+            AgentSession session, string? parentMessageId, CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(session);
-            ArgumentNullException.ThrowIfNull(heard);
 
-            return UnderLock(
-                session,
-                (transcript, gate) =>
-                {
-                    IReadOnlyList<ConversationMessage> rows = transcript.TruncateLastReply(heard);
-                    if (rows.Count == 0)
-                    {
-                        return false;
-                    }
+            return _writes.CutUnderSummaryAsync(session, parentMessageId, cancellationToken);
+        }
 
-                    Log.ReplyTruncated(_logger, rows[0].ConversationId, rows[0].TurnIndex, played.TotalMilliseconds);
+        /// <summary>Rewrites the reply of a turn already committed to the text the user was shown. It never appends.</summary>
+        /// <param name="session">The session this conversation runs on.</param>
+        /// <param name="turnIndex">The turn whose reply is rewritten. It must be the turn of the conversation's last reply.</param>
+        /// <param name="shown">The text the user saw or heard.</param>
+        /// <returns><see langword="false"/> when the last reply belongs to another turn, or there is none.</returns>
+        public bool RewriteReply(AgentSession session, int turnIndex, string shown)
+        {
+            ArgumentNullException.ThrowIfNull(session);
+            ArgumentNullException.ThrowIfNull(shown);
 
-                    foreach (ConversationMessage row in rows)
-                    {
-                        gate.Enqueue(() => _store.RewriteAsync(row.ConversationId, row.MessageId, row.Content, CancellationToken.None));
-                    }
-
-                    return true;
-                });
+            return _writes.Rewrite(session, turnIndex, shown);
         }
 
         /// <summary>
@@ -339,11 +288,7 @@ namespace AgentCore.Application.Transcript
         {
             ArgumentNullException.ThrowIfNull(session);
 
-            ConversationGate gate = GateFor(session);
-            lock (gate.Sync)
-            {
-                return gate.Writes;
-            }
+            return _gates.Writes(session);
         }
 
         /// <inheritdoc />
@@ -352,35 +297,54 @@ namespace AgentCore.Application.Transcript
         {
             ArgumentNullException.ThrowIfNull(context);
 
-            return new(context.Session is { } session ? Read(session) : []);
+            return new(context.Session is { } session && IsBound(session) ? Read(session) : []);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Stages the run's response for the turn. It writes nothing durable: the hook runs before the stage
+        /// machine and the fallback layer, so the words and their state are written together by
+        /// <see cref="CommitTurn"/>. Staging appends, and <see cref="ProvideChatHistoryAsync"/> never returns
+        /// staged messages (design section 7, item 1).
+        /// </summary>
         protected override ValueTask StoreChatHistoryAsync(
             InvokedContext context, CancellationToken cancellationToken = default)
         {
+            ArgumentNullException.ThrowIfNull(context);
+
+            if (context.Session is { } session && IsBound(session) && context.ResponseMessages is { } response)
+            {
+                _ = UnderLock(
+                    session,
+                    (_, gate) =>
+                    {
+                        gate.Staged.AddRange(response);
+                        return true;
+                    });
+            }
+
             return default;
         }
 
-        /// <summary>Runs one piece of work against the conversation's transcript, alone.</summary>
+        private static bool IsBound(AgentSession session)
+        {
+            return session.StateBag.TryGetValue(ConversationKey, out string? _);
+        }
+
+        // The user row comes from the turn, so the hook keeps only what the caller sent: context providers'
+        // system lines (clock, reminders, skills) arrive in the request too (design probe G1).
+        private static IEnumerable<ChatMessage> ExternalOnly(IEnumerable<ChatMessage> messages)
+        {
+            return messages.Where(message => message.GetAgentRequestMessageSourceType() == AgentRequestMessageSourceType.External);
+        }
+
         private TResult UnderLock<TResult>(AgentSession session, Func<ConversationTranscript, ConversationGate, TResult> work)
         {
-            ConversationGate gate = GateFor(session);
-
-            lock (gate.Sync)
-            {
-                return work(gate.Transcript, gate);
-            }
+            return _gates.Under(session, work);
         }
 
         private TResult UnderLock<TResult>(AgentSession session, Func<ConversationTranscript, TResult> work)
         {
             return UnderLock(session, (transcript, _) => work(transcript));
-        }
-
-        private ConversationGate GateFor(AgentSession session)
-        {
-            return _gates.GetValue(session, _ => new ConversationGate(_logger));
         }
     }
 }

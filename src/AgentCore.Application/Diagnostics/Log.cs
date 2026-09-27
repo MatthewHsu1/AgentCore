@@ -5,7 +5,9 @@ using Microsoft.Extensions.Logging;
 namespace AgentCore.Application.Diagnostics
 {
     /// <summary>
-    /// Every line the library writes. Three of them are the "log once" rows of section 8.7.
+    /// Every line the turn loop writes: extraction, moderation, the transcript, and knowledge retrieval. Three
+    /// of them are the "log once" rows of section 8.7. The session owner's own lines — its workspace folder,
+    /// and its close and idle-expiry routine — are <see cref="SessionOwnerLog"/>.
     /// </summary>
     internal static partial class Log
     {
@@ -25,13 +27,27 @@ namespace AgentCore.Application.Diagnostics
         /// <param name="logger">The logger of the session.</param>
         /// <param name="conversationId">The id of the conversation.</param>
         /// <param name="turnIndex">The zero-based index of the turn that just ran.</param>
-        /// <param name="reason">The message of the fault.</param>
+        /// <param name="exception">The fault the fallback layer caught, message and stack trace both.</param>
         [LoggerMessage(
             EventId = 2,
             Level = LogLevel.Error,
-            Message = "A tool of conversation {ConversationId} failed four times in turn {TurnIndex}: {Reason} "
+            Message = "A tool of conversation {ConversationId} failed four times in turn {TurnIndex}. "
                 + "The turn spoke the fallback and the conversation continues.")]
-        public static partial void ToolBudgetSpent(ILogger logger, string conversationId, int turnIndex, string reason);
+        public static partial void ToolBudgetSpent(ILogger logger, string conversationId, int turnIndex, Exception exception);
+
+        /// <summary>
+        /// Section 8.7, row six, the other cause of it: a fault above the fallback layer, so no tool ever ran.
+        /// </summary>
+        /// <param name="logger">The logger of the session.</param>
+        /// <param name="conversationId">The id of the conversation.</param>
+        /// <param name="turnIndex">The zero-based index of the turn that just ran.</param>
+        /// <param name="exception">The fault the run threw, message and stack trace both.</param>
+        [LoggerMessage(
+            EventId = 28,
+            Level = LogLevel.Error,
+            Message = "The run of conversation {ConversationId} faulted in turn {TurnIndex}. "
+                + "The turn spoke the fallback and the conversation continues.")]
+        public static partial void TurnRunFaulted(ILogger logger, string conversationId, int turnIndex, Exception exception);
 
         /// <summary>Section 8.7, last row. The run returned quietly with no text.</summary>
         /// <param name="logger">The logger of the session.</param>
@@ -112,18 +128,6 @@ namespace AgentCore.Application.Diagnostics
             Message = "The transcript store did not accept turn {TurnIndex} of conversation {ConversationId}. "
                 + "The conversation continues and the turn has no durable record.")]
         public static partial void TranscriptWriteFailed(ILogger logger, string conversationId, int turnIndex, Exception exception);
-
-        /// <summary>A barge-in cut a reply, so the record now holds what the caller heard.</summary>
-        /// <param name="logger">The logger of the session.</param>
-        /// <param name="conversationId">The id of the conversation.</param>
-        /// <param name="turnIndex">The zero-based index of the turn whose reply was cut.</param>
-        /// <param name="playedMilliseconds">How much of the reply was played, as the vendor reported it.</param>
-        [LoggerMessage(
-            EventId = 10,
-            Level = LogLevel.Debug,
-            Message = "A barge-in cut the reply of turn {TurnIndex} of conversation {ConversationId} "
-                + "after {PlayedMilliseconds} ms, so the record holds what the caller heard.")]
-        public static partial void ReplyTruncated(ILogger logger, string conversationId, int turnIndex, double playedMilliseconds);
 
         /// <summary>One knowledge retrieval answered, with what it cost and what it returned.</summary>
         /// <param name="logger">The logger of the knowledge provider.</param>
@@ -251,36 +255,6 @@ namespace AgentCore.Application.Diagnostics
                 + "turn since the last read is not among them.")]
         public static partial void TranscriptResyncFailed(ILogger logger, string conversationId, int turnIndex, Exception exception);
 
-        /// <summary>A conversation's workspace folder could not be deleted when the conversation ended.</summary>
-        /// <param name="logger">The logger of the session.</param>
-        /// <param name="path">The folder that could not be deleted.</param>
-        /// <param name="exception">The cause.</param>
-        [LoggerMessage(
-            EventId = 20,
-            Level = LogLevel.Warning,
-            Message = "Could not delete the conversation workspace at '{Path}'.")]
-        public static partial void WorkspaceDeleteFailed(ILogger logger, string path, Exception exception);
-
-        /// <summary>A conversation's shell executor could not be disposed when the conversation ended.</summary>
-        /// <param name="logger">The logger of the session.</param>
-        /// <param name="workspace">The conversation's workspace folder, whose shell failed to dispose.</param>
-        /// <param name="exception">The cause.</param>
-        [LoggerMessage(
-            EventId = 21,
-            Level = LogLevel.Warning,
-            Message = "Could not dispose a shell: executor of the conversation at workspace '{Workspace}'.")]
-        public static partial void ShellDisposeFailed(ILogger logger, string workspace, Exception exception);
-
-        /// <summary>A conversation's background agent sessions could not be released when the conversation ended.</summary>
-        /// <param name="logger">The logger of the session.</param>
-        /// <param name="conversationId">The id of the conversation whose children were being released.</param>
-        /// <param name="exception">The cause.</param>
-        [LoggerMessage(
-            EventId = 22,
-            Level = LogLevel.Warning,
-            Message = "Could not release the background agent sessions of the conversation '{ConversationId}'.")]
-        public static partial void BackgroundReleaseFailed(ILogger logger, string conversationId, Exception exception);
-
         /// <summary>A workspace file could not be published: the run had no call to own it.</summary>
         /// <param name="logger">The logger of the tool.</param>
         /// <param name="tool">The tool the model called.</param>
@@ -331,5 +305,39 @@ namespace AgentCore.Application.Diagnostics
             Message = "The compaction strategy of conversation {ConversationId} produced, before turn {TurnIndex}, a shape one summary row "
                 + "cannot stand for: not one new message over the oldest rows with the rest kept in order. The session keeps the view it had.")]
         public static partial void TranscriptCompactionUnsupported(ILogger logger, string conversationId, int turnIndex);
+
+        /// <summary>A turn was refused or dropped, so none of its words were kept.</summary>
+        /// <param name="logger">The logger of the session.</param>
+        /// <param name="conversationId">The id of the conversation.</param>
+        /// <param name="turnIndex">The turn the session would have run.</param>
+        /// <param name="reason">The <see cref="Domain.Audit.AuditPayloadKeys.RefusedReason"/> token.</param>
+        [LoggerMessage(
+            EventId = 40,
+            Level = LogLevel.Warning,
+            Message = "Turn {TurnIndex} of conversation {ConversationId} was refused ({Reason}), so none of its words "
+                + "were kept.")]
+        public static partial void TurnRefused(ILogger logger, string conversationId, int turnIndex, string reason);
+
+        /// <summary>The store could not put, renew or clear the conversation's busy mark.</summary>
+        /// <param name="logger">The logger of the session.</param>
+        /// <param name="conversationId">The id of the conversation.</param>
+        /// <param name="exception">The cause.</param>
+        [LoggerMessage(
+            EventId = 41,
+            Level = LogLevel.Warning,
+            Message = "The busy mark of conversation {ConversationId} could not be written. The turn runs on; the "
+                + "store still refuses a turn another session saved first.")]
+        public static partial void BusyMarkFailed(ILogger logger, string conversationId, Exception exception);
+
+        /// <summary>A running turn found its busy mark taken by another session when it came to renew it.</summary>
+        /// <param name="logger">The logger of the session.</param>
+        /// <param name="conversationId">The id of the conversation.</param>
+        [LoggerMessage(
+            EventId = 42,
+            Level = LogLevel.Warning,
+            Message = "The busy mark of conversation {ConversationId} lapsed while a turn still ran, and another "
+                + "session took it. The store refuses whichever of the two turns saves second.")]
+        public static partial void BusyMarkLost(ILogger logger, string conversationId);
+
     }
 }

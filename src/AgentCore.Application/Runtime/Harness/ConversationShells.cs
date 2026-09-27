@@ -228,7 +228,7 @@ namespace AgentCore.Application.Runtime.Harness
 
         /// <summary>
         /// Disposes every executor this conversation started. Idempotent, and never throws out: a failed
-        /// dispose is logged at Warning through <see cref="Log.ShellDisposeFailed"/> instead. A second
+        /// dispose is logged at Warning through <see cref="SessionOwnerLog.ShellDisposeFailed"/> instead. A second
         /// concurrent caller returns immediately rather than wait for the first dispose to finish — the
         /// executors are only ever taken out and disposed once.
         /// </summary>
@@ -258,7 +258,7 @@ namespace AgentCore.Application.Runtime.Harness
                 {
                     if (_logger is not null)
                     {
-                        Log.ShellDisposeFailed(_logger, _workspace, exception);
+                        SessionOwnerLog.ShellDisposeFailed(_logger, _workspace, exception);
                     }
                 }
             }

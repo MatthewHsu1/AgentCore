@@ -11,6 +11,7 @@ namespace AgentCore.Application.Configuration.Compilation
     /// <summary>
     /// Turns one <see cref="ToolKind.Agent"/> declaration into the function the outer agent conversations.
     /// </summary>
+#pragma warning disable MAAI001 // BackgroundAgentsProvider is evaluation-only in Microsoft.Agents.AI 1.21.0.
     internal static class AgentDelegationTool
     {
         /// <summary>The argument name <c>AsAIFunction()</c> generates when the document declares no schema.</summary>
@@ -19,20 +20,20 @@ namespace AgentCore.Application.Configuration.Compilation
         /// <summary>Builds the function that runs one declared agent.</summary>
         /// <param name="tool">The <c>kind: agent</c> declaration.</param>
         /// <param name="inner">The already compiled inner agent.</param>
+        /// <param name="backgroundProviders">
+        /// Every background provider the document compiled, so the delegation's fresh session releases its
+        /// background children when the tool returns.
+        /// </param>
         /// <returns>The function the outer agent advertises.</returns>
-        internal static AIFunction Create(ToolConfiguration tool, AIAgent inner)
+        internal static AIFunction Create(ToolConfiguration tool, AIAgent inner, IReadOnlyList<BackgroundAgentsProvider> backgroundProviders)
         {
-            // The document names the function and describes it, because the calling model reads both to
-            // decide when to delegate. Without a description it falls back to the inner agent's own.
-            // AsAIFunction is the schema donor only — the wrapper below runs the agent directly, so
-            // its name, description and parameters stay exactly what the model was built against.
             AIFunction function = inner.AsAIFunction(new AIFunctionFactoryOptions
             {
                 Name = tool.Id,
                 Description = tool.Description ?? inner.Description,
             });
 
-            return new DeclaredSchemaFunction(function, tool.Parameters, tool.Id, inner);
+            return new DeclaredSchemaFunction(function, tool.Parameters, tool.Id, inner, backgroundProviders);
         }
 
         /// <summary>
@@ -51,13 +52,22 @@ namespace AgentCore.Application.Configuration.Compilation
 
             private readonly AIAgent _inner;
 
-            internal DeclaredSchemaFunction(AIFunction inner, JsonNode? parameters, string toolId, AIAgent innerAgent)
+            private readonly IReadOnlyList<BackgroundAgentsProvider> _backgroundProviders;
+
+            internal DeclaredSchemaFunction(
+                AIFunction inner,
+                JsonNode? parameters,
+                string toolId,
+                AIAgent innerAgent,
+                IReadOnlyList<BackgroundAgentsProvider> backgroundProviders)
                 : base(inner)
             {
                 ArgumentNullException.ThrowIfNull(toolId);
+                ArgumentNullException.ThrowIfNull(backgroundProviders);
 
                 _toolId = toolId;
                 _inner = innerAgent ?? throw new ArgumentNullException(nameof(innerAgent));
+                _backgroundProviders = backgroundProviders;
 
                 if (parameters is null)
                 {
@@ -84,24 +94,19 @@ namespace AgentCore.Application.Configuration.Compilation
 
                 TurnInvocation? parent = TurnInvocation.FiledIn(arguments);
 
-                // Schemaless the donor advertises one query string; declared, the payload the
-                // document shaped. Either way the nested agent reads words, not arguments.
                 string query = _argument is null
                     && arguments.TryGetValue(DefaultArgument, out object? bare)
                     && BareText(bare) is { } text
                         ? text
                         : ToolArgumentJson.ToJsonObject(arguments).ToJsonString();
 
-                // Decided here where the parent turn is in hand: the nested run neither latches
-                // the holder (K42) nor records, and only the run under this tool is offered its
-                // tools. Without a turn the nested run is bare, as before.
                 TurnInvocation? nested = parent is not null
                     ? parent with { Clarifications = null, Nested = true }
                     : null;
 
                 IReadOnlyList<AITool>? offered = parent?.ToolsFor == _toolId ? parent?.Tools : null;
 
-                return DelegatedAgentRun.RunAsync(_inner, query, nested, offered, cancellationToken);
+                return DelegatedAgentRun.RunAsync(_inner, query, nested, offered, _backgroundProviders, cancellationToken);
             }
 
             private static string? BareText(object? value)
@@ -128,4 +133,5 @@ namespace AgentCore.Application.Configuration.Compilation
 
         }
     }
+#pragma warning restore MAAI001
 }

@@ -92,6 +92,13 @@ namespace AgentCore.TestSupport
         }
 
         /// <inheritdoc />
+        public virtual ValueTask DeleteMessageAsync(
+            string conversationId, string messageId, CancellationToken cancellationToken = default)
+        {
+            return Inner.DeleteMessageAsync(conversationId, messageId, cancellationToken);
+        }
+
+        /// <inheritdoc />
         public virtual ValueTask<IReadOnlyList<ConversationMessage>> ReadForSessionAsync(
             string conversationId, CancellationToken cancellationToken = default)
         {
@@ -134,6 +141,20 @@ namespace AgentCore.TestSupport
         }
 
         /// <inheritdoc />
+        public virtual ValueTask<bool> TryMarkBusyAsync(
+            string conversationId, string holder, TimeSpan lease, CancellationToken cancellationToken = default)
+        {
+            return Inner.TryMarkBusyAsync(conversationId, holder, lease, cancellationToken);
+        }
+
+        /// <inheritdoc />
+        public virtual ValueTask ClearBusyAsync(
+            string conversationId, string holder, CancellationToken cancellationToken = default)
+        {
+            return Inner.ClearBusyAsync(conversationId, holder, cancellationToken);
+        }
+
+        /// <inheritdoc />
         public virtual ValueTask AttachPrincipalAsync(
             string conversationId, string principalKey, string role, CancellationToken cancellationToken = default)
         {
@@ -149,23 +170,23 @@ namespace AgentCore.TestSupport
 
         /// <inheritdoc />
         public virtual ValueTask SaveContinuationAsync(
-            string continuationId, string conversationId, JsonElement envelope, CancellationToken cancellationToken = default)
+            string responseId, string conversationId, CancellationToken cancellationToken = default)
         {
-            return Inner.SaveContinuationAsync(continuationId, conversationId, envelope, cancellationToken);
+            return Inner.SaveContinuationAsync(responseId, conversationId, cancellationToken);
         }
 
         /// <inheritdoc />
-        public virtual ValueTask<JsonElement?> GetContinuationAsync(
-            string continuationId, CancellationToken cancellationToken = default)
+        public virtual ValueTask<string?> FindContinuationAsync(
+            string responseId, CancellationToken cancellationToken = default)
         {
-            return Inner.GetContinuationAsync(continuationId, cancellationToken);
+            return Inner.FindContinuationAsync(responseId, cancellationToken);
         }
 
         /// <inheritdoc />
         public virtual ValueTask DeleteContinuationAsync(
-            string continuationId, CancellationToken cancellationToken = default)
+            string responseId, CancellationToken cancellationToken = default)
         {
-            return Inner.DeleteContinuationAsync(continuationId, cancellationToken);
+            return Inner.DeleteContinuationAsync(responseId, cancellationToken);
         }
     }
 }

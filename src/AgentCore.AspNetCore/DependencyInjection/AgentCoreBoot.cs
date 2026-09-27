@@ -12,6 +12,7 @@ using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Tools.Builtin;
 using AgentCore.Application.Tools.Registry;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
+using AgentCore.AspNetCore.Voice;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -26,9 +27,11 @@ namespace AgentCore.AspNetCore.DependencyInjection
         private readonly AgentCoreOptions _options;
 
         private readonly ILoggerFactory _loggers;
+
         private readonly List<object> _opened = [];
 
         private readonly Lock _gate = new();
+        
         private int _closed;
 
         /// <summary>Takes the options a host filled and the loggers the container holds.</summary>
@@ -78,7 +81,7 @@ namespace AgentCore.AspNetCore.DependencyInjection
         /// <summary>Gets the queue that answers the audit port, not the store behind it.</summary>
         internal QueuedAuditSink AuditQueue => Started.AuditQueue;
 
-        /// <summary>Gets one factory, one agent, and one session store per entry.</summary>
+        /// <summary>Gets one factory and one agent per entry, over the one session owner shared by every entry.</summary>
         internal EntryRegistry Entries => Started.Entries;
 
         /// <summary>Gets the container, read for host-registered seams the boot honors.</summary>
@@ -208,6 +211,7 @@ namespace AgentCore.AspNetCore.DependencyInjection
                 .ConfigureAwait(false);
 
             ConfigurationValidator.ValidateToolReferences(configuration, tools.ServedIds);
+            FillerKeyCheck.Warn(configuration, tools.ServedIds, bootLogger);
 
             SkillCatalog? skills = await SkillsStartup
                 .OpenAsync(_options, _loggers, cancellationToken)

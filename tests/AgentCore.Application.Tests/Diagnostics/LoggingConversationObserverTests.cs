@@ -11,9 +11,10 @@ namespace AgentCore.Application.Tests.Diagnostics
     /// </summary>
     /// <remarks>
     /// Moving the conversation sites behind the hook must change neither the text an operator greps for nor how
-    /// often it appears, so these tests pin the event id, the level, and the fields of each of the six
-    /// lines. They also pin the six kinds that write nothing here: a normal conversation is recorded by the chain
-    /// of D23, and a log is not.
+    /// often it appears, so these tests pin the event id, the level, and the fields of each of the five
+    /// lines this observer writes. They also pin the kinds that write nothing here: a normal conversation is
+    /// recorded by the chain of D23 and a log is not, and a fact whose exception is logged at its own catch
+    /// site (row six, and a store 1 write or read that failed) is not logged twice.
     /// </remarks>
     public sealed class LoggingConversationObserverTests
     {
@@ -21,7 +22,6 @@ namespace AgentCore.Application.Tests.Diagnostics
 
         /// <summary>The ids the source-generated methods carry. They are unchanged by the hook.</summary>
         private const int ExtractionFailedEventId = 1;
-        private const int ToolBudgetSpentEventId = 2;
         private const int EmptyReplyEventId = 3;
         private const int PromptRefusedEventId = 6;
         private const int ModerationUnavailableEventId = 7;
@@ -35,30 +35,15 @@ namespace AgentCore.Application.Tests.Diagnostics
             ConversationEventKind.ReplyInterrupted,
             ConversationEventKind.ConversationEnded,
 
-            // Logged, but not here: the line is written where the write was refused, which is the only
-            // place the exception still exists. A line from this observer too would double it.
+            // Logged, but not here: the line is written where the exception still exists (ConversationGate,
+            // ConversationTranscriptLedger, ConversationTurnCommit), with the object itself and not only its
+            // message. A line from this observer too would double it.
             ConversationEventKind.TranscriptWriteFailed,
+            ConversationEventKind.ToolFailed,
 
             // The quietest of them all: counted, and not logged anywhere.
             ConversationEventKind.ModerationClean,
         ];
-
-        [Fact]
-        public async Task ASpentToolBudget_IsAnErrorNamingTheTurnAndTheFault()
-        {
-            RecordingLogger logger = new();
-
-            await Observe(
-                logger,
-                Event(ConversationEventKind.ToolFailed, turnIndex: 2, AuditPayloadKeys.ToolError, "the CRM refused."));
-
-            LogLine line = Assert.Single(logger.Of(ToolBudgetSpentEventId));
-            Assert.Equal(LogLevel.Error, line.Level);
-            Assert.Equal(
-                "A tool of conversation conversation-1 failed four times in turn 2: the CRM refused. "
-                    + "The turn spoke the fallback and the conversation continues.",
-                line.Message);
-        }
 
         [Fact]
         public async Task AQuietRun_IsAWarningNamingTheTurn()

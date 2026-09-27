@@ -32,9 +32,6 @@ namespace AgentCore.Application.Runtime
     /// </summary>
     internal sealed class AuditingFunctionInvokingChatClient : FunctionInvokingChatClient
     {
-        // Drain state per open tool call, keyed by the model's own call id. The round that ends a
-        // turn never reaches CreateResponseMessages, so a final round's entries are swept at turn
-        // end through Release; every other entry is consumed where it drains.
         private readonly ConcurrentDictionary<string, Drain> _drains = new(StringComparer.Ordinal);
 
         private sealed record Drain(
@@ -80,11 +77,6 @@ namespace AgentCore.Application.Runtime
 
             string callId = context.CallContent.CallId;
 
-            // The turn arrives on the run's own options — filed there by the loop for the outer
-            // run and by the delegating bridge for a nested one, one value per run, so concurrent
-            // runs never share it. A call with no turn runs bare, exactly as the null branch did
-            // before. Nested runs arrive already stripped per K42 with the outermost call id kept,
-            // so nothing here recomputes either.
             TurnInvocation? invocation = null;
             bool nested = false;
 
@@ -126,6 +118,8 @@ namespace AgentCore.Application.Runtime
             }
             catch (Exception failure) when (!IsCallerCancellation(failure, cancellationToken))
             {
+                ToolFaultMark.Put(failure, callId);
+
                 invocation?.OnToolFailure?.Invoke(new ToolFailure
                 {
                     ToolName = context.CallContent.Name,

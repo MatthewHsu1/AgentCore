@@ -37,6 +37,8 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
                 return [];
             }
 
+            int? lowestTurn = messages.Min(message => message.TurnIndex);
+
             await using NpgsqlConnection connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
             await using NpgsqlBatch batch = new(connection);
 
@@ -63,6 +65,7 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
             {
                 TypedValue = [.. messages.Select(message => message.CoversUpTo)],
             });
+            _ = appendCommand.Parameters.Add(Turn(lowestTurn));
             batch.BatchCommands.Add(appendCommand);
 
             if (state is not null)
@@ -74,6 +77,7 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
                     Value = JsonSerializer.Serialize(state, ConversationStateJson.Options),
                     NpgsqlDbType = NpgsqlDbType.Jsonb,
                 });
+                _ = stateCommand.Parameters.Add(Turn(lowestTurn));
 
                 batch.BatchCommands.Add(stateCommand);
             }
@@ -91,13 +95,43 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
                 }
             }
 
-            return written.Count == 0
-                ? throw new InvalidOperationException($"Store 0 holds no conversation '{conversationId}' to append words to.")
-                : [.. messages.Select(draft =>
+            if (written.Count == 0)
+            {
+                throw await RefusalAsync(connection, conversationId, lowestTurn, cancellationToken).ConfigureAwait(false);
+            }
+
+            return [.. messages.Select(draft =>
             {
                 (int ordinal, int turnIndex) = written[draft.MessageId];
                 return new ConversationMessage(conversationId, ordinal, turnIndex, draft.Content, draft.MessageId) { CoversUpTo = draft.CoversUpTo };
             })];
+        }
+
+        private static NpgsqlParameter<int?> Turn(int? lowestTurn)
+        {
+            return new NpgsqlParameter<int?> { TypedValue = lowestTurn, NpgsqlDbType = NpgsqlDbType.Integer };
+        }
+
+        /// <summary>
+        /// Names why an append wrote nothing. The read runs after the append's own transaction, so it only picks
+        /// the message: the refusal itself was decided atomically by the append.
+        /// </summary>
+        private static async ValueTask<InvalidOperationException> RefusalAsync(
+            NpgsqlConnection connection, string conversationId, int? lowestTurn, CancellationToken cancellationToken)
+        {
+            if (lowestTurn is { } named)
+            {
+                await using NpgsqlCommand command = new(NextTurnIndexSql, connection);
+                _ = command.Parameters.Add(new NpgsqlParameter { Value = conversationId });
+
+                if (await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is int next)
+                {
+                    return new ConversationTurnConflictException(
+                        $"Conversation '{conversationId}' already saved turn {named} and takes turn {next} next, so nothing was written.");
+                }
+            }
+
+            return new InvalidOperationException($"Store 0 holds no conversation '{conversationId}' to append words to.");
         }
 
         /// <inheritdoc cref="IConversationStore.RewriteAsync"/>
@@ -112,6 +146,20 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
             _ = command.Parameters.Add(new NpgsqlParameter { Value = conversationId });
             _ = command.Parameters.Add(new NpgsqlParameter { Value = messageId });
             _ = command.Parameters.Add(new NpgsqlParameter { Value = Serialise(content), NpgsqlDbType = NpgsqlDbType.Jsonb });
+
+            _ = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc cref="IConversationStore.DeleteMessageAsync"/>
+        public async ValueTask DeleteMessageAsync(
+            string conversationId, string messageId, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(conversationId);
+            ArgumentException.ThrowIfNullOrEmpty(messageId);
+
+            await using NpgsqlCommand command = _dataSource.CreateCommand(DeleteMessageSql);
+            _ = command.Parameters.Add(new NpgsqlParameter { Value = conversationId });
+            _ = command.Parameters.Add(new NpgsqlParameter { Value = messageId });
 
             _ = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }

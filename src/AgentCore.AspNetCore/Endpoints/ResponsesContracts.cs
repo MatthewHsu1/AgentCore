@@ -233,4 +233,14 @@ namespace AgentCore.AspNetCore.Endpoints
         /// <summary>Gets the link to fetch it from, or <see langword="null"/> when the store has no web door.</summary>
         public string? Url { get; init; }
     }
+
+    /// <summary>The ids one turn's commit wrote, as the browser reads it.</summary>
+    internal sealed record MessageCommittedPayload
+    {
+        /// <summary>Gets what the user's message was written under.</summary>
+        public required string UserMessageId { get; init; }
+
+        /// <summary>Gets what the last message was written under, or <see langword="null"/> when the user's is the only one.</summary>
+        public string? ReplyMessageId { get; init; }
+    }
 }

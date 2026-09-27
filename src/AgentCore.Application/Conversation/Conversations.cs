@@ -187,6 +187,12 @@ namespace AgentCore.Application.Conversation
         }
 
         /// <inheritdoc />
+        public ValueTask DeleteMessageAsync(string conversationId, string messageId, CancellationToken cancellationToken = default)
+        {
+            return Store.DeleteMessageAsync(conversationId, messageId, cancellationToken);
+        }
+
+        /// <inheritdoc />
         public ValueTask<IReadOnlyList<ConversationMessage>> ReadForSessionAsync(string conversationId, CancellationToken cancellationToken = default)
         {
             return Store.ReadForSessionAsync(conversationId, cancellationToken);
@@ -223,6 +229,18 @@ namespace AgentCore.Application.Conversation
         }
 
         /// <inheritdoc />
+        public ValueTask<bool> TryMarkBusyAsync(string conversationId, string holder, TimeSpan lease, CancellationToken cancellationToken = default)
+        {
+            return Store.TryMarkBusyAsync(conversationId, holder, lease, cancellationToken);
+        }
+
+        /// <inheritdoc />
+        public ValueTask ClearBusyAsync(string conversationId, string holder, CancellationToken cancellationToken = default)
+        {
+            return Store.ClearBusyAsync(conversationId, holder, cancellationToken);
+        }
+
+        /// <inheritdoc />
         public ValueTask AttachPrincipalAsync(string conversationId, string principalKey, string role, CancellationToken cancellationToken = default)
         {
             return Store.AttachPrincipalAsync(conversationId, principalKey, role, cancellationToken);
@@ -235,21 +253,21 @@ namespace AgentCore.Application.Conversation
         }
 
         /// <inheritdoc />
-        public ValueTask SaveContinuationAsync(string continuationId, string conversationId, JsonElement envelope, CancellationToken cancellationToken = default)
+        public ValueTask SaveContinuationAsync(string responseId, string conversationId, CancellationToken cancellationToken = default)
         {
-            return Store.SaveContinuationAsync(continuationId, conversationId, envelope, cancellationToken);
+            return Store.SaveContinuationAsync(responseId, conversationId, cancellationToken);
         }
 
         /// <inheritdoc />
-        public ValueTask<JsonElement?> GetContinuationAsync(string continuationId, CancellationToken cancellationToken = default)
+        public ValueTask<string?> FindContinuationAsync(string responseId, CancellationToken cancellationToken = default)
         {
-            return Store.GetContinuationAsync(continuationId, cancellationToken);
+            return Store.FindContinuationAsync(responseId, cancellationToken);
         }
 
         /// <inheritdoc />
-        public ValueTask DeleteContinuationAsync(string continuationId, CancellationToken cancellationToken = default)
+        public ValueTask DeleteContinuationAsync(string responseId, CancellationToken cancellationToken = default)
         {
-            return Store.DeleteContinuationAsync(continuationId, cancellationToken);
+            return Store.DeleteContinuationAsync(responseId, cancellationToken);
         }
     }
 }

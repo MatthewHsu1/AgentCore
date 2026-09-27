@@ -49,5 +49,14 @@ namespace AgentCore.Application.Runtime
         /// held. A message appended outside a turn since the last read is not among them.
         /// </summary>
         TranscriptResyncFailed = 13,
+
+        /// <summary>A turn was refused or dropped, so none of its words were kept.</summary>
+        TurnRefused = 14,
+
+        /// <summary>
+        /// The turn's run faulted outside every tool, say because the model endpoint did not answer, so the turn spoke
+        /// the fallback. A tool that spent its retry budget is <see cref="ToolFailed"/> instead.
+        /// </summary>
+        RunFaulted = 15,
     }
 }

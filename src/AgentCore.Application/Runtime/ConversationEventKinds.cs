@@ -8,7 +8,7 @@ namespace AgentCore.Application.Runtime
     /// </summary>
     internal static class ConversationEventKinds
     {
-        /// <summary>The seven kinds the chain stores, and the audit kind each one is stored as.</summary>
+        /// <summary>The eight kinds the chain stores, and the audit kind each one is stored as.</summary>
         private static readonly FrozenDictionary<ConversationEventKind, AuditEventKind> AuditKinds =
             new Dictionary<ConversationEventKind, AuditEventKind>
             {
@@ -19,6 +19,7 @@ namespace AgentCore.Application.Runtime
                 [ConversationEventKind.ReplyInterrupted] = AuditEventKind.ReplyInterrupted,
                 [ConversationEventKind.ConversationEnded] = AuditEventKind.ConversationEnded,
                 [ConversationEventKind.TurnSuperseded] = AuditEventKind.TurnSuperseded,
+                [ConversationEventKind.TurnRefused] = AuditEventKind.TurnRefused,
             }.ToFrozenDictionary();
 
         /// <summary>
@@ -43,6 +44,7 @@ namespace AgentCore.Application.Runtime
                 ConversationEventKind.ReplyInterrupted => AuditEventKinds.ToToken(AuditEventKind.ReplyInterrupted),
                 ConversationEventKind.ConversationEnded => AuditEventKinds.ToToken(AuditEventKind.ConversationEnded),
                 ConversationEventKind.TurnSuperseded => AuditEventKinds.ToToken(AuditEventKind.TurnSuperseded),
+                ConversationEventKind.TurnRefused => AuditEventKinds.ToToken(AuditEventKind.TurnRefused),
                 ConversationEventKind.ModerationUnavailable => "moderation.unavailable",
                 ConversationEventKind.ModerationClean => "moderation.clean",
                 ConversationEventKind.EmptyReply => "reply.empty",
@@ -50,6 +52,7 @@ namespace AgentCore.Application.Runtime
                 ConversationEventKind.TranscriptWriteFailed => "transcript.write.failed",
                 ConversationEventKind.StateRestorePartial => "state.restore.partial",
                 ConversationEventKind.TranscriptResyncFailed => "transcript.resync.failed",
+                ConversationEventKind.RunFaulted => "run.faulted",
 
                 // A kind outside the closed set must not cost the report the fault it is carrying, so this
                 // names the value instead of throwing over it.

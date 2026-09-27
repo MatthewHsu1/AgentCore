@@ -32,4 +32,13 @@
     <InternalsVisibleTo Include="AgentCore.Hosting" />
   </ItemGroup>
 
+  <!--
+    This package carries code derived from LiveKit Agents (Apache-2.0). §4(a) requires the
+    licence text, §4(d) requires LiveKit's NOTICE content, both inside the package.
+  -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)../../NOTICE" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)../../LICENSE-APACHE-2.0" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
 </Project>

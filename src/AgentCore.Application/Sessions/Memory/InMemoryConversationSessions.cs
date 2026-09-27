@@ -1,162 +1,278 @@
-using AgentCore.Domain.Audit;
 using System.Collections.Concurrent;
+using AgentCore.Application.Conversation;
+using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Application.Sessions.Memory
 {
     /// <summary>
     /// The default <see cref="IConversationSessions"/>. It holds every session in this process.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This does not survive a restart and does not span instances. A process that stops loses every
-    /// call it was holding, and a second instance behind a load balancer never sees the sessions of the
-    /// first. A deployment that needs either registers another <see cref="IConversationSessions"/> before
-    /// <c>AddAgentCore</c>, and this steps aside.
-    /// </para>
-    /// <para>
-    /// A session is dropped when it has been untouched for the idle timeout. The voice path does not
-    /// wait for that — the socket closing is a real end, and it closes the conversation itself. The timeout is
-    /// for the text path, where a caller who simply stops replying never reaches a terminal stage and
-    /// would otherwise be held for the life of the process.
-    /// </para>
-    /// </remarks>
-    public sealed class InMemoryConversationSessions : IConversationSessions
+    public sealed class InMemoryConversationSessions : IConversationSessions, IDisposable
     {
         /// <summary>The idle timeout a host gets when it names none.</summary>
-        public static readonly TimeSpan DefaultIdleTimeout = TimeSpan.FromMinutes(30);
+        public static readonly TimeSpan DefaultIdleTimeout = TimeSpan.FromMinutes(10);
 
-        private readonly ConcurrentDictionary<string, Entry> _sessions = new(StringComparer.Ordinal);
-        private readonly IConversationSessionFactory _factory;
+        // The longest due time ITimer.Change accepts.
+        private static readonly TimeSpan MaxIdleTimeout = TimeSpan.FromMilliseconds(uint.MaxValue - 1);
+
+        private readonly ConcurrentDictionary<string, SessionSlot> _slots = new(StringComparer.Ordinal);
+
+        private readonly IReadOnlyDictionary<string, IConversationSessionFactory> _factories;
+
         private readonly TimeSpan _idleTimeout;
+
         private readonly TimeProvider _time;
 
+        private volatile bool _disposed;
+
         /// <summary>Creates the store.</summary>
-        /// <param name="factory">Builds the session of a conversation that is not held yet.</param>
-        /// <param name="idleTimeout">How long an untouched session is kept. It slides on every read.</param>
-        /// <param name="timeProvider">The clock the idle timeout is measured on.</param>
+        /// <param name="factories">Builds the session of a conversation that is not held yet, keyed by entry name.</param>
+        /// <param name="idleTimeout">
+        /// How long an untouched session is kept. It slides on every read, and restarts when a running turn ends.
+        /// At most about 49 days.
+        /// </param>
+        /// <param name="timeProvider">The clock the idle timers run on.</param>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// <paramref name="idleTimeout"/> is not positive, or is longer than a timer can wait.
+        /// </exception>
         public InMemoryConversationSessions(
-            IConversationSessionFactory factory, TimeSpan idleTimeout, TimeProvider timeProvider)
+            IReadOnlyDictionary<string, IConversationSessionFactory> factories, TimeSpan idleTimeout, TimeProvider timeProvider)
         {
-            ArgumentNullException.ThrowIfNull(factory);
+            ArgumentNullException.ThrowIfNull(factories);
             ArgumentNullException.ThrowIfNull(timeProvider);
             ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(idleTimeout, TimeSpan.Zero);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(idleTimeout, MaxIdleTimeout);
 
-            _factory = factory;
+            _factories = factories;
             _idleTimeout = idleTimeout;
             _time = timeProvider;
         }
 
-        /// <summary>Gets how many sessions this holds.</summary>
-        public int Count => _sessions.Count;
+        /// <summary>Gets how many live sessions this holds. A session still being built, or already closing, is not counted.</summary>
+        public int Count => _slots.Values.Count(static slot => slot.TryGetHeld(out HeldSession? held) && !held.IsEnded);
 
         /// <inheritdoc />
-        public ValueTask<ConversationSession> OpenAsync(string? conversationId, CancellationToken cancellationToken = default)
+        /// <exception cref="ObjectDisposedException">This store was disposed.</exception>
+        /// <exception cref="ArgumentException"><paramref name="entry"/> is empty, or names no declared entry.</exception>
+        public async ValueTask<ConversationSession> GetOrOpenAsync(
+            string entry, string? conversationId, ConversationSessionState? state, CancellationToken cancellationToken = default)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            ArgumentException.ThrowIfNullOrEmpty(entry);
+            IConversationSessionFactory factory = FactoryFor(entry);
 
-            ConversationSession session = _factory.Create(conversationId);
-            _sessions[session.ConversationId] = new Entry(session, _time.GetUtcNow());
-            return ValueTask.FromResult(session);
-        }
+            // Minted here rather than by the factory, so a new conversation reserves its id like any other.
+            string id = string.IsNullOrWhiteSpace(conversationId) ? Guid.NewGuid().ToString("N") : conversationId;
 
-        /// <inheritdoc />
-        public ValueTask<ConversationSession?> TryGetAsync(string conversationId, CancellationToken cancellationToken = default)
-        {
-            ArgumentNullException.ThrowIfNull(conversationId);
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (!_sessions.TryGetValue(conversationId, out Entry? entry))
-            {
-                return ValueTask.FromResult<ConversationSession?>(null);
-            }
-
-            _ = _sessions.TryUpdate(conversationId, entry with { Touched = _time.GetUtcNow() }, entry);
-            return ValueTask.FromResult<ConversationSession?>(entry.Session);
-        }
-
-        /// <inheritdoc />
-        public async ValueTask CloseAsync(string conversationId, CancellationToken cancellationToken = default)
-        {
-            ArgumentNullException.ThrowIfNull(conversationId);
-
-            // Taken out first so a second caller cannot be handed a session that is already draining,
-            // then flushed while this method still holds the only reference to it.
-            if (_sessions.TryRemove(conversationId, out Entry? entry))
-            {
-                // A store that throws on flush must not leave the session's shells running with
-                // nothing left to hold a reference to them.
-                try
-                {
-                    await entry.Session.FlushTranscriptAsync().ConfigureAwait(false);
-                }
-                finally
-                {
-                    await entry.Session.DisposeAsync().ConfigureAwait(false);
-                }
-            }
-        }
-
-        /// <summary>Closes every session that has been untouched for the idle timeout.</summary>
-        /// <param name="cancellationToken">Cancels the sweep.</param>
-        /// <returns>A task that completes once every expired session is closed.</returns>
-        /// <exception cref="AggregateException">
-        /// One or more sessions could not be ended. The sweep still visited every other session first.
-        /// </exception>
-        /// <remarks>
-        /// This goes through <see cref="CloseAsync"/> and not the dictionary, so an expiring session
-        /// hands over its words on the way out exactly as one the host closed by hand.
-        /// </remarks>
-        public async ValueTask SweepAsync(CancellationToken cancellationToken = default)
-        {
-            DateTimeOffset cutoff = _time.GetUtcNow() - _idleTimeout;
-            List<Exception>? faults = null;
-
-            foreach ((string? conversationId, Entry? entry) in _sessions.ToArray())
+            while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                ObjectDisposedException.ThrowIf(_disposed, this);
 
-                if (entry.Touched > cutoff)
+                if (!_slots.TryGetValue(id, out SessionSlot? slot))
                 {
+                    SessionSlot reserved = new(entry);
+                    if (_slots.TryAdd(id, reserved))
+                    {
+                        return Build(id, reserved, factory, state);
+                    }
+
                     continue;
                 }
 
-                // One session that will not end must not leave every session after it in the
-                // dictionary for the life of the process, which is the leak this sweep exists to stop.
+                // A closing session's folder is about to be deleted, whichever entry held it.
+                if (slot.TryGetHeld(out HeldSession? closing) && closing.IsEnded)
+                {
+                    await slot.Released.WaitAsync(cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
+
+                if (!string.Equals(slot.Entry, entry, StringComparison.Ordinal))
+                {
+                    throw new ConversationInUseException(id, slot.Entry, entry);
+                }
+
+                HeldSession held = await slot.Opened.WaitAsync(cancellationToken).ConfigureAwait(false);
+                if (held.TryTouch())
+                {
+                    return held.Session;
+                }
+
+                await slot.Released.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        /// <inheritdoc />
+        /// <exception cref="ArgumentException"><paramref name="entry"/> is empty.</exception>
+        public ValueTask<ConversationSession?> TryGetAsync(
+            string entry, string conversationId, CancellationToken cancellationToken = default)
+        {
+            ArgumentException.ThrowIfNullOrEmpty(entry);
+            ArgumentNullException.ThrowIfNull(conversationId);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            return ValueTask.FromResult(
+                _slots.TryGetValue(conversationId, out SessionSlot? slot)
+                && string.Equals(slot.Entry, entry, StringComparison.Ordinal)
+                && slot.TryGetHeld(out HeldSession? held)
+                && held.TryTouch()
+                    ? held.Session
+                    : null);
+        }
+
+        /// <inheritdoc />
+        /// <exception cref="ArgumentException"><paramref name="entry"/> is empty.</exception>
+        public async ValueTask CloseAsync(string entry, string conversationId, CancellationToken cancellationToken = default)
+        {
+            ArgumentException.ThrowIfNullOrEmpty(entry);
+            ArgumentNullException.ThrowIfNull(conversationId);
+
+            if (!_slots.TryGetValue(conversationId, out SessionSlot? slot)
+                || !string.Equals(slot.Entry, entry, StringComparison.Ordinal)
+                || !slot.TryGetHeld(out HeldSession? held))
+            {
+                return;
+            }
+
+            if (held.TryEnd())
+            {
+                await TearDownAsync(conversationId, slot, held).ConfigureAwait(false);
+            }
+            else
+            {
+                await slot.Released.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        /// Sweeps <paramref name="root"/> for a folder a crashed process left behind. See
+        /// <see cref="WorkspaceRootSweeper.Sweep"/> for what counts as one, and why. Meant to run once, at
+        /// boot, before this owner has opened any session of its own; a folder this owner already holds by the
+        /// time this runs is skipped regardless of its stamp, so a caller that runs it later never sweeps its
+        /// own live session.
+        /// </summary>
+        /// <param name="root">The workspace root a host bound.</param>
+        /// <param name="logger">Where a failed list or delete is logged, at Warning. May be <see langword="null"/>.</param>
+        /// <exception cref="ArgumentException"><paramref name="root"/> is empty.</exception>
+        internal void SweepWorkspaceRoot(string root, ILogger? logger)
+        {
+            new WorkspaceRootSweeper(_idleTimeout, _time).Sweep(root, id => _slots.ContainsKey(id), logger);
+        }
+
+        /// <summary>Stops every idle timer. A build or a close already running finishes, and wakes its waiters.</summary>
+        public void Dispose()
+        {
+            _disposed = true;
+
+            foreach (SessionSlot slot in _slots.Values)
+            {
+                if (slot.TryGetHeld(out HeldSession? held))
+                {
+                    held.Dispose();
+                }
+            }
+        }
+
+        /// <summary>
+        /// The one close routine every way out runs: flush, dispose (background children, then shells), delete
+        /// the workspace folder. A store that throws on flush must not leave the shells running with nothing
+        /// left to hold a reference to them, and a dispose that throws must not leave the folder undeleted.
+        /// </summary>
+        private static async ValueTask CloseSessionAsync(ConversationSession session)
+        {
+            try
+            {
                 try
                 {
-                    await ExpireAsync(conversationId, entry.Session, cancellationToken).ConfigureAwait(false);
+                    await session.FlushTranscriptAsync().ConfigureAwait(false);
                 }
-                catch (Exception fault) when (fault is not OperationCanceledException)
+                finally
                 {
-                    (faults ??= []).Add(fault);
+                    await session.DisposeAsync().ConfigureAwait(false);
                 }
             }
-
-            if (faults is not null)
+            finally
             {
-                throw new AggregateException(faults);
+                session.Lifetime.DeleteWorkspace();
             }
         }
 
-        /// <summary>Ends one expired conversation, chain first and session second.</summary>
-        /// <remarks>
-        /// §11 item 6 makes <c>conversation.ended</c> the last event of every conversation, and expiry is a way a conversation
-        /// ends. Nothing else writes it here: the relay closes its own chain from the socket and the
-        /// turn loop closes its own from a terminal stage, so a caller who simply stops replying is the
-        /// one ending that would otherwise leave a chain with no end. <see cref="ConversationSession.EndConversation(ConversationEndReason)"/>
-        /// is idempotent, so a session that already closed its chain keeps the reason it wrote.
-        /// The reason is <see cref="ConversationEndReason.Faulted"/> because the closed set of §6 holds no
-        /// reason for an abandoned conversation; see the amendment owed on that enum.
-        /// </remarks>
-        private async ValueTask ExpireAsync(
-            string conversationId, ConversationSession session, CancellationToken cancellationToken)
+        /// <summary>Builds the session of an id this caller reserved, and hands it to every caller waiting on the slot.</summary>
+        private ConversationSession Build(
+            string conversationId, SessionSlot slot, IConversationSessionFactory factory, ConversationSessionState? state)
         {
-            _ = session.EndConversation(ConversationEndReason.Faulted);
-            await CloseAsync(conversationId, cancellationToken).ConfigureAwait(false);
+            HeldSession held;
+            try
+            {
+                ConversationSession session = factory.Create(conversationId, state);
+                held = new(session, _idleTimeout, _time, expired => Expire(conversationId, slot, expired));
+            }
+            catch (Exception fault)
+            {
+                _ = _slots.TryRemove(KeyValuePair.Create(conversationId, slot));
+                slot.Fail(fault);
+                throw;
+            }
+
+            slot.Open(held);
+
+            // A Dispose that ran before the slot was opened did not see this timer.
+            if (_disposed)
+            {
+                held.Dispose();
+            }
+
+            return held.Session;
         }
 
-        private sealed record Entry(ConversationSession Session, DateTimeOffset Touched);
+        private IConversationSessionFactory FactoryFor(string entry)
+        {
+            return _factories.TryGetValue(entry, out IConversationSessionFactory? factory)
+                ? factory
+                : throw new ArgumentException(
+                    $"The entry '{entry}' is not declared. Valid entries: {string.Join(", ", _factories.Keys)}.",
+                    nameof(entry));
+        }
+
+        /// <summary>Starts the unload of one expired session. Its idle timer ended it, so no other close runs.</summary>
+        private void Expire(string conversationId, SessionSlot slot, HeldSession held)
+        {
+            _ = ExpireAsync(conversationId, slot, held);
+        }
+
+        /// <summary>Unloads one expired conversation. It writes no end event; the conversation stays open.</summary>
+        private async Task ExpireAsync(string conversationId, SessionSlot slot, HeldSession held)
+        {
+            // Nothing awaits an expiry, so nothing may escape it.
+#pragma warning disable CA1031
+            try
+            {
+                await TearDownAsync(conversationId, slot, held).ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                SessionOwnerLog.SessionExpiryFailed(held.Session.Logger, conversationId, exception);
+            }
+#pragma warning restore CA1031
+        }
+
+        /// <summary>
+        /// Tears down a session whose close this caller began, then gives up its slot. The slot stays taken until
+        /// the teardown is done, so an open of the id waits instead of racing the folder delete.
+        /// </summary>
+        private async Task TearDownAsync(string conversationId, SessionSlot slot, HeldSession held)
+        {
+            try
+            {
+                await CloseSessionAsync(held.Session).ConfigureAwait(false);
+            }
+            finally
+            {
+                _ = _slots.TryRemove(KeyValuePair.Create(conversationId, slot));
+                slot.Release();
+            }
+        }
     }
 }

@@ -3,6 +3,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
+using AgentCore.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using static AgentCore.AspNetCore.Tests.DependencyInjection.StartedHostFixture;
@@ -31,8 +32,8 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
         {
             using StartedHost provider = await BuildAsync(OneAgentYaml, options => options.UseWorkspace(_tempRoot));
 
-            IConversationSessions sessions = provider.GetRequiredService<EntryRegistry>().ForSessions("main");
-            ConversationSession session = await sessions.OpenAsync("conversation-1", TestContext.Current.CancellationToken);
+            IConversationSessions sessions = provider.GetRequiredService<EntryRegistry>().Sessions;
+            ConversationSession session = await sessions.GetOrOpenAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", null, TestContext.Current.CancellationToken);
 
             Assert.Equal(Path.Combine(_tempRoot, "conversation-1"), session.Workspace);
             Assert.True(Directory.Exists(Path.Combine(_tempRoot, "conversation-1")));
@@ -43,10 +44,47 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
         {
             using StartedHost provider = await BuildAsync(OneAgentYaml);
 
-            IConversationSessions sessions = provider.GetRequiredService<EntryRegistry>().ForSessions("main");
-            ConversationSession session = await sessions.OpenAsync("conversation-1", TestContext.Current.CancellationToken);
+            IConversationSessions sessions = provider.GetRequiredService<EntryRegistry>().Sessions;
+            ConversationSession session = await sessions.GetOrOpenAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", null, TestContext.Current.CancellationToken);
 
             Assert.Null(session.Workspace);
+        }
+
+        [Fact]
+        public async Task Boot_SweepsTheWorkspaceRootExactlyOnce()
+        {
+            FakeTimeProvider clock = new(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+            _ = Directory.CreateDirectory(_tempRoot);
+
+            string stale = MarkedFolder("stale", clock, TimeSpan.FromMinutes(10) + TimeSpan.FromSeconds(1));
+            string fresh = MarkedFolder("fresh", clock, TimeSpan.FromMinutes(9) + TimeSpan.FromSeconds(59));
+
+            using StartedHost provider = await BuildAsync(OneAgentYaml, options =>
+            {
+                _ = options.UseWorkspace(_tempRoot);
+                options.TimeProvider = clock;
+            });
+
+            Assert.False(Directory.Exists(stale));
+            Assert.True(Directory.Exists(fresh));
+
+            // A folder that only becomes old enough to sweep after boot is never touched: nothing runs the
+            // sweep a second time, whether on a timer or when a later conversation opens.
+            string lateStale = MarkedFolder("late-stale", clock, TimeSpan.FromMinutes(10) + TimeSpan.FromSeconds(1));
+
+            IConversationSessions sessions = provider.GetRequiredService<EntryRegistry>().Sessions;
+            _ = await sessions.GetOrOpenAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", null, TestContext.Current.CancellationToken);
+
+            Assert.True(Directory.Exists(lateStale));
+            Assert.True(Directory.Exists(Path.Combine(_tempRoot, "conversation-1")));
+        }
+
+        private string MarkedFolder(string name, FakeTimeProvider clock, TimeSpan age)
+        {
+            string folder = Directory.CreateDirectory(Path.Combine(_tempRoot, name)).FullName;
+            File.WriteAllText(ConversationWorkspace.MarkerPathFor(folder), string.Empty);
+            Directory.SetLastWriteTimeUtc(folder, clock.GetUtcNow().UtcDateTime - age);
+            return folder;
         }
 
         [Fact]
@@ -69,8 +107,8 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
         {
             using StartedHost provider = await BuildAsync(MemoryAgentYaml, options => options.UseWorkspace(_tempRoot));
 
-            IConversationSessions sessions = provider.GetRequiredService<EntryRegistry>().ForSessions("main");
-            ConversationSession session = await sessions.OpenAsync("conversation-1", TestContext.Current.CancellationToken);
+            IConversationSessions sessions = provider.GetRequiredService<EntryRegistry>().Sessions;
+            ConversationSession session = await sessions.GetOrOpenAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", null, TestContext.Current.CancellationToken);
 
             Assert.StartsWith(_tempRoot, session.Workspace, StringComparison.Ordinal);
         }
@@ -104,8 +142,8 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
         {
             using StartedHost provider = await BuildAsync(FilesAgentYaml, options => options.UseWorkspace(_tempRoot));
 
-            IConversationSessions sessions = provider.GetRequiredService<EntryRegistry>().ForSessions("main");
-            ConversationSession session = await sessions.OpenAsync("conversation-1", TestContext.Current.CancellationToken);
+            IConversationSessions sessions = provider.GetRequiredService<EntryRegistry>().Sessions;
+            ConversationSession session = await sessions.GetOrOpenAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", null, TestContext.Current.CancellationToken);
 
             Assert.StartsWith(_tempRoot, session.Workspace, StringComparison.Ordinal);
         }

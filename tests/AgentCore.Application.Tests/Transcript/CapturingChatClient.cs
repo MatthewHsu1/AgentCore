@@ -1,10 +1,10 @@
+using System.Runtime.CompilerServices;
 using AgentCore.Application.Tests.Fakes;
 using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Tests.Transcript
 {
     /// <summary>Answers each request in turn, keeps what it was asked, and runs a hook before answering.</summary>
-    /// <remarks>Buffered path only, like <see cref="RequestRecordingChatClient"/>.</remarks>
     internal sealed class CapturingChatClient(Func<int, Task> beforeReply, params string[] replies) : IChatClient
     {
         private readonly Func<int, Task> _beforeReply = beforeReply;
@@ -28,10 +28,16 @@ namespace AgentCore.Application.Tests.Transcript
             return new ChatResponse(new ChatMessage(ChatRole.Assistant, _replies[callIndex]));
         }
 
-        public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-            IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
+        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            throw new NotSupportedException("These facts drive the buffered path only.");
+            ChatResponse response = await GetResponseAsync(messages, options, cancellationToken).ConfigureAwait(false);
+            foreach (ChatResponseUpdate update in response.ToChatResponseUpdates())
+            {
+                yield return update;
+            }
         }
 
         private static string Words(ChatMessage message)

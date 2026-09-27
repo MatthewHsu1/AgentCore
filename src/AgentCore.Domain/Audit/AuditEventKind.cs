@@ -26,5 +26,8 @@ namespace AgentCore.Domain.Audit
 
         /// <summary>A caller replaced an earlier message, so the turns after it were withdrawn.</summary>
         TurnSuperseded = 7,
+
+        /// <summary>A turn was refused or dropped, so none of its words were kept.</summary>
+        TurnRefused = 8,
     }
 }

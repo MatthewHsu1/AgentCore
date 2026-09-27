@@ -176,7 +176,7 @@ namespace AgentCore.Application.Tests.Configuration.Compilation
 
             AgentCompilationContext context = new(ScreeningChatClientFactory(Marker(capable))) { Tools = registry };
 
-            return AgentToolCompiler.Build(item, model: null, declared, context, "/agents/items/0", static _ => null) ?? [];
+            return AgentToolCompiler.Build(item, model: null, declared, context, "/agents/items/0", static _ => null, []) ?? [];
         }
 
 
@@ -202,7 +202,7 @@ namespace AgentCore.Application.Tests.Configuration.Compilation
 
             AgentCompilationContext context = new(chatClients) { Tools = registry, Loggers = loggers };
 
-            return AgentToolCompiler.Build(item, model, declaredById, context, "/agents/items/0", static _ => null) ?? [];
+            return AgentToolCompiler.Build(item, model, declaredById, context, "/agents/items/0", static _ => null, []) ?? [];
         }
 
         private static ToolRegistry BuildRegistry(IEnumerable<IToolSource> sources, IReadOnlyList<ToolConfiguration> declared)
