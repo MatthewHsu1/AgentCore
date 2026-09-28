@@ -101,17 +101,6 @@ namespace AgentCore.AspNetCore.Tests.Voice
             Assert.Equal("/v1/{entry}/call", ConversationEndpointRouteBuilderExtensions.DefaultPattern);
         }
 
-        [Fact]
-        public void ARouteWithNoEntryParameterIsRefused()
-        {
-            WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
-            using WebApplication app = builder.Build();
-
-            ArgumentException failure = Assert.Throws<ArgumentException>(() => app.MapCall("/v1/conversation"));
-
-            Assert.Contains("{entry}", failure.Message, StringComparison.Ordinal);
-        }
-
         // ---------------------------------------------------------------------------------------------
         // Helpers.
         // ---------------------------------------------------------------------------------------------

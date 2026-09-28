@@ -7,4 +7,20 @@ const AgentCore.Hosting.AgentCoreHostBuilderExtensions.DefaultConfigurationPath 
 const AgentCore.Hosting.AgentCoreHostBuilderExtensions.McpHttpClientName = "agentcore.mcp" -> string!
 const AgentCore.Hosting.AgentCoreHostEndpointExtensions.HealthPattern = "/health" -> string!
 static AgentCore.Hosting.AgentCoreHostBuilderExtensions.AddAgentCoreHost(this Microsoft.AspNetCore.Builder.WebApplicationBuilder! builder, System.Action<AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!>? configure = null) -> Microsoft.AspNetCore.Builder.WebApplicationBuilder!
-static AgentCore.Hosting.AgentCoreHostEndpointExtensions.MapAgentCoreHost(this Microsoft.AspNetCore.Builder.WebApplication! app, string? responsesPattern = null, string? conversationPattern = null) -> Microsoft.AspNetCore.Builder.WebApplication!
+AgentCore.Hosting.AgentCoreEndpoints.<Clone>$() -> AgentCore.Hosting.AgentCoreEndpoints!
+AgentCore.Hosting.AgentCoreEndpoints.AgentCoreEndpoints(Microsoft.AspNetCore.Builder.IEndpointConventionBuilder! Health, Microsoft.AspNetCore.Builder.IEndpointConventionBuilder! Responses, Microsoft.AspNetCore.Builder.IEndpointConventionBuilder! Call) -> void
+AgentCore.Hosting.AgentCoreEndpoints.Call.get -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
+AgentCore.Hosting.AgentCoreEndpoints.Deconstruct(out Microsoft.AspNetCore.Builder.IEndpointConventionBuilder! Health, out Microsoft.AspNetCore.Builder.IEndpointConventionBuilder! Responses, out Microsoft.AspNetCore.Builder.IEndpointConventionBuilder! Call) -> void
+AgentCore.Hosting.AgentCoreEndpoints.Equals(AgentCore.Hosting.AgentCoreEndpoints? other) -> bool
+AgentCore.Hosting.AgentCoreEndpoints.Health.get -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
+AgentCore.Hosting.AgentCoreEndpoints.Responses.get -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
+AgentCore.Hosting.AgentCoreEndpoints.Responses.init -> void
+override AgentCore.Hosting.AgentCoreEndpoints.Equals(object? obj) -> bool
+override AgentCore.Hosting.AgentCoreEndpoints.GetHashCode() -> int
+override AgentCore.Hosting.AgentCoreEndpoints.ToString() -> string!
+static AgentCore.Hosting.AgentCoreEndpoints.operator !=(AgentCore.Hosting.AgentCoreEndpoints? left, AgentCore.Hosting.AgentCoreEndpoints? right) -> bool
+static AgentCore.Hosting.AgentCoreEndpoints.operator ==(AgentCore.Hosting.AgentCoreEndpoints? left, AgentCore.Hosting.AgentCoreEndpoints? right) -> bool
+static AgentCore.Hosting.AgentCoreHostEndpointExtensions.MapAgentCoreHost(this Microsoft.AspNetCore.Builder.WebApplication! app, string? responsesPattern = null, string? conversationPattern = null) -> AgentCore.Hosting.AgentCoreEndpoints!
+AgentCore.Hosting.AgentCoreEndpoints
+AgentCore.Hosting.AgentCoreEndpoints.Call.init -> void
+AgentCore.Hosting.AgentCoreEndpoints.Health.init -> void

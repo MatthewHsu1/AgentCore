@@ -37,7 +37,7 @@ namespace AgentCore.AspNetCore.DependencyInjection
         /// <summary>Takes the options a host filled and the loggers the container holds.</summary>
         /// <param name="options">The options every <c>Use*</c> seam wrote into.</param>
         /// <param name="loggers">The container's factory, used unless the options name another.</param>
-        /// <param name="services">The container, read for the mapped routes the startup check walks.</param>
+        /// <param name="services">The container, read for host-registered seams the boot honors.</param>
         public AgentCoreBoot(IOptions<AgentCoreOptions> options, ILoggerFactory loggers, IServiceProvider? services = null)
         {
             ArgumentNullException.ThrowIfNull(options);
@@ -152,7 +152,7 @@ namespace AgentCore.AspNetCore.DependencyInjection
         /// </exception>
         /// <exception cref="ConfigurationLoadException">
         /// The document fails one of the eight checks, names a <c>kind</c> no registered adapter serves,
-        /// does not compile, or a mapped route names an entry it does not declare.
+        /// or does not compile.
         /// </exception>
         /// <exception cref="SecretResolutionException">One <c>${secret:name}</c> reference resolves to nothing.</exception>
         internal async ValueTask BootAsync(CancellationToken cancellationToken)

@@ -17,29 +17,29 @@ namespace AgentCore.Hosting
         /// <param name="app">The application to map on.</param>
         /// <param name="responsesPattern">
         /// The route the OpenAI-compatible Responses endpoint answers on, with <c>{entry}</c> naming
-        /// the entry, or <see langword="null"/> for
+        /// the entry unless the host attaches an entry selector, or <see langword="null"/> for
         /// <see cref="ResponsesEndpointRouteBuilderExtensions.DefaultPattern"/>.
         /// </param>
         /// <param name="conversationPattern">
-        /// The route the conversation socket answers on, with <c>{entry}</c> naming the entry, or
+        /// The route the conversation socket answers on, with <c>{entry}</c> naming the entry unless the
+        /// host attaches an entry selector, or
         /// <see langword="null"/> for <see cref="ConversationEndpointRouteBuilderExtensions.DefaultPattern"/>.
         /// </param>
-        /// <returns>The same application, so a host chains its conversations.</returns>
+        /// <returns>The mapped routes, so a host adds its own conventions to each.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="app"/> is <see langword="null"/>.</exception>
-        public static WebApplication MapAgentCoreHost(
+        public static AgentCoreEndpoints MapAgentCoreHost(
             this WebApplication app, string? responsesPattern = null, string? conversationPattern = null)
         {
             ArgumentNullException.ThrowIfNull(app);
 
-            _ = app.MapGet(HealthPattern, () => Results.Ok("ok"));
+            IEndpointConventionBuilder health = app.MapGet(HealthPattern, () => Results.Ok("ok"));
 
             _ = app.UseWebSockets();
 
-            _ = app.MapResponses(responsesPattern ?? ResponsesEndpointRouteBuilderExtensions.DefaultPattern);
-
-            _ = app.MapCall(conversationPattern ?? ConversationEndpointRouteBuilderExtensions.DefaultPattern);
-
-            return app;
+            return new AgentCoreEndpoints(
+                health,
+                app.MapResponses(responsesPattern ?? ResponsesEndpointRouteBuilderExtensions.DefaultPattern),
+                app.MapCall(conversationPattern ?? ConversationEndpointRouteBuilderExtensions.DefaultPattern));
         }
     }
 }

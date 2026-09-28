@@ -205,3 +205,11 @@ override sealed AgentCore.AspNetCore.Voice.ConversationInput.Barge.Equals(AgentC
 override sealed AgentCore.AspNetCore.Voice.ConversationInput.Keypress.Equals(AgentCore.AspNetCore.Voice.ConversationInput? other) -> bool
 override sealed AgentCore.AspNetCore.Voice.ConversationInput.Utterance.Equals(AgentCore.AspNetCore.Voice.ConversationInput? other) -> bool
 override sealed AgentCore.AspNetCore.Voice.ConversationInput.Started.Equals(AgentCore.AspNetCore.Voice.ConversationInput? other) -> bool
+AgentCore.AspNetCore.Endpoints.AgentCoreEntries
+AgentCore.AspNetCore.Endpoints.EntrySelectorEndpointConventionBuilderExtensions
+AgentCore.AspNetCore.Endpoints.IEntryFeature
+AgentCore.AspNetCore.Endpoints.IEntryFeature.Entry.get -> string!
+AgentCore.AspNetCore.Endpoints.IEntrySelector
+AgentCore.AspNetCore.Endpoints.IEntrySelector.SelectAsync(Microsoft.AspNetCore.Http.HttpContext! http, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<string?>
+static AgentCore.AspNetCore.Endpoints.AgentCoreEntries.ResolveAsync(Microsoft.AspNetCore.Http.HttpContext! http, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string?>
+static AgentCore.AspNetCore.Endpoints.EntrySelectorEndpointConventionBuilderExtensions.SelectEntry<TSelector>(this Microsoft.AspNetCore.Builder.IEndpointConventionBuilder! builder) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
