@@ -29,7 +29,7 @@ namespace AgentCore.Application.Tests.Skills
                 loggerFactory: null,
                 ownsSource: false);
 
-            using ReadOnlySkillsProvider provider = new(inner);
+            using ReadOnlySkillsProvider provider = new(inner, new HashSet<string>());
 
             using SequencedChatClient client = new("hello there.");
             ChatClientAgent agent = new(client, new ChatClientAgentOptions { Name = "support" });
@@ -57,7 +57,7 @@ namespace AgentCore.Application.Tests.Skills
             using AgentFileSkillsSource source = new(folder.Root);
             using FilteringAgentSkillsSource filtered = new(source, (_, _) => false);
             using AgentSkillsProvider inner = new(filtered, options: null, loggerFactory: null, ownsSource: false);
-            using ReadOnlySkillsProvider provider = new(inner);
+            using ReadOnlySkillsProvider provider = new(inner, new HashSet<string>());
 
             using SequencedChatClient client = new("hello there.");
             ChatClientAgent agent = new(client, new ChatClientAgentOptions { Name = "support" });

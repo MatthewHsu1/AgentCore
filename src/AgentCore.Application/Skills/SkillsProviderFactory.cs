@@ -32,16 +32,19 @@ namespace AgentCore.Application.Skills
         /// <summary>Builds the provider one agent binds.</summary>
         /// <param name="catalog">The skills the host bound, shared by every agent.</param>
         /// <param name="skills">The names this agent may load.</param>
+        /// <param name="pinned">The names this agent pins, which <c>load_skill</c> answers by pointing at the instructions.</param>
         /// <param name="loggers">Where the provider writes its diagnostics, or <see langword="null"/>.</param>
         /// <returns>The provider to hang on that agent.</returns>
         /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
         internal static AIContextProvider Create(
             SkillCatalog catalog,
             IReadOnlyList<string> skills,
+            IReadOnlyList<string> pinned,
             ILoggerFactory? loggers)
         {
             ArgumentNullException.ThrowIfNull(catalog);
             ArgumentNullException.ThrowIfNull(skills);
+            ArgumentNullException.ThrowIfNull(pinned);
 
             HashSet<string> allowed = new(skills, StringComparer.Ordinal);
 
@@ -64,7 +67,8 @@ namespace AgentCore.Application.Skills
                         loggers),
                     options,
                     loggers,
-                    ownsSource: false));
+                    ownsSource: false),
+                new HashSet<string>(pinned, StringComparer.Ordinal));
         }
     }
 }
