@@ -45,7 +45,7 @@ namespace AgentCore.Application.Configuration.Compilation
 
             if (item.Skills.Count > 0)
             {
-                providers.Add(SkillsProviderFactory.Create(RequireCatalog(item, context, pointer, "skills"), item.Skills, context.Loggers));
+                providers.Add(SkillsProviderFactory.Create(RequireCatalog(item, context, pointer, "skills"), item.Skills, item.Pinned, context.Loggers));
             }
 
             ModelReference? model = item.Model ?? defaults?.Model;
