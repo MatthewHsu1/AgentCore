@@ -22,6 +22,19 @@ namespace AgentCore.Application.Configuration.Schema
         public int? MaxFrameBytes { get; init; }
 
         /// <summary>
+        /// Gets how long the call gate (BeforeCall) gives each hook to accept or reject an offered call, in seconds, or null
+        /// for 5.
+        /// </summary>
+        public int? AnswerSeconds { get; init; }
+
+        /// <summary>
+        /// Gets the <c>live:</c> block: settings that only the vendor <see cref="Kind"/> names reads and checks. Undefined
+        /// when the document writes none.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public JsonElement Live { get; init; }
+
+        /// <summary>
         /// Gets the caller-away prompt a voice adapter opens: <c>{ timeoutSeconds, say }</c>. Voice conversations only.
         /// </summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]

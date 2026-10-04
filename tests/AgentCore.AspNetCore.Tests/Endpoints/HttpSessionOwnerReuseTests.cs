@@ -2,7 +2,6 @@ using System.Net;
 using System.Text;
 using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Transcript;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.AspNetCore.Tests.Fakes;
@@ -10,12 +9,13 @@ using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.AspNetCore.Tests.Endpoints
 {
     /// <summary>
     /// The HTTP Responses path runs every turn of a live conversation on the one session the owner holds, so
-    /// consecutive turns share one shell and read the transcript at most once per load (probe P1, issue #24).
+    /// consecutive turns share one shell and read the transcript at most once per load (issue #24).
     /// An idle unload ends that session: the next turn gets a new shell and an empty workspace folder, and
     /// reads the history back from the store.
     /// </summary>
@@ -140,7 +140,7 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             using HttpResponseMessage second = await PostAsync(host.Client, conversation, "go again");
             Assert.Equal(HttpStatusCode.OK, second.StatusCode);
 
-            // Past the 10-minute default idle timeout: the live session unloads (no words lost, store 0
+            // Past the 10-minute default idle timeout: the live session unloads (no words lost, the store
             // still holds them), its shell stops, and its workspace folder is deleted.
             clock.Advance(TimeSpan.FromMinutes(11));
 

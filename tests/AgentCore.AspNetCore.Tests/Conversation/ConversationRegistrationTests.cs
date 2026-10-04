@@ -1,10 +1,10 @@
-using AgentCore.TestSupport;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Tests.Fakes;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Voice.Ports;
+using AgentCore.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Xunit;
@@ -14,26 +14,16 @@ namespace AgentCore.AspNetCore.Tests.Conversation
     /// <summary>
     /// <c>providers.conversation</c> is selected while the host starts, and the pairing rule runs there too.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Registering a vendor is what turns this seam on, exactly as it is for telemetry, knowledge,
-    /// moderation, and speech. Every test here starts a host alone, with no route
-    /// mapped anywhere, because agreement between two document entries is a document fact and is true
-    /// or false whether or not anything is ever routed.
-    /// </para>
-    /// <para>
-    /// Every test runs offline against a fake model. There is no Telnyx account, no network conversation, and
-    /// no API key anywhere in this file.
-    /// </para>
-    /// </remarks>
     public sealed class ConversationRegistrationTests
     {
         /// <summary>A conversation transport that is a name and a wire fact, which is all the port asks for.</summary>
-        private sealed class FakeConversationAdapter(string kind, bool carriesText) : IConversationAdapter
+        private sealed class FakeConversationAdapter(string kind, bool carriesText, CallTraits traits = CallTraits.None) : IConversationAdapter
         {
             public string Kind { get; } = kind;
 
             public bool CarriesText { get; } = carriesText;
+
+            public CallTraits Traits { get; } = traits;
         }
 
         [Fact]
@@ -81,13 +71,11 @@ namespace AgentCore.AspNetCore.Tests.Conversation
             Assert.Equal("/providers/conversation/kind", failure.Errors[0].Pointer);
         }
 
-        // ---------------------------------------------------------------------------------------------
-        // The two blocks are required by the schema, so a loaded document that writes a providers
-        // section carries both. A configuration a host built in code passes through no schema at all,
+        // The schema requires the conversation block, so a loaded document that writes a providers
+        // section carries it. A configuration a host built in code passes through no schema at all,
         // and so does a loaded document that writes no providers section: the root requires only
         // apiVersion and name. Both routes reach the guard with a block missing, and both are refused
         // by a message that names the block rather than by a NullReferenceException.
-        // ---------------------------------------------------------------------------------------------
         [Fact]
         public async Task AConfigurationBuiltInCodeWithNoConversationBlockFailsTheStart()
         {
@@ -122,9 +110,44 @@ namespace AgentCore.AspNetCore.Tests.Conversation
             Assert.Equal("/providers/speech", failure.Errors[0].Pointer);
         }
 
-        // ---------------------------------------------------------------------------------------------
-        // Helpers.
-        // ---------------------------------------------------------------------------------------------
+        // A vendor that speaks for itself needs no providers.speech.
+        [Fact]
+        public async Task AnAdapterThatSpeaksForItselfStartsWithNoSpeechBlock()
+        {
+            using IHost host = await BuildFromAsync(
+                InCode(new ProvidersConfiguration
+                {
+                    Llm = OneModel,
+                    Conversation = new ConversationProviderConfiguration { Kind = "openai-live" },
+                }),
+                new FakeConversationAdapter("openai-live", carriesText: true, CallTraits.SpeaksForItself));
+
+            Assert.NotNull(host.Services.GetService<IReadOnlyList<IConversationAdapter>>());
+        }
+
+        // A vendor that takes turns itself never runs AgentCore's fillers.
+        [Fact]
+        public async Task AVendorThatTakesTurnsItselfRefusesAToolFiller()
+        {
+            ConfigurationLoadException failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
+                async () => await BuildFromAsync(
+                    InCode(new ProvidersConfiguration
+                    {
+                        Llm = OneModel,
+                        Conversation = new ConversationProviderConfiguration
+                        {
+                            Kind = "openai-live",
+                            Filler = new Dictionary<string, VoiceFillerConfiguration>(StringComparer.Ordinal)
+                            {
+                                ["price_lookup"] = new() { Say = "One moment.", DelaySeconds = 1 },
+                            },
+                        },
+                    }),
+                    new FakeConversationAdapter("openai-live", carriesText: true, CallTraits.SpeaksForItself | CallTraits.TakesTurnsItself)));
+
+            Assert.Equal("/providers/conversation/filler", failure.Errors[0].Pointer);
+        }
+
 
         /// <summary>The one model every document here names, so the compile has something to resolve.</summary>
         private static IReadOnlyList<LlmProviderConfiguration> OneModel { get; } =
@@ -191,11 +214,6 @@ namespace AgentCore.AspNetCore.Tests.Conversation
         /// <param name="configuration">The document, loaded or built in code.</param>
         /// <param name="adapters">The conversation transports this host registers, if any.</param>
         /// <returns>The composed container.</returns>
-        /// <remarks>
-        /// <c>UseConversation</c> is called only when this host has something to register. Calling it with an
-        /// empty list would turn the seam on for a host that registered no vendor, which is the one
-        /// thing these tests prove does not happen.
-        /// </remarks>
         private static async Task<IHost> BuildFromAsync(
             AgentCoreConfiguration configuration,
             params IConversationAdapter[] adapters)

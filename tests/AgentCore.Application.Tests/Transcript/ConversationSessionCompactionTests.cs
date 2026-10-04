@@ -1,5 +1,4 @@
 using AgentCore.Application.Conversation.Memory;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Compaction;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Transcript;
@@ -7,6 +6,7 @@ using AgentCore.TestSupport;
 using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Transcript.ConversationSessionCompactionTestSupport;
 
 namespace AgentCore.Application.Tests.Transcript
@@ -37,7 +37,7 @@ namespace AgentCore.Application.Tests.Transcript
 
             _ = Assert.Single(summariser.Requests);
 
-            // Turn 2 (q2/a2) is the newest existing turn and stays live (D11); turns 0 and 1 go under the summary.
+            // Turn 2 (q2/a2) is the newest existing turn and stays live; turns 0 and 1 go under the summary.
             Assert.Equal(["assistant:[Summary]\nthe gist of it", "user:q2", "assistant:a2", "user:q3"], Assert.Single(reply.Requests));
 
             IReadOnlyList<ConversationMessage> forSession = await store.ReadForSessionAsync("c1", TestContext.Current.CancellationToken);
@@ -135,7 +135,7 @@ namespace AgentCore.Application.Tests.Transcript
         [Fact]
         public async Task ATurn_WhoseViewCrossesThreeQuartersOfTheWindow_FiresTheRealPipeline()
         {
-            // A 400-token window fires at 300 and stops at 200 (D7). One short turn stays well under;
+            // A 400-token window fires at 300 and stops at 200. One short turn stays well under;
             // twelve turns of ~80 characters each land well over.
             const int Window = 400;
             InMemoryConversationStore store = new();

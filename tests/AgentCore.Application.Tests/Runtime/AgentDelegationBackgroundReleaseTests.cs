@@ -2,20 +2,19 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Conversation.Memory;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Domain;
 using AgentCore.TestSupport;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
-    /// Bug 7 of the 2026-09-24 round: <c>DelegatedAgentRun</c> made a fresh session per <c>kind: agent</c>
-    /// call and never released it, so a <c>background:</c> child the delegate started outlived the
-    /// conversation. The delegate's own <c>ChatOptions</c> attaches its <see cref="Microsoft.Agents.AI.BackgroundAgentsProvider"/>
-    /// directly, so the fresh session's only owner is the delegation call itself — it must release it when
-    /// the tool returns, on the happy path and on a fault.
+    /// A delegation makes a fresh session per <c>kind: agent</c> call, so a <c>background:</c> child the
+    /// delegate starts must not outlive the conversation. The delegate's own <c>ChatOptions</c> attaches its
+    /// <see cref="Microsoft.Agents.AI.BackgroundAgentsProvider"/> directly, so the fresh session's only owner is
+    /// the delegation call itself — it must release the session when the tool returns, on the happy path and on a fault.
     /// </summary>
     public sealed class AgentDelegationBackgroundReleaseTests
     {
@@ -66,10 +65,10 @@ namespace AgentCore.Application.Tests.Runtime
         }
 
         /// <summary>
-        /// Claim (R4-5): a delegation whose fresh session started a background child that ignores its cancel
-        /// must not stall the outer turn for <see cref="Harness.BackgroundSessionRelease"/>'s timeout. Before
-        /// the fix, the delegation's <c>finally</c> awaited the release with <see cref="CancellationToken.None"/>
-        /// inside the tool call, so the outer model never saw the tool result until the release gave up.
+        /// A delegation whose fresh session started a background child that ignores its cancel
+        /// must not stall the outer turn for <see cref="Harness.BackgroundSessionRelease"/>'s timeout. The release
+        /// must not be awaited with <see cref="CancellationToken.None"/> inside the tool call, or the outer model
+        /// would not see the tool result until the release gave up.
         /// </summary>
         [Fact]
         public async Task Delegation_ToAnAgentWithADeafChild_DoesNotStallTheTurn()

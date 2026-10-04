@@ -10,7 +10,7 @@ using Xunit;
 namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
 {
     /// <summary>
-    /// What an edit does to store 1 in PostgreSQL: which rows go, which stay, and what the names the
+    /// What an edit does to the message store in PostgreSQL: which rows go, which stay, and what the names the
     /// caller knows its messages by are good for.
     /// </summary>
     public sealed class PostgresConversationStoreTruncateTests : PostgresDatabaseTest
@@ -51,7 +51,7 @@ namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
         public async Task Truncate_LeavesTheNextAppendFreeToClimbPastTheGap()
         {
             // The ordinals a truncation takes are never issued again, so an append after one leaves a
-            // hole. Nothing may object to that: store 3 keeps audit rows against the turns that stood in
+            // hole. Nothing may object to that: the audit store keeps audit rows against the turns that stood in
             // the gap, and reissuing a number would put two turns in one place in the chain.
             PostgresConversationStore store = await OpenAsync();
             _ = await store.AppendAsync(

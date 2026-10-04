@@ -1,5 +1,7 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Hooks;
+using AgentCore.Application.Hooks.Layers;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime.Compaction;
@@ -24,7 +26,7 @@ namespace AgentCore.Application.Configuration.Compilation
         /// <param name="context">The compile-time seams.</param>
         /// <param name="pointer">This agent's JSON pointer.</param>
         /// <param name="resolve">Resolves an <c>agents.items</c> id to its compiled agent, or <see langword="null"/> when undeclared.</param>
-        /// <param name="history">Store 1, or <see langword="null"/> on a row whose session carries no history and so has nothing to summarise.</param>
+        /// <param name="history">The conversation history, or <see langword="null"/> on a row whose session carries no history and so has nothing to summarise.</param>
         public static List<AIContextProvider> Build(
             AgentsWalk walk,
             AgentConfiguration item,
@@ -61,9 +63,14 @@ namespace AgentCore.Application.Configuration.Compilation
             providers.Add(new ReaderContentFilterProvider());
 
             CompactionStages stages = context.Compaction ?? CompactionStrategyFactory.Create(context.ChatClients.GetChatClient(model), contextWindow);
-            providers.AddRange(CompactionStrategyFactory.BuildProviders(stages, history));
+            providers.AddRange(CompactionStrategyFactory.BuildProviders(stages, history, walk.Hooks));
 
             AgentHarnessProviders.Add(providers, defaults, item, context, pointer, resolve, walk.Background);
+
+            if (walk.Hooks.Gates.Overrides(GatePoint.BeforeRun))
+            {
+                providers.Add(new RunGateProvider(walk.Hooks));
+            }
 
             if (AgentKnowledge.Compose(defaults, item) is not { } composed)
             {

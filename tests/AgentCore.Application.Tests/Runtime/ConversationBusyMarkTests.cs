@@ -3,8 +3,9 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Conversation.Memory;
+using AgentCore.Application.Hooks;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Tests.Audit;
 using AgentCore.Application.Transcript;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Domain;
@@ -12,11 +13,12 @@ using AgentCore.Domain.Audit;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.Logging;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
-    /// The busy mark a turn puts on its conversation in the store (owner ruling for soak F1, after LangGraph's thread
+    /// The busy mark a turn puts on its conversation in the store (modelled on LangGraph's thread
     /// <c>busy</c> status and its <c>enqueue</c> strategy): a turn of another session waits for it, then reads the
     /// conversation afresh.
     /// </summary>
@@ -99,10 +101,37 @@ namespace AgentCore.Application.Tests.Runtime
             // Assert
             _ = Assert.IsAssignableFrom<OperationCanceledException>(dropped);
             Assert.Empty(model.Requests);
-            AuditEvent refused = Assert.Single(sink.EventsOf(ConversationId), item => item.Kind == AuditEventKind.TurnRefused);
+            AuditEvent refused = Assert.Single(await session.RowsAsync(sink), item => item.Kind == AuditEventKind.TurnRefused);
             Assert.Equal(("gone", null), (refused.Payload[AuditPayloadKeys.RefusedReason], refused.TurnIndex));
             CapturedLine line = Assert.Single(logs.Of(40));
             Assert.Equal((LogLevel.Warning, "gone"), (line.Level, line.Field<string>("Reason")));
+        }
+
+        // A refusal before the store opened starts the conversation; the turn that later opens it starts nothing more.
+        [Fact(Timeout = 30_000)]
+        public async Task ATurnAfterARefusedOneStartsNoSecondConversation()
+        {
+            // Arrange
+            FakeTimeProvider time = new(DateTimeOffset.UnixEpoch);
+            InMemoryConversationStore store = new(time);
+            RequestRecordingChatClient model = new("hello");
+            InMemoryAuditSink sink = new();
+            ConversationSession session = Build(model, store, time, sink, logger: null).Create(ConversationId);
+            _ = await store.TryMarkBusyAsync(ConversationId, "other-host", TimeSpan.FromHours(1), Ct);
+            using CancellationTokenSource caller = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+            Task<TurnResult> dropped = session.RunTurnAsync("hi", caller.Token);
+            _ = await Task.WhenAny(time.WaitForTimersAsync(time.GetUtcNow() + ConversationBusyMark.FirstPoll, 1), dropped);
+            await caller.CancelAsync();
+            _ = await Record.ExceptionAsync(() => dropped);
+            await store.ClearBusyAsync(ConversationId, "other-host", Ct);
+
+            // Act
+            _ = await session.RunTurnAsync("hi again", Ct);
+
+            // Assert
+            Assert.Equal(
+                [AuditEventKind.ConversationStarted, AuditEventKind.TurnRefused, AuditEventKind.TurnCompleted],
+                (await session.RowsAsync(sink)).Select(row => row.Kind));
         }
 
         private static ConversationSessionFactory Build(
@@ -118,7 +147,7 @@ namespace AgentCore.Application.Tests.Runtime
                 extractor: null,
                 timeProvider: time,
                 logger: logger,
-                observers: ConversationObservers.Standard(sink, logger));
+                hooks: BuiltInHooks.Create(sink, logger));
         }
 
         /// <summary>Reports the first time a turn found the conversation marked by another session.</summary>

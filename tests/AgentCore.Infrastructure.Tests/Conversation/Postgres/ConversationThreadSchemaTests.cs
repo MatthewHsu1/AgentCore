@@ -4,7 +4,7 @@ using Xunit;
 
 namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
 {
-    /// <summary>Store 0's shape, and what the running role may do to it.</summary>
+    /// <summary>The conversation store's shape, and what the running role may do to it.</summary>
     /// <remarks>
     /// <c>conversation</c> and <c>role</c> are both non-reserved keywords in PostgreSQL and need no quoting. That
     /// is what the first test proves: the migration would fail to apply at all if it were untrue.

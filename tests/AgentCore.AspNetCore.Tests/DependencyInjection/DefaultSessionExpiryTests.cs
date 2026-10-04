@@ -1,11 +1,11 @@
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Sessions.Memory;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.AspNetCore.Tests.Fakes;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.AspNetCore.Tests.DependencyInjection.StartedHostFixture;
 
 namespace AgentCore.AspNetCore.Tests.DependencyInjection

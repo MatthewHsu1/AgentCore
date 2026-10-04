@@ -2,7 +2,6 @@ using AgentCore.TestSupport;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Tools.Binding;
@@ -12,6 +11,7 @@ using Microsoft.Extensions.AI;
 using Xunit;
 using AgentCore.Domain;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Runtime
 {
@@ -19,9 +19,6 @@ namespace AgentCore.Application.Tests.Runtime
     /// The conversation workspace as a host sees it: bound (or not) through <see cref="ConversationSessionFactory"/>,
     /// deleted when the conversation ends, and visible to a bound tool through <see cref="ToolCallScope"/>.
     /// </summary>
-    /// <remarks>
-    /// Every test here runs offline. There is no network conversation and no API key anywhere in this file.
-    /// </remarks>
     public sealed class ConversationSessionWorkspaceTests : IDisposable
     {
         private const string SimpleYaml =

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgentCore.Application.Conversation;
+using AgentCore.Application.Hooks.Notices;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Harness;
 using AgentCore.AspNetCore.DependencyInjection;
@@ -12,6 +13,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.AspNetCore.Endpoints
 {
@@ -47,9 +49,8 @@ namespace AgentCore.AspNetCore.Endpoints
         /// <summary>Maps every entry on one route.</summary>
         /// <param name="endpoints">The route builder of the host.</param>
         /// <param name="pattern">
-        /// The route to answer on. It carries the <c>{entry}</c> parameter, or the host attaches an
-        /// <see cref="IEntrySelector"/> with <see cref="EntrySelectorEndpointConventionBuilderExtensions.SelectEntry{TSelector}"/>.
-        /// Startup fails when it has neither.
+        /// The route to answer on. It carries the <c>{entry}</c> parameter, or a hook's
+        /// <see cref="AgentCore.Application.Hooks.AgentHook.BeforeEntryAsync"/> picks the entry. Startup fails when it has neither.
         /// </param>
         /// <returns>The mapped endpoint, so a host adds its own conventions.</returns>
         public static IEndpointConventionBuilder MapResponses(this IEndpointRouteBuilder endpoints, string pattern)
@@ -57,7 +58,7 @@ namespace AgentCore.AspNetCore.Endpoints
             ArgumentNullException.ThrowIfNull(endpoints);
             ArgumentException.ThrowIfNullOrEmpty(pattern);
 
-            return endpoints.MapPost(pattern, HandleAsync).WithMetadata(AgentCoreRouteMetadata.Instance);
+            return endpoints.MapPost(pattern, HandleAsync).WithMetadata(AgentCoreRouteMetadata.Http);
         }
 
         /// <summary>Runs one turn of one conversation, and files the session under the ids the answer carries.</summary>
@@ -300,14 +301,14 @@ namespace AgentCore.AspNetCore.Endpoints
             bool streaming = body.TryGetProperty("stream", out JsonElement streamFlag)
                 && streamFlag.ValueKind == JsonValueKind.True;
 
-            string refusedReason = TurnRefusals.Busy;
+            string refusedReason = TurnRefusalTokens.ToToken(TurnRefusal.Busy);
             try
             {
                 // The conversation stays busy until the session is filed, after the abort too: a message sent at once,
                 // to this host or another, then waits for this turn's words instead of racing them to the same turn index.
                 ConversationSession conversation = await pending.Agent
                     .EnterRequestAsync(pending.Session, cancellationToken).ConfigureAwait(false);
-                refusedReason = TurnRefusals.Conflict;
+                refusedReason = TurnRefusalTokens.ToToken(TurnRefusal.Conflict);
                 try
                 {
                     ChatMessage? input = pending.Approval is { } approval

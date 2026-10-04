@@ -1,12 +1,12 @@
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Domain;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Runtime
 {
@@ -14,9 +14,6 @@ namespace AgentCore.Application.Tests.Runtime
     /// The approval round trip through the turn loop: a gated tool suspends the turn with a request
     /// instead of failing it, and the caller's answer on the same conversation runs the tool.
     /// </summary>
-    /// <remarks>
-    /// Every test here runs offline. There is no network conversation and no API key anywhere in this file.
-    /// </remarks>
     public sealed class ConversationSessionApprovalTests
     {
         private const string GatedYaml =
@@ -140,7 +137,7 @@ namespace AgentCore.Application.Tests.Runtime
 
             _ = await session.RunTurnAsync("send it", token);
 
-            Assert.True(session.Snapshot().Providers.ContainsKey("_pendingApprovalRequests"));
+            Assert.True(session.States.Snapshot().Providers.ContainsKey("_pendingApprovalRequests"));
         }
 
         private static ConversationSession Session(string yaml, Action onSend, CancellationToken token)

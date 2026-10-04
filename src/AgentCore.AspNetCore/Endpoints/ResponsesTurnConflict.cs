@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Hooks.Notices;
 using Microsoft.AspNetCore.Http;
 
 namespace AgentCore.AspNetCore.Endpoints
@@ -25,11 +25,11 @@ namespace AgentCore.AspNetCore.Endpoints
             "another request is still running a turn of this conversation, so this turn was refused before it ran. Wait "
             + "for that turn to finish and send the message again.";
 
-        /// <summary>Picks the message for a <see cref="TurnRefusals"/> reason.</summary>
+        /// <summary>Picks the message for a <see cref="TurnRefusalTokens"/> reason.</summary>
         /// <param name="refusedReason">The <c>refusedReason</c> of the turn's <c>turn.refused</c> event.</param>
         /// <returns>The message the caller reads.</returns>
         public static string MessageFor(string refusedReason) =>
-            refusedReason == TurnRefusals.Busy ? BusyMessage : ConflictMessage;
+            refusedReason == TurnRefusalTokens.ToToken(TurnRefusal.Busy) ? BusyMessage : ConflictMessage;
 
         /// <summary>
         /// Ends a stream whose headers already left with the Responses <c>error</c> event, in place of the

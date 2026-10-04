@@ -3,10 +3,12 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Hooks;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using Microsoft.Extensions.AI;
+using AgentCore.Application.Runtime.Session;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 
 namespace AgentCore.Application.Tests.Runtime
 {
@@ -28,12 +30,13 @@ namespace AgentCore.Application.Tests.Runtime
                 document,
                 new AgentCompilationContext(new FakeChatClientFactory(reply)) { ConversationStore = store })["main"];
 
+            InMemoryAuditSink rows = sink ?? new InMemoryAuditSink();
             ConversationSessionFactory factory = new(
                 compiled,
                 new GuardEvaluator(compiled.Configuration.Guards),
                 extractor: null,
                 timeProvider: time,
-                observers: ConversationObservers.Standard(sink ?? new InMemoryAuditSink(), logger: null));
+                hooks: BuiltInHooks.Create(rows));
 
             return factory.Create();
         }

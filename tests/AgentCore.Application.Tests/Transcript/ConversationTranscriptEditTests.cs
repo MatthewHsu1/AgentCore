@@ -15,7 +15,7 @@ namespace AgentCore.Application.Tests.Transcript
         {
             ConversationTranscript transcript = new() { ConversationId = "conversation-1" };
 
-            IReadOnlyList<ConversationMessage> rows = transcript.Append([User("hello"), Assistant("hi")], firstMessageId: "caller-1");
+            IReadOnlyList<ConversationMessage> rows = transcript.Append([User("hello"), Assistant("hi")], userMessageId: "caller-1");
 
             Assert.Equal("caller-1", rows[0].MessageId);
 
@@ -39,7 +39,7 @@ namespace AgentCore.Application.Tests.Transcript
             Assert.Equal(new WithdrawnTurns(1, 1), went);
             Assert.Equal(["q1", "a1"], transcript.Read().Select(message => message.Text));
 
-            // The withdrawn places stay spent. Store 3 is append-only and still holds rows against the
+            // The withdrawn places stay spent. The store is append-only and still holds rows against the
             // turns that stood in them, so reissuing either number would put two turns in one place.
             Assert.Equal(4, transcript.NextOrdinal);
             Assert.Equal(1, transcript.TurnIndex);

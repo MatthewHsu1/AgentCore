@@ -1,7 +1,7 @@
 namespace AgentCore.Application.Configuration.Schema
 {
     /// <summary>
-    /// A provider that names one vendor and nothing else, such as speech or telephony.
+    /// A provider that names one vendor and nothing else, such as audit or conversations.
     /// </summary>
     public sealed record VendorProviderConfiguration
     {

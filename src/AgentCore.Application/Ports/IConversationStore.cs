@@ -5,7 +5,7 @@ using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Ports
 {
-    /// <summary>Where store 0 keeps what a conversation is, apart from its words.</summary>
+    /// <summary>Where the conversation store keeps what a conversation is, apart from its words.</summary>
     public interface IConversationStore
     {
         /// <summary>Makes the conversation's row, or returns the one already there.</summary>
@@ -17,7 +17,7 @@ namespace AgentCore.Application.Ports
         /// <summary>Reads one conversation's row.</summary>
         /// <param name="conversationId">The conversation to read.</param>
         /// <param name="cancellationToken">Cancels the read.</param>
-        /// <returns>The row, or <see langword="null"/> when store 0 holds none.</returns>
+        /// <returns>The row, or <see langword="null"/> when the conversation store holds none.</returns>
         ValueTask<ConversationRecord?> GetAsync(string conversationId, CancellationToken cancellationToken = default);
 
         /// <summary>Lists one principal's conversations, most recently active first.</summary>
@@ -90,6 +90,20 @@ namespace AgentCore.Application.Ports
             string conversationId,
             IReadOnlyList<ConversationMessageDraft> messages,
             ConversationSessionState? state = null,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Writes the state the session holds when no turn's words carry it, as when a host ends the conversation after
+        /// its last turn. It follows the rule of <see cref="AppendAsync"/>: a state whose
+        /// <see cref="ConversationSessionState.NextTurnIndex"/> is behind the stored state's is dropped, so it never
+        /// replaces a newer one, and one level with it replaces it.
+        /// </summary>
+        /// <param name="conversationId">The conversation to write. A conversation the conversation store holds no row for is left alone.</param>
+        /// <param name="state">What the session holds now.</param>
+        /// <param name="cancellationToken">Cancels the write.</param>
+        ValueTask SaveStateAsync(
+            string conversationId,
+            ConversationSessionState state,
             CancellationToken cancellationToken = default);
 
         /// <summary>

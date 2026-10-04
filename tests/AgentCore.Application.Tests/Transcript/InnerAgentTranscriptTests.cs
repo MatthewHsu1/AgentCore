@@ -1,10 +1,10 @@
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Transcript
 {
@@ -33,8 +33,8 @@ namespace AgentCore.Application.Tests.Transcript
           """;
 
         /// <summary>
-        /// The inner agent runs on a session of its own, which no <c>BeginConversation</c> ever named, so store 1
-        /// never sees its rounds. Keeping them would cost tokens on every later turn and would put the
+        /// The inner agent runs on a session of its own, which no <c>BeginConversation</c> ever named, so the
+        /// conversation's transcript never sees its rounds. Keeping them would cost tokens on every later turn and would put the
         /// inner agent's working-out into the audit record, which no consumer asked for.
         /// </summary>
         [Fact]
@@ -55,10 +55,8 @@ namespace AgentCore.Application.Tests.Transcript
 
             await session.FlushTranscriptAsync();
 
-            // Outer tool call, inner answer, outer reply. The old count was two: the inner run
-            // never reached its own model, so a kind: agent tool never heard its agent. Three is
-            // the delegation actually working — and the rows below still hold, so its working-out
-            // stays off store 1 all the same.
+            // Outer tool call, inner answer, outer reply: the inner agent's model is reached, and its
+            // working-out still stays off the outer conversation's rows.
             Assert.Equal(3, model.Calls);
             Assert.Equal(
                 ["user", "assistant", "tool", "assistant"],

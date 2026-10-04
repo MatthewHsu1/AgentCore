@@ -1,4 +1,5 @@
 using System.Net.WebSockets;
+using AgentCore.AspNetCore.Vendors.TelnyxRelay.Connection;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
@@ -12,7 +13,7 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay
     internal static class TelnyxRelayEndpointRouteBuilderExtensions
     {
         /// <summary>The route the test host maps this endpoint on.</summary>
-        public const string DefaultPattern = "/v1/{" + AgentCore.AspNetCore.Voice.ConversationEndpointRouteBuilderExtensions.EntryRouteParameter + "}/telnyx/relay";
+        public const string DefaultPattern = "/v1/{" + AgentCore.AspNetCore.Voice.Routing.ConversationEndpointRouteBuilderExtensions.EntryRouteParameter + "}/telnyx/relay";
 
         /// <summary>Maps the socket on one route, with the limits the host chose.</summary>
         /// <param name="endpoints">The route builder of the host.</param>

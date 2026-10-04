@@ -1,8 +1,8 @@
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Sessions.Memory;
 using AgentCore.Application.Tests.Transcript;
 using AgentCore.TestSupport;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Sessions.ConversationSessionsFixture;
 
 namespace AgentCore.Application.Tests.Sessions
@@ -59,11 +59,13 @@ namespace AgentCore.Application.Tests.Sessions
                     Assert.Equal(1, sessions.Count);
                 }
 
+                // The release touch runs on a continuation after the turn frees its slot, not inside the turn,
+                // so it is waited for by its own stamp: one the last heartbeat could not have written already.
+                clock.Advance(TimeSpan.FromMinutes(1));
+                DateTime freedAt = clock.GetUtcNow().UtcDateTime;
                 gates[t].SetResult();
                 await turn;
-                DateTime freedAt = clock.GetUtcNow().UtcDateTime;
                 await EventuallyAsync(() => Stamp("c1") == freedAt);
-                clock.Advance(TimeSpan.FromMinutes(1));
             }
 
             clock.Advance(IdleTimeout);

@@ -1,7 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Conversation;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tools;
 using Microsoft.Agents.AI;
@@ -11,6 +10,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 
 namespace AgentCore.AspNetCore.Endpoints
 {
@@ -63,7 +63,7 @@ namespace AgentCore.AspNetCore.Endpoints
             }
             finally
             {
-                // The turn commits its words even when the host cancels mid-stream (design section 3), so the
+                // The turn commits its words even when the host cancels mid-stream, so the
                 // session still needs filing here, on a token that outlives the abort that cancelled the one above.
                 if (cancellationToken.IsCancellationRequested)
                 {
@@ -84,21 +84,17 @@ namespace AgentCore.AspNetCore.Endpoints
 
         /// <summary>
         /// Files the session of a turn whose client has gone, within
-        /// <see cref="ConversationSession.TurnCompletionTimeout"/>: the same bound the rest of the work after
+        /// <see cref="TurnFailureReasons.CompletionTimeout"/>: the same bound the rest of the work after
         /// the reply runs under once the host's token no longer counts.
         /// </summary>
         /// <param name="file">Files the session; it reads the bound's token.</param>
         /// <param name="conversationId">The conversation being filed, for the log.</param>
         /// <param name="time">The clock the bound runs on.</param>
         /// <param name="logger">Where a filing that outruns the bound is reported.</param>
-        /// <remarks>
-        /// The wait ends at the bound even when <paramref name="file"/> ignores its token. A filing that
-        /// outruns it is logged and dropped, not thrown: the client that could read the error is gone.
-        /// </remarks>
         internal static async Task FileAfterAbortAsync(
             Func<CancellationToken, Task> file, string conversationId, TimeProvider time, ILogger logger)
         {
-            TimeSpan bound = ConversationSession.TurnCompletionTimeout;
+            TimeSpan bound = TurnFailureReasons.CompletionTimeout;
             using CancellationTokenSource deadline = new(bound, time);
 
             try
@@ -126,7 +122,7 @@ namespace AgentCore.AspNetCore.Endpoints
             {
                 bool isNotice = update.Contents.OfType<NoticeContent>().Any();
 
-                // Carries no text of its own (E5): the caller reads it off the agentcore_message_committed
+                // Carries no text of its own: the caller reads it off the agentcore_message_committed
                 // dialect part instead, never as spoken or output text.
                 bool isCommitted = update.Contents.OfType<TurnCommittedContent>().Any();
 

@@ -1,6 +1,7 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Voice.Options;
+using AgentCore.AspNetCore.Voice.Ports;
 using Microsoft.AspNetCore.Http;
 
 namespace AgentCore.AspNetCore.Vendors.TelnyxRelay
@@ -8,17 +9,6 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay
     /// <summary>
     /// The Telnyx Conversation Relay as a conversation transport: it owns the socket and speaks Telnyx frames.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// D28 buys the whole speech layer — recognition, turn detection, synthesis, and interruption —
-    /// inside the relay, so <see cref="CarriesText"/> is <see langword="true"/> and both speech roles,
-    /// <c>providers.speech.stt</c> and <c>providers.speech.tts</c>, must name this same vendor.
-    /// </para>
-    /// <para>
-    /// This owns only the route. <c>TelnyxRelayConnection</c> is still what a conversation runs on, and
-    /// <c>TelnyxRelayConversationChannelFactory</c> is still what hands out its two ports.
-    /// </para>
-    /// </remarks>
     public sealed class TelnyxRelayConversationAdapter : IConversationTransportAdapter
     {
         /// <summary>The one <c>providers.conversation.kind</c> value this vendor answers to.</summary>
@@ -28,7 +18,6 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay
         public string Kind => TelnyxRelayKind;
 
         /// <inheritdoc/>
-        /// <remarks>The relay's frames carry text: the vendor performs recognition and synthesis itself.</remarks>
         public bool CarriesText => true;
 
         /// <inheritdoc/>
@@ -47,11 +36,6 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay
         /// A value would be refused at run time by <c>Task.Delay</c>, <c>CancelAfter</c>, or
         /// <c>Task.WaitAsync</c>, or a frame cap is not positive. The pointer names the exact field.
         /// </exception>
-        /// <remarks>
-        /// It throws <see cref="ConfigurationLoadException"/> and not
-        /// <see cref="ArgumentOutOfRangeException"/> because the value came from a document rather than
-        /// from a C# caller, and a reader needs the line to fix rather than a property name.
-        /// </remarks>
         internal static TelnyxRelayOptions BuildOptions(ConversationProviderConfiguration configuration)
         {
             ArgumentNullException.ThrowIfNull(configuration);

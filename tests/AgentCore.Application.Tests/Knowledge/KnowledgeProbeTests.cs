@@ -5,7 +5,6 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Domain.Knowledge;
 using AgentCore.TestSupport;
@@ -13,26 +12,20 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Xunit;
+using AgentCore.Application.Runtime.Clarification;
+using AgentCore.Application.Runtime.ToolCalls;
 
 namespace AgentCore.Application.Tests.Knowledge
 {
     /// <summary>
-    /// §8: the probe. Channel 2 of the ambiguity design — inside the knowledge search itself, dropping
+    /// The probe: inside the knowledge search itself, dropping
     /// one wildcard-filled facet, re-searching, and naming the values it finds.
     /// </summary>
-    /// <remarks>
-    /// Every test drives the search tool <c>KnowledgeProviderFactory</c> offers, the same way
-    /// <c>KnowledgeProviderFactorySearchTests</c> does, rather than through <c>ConversationSession</c>: the probe reads
-    /// only the turn (<see cref="Clarifications"/>, the knowledge scope, the history flag) and the
-    /// resolved <c>knowledge:</c> block, so filing exactly those by hand proves the same mechanism a
-    /// real conversation would exercise, at a fraction of the setup. The genuinely two-turn and
-    /// delegation-shaped cases live in <c>ConversationSessionProbeTests</c>.
-    /// </remarks>
     public sealed class KnowledgeProbeTests
     {
         private const string Description = "The model, as printed on the machine.";
 
-        // §8 steps 1-2: when the probe does not run at all.
+        // When the probe does not run at all.
 
         [Fact]
         public async Task Step1_MainSearchReturnedCards_TheProbeNeverRuns()
@@ -49,8 +42,8 @@ namespace AgentCore.Application.Tests.Knowledge
         [Fact]
         public async Task Step2_UnscopedAgentsEmptySearch_ReturnsAnEmptyList()
         {
-            // Acceptance: "an unscoped agent's empty search returns an empty list." The probe and the
-            // "holds nothing" notice are for a scoped agent only (K19).
+            // "an unscoped agent's empty search returns an empty list." The probe and the
+            // "holds nothing" notice are for a scoped agent only.
             ProbeFakePort port = new((_, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>([]));
             TurnInvocation turn = TurnOf(null, new Clarifications());
 
@@ -64,7 +57,7 @@ namespace AgentCore.Application.Tests.Knowledge
         [Fact]
         public async Task NoAmbiguityConfigured_StaysByteIdenticalToTheWildcardPlan()
         {
-            // K19: with no ambiguity: (and so no wildcard, no template) configured, behaviour is
+            // With no ambiguity: (and so no wildcard, no template) configured, behaviour is
             // byte-identical to the wildcard plan's own "holds nothing" notice — no second search.
             ProbeFakePort port = new((_, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>([]));
             TurnInvocation turn = TurnOf(FullScope("applies_to", "other"), new Clarifications());
@@ -76,12 +69,12 @@ namespace AgentCore.Application.Tests.Knowledge
             Assert.Equal(1, port.Calls);
         }
 
-        // §8 step 3: which facets are droppable.
+        // Which facets are droppable.
 
         [Fact]
         public async Task Step3_SingleFacetScope_IsUndroppable()
         {
-            // K33: dropping the scope's only facet would open it empty, which a scoped store refuses.
+            // Dropping the scope's only facet would open it empty, which a scoped store refuses.
             ProbeFakePort port = new((_, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>([]));
             TurnInvocation turn = TurnOf(FullScope("applies_to"), new Clarifications());
 
@@ -141,7 +134,7 @@ namespace AgentCore.Application.Tests.Knowledge
             Assert.Contains(results, r => r.Text.Contains("ct900", StringComparison.Ordinal));
         }
 
-        // §8 steps 5-6: reading candidates and choosing the message.
+        // Reading candidates and choosing the message.
 
         [Fact]
         public async Task Steps5And6_FindsCandidates_RecordsWhatItNamedAndEmitsTheNote()
@@ -170,7 +163,7 @@ namespace AgentCore.Application.Tests.Knowledge
         [Fact]
         public async Task Step5_ReadsAListShapedFacetValue_NotJustAString()
         {
-            // K24's own example: a card tagged applies_to: ["ct900", "ct900ent"]. A cast straight to
+            // Example: a card tagged applies_to: ["ct900", "ct900ent"]. A cast straight to
             // string would return null for every card on a multi-model collection.
             ProbeFakePort port = new((facets, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>(
                 facets.ContainsKey("applies_to")
@@ -223,7 +216,7 @@ namespace AgentCore.Application.Tests.Knowledge
         [Fact]
         public async Task K24_OneCardIsNeverASpread()
         {
-            // Acceptance: "one card is never a spread." One value produces a confirm question, not
+            // "one card is never a spread." One value produces a confirm question, not
             // "fewer than two -> holds nothing".
             ProbeFakePort port = new((facets, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>(
                 facets.ContainsKey("applies_to") ? [] : [CardWithFacet("a", "applies_to", "ct900")]));
@@ -242,7 +235,7 @@ namespace AgentCore.Application.Tests.Knowledge
         [Fact]
         public async Task MoreThanMaxCandidates_NamesNone()
         {
-            // Acceptance: "more than maxCandidates names none." The probe still speaks — this is not the
+            // "more than maxCandidates names none." The probe still speaks — this is not the
             // "holds nothing" notice — but the rendered text omits every value.
             string[] many = [.. Enumerable.Range(0, 7).Select(i => $"model{i}")];
             ProbeFakePort port = new((facets, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>(
@@ -298,7 +291,7 @@ namespace AgentCore.Application.Tests.Knowledge
             Assert.Contains("holds nothing", Assert.Single(results).Text, StringComparison.Ordinal);
         }
 
-        // K39: a graph document's probe still speaks, but must not record what it named.
+        // A graph document's probe still speaks, but must not record what it named.
 
         [Fact]
         public async Task K39_AGraphDocumentsProbe_EmitsItsNote_AndRecordsNoLastNamed()
@@ -313,12 +306,12 @@ namespace AgentCore.Application.Tests.Knowledge
 
             Assert.Contains("ct900", Assert.Single(results).Text, StringComparison.Ordinal);
 
-            // The record of what was named is withheld: K21's tie-break rests on the caller having heard
+            // The record of what was named is withheld: the tie-break rests on the caller having heard
             // the list, which AgentCore cannot know on a graph row.
             Assert.Equal(Clarifications.LastNamedKind.None, clarificationsObject.Read("applies_to").LastNamed.Kind);
         }
 
-        // K42: no holder, no probe -- but the notice is still owed to a scoped run.
+        // No holder, no probe -- but the notice is still owed to a scoped run.
 
         [Fact]
         public async Task K42_NoHolderOnTheTurn_TheProbeDoesNotSearch_ButStillEmitsTheNotice()
@@ -326,7 +319,7 @@ namespace AgentCore.Application.Tests.Knowledge
             ProbeFakePort port = new((_, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>([]));
             TurnInvocation turn = TurnOf(FullScope("applies_to", "other"), null);
 
-            // No Clarifications on the turn at all -- the K42 strip inside a nested tool call.
+            // No Clarifications on the turn at all -- the strip inside a nested tool call.
             IReadOnlyList<TextSearchProvider.TextSearchResult> results = await InvokeSearchAsync(Provider(port, Resolved(["applies_to"])), "e33", turn);
 
             Assert.Contains("holds nothing", Assert.Single(results).Text, StringComparison.Ordinal);
@@ -336,7 +329,7 @@ namespace AgentCore.Application.Tests.Knowledge
         [Fact]
         public async Task K42_ASubAgentThatSearchesFirst_WritesNoLastNamed_AndTheCallersOwnSearchStillCounts()
         {
-            // Acceptance: "a sub-agent that searches first writes no lastNamed, and the caller's own
+            // "a sub-agent that searches first writes no lastNamed, and the caller's own
             // search still counts." Simulates exactly what AuditingFunctionInvokingChatClient.
             // InvokeFunctionAsync does for a NESTED tool call: it strips Clarifications from the turn,
             // leaving the outer call id in place.
@@ -361,7 +354,7 @@ namespace AgentCore.Application.Tests.Knowledge
             Assert.Equal(1, clarificationsObject.Read("applies_to").ProbeAsks);
         }
 
-        // K25: every notice this design emits carries the reserved source name, and none is citable.
+        // Every notice the probe emits carries the reserved source name, and none is citable.
 
         [Fact]
         public async Task EveryOutcome_CarriesTheReservedSourceName()
@@ -381,7 +374,7 @@ namespace AgentCore.Application.Tests.Knowledge
         [Fact]
         public async Task K23_AProbeSpread_PublishesNoSources()
         {
-            // Acceptance: "a probe spread publishes no sources." The probe runs between Kept and Cite, so
+            // "a probe spread publishes no sources." The probe runs between Kept and Cite, so
             // nothing it discards -- and nothing it names -- is ever published as a citable source.
             ProbeFakePort port = new((facets, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>(
                 facets.ContainsKey("applies_to")
@@ -391,16 +384,13 @@ namespace AgentCore.Application.Tests.Knowledge
             AIContextProvider provider = Provider(port, Resolved(["applies_to"], citations: true));
             TurnSources sources = new();
 
-            TurnInvocation turn = TurnOf(FullScope("applies_to", "other"), new Clarifications(), sources: sources);
-            using (sources.BeginOuterCall("conversation-1"))
-            {
-                _ = await InvokeSearchAsync(provider, "e33", turn);
-            }
+            TurnInvocation turn = TurnOf(FullScope("applies_to", "other"), new Clarifications(), sources: sources) with { OuterCallId = "conversation-1" };
+            _ = await InvokeSearchAsync(provider, "e33", turn);
 
             Assert.Empty(sources.TakeFor("conversation-1"));
         }
 
-        // K32: the probe's own try, its own budget, its own log events.
+        // The probe's own try, its own budget, its own log events.
 
         [Fact]
         public async Task Probe_SecondSearchThrows_EmitsHoldsNothing_AndLogsItsOwnFailureEvent()
@@ -455,12 +445,12 @@ namespace AgentCore.Application.Tests.Knowledge
 
             Assert.Contains("holds nothing", Assert.Single(results).Text, StringComparison.Ordinal);
 
-            // §8 step 4's increment ran before the search; a timeout that is not caller cancellation
-            // never rolls it back the way K43's own cancellation row does.
+            // The increment ran before the search; a timeout that is not caller cancellation
+            // never rolls it back the way the cancellation row does.
             Assert.Equal(1, clarificationsObject.Read("applies_to").ProbeAsks);
         }
 
-        // K43: at most once per turn -- the latch, the replay, and cancellation.
+        // At most once per turn -- the latch, the replay, and cancellation.
 
         [Fact]
         public async Task K43_ThreeSearchConversationsInOneTurn_RunOneProbe_AndIncrementOnce()
@@ -639,7 +629,7 @@ namespace AgentCore.Application.Tests.Knowledge
         [Fact]
         public async Task K43_ProbeThatThrowsEveryTurn_StillAdvancesProbeAsks()
         {
-            // Acceptance: "a probe that throws every turn still advances probeAsks." Two turns,
+            // "a probe that throws every turn still advances probeAsks." Two turns,
             // simulated with the same BeginTurn a real ConversationSession conversations: the latch and the per-turn mark
             // reset, the counter does not.
             int attempts = 0;
@@ -672,11 +662,10 @@ namespace AgentCore.Application.Tests.Knowledge
         [Fact]
         public async Task Loser_WaitExpiresBeforeAnyOutcomeIsPublished_EmitsHoldsNothing_NeverUnreachable()
         {
-            // C1's own gap: the probe is claimed directly, exactly as a real winner's ProbeAsync would,
+            // The probe is claimed directly, exactly as a real winner's ProbeAsync would,
             // but its payload is never published -- neither Publish nor Fail. With ProbeDeadlineSeconds
             // and ProbeWaitMarginSeconds both 0, the loser's own wait times out almost at once, which is
-            // the row the fix exists for:
-            // a TimeoutException reaching SearchAsync's outer catch would blame the main search, which
+            // the case under test: a TimeoutException reaching SearchAsync's outer catch would blame the main search, which
             // never ran a second time and never failed.
             ProbeFakePort port = new((_, _) => Task.FromResult<IReadOnlyList<KnowledgeCard>>([]));
 
@@ -791,7 +780,7 @@ namespace AgentCore.Application.Tests.Knowledge
         [Fact]
         public async Task Step4_TheDeadlineFiredBeforeTheCallerHungUp_KeepsTheAskCharged()
         {
-            // K22's cap is only monotone if a timeout is charged. Classifying by "is the caller's token
+            // The cap is only monotone if a timeout is charged. Classifying by "is the caller's token
             // cancelled now" would refund one whenever the caller happens to hang up in the moment after
             // the deadline fired, and a probe that always times out could then offer the same facet
             // forever. The port below makes that order certain: it waits for its own token to be
@@ -1152,7 +1141,7 @@ namespace AgentCore.Application.Tests.Knowledge
 
         /// <summary>
         /// The cancellation row's own entry point: <paramref name="callerToken"/> here is the
-        /// SIMULATED CALLER's own token (K43's cancellation row), never the test host's — see
+        /// SIMULATED CALLER's own token (the cancellation row), never the test host's — see
         /// <see cref="K43_ACancelledProbe_RollsBackTheIncrement_FailsThePayload_AndKeepsTheLatch"/>, its
         /// only caller. Named apart from <see cref="InvokeSearchAsync(AIContextProvider, string, TurnInvocation)"/>
         /// so a deliberately non-<c>TestContext</c> token at this one conversation site does not read as a mistake.

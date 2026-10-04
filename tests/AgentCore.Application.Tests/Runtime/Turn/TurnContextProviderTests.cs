@@ -3,7 +3,6 @@ using System.Text.Json;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.State;
 using AgentCore.Application.Tests.Fakes;
@@ -11,23 +10,13 @@ using AgentCore.Application.Transcript;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Runtime.Turn
 {
     /// <summary>
     /// The per-invocation seam: what one turn hands the model on top of the agent's own instructions.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The compiled agent is a process singleton, so the provider bound to it is one too and may hold
-    /// nothing per conversation. It finds the turn in the session-keyed registry instead, and it applies what
-    /// it finds only to a run on the session that turn filed. That rule is what keeps a delegated
-    /// run — which is call and return on a session of its own — out of the turn's context.
-    /// </para>
-    /// <para>
-    /// Every test here runs offline: no network conversation and no API key.
-    /// </para>
-    /// </remarks>
     public sealed class TurnContextProviderTests
     {
         private const string ReminderYaml =

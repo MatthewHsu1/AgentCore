@@ -2,11 +2,11 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Llm;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Turn;
 
 namespace AgentCore.Application.Tests.Configuration.Compilation
 {

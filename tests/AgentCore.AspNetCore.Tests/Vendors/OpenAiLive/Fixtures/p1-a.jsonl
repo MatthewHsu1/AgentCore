@@ -1,0 +1,71 @@
+{"t": 0.0, "dir": "out", "event": {"type": "session.start", "session": {"model": "gpt-live-1", "instructions": "You are a phone support agent for Sole Fitness. Be brief. You cannot see orders yourself. For any order question, delegate to the backend and wait for its answer.", "audio": {"format": {"type": "audio/pcm", "rate": 24000}, "output": {"voice": "marin"}}, "delegation": {"type": "client"}}, "event_id": "c1"}}
+{"t": 0.282, "dir": "in", "event": {"event_id": "event_ESev6L9Z4vXu2jY4tWfcy", "type": "session.started", "client_event_id": "c1", "session": {"id": "live_u7_ESev6p3oMVi8ok4kVufJAq08AR0pnQqS", "expires_at": 1790506388, "model": "gpt-live-1", "instructions": "You are a phone support agent for Sole Fitness. Be brief. You cannot see orders yourself. For any order question, delegate to the backend and wait for its answer.", "audio": {"output": {"voice": "marin"}, "format": {"type": "audio/pcm", "rate": 24000}}, "delegation": {"type": "client"}, "status": "active", "input": []}}}
+{"t": 1.003, "dir": "caller", "line": "hello", "seconds": 1.1}
+{"t": 2.054, "dir": "in", "event": {"type": "session.input_transcript.delta", "start_ms": 1200, "end_ms": 1400, "delta": " Hi", "event_id": "event_ESev8BrvR0yiMYPWq4Bee"}}
+{"t": 2.447, "dir": "in", "event": {"type": "session.input_transcript.delta", "start_ms": 1600, "end_ms": 1800, "delta": " there", "event_id": "event_ESev8QHi82AFUGrsdmCbt"}}
+{"t": 2.938, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 2000, "end_ms": 2200, "delta": " Hey!", "event_id": "event_ESev90H5CWyMa8dCqR4ts"}}
+{"t": 3.563, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 2600, "end_ms": 2800, "delta": " Thanks", "event_id": "event_ESev9llm39DAc1zGLHnpD"}}
+{"t": 3.764, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 2800, "end_ms": 3000, "delta": " for", "event_id": "event_ESev9gs6NXWyWttNswvkq"}}
+{"t": 4.018, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 3000, "end_ms": 3200, "delta": " calling", "event_id": "event_ESevAGrVN4w3CzWqwRXsv"}}
+{"t": 4.165, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 3200, "end_ms": 3400, "delta": " Sole", "event_id": "event_ESevAj9tMY0NdvTvcoj2X"}}
+{"t": 4.35, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 3400, "end_ms": 3600, "delta": " Fitness.", "event_id": "event_ESevAS6EVH86zHTznl1kp"}}
+{"t": 4.958, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 4000, "end_ms": 4200, "delta": " How", "event_id": "event_ESevBQsK649iWKDQP6Kj7"}}
+{"t": 5.004, "dir": "caller", "line": "order", "seconds": 5.6}
+{"t": 5.188, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 4200, "end_ms": 4400, "delta": " can", "event_id": "event_ESevBgMuInTOMNHzxxQ7U"}}
+{"t": 5.354, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 4400, "end_ms": 4600, "delta": " I help", "event_id": "event_ESevBKSOoqRuKUfp0xpGZ"}}
+{"t": 5.547, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 4600, "end_ms": 4800, "delta": "?", "event_id": "event_ESevBS5FeyJKIdznXQGI4"}}
+{"t": 6.475, "dir": "in", "event": {"type": "session.input_transcript.delta", "start_ms": 5600, "end_ms": 5800, "delta": " Can", "event_id": "event_ESevCPDFMwHTbtlYOfR6z"}}
+{"t": 6.685, "dir": "in", "event": {"type": "session.input_transcript.delta", "start_ms": 5800, "end_ms": 6000, "delta": " you", "event_id": "event_ESevCB0arGux4GYKaUKyP"}}
+{"t": 6.883, "dir": "in", "event": {"type": "session.input_transcript.delta", "start_ms": 6000, "end_ms": 6200, "delta": " check", "event_id": "event_ESevDHqKzwuthO1woPi2a"}}
+{"t": 7.045, "dir": "in", "event": {"type": "session.input_transcript.delta", "start_ms": 6200, "end_ms": 6400, "delta": " the", "event_id": "event_ESevDlYixVXWDIN9s3KPJ"}}
+{"t": 7.515, "dir": "in", "event": {"type": "session.input_transcript.delta", "start_ms": 6600, "end_ms": 6800, "delta": " status", "event_id": "event_ESevDgM7O2Xs2GV31Youk"}}
+{"t": 7.646, "dir": "in", "event": {"type": "session.input_transcript.delta", "start_ms": 6800, "end_ms": 7000, "delta": " of my", "event_id": "event_ESevDsAhzrVXpYEDsnhdA"}}
+{"t": 8.046, "dir": "in", "event": {"type": "session.input_transcript.delta", "start_ms": 7200, "end_ms": 7400, "delta": " order", "event_id": "event_ESevEyzhn65or6BFfens2"}}
+{"t": 8.647, "dir": "in", "event": {"type": "session.input_transcript.delta", "start_ms": 7800, "end_ms": 8000, "delta": "? The", "event_id": "event_ESevEbX9KZbjwGdgbbeUb"}}
+{"t": 9.059, "dir": "in", "event": {"type": "session.input_transcript.delta", "start_ms": 8200, "end_ms": 8400, "delta": " order", "event_id": "event_ESevFtA8FfnPR7ktFxBEi"}}
+{"t": 9.49, "dir": "in", "event": {"type": "session.input_transcript.delta", "start_ms": 8600, "end_ms": 8800, "delta": " number", "event_id": "event_ESevFtVNfIvwCpkXbToMs"}}
+{"t": 9.689, "dir": "in", "event": {"type": "session.input_transcript.delta", "start_ms": 8800, "end_ms": 9000, "delta": " is", "event_id": "event_ESevFdUpMPOESdxUK1TuF"}}
+{"t": 9.856, "dir": "in", "event": {"type": "session.input_transcript.delta", "start_ms": 9000, "end_ms": 9200, "delta": " A", "event_id": "event_ESevGMh9l8FxSpb8HlE93"}}
+{"t": 10.451, "dir": "in", "event": {"type": "session.input_transcript.delta", "start_ms": 9600, "end_ms": 9800, "delta": " four four", "event_id": "event_ESevGd8TIZ3MXtWZ9YKqC"}}
+{"t": 10.842, "dir": "in", "event": {"type": "session.input_transcript.delta", "start_ms": 10000, "end_ms": 10200, "delta": " seven", "event_id": "event_ESevHhMGCo4Qxg6F8GrVm"}}
+{"t": 11.258, "dir": "in", "event": {"type": "session.input_transcript.delta", "start_ms": 10400, "end_ms": 10600, "delta": " one", "event_id": "event_ESevHbhtLZyRwhKP5Pxx4"}}
+{"t": 11.26, "dir": "in", "event": {"type": "session.delegation.created", "offset_ms": 10400, "delegation": {"id": "item_ESevHlqkAJkwt1wThn5gW", "type": "delegation", "target": "client"}, "event_id": "event_ESevHpUZf9dUmLlFdDFcF"}}
+{"t": 11.26, "dir": "note", "input_at_delegation": " Hi there Can you check the status of my order? The order number is A four four seven one", "output_at_delegation": " Hey! Thanks for calling Sole Fitness. How can I help?"}
+{"t": 11.764, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 10800, "end_ms": 11000, "delta": " Sure.", "event_id": "event_ESevHaZL6I1QvMIoxoKao"}}
+{"t": 12.261, "dir": "out", "event": {"type": "session.thinking.append", "delegation_id": "item_ESevHlqkAJkwt1wThn5gW", "content": "Looking up order A4471. Nothing is known yet.", "event_id": "c2"}}
+{"t": 12.395, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 11400, "end_ms": 11600, "delta": " Checking", "event_id": "event_ESevI3KQF5Ckmp2L4DpJ1"}}
+{"t": 12.744, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 11800, "end_ms": 12000, "delta": " that", "event_id": "event_ESevIhapHIN5XPqTMxFqz"}}
+{"t": 12.744, "dir": "in", "event": {"type": "session.thinking.appended", "start_ms": 11800, "end_ms": 12000, "event_id": "event_ESevIEFGDA92eiHO7ktg2", "client_event_id": "c2"}}
+{"t": 13.24, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 12200, "end_ms": 12400, "delta": " now.", "event_id": "event_ESevJ4306UmnoMoQwVF52"}}
+{"t": 13.762, "dir": "out", "event": {"type": "session.commentary.append", "delegation_id": "item_ESevHlqkAJkwt1wThn5gW", "content": "Order A4471 shipped on September 24 with UPS. It should arrive on Tuesday, September 29.", "event_id": "c3"}}
+{"t": 14.351, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 13400, "end_ms": 13600, "delta": " Okay.", "event_id": "event_ESevKyWgS1agTMv7ino2d"}}
+{"t": 14.354, "dir": "in", "event": {"type": "session.commentary.appended", "start_ms": 13400, "end_ms": 13600, "event_id": "event_ESevK47WC7xnvbBG2eUPH", "client_event_id": "c3"}}
+{"t": 14.769, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 13800, "end_ms": 14000, "delta": " That", "event_id": "event_ESevKIyZI4p6rSE4dOUr4"}}
+{"t": 14.965, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 14000, "end_ms": 14200, "delta": " order", "event_id": "event_ESevLAHuOtedCDWnuII7y"}}
+{"t": 15.124, "dir": "in", "event": {"type": "session.usage.updated", "usage": {"seconds": 14.0}, "context_window": {"usage_ratio": 0.0106640625}, "event_id": "event_ESevLUGxS2CQPyTuxU4tS"}}
+{"t": 15.18, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 14200, "end_ms": 14400, "delta": " shipped", "event_id": "event_ESevL9VCeGe4P12pQ2qfx"}}
+{"t": 15.37, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 14400, "end_ms": 14600, "delta": " on", "event_id": "event_ESevLGVRgqRpJ1XF6Np0X"}}
+{"t": 15.556, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 14600, "end_ms": 14800, "delta": " September", "event_id": "event_ESevLmCjq9whrYmDt6JXp"}}
+{"t": 15.979, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 15000, "end_ms": 15200, "delta": " 24", "event_id": "event_ESevM0ZaJdF1VQAc53si0"}}
+{"t": 16.771, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 15800, "end_ms": 16000, "delta": " with", "event_id": "event_ESevM6EbkQsTyoYQ4OvKY"}}
+{"t": 16.969, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 16000, "end_ms": 16200, "delta": " UPS.", "event_id": "event_ESevN8ZX4Sbqg5Y5Qxu8G"}}
+{"t": 17.981, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 17000, "end_ms": 17200, "delta": " It should", "event_id": "event_ESevOEJVlaeVxAGTeegjf"}}
+{"t": 18.165, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 17200, "end_ms": 17400, "delta": " arrive", "event_id": "event_ESevOC4Gl2sxBfY702oOw"}}
+{"t": 18.589, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 17600, "end_ms": 17800, "delta": " on Tuesday", "event_id": "event_ESevOw7NUjtmGD4oHY5sp"}}
+{"t": 18.743, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 17800, "end_ms": 18000, "delta": ",", "event_id": "event_ESevOaKqHsCYOhNhK50m7"}}
+{"t": 19.135, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 18200, "end_ms": 18400, "delta": " September", "event_id": "event_ESevPjg0q9Ci7OA0XciPI"}}
+{"t": 19.574, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 18600, "end_ms": 18800, "delta": " 29", "event_id": "event_ESevPCKXQqz491qezNBqH"}}
+{"t": 19.755, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 18800, "end_ms": 19000, "delta": ".", "event_id": "event_ESevPhZZ8ujYq8U4BquxJ"}}
+{"t": 28.004, "dir": "caller", "line": "thanks", "seconds": 3.2}
+{"t": 29.445, "dir": "in", "event": {"type": "session.input_transcript.delta", "start_ms": 28600, "end_ms": 28800, "delta": " Okay", "event_id": "event_ESevZpchSmL1QmgUAs1YK"}}
+{"t": 30.125, "dir": "in", "event": {"type": "session.usage.updated", "usage": {"seconds": 29.0}, "context_window": {"usage_ratio": 0.0142265625}, "event_id": "event_ESevadScsCmFRhHF7UBCu"}}
+{"t": 30.655, "dir": "in", "event": {"type": "session.input_transcript.delta", "start_ms": 29800, "end_ms": 30000, "delta": ". Thanks", "event_id": "event_ESevaLkzckYINePgWtyLc"}}
+{"t": 31.782, "dir": "in", "event": {"type": "session.input_transcript.delta", "start_ms": 30800, "end_ms": 31000, "delta": ". That's", "event_id": "event_ESevcDKndXMmupjReNs40"}}
+{"t": 31.981, "dir": "in", "event": {"type": "session.input_transcript.delta", "start_ms": 31000, "end_ms": 31200, "delta": " all", "event_id": "event_ESevcnkl38fvvTECXpND5"}}
+{"t": 31.982, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 31000, "end_ms": 31200, "delta": " You're welcome", "event_id": "event_ESevcgG9mdOOOPFtlQnDm"}}
+{"t": 32.152, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 31200, "end_ms": 31400, "delta": ".", "event_id": "event_ESevcPLmqoDe0zBH29vEW"}}
+{"t": 32.581, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 31600, "end_ms": 31800, "delta": " Take", "event_id": "event_ESevcySz2W4E2gwhg35VM"}}
+{"t": 32.749, "dir": "in", "event": {"type": "session.output_transcript.delta", "start_ms": 31800, "end_ms": 32000, "delta": " care!", "event_id": "event_ESevcxIszegkvzmglkrZv"}}
+{"t": 38.284, "dir": "out", "event": {"type": "session.close", "event_id": "c4"}}
+{"t": 38.938, "dir": "in", "event": {"event_id": "event_ESevjmY2RfRGAR3M9rkOB", "type": "session.closed", "reason": "close_requested", "session": {"id": "live_u7_ESev6p3oMVi8ok4kVufJAq08AR0pnQqS", "expires_at": 1790506388, "model": "gpt-live-1", "instructions": "You are a phone support agent for Sole Fitness. Be brief. You cannot see orders yourself. For any order question, delegate to the backend and wait for its answer.", "audio": {"output": {"voice": "marin"}, "format": {"type": "audio/pcm", "rate": 24000}}, "delegation": {"type": "client"}, "status": "active", "input": []}, "usage": {"seconds": 37.0}, "client_event_id": "c4"}}
+{"t": 38.938, "dir": "note", "output_audio_bytes": 1769280}

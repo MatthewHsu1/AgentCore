@@ -1,8 +1,9 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.AspNetCore.Voice;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
+using AgentCore.AspNetCore.Voice.Ports;
+using AgentCore.AspNetCore.Voice.Routing;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -55,7 +56,7 @@ namespace AgentCore.AspNetCore.Tests.Voice
         {
             ConversationSeamAdapters seams = Build(conversationKind: "dial-out-fake", new FakeDialOut("dial-out-fake"));
 
-            // Section 12 asks this case to route nothing AND say so. A route that vanishes in silence is
+            // This case must route nothing AND say so. A route that vanishes in silence is
             // how a deployment loses every call to a 404 with nothing to read.
             Assert.Null(seams.Handler);
             Assert.NotNull(seams.Unroutable);
@@ -101,9 +102,6 @@ namespace AgentCore.AspNetCore.Tests.Voice
             Assert.Equal("/v1/{entry}/call", ConversationEndpointRouteBuilderExtensions.DefaultPattern);
         }
 
-        // ---------------------------------------------------------------------------------------------
-        // Helpers.
-        // ---------------------------------------------------------------------------------------------
 
         /// <summary>Runs the conversation seam over one document and the adapters a host registered.</summary>
         /// <param name="conversationKind">The value <c>providers.conversation.kind</c> carries.</param>
@@ -131,7 +129,7 @@ namespace AgentCore.AspNetCore.Tests.Voice
                         .First();
         }
 
-        /// <summary>Writes one document that names both blocks section 8.2 requires of one another.</summary>
+        /// <summary>Writes one document that names both blocks that require each other.</summary>
         /// <param name="conversationKind">The value <c>providers.conversation.kind</c> carries.</param>
         /// <returns>The document text.</returns>
         private static string Document(string conversationKind)

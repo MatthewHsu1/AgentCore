@@ -4,10 +4,6 @@ using Microsoft.Extensions.AI;
 namespace AgentCore.Application.Tests.Fakes
 {
     /// <summary>Answers each request in turn, and keeps what it was asked.</summary>
-    /// <remarks>
-    /// A streamed request is answered in one piece. <see cref="Requests"/> is what a fact about the prompt reads:
-    /// one role-prefixed line per message, in the order the run sent them.
-    /// </remarks>
     internal sealed class RequestRecordingChatClient(params string[] replies) : IChatClient
     {
         private readonly string[] _replies = replies;
@@ -27,7 +23,7 @@ namespace AgentCore.Application.Tests.Fakes
             Requests.Add([.. messages.Select(message => $"{message.Role}:{message.Text}")]);
             Instructions.Add(options?.Instructions);
             return Task.FromResult(
-                new ChatResponse(new ChatMessage(ChatRole.Assistant, _replies[Requests.Count - 1])));
+                new ChatResponse(new ChatMessage(ChatRole.Assistant, _replies[Requests.Count - 1]) { MessageId = $"m{Requests.Count}" }));
         }
 
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(

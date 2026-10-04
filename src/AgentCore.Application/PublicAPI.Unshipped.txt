@@ -93,6 +93,7 @@ AgentCore.Application.Conversation.ChatConversationTitler.GenerateAsync(string! 
 AgentCore.Application.Conversation.ChatConversationTitler.GenerateFromAsync(string! conversationId, System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatMessage!>! messages, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<string!>!
 AgentCore.Application.Conversation.Memory.InMemoryConversationStore
 AgentCore.Application.Conversation.Memory.InMemoryConversationStore.AppendAsync(string! conversationId, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.ConversationMessageDraft!>! messages, AgentCore.Application.Conversation.ConversationSessionState? state = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.ConversationMessage!>!>
+AgentCore.Application.Conversation.Memory.InMemoryConversationStore.SaveStateAsync(string! conversationId, AgentCore.Application.Conversation.ConversationSessionState! state, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Conversation.Memory.InMemoryConversationStore.AttachPrincipalAsync(string! conversationId, string! principalKey, string! role, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Conversation.Memory.InMemoryConversationStore.CreateAsync(string! conversationId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Conversation.ConversationRecord!>
 AgentCore.Application.Conversation.Memory.InMemoryConversationStore.DeleteAsync(string! conversationId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
@@ -381,6 +382,8 @@ AgentCore.Application.Configuration.Schema.ApprovalConfiguration.Auto.get -> Sys
 AgentCore.Application.Configuration.Schema.ApprovalConfiguration.Auto.init -> void
 AgentCore.Application.Configuration.Schema.ApprovalConfiguration.Equals(AgentCore.Application.Configuration.Schema.ApprovalConfiguration? other) -> bool
 AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration
+AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration.AnswerSeconds.get -> int?
+AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration.AnswerSeconds.init -> void
 AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration!
 AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration.ConversationProviderConfiguration() -> void
 AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration.CloseTimeoutSeconds.get -> int?
@@ -390,6 +393,8 @@ AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration.Idl
 AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration.IdleTimeoutSeconds.init -> void
 AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration.Kind.get -> string!
 AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration.Kind.init -> void
+AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration.Live.get -> System.Text.Json.JsonElement
+AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration.Live.init -> void
 AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration.MaxFrameBytes.get -> int?
 AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration.MaxFrameBytes.init -> void
 AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration
@@ -729,8 +734,6 @@ AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Speech.get -> 
 AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Speech.init -> void
 AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Telemetry.get -> AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration?
 AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Telemetry.init -> void
-AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Telephony.get -> AgentCore.Application.Configuration.Schema.VendorProviderConfiguration?
-AgentCore.Application.Configuration.Schema.ProvidersConfiguration.Telephony.init -> void
 AgentCore.Application.Configuration.Schema.ReservedStateSlots
 AgentCore.Application.Configuration.Schema.ShellConfiguration
 AgentCore.Application.Configuration.Schema.ShellConfiguration.<Clone>$() -> AgentCore.Application.Configuration.Schema.ShellConfiguration!
@@ -1007,19 +1010,18 @@ AgentCore.Application.Ports.IAuditSinkAdapter.OpenAsync(AgentCore.Application.Co
 AgentCore.Application.Ports.IAuditSinkPort
 AgentCore.Application.Ports.IAuditSinkPort.AppendAsync(AgentCore.Domain.Audit.AuditEvent! auditEvent, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Ports.IAuditSinkPort.AppendManyAsync(System.Collections.Generic.IReadOnlyList<AgentCore.Domain.Audit.AuditEvent!>! auditEvents, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
-AgentCore.Application.Ports.IConversationObserver
-AgentCore.Application.Ports.IConversationObserver.OnConversationEventAsync(AgentCore.Application.Runtime.ConversationEvent! conversationEvent, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Ports.IConversationSessionFactory
-AgentCore.Application.Ports.IConversationSessionFactory.Create(string? conversationId = null, AgentCore.Application.Conversation.ConversationSessionState? state = null) -> AgentCore.Application.Runtime.ConversationSession!
+AgentCore.Application.Ports.IConversationSessionFactory.Create(string? conversationId = null, AgentCore.Application.Conversation.ConversationSessionState? state = null) -> AgentCore.Application.Runtime.Session.ConversationSession!
 AgentCore.Application.Ports.IConversationSessionRegistry
 AgentCore.Application.Ports.IConversationSessionRegistry.Entries.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
 AgentCore.Application.Ports.IConversationSessionRegistry.Sessions.get -> AgentCore.Application.Ports.IConversationSessions!
 AgentCore.Application.Ports.IConversationSessions
 AgentCore.Application.Ports.IConversationSessions.CloseAsync(string! entry, string! conversationId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
-AgentCore.Application.Ports.IConversationSessions.GetOrOpenAsync(string! entry, string? conversationId, AgentCore.Application.Conversation.ConversationSessionState? state, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Runtime.ConversationSession!>
-AgentCore.Application.Ports.IConversationSessions.TryGetAsync(string! entry, string! conversationId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Runtime.ConversationSession?>
+AgentCore.Application.Ports.IConversationSessions.GetOrOpenAsync(string! entry, string? conversationId, AgentCore.Application.Conversation.ConversationSessionState? state, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Runtime.Session.ConversationSession!>
+AgentCore.Application.Ports.IConversationSessions.TryGetAsync(string! entry, string! conversationId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Runtime.Session.ConversationSession?>
 AgentCore.Application.Ports.IConversationStore
 AgentCore.Application.Ports.IConversationStore.AppendAsync(string! conversationId, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.ConversationMessageDraft!>! messages, AgentCore.Application.Conversation.ConversationSessionState? state = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.ConversationMessage!>!>
+AgentCore.Application.Ports.IConversationStore.SaveStateAsync(string! conversationId, AgentCore.Application.Conversation.ConversationSessionState! state, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Ports.IConversationStore.AppendMessageAsync(string! conversationId, Microsoft.Extensions.AI.ChatMessage! message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Transcript.ConversationMessage!>
 AgentCore.Application.Ports.IConversationStore.AttachPrincipalAsync(string! conversationId, string! principalKey, string! role, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Ports.IConversationStore.CreateAsync(string! conversationId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Conversation.ConversationRecord!>
@@ -1061,8 +1063,8 @@ AgentCore.Application.Ports.IConversationPort.RunTurnStreamingAsync(string! user
 AgentCore.Application.Ports.IConversationPort.Scope.get -> AgentCore.Domain.Knowledge.KnowledgeScope?
 AgentCore.Application.Ports.IConversationPort.Scope.set -> void
 AgentCore.Application.Ports.IConversationPort.Stage.get -> string!
-AgentCore.Application.Ports.IConversationPort.Cut(int turnIndex, AgentCore.Application.Runtime.TurnCut! cut) -> bool
-AgentCore.Application.Ports.IConversationPort.Recut(int turnIndex, AgentCore.Application.Runtime.TurnCut! cut) -> bool
+AgentCore.Application.Ports.IConversationPort.Cut(int turnIndex, AgentCore.Application.Runtime.Cut.TurnCut! cut) -> bool
+AgentCore.Application.Ports.IConversationPort.Recut(int turnIndex, AgentCore.Application.Runtime.Cut.TurnCut! cut) -> bool
 AgentCore.Application.Ports.IEmbeddingGeneratorAdapter
 AgentCore.Application.Ports.IEmbeddingGeneratorAdapter.CreateGeneratorAsync(AgentCore.Application.Configuration.Schema.EmbeddingProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.IEmbeddingGenerator<string!, Microsoft.Extensions.AI.Embedding<float>!>!>
 AgentCore.Application.Ports.IEvaluationScorePublisher
@@ -1080,8 +1082,6 @@ AgentCore.Application.Ports.IModerationAdapter
 AgentCore.Application.Ports.IModerationAdapter.CreateAsync(AgentCore.Application.Configuration.Schema.VendorProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.Evaluation.IEvaluator!>
 AgentCore.Application.Ports.ISecretResolverPort
 AgentCore.Application.Ports.ISecretResolverPort.TryResolveAsync(string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string?>
-AgentCore.Application.Ports.ISourcePort
-AgentCore.Application.Ports.ISourcePort.Publish(AgentCore.Domain.Sources.SourceReference! source) -> void
 AgentCore.Application.Ports.ITelemetryAdapter
 AgentCore.Application.Ports.ITelemetryAdapter.StartAsync(AgentCore.Application.Configuration.Schema.TelemetryProviderConfiguration! entry, AgentCore.Application.Ports.ISecretResolverPort? secrets, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Ports.ITelemetrySession!>
 AgentCore.Application.Ports.ITelemetrySession
@@ -1109,93 +1109,60 @@ AgentCore.Application.Runtime.AgentCoreAgent
 AgentCore.Application.Runtime.AgentCoreAgent.AgentCoreAgent(AgentCore.Application.Ports.IConversationSessions! sessions, string! entryName, string? description = null) -> void
 AgentCore.Application.Runtime.AgentCoreAgent.CreateSessionAsync(string! conversationId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Agents.AI.AgentSession!>
 AgentCore.Application.Runtime.AgentCoreAgent.EntryName.get -> string!
-AgentCore.Application.Runtime.ConversationEvent
-AgentCore.Application.Runtime.ConversationEvent.<Clone>$() -> AgentCore.Application.Runtime.ConversationEvent!
-AgentCore.Application.Runtime.ConversationEvent.AmendsEventId.get -> System.Guid?
-AgentCore.Application.Runtime.ConversationEvent.AmendsEventId.init -> void
-AgentCore.Application.Runtime.ConversationEvent.ConversationEvent() -> void
-AgentCore.Application.Runtime.ConversationEvent.ConversationId.get -> string!
-AgentCore.Application.Runtime.ConversationEvent.ConversationId.init -> void
-AgentCore.Application.Runtime.ConversationEvent.Equals(AgentCore.Application.Runtime.ConversationEvent? other) -> bool
-AgentCore.Application.Runtime.ConversationEvent.EventId.get -> System.Guid?
-AgentCore.Application.Runtime.ConversationEvent.EventId.init -> void
-AgentCore.Application.Runtime.ConversationEvent.Kind.get -> AgentCore.Application.Runtime.ConversationEventKind
-AgentCore.Application.Runtime.ConversationEvent.Kind.init -> void
-AgentCore.Application.Runtime.ConversationEvent.OccurredAt.get -> System.DateTimeOffset
-AgentCore.Application.Runtime.ConversationEvent.OccurredAt.init -> void
-AgentCore.Application.Runtime.ConversationEvent.Payload.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!
-AgentCore.Application.Runtime.ConversationEvent.Payload.init -> void
-AgentCore.Application.Runtime.ConversationEvent.TurnIndex.get -> int?
-AgentCore.Application.Runtime.ConversationEvent.TurnIndex.init -> void
-AgentCore.Application.Runtime.ConversationEventKind
-AgentCore.Application.Runtime.ConversationEventKind.ConversationEnded = 9 -> AgentCore.Application.Runtime.ConversationEventKind
-AgentCore.Application.Runtime.ConversationEventKind.ConversationStarted = 0 -> AgentCore.Application.Runtime.ConversationEventKind
-AgentCore.Application.Runtime.ConversationEventKind.EmptyReply = 5 -> AgentCore.Application.Runtime.ConversationEventKind
-AgentCore.Application.Runtime.ConversationEventKind.ExtractionFailed = 6 -> AgentCore.Application.Runtime.ConversationEventKind
-AgentCore.Application.Runtime.ConversationEventKind.ModerationClean = 3 -> AgentCore.Application.Runtime.ConversationEventKind
-AgentCore.Application.Runtime.ConversationEventKind.ModerationUnavailable = 2 -> AgentCore.Application.Runtime.ConversationEventKind
-AgentCore.Application.Runtime.ConversationEventKind.PromptFlagged = 1 -> AgentCore.Application.Runtime.ConversationEventKind
-AgentCore.Application.Runtime.ConversationEventKind.ReplyInterrupted = 8 -> AgentCore.Application.Runtime.ConversationEventKind
-AgentCore.Application.Runtime.ConversationEventKind.StateRestorePartial = 11 -> AgentCore.Application.Runtime.ConversationEventKind
-AgentCore.Application.Runtime.ConversationEventKind.ToolFailed = 4 -> AgentCore.Application.Runtime.ConversationEventKind
-AgentCore.Application.Runtime.ConversationEventKind.TranscriptResyncFailed = 13 -> AgentCore.Application.Runtime.ConversationEventKind
-AgentCore.Application.Runtime.ConversationEventKind.TranscriptWriteFailed = 10 -> AgentCore.Application.Runtime.ConversationEventKind
-AgentCore.Application.Runtime.ConversationEventKind.TurnCompleted = 7 -> AgentCore.Application.Runtime.ConversationEventKind
-AgentCore.Application.Runtime.ConversationEventKind.TurnSuperseded = 12 -> AgentCore.Application.Runtime.ConversationEventKind
-AgentCore.Application.Runtime.ConversationEventKind.TurnRefused = 14 -> AgentCore.Application.Runtime.ConversationEventKind
-AgentCore.Application.Runtime.ConversationEventKind.RunFaulted = 15 -> AgentCore.Application.Runtime.ConversationEventKind
-AgentCore.Application.Runtime.ConversationObservers
-AgentCore.Application.Runtime.ConversationSession
-AgentCore.Application.Runtime.ConversationSession.ConversationId.get -> string!
-AgentCore.Application.Runtime.ConversationSession.Compiled.get -> AgentCore.Application.Configuration.Compilation.CompiledAgent!
-AgentCore.Application.Runtime.ConversationSession.DisposeAsync() -> System.Threading.Tasks.ValueTask
-AgentCore.Application.Runtime.ConversationSession.EndConversation(AgentCore.Domain.Audit.ConversationEndReason reason) -> bool
-AgentCore.Application.Runtime.ConversationSession.FlushTranscriptAsync() -> System.Threading.Tasks.Task!
-AgentCore.Application.Runtime.ConversationSession.IsComplete.get -> bool
-AgentCore.Application.Runtime.ConversationSession.LastReplyMessageId.get -> string?
-AgentCore.Application.Runtime.ConversationSession.LastTurn.get -> AgentCore.Domain.TurnResult?
-AgentCore.Application.Runtime.ConversationSession.RunTurnAsync(string! userInput, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<AgentCore.Domain.TurnResult!>!
-AgentCore.Application.Runtime.ConversationSession.RunTurnAtOriginAsync(string! userInput, AgentCore.Application.Runtime.ConversationTurnOrigin? origin, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<AgentCore.Domain.TurnResult!>!
-AgentCore.Application.Runtime.ConversationSession.RunTurnMessageAsync(Microsoft.Extensions.AI.ChatMessage! userInput, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<AgentCore.Domain.TurnResult!>!
-AgentCore.Application.Runtime.ConversationSession.RunTurnMessageAtOriginAsync(Microsoft.Extensions.AI.ChatMessage! userInput, AgentCore.Application.Runtime.ConversationTurnOrigin? origin, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<AgentCore.Domain.TurnResult!>!
-AgentCore.Application.Runtime.ConversationSession.RunTurnMessageStreamingAsync(Microsoft.Extensions.AI.ChatMessage! userInput, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
-AgentCore.Application.Runtime.ConversationSession.RunTurnMessageStreamingAtOriginAsync(Microsoft.Extensions.AI.ChatMessage! userInput, AgentCore.Application.Runtime.ConversationTurnOrigin? origin, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
-AgentCore.Application.Runtime.ConversationSession.RunTurnStreamingAsync(string! userInput, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
-AgentCore.Application.Runtime.ConversationSession.RunTurnStreamingAtOriginAsync(string! userInput, AgentCore.Application.Runtime.ConversationTurnOrigin? origin, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
-AgentCore.Application.Runtime.ConversationSession.Scope.get -> AgentCore.Domain.Knowledge.KnowledgeScope?
-AgentCore.Application.Runtime.ConversationSession.Scope.set -> void
-AgentCore.Application.Runtime.ConversationSession.SetDelegatedTools(string! delegatingToolId, System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.AITool!>! tools) -> void
-AgentCore.Application.Runtime.ConversationSession.Stage.get -> string!
-AgentCore.Application.Runtime.ConversationSession.State.get -> AgentCore.Application.State.StateDocument!
-AgentCore.Application.Runtime.ConversationSession.Transcript.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatMessage!>!
-AgentCore.Application.Runtime.ConversationSession.TryCreateApprovalAnswer(string! requestId, bool approved) -> Microsoft.Extensions.AI.ChatMessage?
-AgentCore.Application.Runtime.ConversationSession.TryCreateApprovalAnswerAsync(string! requestId, bool approved, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.ChatMessage?>
-AgentCore.Application.Runtime.ConversationSession.Workspace.get -> string?
-AgentCore.Application.Runtime.ConversationSession.Cut(int turnIndex, AgentCore.Application.Runtime.TurnCut! cut) -> bool
-AgentCore.Application.Runtime.ConversationSession.Recut(int turnIndex, AgentCore.Application.Runtime.TurnCut! cut) -> bool
-AgentCore.Application.Runtime.ConversationSessionFactory
-AgentCore.Application.Runtime.ConversationSessionFactory.ConversationSessionFactory(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Configuration.Validation.IGuardEvaluator! guards, AgentCore.Application.State.StateExtractor? extractor = null, System.TimeProvider? timeProvider = null, Microsoft.Extensions.Logging.ILogger? logger = null, System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.IConversationObserver!>? observers = null, string? workspaceRoot = null) -> void
-AgentCore.Application.Runtime.ConversationSessionFactory.Create(string? conversationId = null, AgentCore.Application.Conversation.ConversationSessionState? state = null) -> AgentCore.Application.Runtime.ConversationSession!
-AgentCore.Application.Runtime.ConversationTurnOrigin
-AgentCore.Application.Runtime.ConversationTurnOrigin.<Clone>$() -> AgentCore.Application.Runtime.ConversationTurnOrigin!
-AgentCore.Application.Runtime.ConversationTurnOrigin.ConversationTurnOrigin(string? MessageId, string? ParentMessageId) -> void
-AgentCore.Application.Runtime.ConversationTurnOrigin.Deconstruct(out string? MessageId, out string? ParentMessageId) -> void
-AgentCore.Application.Runtime.ConversationTurnOrigin.Equals(AgentCore.Application.Runtime.ConversationTurnOrigin? other) -> bool
-AgentCore.Application.Runtime.ConversationTurnOrigin.MessageId.get -> string?
-AgentCore.Application.Runtime.ConversationTurnOrigin.MessageId.init -> void
-AgentCore.Application.Runtime.ConversationTurnOrigin.NamesParent.get -> bool
-AgentCore.Application.Runtime.ConversationTurnOrigin.NamesParent.init -> void
-AgentCore.Application.Runtime.ConversationTurnOrigin.ParentMessageId.get -> string?
-AgentCore.Application.Runtime.ConversationTurnOrigin.ParentMessageId.init -> void
-AgentCore.Application.Runtime.TurnCut
-AgentCore.Application.Runtime.TurnCut.<Clone>$() -> AgentCore.Application.Runtime.TurnCut!
-AgentCore.Application.Runtime.TurnCut.Deconstruct(out string? ShownText, out System.TimeSpan? Played) -> void
-AgentCore.Application.Runtime.TurnCut.Equals(AgentCore.Application.Runtime.TurnCut? other) -> bool
-AgentCore.Application.Runtime.TurnCut.Played.get -> System.TimeSpan?
-AgentCore.Application.Runtime.TurnCut.Played.init -> void
-AgentCore.Application.Runtime.TurnCut.ShownText.get -> string?
-AgentCore.Application.Runtime.TurnCut.ShownText.init -> void
-AgentCore.Application.Runtime.TurnCut.TurnCut(string? ShownText, System.TimeSpan? Played) -> void
+AgentCore.Application.Runtime.Session.ConversationSession
+AgentCore.Application.Runtime.Session.ConversationSession.ConversationId.get -> string!
+AgentCore.Application.Runtime.Session.ConversationSession.Compiled.get -> AgentCore.Application.Configuration.Compilation.CompiledAgent!
+AgentCore.Application.Runtime.Session.ConversationSession.DisposeAsync() -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Runtime.Session.ConversationSession.EndConversation(AgentCore.Domain.Audit.ConversationEndReason reason) -> bool
+AgentCore.Application.Runtime.Session.ConversationSession.FlushTranscriptAsync() -> System.Threading.Tasks.Task!
+AgentCore.Application.Runtime.Session.ConversationSession.FlushNoticesAsync() -> System.Threading.Tasks.Task!
+AgentCore.Application.Runtime.Session.ConversationSession.IsComplete.get -> bool
+AgentCore.Application.Runtime.Session.ConversationSession.LastReplyMessageId.get -> string?
+AgentCore.Application.Runtime.Session.ConversationSession.LastTurn.get -> AgentCore.Domain.TurnResult?
+AgentCore.Application.Runtime.Session.ConversationSession.RunTurnAsync(string! userInput, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<AgentCore.Domain.TurnResult!>!
+AgentCore.Application.Runtime.Session.ConversationSession.RunTurnAtOriginAsync(string! userInput, AgentCore.Application.Runtime.Turn.ConversationTurnOrigin? origin, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<AgentCore.Domain.TurnResult!>!
+AgentCore.Application.Runtime.Session.ConversationSession.RunTurnMessageAsync(Microsoft.Extensions.AI.ChatMessage! userInput, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<AgentCore.Domain.TurnResult!>!
+AgentCore.Application.Runtime.Session.ConversationSession.RunTurnMessageAtOriginAsync(Microsoft.Extensions.AI.ChatMessage! userInput, AgentCore.Application.Runtime.Turn.ConversationTurnOrigin? origin, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<AgentCore.Domain.TurnResult!>!
+AgentCore.Application.Runtime.Session.ConversationSession.RunTurnMessageStreamingAsync(Microsoft.Extensions.AI.ChatMessage! userInput, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
+AgentCore.Application.Runtime.Session.ConversationSession.RunTurnMessageStreamingAtOriginAsync(Microsoft.Extensions.AI.ChatMessage! userInput, AgentCore.Application.Runtime.Turn.ConversationTurnOrigin? origin, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
+AgentCore.Application.Runtime.Session.ConversationSession.RunTurnStreamingAsync(string! userInput, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
+AgentCore.Application.Runtime.Session.ConversationSession.RunTurnStreamingAtOriginAsync(string! userInput, AgentCore.Application.Runtime.Turn.ConversationTurnOrigin? origin, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
+AgentCore.Application.Runtime.Session.ConversationSession.Scope.get -> AgentCore.Domain.Knowledge.KnowledgeScope?
+AgentCore.Application.Runtime.Session.ConversationSession.Scope.set -> void
+AgentCore.Application.Runtime.Session.ConversationSession.SetDelegatedTools(string! delegatingToolId, System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.AITool!>! tools) -> void
+AgentCore.Application.Runtime.Session.ConversationSession.Stage.get -> string!
+AgentCore.Application.Runtime.Session.ConversationSession.State.get -> AgentCore.Application.State.StateDocument!
+AgentCore.Application.Runtime.Session.ConversationSession.Transcript.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatMessage!>!
+AgentCore.Application.Runtime.Session.ConversationSession.TryCreateApprovalAnswer(string! requestId, bool approved) -> Microsoft.Extensions.AI.ChatMessage?
+AgentCore.Application.Runtime.Session.ConversationSession.TryCreateApprovalAnswerAsync(string! requestId, bool approved, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.ChatMessage?>
+AgentCore.Application.Runtime.Session.ConversationSession.Workspace.get -> string?
+AgentCore.Application.Runtime.Session.ConversationSession.Cut(int turnIndex, AgentCore.Application.Runtime.Cut.TurnCut! cut) -> bool
+AgentCore.Application.Runtime.Session.ConversationSession.Recut(int turnIndex, AgentCore.Application.Runtime.Cut.TurnCut! cut) -> bool
+AgentCore.Application.Runtime.Session.ConversationSessionFactory
+AgentCore.Application.Runtime.Session.ConversationSessionFactory.ConversationSessionFactory(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Configuration.Validation.IGuardEvaluator! guards, AgentCore.Application.State.StateExtractor? extractor = null, System.TimeProvider? timeProvider = null, Microsoft.Extensions.Logging.ILogger? logger = null, System.Collections.Generic.IEnumerable<AgentCore.Application.Hooks.AgentHook!>? hooks = null, string? workspaceRoot = null) -> void
+AgentCore.Application.Runtime.Session.ConversationSessionFactory.Create(string? conversationId = null, AgentCore.Application.Conversation.ConversationSessionState? state = null) -> AgentCore.Application.Runtime.Session.ConversationSession!
+AgentCore.Application.Runtime.Session.ConversationSessionFactory.DisposeAsync() -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Runtime.Turn.ConversationTurnOrigin
+AgentCore.Application.Runtime.Turn.ConversationTurnOrigin.<Clone>$() -> AgentCore.Application.Runtime.Turn.ConversationTurnOrigin!
+AgentCore.Application.Runtime.Turn.ConversationTurnOrigin.ConversationTurnOrigin(string? MessageId, string? ParentMessageId) -> void
+AgentCore.Application.Runtime.Turn.ConversationTurnOrigin.Deconstruct(out string? MessageId, out string? ParentMessageId) -> void
+AgentCore.Application.Runtime.Turn.ConversationTurnOrigin.Equals(AgentCore.Application.Runtime.Turn.ConversationTurnOrigin? other) -> bool
+AgentCore.Application.Runtime.Turn.ConversationTurnOrigin.MessageId.get -> string?
+AgentCore.Application.Runtime.Turn.ConversationTurnOrigin.MessageId.init -> void
+AgentCore.Application.Runtime.Turn.ConversationTurnOrigin.NamesParent.get -> bool
+AgentCore.Application.Runtime.Turn.ConversationTurnOrigin.NamesParent.init -> void
+AgentCore.Application.Runtime.Turn.ConversationTurnOrigin.ParentMessageId.get -> string?
+AgentCore.Application.Runtime.Turn.ConversationTurnOrigin.ParentMessageId.init -> void
+AgentCore.Application.Runtime.Cut.TurnCut
+AgentCore.Application.Runtime.Cut.TurnCut.<Clone>$() -> AgentCore.Application.Runtime.Cut.TurnCut!
+AgentCore.Application.Runtime.Cut.TurnCut.Deconstruct(out string? ShownText, out System.TimeSpan? Played) -> void
+AgentCore.Application.Runtime.Cut.TurnCut.Equals(AgentCore.Application.Runtime.Cut.TurnCut? other) -> bool
+AgentCore.Application.Runtime.Cut.TurnCut.Played.get -> System.TimeSpan?
+AgentCore.Application.Runtime.Cut.TurnCut.Played.init -> void
+AgentCore.Application.Runtime.Cut.TurnCut.ShownText.get -> string?
+AgentCore.Application.Runtime.Cut.TurnCut.ShownText.init -> void
+AgentCore.Application.Runtime.Cut.TurnCut.TurnCut(string? ShownText, System.TimeSpan? Played) -> void
+AgentCore.Application.Runtime.Turn.Lifecycle.TurnFailureReasons
 AgentCore.Application.Scripting.ScriptRequest
 AgentCore.Application.Scripting.ScriptRequest.<Clone>$() -> AgentCore.Application.Scripting.ScriptRequest!
 AgentCore.Application.Scripting.ScriptRequest.Code.get -> string!
@@ -1239,8 +1206,8 @@ AgentCore.Application.Sessions.Memory.InMemoryConversationSessions.CloseAsync(st
 AgentCore.Application.Sessions.Memory.InMemoryConversationSessions.Count.get -> int
 AgentCore.Application.Sessions.Memory.InMemoryConversationSessions.Dispose() -> void
 AgentCore.Application.Sessions.Memory.InMemoryConversationSessions.InMemoryConversationSessions(System.Collections.Generic.IReadOnlyDictionary<string!, AgentCore.Application.Ports.IConversationSessionFactory!>! factories, System.TimeSpan idleTimeout, System.TimeProvider! timeProvider) -> void
-AgentCore.Application.Sessions.Memory.InMemoryConversationSessions.GetOrOpenAsync(string! entry, string? conversationId, AgentCore.Application.Conversation.ConversationSessionState? state, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Runtime.ConversationSession!>
-AgentCore.Application.Sessions.Memory.InMemoryConversationSessions.TryGetAsync(string! entry, string! conversationId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Runtime.ConversationSession?>
+AgentCore.Application.Sessions.Memory.InMemoryConversationSessions.GetOrOpenAsync(string! entry, string? conversationId, AgentCore.Application.Conversation.ConversationSessionState? state, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Runtime.Session.ConversationSession!>
+AgentCore.Application.Sessions.Memory.InMemoryConversationSessions.TryGetAsync(string! entry, string! conversationId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Runtime.Session.ConversationSession?>
 AgentCore.Application.Skills.SkillCatalog
 AgentCore.Application.Skills.SkillCatalog.Names.get -> System.Collections.Generic.IReadOnlySet<string!>!
 AgentCore.Application.Skills.SkillCatalog.SkillCatalog(Microsoft.Agents.AI.AgentSkillsSource! source, System.Collections.Generic.IReadOnlySet<string!>! names) -> void
@@ -1372,6 +1339,8 @@ AgentCore.Application.Tools.ToolCallScope.TurnIndex.get -> int
 AgentCore.Application.Tools.ToolCallScope.TurnIndex.init -> void
 AgentCore.Application.Tools.ToolCallScope.Workspace.get -> string?
 AgentCore.Application.Tools.ToolCallScope.Workspace.init -> void
+AgentCore.Application.Tools.ToolCallScope.Items.get -> System.Collections.Generic.IDictionary<string!, object?>?
+AgentCore.Application.Tools.ToolCallScope.Items.init -> void
 AgentCore.Application.Tools.ToolErrorResult
 AgentCore.Application.Tools.ToolResultJson
 AgentCore.Application.Transcript.ConversationMessage
@@ -1456,16 +1425,18 @@ const AgentCore.Application.Evaluation.RetrievedDocumentsContext.RetrievedDocume
 const AgentCore.Application.Knowledge.NoQueryAnalyzer.AnalyzerName = "none" -> string!
 const AgentCore.Application.Knowledge.SourceLocatorCitationFormatter.FormatterName = "source-locator" -> string!
 const AgentCore.Application.Policy.StagePolicy.TurnEndedTrigger = "TurnEnded" -> string!
-const AgentCore.Application.Runtime.ConversationSession.EmptyReplyReason = "the run returned an empty reply, so the turn spoke the fallback." -> string!
-const AgentCore.Application.Runtime.ConversationSession.FallbackReply = "I am sorry. I could not finish that. Please say it again." -> string!
-const AgentCore.Application.Runtime.ConversationSession.RunFaultReason = "the turn's run faulted, so it spoke the fallback." -> string!
-const AgentCore.Application.Runtime.ConversationSession.ToolFailureReason = "a tool failed four times in a row, so the turn spoke the fallback." -> string!
+const AgentCore.Application.Runtime.Session.ConversationSession.FallbackReply = "I am sorry. I could not finish that. Please say it again." -> string!
+const AgentCore.Application.Runtime.Turn.Lifecycle.TurnFailureReasons.EmptyReply = "the run returned an empty reply, so the turn spoke the fallback." -> string!
+const AgentCore.Application.Runtime.Turn.Lifecycle.TurnFailureReasons.RunFault = "the turn's run faulted, so it spoke the fallback." -> string!
+const AgentCore.Application.Runtime.Turn.Lifecycle.TurnFailureReasons.ToolFailure = "a tool failed four times in a row, so the turn spoke the fallback." -> string!
 const AgentCore.Application.Secrets.KnownSecrets.GrafanaCloudApiTokenName = "grafana-cloud-api-token" -> string!
 const AgentCore.Application.Secrets.KnownSecrets.GrafanaCloudApiTokenVariable = "GRAFANA_CLOUD_API_TOKEN" -> string!
 const AgentCore.Application.Secrets.KnownSecrets.GrafanaCloudInstanceIdName = "grafana-cloud-instance-id" -> string!
 const AgentCore.Application.Secrets.KnownSecrets.GrafanaCloudInstanceIdVariable = "GRAFANA_CLOUD_INSTANCE_ID" -> string!
 const AgentCore.Application.Secrets.KnownSecrets.OpenAiApiKeyName = "openai-api-key" -> string!
 const AgentCore.Application.Secrets.KnownSecrets.OpenAiApiKeyVariable = "OPENAI_API_KEY" -> string!
+const AgentCore.Application.Secrets.KnownSecrets.OpenAiWebhookSecretName = "openai-webhook-secret" -> string!
+const AgentCore.Application.Secrets.KnownSecrets.OpenAiWebhookSecretVariable = "OPENAI_WEBHOOK_SECRET" -> string!
 const AgentCore.Application.Secrets.KnownSecrets.PostgresConnectionStringName = "postgres-connection-string" -> string!
 const AgentCore.Application.Secrets.KnownSecrets.PostgresConnectionStringVariable = "POSTGRES_CONNECTION_STRING" -> string!
 const AgentCore.Application.Secrets.KnownSecrets.QdrantApiKeyName = "qdrant-api-key" -> string!
@@ -1667,15 +1638,12 @@ override AgentCore.Application.Knowledge.KnowledgePoint.ToString() -> string!
 override AgentCore.Application.Providers.VendorSeam.GetHashCode() -> int
 override AgentCore.Application.Runtime.AgentCoreAgent.Description.get -> string?
 override AgentCore.Application.Runtime.AgentCoreAgent.Name.get -> string?
-override AgentCore.Application.Runtime.ConversationEvent.Equals(object? obj) -> bool
-override AgentCore.Application.Runtime.ConversationEvent.GetHashCode() -> int
-override AgentCore.Application.Runtime.ConversationEvent.ToString() -> string!
-override AgentCore.Application.Runtime.ConversationTurnOrigin.Equals(object? obj) -> bool
-override AgentCore.Application.Runtime.ConversationTurnOrigin.GetHashCode() -> int
-override AgentCore.Application.Runtime.ConversationTurnOrigin.ToString() -> string!
-override AgentCore.Application.Runtime.TurnCut.Equals(object? obj) -> bool
-override AgentCore.Application.Runtime.TurnCut.GetHashCode() -> int
-override AgentCore.Application.Runtime.TurnCut.ToString() -> string!
+override AgentCore.Application.Runtime.Turn.ConversationTurnOrigin.Equals(object? obj) -> bool
+override AgentCore.Application.Runtime.Turn.ConversationTurnOrigin.GetHashCode() -> int
+override AgentCore.Application.Runtime.Turn.ConversationTurnOrigin.ToString() -> string!
+override AgentCore.Application.Runtime.Cut.TurnCut.Equals(object? obj) -> bool
+override AgentCore.Application.Runtime.Cut.TurnCut.GetHashCode() -> int
+override AgentCore.Application.Runtime.Cut.TurnCut.ToString() -> string!
 override AgentCore.Application.Scripting.ScriptRequest.Equals(object? obj) -> bool
 override AgentCore.Application.Scripting.ScriptRequest.GetHashCode() -> int
 override AgentCore.Application.Scripting.ScriptRequest.ToString() -> string!
@@ -1896,14 +1864,11 @@ static AgentCore.Application.Llm.CompositeChatClientFactory.CreateAsync(AgentCor
 static AgentCore.Application.Providers.VendorAdapterSelector.Select<TAdapter>(string! kind, System.Collections.Generic.IReadOnlyList<TAdapter>! adapters, AgentCore.Application.Providers.VendorSeam seam) -> TAdapter
 static AgentCore.Application.Providers.VendorSeam.operator !=(AgentCore.Application.Providers.VendorSeam left, AgentCore.Application.Providers.VendorSeam right) -> bool
 static AgentCore.Application.Providers.VendorSeam.operator ==(AgentCore.Application.Providers.VendorSeam left, AgentCore.Application.Providers.VendorSeam right) -> bool
-static AgentCore.Application.Runtime.ConversationEvent.operator !=(AgentCore.Application.Runtime.ConversationEvent? left, AgentCore.Application.Runtime.ConversationEvent? right) -> bool
-static AgentCore.Application.Runtime.ConversationEvent.operator ==(AgentCore.Application.Runtime.ConversationEvent? left, AgentCore.Application.Runtime.ConversationEvent? right) -> bool
-static AgentCore.Application.Runtime.ConversationObservers.Standard(AgentCore.Application.Ports.IAuditSinkPort! auditSink, Microsoft.Extensions.Logging.ILogger? logger, System.Collections.Generic.IEnumerable<AgentCore.Application.Ports.IConversationObserver!>? hostObservers = null) -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Ports.IConversationObserver!>!
-static AgentCore.Application.Runtime.ConversationSessionFactory.CreateExtractor(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Ports.IChatClientFactory! chatClients) -> AgentCore.Application.State.StateExtractor?
-static AgentCore.Application.Runtime.ConversationTurnOrigin.operator !=(AgentCore.Application.Runtime.ConversationTurnOrigin? left, AgentCore.Application.Runtime.ConversationTurnOrigin? right) -> bool
-static AgentCore.Application.Runtime.ConversationTurnOrigin.operator ==(AgentCore.Application.Runtime.ConversationTurnOrigin? left, AgentCore.Application.Runtime.ConversationTurnOrigin? right) -> bool
-static AgentCore.Application.Runtime.TurnCut.operator !=(AgentCore.Application.Runtime.TurnCut? left, AgentCore.Application.Runtime.TurnCut? right) -> bool
-static AgentCore.Application.Runtime.TurnCut.operator ==(AgentCore.Application.Runtime.TurnCut? left, AgentCore.Application.Runtime.TurnCut? right) -> bool
+static AgentCore.Application.Runtime.Session.ConversationSessionFactory.CreateExtractor(AgentCore.Application.Configuration.Compilation.CompiledAgent! compiled, AgentCore.Application.Ports.IChatClientFactory! chatClients) -> AgentCore.Application.State.StateExtractor?
+static AgentCore.Application.Runtime.Turn.ConversationTurnOrigin.operator !=(AgentCore.Application.Runtime.Turn.ConversationTurnOrigin? left, AgentCore.Application.Runtime.Turn.ConversationTurnOrigin? right) -> bool
+static AgentCore.Application.Runtime.Turn.ConversationTurnOrigin.operator ==(AgentCore.Application.Runtime.Turn.ConversationTurnOrigin? left, AgentCore.Application.Runtime.Turn.ConversationTurnOrigin? right) -> bool
+static AgentCore.Application.Runtime.Cut.TurnCut.operator !=(AgentCore.Application.Runtime.Cut.TurnCut? left, AgentCore.Application.Runtime.Cut.TurnCut? right) -> bool
+static AgentCore.Application.Runtime.Cut.TurnCut.operator ==(AgentCore.Application.Runtime.Cut.TurnCut? left, AgentCore.Application.Runtime.Cut.TurnCut? right) -> bool
 static AgentCore.Application.Scripting.ScriptRequest.operator !=(AgentCore.Application.Scripting.ScriptRequest? left, AgentCore.Application.Scripting.ScriptRequest? right) -> bool
 static AgentCore.Application.Scripting.ScriptRequest.operator ==(AgentCore.Application.Scripting.ScriptRequest? left, AgentCore.Application.Scripting.ScriptRequest? right) -> bool
 static AgentCore.Application.Scripting.ScriptResult.Failed(string! error) -> AgentCore.Application.Scripting.ScriptResult!
@@ -1956,6 +1921,7 @@ static readonly AgentCore.Application.Configuration.Schema.TelemetryProviderConf
 static readonly AgentCore.Application.Secrets.KnownSecrets.GrafanaCloudApiToken -> AgentCore.Application.Secrets.SecretName!
 static readonly AgentCore.Application.Secrets.KnownSecrets.GrafanaCloudInstanceId -> AgentCore.Application.Secrets.SecretName!
 static readonly AgentCore.Application.Secrets.KnownSecrets.OpenAi -> AgentCore.Application.Secrets.SecretName!
+static readonly AgentCore.Application.Secrets.KnownSecrets.OpenAiWebhook -> AgentCore.Application.Secrets.SecretName!
 static readonly AgentCore.Application.Secrets.KnownSecrets.PostgresConnectionString -> AgentCore.Application.Secrets.SecretName!
 static readonly AgentCore.Application.Secrets.KnownSecrets.Qdrant -> AgentCore.Application.Secrets.SecretName!
 static readonly AgentCore.Application.Sessions.Memory.InMemoryConversationSessions.DefaultIdleTimeout -> System.TimeSpan
@@ -2077,6 +2043,7 @@ AgentCore.Application.Blobs.FileLink.Url.get -> System.Uri?
 AgentCore.Application.Blobs.FileLink.Url.init -> void
 AgentCore.Application.Conversation.Conversations
 AgentCore.Application.Conversation.Conversations.AppendAsync(string! conversationId, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.ConversationMessageDraft!>! messages, AgentCore.Application.Conversation.ConversationSessionState? state = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.ConversationMessage!>!>
+AgentCore.Application.Conversation.Conversations.SaveStateAsync(string! conversationId, AgentCore.Application.Conversation.ConversationSessionState! state, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Conversation.Conversations.AppendMessageAsync(string! conversationId, Microsoft.Extensions.AI.ChatMessage! message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Transcript.ConversationMessage!>
 AgentCore.Application.Conversation.Conversations.AttachPrincipalAsync(string! conversationId, string! principalKey, string! role, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Conversation.Conversations.Conversations(AgentCore.Application.Ports.IConversationStore! conversations, AgentCore.Application.Ports.IBlobStore? blobs) -> void
@@ -2146,6 +2113,8 @@ AgentCore.Application.Configuration.Schema.ShellConfiguration.MemoryMb.get -> in
 AgentCore.Application.Configuration.Schema.ShellConfiguration.MemoryMb.init -> void
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Secrets.get -> AgentCore.Application.Secrets.ResolvedSecrets?
 AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Secrets.init -> void
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Hooks.get -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Hooks.AgentHook!>?
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Hooks.init -> void
 AgentCore.Application.Conversation.StoredConversation
 AgentCore.Application.Conversation.StoredConversation.Conversation.get -> AgentCore.Application.Conversation.ConversationRecord!
 AgentCore.Application.Conversation.StoredConversation.Conversation.init -> void
@@ -2286,13 +2255,13 @@ AgentCore.Application.Ports.IModelCatalogPort.LookupAsync(string! provider, stri
 const AgentCore.Application.Secrets.KnownSecrets.OpenCodeGoApiKeyName = "opencode-go-api-key" -> string!
 const AgentCore.Application.Secrets.KnownSecrets.OpenCodeGoApiKeyVariable = "OPENCODE_GO_API_KEY" -> string!
 static readonly AgentCore.Application.Secrets.KnownSecrets.OpenCodeGo -> AgentCore.Application.Secrets.SecretName!
-AgentCore.Application.Ports.IConversationPort.StartTurnAsync(Microsoft.Extensions.AI.ChatMessage! userInput, AgentCore.Application.Runtime.ConversationTurnOrigin? origin, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<AgentCore.Application.Runtime.TurnRun!>!
-AgentCore.Application.Runtime.ConversationSession.StartTurnAsync(Microsoft.Extensions.AI.ChatMessage! userInput, AgentCore.Application.Runtime.ConversationTurnOrigin? origin, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<AgentCore.Application.Runtime.TurnRun!>!
-AgentCore.Application.Runtime.TurnRun
-AgentCore.Application.Runtime.TurnRun.DisposeAsync() -> System.Threading.Tasks.ValueTask
-AgentCore.Application.Runtime.TurnRun.TurnIndex.get -> int
-AgentCore.Application.Runtime.TurnRun.TurnRun(int turnIndex, System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>! updates) -> void
-AgentCore.Application.Runtime.TurnRun.Updates.get -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
+AgentCore.Application.Ports.IConversationPort.StartTurnAsync(Microsoft.Extensions.AI.ChatMessage! userInput, AgentCore.Application.Runtime.Turn.ConversationTurnOrigin? origin, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<AgentCore.Application.Runtime.Turn.Lifecycle.TurnRun!>!
+AgentCore.Application.Runtime.Session.ConversationSession.StartTurnAsync(Microsoft.Extensions.AI.ChatMessage! userInput, AgentCore.Application.Runtime.Turn.ConversationTurnOrigin? origin, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<AgentCore.Application.Runtime.Turn.Lifecycle.TurnRun!>!
+AgentCore.Application.Runtime.Turn.Lifecycle.TurnRun
+AgentCore.Application.Runtime.Turn.Lifecycle.TurnRun.DisposeAsync() -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Runtime.Turn.Lifecycle.TurnRun.TurnIndex.get -> int
+AgentCore.Application.Runtime.Turn.Lifecycle.TurnRun.TurnRun(int turnIndex, System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>! updates) -> void
+AgentCore.Application.Runtime.Turn.Lifecycle.TurnRun.Updates.get -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
 AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration.Filler.get -> System.Collections.Generic.IReadOnlyDictionary<string!, AgentCore.Application.Configuration.Schema.VoiceFillerConfiguration!>!
 AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration.Filler.init -> void
 AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration.UserAway.get -> System.Text.Json.JsonElement
@@ -2323,3 +2292,825 @@ AgentCore.Application.Conversation.Memory.InMemoryConversationStore.TryMarkBusyA
 AgentCore.Application.Conversation.Memory.InMemoryConversationStore.ClearBusyAsync(string! conversationId, string! holder, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Ports.IConversationStore.TryMarkBusyAsync(string! conversationId, string! holder, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<bool>
 AgentCore.Application.Ports.IConversationStore.ClearBusyAsync(string! conversationId, string! holder, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Hooks.Notices.ApprovalBy
+AgentCore.Application.Hooks.Notices.ApprovalBy.Hook = 0 -> AgentCore.Application.Hooks.Notices.ApprovalBy
+AgentCore.Application.Hooks.Notices.ApprovalBy.Human = 1 -> AgentCore.Application.Hooks.Notices.ApprovalBy
+AgentCore.Application.Hooks.Notices.ApprovalBy.Rule = 2 -> AgentCore.Application.Hooks.Notices.ApprovalBy
+AgentCore.Application.Hooks.Notices.ApprovalChanged
+AgentCore.Application.Hooks.Notices.ApprovalChanged.ApprovalChanged(AgentCore.Application.Hooks.HookScope! Scope, string! ToolName, string! CallId, AgentCore.Application.Hooks.Notices.ApprovalState State, AgentCore.Application.Hooks.Notices.ApprovalBy By, string? Reason) -> void
+AgentCore.Application.Hooks.Notices.ApprovalChanged.By.get -> AgentCore.Application.Hooks.Notices.ApprovalBy
+AgentCore.Application.Hooks.Notices.ApprovalChanged.By.init -> void
+AgentCore.Application.Hooks.Notices.ApprovalChanged.CallId.get -> string!
+AgentCore.Application.Hooks.Notices.ApprovalChanged.CallId.init -> void
+AgentCore.Application.Hooks.Notices.ApprovalChanged.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out string! ToolName, out string! CallId, out AgentCore.Application.Hooks.Notices.ApprovalState State, out AgentCore.Application.Hooks.Notices.ApprovalBy By, out string? Reason) -> void
+AgentCore.Application.Hooks.Notices.ApprovalChanged.Equals(AgentCore.Application.Hooks.Notices.ApprovalChanged? other) -> bool
+AgentCore.Application.Hooks.Notices.ApprovalChanged.Reason.get -> string?
+AgentCore.Application.Hooks.Notices.ApprovalChanged.Reason.init -> void
+AgentCore.Application.Hooks.Notices.ApprovalChanged.State.get -> AgentCore.Application.Hooks.Notices.ApprovalState
+AgentCore.Application.Hooks.Notices.ApprovalChanged.State.init -> void
+AgentCore.Application.Hooks.Notices.ApprovalChanged.ToolName.get -> string!
+AgentCore.Application.Hooks.Notices.ApprovalChanged.ToolName.init -> void
+AgentCore.Application.Hooks.Notices.ApprovalState
+AgentCore.Application.Hooks.Notices.ApprovalState.Approved = 1 -> AgentCore.Application.Hooks.Notices.ApprovalState
+AgentCore.Application.Hooks.Notices.ApprovalState.Asked = 0 -> AgentCore.Application.Hooks.Notices.ApprovalState
+AgentCore.Application.Hooks.Notices.ApprovalState.Denied = 2 -> AgentCore.Application.Hooks.Notices.ApprovalState
+AgentCore.Application.Hooks.Notices.CallEnd
+AgentCore.Application.Hooks.Notices.CallEnd.<Clone>$() -> AgentCore.Application.Hooks.Notices.CallEnd!
+AgentCore.Application.Hooks.Notices.CallEnd.CallEnd(string! CallId, double Seconds, string? Cause) -> void
+AgentCore.Application.Hooks.Notices.CallEnd.CallId.get -> string!
+AgentCore.Application.Hooks.Notices.CallEnd.CallId.init -> void
+AgentCore.Application.Hooks.Notices.CallEnd.Cause.get -> string?
+AgentCore.Application.Hooks.Notices.CallEnd.Cause.init -> void
+AgentCore.Application.Hooks.Notices.CallEnd.Deconstruct(out string! CallId, out double Seconds, out string? Cause) -> void
+AgentCore.Application.Hooks.Notices.CallEnd.Equals(AgentCore.Application.Hooks.Notices.CallEnd? other) -> bool
+AgentCore.Application.Hooks.Notices.CallEnd.Seconds.get -> double
+AgentCore.Application.Hooks.Notices.CallEnd.Seconds.init -> void
+AgentCore.Application.Hooks.Gates.CallRefusal
+AgentCore.Application.Hooks.Gates.CallRefusal.Busy = 1 -> AgentCore.Application.Hooks.Gates.CallRefusal
+AgentCore.Application.Hooks.Gates.CallRefusal.Declined = 0 -> AgentCore.Application.Hooks.Gates.CallRefusal
+AgentCore.Application.Hooks.Gates.CallRefusal.Unavailable = 2 -> AgentCore.Application.Hooks.Gates.CallRefusal
+AgentCore.Application.Hooks.Notices.CallStarted
+AgentCore.Application.Hooks.Notices.CallStarted.CallId.get -> string!
+AgentCore.Application.Hooks.Notices.CallStarted.CallId.init -> void
+AgentCore.Application.Hooks.Notices.CallStarted.CallStarted(AgentCore.Application.Hooks.HookScope! Scope, string! CallId, string? From, string? To, string! Transport) -> void
+AgentCore.Application.Hooks.Notices.CallStarted.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out string! CallId, out string? From, out string? To, out string! Transport) -> void
+AgentCore.Application.Hooks.Notices.CallStarted.Equals(AgentCore.Application.Hooks.Notices.CallStarted? other) -> bool
+AgentCore.Application.Hooks.Notices.CallStarted.From.get -> string?
+AgentCore.Application.Hooks.Notices.CallStarted.From.init -> void
+AgentCore.Application.Hooks.Notices.CallStarted.To.get -> string?
+AgentCore.Application.Hooks.Notices.CallStarted.To.init -> void
+AgentCore.Application.Hooks.Notices.CallStarted.Transport.get -> string!
+AgentCore.Application.Hooks.Notices.CallStarted.Transport.init -> void
+AgentCore.Application.Hooks.Notices.Compacted
+AgentCore.Application.Hooks.Notices.Compacted.Compacted(AgentCore.Application.Hooks.HookScope! Scope, int MessagesBefore, int MessagesAfter, AgentCore.Application.Hooks.Notices.CompactionOutcome Outcome) -> void
+AgentCore.Application.Hooks.Notices.Compacted.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out int MessagesBefore, out int MessagesAfter, out AgentCore.Application.Hooks.Notices.CompactionOutcome Outcome) -> void
+AgentCore.Application.Hooks.Notices.Compacted.Equals(AgentCore.Application.Hooks.Notices.Compacted? other) -> bool
+AgentCore.Application.Hooks.Notices.Compacted.MessagesAfter.get -> int
+AgentCore.Application.Hooks.Notices.Compacted.MessagesAfter.init -> void
+AgentCore.Application.Hooks.Notices.Compacted.MessagesBefore.get -> int
+AgentCore.Application.Hooks.Notices.Compacted.MessagesBefore.init -> void
+AgentCore.Application.Hooks.Notices.Compacted.Outcome.get -> AgentCore.Application.Hooks.Notices.CompactionOutcome
+AgentCore.Application.Hooks.Notices.Compacted.Outcome.init -> void
+AgentCore.Application.Hooks.Notices.CompactionOutcome
+AgentCore.Application.Hooks.Notices.CompactionOutcome.Cancelled = 3 -> AgentCore.Application.Hooks.Notices.CompactionOutcome
+AgentCore.Application.Hooks.Notices.CompactionOutcome.Compacted = 0 -> AgentCore.Application.Hooks.Notices.CompactionOutcome
+AgentCore.Application.Hooks.Notices.CompactionOutcome.Failed = 2 -> AgentCore.Application.Hooks.Notices.CompactionOutcome
+AgentCore.Application.Hooks.Notices.CompactionOutcome.Unchanged = 1 -> AgentCore.Application.Hooks.Notices.CompactionOutcome
+AgentCore.Application.Hooks.Notices.ConversationEnded
+AgentCore.Application.Hooks.Notices.ConversationEnded.Call.get -> AgentCore.Application.Hooks.Notices.CallEnd?
+AgentCore.Application.Hooks.Notices.ConversationEnded.Call.init -> void
+AgentCore.Application.Hooks.Notices.ConversationEnded.ConversationEnded(AgentCore.Application.Hooks.HookScope! Scope, AgentCore.Domain.Audit.ConversationEndReason Reason, string? TerminalStage, AgentCore.Application.Hooks.Notices.CallEnd? Call) -> void
+AgentCore.Application.Hooks.Notices.ConversationEnded.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out AgentCore.Domain.Audit.ConversationEndReason Reason, out string? TerminalStage, out AgentCore.Application.Hooks.Notices.CallEnd? Call) -> void
+AgentCore.Application.Hooks.Notices.ConversationEnded.Equals(AgentCore.Application.Hooks.Notices.ConversationEnded? other) -> bool
+AgentCore.Application.Hooks.Notices.ConversationEnded.Reason.get -> AgentCore.Domain.Audit.ConversationEndReason
+AgentCore.Application.Hooks.Notices.ConversationEnded.Reason.init -> void
+AgentCore.Application.Hooks.Notices.ConversationEnded.TerminalStage.get -> string?
+AgentCore.Application.Hooks.Notices.ConversationEnded.TerminalStage.init -> void
+AgentCore.Application.Hooks.Notices.ConversationOrigin
+AgentCore.Application.Hooks.Notices.ConversationOrigin.New = 0 -> AgentCore.Application.Hooks.Notices.ConversationOrigin
+AgentCore.Application.Hooks.Notices.ConversationOrigin.Reloaded = 2 -> AgentCore.Application.Hooks.Notices.ConversationOrigin
+AgentCore.Application.Hooks.Notices.ConversationOrigin.Resumed = 1 -> AgentCore.Application.Hooks.Notices.ConversationOrigin
+AgentCore.Application.Hooks.Notices.ConversationStarted
+AgentCore.Application.Hooks.Notices.ConversationStarted.ConversationStarted(AgentCore.Application.Hooks.HookScope! Scope, AgentCore.Application.Hooks.Notices.ConversationOrigin Origin) -> void
+AgentCore.Application.Hooks.Notices.ConversationStarted.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out AgentCore.Application.Hooks.Notices.ConversationOrigin Origin) -> void
+AgentCore.Application.Hooks.Notices.ConversationStarted.Equals(AgentCore.Application.Hooks.Notices.ConversationStarted? other) -> bool
+AgentCore.Application.Hooks.Notices.ConversationStarted.Origin.get -> AgentCore.Application.Hooks.Notices.ConversationOrigin
+AgentCore.Application.Hooks.Notices.ConversationStarted.Origin.init -> void
+AgentCore.Application.Hooks.Notices.ConversationUnloaded
+AgentCore.Application.Hooks.Notices.ConversationUnloaded.Cause.get -> AgentCore.Application.Hooks.Notices.UnloadCause
+AgentCore.Application.Hooks.Notices.ConversationUnloaded.Cause.init -> void
+AgentCore.Application.Hooks.Notices.ConversationUnloaded.ConversationUnloaded(AgentCore.Application.Hooks.HookScope! Scope, AgentCore.Application.Hooks.Notices.UnloadCause Cause) -> void
+AgentCore.Application.Hooks.Notices.ConversationUnloaded.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out AgentCore.Application.Hooks.Notices.UnloadCause Cause) -> void
+AgentCore.Application.Hooks.Notices.ConversationUnloaded.Equals(AgentCore.Application.Hooks.Notices.ConversationUnloaded? other) -> bool
+AgentCore.Application.Hooks.Gates.EntryTransport
+AgentCore.Application.Hooks.Gates.EntryTransport.Call = 1 -> AgentCore.Application.Hooks.Gates.EntryTransport
+AgentCore.Application.Hooks.Gates.EntryTransport.Http = 0 -> AgentCore.Application.Hooks.Gates.EntryTransport
+AgentCore.Application.Hooks.Notices.Fault
+AgentCore.Application.Hooks.Notices.Fault.Cause.get -> System.Exception?
+AgentCore.Application.Hooks.Notices.Fault.Cause.init -> void
+AgentCore.Application.Hooks.Notices.Fault.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out AgentCore.Application.Hooks.Notices.FaultKind Kind, out string! Message, out System.Exception? Cause) -> void
+AgentCore.Application.Hooks.Notices.Fault.Equals(AgentCore.Application.Hooks.Notices.Fault? other) -> bool
+AgentCore.Application.Hooks.Notices.Fault.Fault(AgentCore.Application.Hooks.HookScope! Scope, AgentCore.Application.Hooks.Notices.FaultKind Kind, string! Message, System.Exception? Cause) -> void
+AgentCore.Application.Hooks.Notices.Fault.Kind.get -> AgentCore.Application.Hooks.Notices.FaultKind
+AgentCore.Application.Hooks.Notices.Fault.Kind.init -> void
+AgentCore.Application.Hooks.Notices.Fault.Message.get -> string!
+AgentCore.Application.Hooks.Notices.Fault.Message.init -> void
+AgentCore.Application.Hooks.Notices.FaultKind
+AgentCore.Application.Hooks.Notices.FaultKind.BusyMarkFailed = 6 -> AgentCore.Application.Hooks.Notices.FaultKind
+AgentCore.Application.Hooks.Notices.FaultKind.BusyMarkLost = 4 -> AgentCore.Application.Hooks.Notices.FaultKind
+AgentCore.Application.Hooks.Notices.FaultKind.DenialRoundsExhausted = 7 -> AgentCore.Application.Hooks.Notices.FaultKind
+AgentCore.Application.Hooks.Notices.FaultKind.ExtractionFailed = 3 -> AgentCore.Application.Hooks.Notices.FaultKind
+AgentCore.Application.Hooks.Notices.FaultKind.HookFailed = 5 -> AgentCore.Application.Hooks.Notices.FaultKind
+AgentCore.Application.Hooks.Notices.FaultKind.StateRestorePartial = 2 -> AgentCore.Application.Hooks.Notices.FaultKind
+AgentCore.Application.Hooks.Notices.FaultKind.TranscriptResyncFailed = 1 -> AgentCore.Application.Hooks.Notices.FaultKind
+AgentCore.Application.Hooks.Notices.FaultKind.TranscriptWriteFailed = 0 -> AgentCore.Application.Hooks.Notices.FaultKind
+AgentCore.Application.Hooks.Notices.FilePublished
+AgentCore.Application.Hooks.Notices.FilePublished.BlobKey.get -> string!
+AgentCore.Application.Hooks.Notices.FilePublished.BlobKey.init -> void
+AgentCore.Application.Hooks.Notices.FilePublished.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out string! Name, out long Length, out string! MediaType, out string! BlobKey) -> void
+AgentCore.Application.Hooks.Notices.FilePublished.Equals(AgentCore.Application.Hooks.Notices.FilePublished? other) -> bool
+AgentCore.Application.Hooks.Notices.FilePublished.FilePublished(AgentCore.Application.Hooks.HookScope! Scope, string! Name, long Length, string! MediaType, string! BlobKey) -> void
+AgentCore.Application.Hooks.Notices.FilePublished.Length.get -> long
+AgentCore.Application.Hooks.Notices.FilePublished.Length.init -> void
+AgentCore.Application.Hooks.Notices.FilePublished.MediaType.get -> string!
+AgentCore.Application.Hooks.Notices.FilePublished.MediaType.init -> void
+AgentCore.Application.Hooks.Notices.FilePublished.Name.get -> string!
+AgentCore.Application.Hooks.Notices.FilePublished.Name.init -> void
+AgentCore.Application.Hooks.HookNotice
+AgentCore.Application.Hooks.HookNotice.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope) -> void
+AgentCore.Application.Hooks.HookNotice.EventId.get -> System.Guid
+AgentCore.Application.Hooks.HookNotice.EventId.init -> void
+AgentCore.Application.Hooks.HookNotice.HookNotice(AgentCore.Application.Hooks.HookNotice! original) -> void
+AgentCore.Application.Hooks.HookNotice.HookNotice(AgentCore.Application.Hooks.HookScope! Scope) -> void
+AgentCore.Application.Hooks.HookNotice.Scope.get -> AgentCore.Application.Hooks.HookScope!
+AgentCore.Application.Hooks.HookNotice.Scope.init -> void
+AgentCore.Application.Hooks.HookScope
+AgentCore.Application.Hooks.HookScope.<Clone>$() -> AgentCore.Application.Hooks.HookScope!
+AgentCore.Application.Hooks.HookScope.ConversationId.get -> string?
+AgentCore.Application.Hooks.HookScope.ConversationId.init -> void
+AgentCore.Application.Hooks.HookScope.Deconstruct(out string? ConversationId, out string? Entry, out int? TurnIndex, out string? Stage, out System.Guid SessionId, out long Sequence, out System.DateTimeOffset OccurredAt) -> void
+AgentCore.Application.Hooks.HookScope.Entry.get -> string?
+AgentCore.Application.Hooks.HookScope.Entry.init -> void
+AgentCore.Application.Hooks.HookScope.Equals(AgentCore.Application.Hooks.HookScope? other) -> bool
+AgentCore.Application.Hooks.HookScope.HookScope(string? ConversationId, string? Entry, int? TurnIndex, string? Stage, System.Guid SessionId, long Sequence, System.DateTimeOffset OccurredAt) -> void
+AgentCore.Application.Hooks.HookScope.OccurredAt.get -> System.DateTimeOffset
+AgentCore.Application.Hooks.HookScope.OccurredAt.init -> void
+AgentCore.Application.Hooks.HookScope.Sequence.get -> long
+AgentCore.Application.Hooks.HookScope.Sequence.init -> void
+AgentCore.Application.Hooks.HookScope.SessionId.get -> System.Guid
+AgentCore.Application.Hooks.HookScope.SessionId.init -> void
+AgentCore.Application.Hooks.HookScope.Stage.get -> string?
+AgentCore.Application.Hooks.HookScope.Stage.init -> void
+AgentCore.Application.Hooks.HookScope.TurnIndex.get -> int?
+AgentCore.Application.Hooks.HookScope.TurnIndex.init -> void
+AgentCore.Application.Hooks.Notices.HostStarted
+AgentCore.Application.Hooks.Notices.HostStarted.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out System.Collections.Generic.IReadOnlyList<string!>! Entries, out int ToolCount) -> void
+AgentCore.Application.Hooks.Notices.HostStarted.Entries.get -> System.Collections.Generic.IReadOnlyList<string!>!
+AgentCore.Application.Hooks.Notices.HostStarted.Entries.init -> void
+AgentCore.Application.Hooks.Notices.HostStarted.Equals(AgentCore.Application.Hooks.Notices.HostStarted? other) -> bool
+AgentCore.Application.Hooks.Notices.HostStarted.HostStarted(AgentCore.Application.Hooks.HookScope! Scope, System.Collections.Generic.IReadOnlyList<string!>! Entries, int ToolCount) -> void
+AgentCore.Application.Hooks.Notices.HostStarted.ToolCount.get -> int
+AgentCore.Application.Hooks.Notices.HostStarted.ToolCount.init -> void
+AgentCore.Application.Hooks.Notices.HostStopping
+AgentCore.Application.Hooks.Notices.HostStopping.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope) -> void
+AgentCore.Application.Hooks.Notices.HostStopping.Equals(AgentCore.Application.Hooks.Notices.HostStopping? other) -> bool
+AgentCore.Application.Hooks.Notices.HostStopping.HostStopping(AgentCore.Application.Hooks.HookScope! Scope) -> void
+AgentCore.Application.Hooks.Notices.InputModerated
+AgentCore.Application.Hooks.Notices.InputModerated.Categories.get -> System.Collections.Generic.IReadOnlyList<string!>!
+AgentCore.Application.Hooks.Notices.InputModerated.Categories.init -> void
+AgentCore.Application.Hooks.Notices.InputModerated.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out AgentCore.Application.Hooks.Notices.InputVerdict Verdict, out System.Collections.Generic.IReadOnlyList<string!>! Categories, out AgentCore.Application.Hooks.Notices.ModerationUnavailableReason? Reason) -> void
+AgentCore.Application.Hooks.Notices.InputModerated.Equals(AgentCore.Application.Hooks.Notices.InputModerated? other) -> bool
+AgentCore.Application.Hooks.Notices.InputModerated.InputModerated(AgentCore.Application.Hooks.HookScope! Scope, AgentCore.Application.Hooks.Notices.InputVerdict Verdict, System.Collections.Generic.IReadOnlyList<string!>! Categories, AgentCore.Application.Hooks.Notices.ModerationUnavailableReason? Reason) -> void
+AgentCore.Application.Hooks.Notices.InputModerated.Reason.get -> AgentCore.Application.Hooks.Notices.ModerationUnavailableReason?
+AgentCore.Application.Hooks.Notices.InputModerated.Reason.init -> void
+AgentCore.Application.Hooks.Notices.InputModerated.Verdict.get -> AgentCore.Application.Hooks.Notices.InputVerdict
+AgentCore.Application.Hooks.Notices.InputModerated.Verdict.init -> void
+AgentCore.Application.Hooks.Notices.InputVerdict
+AgentCore.Application.Hooks.Notices.InputVerdict.Clean = 0 -> AgentCore.Application.Hooks.Notices.InputVerdict
+AgentCore.Application.Hooks.Notices.InputVerdict.Flagged = 1 -> AgentCore.Application.Hooks.Notices.InputVerdict
+AgentCore.Application.Hooks.Notices.InputVerdict.Unavailable = 2 -> AgentCore.Application.Hooks.Notices.InputVerdict
+AgentCore.Application.Hooks.Notices.KnowledgeSearched
+AgentCore.Application.Hooks.Notices.KnowledgeSearched.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out string! Query, out AgentCore.Domain.Knowledge.KnowledgeScope? SearchScope, out int Hits, out System.TimeSpan Latency, out string? Failure) -> void
+AgentCore.Application.Hooks.Notices.KnowledgeSearched.Equals(AgentCore.Application.Hooks.Notices.KnowledgeSearched? other) -> bool
+AgentCore.Application.Hooks.Notices.KnowledgeSearched.Failure.get -> string?
+AgentCore.Application.Hooks.Notices.KnowledgeSearched.Failure.init -> void
+AgentCore.Application.Hooks.Notices.KnowledgeSearched.Hits.get -> int
+AgentCore.Application.Hooks.Notices.KnowledgeSearched.Hits.init -> void
+AgentCore.Application.Hooks.Notices.KnowledgeSearched.KnowledgeSearched(AgentCore.Application.Hooks.HookScope! Scope, string! Query, AgentCore.Domain.Knowledge.KnowledgeScope? SearchScope, int Hits, System.TimeSpan Latency, string? Failure) -> void
+AgentCore.Application.Hooks.Notices.KnowledgeSearched.Latency.get -> System.TimeSpan
+AgentCore.Application.Hooks.Notices.KnowledgeSearched.Latency.init -> void
+AgentCore.Application.Hooks.Notices.KnowledgeSearched.Query.get -> string!
+AgentCore.Application.Hooks.Notices.KnowledgeSearched.Query.init -> void
+AgentCore.Application.Hooks.Notices.KnowledgeSearched.SearchScope.get -> AgentCore.Domain.Knowledge.KnowledgeScope?
+AgentCore.Application.Hooks.Notices.KnowledgeSearched.SearchScope.init -> void
+AgentCore.Application.Hooks.Notices.LatencyMetric
+AgentCore.Application.Hooks.Notices.LatencyMetric.BargeIn = 3 -> AgentCore.Application.Hooks.Notices.LatencyMetric
+AgentCore.Application.Hooks.Notices.LatencyMetric.TimeToFirstSpeech = 1 -> AgentCore.Application.Hooks.Notices.LatencyMetric
+AgentCore.Application.Hooks.Notices.LatencyMetric.TimeToFirstToken = 0 -> AgentCore.Application.Hooks.Notices.LatencyMetric
+AgentCore.Application.Hooks.Notices.LatencyMetric.TimeToReplyEnd = 2 -> AgentCore.Application.Hooks.Notices.LatencyMetric
+AgentCore.Application.Hooks.Notices.LineSpoken
+AgentCore.Application.Hooks.Notices.LineSpoken.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out AgentCore.Application.Hooks.Notices.Speaker Speaker, out string! Text, out System.DateTimeOffset StartedAt, out System.DateTimeOffset EndedAt) -> void
+AgentCore.Application.Hooks.Notices.LineSpoken.EndedAt.get -> System.DateTimeOffset
+AgentCore.Application.Hooks.Notices.LineSpoken.EndedAt.init -> void
+AgentCore.Application.Hooks.Notices.LineSpoken.Equals(AgentCore.Application.Hooks.Notices.LineSpoken? other) -> bool
+AgentCore.Application.Hooks.Notices.LineSpoken.LineSpoken(AgentCore.Application.Hooks.HookScope! Scope, AgentCore.Application.Hooks.Notices.Speaker Speaker, string! Text, System.DateTimeOffset StartedAt, System.DateTimeOffset EndedAt) -> void
+AgentCore.Application.Hooks.Notices.LineSpoken.Speaker.get -> AgentCore.Application.Hooks.Notices.Speaker
+AgentCore.Application.Hooks.Notices.LineSpoken.Speaker.init -> void
+AgentCore.Application.Hooks.Notices.LineSpoken.StartedAt.get -> System.DateTimeOffset
+AgentCore.Application.Hooks.Notices.LineSpoken.StartedAt.init -> void
+AgentCore.Application.Hooks.Notices.LineSpoken.Text.get -> string!
+AgentCore.Application.Hooks.Notices.LineSpoken.Text.init -> void
+AgentCore.Application.Hooks.Notices.ModelCalled
+AgentCore.Application.Hooks.Notices.ModelCalled.CachedInputTokens.get -> long?
+AgentCore.Application.Hooks.Notices.ModelCalled.CachedInputTokens.init -> void
+AgentCore.Application.Hooks.Notices.ModelCalled.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out string? ModelId, out int Round, out long? InputTokens, out long? OutputTokens, out long? CachedInputTokens, out System.TimeSpan Latency, out string? FinishReason, out string? Failure) -> void
+AgentCore.Application.Hooks.Notices.ModelCalled.Equals(AgentCore.Application.Hooks.Notices.ModelCalled? other) -> bool
+AgentCore.Application.Hooks.Notices.ModelCalled.Failure.get -> string?
+AgentCore.Application.Hooks.Notices.ModelCalled.Failure.init -> void
+AgentCore.Application.Hooks.Notices.ModelCalled.FinishReason.get -> string?
+AgentCore.Application.Hooks.Notices.ModelCalled.FinishReason.init -> void
+AgentCore.Application.Hooks.Notices.ModelCalled.InputTokens.get -> long?
+AgentCore.Application.Hooks.Notices.ModelCalled.InputTokens.init -> void
+AgentCore.Application.Hooks.Notices.ModelCalled.Latency.get -> System.TimeSpan
+AgentCore.Application.Hooks.Notices.ModelCalled.Latency.init -> void
+AgentCore.Application.Hooks.Notices.ModelCalled.ModelCalled(AgentCore.Application.Hooks.HookScope! Scope, string? ModelId, int Round, long? InputTokens, long? OutputTokens, long? CachedInputTokens, System.TimeSpan Latency, string? FinishReason, string? Failure) -> void
+AgentCore.Application.Hooks.Notices.ModelCalled.ModelId.get -> string?
+AgentCore.Application.Hooks.Notices.ModelCalled.ModelId.init -> void
+AgentCore.Application.Hooks.Notices.ModelCalled.OutputTokens.get -> long?
+AgentCore.Application.Hooks.Notices.ModelCalled.OutputTokens.init -> void
+AgentCore.Application.Hooks.Notices.ModelCalled.Round.get -> int
+AgentCore.Application.Hooks.Notices.ModelCalled.Round.init -> void
+AgentCore.Application.Hooks.Notices.ModerationUnavailableReason
+AgentCore.Application.Hooks.Notices.ModerationUnavailableReason.Threw = 1 -> AgentCore.Application.Hooks.Notices.ModerationUnavailableReason
+AgentCore.Application.Hooks.Notices.ModerationUnavailableReason.TimedOut = 0 -> AgentCore.Application.Hooks.Notices.ModerationUnavailableReason
+AgentCore.Application.Hooks.Notices.ReplyCut
+AgentCore.Application.Hooks.Notices.ReplyCut.AmendsEventId.get -> System.Guid
+AgentCore.Application.Hooks.Notices.ReplyCut.AmendsEventId.init -> void
+AgentCore.Application.Hooks.Notices.ReplyCut.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out string! HeardText, out System.TimeSpan? Played, out System.Guid AmendsEventId) -> void
+AgentCore.Application.Hooks.Notices.ReplyCut.Equals(AgentCore.Application.Hooks.Notices.ReplyCut? other) -> bool
+AgentCore.Application.Hooks.Notices.ReplyCut.HeardText.get -> string!
+AgentCore.Application.Hooks.Notices.ReplyCut.HeardText.init -> void
+AgentCore.Application.Hooks.Notices.ReplyCut.Played.get -> System.TimeSpan?
+AgentCore.Application.Hooks.Notices.ReplyCut.Played.init -> void
+AgentCore.Application.Hooks.Notices.ReplyCut.ReplyCut(AgentCore.Application.Hooks.HookScope! Scope, string! HeardText, System.TimeSpan? Played, System.Guid AmendsEventId) -> void
+AgentCore.Application.Hooks.Notices.ReplyUpdated
+AgentCore.Application.Hooks.Notices.ReplyUpdated.Author.get -> string?
+AgentCore.Application.Hooks.Notices.ReplyUpdated.Author.init -> void
+AgentCore.Application.Hooks.Notices.ReplyUpdated.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out string! Text, out string? Author) -> void
+AgentCore.Application.Hooks.Notices.ReplyUpdated.Equals(AgentCore.Application.Hooks.Notices.ReplyUpdated? other) -> bool
+AgentCore.Application.Hooks.Notices.ReplyUpdated.ReplyUpdated(AgentCore.Application.Hooks.HookScope! Scope, string! Text, string? Author) -> void
+AgentCore.Application.Hooks.Notices.ReplyUpdated.Text.get -> string!
+AgentCore.Application.Hooks.Notices.ReplyUpdated.Text.init -> void
+AgentCore.Application.Hooks.Notices.RetentionSwept
+AgentCore.Application.Hooks.Notices.RetentionSwept.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out int Deleted) -> void
+AgentCore.Application.Hooks.Notices.RetentionSwept.Deleted.get -> int
+AgentCore.Application.Hooks.Notices.RetentionSwept.Deleted.init -> void
+AgentCore.Application.Hooks.Notices.RetentionSwept.Equals(AgentCore.Application.Hooks.Notices.RetentionSwept? other) -> bool
+AgentCore.Application.Hooks.Notices.RetentionSwept.RetentionSwept(AgentCore.Application.Hooks.HookScope! Scope, int Deleted) -> void
+AgentCore.Application.Hooks.Notices.SkillLoaded
+AgentCore.Application.Hooks.Notices.SkillLoaded.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out string! Name, out bool Pinned) -> void
+AgentCore.Application.Hooks.Notices.SkillLoaded.Equals(AgentCore.Application.Hooks.Notices.SkillLoaded? other) -> bool
+AgentCore.Application.Hooks.Notices.SkillLoaded.Name.get -> string!
+AgentCore.Application.Hooks.Notices.SkillLoaded.Name.init -> void
+AgentCore.Application.Hooks.Notices.SkillLoaded.Pinned.get -> bool
+AgentCore.Application.Hooks.Notices.SkillLoaded.Pinned.init -> void
+AgentCore.Application.Hooks.Notices.SkillLoaded.SkillLoaded(AgentCore.Application.Hooks.HookScope! Scope, string! Name, bool Pinned) -> void
+AgentCore.Application.Hooks.Notices.Speaker
+AgentCore.Application.Hooks.Notices.Speaker.Agent = 1 -> AgentCore.Application.Hooks.Notices.Speaker
+AgentCore.Application.Hooks.Notices.Speaker.Caller = 0 -> AgentCore.Application.Hooks.Notices.Speaker
+AgentCore.Application.Hooks.Notices.StageChanged
+AgentCore.Application.Hooks.Notices.StageChanged.After.get -> string!
+AgentCore.Application.Hooks.Notices.StageChanged.After.init -> void
+AgentCore.Application.Hooks.Notices.StageChanged.Before.get -> string!
+AgentCore.Application.Hooks.Notices.StageChanged.Before.init -> void
+AgentCore.Application.Hooks.Notices.StageChanged.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out string! Before, out string! After) -> void
+AgentCore.Application.Hooks.Notices.StageChanged.Equals(AgentCore.Application.Hooks.Notices.StageChanged? other) -> bool
+AgentCore.Application.Hooks.Notices.StageChanged.StageChanged(AgentCore.Application.Hooks.HookScope! Scope, string! Before, string! After) -> void
+AgentCore.Application.Hooks.Notices.SubagentEnded
+AgentCore.Application.Hooks.Notices.SubagentEnded.AgentId.get -> string!
+AgentCore.Application.Hooks.Notices.SubagentEnded.AgentId.init -> void
+AgentCore.Application.Hooks.Notices.SubagentEnded.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out string? ParentToolCallId, out string! AgentId, out AgentCore.Application.Hooks.Notices.SubagentOutcome Outcome, out System.TimeSpan Duration) -> void
+AgentCore.Application.Hooks.Notices.SubagentEnded.Duration.get -> System.TimeSpan
+AgentCore.Application.Hooks.Notices.SubagentEnded.Duration.init -> void
+AgentCore.Application.Hooks.Notices.SubagentEnded.Equals(AgentCore.Application.Hooks.Notices.SubagentEnded? other) -> bool
+AgentCore.Application.Hooks.Notices.SubagentEnded.Outcome.get -> AgentCore.Application.Hooks.Notices.SubagentOutcome
+AgentCore.Application.Hooks.Notices.SubagentEnded.Outcome.init -> void
+AgentCore.Application.Hooks.Notices.SubagentEnded.ParentToolCallId.get -> string?
+AgentCore.Application.Hooks.Notices.SubagentEnded.ParentToolCallId.init -> void
+AgentCore.Application.Hooks.Notices.SubagentEnded.SubagentEnded(AgentCore.Application.Hooks.HookScope! Scope, string? ParentToolCallId, string! AgentId, AgentCore.Application.Hooks.Notices.SubagentOutcome Outcome, System.TimeSpan Duration) -> void
+AgentCore.Application.Hooks.Notices.SubagentOutcome
+AgentCore.Application.Hooks.Notices.SubagentOutcome.Answered = 0 -> AgentCore.Application.Hooks.Notices.SubagentOutcome
+AgentCore.Application.Hooks.Notices.SubagentOutcome.Cancelled = 2 -> AgentCore.Application.Hooks.Notices.SubagentOutcome
+AgentCore.Application.Hooks.Notices.SubagentOutcome.Faulted = 1 -> AgentCore.Application.Hooks.Notices.SubagentOutcome
+AgentCore.Application.Hooks.Notices.SubagentStarted
+AgentCore.Application.Hooks.Notices.SubagentStarted.AgentId.get -> string!
+AgentCore.Application.Hooks.Notices.SubagentStarted.AgentId.init -> void
+AgentCore.Application.Hooks.Notices.SubagentStarted.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out string? ParentToolCallId, out string! AgentId) -> void
+AgentCore.Application.Hooks.Notices.SubagentStarted.Equals(AgentCore.Application.Hooks.Notices.SubagentStarted? other) -> bool
+AgentCore.Application.Hooks.Notices.SubagentStarted.ParentToolCallId.get -> string?
+AgentCore.Application.Hooks.Notices.SubagentStarted.ParentToolCallId.init -> void
+AgentCore.Application.Hooks.Notices.SubagentStarted.SubagentStarted(AgentCore.Application.Hooks.HookScope! Scope, string? ParentToolCallId, string! AgentId) -> void
+AgentCore.Application.Hooks.Notices.ToolCalled
+AgentCore.Application.Hooks.Notices.ToolCalled.CallId.get -> string!
+AgentCore.Application.Hooks.Notices.ToolCalled.CallId.init -> void
+AgentCore.Application.Hooks.Notices.ToolCalled.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out string! ToolName, out string! CallId, out System.TimeSpan Duration, out AgentCore.Application.Hooks.Notices.ToolOutcome Outcome, out bool Fatal, out AgentCore.Domain.Audit.ToolFailureKind? FailureKind, out string? Failure) -> void
+AgentCore.Application.Hooks.Notices.ToolCalled.Duration.get -> System.TimeSpan
+AgentCore.Application.Hooks.Notices.ToolCalled.Duration.init -> void
+AgentCore.Application.Hooks.Notices.ToolCalled.Equals(AgentCore.Application.Hooks.Notices.ToolCalled? other) -> bool
+AgentCore.Application.Hooks.Notices.ToolCalled.Failure.get -> string?
+AgentCore.Application.Hooks.Notices.ToolCalled.Failure.init -> void
+AgentCore.Application.Hooks.Notices.ToolCalled.FailureKind.get -> AgentCore.Domain.Audit.ToolFailureKind?
+AgentCore.Application.Hooks.Notices.ToolCalled.FailureKind.init -> void
+AgentCore.Application.Hooks.Notices.ToolCalled.Fatal.get -> bool
+AgentCore.Application.Hooks.Notices.ToolCalled.Fatal.init -> void
+AgentCore.Application.Hooks.Notices.ToolCalled.Outcome.get -> AgentCore.Application.Hooks.Notices.ToolOutcome
+AgentCore.Application.Hooks.Notices.ToolCalled.Outcome.init -> void
+AgentCore.Application.Hooks.Notices.ToolCalled.ToolCalled(AgentCore.Application.Hooks.HookScope! Scope, string! ToolName, string! CallId, System.TimeSpan Duration, AgentCore.Application.Hooks.Notices.ToolOutcome Outcome, bool Fatal, AgentCore.Domain.Audit.ToolFailureKind? FailureKind, string? Failure) -> void
+AgentCore.Application.Hooks.Notices.ToolCalled.ToolName.get -> string!
+AgentCore.Application.Hooks.Notices.ToolCalled.ToolName.init -> void
+AgentCore.Application.Hooks.Notices.ToolOutcome
+AgentCore.Application.Hooks.Notices.ToolOutcome.Blocked = 2 -> AgentCore.Application.Hooks.Notices.ToolOutcome
+AgentCore.Application.Hooks.Notices.ToolOutcome.Cached = 4 -> AgentCore.Application.Hooks.Notices.ToolOutcome
+AgentCore.Application.Hooks.Notices.ToolOutcome.Failed = 1 -> AgentCore.Application.Hooks.Notices.ToolOutcome
+AgentCore.Application.Hooks.Notices.ToolOutcome.Ok = 0 -> AgentCore.Application.Hooks.Notices.ToolOutcome
+AgentCore.Application.Hooks.Notices.ToolOutcome.Responded = 3 -> AgentCore.Application.Hooks.Notices.ToolOutcome
+AgentCore.Application.Hooks.Notices.ToolOutcome.TimedOut = 5 -> AgentCore.Application.Hooks.Notices.ToolOutcome
+AgentCore.Application.Hooks.Notices.ToolOutcome.Undeclared = 6 -> AgentCore.Application.Hooks.Notices.ToolOutcome
+AgentCore.Application.Hooks.Notices.TurnCompleted
+AgentCore.Application.Hooks.Notices.TurnCompleted.Cause.get -> System.Exception?
+AgentCore.Application.Hooks.Notices.TurnCompleted.Cause.init -> void
+AgentCore.Application.Hooks.Notices.TurnCompleted.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out AgentCore.Application.Hooks.Notices.TurnOutcome Outcome, out string! UserText, out string! ReplyText, out string! StageBefore, out string! StageAfter, out System.TimeSpan Duration, out string? Failure, out bool FailedInTool, out System.Exception? Cause) -> void
+AgentCore.Application.Hooks.Notices.TurnCompleted.Duration.get -> System.TimeSpan
+AgentCore.Application.Hooks.Notices.TurnCompleted.Duration.init -> void
+AgentCore.Application.Hooks.Notices.TurnCompleted.Equals(AgentCore.Application.Hooks.Notices.TurnCompleted? other) -> bool
+AgentCore.Application.Hooks.Notices.TurnCompleted.FailedInTool.get -> bool
+AgentCore.Application.Hooks.Notices.TurnCompleted.FailedInTool.init -> void
+AgentCore.Application.Hooks.Notices.TurnCompleted.Failure.get -> string?
+AgentCore.Application.Hooks.Notices.TurnCompleted.Failure.init -> void
+AgentCore.Application.Hooks.Notices.TurnCompleted.Outcome.get -> AgentCore.Application.Hooks.Notices.TurnOutcome
+AgentCore.Application.Hooks.Notices.TurnCompleted.Outcome.init -> void
+AgentCore.Application.Hooks.Notices.TurnCompleted.ReplyText.get -> string!
+AgentCore.Application.Hooks.Notices.TurnCompleted.ReplyText.init -> void
+AgentCore.Application.Hooks.Notices.TurnCompleted.StageAfter.get -> string!
+AgentCore.Application.Hooks.Notices.TurnCompleted.StageAfter.init -> void
+AgentCore.Application.Hooks.Notices.TurnCompleted.StageBefore.get -> string!
+AgentCore.Application.Hooks.Notices.TurnCompleted.StageBefore.init -> void
+AgentCore.Application.Hooks.Notices.TurnCompleted.TurnCompleted(AgentCore.Application.Hooks.HookScope! Scope, AgentCore.Application.Hooks.Notices.TurnOutcome Outcome, string! UserText, string! ReplyText, string! StageBefore, string! StageAfter, System.TimeSpan Duration, string? Failure, bool FailedInTool, System.Exception? Cause) -> void
+AgentCore.Application.Hooks.Notices.TurnCompleted.UserText.get -> string!
+AgentCore.Application.Hooks.Notices.TurnCompleted.UserText.init -> void
+AgentCore.Application.Hooks.Notices.TurnLatency
+AgentCore.Application.Hooks.Notices.TurnLatency.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out AgentCore.Application.Hooks.Notices.LatencyMetric Metric, out System.TimeSpan Value) -> void
+AgentCore.Application.Hooks.Notices.TurnLatency.Equals(AgentCore.Application.Hooks.Notices.TurnLatency? other) -> bool
+AgentCore.Application.Hooks.Notices.TurnLatency.Metric.get -> AgentCore.Application.Hooks.Notices.LatencyMetric
+AgentCore.Application.Hooks.Notices.TurnLatency.Metric.init -> void
+AgentCore.Application.Hooks.Notices.TurnLatency.TurnLatency(AgentCore.Application.Hooks.HookScope! Scope, AgentCore.Application.Hooks.Notices.LatencyMetric Metric, System.TimeSpan Value) -> void
+AgentCore.Application.Hooks.Notices.TurnLatency.Value.get -> System.TimeSpan
+AgentCore.Application.Hooks.Notices.TurnLatency.Value.init -> void
+AgentCore.Application.Hooks.Notices.TurnOutcome
+AgentCore.Application.Hooks.Notices.TurnOutcome.Answered = 0 -> AgentCore.Application.Hooks.Notices.TurnOutcome
+AgentCore.Application.Hooks.Notices.TurnOutcome.Blocked = 3 -> AgentCore.Application.Hooks.Notices.TurnOutcome
+AgentCore.Application.Hooks.Notices.TurnOutcome.Cancelled = 4 -> AgentCore.Application.Hooks.Notices.TurnOutcome
+AgentCore.Application.Hooks.Notices.TurnOutcome.Empty = 2 -> AgentCore.Application.Hooks.Notices.TurnOutcome
+AgentCore.Application.Hooks.Notices.TurnOutcome.Fallback = 1 -> AgentCore.Application.Hooks.Notices.TurnOutcome
+AgentCore.Application.Hooks.Notices.TurnOutcome.Faulted = 5 -> AgentCore.Application.Hooks.Notices.TurnOutcome
+AgentCore.Application.Hooks.Notices.TurnRefusal
+AgentCore.Application.Hooks.Notices.TurnRefusal.Busy = 0 -> AgentCore.Application.Hooks.Notices.TurnRefusal
+AgentCore.Application.Hooks.Notices.TurnRefusal.Conflict = 1 -> AgentCore.Application.Hooks.Notices.TurnRefusal
+AgentCore.Application.Hooks.Notices.TurnRefusal.Disposed = 5 -> AgentCore.Application.Hooks.Notices.TurnRefusal
+AgentCore.Application.Hooks.Notices.TurnRefusal.Dropped = 3 -> AgentCore.Application.Hooks.Notices.TurnRefusal
+AgentCore.Application.Hooks.Notices.TurnRefusal.Gone = 2 -> AgentCore.Application.Hooks.Notices.TurnRefusal
+AgentCore.Application.Hooks.Notices.TurnRefusal.InUse = 6 -> AgentCore.Application.Hooks.Notices.TurnRefusal
+AgentCore.Application.Hooks.Notices.TurnRefusal.Terminal = 4 -> AgentCore.Application.Hooks.Notices.TurnRefusal
+AgentCore.Application.Hooks.Notices.TurnRefusalTokens
+AgentCore.Application.Hooks.Notices.TurnRefused
+AgentCore.Application.Hooks.Notices.TurnRefused.AfterEnd.get -> bool
+AgentCore.Application.Hooks.Notices.TurnRefused.AfterEnd.init -> void
+AgentCore.Application.Hooks.Notices.TurnRefused.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out AgentCore.Application.Hooks.Notices.TurnRefusal Reason, out bool AfterEnd) -> void
+AgentCore.Application.Hooks.Notices.TurnRefused.Equals(AgentCore.Application.Hooks.Notices.TurnRefused? other) -> bool
+AgentCore.Application.Hooks.Notices.TurnRefused.Reason.get -> AgentCore.Application.Hooks.Notices.TurnRefusal
+AgentCore.Application.Hooks.Notices.TurnRefused.Reason.init -> void
+AgentCore.Application.Hooks.Notices.TurnRefused.TurnRefused(AgentCore.Application.Hooks.HookScope! Scope, AgentCore.Application.Hooks.Notices.TurnRefusal Reason, bool AfterEnd) -> void
+AgentCore.Application.Hooks.Notices.TurnStarted
+AgentCore.Application.Hooks.Notices.TurnStarted.AgentId.get -> string!
+AgentCore.Application.Hooks.Notices.TurnStarted.AgentId.init -> void
+AgentCore.Application.Hooks.Notices.TurnStarted.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out string! AgentId, out string! UserText) -> void
+AgentCore.Application.Hooks.Notices.TurnStarted.Equals(AgentCore.Application.Hooks.Notices.TurnStarted? other) -> bool
+AgentCore.Application.Hooks.Notices.TurnStarted.TurnStarted(AgentCore.Application.Hooks.HookScope! Scope, string! AgentId, string! UserText) -> void
+AgentCore.Application.Hooks.Notices.TurnStarted.UserText.get -> string!
+AgentCore.Application.Hooks.Notices.TurnStarted.UserText.init -> void
+AgentCore.Application.Hooks.Notices.TurnSuperseded
+AgentCore.Application.Hooks.Notices.TurnSuperseded.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out int WithdrewFrom, out int WithdrewThrough) -> void
+AgentCore.Application.Hooks.Notices.TurnSuperseded.Equals(AgentCore.Application.Hooks.Notices.TurnSuperseded? other) -> bool
+AgentCore.Application.Hooks.Notices.TurnSuperseded.TurnSuperseded(AgentCore.Application.Hooks.HookScope! Scope, int WithdrewFrom, int WithdrewThrough) -> void
+AgentCore.Application.Hooks.Notices.TurnSuperseded.WithdrewFrom.get -> int
+AgentCore.Application.Hooks.Notices.TurnSuperseded.WithdrewFrom.init -> void
+AgentCore.Application.Hooks.Notices.TurnSuperseded.WithdrewThrough.get -> int
+AgentCore.Application.Hooks.Notices.TurnSuperseded.WithdrewThrough.init -> void
+AgentCore.Application.Hooks.Notices.UnloadCause
+AgentCore.Application.Hooks.Notices.UnloadCause.Closed = 1 -> AgentCore.Application.Hooks.Notices.UnloadCause
+AgentCore.Application.Hooks.Notices.UnloadCause.Idle = 0 -> AgentCore.Application.Hooks.Notices.UnloadCause
+AgentCore.Application.Hooks.Notices.VoiceParty
+AgentCore.Application.Hooks.Notices.VoiceParty.Agent = 1 -> AgentCore.Application.Hooks.Notices.VoiceParty
+AgentCore.Application.Hooks.Notices.VoiceParty.User = 0 -> AgentCore.Application.Hooks.Notices.VoiceParty
+AgentCore.Application.Hooks.Notices.VoiceState
+AgentCore.Application.Hooks.Notices.VoiceState.Away = 3 -> AgentCore.Application.Hooks.Notices.VoiceState
+AgentCore.Application.Hooks.Notices.VoiceState.Listening = 0 -> AgentCore.Application.Hooks.Notices.VoiceState
+AgentCore.Application.Hooks.Notices.VoiceState.Speaking = 2 -> AgentCore.Application.Hooks.Notices.VoiceState
+AgentCore.Application.Hooks.Notices.VoiceState.Thinking = 1 -> AgentCore.Application.Hooks.Notices.VoiceState
+AgentCore.Application.Hooks.Notices.VoiceStateChanged
+AgentCore.Application.Hooks.Notices.VoiceStateChanged.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out AgentCore.Application.Hooks.Notices.VoiceParty Party, out AgentCore.Application.Hooks.Notices.VoiceState Old, out AgentCore.Application.Hooks.Notices.VoiceState New) -> void
+AgentCore.Application.Hooks.Notices.VoiceStateChanged.Equals(AgentCore.Application.Hooks.Notices.VoiceStateChanged? other) -> bool
+AgentCore.Application.Hooks.Notices.VoiceStateChanged.New.get -> AgentCore.Application.Hooks.Notices.VoiceState
+AgentCore.Application.Hooks.Notices.VoiceStateChanged.New.init -> void
+AgentCore.Application.Hooks.Notices.VoiceStateChanged.Old.get -> AgentCore.Application.Hooks.Notices.VoiceState
+AgentCore.Application.Hooks.Notices.VoiceStateChanged.Old.init -> void
+AgentCore.Application.Hooks.Notices.VoiceStateChanged.Party.get -> AgentCore.Application.Hooks.Notices.VoiceParty
+AgentCore.Application.Hooks.Notices.VoiceStateChanged.Party.init -> void
+AgentCore.Application.Hooks.Notices.VoiceStateChanged.VoiceStateChanged(AgentCore.Application.Hooks.HookScope! Scope, AgentCore.Application.Hooks.Notices.VoiceParty Party, AgentCore.Application.Hooks.Notices.VoiceState Old, AgentCore.Application.Hooks.Notices.VoiceState New) -> void
+abstract AgentCore.Application.Hooks.HookNotice.<Clone>$() -> AgentCore.Application.Hooks.HookNotice!
+override AgentCore.Application.Hooks.Notices.ApprovalChanged.<Clone>$() -> AgentCore.Application.Hooks.Notices.ApprovalChanged!
+override AgentCore.Application.Hooks.Notices.ApprovalChanged.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.ApprovalChanged.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.ApprovalChanged.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.CallEnd.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.CallEnd.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.CallEnd.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.CallStarted.<Clone>$() -> AgentCore.Application.Hooks.Notices.CallStarted!
+override AgentCore.Application.Hooks.Notices.CallStarted.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.CallStarted.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.CallStarted.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.Compacted.<Clone>$() -> AgentCore.Application.Hooks.Notices.Compacted!
+override AgentCore.Application.Hooks.Notices.Compacted.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.Compacted.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.Compacted.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.ConversationEnded.<Clone>$() -> AgentCore.Application.Hooks.Notices.ConversationEnded!
+override AgentCore.Application.Hooks.Notices.ConversationEnded.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.ConversationEnded.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.ConversationEnded.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.ConversationStarted.<Clone>$() -> AgentCore.Application.Hooks.Notices.ConversationStarted!
+override AgentCore.Application.Hooks.Notices.ConversationStarted.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.ConversationStarted.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.ConversationStarted.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.ConversationUnloaded.<Clone>$() -> AgentCore.Application.Hooks.Notices.ConversationUnloaded!
+override AgentCore.Application.Hooks.Notices.ConversationUnloaded.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.ConversationUnloaded.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.ConversationUnloaded.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.Fault.<Clone>$() -> AgentCore.Application.Hooks.Notices.Fault!
+override AgentCore.Application.Hooks.Notices.Fault.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.Fault.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.Fault.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.FilePublished.<Clone>$() -> AgentCore.Application.Hooks.Notices.FilePublished!
+override AgentCore.Application.Hooks.Notices.FilePublished.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.FilePublished.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.FilePublished.ToString() -> string!
+override AgentCore.Application.Hooks.HookNotice.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.HookNotice.GetHashCode() -> int
+override AgentCore.Application.Hooks.HookNotice.ToString() -> string!
+override AgentCore.Application.Hooks.HookScope.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.HookScope.GetHashCode() -> int
+override AgentCore.Application.Hooks.HookScope.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.HostStarted.<Clone>$() -> AgentCore.Application.Hooks.Notices.HostStarted!
+override AgentCore.Application.Hooks.Notices.HostStarted.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.HostStarted.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.HostStarted.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.HostStopping.<Clone>$() -> AgentCore.Application.Hooks.Notices.HostStopping!
+override AgentCore.Application.Hooks.Notices.HostStopping.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.HostStopping.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.HostStopping.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.InputModerated.<Clone>$() -> AgentCore.Application.Hooks.Notices.InputModerated!
+override AgentCore.Application.Hooks.Notices.InputModerated.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.InputModerated.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.InputModerated.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.KnowledgeSearched.<Clone>$() -> AgentCore.Application.Hooks.Notices.KnowledgeSearched!
+override AgentCore.Application.Hooks.Notices.KnowledgeSearched.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.KnowledgeSearched.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.KnowledgeSearched.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.LineSpoken.<Clone>$() -> AgentCore.Application.Hooks.Notices.LineSpoken!
+override AgentCore.Application.Hooks.Notices.LineSpoken.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.LineSpoken.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.LineSpoken.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.ModelCalled.<Clone>$() -> AgentCore.Application.Hooks.Notices.ModelCalled!
+override AgentCore.Application.Hooks.Notices.ModelCalled.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.ModelCalled.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.ModelCalled.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.ReplyCut.<Clone>$() -> AgentCore.Application.Hooks.Notices.ReplyCut!
+override AgentCore.Application.Hooks.Notices.ReplyCut.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.ReplyCut.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.ReplyCut.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.ReplyUpdated.<Clone>$() -> AgentCore.Application.Hooks.Notices.ReplyUpdated!
+override AgentCore.Application.Hooks.Notices.ReplyUpdated.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.ReplyUpdated.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.ReplyUpdated.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.RetentionSwept.<Clone>$() -> AgentCore.Application.Hooks.Notices.RetentionSwept!
+override AgentCore.Application.Hooks.Notices.RetentionSwept.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.RetentionSwept.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.RetentionSwept.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.SkillLoaded.<Clone>$() -> AgentCore.Application.Hooks.Notices.SkillLoaded!
+override AgentCore.Application.Hooks.Notices.SkillLoaded.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.SkillLoaded.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.SkillLoaded.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.StageChanged.<Clone>$() -> AgentCore.Application.Hooks.Notices.StageChanged!
+override AgentCore.Application.Hooks.Notices.StageChanged.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.StageChanged.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.StageChanged.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.SubagentEnded.<Clone>$() -> AgentCore.Application.Hooks.Notices.SubagentEnded!
+override AgentCore.Application.Hooks.Notices.SubagentEnded.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.SubagentEnded.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.SubagentEnded.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.SubagentStarted.<Clone>$() -> AgentCore.Application.Hooks.Notices.SubagentStarted!
+override AgentCore.Application.Hooks.Notices.SubagentStarted.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.SubagentStarted.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.SubagentStarted.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.ToolCalled.<Clone>$() -> AgentCore.Application.Hooks.Notices.ToolCalled!
+override AgentCore.Application.Hooks.Notices.ToolCalled.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.ToolCalled.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.ToolCalled.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.TurnCompleted.<Clone>$() -> AgentCore.Application.Hooks.Notices.TurnCompleted!
+override AgentCore.Application.Hooks.Notices.TurnCompleted.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.TurnCompleted.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.TurnCompleted.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.TurnLatency.<Clone>$() -> AgentCore.Application.Hooks.Notices.TurnLatency!
+override AgentCore.Application.Hooks.Notices.TurnLatency.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.TurnLatency.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.TurnLatency.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.TurnRefused.<Clone>$() -> AgentCore.Application.Hooks.Notices.TurnRefused!
+override AgentCore.Application.Hooks.Notices.TurnRefused.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.TurnRefused.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.TurnRefused.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.TurnStarted.<Clone>$() -> AgentCore.Application.Hooks.Notices.TurnStarted!
+override AgentCore.Application.Hooks.Notices.TurnStarted.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.TurnStarted.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.TurnStarted.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.TurnSuperseded.<Clone>$() -> AgentCore.Application.Hooks.Notices.TurnSuperseded!
+override AgentCore.Application.Hooks.Notices.TurnSuperseded.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.TurnSuperseded.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.TurnSuperseded.ToString() -> string!
+override AgentCore.Application.Hooks.Notices.VoiceStateChanged.<Clone>$() -> AgentCore.Application.Hooks.Notices.VoiceStateChanged!
+override AgentCore.Application.Hooks.Notices.VoiceStateChanged.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.VoiceStateChanged.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.VoiceStateChanged.ToString() -> string!
+override sealed AgentCore.Application.Hooks.Notices.ApprovalChanged.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.CallStarted.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.Compacted.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.ConversationEnded.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.ConversationStarted.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.ConversationUnloaded.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.Fault.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.FilePublished.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.HostStarted.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.HostStopping.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.InputModerated.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.KnowledgeSearched.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.LineSpoken.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.ModelCalled.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.ReplyCut.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.ReplyUpdated.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.RetentionSwept.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.SkillLoaded.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.StageChanged.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.SubagentEnded.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.SubagentStarted.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.ToolCalled.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.TurnCompleted.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.TurnLatency.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.TurnRefused.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.TurnStarted.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.TurnSuperseded.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+override sealed AgentCore.Application.Hooks.Notices.VoiceStateChanged.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+static AgentCore.Application.Hooks.Notices.ApprovalChanged.operator !=(AgentCore.Application.Hooks.Notices.ApprovalChanged? left, AgentCore.Application.Hooks.Notices.ApprovalChanged? right) -> bool
+static AgentCore.Application.Hooks.Notices.ApprovalChanged.operator ==(AgentCore.Application.Hooks.Notices.ApprovalChanged? left, AgentCore.Application.Hooks.Notices.ApprovalChanged? right) -> bool
+static AgentCore.Application.Hooks.Notices.CallEnd.operator !=(AgentCore.Application.Hooks.Notices.CallEnd? left, AgentCore.Application.Hooks.Notices.CallEnd? right) -> bool
+static AgentCore.Application.Hooks.Notices.CallEnd.operator ==(AgentCore.Application.Hooks.Notices.CallEnd? left, AgentCore.Application.Hooks.Notices.CallEnd? right) -> bool
+static AgentCore.Application.Hooks.Notices.CallStarted.operator !=(AgentCore.Application.Hooks.Notices.CallStarted? left, AgentCore.Application.Hooks.Notices.CallStarted? right) -> bool
+static AgentCore.Application.Hooks.Notices.CallStarted.operator ==(AgentCore.Application.Hooks.Notices.CallStarted? left, AgentCore.Application.Hooks.Notices.CallStarted? right) -> bool
+static AgentCore.Application.Hooks.Notices.Compacted.operator !=(AgentCore.Application.Hooks.Notices.Compacted? left, AgentCore.Application.Hooks.Notices.Compacted? right) -> bool
+static AgentCore.Application.Hooks.Notices.Compacted.operator ==(AgentCore.Application.Hooks.Notices.Compacted? left, AgentCore.Application.Hooks.Notices.Compacted? right) -> bool
+static AgentCore.Application.Hooks.Notices.ConversationEnded.operator !=(AgentCore.Application.Hooks.Notices.ConversationEnded? left, AgentCore.Application.Hooks.Notices.ConversationEnded? right) -> bool
+static AgentCore.Application.Hooks.Notices.ConversationEnded.operator ==(AgentCore.Application.Hooks.Notices.ConversationEnded? left, AgentCore.Application.Hooks.Notices.ConversationEnded? right) -> bool
+static AgentCore.Application.Hooks.Notices.ConversationStarted.operator !=(AgentCore.Application.Hooks.Notices.ConversationStarted? left, AgentCore.Application.Hooks.Notices.ConversationStarted? right) -> bool
+static AgentCore.Application.Hooks.Notices.ConversationStarted.operator ==(AgentCore.Application.Hooks.Notices.ConversationStarted? left, AgentCore.Application.Hooks.Notices.ConversationStarted? right) -> bool
+static AgentCore.Application.Hooks.Notices.ConversationUnloaded.operator !=(AgentCore.Application.Hooks.Notices.ConversationUnloaded? left, AgentCore.Application.Hooks.Notices.ConversationUnloaded? right) -> bool
+static AgentCore.Application.Hooks.Notices.ConversationUnloaded.operator ==(AgentCore.Application.Hooks.Notices.ConversationUnloaded? left, AgentCore.Application.Hooks.Notices.ConversationUnloaded? right) -> bool
+static AgentCore.Application.Hooks.Notices.Fault.operator !=(AgentCore.Application.Hooks.Notices.Fault? left, AgentCore.Application.Hooks.Notices.Fault? right) -> bool
+static AgentCore.Application.Hooks.Notices.Fault.operator ==(AgentCore.Application.Hooks.Notices.Fault? left, AgentCore.Application.Hooks.Notices.Fault? right) -> bool
+static AgentCore.Application.Hooks.Notices.FilePublished.operator !=(AgentCore.Application.Hooks.Notices.FilePublished? left, AgentCore.Application.Hooks.Notices.FilePublished? right) -> bool
+static AgentCore.Application.Hooks.Notices.FilePublished.operator ==(AgentCore.Application.Hooks.Notices.FilePublished? left, AgentCore.Application.Hooks.Notices.FilePublished? right) -> bool
+static AgentCore.Application.Hooks.HookNotice.operator !=(AgentCore.Application.Hooks.HookNotice? left, AgentCore.Application.Hooks.HookNotice? right) -> bool
+static AgentCore.Application.Hooks.HookNotice.operator ==(AgentCore.Application.Hooks.HookNotice? left, AgentCore.Application.Hooks.HookNotice? right) -> bool
+static AgentCore.Application.Hooks.HookScope.operator !=(AgentCore.Application.Hooks.HookScope? left, AgentCore.Application.Hooks.HookScope? right) -> bool
+static AgentCore.Application.Hooks.HookScope.operator ==(AgentCore.Application.Hooks.HookScope? left, AgentCore.Application.Hooks.HookScope? right) -> bool
+static AgentCore.Application.Hooks.Notices.HostStarted.operator !=(AgentCore.Application.Hooks.Notices.HostStarted? left, AgentCore.Application.Hooks.Notices.HostStarted? right) -> bool
+static AgentCore.Application.Hooks.Notices.HostStarted.operator ==(AgentCore.Application.Hooks.Notices.HostStarted? left, AgentCore.Application.Hooks.Notices.HostStarted? right) -> bool
+static AgentCore.Application.Hooks.Notices.HostStopping.operator !=(AgentCore.Application.Hooks.Notices.HostStopping? left, AgentCore.Application.Hooks.Notices.HostStopping? right) -> bool
+static AgentCore.Application.Hooks.Notices.HostStopping.operator ==(AgentCore.Application.Hooks.Notices.HostStopping? left, AgentCore.Application.Hooks.Notices.HostStopping? right) -> bool
+static AgentCore.Application.Hooks.Notices.InputModerated.operator !=(AgentCore.Application.Hooks.Notices.InputModerated? left, AgentCore.Application.Hooks.Notices.InputModerated? right) -> bool
+static AgentCore.Application.Hooks.Notices.InputModerated.operator ==(AgentCore.Application.Hooks.Notices.InputModerated? left, AgentCore.Application.Hooks.Notices.InputModerated? right) -> bool
+static AgentCore.Application.Hooks.Notices.KnowledgeSearched.operator !=(AgentCore.Application.Hooks.Notices.KnowledgeSearched? left, AgentCore.Application.Hooks.Notices.KnowledgeSearched? right) -> bool
+static AgentCore.Application.Hooks.Notices.KnowledgeSearched.operator ==(AgentCore.Application.Hooks.Notices.KnowledgeSearched? left, AgentCore.Application.Hooks.Notices.KnowledgeSearched? right) -> bool
+static AgentCore.Application.Hooks.Notices.LineSpoken.operator !=(AgentCore.Application.Hooks.Notices.LineSpoken? left, AgentCore.Application.Hooks.Notices.LineSpoken? right) -> bool
+static AgentCore.Application.Hooks.Notices.LineSpoken.operator ==(AgentCore.Application.Hooks.Notices.LineSpoken? left, AgentCore.Application.Hooks.Notices.LineSpoken? right) -> bool
+static AgentCore.Application.Hooks.Notices.ModelCalled.operator !=(AgentCore.Application.Hooks.Notices.ModelCalled? left, AgentCore.Application.Hooks.Notices.ModelCalled? right) -> bool
+static AgentCore.Application.Hooks.Notices.ModelCalled.operator ==(AgentCore.Application.Hooks.Notices.ModelCalled? left, AgentCore.Application.Hooks.Notices.ModelCalled? right) -> bool
+static AgentCore.Application.Hooks.Notices.ReplyCut.operator !=(AgentCore.Application.Hooks.Notices.ReplyCut? left, AgentCore.Application.Hooks.Notices.ReplyCut? right) -> bool
+static AgentCore.Application.Hooks.Notices.ReplyCut.operator ==(AgentCore.Application.Hooks.Notices.ReplyCut? left, AgentCore.Application.Hooks.Notices.ReplyCut? right) -> bool
+static AgentCore.Application.Hooks.Notices.ReplyUpdated.operator !=(AgentCore.Application.Hooks.Notices.ReplyUpdated? left, AgentCore.Application.Hooks.Notices.ReplyUpdated? right) -> bool
+static AgentCore.Application.Hooks.Notices.ReplyUpdated.operator ==(AgentCore.Application.Hooks.Notices.ReplyUpdated? left, AgentCore.Application.Hooks.Notices.ReplyUpdated? right) -> bool
+static AgentCore.Application.Hooks.Notices.RetentionSwept.operator !=(AgentCore.Application.Hooks.Notices.RetentionSwept? left, AgentCore.Application.Hooks.Notices.RetentionSwept? right) -> bool
+static AgentCore.Application.Hooks.Notices.RetentionSwept.operator ==(AgentCore.Application.Hooks.Notices.RetentionSwept? left, AgentCore.Application.Hooks.Notices.RetentionSwept? right) -> bool
+static AgentCore.Application.Hooks.Notices.SkillLoaded.operator !=(AgentCore.Application.Hooks.Notices.SkillLoaded? left, AgentCore.Application.Hooks.Notices.SkillLoaded? right) -> bool
+static AgentCore.Application.Hooks.Notices.SkillLoaded.operator ==(AgentCore.Application.Hooks.Notices.SkillLoaded? left, AgentCore.Application.Hooks.Notices.SkillLoaded? right) -> bool
+static AgentCore.Application.Hooks.Notices.StageChanged.operator !=(AgentCore.Application.Hooks.Notices.StageChanged? left, AgentCore.Application.Hooks.Notices.StageChanged? right) -> bool
+static AgentCore.Application.Hooks.Notices.StageChanged.operator ==(AgentCore.Application.Hooks.Notices.StageChanged? left, AgentCore.Application.Hooks.Notices.StageChanged? right) -> bool
+static AgentCore.Application.Hooks.Notices.SubagentEnded.operator !=(AgentCore.Application.Hooks.Notices.SubagentEnded? left, AgentCore.Application.Hooks.Notices.SubagentEnded? right) -> bool
+static AgentCore.Application.Hooks.Notices.SubagentEnded.operator ==(AgentCore.Application.Hooks.Notices.SubagentEnded? left, AgentCore.Application.Hooks.Notices.SubagentEnded? right) -> bool
+static AgentCore.Application.Hooks.Notices.SubagentStarted.operator !=(AgentCore.Application.Hooks.Notices.SubagentStarted? left, AgentCore.Application.Hooks.Notices.SubagentStarted? right) -> bool
+static AgentCore.Application.Hooks.Notices.SubagentStarted.operator ==(AgentCore.Application.Hooks.Notices.SubagentStarted? left, AgentCore.Application.Hooks.Notices.SubagentStarted? right) -> bool
+static AgentCore.Application.Hooks.Notices.ToolCalled.operator !=(AgentCore.Application.Hooks.Notices.ToolCalled? left, AgentCore.Application.Hooks.Notices.ToolCalled? right) -> bool
+static AgentCore.Application.Hooks.Notices.ToolCalled.operator ==(AgentCore.Application.Hooks.Notices.ToolCalled? left, AgentCore.Application.Hooks.Notices.ToolCalled? right) -> bool
+static AgentCore.Application.Hooks.Notices.TurnCompleted.operator !=(AgentCore.Application.Hooks.Notices.TurnCompleted? left, AgentCore.Application.Hooks.Notices.TurnCompleted? right) -> bool
+static AgentCore.Application.Hooks.Notices.TurnCompleted.operator ==(AgentCore.Application.Hooks.Notices.TurnCompleted? left, AgentCore.Application.Hooks.Notices.TurnCompleted? right) -> bool
+static AgentCore.Application.Hooks.Notices.TurnLatency.operator !=(AgentCore.Application.Hooks.Notices.TurnLatency? left, AgentCore.Application.Hooks.Notices.TurnLatency? right) -> bool
+static AgentCore.Application.Hooks.Notices.TurnLatency.operator ==(AgentCore.Application.Hooks.Notices.TurnLatency? left, AgentCore.Application.Hooks.Notices.TurnLatency? right) -> bool
+static AgentCore.Application.Hooks.Notices.TurnRefusalTokens.ToToken(AgentCore.Application.Hooks.Notices.TurnRefusal refusal) -> string!
+static AgentCore.Application.Hooks.Notices.TurnRefused.operator !=(AgentCore.Application.Hooks.Notices.TurnRefused? left, AgentCore.Application.Hooks.Notices.TurnRefused? right) -> bool
+static AgentCore.Application.Hooks.Notices.TurnRefused.operator ==(AgentCore.Application.Hooks.Notices.TurnRefused? left, AgentCore.Application.Hooks.Notices.TurnRefused? right) -> bool
+static AgentCore.Application.Hooks.Notices.TurnStarted.operator !=(AgentCore.Application.Hooks.Notices.TurnStarted? left, AgentCore.Application.Hooks.Notices.TurnStarted? right) -> bool
+static AgentCore.Application.Hooks.Notices.TurnStarted.operator ==(AgentCore.Application.Hooks.Notices.TurnStarted? left, AgentCore.Application.Hooks.Notices.TurnStarted? right) -> bool
+static AgentCore.Application.Hooks.Notices.TurnSuperseded.operator !=(AgentCore.Application.Hooks.Notices.TurnSuperseded? left, AgentCore.Application.Hooks.Notices.TurnSuperseded? right) -> bool
+static AgentCore.Application.Hooks.Notices.TurnSuperseded.operator ==(AgentCore.Application.Hooks.Notices.TurnSuperseded? left, AgentCore.Application.Hooks.Notices.TurnSuperseded? right) -> bool
+static AgentCore.Application.Hooks.Notices.VoiceStateChanged.operator !=(AgentCore.Application.Hooks.Notices.VoiceStateChanged? left, AgentCore.Application.Hooks.Notices.VoiceStateChanged? right) -> bool
+static AgentCore.Application.Hooks.Notices.VoiceStateChanged.operator ==(AgentCore.Application.Hooks.Notices.VoiceStateChanged? left, AgentCore.Application.Hooks.Notices.VoiceStateChanged? right) -> bool
+virtual AgentCore.Application.Hooks.HookNotice.EqualityContract.get -> System.Type!
+virtual AgentCore.Application.Hooks.HookNotice.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+virtual AgentCore.Application.Hooks.HookNotice.PrintMembers(System.Text.StringBuilder! builder) -> bool
+AgentCore.Application.Hooks.AgentHook
+AgentCore.Application.Hooks.AgentHook.AgentHook() -> void
+AgentCore.Application.Hooks.Gates.ApprovalGate
+AgentCore.Application.Hooks.Gates.ApprovalGate.Approve() -> void
+AgentCore.Application.Hooks.Gates.ApprovalGate.Arguments.get -> System.Collections.Generic.IReadOnlyDictionary<string!, object?>!
+AgentCore.Application.Hooks.Gates.ApprovalGate.CallId.get -> string!
+AgentCore.Application.Hooks.Gates.ApprovalGate.Deny(string! reason) -> void
+AgentCore.Application.Hooks.Gates.ApprovalGate.Items.get -> System.Collections.Generic.IDictionary<string!, object?>!
+AgentCore.Application.Hooks.Gates.ApprovalGate.ToolName.get -> string!
+AgentCore.Application.Hooks.Gates.CallGate
+AgentCore.Application.Hooks.Gates.CallGate.Accept(string! conversationId, string? brief = null) -> void
+AgentCore.Application.Hooks.Gates.CallGate.CallId.get -> string!
+AgentCore.Application.Hooks.Gates.CallGate.Entry.get -> string!
+AgentCore.Application.Hooks.Gates.CallGate.From.get -> string?
+AgentCore.Application.Hooks.Gates.CallGate.Headers.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!
+AgentCore.Application.Hooks.Gates.CallGate.Reject(AgentCore.Application.Hooks.Gates.CallRefusal reason) -> void
+AgentCore.Application.Hooks.Gates.CallGate.To.get -> string?
+AgentCore.Application.Hooks.Gates.CallGate.Transport.get -> string!
+AgentCore.Application.Hooks.Gates.CompactionGate
+AgentCore.Application.Hooks.Gates.CompactionGate.Cancel() -> void
+AgentCore.Application.Hooks.Gates.CompactionGate.Items.get -> System.Collections.Generic.IDictionary<string!, object?>!
+AgentCore.Application.Hooks.Gates.CompactionGate.MessageCount.get -> int
+AgentCore.Application.Hooks.Gates.CompactionGate.ReplaceSummary(string! text) -> void
+AgentCore.Application.Hooks.Gates.EntryGate
+AgentCore.Application.Hooks.Gates.EntryGate.Choose(string! entry) -> void
+AgentCore.Application.Hooks.Gates.EntryGate.Headers.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!
+AgentCore.Application.Hooks.Gates.EntryGate.Refuse() -> void
+AgentCore.Application.Hooks.Gates.EntryGate.RequestedEntry.get -> string?
+AgentCore.Application.Hooks.Gates.EntryGate.Route.get -> string!
+AgentCore.Application.Hooks.Gates.EntryGate.Transport.get -> AgentCore.Application.Hooks.Gates.EntryTransport
+AgentCore.Application.Hooks.Gates.EntryGate.User.get -> System.Security.Claims.ClaimsPrincipal?
+AgentCore.Application.Hooks.GatePoint
+AgentCore.Application.Hooks.GatePoint.Deadline.get -> System.TimeSpan
+AgentCore.Application.Hooks.GatePoint.DefaultFailure.get -> AgentCore.Application.Hooks.HookFailure
+AgentCore.Application.Hooks.GatePoint.Name.get -> string!
+AgentCore.Application.Hooks.HookFailure
+AgentCore.Application.Hooks.HookFailure.Closed = 1 -> AgentCore.Application.Hooks.HookFailure
+AgentCore.Application.Hooks.HookFailure.Open = 0 -> AgentCore.Application.Hooks.HookFailure
+AgentCore.Application.Hooks.HookGate
+AgentCore.Application.Hooks.HookGate.Scope.get -> AgentCore.Application.Hooks.HookScope!
+AgentCore.Application.Hooks.Gates.ModelFailureGate
+AgentCore.Application.Hooks.Gates.ModelFailureGate.Attempt.get -> int
+AgentCore.Application.Hooks.Gates.ModelFailureGate.CanRetry.get -> bool
+AgentCore.Application.Hooks.Gates.ModelFailureGate.Exception.get -> System.Exception!
+AgentCore.Application.Hooks.Gates.ModelFailureGate.Items.get -> System.Collections.Generic.IDictionary<string!, object?>!
+AgentCore.Application.Hooks.Gates.ModelFailureGate.Respond(Microsoft.Extensions.AI.ChatResponse! response) -> void
+AgentCore.Application.Hooks.Gates.ModelFailureGate.Retry() -> void
+AgentCore.Application.Hooks.Gates.ModelFailureGate.Round.get -> int
+AgentCore.Application.Hooks.Gates.ModelGate
+AgentCore.Application.Hooks.Gates.ModelGate.Items.get -> System.Collections.Generic.IDictionary<string!, object?>!
+AgentCore.Application.Hooks.Gates.ModelGate.Messages.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatMessage!>!
+AgentCore.Application.Hooks.Gates.ModelGate.Options.get -> Microsoft.Extensions.AI.ChatOptions?
+AgentCore.Application.Hooks.Gates.ModelGate.ReplaceMessages(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages) -> void
+AgentCore.Application.Hooks.Gates.ModelGate.Respond(Microsoft.Extensions.AI.ChatResponse! response) -> void
+AgentCore.Application.Hooks.Gates.ModelGate.Round.get -> int
+AgentCore.Application.Hooks.Gates.ModelGate.SetOptions(Microsoft.Extensions.AI.ChatOptions! options) -> void
+AgentCore.Application.Hooks.Gates.ModelResultGate
+AgentCore.Application.Hooks.Gates.ModelResultGate.Items.get -> System.Collections.Generic.IDictionary<string!, object?>!
+AgentCore.Application.Hooks.Gates.ModelResultGate.ReplaceResponse(Microsoft.Extensions.AI.ChatResponse! response) -> void
+AgentCore.Application.Hooks.Gates.ModelResultGate.Response.get -> Microsoft.Extensions.AI.ChatResponse!
+AgentCore.Application.Hooks.Gates.ModelResultGate.Round.get -> int
+AgentCore.Application.Hooks.Gates.RunEndGate
+AgentCore.Application.Hooks.Gates.RunEndGate.AgentId.get -> string?
+AgentCore.Application.Hooks.Gates.RunEndGate.Continue(string! message) -> void
+AgentCore.Application.Hooks.Gates.RunEndGate.Items.get -> System.Collections.Generic.IDictionary<string!, object?>!
+AgentCore.Application.Hooks.Gates.RunEndGate.Iteration.get -> int
+AgentCore.Application.Hooks.Gates.RunEndGate.ReplyText.get -> string!
+AgentCore.Application.Hooks.Gates.RunGate
+AgentCore.Application.Hooks.Gates.RunGate.AddInstructions(string! text) -> void
+AgentCore.Application.Hooks.Gates.RunGate.AddMessages(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages) -> void
+AgentCore.Application.Hooks.Gates.RunGate.AddTools(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.AITool!>! tools) -> void
+AgentCore.Application.Hooks.Gates.RunGate.AgentId.get -> string!
+AgentCore.Application.Hooks.Gates.RunGate.Items.get -> System.Collections.Generic.IDictionary<string!, object?>!
+AgentCore.Application.Hooks.Gates.RunGate.Nested.get -> bool
+AgentCore.Application.Hooks.Gates.ToolFailureGate
+AgentCore.Application.Hooks.Gates.ToolFailureGate.Attempt.get -> int
+AgentCore.Application.Hooks.Gates.ToolFailureGate.CallId.get -> string!
+AgentCore.Application.Hooks.Gates.ToolFailureGate.CanRetry.get -> bool
+AgentCore.Application.Hooks.Gates.ToolFailureGate.Exception.get -> System.Exception!
+AgentCore.Application.Hooks.Gates.ToolFailureGate.Items.get -> System.Collections.Generic.IDictionary<string!, object?>!
+AgentCore.Application.Hooks.Gates.ToolFailureGate.Respond(object? result) -> void
+AgentCore.Application.Hooks.Gates.ToolFailureGate.Retry() -> void
+AgentCore.Application.Hooks.Gates.ToolFailureGate.ToolName.get -> string!
+AgentCore.Application.Hooks.Gates.ToolGate
+AgentCore.Application.Hooks.Gates.ToolGate.Arguments.get -> System.Collections.Generic.IReadOnlyDictionary<string!, object?>!
+AgentCore.Application.Hooks.Gates.ToolGate.Block(object? resultForModel) -> void
+AgentCore.Application.Hooks.Gates.ToolGate.CallId.get -> string!
+AgentCore.Application.Hooks.Gates.ToolGate.EndLoop() -> void
+AgentCore.Application.Hooks.Gates.ToolGate.Items.get -> System.Collections.Generic.IDictionary<string!, object?>!
+AgentCore.Application.Hooks.Gates.ToolGate.ReplaceArguments(System.Collections.Generic.IReadOnlyDictionary<string!, object?>! arguments) -> void
+AgentCore.Application.Hooks.Gates.ToolGate.Respond(object? result) -> void
+AgentCore.Application.Hooks.Gates.ToolGate.ToolName.get -> string!
+AgentCore.Application.Hooks.Gates.ToolResultGate
+AgentCore.Application.Hooks.Gates.ToolResultGate.CallId.get -> string!
+AgentCore.Application.Hooks.Gates.ToolResultGate.EndLoop() -> void
+AgentCore.Application.Hooks.Gates.ToolResultGate.Items.get -> System.Collections.Generic.IDictionary<string!, object?>!
+AgentCore.Application.Hooks.Gates.ToolResultGate.ReplaceResult(object? result) -> void
+AgentCore.Application.Hooks.Gates.ToolResultGate.Result.get -> object?
+AgentCore.Application.Hooks.Gates.ToolResultGate.ToolName.get -> string!
+AgentCore.Application.Hooks.Gates.TurnGate
+AgentCore.Application.Hooks.Gates.TurnGate.AddContext(string! text) -> void
+AgentCore.Application.Hooks.Gates.TurnGate.Block(string! reply) -> void
+AgentCore.Application.Hooks.Gates.TurnGate.Items.get -> System.Collections.Generic.IDictionary<string!, object?>!
+AgentCore.Application.Hooks.Gates.TurnGate.ReplaceInput(string! text) -> void
+AgentCore.Application.Hooks.Gates.TurnGate.UserText.get -> string!
+override AgentCore.Application.Hooks.GatePoint.ToString() -> string!
+static AgentCore.Application.Hooks.GatePoint.AfterModelFailed.get -> AgentCore.Application.Hooks.GatePoint!
+static AgentCore.Application.Hooks.GatePoint.AfterModel.get -> AgentCore.Application.Hooks.GatePoint!
+static AgentCore.Application.Hooks.GatePoint.AfterRun.get -> AgentCore.Application.Hooks.GatePoint!
+static AgentCore.Application.Hooks.GatePoint.AfterToolFailed.get -> AgentCore.Application.Hooks.GatePoint!
+static AgentCore.Application.Hooks.GatePoint.AfterTool.get -> AgentCore.Application.Hooks.GatePoint!
+static AgentCore.Application.Hooks.GatePoint.All.get -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Hooks.GatePoint!>!
+static AgentCore.Application.Hooks.GatePoint.BeforeCall.get -> AgentCore.Application.Hooks.GatePoint!
+static AgentCore.Application.Hooks.GatePoint.BeforeCompaction.get -> AgentCore.Application.Hooks.GatePoint!
+static AgentCore.Application.Hooks.GatePoint.BeforeEntry.get -> AgentCore.Application.Hooks.GatePoint!
+static AgentCore.Application.Hooks.GatePoint.BeforeModel.get -> AgentCore.Application.Hooks.GatePoint!
+static AgentCore.Application.Hooks.GatePoint.BeforeRun.get -> AgentCore.Application.Hooks.GatePoint!
+static AgentCore.Application.Hooks.GatePoint.BeforeToolApproval.get -> AgentCore.Application.Hooks.GatePoint!
+static AgentCore.Application.Hooks.GatePoint.BeforeTool.get -> AgentCore.Application.Hooks.GatePoint!
+static AgentCore.Application.Hooks.GatePoint.BeforeTurn.get -> AgentCore.Application.Hooks.GatePoint!
+virtual AgentCore.Application.Hooks.AgentHook.AfterModelAsync(AgentCore.Application.Hooks.Gates.ModelResultGate! gate, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.AfterModelFailedAsync(AgentCore.Application.Hooks.Gates.ModelFailureGate! gate, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.AfterRunAsync(AgentCore.Application.Hooks.Gates.RunEndGate! gate, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.AfterToolAsync(AgentCore.Application.Hooks.Gates.ToolResultGate! gate, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.AfterToolFailedAsync(AgentCore.Application.Hooks.Gates.ToolFailureGate! gate, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.BeforeCallAsync(AgentCore.Application.Hooks.Gates.CallGate! gate, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.BeforeCompactionAsync(AgentCore.Application.Hooks.Gates.CompactionGate! gate, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.BeforeEntryAsync(AgentCore.Application.Hooks.Gates.EntryGate! gate, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.BeforeModelAsync(AgentCore.Application.Hooks.Gates.ModelGate! gate, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.BeforeRunAsync(AgentCore.Application.Hooks.Gates.RunGate! gate, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.BeforeToolApprovalAsync(AgentCore.Application.Hooks.Gates.ApprovalGate! gate, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.BeforeToolAsync(AgentCore.Application.Hooks.Gates.ToolGate! gate, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.BeforeTurnAsync(AgentCore.Application.Hooks.Gates.TurnGate! gate, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.FailureFor(AgentCore.Application.Hooks.GatePoint! point) -> AgentCore.Application.Hooks.HookFailure
+virtual AgentCore.Application.Hooks.AgentHook.NoticeTimeout.get -> System.TimeSpan?
+virtual AgentCore.Application.Hooks.AgentHook.OnApprovalChangedAsync(AgentCore.Application.Hooks.Notices.ApprovalChanged! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnCallStartedAsync(AgentCore.Application.Hooks.Notices.CallStarted! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnCompactedAsync(AgentCore.Application.Hooks.Notices.Compacted! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnConversationEndedAsync(AgentCore.Application.Hooks.Notices.ConversationEnded! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnConversationStartedAsync(AgentCore.Application.Hooks.Notices.ConversationStarted! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnConversationUnloadedAsync(AgentCore.Application.Hooks.Notices.ConversationUnloaded! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnFaultAsync(AgentCore.Application.Hooks.Notices.Fault! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnFilePublishedAsync(AgentCore.Application.Hooks.Notices.FilePublished! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnHostStartedAsync(AgentCore.Application.Hooks.Notices.HostStarted! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnHostStoppingAsync(AgentCore.Application.Hooks.Notices.HostStopping! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnInputModeratedAsync(AgentCore.Application.Hooks.Notices.InputModerated! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnKnowledgeSearchedAsync(AgentCore.Application.Hooks.Notices.KnowledgeSearched! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnLineSpokenAsync(AgentCore.Application.Hooks.Notices.LineSpoken! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnModelCalledAsync(AgentCore.Application.Hooks.Notices.ModelCalled! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnReplyCutAsync(AgentCore.Application.Hooks.Notices.ReplyCut! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnReplyUpdatedAsync(AgentCore.Application.Hooks.Notices.ReplyUpdated! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnRetentionSweptAsync(AgentCore.Application.Hooks.Notices.RetentionSwept! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnSkillLoadedAsync(AgentCore.Application.Hooks.Notices.SkillLoaded! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnStageChangedAsync(AgentCore.Application.Hooks.Notices.StageChanged! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnSubagentEndedAsync(AgentCore.Application.Hooks.Notices.SubagentEnded! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnSubagentStartedAsync(AgentCore.Application.Hooks.Notices.SubagentStarted! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnToolCalledAsync(AgentCore.Application.Hooks.Notices.ToolCalled! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnTurnCompletedAsync(AgentCore.Application.Hooks.Notices.TurnCompleted! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnTurnLatencyAsync(AgentCore.Application.Hooks.Notices.TurnLatency! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnTurnRefusedAsync(AgentCore.Application.Hooks.Notices.TurnRefused! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnTurnStartedAsync(AgentCore.Application.Hooks.Notices.TurnStarted! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnTurnSupersededAsync(AgentCore.Application.Hooks.Notices.TurnSuperseded! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.OnVoiceStateChangedAsync(AgentCore.Application.Hooks.Notices.VoiceStateChanged! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+AgentCore.Application.Hooks.BuiltInHooks
+static AgentCore.Application.Hooks.BuiltInHooks.Create(AgentCore.Application.Ports.IAuditSinkPort! auditSink, Microsoft.Extensions.Logging.ILogger? logger = null) -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Hooks.AgentHook!>!
+AgentCore.Application.Hooks.Notices.ConversationOrigin.Unopened = 3 -> AgentCore.Application.Hooks.Notices.ConversationOrigin
+AgentCore.Application.Hooks.Notices.CallEnded
+AgentCore.Application.Hooks.Notices.CallEnded.CallEnded(AgentCore.Application.Hooks.HookScope! Scope, string! CallId, double Seconds, string? Cause, AgentCore.Application.Hooks.Notices.CallEndReason Reason) -> void
+AgentCore.Application.Hooks.Notices.CallEnded.CallId.get -> string!
+AgentCore.Application.Hooks.Notices.CallEnded.CallId.init -> void
+AgentCore.Application.Hooks.Notices.CallEnded.Cause.get -> string?
+AgentCore.Application.Hooks.Notices.CallEnded.Cause.init -> void
+AgentCore.Application.Hooks.Notices.CallEnded.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out string! CallId, out double Seconds, out string? Cause, out AgentCore.Application.Hooks.Notices.CallEndReason Reason) -> void
+AgentCore.Application.Hooks.Notices.CallEnded.Equals(AgentCore.Application.Hooks.Notices.CallEnded? other) -> bool
+AgentCore.Application.Hooks.Notices.CallEnded.Reason.get -> AgentCore.Application.Hooks.Notices.CallEndReason
+AgentCore.Application.Hooks.Notices.CallEnded.Reason.init -> void
+AgentCore.Application.Hooks.Notices.CallEnded.Seconds.get -> double
+AgentCore.Application.Hooks.Notices.CallEnded.Seconds.init -> void
+AgentCore.Application.Hooks.Notices.CallEndReason
+AgentCore.Application.Hooks.Notices.CallEndReason.Closed = 3 -> AgentCore.Application.Hooks.Notices.CallEndReason
+AgentCore.Application.Hooks.Notices.CallEndReason.Ended = 0 -> AgentCore.Application.Hooks.Notices.CallEndReason
+AgentCore.Application.Hooks.Notices.CallEndReason.Lost = 2 -> AgentCore.Application.Hooks.Notices.CallEndReason
+AgentCore.Application.Hooks.Notices.CallEndReason.Replaced = 1 -> AgentCore.Application.Hooks.Notices.CallEndReason
+override AgentCore.Application.Hooks.Notices.CallEnded.<Clone>$() -> AgentCore.Application.Hooks.Notices.CallEnded!
+override AgentCore.Application.Hooks.Notices.CallEnded.Equals(object? obj) -> bool
+override AgentCore.Application.Hooks.Notices.CallEnded.GetHashCode() -> int
+override AgentCore.Application.Hooks.Notices.CallEnded.ToString() -> string!
+override sealed AgentCore.Application.Hooks.Notices.CallEnded.Equals(AgentCore.Application.Hooks.HookNotice? other) -> bool
+static AgentCore.Application.Hooks.Notices.CallEnded.operator !=(AgentCore.Application.Hooks.Notices.CallEnded? left, AgentCore.Application.Hooks.Notices.CallEnded? right) -> bool
+static AgentCore.Application.Hooks.Notices.CallEnded.operator ==(AgentCore.Application.Hooks.Notices.CallEnded? left, AgentCore.Application.Hooks.Notices.CallEnded? right) -> bool
+virtual AgentCore.Application.Hooks.AgentHook.OnCallEndedAsync(AgentCore.Application.Hooks.Notices.CallEnded! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask

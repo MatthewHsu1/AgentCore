@@ -1,8 +1,10 @@
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Cut;
+using AgentCore.Application.Runtime.Session;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 using static AgentCore.Application.Tests.Runtime.ConversationSessionCutTestSupport;
 
 namespace AgentCore.Application.Tests.Runtime
@@ -19,7 +21,7 @@ namespace AgentCore.Application.Tests.Runtime
 
         private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-        // Probe P7e (docs/probes/voice-engine/engine/REPORT.md, F1): the next turn's start reads the store while the
+        // The next turn's start reads the store while the
         // turn before it is cut and commits. The cut turn ends only once the store answered its append
         // (ConversationTurnCommit.RefusedAsync), so the append lands before that read returns.
         [Fact]
@@ -55,7 +57,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(["q0", "q1", "second reply"], Texts(session.Transcript));
         }
 
-        // Probe P7a/P7c, the other order: the store read begun before the turn was admitted misses the turn that
+        // The other order: the store read begun before the turn was admitted misses the turn that
         // committed meanwhile, since the session's words moved under it, and the store also holds a row written from
         // outside any turn. The admitted turn reads both.
         [Fact]
@@ -95,7 +97,7 @@ namespace AgentCore.Application.Tests.Runtime
                 Texts(model.Requests[2].Where(message => message.Role != ChatRole.System)));
         }
 
-        // Probe F1, second cause: a start that gives up waiting for a running turn must not re-read the store into the
+        // A start that gives up waiting for a running turn must not re-read the store into the
         // session. The next admitted turn still catches up with what was written from outside.
         [Fact]
         public async Task AStartAbandonedWhileATurnRuns_ChangesNoWords_AndTheNextTurnCatchesUp()

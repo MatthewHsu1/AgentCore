@@ -1,7 +1,7 @@
-using AgentCore.Application.Runtime;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.Logging;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Runtime
 {

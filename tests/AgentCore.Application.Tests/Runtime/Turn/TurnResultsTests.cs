@@ -1,11 +1,11 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tools;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.ToolCalls;
 
 namespace AgentCore.Application.Tests.Runtime.Turn
 {

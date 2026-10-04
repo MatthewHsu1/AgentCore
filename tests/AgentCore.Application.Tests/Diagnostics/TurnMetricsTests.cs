@@ -1,20 +1,20 @@
 using AgentCore.TestSupport;
 using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Diagnostics;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Runtime;
 using System.Diagnostics.Metrics;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Diagnostics.TurnObservabilityHarness;
 
 namespace AgentCore.Application.Tests.Diagnostics
 {
     /// <summary>
-    /// The metrics a turn reports, and the attributes they may carry. See T61.
+    /// The metrics a turn reports, and the attributes they may carry.
     /// </summary>
     public sealed class TurnMetricsTests
     {
-        /// <summary>The only attribute keys any metric of this library may carry. See T61.</summary>
+        /// <summary>The only attribute keys any metric of this library may carry.</summary>
         private static readonly string[] PermittedMetricKeys =
         [
             "agentcore.turn.outcome",
@@ -22,7 +22,7 @@ namespace AgentCore.Application.Tests.Diagnostics
             "agentcore.audit.kind",
 
             // Three values: clean, flagged, unavailable. Three series for each replica, against the
-            // 10,000 ceiling of item 12. No conversation id rides on it, so T61 holds.
+            // 10,000 ceiling. No conversation id rides on it.
             "agentcore.moderation.outcome",
         ];
 
@@ -36,7 +36,7 @@ namespace AgentCore.Application.Tests.Diagnostics
 
             // The .NET default is cumulative temporality, so one conversation id on a metric attribute is one
             // permanent series. A day of conversations would then be a day of permanent series, and the free
-            // tier binds at 10,000. See D26 and T61.
+            // tier binds at 10,000.
             Assert.DoesNotContain(tags, tag => string.Equals(tag.Value as string, conversationId, StringComparison.Ordinal));
         }
 
@@ -48,7 +48,7 @@ namespace AgentCore.Application.Tests.Diagnostics
             // The listener really saw the instruments of this library.
             Assert.NotEmpty(tags);
 
-            // T61 again, and this is the half that catches the next attribute somebody adds. Every key
+            // This half catches the next attribute somebody adds. Every key
             // below takes a handful of values the library writes itself. A key that is not on this list
             // has not been costed, so the build refuses it.
             Assert.All(tags, tag => Assert.Contains(tag.Key, PermittedMetricKeys, StringComparer.Ordinal));
@@ -120,6 +120,7 @@ namespace AgentCore.Application.Tests.Diagnostics
             _ = await session.RunTurnAsync("hi", token);
             _ = await session.RunTurnAsync("still there?", token);
             _ = await session.RunTurnAsync("goodbye", token);
+            await session.FlushNoticesAsync();
 
             listener.Dispose();
             return tags;

@@ -1,7 +1,7 @@
-using AgentCore.Application.Runtime;
 using AgentCore.Application.State;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Runtime.ConversationSessionTestSupport;
 
 namespace AgentCore.Application.Tests.Runtime
@@ -24,7 +24,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Contains(
                 "the machine model and the serial number", reply.SystemText(0), StringComparison.Ordinal);
 
-            // The caller's utterance is the caller's. It goes to the model, to store 1 and to the
+            // The caller's utterance is the caller's. It goes to the model, to the message store and to the
             // extractor as it was spoken.
             Assert.Equal("hi", reply.LastUserText(0));
             Assert.Equal("hi", session.Transcript[0].Text);
@@ -70,7 +70,7 @@ namespace AgentCore.Application.Tests.Runtime
         public async Task TheReminder_NeverAsksTheCallerForAnInferredFlag()
         {
             // config/local.yaml ships this shape: one boolean the extractor infers from the turn, read by
-            // the exit guard of the talking stage, carrying a default. Section 8.3 reminds on a slot that
+            // the exit guard of the talking stage, carrying a default. The reminder fires on a slot that
             // is "still null", and a default is never null, so nothing is owed and the caller is not asked.
             using SequencedChatClient reply = new("hello there.");
             using SequencedChatClient fill = new(StayingNull);

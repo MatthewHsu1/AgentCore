@@ -6,7 +6,6 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Transcript;
 using AgentCore.AspNetCore.Endpoints;
 using AgentCore.AspNetCore.Tests.Fakes;
@@ -14,13 +13,13 @@ using AgentCore.Domain.Audit;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 
 namespace AgentCore.AspNetCore.Tests.Endpoints
 {
     /// <summary>
-    /// A store that answers a turn's append later than <see cref="ConversationSession.TurnCompletionTimeout"/>. The
-    /// turn publishes only what the store's answer says, however late it comes (owner ruling 2026-09-24, "refuse at
-    /// save").
+    /// A store that answers a turn's append later than <see cref="TurnFailureReasons.CompletionTimeout"/>. The
+    /// turn publishes only what the store's answer says, however late it comes.
     /// </summary>
     public sealed class ResponsesSlowStoreTests
     {
@@ -45,14 +44,13 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
                 agent: greeter
             """;
 
-        private static readonly TimeSpan PastTheBound = ConversationSession.TurnCompletionTimeout + TimeSpan.FromSeconds(1);
+        private static readonly TimeSpan PastTheBound = TurnFailureReasons.CompletionTimeout + TimeSpan.FromSeconds(1);
 
         private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
         [Fact(Timeout = 60_000)]
         public async Task ARefusalThatComesAfterTheBound_FilesNothing_AndPublishesNoCommit()
         {
-            // Arrange
             FakeTimeProvider time = new(DateTimeOffset.UnixEpoch);
             HoldingStore store = new(holdAppendOfTurn: 1, holdAppendNumber: 2);
             RendezvousChatClient model = new(parties: 2);
@@ -62,7 +60,6 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             await using ResponsesHost other = await StartAsync(model, store, time);
             string conversation = await OpenAsync(host);
 
-            // Act
             Task<HttpResponseMessage> first = host.PostAsync(Race(conversation, "race A", "user-a"));
             Task<HttpResponseMessage> second = other.PostAsync(Race(conversation, "race B", "user-b"));
             await store.Held.WaitAsync(Ct);
@@ -73,7 +70,6 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             List<JsonObject> eventsA = Parse(await ResponsesHost.ReadEventsAsync(a));
             List<JsonObject> eventsB = Parse(await ResponsesHost.ReadEventsAsync(b));
 
-            // Assert
             List<JsonObject> won = Assert.Single([eventsA, eventsB], events => Type(events[^1]) == "response.completed");
             List<JsonObject> lost = Assert.Single([eventsA, eventsB], events => Type(events[^1]) == "error");
             Assert.Equal(ResponsesTurnConflict.Code, lost[^1]["code"]!.GetValue<string>());
@@ -91,14 +87,12 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
         [Fact(Timeout = 60_000)]
         public async Task ASaveThatLandsAfterTheBound_EndsTheTurnAsSaved_AndFilesIt()
         {
-            // Arrange
             FakeTimeProvider time = new(DateTimeOffset.UnixEpoch);
             HoldingStore store = new(holdAppendOfTurn: 1, holdAppendNumber: 1);
             RendezvousChatClient model = new(parties: 1);
             await using ResponsesHost host = await StartAsync(model, store, time);
             string conversation = await OpenAsync(host);
 
-            // Act
             Task<HttpResponseMessage> slow = host.PostAsync(Race(conversation, "race A", "user-a"));
             await store.Held.WaitAsync(Ct);
             await PassTheBoundAsync(time);
@@ -106,7 +100,6 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             using HttpResponseMessage response = await slow;
             List<JsonObject> events = Parse(await ResponsesHost.ReadEventsAsync(response));
 
-            // Assert
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             Assert.Equal("response.completed", Type(events[^1]));
             Assert.Contains(events, frame => frame.ContainsKey(TurnStreamPart.MessageCommitted));
@@ -141,7 +134,7 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
         /// <summary>Moves the clock past the bound, once a bound the turn armed on it, if any, is armed.</summary>
         private static async Task PassTheBoundAsync(FakeTimeProvider time)
         {
-            Task armed = time.WaitForTimersAsync(time.GetUtcNow() + ConversationSession.TurnCompletionTimeout, 1);
+            Task armed = time.WaitForTimersAsync(time.GetUtcNow() + TurnFailureReasons.CompletionTimeout, 1);
             _ = await Task.WhenAny(armed, Task.Delay(TimeSpan.FromSeconds(1), Ct));
             time.Advance(PastTheBound);
         }

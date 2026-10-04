@@ -1,20 +1,21 @@
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime;
 using AgentCore.Application.Transcript;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
+using AgentCore.Application.Runtime.Turn;
 using static AgentCore.Application.Tests.Transcript.ConversationSessionResumeTestSupport;
 
 namespace AgentCore.Application.Tests.Transcript
 {
     /// <summary>
     /// A turn sees a row a host appended from outside any turn — after a human handoff ends, say,
-    /// possibly from another machine — and its own new rows still continue from store 0's counter.
+    /// possibly from another machine — and its own new rows still continue from the conversation store's counter.
     /// </summary>
 #pragma warning disable CA1859 // store is typed as IConversationStore throughout: AppendMessageAsync(conversationId, message, ct)
     // is a default interface method, and only resolves through the interface type.
@@ -163,7 +164,7 @@ namespace AgentCore.Application.Tests.Transcript
             _ = await session.RunTurnAsync("are you still there?", TestContext.Current.CancellationToken);
             await session.FlushTranscriptAsync();
 
-            // The counter store 0 hands back matches the one the session holds, so nobody wrote from
+            // The counter the conversation store hands back matches the one the session holds, so nobody wrote from
             // outside and there is nothing to read.
             Assert.Equal(0, store.Reads);
             Assert.Equal(

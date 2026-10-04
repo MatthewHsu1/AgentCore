@@ -3,8 +3,6 @@ using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Tools.Registry;
 using AgentCore.TestSupport;
 using AgentCore.Application.Sessions.Memory;
-using AgentCore.Application.Audit.Memory;
-using AgentCore.Application.Audit;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
@@ -16,10 +14,7 @@ using AgentCore.Application.Secrets;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Transcript;
-using AgentCore.AspNetCore.DependencyInjection;
-using AgentCore.AspNetCore.Sessions;
 using AgentCore.AspNetCore.Tests.Fakes;
-using AgentCore.Domain.Audit;
 using AgentCore.Domain.Knowledge;
 using AgentCore.Infrastructure.Tools;
 using Microsoft.Extensions.AI.Evaluation;
@@ -33,36 +28,15 @@ using AgentCore.AspNetCore.DependencyInjection.Startup;
 using Microsoft.Agents.AI;
 using static AgentCore.AspNetCore.Tests.DependencyInjection.StartedHostFixture;
 using AgentCore.Domain;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.AspNetCore.Tests.DependencyInjection
 {
     /// <summary>
     /// The composition root. It loads, validates, resolves, compiles, and registers, in that order.
     /// </summary>
-    /// <remarks>
-    /// A configuration defect stops the host at start and never on the first conversation. Every test proves
-    /// that by starting a host and nothing else, with no request anywhere.
-    /// </remarks>
     public sealed class AddAgentCoreTests
     {
-        /// <summary>The conversation and speech providers every document below shares.</summary>
-        private const string SpeechAndConversation =
-            """
-        providers:
-          conversation:   { kind: telnyx-relay }
-          speech:
-            stt: { kind: telnyx-relay }
-            tts: { kind: telnyx-relay }
-        """;
-
-        /// <summary><see cref="SpeechAndConversation"/> plus the single reply model most documents declare.</summary>
-        private const string MinimalProviders =
-            $$"""
-        {{SpeechAndConversation}}
-          llm:
-            - { kind: openai, model: gpt-4.1-mini, as: reply }
-        """;
-
         // The same agent, reachable on two entries.
         private const string TwoEntryYaml =
             $$"""
@@ -182,8 +156,8 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
             agent: only
         """;
 
-        // Row 4 of the section 8.2 compile table, with a guarded edge on each exit of the start node.
-        // Check 5 proves the two guards exclusive, so exactly one edge fires for each conversation.
+        // A guarded edge on each exit of the start node.
+        // Load-time validation proves the two guards exclusive, so exactly one edge fires for each conversation.
         private const string GuardedGraphYaml =
             $$"""
           apiVersion: agentcore/v1
@@ -218,7 +192,7 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
               - { kind: openai, model: gpt-4.1-mini, as: bot }
           """;
 
-        // A stage names a target that policy.stages does not declare, so check 2 fails the load.
+        // A stage names a target that policy.stages does not declare, so validation fails the load.
         private const string BrokenYaml =
             $$"""
           apiVersion: agentcore/v1
@@ -336,7 +310,7 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
           """;
 
         // BrokenYaml's structural defect (an unreachable policy transition), plus an mcp: server whose
-        // command names a binary that does not exist. Decision 15's whole point is that the structural
+        // command names a binary that does not exist. The structural
         // error below must surface without AgentCore ever trying to reach that server: a missing
         // executable fails Process.Start synchronously, so if discovery ran first this would instead
         // report the MCP failure. See AddAgentCore_TheStructuralFaultSurfaces_BeforeMcpIsEverAsked.
@@ -360,9 +334,6 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
                   - { id: start, agent: only, to: [ { stage: nowhere } ] }
           """;
 
-        // -------------------------------------------------------------------------------------------
-        // What it registers.
-        // -------------------------------------------------------------------------------------------
         [Fact]
         public async Task AddAgentCore_RegistersTheCompiledAgentAsAProcessSingleton()
         {
@@ -529,10 +500,8 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
             Assert.Null(provider.GetService<IConversationSessions>());
         }
 
-        // -------------------------------------------------------------------------------------------
         // Telemetry shuts down with the host. The container owns the session, so its disposal is the
         // flush — which is the one path a start that failed also reaches.
-        // -------------------------------------------------------------------------------------------
         [Fact]
         public async Task AddAgentCore_RegistersTheTelemetrySessionTheDocumentNames()
         {
@@ -585,49 +554,6 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
             host.Dispose();
 
             Assert.Equal(1, adapter.Session.Flushes);
-        }
-
-        // -------------------------------------------------------------------------------------------
-        // The audit chain shuts down with the host. An event is ACCEPTED when AppendAsync returns, so a
-        // stop that does not drain the queue loses every row still in it.
-        // -------------------------------------------------------------------------------------------
-        [Fact]
-        public async Task AddAgentCore_DrainsTheAuditQueueWhenTheHostShutsDown()
-        {
-            (IHost? host, ClosingAuditSink? store) = await BuildAuditHostAsync();
-
-            await host.StartAsync(TestContext.Current.CancellationToken);
-
-            await host.Services
-                .GetRequiredService<IAuditSinkPort>()
-                .AppendAsync(AuditRow(1), TestContext.Current.CancellationToken);
-
-            await host.StopAsync(TestContext.Current.CancellationToken);
-            host.Dispose();
-
-            Assert.Equal(1, store.Written);
-        }
-
-        [Fact]
-        public async Task AddAgentCore_ClosesTheAuditStoreOnlyAfterTheQueueHasDrained()
-        {
-            (IHost? host, ClosingAuditSink? store) = await BuildAuditHostAsync();
-
-            await host.StartAsync(TestContext.Current.CancellationToken);
-
-            await host.Services
-                .GetRequiredService<IAuditSinkPort>()
-                .AppendAsync(AuditRow(1), TestContext.Current.CancellationToken);
-
-            await host.StopAsync(TestContext.Current.CancellationToken);
-
-            // The container closes what it resolved before it closes the boot that still owns the store
-            // behind the queue. Closing that store first would hand the drain a store which can no
-            // longer accept the rows it already promised to keep.
-            host.Dispose();
-
-            Assert.True(store.Closed);
-            Assert.Equal(1, store.WrittenWhenClosed);
         }
 
         [Fact]
@@ -701,9 +627,7 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
             Assert.True(source.Disposed);
         }
 
-        // -------------------------------------------------------------------------------------------
         // The document picks the vendor, and no code names one: the point of the adapter seam.
-        // -------------------------------------------------------------------------------------------
         [Fact]
         public async Task TheAdapterOverload_LetsTheDocumentPickTheVendorByItsKind()
         {
@@ -777,9 +701,6 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
             Assert.Same(builtFactory, seenWhenToolsWereBuilt);
         }
 
-        // -------------------------------------------------------------------------------------------
-        // The seams the host binds.
-        // -------------------------------------------------------------------------------------------
         [Fact]
         public async Task ABindingTool_ReachesTheDelegateTheHostRegistered()
         {
@@ -837,9 +758,6 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
             Assert.Equal("orders-api-key", failure.SecretName);
         }
 
-        // -------------------------------------------------------------------------------------------
-        // Row 4 of the compile table, through the only supported composition root.
-        // -------------------------------------------------------------------------------------------
         [Fact]
         public async Task AGuardedGraph_Starts()
         {
@@ -847,7 +765,7 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
 
             CompiledAgent compiled = provider.GetRequiredService<IReadOnlyDictionary<string, CompiledAgent>>()["main"];
 
-            // The document passes all eight checks and now compiles too. AddAgentCore binds the guard
+            // The document passes all eight checks and compiles too. AddAgentCore binds the guard
             // evaluator, so a guarded edge is reachable from here.
             Assert.Equal(CompiledAgentShape.ExplicitGraph, compiled.Shape);
             Assert.Equal("main", compiled.Name);
@@ -890,9 +808,7 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
             Assert.Equal(1, provider.GetRequiredService<CompiledAgentRegistry>().CompileCount);
         }
 
-        // -------------------------------------------------------------------------------------------
-        // The evaluation seam of D13. Triage row T18 defers the online path, so the rate is 0.
-        // -------------------------------------------------------------------------------------------
+        // The online evaluation path is closed by default, so the sample rate is 0.
         [Fact]
         public async Task AddAgentCore_RegistersTheEvaluationSeamWithTheOnlinePathClosed()
         {
@@ -901,11 +817,10 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
             EvaluatorRegistry registry = provider.GetRequiredService<EvaluatorRegistry>();
             EvaluationSampler sampler = provider.GetRequiredService<EvaluationSampler>();
 
-            // D13 names fault_code, and it calls no model, so it is the one evaluator that is safe by
-            // default.
+            // fault_code calls no model, so it is the one evaluator that is safe by default.
             Assert.True(registry.Contains("fault_code"));
 
-            // T18: a judge must never block a turn, and the offline gate has not proved the evaluators
+            // A judge must never block a turn, and the offline gate has not proved the evaluators
             // yet. A rate of 0 draws no number and conversations nothing.
             Assert.Equal(0, sampler.Rate);
             Assert.False(sampler.ShouldSample());
@@ -950,8 +865,7 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
 
             EvaluatorRegistry registry = provider.GetRequiredService<EvaluatorRegistry>();
 
-            // The same object serves the turn loop and the offline golden set, which is what D13 means
-            // by an evaluator written once and used twice.
+            // The same object serves the turn loop and the offline golden set: an evaluator is written once and used twice.
             Assert.Equal(1, adapter.Builds);
             Assert.True(registry.Contains(PromptModerator.ModerationEvaluatorName));
             Assert.True(registry.Contains("fault_code"));
@@ -1022,14 +936,12 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
 
             EvaluationSampler sampler = provider.GetRequiredService<EvaluationSampler>();
 
-            // T18: the rate comes from evaluation.sampleRate, and the composition root reads it.
+            // The rate comes from evaluation.sampleRate, and the composition root reads it.
             Assert.Equal(1, sampler.Rate);
             Assert.True(sampler.ShouldSample());
         }
 
-        // -------------------------------------------------------------------------------------------
-        // The spoken fallback of section 8.7, from the document to the caller.
-        // -------------------------------------------------------------------------------------------
+        // The spoken fallback, from the document to the caller.
         [Fact]
         public async Task AQuietTurn_SpeaksTheFallbackTheDocumentNames()
         {
@@ -1070,9 +982,6 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
             Assert.Same(mine, provider.GetRequiredService<EvaluationSampler>());
         }
 
-        // -------------------------------------------------------------------------------------------
-        // The conversation titler: one model, named by the document like every other model.
-        // -------------------------------------------------------------------------------------------
 
         // The same agent, and a document that gives the titler a model of its own.
         private const string TitlerYaml =
@@ -1148,141 +1057,6 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
             }
         }
 
-        // -------------------------------------------------------------------------------------------
-        // The audit sink: named by providers.audit, and never absent.
-        // -------------------------------------------------------------------------------------------
-
-        // The same agent, and a document that names the built-in memory kind on purpose.
-        private const string MemoryAuditYaml =
-            $$"""
-        apiVersion: agentcore/v1
-        agents:
-          items:
-            - { id: only, instructions: "I answer everything" }
-        {{MinimalProviders}}
-          audit: { kind: memory }
-        entries:
-          main:
-            agent: only
-        """;
-
-        // The same agent, served by an audit vendor the host registers itself.
-        private const string VendorAuditYaml =
-            $$"""
-        apiVersion: agentcore/v1
-        agents:
-          items:
-            - { id: only, instructions: "I answer everything" }
-        {{MinimalProviders}}
-          audit: { kind: test }
-        entries:
-          main:
-            agent: only
-        """;
-
-        [Fact]
-        public async Task TheDefaultAuditSink_ReachesTheTurnLoopAndTheChainVerifies()
-        {
-            using StartedHost provider = await BuildAsync(OneAgentYaml);
-
-            ConversationSession session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("conversation-1");
-            _ = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
-
-            // The queue is what keeps the append off the turn, so the rows land on a thread of their own
-            // and a reader that wants them now asks for them now.
-            await Queue(provider).FlushAsync(TestContext.Current.CancellationToken);
-
-            IReadOnlyList<AuditEvent> events = Sink(provider).EventsOf("conversation-1");
-            Assert.Equal(
-                [AuditEventKind.ConversationStarted, AuditEventKind.TurnCompleted],
-                events.Select(item => item.Kind).ToArray());
-            Assert.All(events, AuditEventVocabulary.Validate);
-        }
-
-        [Fact]
-        public async Task ADocumentThatNamesNoAuditProvider_StillOpensTheMemorySink()
-        {
-            using StartedHost provider = await BuildAsync(OneAgentYaml);
-
-            // The turn loop produces the events of D23 whatever a document says, so the seam that receives
-            // them has a working default rather than a null. That is what lets every reading of a conversation be
-            // unconditional, and what lets a first run and a test work with no database.
-            Assert.NotNull(provider.GetService<IAuditSinkPort>());
-            _ = Assert.IsType<InMemoryAuditSink>(provider.GetRequiredService<QueuedAuditSink>().Store);
-        }
-
-        [Fact]
-        public async Task ADocumentThatNamesTheMemoryKind_OpensTheSameSinkAsNamingNothing()
-        {
-            using StartedHost provider = await BuildAsync(MemoryAuditYaml);
-
-            // memory is this library's own name and it needs no registered vendor, so writing it says out
-            // loud what leaving the block out does quietly. The startup warning is the difference.
-            _ = Assert.IsType<InMemoryAuditSink>(provider.GetRequiredService<QueuedAuditSink>().Store);
-        }
-
-        [Fact]
-        public async Task AnAuditVendorTheDocumentNames_IsTheStoreBehindTheQueue()
-        {
-            RecordingAuditSink store = new();
-            using StartedHost provider = await BuildAsync(
-                VendorAuditYaml,
-                options => options.UseAuditSinks(new TestAuditSinkAdapter(store)));
-
-            ConversationSession session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("conversation-1");
-            _ = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
-            await Queue(provider).FlushAsync(TestContext.Current.CancellationToken);
-
-            // The host lists its vendors once and providers.audit.kind picks one, exactly as the five
-            // seams beside it. Nothing but the document decides which store the chain lands in.
-            Assert.Same(store, provider.GetRequiredService<QueuedAuditSink>().Store);
-            Assert.Equal(
-                [AuditEventKind.ConversationStarted, AuditEventKind.TurnCompleted],
-                store.Events.Select(item => item.Kind).ToArray());
-        }
-
-        [Fact]
-        public async Task AnAuditKindThisHostDoesNotRegister_FailsTheStart()
-        {
-            // A document that asked for something this host cannot give fails while the host starts, and
-            // never on a conversation. The message names the kind, exactly as every other vendor seam.
-            ConfigurationLoadException failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
-                () => BuildAsync(VendorAuditYaml));
-
-            Assert.Contains("test", failure.Message, StringComparison.Ordinal);
-        }
-
-        [Fact]
-        public async Task TheAuditSink_IsWrappedInTheQueueThatKeepsItOffTheTurn()
-        {
-            using StartedHost provider = await BuildAsync(OneAgentYaml);
-
-            // Section 7 puts a durable insert at 13 ms p50 against 91 nanoseconds to enqueue, and the rule
-            // that follows is applied once, here, to whatever the document opened. So an adapter that
-            // blocks on its database is a correct adapter, and no adapter carries a queue of its own.
-            _ = Assert.IsType<QueuedAuditSink>(provider.GetRequiredService<IAuditSinkPort>());
-        }
-
-        /// <summary>Reads back the queue the composition root put in front of the document's store.</summary>
-        private static QueuedAuditSink Queue(IServiceProvider provider)
-        {
-            return Assert.IsType<QueuedAuditSink>(provider.GetRequiredService<IAuditSinkPort>());
-        }
-
-        /// <summary>Reads back the store itself, which is registered under its own concrete type.</summary>
-        /// <remarks>
-        /// The document builds the store now, not the host, so this is how a test that wants the events
-        /// of one conversation reaches the thing that holds them. Resolving <see cref="IAuditSinkPort"/> gives the
-        /// queue instead, because that is the only registration that honours the port's contract.
-        /// </remarks>
-        private static InMemoryAuditSink Sink(IServiceProvider provider)
-        {
-            return Assert.IsType<InMemoryAuditSink>(provider.GetRequiredService<QueuedAuditSink>().Store);
-        }
-
-        // -------------------------------------------------------------------------------------------
-        // The transcript store: named by providers.conversations, and never absent.
-        // -------------------------------------------------------------------------------------------
 
         // The same agent, served by a conversation-store vendor the host registers itself.
         private const string VendorTranscriptYaml =
@@ -1312,7 +1086,7 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
             agent: only
         """;
 
-        // The conversation store opens at step 4c and the moderation vendor is built at step 4c, so a
+        // The conversation store opens before the moderation vendor is built, so a
         // document that names both puts a failure strictly after an open. Nothing else in the boot has
         // that shape.
         private const string ConversationStoreThenModerationFailureYaml =
@@ -1383,13 +1157,7 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
             }
         }
 
-        /// <summary>A store 1 backing that keeps the role of every row it accepted.</summary>
-        /// <remarks>
-        /// Keeps only <see cref="Roles"/>, with no <c>conversationId</c> or <c>ordinal</c>, so it cannot rebuild a
-        /// <see cref="ConversationMessage"/> to answer a read or an erase truthfully. <see cref="ReadAsync"/> and
-        /// <see cref="EraseAsync"/> report empty and 0 even after <see cref="AppendAsync"/> has recorded
-        /// rows — a test that needs either should use a different double.
-        /// </remarks>
+        /// <summary>A conversation store that keeps the role of every row it accepted.</summary>
         private sealed class RecordingConversationStore() : DelegatingConversationStore(new InMemoryConversationStore()), IAsyncDisposable
         {
             private readonly Lock _gate = new();
@@ -1513,70 +1281,6 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
             Assert.Equal("hello", turn.ReplyText);
         }
 
-        // -------------------------------------------------------------------------------------------
-        // The host's own observers: the socket behind IConversationObserver.
-        // -------------------------------------------------------------------------------------------
-        [Fact]
-        public async Task AHostObserver_ReadsTheFactsOfATurn()
-        {
-            RecordingConversationObserver first = new();
-            RecordingConversationObserver second = new();
-            using StartedHost provider = await BuildAsync(OneAgentYaml, options => options.UseObservers(first, second));
-
-            ConversationSession session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("conversation-1");
-            _ = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
-
-            // The port is public, so a host writes one of these and binds it. Every observer of a conversation
-            // reads the same facts, and the library's own three are neither replaced nor bypassed.
-            Assert.Equal([ConversationEventKind.ConversationStarted, ConversationEventKind.TurnCompleted], first.Seen);
-            Assert.Equal([ConversationEventKind.ConversationStarted, ConversationEventKind.TurnCompleted], second.Seen);
-        }
-
-        [Fact]
-        public async Task AHostObserverThatThrows_CostsNeitherTheTurnNorTheChain()
-        {
-            using StartedHost provider = await BuildAsync(
-                OneAgentYaml,
-                options => options.UseObservers(new ThrowingConversationObserver()));
-
-            ConversationSession session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("conversation-1");
-            TurnResult turn = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
-
-            // An observer records the conversation and is never a part of it. That holds for the host's own, and
-            // it holds for the readings registered beside it: a broken host observer does not cost the
-            // chain of D23 a single row.
-            Assert.Equal("hello", turn.ReplyText);
-
-            await Queue(provider).FlushAsync(TestContext.Current.CancellationToken);
-
-            IReadOnlyList<AuditEvent> events = Sink(provider).EventsOf("conversation-1");
-            Assert.Equal(
-                [AuditEventKind.ConversationStarted, AuditEventKind.TurnCompleted],
-                events.Select(item => item.Kind).ToArray());
-            Assert.All(events, AuditEventVocabulary.Validate);
-        }
-
-        [Fact]
-        public async Task UseObserversTwice_KeepsBothRegistrations()
-        {
-            RecordingConversationObserver first = new();
-            RecordingConversationObserver second = new();
-            using StartedHost provider = await BuildAsync(
-                OneAgentYaml,
-                options => options.UseObservers(first).UseObservers(second));
-
-            ConversationSession session = provider.GetRequiredService<EntryRegistry>().ForFactory("main").Create("conversation-1");
-            _ = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
-
-            // The seam adds rather than replaces, so a host composes its readings across whatever code
-            // configures the container.
-            Assert.NotEmpty(first.Seen);
-            Assert.NotEmpty(second.Seen);
-        }
-
-        // -------------------------------------------------------------------------------------------
-        // What it refuses.
-        // -------------------------------------------------------------------------------------------
         [Fact]
         public async Task ABadDocument_FailsTheStartAndNamesTheFault()
         {
@@ -1635,9 +1339,9 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
         }
 
         /// <summary>
-        /// The conversation store is opened at step 4c, and the moderation vendor is built after it. A
+        /// The conversation store is opened before the moderation vendor is built. A
         /// document that names a moderation kind this host does not register therefore fails with the
-        /// store already open, and nothing between the two steps has taken ownership of it.
+        /// store already open, and nothing between the two has taken ownership of it.
         /// </summary>
         [Fact]
         public async Task AFailureAfterTheConversationStoreOpens_StillClosesTheStore()
@@ -1673,8 +1377,8 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
         /// <summary>
         /// An id no <c>tools:</c> entry names, served only by a discovering source, still satisfies an
         /// agent's reference through <see cref="AgentCoreServiceCollectionExtensions.AddAgentCore"/>
-        /// end to end, public API only. An <c>mcp:</c> server's tools work exactly this way: decision 15
-        /// requires the reference pass to resolve against what got discovered, not just what got declared.
+        /// end to end, public API only. An <c>mcp:</c> server's tools work exactly this way: the
+        /// reference pass must resolve against what got discovered, not just what got declared.
         /// </summary>
         [Fact]
         public async Task ADiscoveredOnlyTool_SatisfiesAnAgentsReferenceThroughTheRealBoot()
@@ -1692,7 +1396,7 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
         /// out of its own "every declaration is served" rule, because that kind reaches no source — the
         /// compile table builds it once the agent it names has compiled. The reference pass in the
         /// composition root has to carve the same kind out of its own served-ids set for the same reason,
-        /// or a document exactly like this one — the shape section 8.1 calls agent-as-tool — fails to
+        /// or a document exactly like this one — an agent-as-tool — fails to
         /// boot even though it declares nothing wrong.
         /// </summary>
         [Fact]
@@ -1704,7 +1408,7 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
         }
 
         /// <summary>
-        /// Decision 15's whole justification: a YAML typo must never cost a round trip to an MCP server.
+        /// A YAML typo must never cost a round trip to an MCP server.
         /// This document carries both a structural defect and an <c>mcp:</c> server whose command does
         /// not exist, so the two possible orderings are observably different: structure-first reports
         /// the policy fault and never touches the server; discovery-first would instead report that the
@@ -1924,9 +1628,6 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
             Assert.True(tracked.Disposed);
         }
 
-        // -------------------------------------------------------------------------------------------
-        // Helpers.
-        // -------------------------------------------------------------------------------------------
         /// <summary>Composes the guarded graph over one offline model for each node.</summary>
         /// <returns>The provider a test resolves from.</returns>
         private static Task<StartedHost> BuildGuardedGraphAsync()
@@ -1948,32 +1649,6 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
                 options => options.UseTelemetry(adapter));
 
             return (builder.Build(), adapter);
-        }
-
-        private static async Task<(IHost Host, ClosingAuditSink Store)> BuildAuditHostAsync()
-        {
-            ClosingAuditSink store = new();
-            HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new());
-            ConfigureServices(
-                builder.Services,
-                VendorAuditYaml,
-                options => options.UseAuditSinks(new TestAuditSinkAdapter(store)));
-
-            return (builder.Build(), store);
-        }
-
-        /// <summary>One well-formed event, which is all a drain has to carry.</summary>
-        /// <param name="secondsPastEpoch">Seconds past the epoch the event occurred at, so callers can order rows.</param>
-        /// <returns>The event.</returns>
-        private static AuditEvent AuditRow(long secondsPastEpoch)
-        {
-            return new()
-            {
-                ConversationId = "conversation-1",
-                EventId = Guid.CreateVersion7(),
-                Kind = AuditEventKind.TurnCompleted,
-                OccurredAt = DateTimeOffset.UnixEpoch.AddSeconds(secondsPastEpoch),
-            };
         }
 
         /// <summary>An adapter that starts nothing and hands back a session that records its flush.</summary>
@@ -2006,45 +1681,6 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
             }
         }
 
-        /// <summary>An observer a host binds, which keeps every fact it was offered, in order.</summary>
-        private sealed class RecordingConversationObserver : IConversationObserver
-        {
-            private readonly Lock _gate = new();
-            private readonly List<ConversationEventKind> _seen = [];
-
-            /// <summary>Gets what this observer read, in the order the conversation produced it.</summary>
-            public IReadOnlyList<ConversationEventKind> Seen
-            {
-                get
-                {
-                    // A delivery may land on a thread of its own, so the reading is taken under the gate.
-                    lock (_gate)
-                    {
-                        return [.. _seen];
-                    }
-                }
-            }
-
-            public ValueTask OnConversationEventAsync(ConversationEvent conversationEvent, CancellationToken cancellationToken)
-            {
-                lock (_gate)
-                {
-                    _seen.Add(conversationEvent.Kind);
-                }
-
-                return ValueTask.CompletedTask;
-            }
-        }
-
-        /// <summary>An observer that refuses every fact, so the isolation of the seam is observable.</summary>
-        private sealed class ThrowingConversationObserver : IConversationObserver
-        {
-            public ValueTask OnConversationEventAsync(ConversationEvent conversationEvent, CancellationToken cancellationToken)
-            {
-                throw new InvalidOperationException("the host's observer is broken");
-            }
-        }
-
         /// <summary>A moderation vendor a test registers, which counts the times it was asked to build.</summary>
         private sealed class FakeModerationAdapter(string kind, IEvaluator evaluator) : IModerationAdapter
         {
@@ -2060,87 +1696,6 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
             {
                 Builds++;
                 return ValueTask.FromResult(evaluator);
-            }
-        }
-
-        /// <summary>An audit vendor a test registers, which opens one store the test already holds.</summary>
-        private sealed class TestAuditSinkAdapter(IAuditSinkPort store) : IAuditSinkAdapter
-        {
-            public string Kind => "test";
-
-            public ValueTask<IAuditSinkPort> OpenAsync(
-                VendorProviderConfiguration entry,
-                ISecretResolverPort? secrets,
-                CancellationToken cancellationToken = default)
-            {
-                return ValueTask.FromResult(store);
-            }
-        }
-
-        /// <summary>An audit store that is slow to write and records what it held when it was closed.</summary>
-        /// <remarks>
-        /// The delay is the whole test: a shutdown that does not wait for the queue returns long before
-        /// this store has been handed anything, so a lost row is a failed assertion rather than a race.
-        /// </remarks>
-        private sealed class ClosingAuditSink : IAuditSinkPort, IAsyncDisposable
-        {
-            private static readonly TimeSpan WriteDelay = TimeSpan.FromMilliseconds(200);
-
-            private int _written;
-
-            /// <summary>Gets the number of events this store has written.</summary>
-            public int Written => Volatile.Read(ref _written);
-
-            /// <summary>Gets whether this store was closed.</summary>
-            public bool Closed { get; private set; }
-
-            /// <summary>Gets how many events this store had written by the time it was closed.</summary>
-            public int WrittenWhenClosed { get; private set; }
-
-            public async ValueTask AppendAsync(AuditEvent auditEvent, CancellationToken cancellationToken = default)
-            {
-                await Task.Delay(WriteDelay, CancellationToken.None);
-                _ = Interlocked.Increment(ref _written);
-            }
-
-            public ValueTask DisposeAsync()
-            {
-                Closed = true;
-                WrittenWhenClosed = Written;
-                return ValueTask.CompletedTask;
-            }
-        }
-
-        /// <summary>An audit store that keeps what it accepted, so what the document opened is observable.</summary>
-        /// <remarks>
-        /// It is not <see cref="InMemoryAuditSink"/>, on purpose: the test has to tell the vendor the
-        /// document named apart from the built-in the document would have fallen back to.
-        /// </remarks>
-        private sealed class RecordingAuditSink : IAuditSinkPort
-        {
-            private readonly Lock _gate = new();
-            private readonly List<AuditEvent> _events = [];
-
-            /// <summary>Gets the events this store accepted, in the order they arrived.</summary>
-            public IReadOnlyList<AuditEvent> Events
-            {
-                get
-                {
-                    lock (_gate)
-                    {
-                        return [.. _events];
-                    }
-                }
-            }
-
-            public ValueTask AppendAsync(AuditEvent auditEvent, CancellationToken cancellationToken = default)
-            {
-                lock (_gate)
-                {
-                    _events.Add(auditEvent);
-                }
-
-                return ValueTask.CompletedTask;
             }
         }
 

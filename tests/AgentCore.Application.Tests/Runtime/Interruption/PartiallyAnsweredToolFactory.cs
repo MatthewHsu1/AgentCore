@@ -4,13 +4,19 @@ using Microsoft.Extensions.AI;
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
-    /// Answers the first call to the one declared tool at once, and blocks the second call until the
-    /// run's own cancellation ends it.
+    /// Answers the first call to the one declared tool at once, and blocks the second call until
+    /// <see cref="ReleaseSecond"/> completes. A cancellation that reaches the second call ends it unanswered.
     /// </summary>
     internal sealed class PartiallyAnsweredToolFactory
     {
+        /// <summary>The answer the second call gives once released.</summary>
+        public const string SecondAnswer = "70";
+
         /// <summary>Signals once the second call is in flight and blocked.</summary>
         public TaskCompletionSource SecondConversationStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>Lets the blocked second call answer.</summary>
+        public TaskCompletionSource ReleaseSecond { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public AIFunction? Create(ToolConfiguration tool)
         {
@@ -26,10 +32,8 @@ namespace AgentCore.Application.Tests.Runtime
             }
 
             _ = SecondConversationStarted.TrySetResult();
-            await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
-
-            // Unreachable: the delay above only ever ends in cancellation.
-            return string.Empty;
+            await ReleaseSecond.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            return SecondAnswer;
         }
     }
 }

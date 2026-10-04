@@ -1,8 +1,8 @@
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Transcript;
 using AgentCore.Domain.Sources;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.ToolCalls;
 
 namespace AgentCore.Application.Tests.Runtime
 {

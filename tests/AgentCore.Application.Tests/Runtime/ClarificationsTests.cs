@@ -1,20 +1,18 @@
 using AgentCore.Application.Conversation;
-using AgentCore.Application.Runtime;
 using Microsoft.Agents.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Clarification;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
-    /// <see cref="Clarifications"/>: the per-conversation holder K36 describes, K41's per-turn mark, and K43's
+    /// <see cref="Clarifications"/>: the per-conversation holder, the per-turn mark, and the
     /// probe latch and replay payload.
     /// </summary>
     public sealed class ClarificationsTests
     {
-        // -----------------------------------------------------------------------------------------
-        // K43: the probe latch is a compare-and-set. Several search-tool calls in one turn, or several
+        // The probe latch is a compare-and-set. Several search-tool calls in one turn, or several
         // graph participants sharing this conversation, must cost exactly one probe.
-        // -----------------------------------------------------------------------------------------
         [Fact]
         public void ClaimProbe_ManyConcurrentCallers_ExactlyOneClaimsEachTrial()
         {
@@ -69,10 +67,8 @@ namespace AgentCore.Application.Tests.Runtime
             }
         }
 
-        // -----------------------------------------------------------------------------------------
-        // K43: the caller hanging up mid-probe must fail the payload, not merely drop it, so every
+        // The caller hanging up mid-probe must fail the payload, not merely drop it, so every
         // loser waiting on it wakes rather than burning its full wait margin on a corpse.
-        // -----------------------------------------------------------------------------------------
         [Fact]
         public async Task Fail_WakesEveryWaiter_AndLeavesTheLatchClaimed()
         {
@@ -121,10 +117,8 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.All(results, result => Assert.Same(cards, result));
         }
 
-        // -----------------------------------------------------------------------------------------
-        // K43: BeginTurn opens a fresh turn. It clears the probe latch and its payload together, and
+        // BeginTurn opens a fresh turn. It clears the probe latch and its payload together, and
         // never the counter — that is per-conversation, not per-turn.
-        // -----------------------------------------------------------------------------------------
         [Fact]
         public void BeginTurn_ClearsTheLatch_AndLeavesTheCounter()
         {
@@ -161,10 +155,8 @@ namespace AgentCore.Application.Tests.Runtime
                 () => loser.WaitAsync(TimeSpan.FromMilliseconds(1), TestContext.Current.CancellationToken));
         }
 
-        // -----------------------------------------------------------------------------------------
         // A search that outlives its turn holds turn N's handle. Publishing through it must not resolve
         // the latch turn N+1 opened, or every loser of the new turn replays the old turn's cards.
-        // -----------------------------------------------------------------------------------------
         [Fact]
         public async Task Publish_FromTheTurnBefore_LeavesTheNewTurnsLatchAlone()
         {
@@ -220,10 +212,8 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Empty(clarifications.Spent());
         }
 
-        // -----------------------------------------------------------------------------------------
         // Edit-and-resend: Withdraw clears what was named, and leaves the ask counter untouched so a
         // withdrawn segment cannot buy a fresh maxAsks budget.
-        // -----------------------------------------------------------------------------------------
         [Fact]
         public void Withdraw_ClearsLastNamed_AndLeavesTheCounter()
         {
@@ -263,12 +253,10 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(7, clarifications.Read("brand").ProbeAsks);
         }
 
-        // -----------------------------------------------------------------------------------------
-        // §8's compound transitions (K36): a slot's fields must move together as one step, or a
-        // concurrent reader can catch it between the two writes. This is the §8-step-6 shape - record
-        // what was named and move a counter - reduced to its atomicity core: LastNamed is set exactly
-        // when ProbeAsks is odd, and a reader that ever sees them disagree caught a torn write.
-        // -----------------------------------------------------------------------------------------
+        // A slot's fields must move together as one step, or a concurrent reader can catch it between the
+        // two writes. This is the record-what-was-named-and-move-a-counter shape, reduced to its atomicity
+        // core: LastNamed is set exactly when ProbeAsks is odd, and a reader that ever sees them disagree
+        // caught a torn write.
         [Fact]
         public async Task Update_ACompoundTransition_IsNeverObservedHalfApplied()
         {

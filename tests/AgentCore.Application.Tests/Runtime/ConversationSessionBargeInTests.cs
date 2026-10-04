@@ -1,13 +1,14 @@
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Domain;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Cut;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Runtime.ConversationSessionTestSupport;
 
 namespace AgentCore.Application.Tests.Runtime
 {
-    /// <summary>Item 6a: barge-in. The record holds what the caller heard.</summary>
+    /// <summary>Barge-in. The record holds what the caller heard.</summary>
     public sealed class ConversationSessionBargeInTests
     {
         [Fact]
@@ -28,7 +29,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.True(await updates.MoveNextAsync());
             Assert.Equal("I can help with that,", updates.Current.Text);
 
-            // Section 7.1 reports both values on the interrupt frame, at 1 ms. Nothing estimates either.
+            // Both values are reported on the interrupt frame, at 1 ms. Nothing estimates either.
             Assert.True(session.Cut(0, new TurnCut("I can help", TimeSpan.FromMilliseconds(740))));
             Assert.False(await updates.MoveNextAsync());
 
@@ -76,8 +77,8 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Null(next.Cut);
         }
 
-        // Probe W04 (design section 3, row "Cut before output"): a cut of a buffered turn that names nothing shown
-        // keeps its user message only, and the turn before it stays as it was.
+        // A cut of a buffered turn that names nothing shown keeps its user message only,
+        // and the turn before it stays as it was.
         [Fact]
         public async Task AnInterruptionDuringABufferedTurn_CutsThatTurnWithNothingShown_AndLeavesThePreviousTurn()
         {

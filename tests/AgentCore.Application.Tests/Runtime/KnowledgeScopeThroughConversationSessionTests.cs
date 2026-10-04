@@ -3,12 +3,12 @@ using AgentCore.Application.Conversation;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Knowledge.Fakes;
 using AgentCore.Domain.Knowledge;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Runtime
 {
@@ -16,19 +16,6 @@ namespace AgentCore.Application.Tests.Runtime
     /// The one wiring a host can actually write: set a knowledge scope on the session, run a turn,
     /// and have the scope still be there when the retrieval delegate reads it.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Every other test of the scope sets it and reads it back without a turn loop in between, and
-    /// every one of them passed while the feature was wired shut: the loop built its turn without the
-    /// session's scope, so the store never saw it. The defect lives in the interaction, so the test
-    /// has to run the interaction.
-    /// </para>
-    /// <para>
-    /// The agent here is <c>scoped: true</c>, which makes the erasure visible twice over: the provider's
-    /// own gate refuses to call the store at all with no scope set, so a broken carry-through shows up
-    /// as a store nobody searched as well as a scope nobody could read.
-    /// </para>
-    /// </remarks>
     public sealed class KnowledgeScopeThroughConversationSessionTests
     {
         private const string Yaml =
@@ -45,6 +32,20 @@ namespace AgentCore.Application.Tests.Runtime
                 initial: greeting
                 stages:
                   - { id: greeting, agent: only }
+          """;
+
+        private const string GraphYaml =
+            """
+          apiVersion: agentcore/v1
+          agents:
+            items:
+              - { id: researcher, instructions: "look it up", knowledge: { mode: prefetch, scoped: true } }
+              - { id: responder, instructions: "answer the caller", knowledge: { mode: prefetch, scoped: true } }
+          entries:
+            main:
+              graph:
+                pattern: sequential
+                agents: [ researcher, responder ]
           """;
 
         /// <summary>
@@ -125,6 +126,22 @@ namespace AgentCore.Application.Tests.Runtime
             }
 
             Assert.Equal(1, port.Calls);
+            Assert.Same(scope, port.ScopeAtTheStore);
+        }
+
+        [Fact]
+        public async Task RunTurnAsync_OnAGraphRow_EveryParticipantsStoreSeesTheHostScope()
+        {
+            // A graph participant runs on a session of its own; the turn's scope must still reach it.
+            using SequencedChatClient reply = new("hello there.");
+            StubKnowledgePort port = new([Card("a")]);
+            ConversationSession session = Build(reply, port, GraphYaml).Create("conversation-graph");
+
+            KnowledgeScope scope = Scope();
+            session.Scope = scope;
+            _ = await session.RunTurnAsync("the screen says e33", TestContext.Current.CancellationToken);
+
+            Assert.Equal(2, port.Calls);
             Assert.Same(scope, port.ScopeAtTheStore);
         }
 
@@ -245,7 +262,7 @@ namespace AgentCore.Application.Tests.Runtime
         {
             _port = new StubKnowledgePort([Card("a")]);
 
-            // The real restore path: a ConversationSessionState of the shape store 0 hands back, fed through
+            // The real restore path: a ConversationSessionState of the shape the conversation store hands back, fed through
             // ConversationSessionFactory.Create so Resume/Restore write the slots, rather than the test poking
             // session.State directly and skipping the coercion and enum checks Restore applies.
             ConversationSessionState state = new()

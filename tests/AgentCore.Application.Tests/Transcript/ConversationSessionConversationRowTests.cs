@@ -4,12 +4,12 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Transcript
 {
@@ -26,28 +26,25 @@ namespace AgentCore.Application.Tests.Transcript
             agent: only
         """;
 
-        /// <summary>A store 0 that is down: it takes no row, so no word may follow.</summary>
+        /// <summary>A conversation store that is down: it takes no row, so no word may follow.</summary>
         private sealed class RefusingCreate(IConversationStore inner) : DelegatingConversationStore(inner)
         {
             public override ValueTask<ConversationRecord> CreateAsync(
                 string conversationId, CancellationToken cancellationToken = default)
             {
-                throw new InvalidOperationException("store 0 is down.");
+                throw new InvalidOperationException("the conversation store is down.");
             }
         }
 
         [Fact]
         public async Task ATurn_CreatesTheConversationRow_BeforeItWritesAnyWord()
         {
-            // Arrange
             InMemoryConversationStore store = new();
             using ScriptedChatClient reply = new("hello");
             ConversationSession session = CreateSession(OneAgentYaml, reply, store);
 
-            // Act
             _ = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
-            // Assert
             await session.FlushTranscriptAsync();
             Assert.NotNull(await store.GetAsync(session.ConversationId, TestContext.Current.CancellationToken));
             Assert.NotEmpty(await store.ReadAllAsync(session.ConversationId, TestContext.Current.CancellationToken));
@@ -56,18 +53,15 @@ namespace AgentCore.Application.Tests.Transcript
         [Fact]
         public async Task ATurn_WhenStoreZeroRefusesTheRow_FailsAndWritesNoWords()
         {
-            // Arrange
             InMemoryConversationStore inner = new();
             RefusingCreate store = new(inner);
             using ScriptedChatClient reply = new("hello");
             ConversationSession session = CreateSession(OneAgentYaml, reply, store);
 
-            // Act
             InvalidOperationException fault = await Assert.ThrowsAsync<InvalidOperationException>(
                 () => session.RunTurnAsync("hi", TestContext.Current.CancellationToken));
 
-            // Assert
-            Assert.Equal("store 0 is down.", fault.Message);
+            Assert.Equal("the conversation store is down.", fault.Message);
             Assert.Empty(await inner.ReadAllAsync(session.ConversationId, TestContext.Current.CancellationToken));
         }
 

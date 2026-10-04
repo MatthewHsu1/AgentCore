@@ -3,17 +3,17 @@ using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Transcript;
 using AgentCore.Domain;
 using AgentCore.Application.Tests.Runtime;
 using AgentCore.Domain.Audit;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Audit.ConversationSessionAuditTestSupport;
 
 namespace AgentCore.Application.Tests.Audit
 {
-    /// <summary>The four ways section 4 lets a conversation end, and what each one writes to the chain.</summary>
+    /// <summary>The four ways a conversation can end, and what each one writes to the chain.</summary>
     public sealed class ConversationSessionAuditConversationEndedTests
     {
         [Fact]
@@ -27,7 +27,7 @@ namespace AgentCore.Application.Tests.Audit
             _ = await session.RunTurnAsync("goodbye", TestContext.Current.CancellationToken);
 
             Assert.True(session.IsComplete);
-            AuditEvent ended = Assert.Single(sink.EventsOf("conversation-1"), item => item.Kind == AuditEventKind.ConversationEnded);
+            AuditEvent ended = Assert.Single(await session.RowsAsync(sink), item => item.Kind == AuditEventKind.ConversationEnded);
             Assert.Null(ended.TurnIndex);
 
             // The reason is one token of the closed set, so a report can count it. The terminal stage is
@@ -55,15 +55,59 @@ namespace AgentCore.Application.Tests.Audit
             TurnResult turn = await session.RunTurnAsync("goodbye", TestContext.Current.CancellationToken);
 
             Assert.True(turn.IsTerminal);
-            AuditEvent ended = Assert.Single(sink.EventsOf("conversation-1"), item => item.Kind == AuditEventKind.ConversationEnded);
+            AuditEvent ended = Assert.Single(await session.RowsAsync(sink), item => item.Kind == AuditEventKind.ConversationEnded);
             Assert.NotNull(store.LandedAt);
             Assert.True(
                 ended.OccurredAt >= store.LandedAt,
                 $"conversation.ended is dated {ended.OccurredAt:O}, before the turn's rows landed at {store.LandedAt:O}.");
         }
 
+        // A conversation that a terminal stage ended stays ended when it is loaded again. The turn it
+        // refuses, and a host end that is then not a first end, write no row after conversation.ended.
         [Fact]
-        public void AHostThatEndsTheConversation_ClosesTheChainOnce()
+        public async Task AReloadedEndedConversation_WritesNoRowAfterItsEnd()
+        {
+            using SequencedChatClient reply = new("goodbye.");
+            using SequencedChatClient fill = new(SaidGoodbye);
+            InMemoryAuditSink sink = new();
+            ConversationSessionFactory factory = Build(PolicyYaml, reply, fill, auditSink: sink, store: new InMemoryConversationStore());
+            ConversationSession first = factory.Create("conversation-1");
+            _ = await first.RunTurnAsync("goodbye", TestContext.Current.CancellationToken);
+            await first.FlushTranscriptAsync();
+            await first.DisposeAsync();
+
+            ConversationSession second = factory.Create("conversation-1");
+            _ = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => second.RunTurnAsync("are you there?", TestContext.Current.CancellationToken));
+            Assert.False(second.EndConversation(ConversationEndReason.CallerHungUp));
+
+            IReadOnlyList<AuditEvent> rows = await second.RowsAsync(sink);
+            Assert.Equal(
+                [AuditEventKind.ConversationStarted, AuditEventKind.TurnCompleted, AuditEventKind.ConversationEnded],
+                rows.Select(row => row.Kind));
+        }
+
+        // TurnResult.EndedAt: every row of a turn carries the moment it ended, not the moment its words landed.
+        [Fact]
+        public async Task ATurnRow_IsDatedWhenTheTurnEnded_NotWhenItsWordsLanded()
+        {
+            using SequencedChatClient reply = new("hello there.");
+            using SequencedChatClient fill = new(StayingNull);
+            InMemoryAuditSink sink = new();
+            TestTimeProvider clock = new();
+            SlowAppends store = new(new InMemoryConversationStore(), clock, TimeSpan.FromSeconds(3));
+            ConversationSession session = Build(PolicyYaml, reply, fill, timeProvider: clock, auditSink: sink, store: store)
+                .Create("conversation-1");
+
+            TurnResult turn = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+
+            AuditEvent completed = Assert.Single(await session.RowsAsync(sink), item => item.Kind == AuditEventKind.TurnCompleted);
+            Assert.True(store.LandedAt > turn.EndedAt);
+            Assert.Equal(turn.EndedAt, completed.OccurredAt);
+        }
+
+        [Fact]
+        public async Task AHostThatEndsTheConversation_ClosesTheChainOnce()
         {
             using SequencedChatClient reply = new("hello there.");
             using SequencedChatClient fill = new(StayingNull);
@@ -73,7 +117,9 @@ namespace AgentCore.Application.Tests.Audit
             Assert.True(session.EndConversation(ConversationEndReason.CallerHungUp));
             Assert.False(session.EndConversation(ConversationEndReason.CallerHungUp));
 
-            AuditEvent ended = Assert.Single(sink.EventsOf("conversation-1"), item => item.Kind == AuditEventKind.ConversationEnded);
+            IReadOnlyList<AuditEvent> rows = await session.RowsAsync(sink);
+            Assert.Equal([AuditEventKind.ConversationStarted, AuditEventKind.ConversationEnded], rows.Select(item => item.Kind));
+            AuditEvent ended = rows[1];
             Assert.Equal("caller.hangup", ended.Payload[AuditPayloadKeys.EndReason]);
 
             // The machine never ran, so no stage closed the conversation and no stage rides on the event.
@@ -81,24 +127,26 @@ namespace AgentCore.Application.Tests.Audit
             Assert.True(session.IsComplete);
         }
 
-        /// <summary>Section 11, item 5: the conversation goes to a human through the conference pattern.</summary>
+        /// <summary>The conversation goes to a human through the conference pattern.</summary>
         [Fact]
-        public void ATransferToAHuman_ClosesTheChainWithItsOwnReason()
+        public async Task ATransferToAHuman_ClosesTheChainWithItsOwnReason()
         {
             using SequencedChatClient reply = new("one moment please.");
             using SequencedChatClient fill = new(StayingNull);
             InMemoryAuditSink sink = new();
             ConversationSession session = Build(PolicyYaml, reply, fill, auditSink: sink).Create("conversation-1");
 
-            // The adapter joins the conversation to a conference and never sends the transfer command (T27).
+            // The adapter joins the conversation to a conference and never sends the transfer command.
             Assert.True(session.EndConversation(ConversationEndReason.TransferredToHuman));
 
-            AuditEvent ended = Assert.Single(sink.EventsOf("conversation-1"), item => item.Kind == AuditEventKind.ConversationEnded);
+            IReadOnlyList<AuditEvent> rows = await session.RowsAsync(sink);
+            Assert.Equal([AuditEventKind.ConversationStarted, AuditEventKind.ConversationEnded], rows.Select(item => item.Kind));
+            AuditEvent ended = rows[1];
             Assert.Equal("agent.transferred", ended.Payload[AuditPayloadKeys.EndReason]);
         }
 
         [Fact]
-        public void AReasonOutsideTheClosedSet_EndsNoConversation()
+        public async Task AReasonOutsideTheClosedSet_EndsNoConversation()
         {
             using SequencedChatClient reply = new("hello there.");
             using SequencedChatClient fill = new(StayingNull);
@@ -109,7 +157,7 @@ namespace AgentCore.Application.Tests.Audit
 
             // Nothing moved. The conversation still runs, and the chain still holds only its first event.
             Assert.False(session.IsComplete);
-            Assert.DoesNotContain(sink.EventsOf("conversation-1"), item => item.Kind == AuditEventKind.ConversationEnded);
+            Assert.DoesNotContain(await session.RowsAsync(sink), item => item.Kind == AuditEventKind.ConversationEnded);
         }
 
         /// <summary>A store whose appends take time on the test's clock, and that notes when the last one landed.</summary>

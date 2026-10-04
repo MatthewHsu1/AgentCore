@@ -2,9 +2,11 @@
 // (_interrupt_by_audio_activity), commit d8405f132e1bd960f298190c18daf81ffc1faf45. Copyright 2023 LiveKit, Inc.
 // Licensed under the Apache License, Version 2.0. Modified: translated to C#; driven over a scripted engine turn.
 
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Cut;
 using AgentCore.AspNetCore.Tests.Fakes;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Voice.Session;
+using AgentCore.AspNetCore.Voice.Speech;
+using AgentCore.AspNetCore.Voice.Turns;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -75,7 +77,7 @@ namespace AgentCore.AspNetCore.Tests.Voice
             Assert.Equal(["Let me look that up.", "It shipped."], _output.Spoken);
         }
 
-        // Handoff 2026-09-22, step 7 open issues: the first cut wins, so a transport report that arrives once a
+        // The first cut wins, so a transport report that arrives once a
         // user turn has already interrupted the speech is refused.
         [Fact(Timeout = 30_000)]
         public async Task ABargeInOnAReplyAlreadyInterrupted_LeavesTheCutToThatInterruption()

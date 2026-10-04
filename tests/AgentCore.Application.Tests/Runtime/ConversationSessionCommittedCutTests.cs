@@ -1,13 +1,15 @@
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Cut;
+using AgentCore.Application.Runtime.Session;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 using static AgentCore.Application.Tests.Runtime.ConversationSessionCutTestSupport;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
-    /// <see cref="ConversationSession.Cut"/> on a turn that already committed (design section 3, row "sealed").
+    /// <see cref="ConversationSession.Cut"/> on a turn that already committed.
     /// </summary>
     public sealed class ConversationSessionCommittedCutTests
     {
@@ -15,7 +17,7 @@ namespace AgentCore.Application.Tests.Runtime
 
         private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-        // Probe P1b (REPORT.md, F2): a cut that shows nothing of a committed reply leaves it carrying nothing, so
+        // A cut that shows nothing of a committed reply leaves it carrying nothing, so
         // the row goes, as a running turn's cut drops it; LiveKit adds a message only if forwarded_text
         // (agent_activity.py:3335). The next model is never read an assistant message with no content.
         [Fact]
@@ -40,7 +42,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.All(sent, message => Assert.NotEmpty(message.Contents));
         }
 
-        // Probe P7d, owner ruling 2026-09-24: once turn 1 has started, a cut naming turn 0 is stale. It reports
+        // Once turn 1 has started, a cut naming turn 0 is stale. It reports
         // false and turn 0's reply stays as it was saved, while turn 1 still runs and commits.
         [Fact]
         public async Task CutOfThePreviousTurn_WhileTheNextTurnRuns_IsRefusedAndChangesNothing()

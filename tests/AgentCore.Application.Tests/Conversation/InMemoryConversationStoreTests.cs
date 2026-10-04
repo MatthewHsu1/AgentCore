@@ -7,7 +7,7 @@ using Xunit;
 
 namespace AgentCore.Application.Tests.Conversation
 {
-    /// <summary>Store 0, kept in this process.</summary>
+    /// <summary>The conversation store, kept in this process.</summary>
     public sealed class InMemoryConversationStoreTests
     {
         private static CancellationToken Token => TestContext.Current.CancellationToken;

@@ -1,17 +1,20 @@
 using AgentCore.Application.Audit.Memory;
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Tests.Audit;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Domain.Audit;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Cut;
+using AgentCore.Application.Runtime.Session;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 using static AgentCore.Application.Tests.Runtime.ConversationSessionCutTestSupport;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
     /// <see cref="ConversationSession.Recut"/>: a later account of what reached the user replaces the cut a turn
-    /// already took, while that turn is the newest one started (owner ruling E3).
+    /// already took, while that turn is the newest one started.
     /// </summary>
     public sealed class ConversationSessionRecutTests
     {
@@ -45,11 +48,11 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(TimeSpan.FromMilliseconds(300), session.LastTurn!.Cut);
             Assert.Equal(1, store.Appends);
             Assert.Empty(store.Rewrites);
-            AuditEvent interrupted = Assert.Single(sink.EventsOf(session.ConversationId), item => item.Kind == AuditEventKind.ReplyInterrupted);
+            AuditEvent interrupted = Assert.Single(await session.RowsAsync(sink), item => item.Kind == AuditEventKind.ReplyInterrupted);
             Assert.Equal(AuditHash.OfText("Hel").Value, interrupted.Payload[AuditPayloadKeys.UtteranceUntilInterruptSha256]);
         }
 
-        // TurnCutSlot remarks: a recut between the seal and the commit waits for the commit, which rewrites the reply
+        // A recut between the seal and the commit waits for the commit, which rewrites the reply
         // the cut shaped. The store holds the append, so the turn stays sealed and uncommitted meanwhile.
         [Fact]
         public async Task ARecutWhileTheCutTurnsAppendIsInFlight_RewritesTheReplyOnceItLands()
@@ -92,7 +95,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(TimeSpan.FromMilliseconds(300), session.LastTurn!.Cut);
             Assert.Equal(
                 [AuditHash.OfText("Hello").Value, AuditHash.OfText("Hel").Value],
-                sink.EventsOf(session.ConversationId)
+                (await session.RowsAsync(sink))
                     .Where(item => item.Kind == AuditEventKind.ReplyInterrupted)
                     .Select(item => item.Payload[AuditPayloadKeys.UtteranceUntilInterruptSha256]));
         }
@@ -118,7 +121,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(TimeSpan.FromMilliseconds(900), session.LastTurn.Cut);
             Assert.Equal(1, store.Appends);
             Assert.Equal(2, store.Rewrites.Count);
-            IReadOnlyList<AuditEvent> events = sink.EventsOf(session.ConversationId);
+            IReadOnlyList<AuditEvent> events = await session.RowsAsync(sink);
             AuditEvent completed = Assert.Single(events, item => item.Kind == AuditEventKind.TurnCompleted);
             List<AuditEvent> amendments = [.. events.Where(item => item.Kind == AuditEventKind.ReplyInterrupted)];
             Assert.Equal(2, amendments.Count);
@@ -142,10 +145,10 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.False(recut);
             Assert.Equal(["hi", "Hello there"], Texts(session.Transcript));
             Assert.Empty(store.Rewrites);
-            Assert.DoesNotContain(sink.EventsOf(session.ConversationId), item => item.Kind == AuditEventKind.ReplyInterrupted);
+            Assert.DoesNotContain(await session.RowsAsync(sink), item => item.Kind == AuditEventKind.ReplyInterrupted);
         }
 
-        // Owner ruling E3: once a later turn has started, an earlier turn's reply never changes.
+        // Once a later turn has started, an earlier turn's reply never changes.
         [Fact]
         public async Task ARecutOfACutTurnOnceTheNextTurnStarted_ReportsFalseAndChangesNothing()
         {

@@ -1,3 +1,4 @@
+using AgentCore.Application.Hooks.Engine;
 using AgentCore.Application.Transcript;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Compaction;
@@ -40,15 +41,17 @@ namespace AgentCore.Application.Runtime.Compaction
 
         /// <summary>Builds the providers in chain order: the cap always runs, the summary needs history to persist its row.</summary>
         /// <param name="stages">The cap provider and what the summary provider builds its strategy from.</param>
-        /// <param name="history">Store 1, or <see langword="null"/> when the session carries no history.</param>
+        /// <param name="history">The message store, or <see langword="null"/> when the session carries no history.</param>
+        /// <param name="hooks">The hooks of this compile.</param>
         /// <returns>The cap, then the summary when there is somewhere to write it.</returns>
-        public static AIContextProvider[] BuildProviders(CompactionStages stages, AgentCoreChatHistoryProvider? history)
+        public static AIContextProvider[] BuildProviders(CompactionStages stages, AgentCoreChatHistoryProvider? history, HookRuntime hooks)
         {
             ArgumentNullException.ThrowIfNull(stages);
+            ArgumentNullException.ThrowIfNull(hooks);
 
             return history is null
                 ? [stages.Cap]
-                : [stages.Cap, new SummaryRowProvider(history, stages.Summariser, stages.Summary)];
+                : [stages.Cap, new SummaryRowProvider(history, stages.Summariser, stages.Summary, hooks)];
         }
     }
 #pragma warning restore MAAI001

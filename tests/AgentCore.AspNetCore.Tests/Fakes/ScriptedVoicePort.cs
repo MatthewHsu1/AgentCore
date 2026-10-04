@@ -1,8 +1,10 @@
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Ports;
 using AgentCore.Domain;
 using AgentCore.Domain.Knowledge;
 using Microsoft.Extensions.AI;
+using AgentCore.Application.Runtime.Cut;
+using AgentCore.Application.Runtime.Turn;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 
 namespace AgentCore.AspNetCore.Tests.Fakes
 {

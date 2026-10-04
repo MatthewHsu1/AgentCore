@@ -1,21 +1,22 @@
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.TestSupport;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Cut;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
     /// The Cut rule over the real <see cref="ConversationTurnAgent"/>: a cut, a host cancel and an abandoned stream
-    /// each end in the turn's one append (docs/handoff/2026-09-22-maf-native-engine-design.md, section 3).
+    /// each end in the turn's one append.
     /// </summary>
     public sealed class ConversationTurnAgentCutTests
     {
         private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-        // Probe W03: a cut mid-text keeps the user and the shown text, in one append.
+        // A cut mid-text keeps the user and the shown text, in one append.
         [Fact]
         public async Task CutMidText_KeepsTheUserAndTheShownText_InOneAppend()
         {
@@ -38,7 +39,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Empty(h.Store.Rewrites);
         }
 
-        // Probe W04 (G1): a cut before any output keeps the user message only, and the turn before stays untouched.
+        // A cut before any output keeps the user message only, and the turn before stays untouched.
         [Fact]
         public async Task CutBeforeOutput_KeepsTheUserOnly_AndLeavesThePreviousTurnUntouched()
         {
@@ -62,7 +63,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(["one", "first", "two"], Texts(h.History.Read(h.Session)));
         }
 
-        // Probe W05: a host cancel keeps the user and everything yielded, in one append the hook never fed.
+        // A host cancel keeps the user and everything yielded, in one append the hook never fed.
         [Fact]
         public async Task HostCancel_KeepsTheUserAndEverythingYielded_InOneAppend()
         {
@@ -87,7 +88,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(["hi", "Hel"], Texts(h.Store.Rows.Select(row => row.Content)));
         }
 
-        // Probe W06: a reader that abandons the stream still gets the turn committed, from the layer's finally.
+        // A reader that abandons the stream still gets the turn committed, from the layer's finally.
         [Fact]
         public async Task ReaderAbandonsTheStream_TheLayerCommitsTheUserAndTheYieldedText_InOneAppend()
         {

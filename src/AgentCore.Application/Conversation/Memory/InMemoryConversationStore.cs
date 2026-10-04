@@ -6,7 +6,6 @@ using Microsoft.Extensions.AI;
 namespace AgentCore.Application.Conversation.Memory
 {
     /// <summary>The store backing that keeps every row in this process: a conversation, and its words.</summary>
-    /// <remarks>Creates the store.</remarks>
     /// <param name="timeProvider">Where <c>created_at</c> comes from, or <see langword="null"/> for the system clock.</param>
     public sealed class InMemoryConversationStore(TimeProvider? timeProvider = null) : IConversationStore
     {
@@ -16,8 +15,7 @@ namespace AgentCore.Application.Conversation.Memory
 
         private readonly InMemoryConversationWords _words = new();
 
-        /// <summary>The resume blob of each conversation, beside the row rather than on it.</summary>
-        private readonly Dictionary<string, ConversationSessionState> _state = [];
+        private readonly InMemoryConversationStates _states = new();
 
         private readonly InMemoryConversationClaims _claims = new();
 
@@ -43,7 +41,7 @@ namespace AgentCore.Application.Conversation.Memory
 
                 return ValueTask.FromResult(existing with
                 {
-                    State = _state.GetValueOrDefault(conversationId),
+                    State = _states.Of(conversationId),
                     NextOrdinal = _words.NextOrdinal(conversationId),
                 });
             }
@@ -62,7 +60,7 @@ namespace AgentCore.Application.Conversation.Memory
                     ? null
                     : conversation with
                     {
-                        State = _state.GetValueOrDefault(conversationId),
+                        State = _states.Of(conversationId),
                         NextOrdinal = _words.NextOrdinal(conversationId),
                     });
             }
@@ -130,12 +128,7 @@ namespace AgentCore.Application.Conversation.Memory
         {
             ArgumentNullException.ThrowIfNull(conversationId);
 
-            lock (_lock)
-            {
-                Forget(conversationId);
-            }
-
-            return default;
+            return UnderLock(() => Forget(conversationId));
         }
 
         /// <inheritdoc />
@@ -175,12 +168,7 @@ namespace AgentCore.Application.Conversation.Memory
             ArgumentNullException.ThrowIfNull(principalKey);
             ArgumentNullException.ThrowIfNull(role);
 
-            lock (_lock)
-            {
-                _claims.Attach(conversationId, principalKey);
-            }
-
-            return default;
+            return UnderLock(() => _claims.Attach(conversationId, principalKey));
         }
 
         /// <inheritdoc />
@@ -190,12 +178,7 @@ namespace AgentCore.Application.Conversation.Memory
             ArgumentNullException.ThrowIfNull(conversationId);
             ArgumentNullException.ThrowIfNull(principalKey);
 
-            lock (_lock)
-            {
-                _claims.Detach(conversationId, principalKey);
-            }
-
-            return default;
+            return UnderLock(() => _claims.Detach(conversationId, principalKey));
         }
 
         /// <inheritdoc />
@@ -217,10 +200,10 @@ namespace AgentCore.Application.Conversation.Memory
             {
                 if (!_conversations.TryGetValue(conversationId, out ConversationRecord? conversation))
                 {
-                    throw new InvalidOperationException($"Store 0 holds no conversation '{conversationId}' to append words to.");
+                    throw new InvalidOperationException($"The conversation store holds no conversation '{conversationId}' to append words to.");
                 }
 
-                int fallbackTurnIndex = _state.GetValueOrDefault(conversationId)?.NextTurnIndex ?? 0;
+                int fallbackTurnIndex = _states.NextTurnIndex(conversationId);
                 if (messages.Min(message => message.TurnIndex) is { } named && named < fallbackTurnIndex)
                 {
                     throw new ConversationTurnConflictException(
@@ -232,13 +215,24 @@ namespace AgentCore.Application.Conversation.Memory
                 DateTimeOffset now = _time.GetUtcNow();
                 _conversations[conversationId] = conversation with { LastMessageAt = now };
 
-                if (state is not null && state.NextTurnIndex >= fallbackTurnIndex)
-                {
-                    _state[conversationId] = state;
-                }
+                _states.Save(conversationId, state);
 
                 return ValueTask.FromResult(rows);
             }
+        }
+
+        /// <inheritdoc />
+        public ValueTask SaveStateAsync(
+            string conversationId, ConversationSessionState state, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(conversationId);
+            ArgumentNullException.ThrowIfNull(state);
+
+            return Amend(conversationId, conversation =>
+            {
+                _states.Save(conversationId, state);
+                return conversation;
+            });
         }
 
         /// <inheritdoc />
@@ -249,12 +243,7 @@ namespace AgentCore.Application.Conversation.Memory
             ArgumentException.ThrowIfNullOrEmpty(messageId);
             ArgumentNullException.ThrowIfNull(content);
 
-            lock (_lock)
-            {
-                _words.Rewrite(conversationId, messageId, content);
-            }
-
-            return default;
+            return UnderLock(() => _words.Rewrite(conversationId, messageId, content));
         }
 
         /// <inheritdoc />
@@ -263,12 +252,7 @@ namespace AgentCore.Application.Conversation.Memory
             ArgumentNullException.ThrowIfNull(conversationId);
             ArgumentException.ThrowIfNullOrEmpty(messageId);
 
-            lock (_lock)
-            {
-                _words.Delete(conversationId, messageId);
-            }
-
-            return default;
+            return UnderLock(() => _words.Delete(conversationId, messageId));
         }
 
         /// <inheritdoc />
@@ -277,10 +261,7 @@ namespace AgentCore.Application.Conversation.Memory
         {
             ArgumentNullException.ThrowIfNull(conversationId);
 
-            lock (_lock)
-            {
-                return ValueTask.FromResult(_words.ReadForSession(conversationId));
-            }
+            return UnderLock(() => _words.ReadForSession(conversationId));
         }
 
         /// <inheritdoc />
@@ -289,10 +270,7 @@ namespace AgentCore.Application.Conversation.Memory
         {
             ArgumentNullException.ThrowIfNull(conversationId);
 
-            lock (_lock)
-            {
-                return ValueTask.FromResult(_words.Read(conversationId, window));
-            }
+            return UnderLock(() => _words.Read(conversationId, window));
         }
 
         /// <inheritdoc />
@@ -302,10 +280,7 @@ namespace AgentCore.Application.Conversation.Memory
             ArgumentNullException.ThrowIfNull(conversationId);
             ArgumentException.ThrowIfNullOrEmpty(messageId);
 
-            lock (_lock)
-            {
-                return ValueTask.FromResult(_words.OrdinalOf(conversationId, messageId));
-            }
+            return UnderLock(() => _words.OrdinalOf(conversationId, messageId));
         }
 
         /// <inheritdoc />
@@ -314,10 +289,7 @@ namespace AgentCore.Application.Conversation.Memory
         {
             ArgumentNullException.ThrowIfNull(conversationId);
 
-            lock (_lock)
-            {
-                return ValueTask.FromResult(_words.Truncate(conversationId, fromOrdinal));
-            }
+            return UnderLock(() => _words.Truncate(conversationId, fromOrdinal));
         }
 
         /// <inheritdoc />
@@ -325,10 +297,7 @@ namespace AgentCore.Application.Conversation.Memory
         {
             ArgumentNullException.ThrowIfNull(conversationId);
 
-            lock (_lock)
-            {
-                return ValueTask.FromResult(_words.Erase(conversationId));
-            }
+            return UnderLock(() => _words.Erase(conversationId));
         }
 
         /// <inheritdoc />
@@ -337,12 +306,7 @@ namespace AgentCore.Application.Conversation.Memory
             ArgumentNullException.ThrowIfNull(responseId);
             ArgumentNullException.ThrowIfNull(conversationId);
 
-            lock (_lock)
-            {
-                _continuations.Save(responseId, conversationId, _time.GetUtcNow());
-            }
-
-            return default;
+            return UnderLock(() => _continuations.Save(responseId, conversationId, _time.GetUtcNow()));
         }
 
         /// <inheritdoc />
@@ -350,10 +314,7 @@ namespace AgentCore.Application.Conversation.Memory
         {
             ArgumentNullException.ThrowIfNull(responseId);
 
-            lock (_lock)
-            {
-                return ValueTask.FromResult(_continuations.Find(responseId));
-            }
+            return UnderLock(() => _continuations.Find(responseId));
         }
 
         /// <inheritdoc />
@@ -361,12 +322,7 @@ namespace AgentCore.Application.Conversation.Memory
         {
             ArgumentNullException.ThrowIfNull(responseId);
 
-            lock (_lock)
-            {
-                _continuations.Forget(responseId);
-            }
-
-            return default;
+            return UnderLock(() => _continuations.Forget(responseId));
         }
 
         /// <summary>Drops a conversation, its claims, its state, its continuation and its words. Runs under the lock.</summary>
@@ -374,9 +330,27 @@ namespace AgentCore.Application.Conversation.Memory
         {
             _ = _conversations.Remove(conversationId);
             _claims.Forget(conversationId);
-            _ = _state.Remove(conversationId);
+            _states.Forget(conversationId);
             _continuations.ForgetConversation(conversationId);
             _words.Forget(conversationId);
+        }
+
+        private ValueTask UnderLock(Action work)
+        {
+            lock (_lock)
+            {
+                work();
+            }
+
+            return default;
+        }
+
+        private ValueTask<T> UnderLock<T>(Func<T> read)
+        {
+            lock (_lock)
+            {
+                return ValueTask.FromResult(read());
+            }
         }
 
         private ValueTask Amend(string conversationId, Func<ConversationRecord, ConversationRecord> amend)

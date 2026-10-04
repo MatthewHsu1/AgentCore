@@ -1,24 +1,27 @@
 using AgentCore.Application.Audit.Memory;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
+using AgentCore.Application.Tests.Audit;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Domain.Audit;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Cut;
+using AgentCore.Application.Runtime.Session;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 using static AgentCore.Application.Tests.Runtime.ConversationSessionCutTestSupport;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
     /// <see cref="ConversationSession.Cut"/> at the edges of a turn's window: after its commit, after its run was
-    /// abandoned, and after the conversation ended (docs/handoff/2026-09-22-maf-native-engine-design.md, section 3).
+    /// abandoned, and after the conversation ended.
     /// </summary>
     public sealed class ConversationSessionCutWindowTests
     {
         private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-        // TurnCutSlot remarks: a cut after the commit belongs to the committed turn. It lands while the reader still
+        // A cut after the commit belongs to the committed turn. It lands while the reader still
         // holds the turn's last update, so the run has not ended, and it rewrites the reply the commit wrote.
         [Fact]
         public async Task ACutAfterTheCommit_WhileTheRunIsStillOpen_RewritesTheCommittedReply()
@@ -44,10 +47,10 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(["hi", "Hello"], Texts(session.Transcript));
             Assert.Equal(1, store.Appends);
             _ = Assert.Single(store.Rewrites);
-            _ = Assert.Single(sink.EventsOf(session.ConversationId), item => item.Kind == AuditEventKind.ReplyInterrupted);
+            _ = Assert.Single(await session.RowsAsync(sink), item => item.Kind == AuditEventKind.ReplyInterrupted);
         }
 
-        // Owner ruling 2026-09-23: a run disposed unread commits nothing, so a cut that names it has no turn to reach.
+        // A run disposed unread commits nothing, so a cut that names it has no turn to reach.
         [Fact]
         public async Task ACutOfARunDisposedUnread_ReportsFalse_AndChangesNothing()
         {
@@ -83,8 +86,8 @@ namespace AgentCore.Application.Tests.Runtime
             // Assert
             Assert.False(recorded);
             Assert.Empty(store.Rewrites);
-            Assert.Equal(AuditEventKind.ConversationEnded, sink.EventsOf(session.ConversationId)[^1].Kind);
-            Assert.DoesNotContain(sink.EventsOf(session.ConversationId), item => item.Kind == AuditEventKind.ReplyInterrupted);
+            Assert.Equal(AuditEventKind.ConversationEnded, (await session.RowsAsync(sink))[^1].Kind);
+            Assert.DoesNotContain(await session.RowsAsync(sink), item => item.Kind == AuditEventKind.ReplyInterrupted);
         }
 
         // IConversationPort.Cut: a negative played duration is refused.

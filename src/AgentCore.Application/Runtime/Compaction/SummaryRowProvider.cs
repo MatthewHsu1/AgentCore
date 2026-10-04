@@ -1,4 +1,7 @@
 using AgentCore.Application.Diagnostics;
+using AgentCore.Application.Hooks.Engine;
+using AgentCore.Application.Hooks.Layers;
+using AgentCore.Application.Hooks.Notices;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Transcript;
 using Microsoft.Agents.AI;
@@ -25,18 +28,23 @@ namespace AgentCore.Application.Runtime.Compaction
 
         private readonly Func<IChatClient, CompactionStrategy> _summary;
 
-        /// <param name="history">Store 1, which says what a compaction may cover and takes the row.</param>
+        private readonly HookRuntime _hooks;
+
+        /// <param name="history">The message store, which says what a compaction may cover and takes the row.</param>
         /// <param name="summariser">The chat client the strategy calls. Wrapped fresh each invocation, so the notice tracks the call it actually makes.</param>
         /// <param name="summary">Builds the strategy that replaces the oldest messages with one summary, over the client it is handed.</param>
-        public SummaryRowProvider(AgentCoreChatHistoryProvider history, IChatClient summariser, Func<IChatClient, CompactionStrategy> summary)
+        /// <param name="hooks">The hooks of this compile; they run inside each compaction.</param>
+        public SummaryRowProvider(AgentCoreChatHistoryProvider history, IChatClient summariser, Func<IChatClient, CompactionStrategy> summary, HookRuntime hooks)
         {
             ArgumentNullException.ThrowIfNull(history);
             ArgumentNullException.ThrowIfNull(summariser);
             ArgumentNullException.ThrowIfNull(summary);
+            ArgumentNullException.ThrowIfNull(hooks);
 
             _history = history;
             _summariser = summariser;
             _summary = summary;
+            _hooks = hooks;
         }
 
         /// <inheritdoc />
@@ -63,14 +71,23 @@ namespace AgentCore.Application.Runtime.Compaction
             List<ChatMessage> view = [.. messages.Take(floor.Messages.Count)];
 
             NoticingChatClient client = new(_summariser, turn?.Notices);
-            CompactionStrategy strategy = _summary(client);
+            GatedSummariser gated = new(client, _hooks, turn, view.Count);
+            CompactionStrategy strategy = _summary(gated);
 
             try
             {
                 List<ChatMessage> output = [.. await CompactionProvider.CompactAsync(strategy, view, logger, cancellationToken).ConfigureAwait(false)];
 
+                if (gated.Cancelled)
+                {
+                    RaiseCompacted(turn, gated, messages.Count, messages.Count, CompactionOutcome.Cancelled);
+                    PostEnd(turn, client, "unchanged");
+                    return input;
+                }
+
                 if (output.Count == view.Count && output.Zip(view).All(pair => ReferenceEquals(pair.First, pair.Second)))
                 {
+                    RaiseCompacted(turn, gated, messages.Count, messages.Count, CompactionOutcome.Unchanged);
                     PostEnd(turn, client, "unchanged");
                     return input;
                 }
@@ -82,6 +99,7 @@ namespace AgentCore.Application.Runtime.Compaction
                         Log.TranscriptCompactionUnsupported(logger, turn.ConversationId, turn.TurnIndex);
                     }
 
+                    RaiseCompacted(turn, gated, messages.Count, messages.Count, CompactionOutcome.Unchanged);
                     PostEnd(turn, client, "unchanged");
                     return input;
                 }
@@ -89,10 +107,12 @@ namespace AgentCore.Application.Runtime.Compaction
                 int coversUpTo = floor.Messages[kept - 1].LastOrdinal;
                 if (coversUpTo <= floor.CoversUpTo || !_history.Compact(session, output[0], coversUpTo, floor.Revision))
                 {
+                    RaiseCompacted(turn, gated, messages.Count, messages.Count, CompactionOutcome.Unchanged);
                     PostEnd(turn, client, "unchanged");
                     return input;
                 }
 
+                RaiseCompacted(turn, gated, messages.Count, 1 + messages.Count - kept, CompactionOutcome.Compacted);
                 PostEnd(turn, client, "compacted");
                 return new AIContext
                 {
@@ -105,13 +125,30 @@ namespace AgentCore.Application.Runtime.Compaction
             catch (Exception exception) when (exception is not OperationCanceledException)
 #pragma warning restore CA1031
             {
+                if (gated.Cancelled)
+                {
+                    RaiseCompacted(turn, gated, messages.Count, messages.Count, CompactionOutcome.Cancelled);
+                    PostEnd(turn, client, "unchanged");
+                    return input;
+                }
+
                 if (turn is not null)
                 {
                     Log.TranscriptCompactionFailed(logger, turn.ConversationId, turn.TurnIndex, exception);
                 }
 
+                RaiseCompacted(turn, gated, messages.Count, messages.Count, CompactionOutcome.Failed);
                 PostEnd(turn, client, "failed");
                 return input;
+            }
+        }
+
+        /// <summary>Raises the compaction notice when the strategy actually asked for a summary: no ask, no compaction.</summary>
+        private static void RaiseCompacted(TurnInvocation? turn, GatedSummariser gated, int before, int after, CompactionOutcome outcome)
+        {
+            if (gated.Asked && turn?.Hooks is { } hooks)
+            {
+                _ = hooks.Raise(new Compacted(hooks.Scope(turn.TurnIndex, turn.Stage), before, after, outcome));
             }
         }
 

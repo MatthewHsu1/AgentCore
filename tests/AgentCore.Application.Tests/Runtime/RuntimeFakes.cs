@@ -3,6 +3,7 @@ using System.Text.Json;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Tools;
 using Microsoft.Extensions.AI;
+using AgentCore.Application.Runtime.ToolCalls;
 
 namespace AgentCore.Application.Tests.Runtime
 {
@@ -29,11 +30,6 @@ namespace AgentCore.Application.Tests.Runtime
     /// <summary>
     /// A deterministic offline model that answers one reply for each request, in order.
     /// </summary>
-    /// <remarks>
-    /// The turn loop makes two model calls in one turn, the reply and the extractor, and they need
-    /// different answers. This client answers a list, and it holds the last answer once the list runs
-    /// out.
-    /// </remarks>
     internal sealed class SequencedChatClient(params string[] replies) : IChatClient
     {
         private readonly string[] _replies = replies;
@@ -123,11 +119,6 @@ namespace AgentCore.Application.Tests.Runtime
     /// <summary>
     /// A model that yields lifecycle updates between its text fragments.
     /// </summary>
-    /// <remarks>
-    /// Section 8.6 measured <c>AsAIAgent()</c>: 47 updates for 40 text fragments, and seven of them carry
-    /// no content. This client reproduces both empty shapes, an update with no content at all and an
-    /// update whose only content is empty text, so a test proves the seam drops them.
-    /// </remarks>
     internal sealed class LifecycleChatClient(params string[] fragments) : IChatClient
     {
         private readonly string[] _fragments = fragments;
@@ -199,11 +190,6 @@ namespace AgentCore.Application.Tests.Runtime
     /// <summary>
     /// A model that calls the first tool it is offered on every request, and never answers with text.
     /// </summary>
-    /// <remarks>
-    /// <see cref="ToolCallingChatClient"/> conversations one tool once, which keeps a healthy run finite. Section
-    /// 8.7 needs the other case: a tool that keeps failing. This client never stops calling, so the run
-    /// spends the error budget of <c>MaximumConsecutiveErrorsPerRequest</c> and the 4th failure throws.
-    /// </remarks>
     internal sealed class LoopingToolCallingChatClient : IChatClient
     {
         private int _calls;
@@ -273,25 +259,6 @@ namespace AgentCore.Application.Tests.Runtime
     /// Builds one function for each declared tool, and every one of them throws a fault the model
     /// cannot answer.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// A <c>builtin</c> tool returns an error result rather than throwing, so this factory stands for
-    /// the case section 8.7 keeps for a defect: the fault is beyond the model, and the 4th consecutive
-    /// one throws out of the run and spends the framework's own budget.
-    /// </para>
-    /// <para>
-    /// Task 7a moved that classification off <see cref="DeclaredTool"/> and
-    /// into <see cref="AuditingFunctionInvokingChatClient"/>, the framework's single choke point for
-    /// every tool call. This factory builds a bare <c>AIFunctionFactory</c> tool, which is not a
-    /// <see cref="DeclaredTool"/> at all, so it is the one thing in this file
-    /// that still exercises the classification of a fault reaching that middleware with no tool kind in
-    /// front of it. The exception type is deliberately one <c>IsBeyondTheModel</c> classifies as beyond
-    /// the model — before the move that was true of every exception this factory could throw, because
-    /// nothing classified it either way; after the move, only this arm keeps the run finite, since an
-    /// answerable fault would now become an error result the model reads and
-    /// <see cref="LoopingToolCallingChatClient"/> would call the tool again forever.
-    /// </para>
-    /// </remarks>
     internal sealed class ThrowingToolBuilder
     {
         /// <summary>The message every fault carries.</summary>
@@ -319,11 +286,6 @@ namespace AgentCore.Application.Tests.Runtime
     /// <summary>
     /// Builds one function for each declared tool, and answers it with a fixed JSON document.
     /// </summary>
-    /// <remarks>
-    /// The turn loop reads a tool result out of the finished turn and hands it to
-    /// <c>ToolStateWriter</c>. This factory gives it something to read without an HTTP adapter.
-    /// </remarks>
-    /// <remarks>Creates the factory.</remarks>
     /// <param name="result">The JSON document each tool answers.</param>
     /// <param name="asText">
     /// Whether the tool answers the document as one string. A real tool answers either way, because a
@@ -376,13 +338,6 @@ namespace AgentCore.Application.Tests.Runtime
     /// <summary>
     /// A model that calls one tool by a name of the test's choosing, once, then answers with text.
     /// </summary>
-    /// <remarks>
-    /// <see cref="ToolCallingChatClient"/> always calls a tool the document declares. This one calls
-    /// whatever name it is given, so a test can reproduce the model INVENTING a tool name — the
-    /// <c>NotFound</c> case, which the framework answers with a message and no exception, so it spends
-    /// none of the error budget and the turn goes on. Nothing recorded it before.
-    /// </remarks>
-    /// <remarks>Creates the client.</remarks>
     /// <param name="toolName">The name the model calls. It need not be a name the document declares.</param>
     /// <param name="reply">What it says once the tool round is over.</param>
     /// <param name="callsPerTurn">
@@ -475,13 +430,6 @@ namespace AgentCore.Application.Tests.Runtime
     /// Builds one REAL <see cref="DeclaredTool"/> for each declared tool, and every one of them throws a
     /// fault the model cannot answer.
     /// </summary>
-    /// <remarks>
-    /// <see cref="ThrowingToolBuilder"/> builds a bare <c>AIFunctionFactory</c> delegate, which throws
-    /// straight at the framework. This one goes through the base every shipped tool kind shares, so it
-    /// exercises the classification <c>AuditingFunctionInvokingChatClient</c> applies and not just the
-    /// framework's reaction to it. Section 8.7 row six is only reachable through a tool that lets a fault
-    /// out.
-    /// </remarks>
     internal sealed class UnreachableEndpointToolBuilder
     {
         /// <summary>The message every fault carries.</summary>
@@ -521,11 +469,6 @@ namespace AgentCore.Application.Tests.Runtime
     /// Builds one REAL <see cref="DeclaredTool"/> for each declared tool, and every one of them throws a
     /// fault the model CAN answer.
     /// </summary>
-    /// <remarks>
-    /// The counterpart of <see cref="UnreachableEndpointToolBuilder"/>, and the half of section 8.7 that
-    /// must not regress: the tool answers with an error result, the model reads it, and the turn ends
-    /// with a spoken reply and no failure at all.
-    /// </remarks>
     internal sealed class RefusedRequestToolBuilder
     {
         /// <summary>The message every fault carries.</summary>
@@ -564,12 +507,6 @@ namespace AgentCore.Application.Tests.Runtime
     /// <summary>
     /// A model that throws instead of answering, on both run shapes.
     /// </summary>
-    /// <remarks>
-    /// R1 reaches the turn loop through a tool that failed four times, and that path needs a tool, a
-    /// looping model, and four round trips to set up. The fault this client raises is the same fault as
-    /// far as everything above the chat pipeline is concerned, so a test of the fallback layer says what
-    /// it means in three lines.
-    /// </remarks>
     internal sealed class ThrowingChatClient(Exception fault) : IChatClient
     {
         private readonly Exception _fault = fault;
@@ -605,11 +542,6 @@ namespace AgentCore.Application.Tests.Runtime
     /// <summary>
     /// A model that calls a scripted list of tools by name, one per request, then answers in words.
     /// </summary>
-    /// <remarks>
-    /// <see cref="LoopingToolCallingChatClient"/> always calls the first tool it is offered, so it
-    /// cannot drive an agent whose behaviour IS which tool it picks next. This one names the tool and its arguments, which is
-    /// what makes a multi-hop test assert on the hops rather than on the count.
-    /// </remarks>
     internal sealed class ScriptedToolCallingChatClient(params (string Tool, string Arguments)[] script) : IChatClient
     {
         private readonly (string Tool, string Arguments)[] _script = script;

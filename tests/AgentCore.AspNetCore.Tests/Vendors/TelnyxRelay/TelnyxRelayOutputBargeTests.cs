@@ -1,7 +1,11 @@
 using System.Buffers;
 using System.Text.Json;
-using AgentCore.AspNetCore.Vendors.TelnyxRelay;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Vendors.TelnyxRelay.Connection;
+using AgentCore.AspNetCore.Vendors.TelnyxRelay.Wire;
+using AgentCore.AspNetCore.Voice.Ports;
+using AgentCore.AspNetCore.Voice.Speech;
+using AgentCore.AspNetCore.Voice.Speech.Replies;
+using AgentCore.AspNetCore.Voice.Turns;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 

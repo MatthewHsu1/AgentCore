@@ -5,7 +5,7 @@ using Microsoft.Extensions.AI;
 namespace AgentCore.TestSupport
 {
     /// <summary>
-    /// What every store 1 must do with a summary row: hand it to the session's read alone, leave it out
+    /// What every message store must do with a summary row: hand it to the session's read alone, leave it out
     /// of every consumer read, and take it on a truncate only when the cut reaches a row it covers.
     /// Each store's test class runs these against its own instance. This project carries no test
     /// framework, so a fact that fails throws <see cref="InvalidOperationException"/> naming what it saw.

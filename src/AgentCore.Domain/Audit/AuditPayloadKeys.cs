@@ -77,8 +77,9 @@ namespace AgentCore.Domain.Audit
         /// <summary>
         /// On <c>turn.refused</c>: why the turn was refused. <c>busy</c>: another turn held the conversation past the
         /// wait limit. <c>conflict</c>: the store refused the words, because another session saved that turn first.
-        /// <c>gone</c>: the client left while the turn waited to start. <c>running</c>: this session was still running
-        /// a turn. <c>dropped</c>: the caller let go of the turn before it read the reply. A <c>busy</c> or
+        /// <c>gone</c>: the client left while the turn waited to start. <c>dropped</c>: the caller let go of the turn
+        /// before it read the reply. <c>terminal</c>: the conversation had reached a terminal stage. <c>disposed</c>: the
+        /// session was disposed. <c>in_use</c>: another entry holds the conversation. A <c>busy</c> or
         /// <c>gone</c> refusal carries no turn index: the turn never read the conversation, so the index it would
         /// have taken is not known.
         /// </summary>

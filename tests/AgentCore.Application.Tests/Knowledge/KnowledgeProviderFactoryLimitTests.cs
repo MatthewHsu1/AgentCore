@@ -17,7 +17,7 @@ namespace AgentCore.Application.Tests.Knowledge
         public async Task Create_MoreCardsThanTheAgentAsksFor_KeepsTheBestFew(
             int limit, string lastKept, string firstDropped)
         {
-            // Ruling 14(c). The store fetches once, up to its own deployment ceiling, for every agent.
+            // The store fetches once, up to its own deployment ceiling, for every agent.
             // limit: is this agent's view of that fetch, and the port returns cards best first.
             // Two limits, because one cannot tell the agent's limit from a hardcoded number.
             StubKnowledgePort port = new([Card("a"), Card("b"), Card("c"), Card("d"), Card("e")]);
@@ -37,7 +37,7 @@ namespace AgentCore.Application.Tests.Knowledge
         [Fact]
         public async Task Create_TheLimit_CountsRankedCardsAndLetsALinkedOneRideAlong()
         {
-            // Ruling 16. A7 makes see_also expansion never optional, and the store appends the linked
+            // see_also expansion is never optional, and the store appends the linked
             // cards after every scored one. A plain prefix would drop every link whenever the fetch
             // filled up -- which, at the shipped defaults of 5 and 5, is every full result. The winning
             // probe arm was "top 5 plus see_also of the top hit": the links are additional to the five.
@@ -58,7 +58,7 @@ namespace AgentCore.Application.Tests.Knowledge
         [Fact]
         public async Task Create_MoreCardsThanTheLimit_CitesOnlyTheCardsTheModelIsShown()
         {
-            // Finding 2. A card ranked past the agent's limit: is never shown to the model, so citing
+            // A card ranked past the agent's limit: is never shown to the model, so citing
             // it anyway would put a chip on screen for a document the answer could not possibly have
             // drawn on. The cited set must match the kept set, not the store's full return.
             StubKnowledgePort port = new([Card("a"), Card("b"), Card("c"), Card("d"), Card("e")]);
@@ -67,12 +67,9 @@ namespace AgentCore.Application.Tests.Knowledge
             TurnSources sources = new();
 
             StubSession session = new();
-            TurnRegistry.Set(session, PrefetchTurn(sources: sources));
-            using (sources.BeginOuterCall("conversation-1"))
-            {
-                _ = await provider.InvokingAsync(
-                    Invoking("the screen says e33", session), TestContext.Current.CancellationToken);
-            }
+            TurnRegistry.Set(session, PrefetchTurn(sources: sources) with { OuterCallId = "conversation-1" });
+            _ = await provider.InvokingAsync(
+                Invoking("the screen says e33", session), TestContext.Current.CancellationToken);
 
             IReadOnlyList<SourceContent> cited = sources.TakeFor("conversation-1");
             Assert.Equal(2, cited.Count);

@@ -1,11 +1,11 @@
-using AgentCore.TestSupport;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.Application.Runtime.Session;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
+using AgentCore.AspNetCore.Voice.Routing;
+using AgentCore.TestSupport;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -20,12 +20,6 @@ namespace AgentCore.AspNetCore.Tests.Fakes
     /// <summary>
     /// One real host with the relay route mapped, over a fake model.
     /// </summary>
-    /// <remarks>
-    /// Kestrel takes port zero and reports the port it got, so many tests run at once. The socket is
-    /// real on purpose: framing, fragmentation, and the close handshake are wire behaviours, and the
-    /// in-memory socket of TestServer never frames anything. No test here reaches a network, and no
-    /// test needs a Telnyx account. That is T59.
-    /// </remarks>
     internal sealed class TelnyxRelayHost : IAsyncDisposable
     {
         /// <summary>The vendor-neutral conversation route, with the document's one entry filled in.</summary>
@@ -53,23 +47,9 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         public IServiceProvider Services => _app.Services;
 
         /// <summary>Gets the <c>ws://</c> address of the relay route.</summary>
-        /// <remarks>
-        /// <see cref="ConnectAsync"/> covers every test that wants the vendor side driven for it. A
-        /// test that needs to control exactly when bytes are read off the wire — proving something
-        /// about backpressure, for one, since <see cref="FakeRelayClient"/>'s own pump always drains
-        /// the socket as fast as it can — opens its own <see cref="System.Net.WebSockets.ClientWebSocket"/>
-        /// against this address instead.
-        /// </remarks>
         public Uri Address { get; }
 
         /// <summary>Gets the last exception any part of the host logged at error level, or null.</summary>
-        /// <remarks>
-        /// A host that forgot <c>app.UseWebSockets()</c> answers every relay request with an unhandled
-        /// exception, and there is no field on the endpoint itself that carries it — only the log line
-        /// ASP.NET Core's own hosting layer writes when a request delegate throws. This reads that line,
-        /// captured by <see cref="ErrorCapturingLoggerProvider"/>, which this host always installs
-        /// regardless of what a test's own <c>logging</c> callback adds.
-        /// </remarks>
         public string? LastError => _errors.LastMessage;
 
         /// <summary>Starts one host over one document, with the WebSocket middleware in place.</summary>
@@ -103,12 +83,6 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         /// </param>
         /// <param name="logging">Anything a test adds to the logging pipeline.</param>
         /// <returns>The started host, answering on <see cref="MainConversation"/>.</returns>
-        /// <remarks>
-        /// <see cref="StartAsync"/> maps the relay through the internal <c>MapTelnyxRelay</c> and so
-        /// bypasses the seam entirely, which is right for the several dozen frame-level tests that use
-        /// it and wrong for proving that the shipped vendor is reachable from the vendor-neutral route.
-        /// This overload is the one that joins the two.
-        /// </remarks>
         public static Task<TelnyxRelayHost> StartThroughConversationSeamAsync(
             string yaml,
             IChatClient reply,
@@ -124,10 +98,6 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         /// <param name="configure">Anything else the test binds on the options.</param>
         /// <param name="logging">Anything a test adds to the logging pipeline.</param>
         /// <returns>The started host.</returns>
-        /// <remarks>
-        /// The middleware is the host's own job, not the library's — <c>MapTelnyxRelay</c> only maps the
-        /// route. This is how a test proves what happens when a host forgets it.
-        /// </remarks>
         public static Task<TelnyxRelayHost> StartWithoutWebSocketsAsync(
             string yaml,
             IChatClient reply,
@@ -255,12 +225,6 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         /// <summary>Waits until the store holds one conversation.</summary>
         /// <param name="conversationId">The conversation id.</param>
         /// <returns>A task that completes once the session appears.</returns>
-        /// <remarks>
-        /// A setup frame's <c>SendAsync</c> completing on the client only means the bytes left the
-        /// client; it proves nothing about whether the server has read and dispatched them yet. A test
-        /// that then tears the socket down immediately would otherwise race the server's own session
-        /// creation, and a pass would not prove the removal it meant to prove.
-        /// </remarks>
         /// <exception cref="TimeoutException">The session never appeared within two seconds.</exception>
         public async Task WaitForSessionAsync(string conversationId)
         {
@@ -287,13 +251,6 @@ namespace AgentCore.AspNetCore.Tests.Fakes
     }
 
     /// <summary>Captures the message of the last exception any category logged at error level or above.</summary>
-    /// <remarks>
-    /// ASP.NET Core's own hosting layer logs an unhandled exception from a request delegate rather than
-    /// letting a test observe it any other way, so this is the only handle <see cref="TelnyxRelayHost"/>
-    /// has on it. Every category is captured, not just the relay connection's own logger, because the
-    /// missing-middleware fault this exists for is thrown and logged by the framework, not by
-    /// <c>AgentCore.TelnyxRelay</c>.
-    /// </remarks>
     internal sealed class ErrorCapturingLoggerProvider : ILoggerProvider
     {
         private volatile string? _lastMessage;

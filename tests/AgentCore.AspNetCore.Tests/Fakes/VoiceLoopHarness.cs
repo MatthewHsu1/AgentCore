@@ -3,10 +3,16 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Hooks;
+using AgentCore.Application.Runtime.Session;
 using AgentCore.Application.Sessions.Memory;
+using AgentCore.AspNetCore.Calls;
 using AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Voice.Filler;
+using AgentCore.AspNetCore.Voice.Options;
+using AgentCore.AspNetCore.Voice.Ports;
+using AgentCore.AspNetCore.Voice.Transport;
+using AgentCore.AspNetCore.Voice.Turns;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -30,8 +36,9 @@ namespace AgentCore.AspNetCore.Tests.Fakes
                 TimeSpan.FromMinutes(5),
                 TimeProvider.System);
             Loop = new VoiceConversationLoop(
-                Sessions,
+                new PhoneCallHost(Sessions, compiled.Hooks, TimeProvider.System, NullLogger.Instance, GatePoint.BeforeCall.Deadline),
                 SingleEntrySessionFactories.MainEntry,
+                "test-transport",
                 output,
                 new ConnectionTaskObserver(() => Loop?.ConversationId ?? "(none)", (_, _) => { }, (_, _, _) => { }, (_, _, _) => false),
                 TimeProvider.System,

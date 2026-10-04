@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using AgentCore.Application.Hooks.Layers;
 using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Tools
@@ -38,6 +39,7 @@ namespace AgentCore.Application.Tools
             {
                 // The turn itself being cancelled is not this: that token is the caller's, and it is left
                 // to propagate. Only this wrapper's own deadline becomes a result.
+                ToolCallOutcomes.Mark(arguments, ToolCallOutcomes.TimedOutKey);
                 return Failed();
             }
         }

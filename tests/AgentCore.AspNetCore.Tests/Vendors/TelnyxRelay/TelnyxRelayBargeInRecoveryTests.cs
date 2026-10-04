@@ -1,8 +1,8 @@
-using AgentCore.Application.Runtime;
 using AgentCore.AspNetCore.Tests.Fakes;
 using AgentCore.Domain;
 using Microsoft.Extensions.Logging;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
 {
@@ -12,8 +12,8 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
     /// </summary>
     public sealed class TelnyxRelayBargeInRecoveryTests
     {
-        // Plan B1 (agent_activity.py:2774-2783): a second final prompt interrupts turn one, which keeps the text
-        // that reached the relay (design section 3), and turn two answers. Nothing is held.
+        // LiveKit's agent_activity.py:2774-2783: a second final prompt interrupts turn one, which keeps the text
+        // that reached the relay, and turn two answers. Nothing is held.
         [Fact(Timeout = 30_000)]
         public async Task ASecondFinalPromptDuringATurn_InterruptsTheFirstAndTheSecondAnswers()
         {
@@ -78,9 +78,8 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
         [Fact(Timeout = 30_000)]
         public async Task ATurnAfterABargeIn_AnswersNormally()
         {
-            // Item 6a is half proved by AfterAnInterrupt_NoFurtherTextFrameReachesTheRelay: a barge-in
-            // ends one turn cleanly. The other half — the conversation itself goes on — needs its own proof,
-            // because nothing else here shows the caller can speak again and get a real answer rather
+            // AfterAnInterrupt_NoFurtherTextFrameReachesTheRelay proves a barge-in ends one turn cleanly. The conversation
+            // itself must also go on: nothing else here shows the caller can speak again and get a real answer rather
             // than silence or a leftover interrupted reply.
             using BlockingChatClient reply = new("hello there caller");
             EventObservedLoggerProvider capture = new("InterruptReceived");
@@ -138,7 +137,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
             Assert.Null(session!.LastTurn!.Cut);
         }
 
-        // Owner ruling 2026-09-24: once a later turn has started, an earlier turn's reply never changes. Turn one's
+        // Once a later turn has started, an earlier turn's reply never changes. Turn one's
         // reply is all on the wire and the relay is still playing it; turn two has streamed only content with no
         // words. A barge-in then reports what the caller heard of turn one, too late: the engine refuses the cut,
         // the refusal is logged, turn one keeps its reply, and turn two speaks on.

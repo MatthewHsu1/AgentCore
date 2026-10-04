@@ -1,7 +1,6 @@
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging;
 using AgentCore.Application.Runtime.Turn;
-using AgentCore.Application.Runtime;
 
 namespace AgentCore.Application.Knowledge
 {

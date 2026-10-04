@@ -5,13 +5,12 @@ using Microsoft.Extensions.Logging;
 namespace AgentCore.Application.Diagnostics
 {
     /// <summary>
-    /// Every line the turn loop writes: extraction, moderation, the transcript, and knowledge retrieval. Three
-    /// of them are the "log once" rows of section 8.7. The session owner's own lines — its workspace folder,
+    /// Every line the turn loop writes: extraction, moderation, the transcript, and knowledge retrieval. The session owner's own lines — its workspace folder,
     /// and its close and idle-expiry routine — are <see cref="SessionOwnerLog"/>.
     /// </summary>
     internal static partial class Log
     {
-        /// <summary>Section 8.7, row two. The extractor returned an invalid object.</summary>
+        /// <summary>The extractor returned an invalid object.</summary>
         /// <param name="logger">The logger of the session.</param>
         /// <param name="conversationId">The id of the conversation.</param>
         /// <param name="turnIndex">The zero-based index of the turn that just ran.</param>
@@ -23,7 +22,7 @@ namespace AgentCore.Application.Diagnostics
                 + "The slots stay unchanged and the conversation continues.")]
         public static partial void ExtractionFailed(ILogger logger, string conversationId, int turnIndex, string reason);
 
-        /// <summary>Section 8.7, row six. A tool failed four times in a row and the run threw.</summary>
+        /// <summary>A tool failed four times in a row and the run threw.</summary>
         /// <param name="logger">The logger of the session.</param>
         /// <param name="conversationId">The id of the conversation.</param>
         /// <param name="turnIndex">The zero-based index of the turn that just ran.</param>
@@ -36,7 +35,7 @@ namespace AgentCore.Application.Diagnostics
         public static partial void ToolBudgetSpent(ILogger logger, string conversationId, int turnIndex, Exception exception);
 
         /// <summary>
-        /// Section 8.7, row six, the other cause of it: a fault above the fallback layer, so no tool ever ran.
+        /// A fault above the fallback layer, so no tool ever ran.
         /// </summary>
         /// <param name="logger">The logger of the session.</param>
         /// <param name="conversationId">The id of the conversation.</param>
@@ -49,7 +48,7 @@ namespace AgentCore.Application.Diagnostics
                 + "The turn spoke the fallback and the conversation continues.")]
         public static partial void TurnRunFaulted(ILogger logger, string conversationId, int turnIndex, Exception exception);
 
-        /// <summary>Section 8.7, last row. The run returned quietly with no text.</summary>
+        /// <summary>The run returned quietly with no text.</summary>
         /// <param name="logger">The logger of the session.</param>
         /// <param name="conversationId">The id of the conversation.</param>
         /// <param name="turnIndex">The zero-based index of the turn that just ran.</param>
@@ -60,7 +59,7 @@ namespace AgentCore.Application.Diagnostics
                 + "The run reached 40 tool rounds, or the model answered nothing.")]
         public static partial void EmptyReply(ILogger logger, string conversationId, int turnIndex);
 
-        /// <summary>Section 8.7, row five. A guard threw at run time, or its rule did not parse.</summary>
+        /// <summary>A guard threw at run time, or its rule did not parse.</summary>
         /// <param name="logger">The logger of the composition root.</param>
         /// <param name="guard">The guard name, or the rule text of an inline guard.</param>
         /// <param name="exception">The cause.</param>
@@ -70,7 +69,7 @@ namespace AgentCore.Application.Diagnostics
             Message = "The guard {Guard} failed. It is treated as false and the conversation continues.")]
         public static partial void GuardFailed(ILogger logger, string guard, Exception exception);
 
-        /// <summary>An observer of the conversation refused an event, or faulted behind its own enqueue.</summary>
+        /// <summary>The audit store refused a row, or the queue behind it faulted.</summary>
         /// <param name="logger">The logger of the session.</param>
         /// <param name="conversationId">The id of the conversation.</param>
         /// <param name="kind">The wire token of the event kind.</param>
@@ -106,18 +105,21 @@ namespace AgentCore.Application.Diagnostics
                 + "The turn ran unchecked, because moderation fails open.")]
         public static partial void ModerationUnavailable(ILogger logger, string conversationId, int turnIndex, string reason);
 
-        /// <summary>The audit queue had no room, so the event was dropped.</summary>
+        /// <summary>
+        /// The audit queue did not take an event: the queue was closed, or the caller cancelled the append. A full queue
+        /// makes the caller wait instead.
+        /// </summary>
         /// <param name="logger">The logger of the queue.</param>
         /// <param name="conversationId">The id of the conversation the dropped event belongs to.</param>
         /// <param name="eventId">The identity of the dropped event.</param>
         [LoggerMessage(
             EventId = 8,
             Level = LogLevel.Error,
-            Message = "The audit queue was full, so event {EventId} of conversation {ConversationId} was dropped. "
-                + "The conversation continues and the chain has a gap.")]
+            Message = "The audit queue did not take event {EventId} of conversation {ConversationId}: the queue was closed, "
+                + "or the append was cancelled. The conversation continues and the chain has a gap.")]
         public static partial void AuditQueueFull(ILogger logger, string conversationId, Guid eventId);
 
-        /// <summary>A store 1 write was refused, so the turn has no durable record.</summary>
+        /// <summary>A conversation history write was refused, so the turn has no durable record.</summary>
         /// <param name="logger">The logger of the session.</param>
         /// <param name="conversationId">The id of the conversation.</param>
         /// <param name="turnIndex">The zero-based index of the turn that was being written.</param>
@@ -141,7 +143,7 @@ namespace AgentCore.Application.Diagnostics
         public static partial void KnowledgeRetrieved(
             ILogger logger, string agent, int cardCount, KnowledgeAuditRecord.LogView record);
 
-        /// <summary>A19. One knowledge retrieval threw, and this is the only place the cause survives.</summary>
+        /// <summary>One knowledge retrieval threw, and this is the only place the cause survives.</summary>
         /// <param name="logger">The logger of the knowledge provider.</param>
         /// <param name="agent">The id of the agent that asked.</param>
         /// <param name="record">The loggable part of the retrieval, as a structured field.</param>
@@ -196,7 +198,7 @@ namespace AgentCore.Application.Diagnostics
             int turnIndex,
             IReadOnlyDictionary<string, KnowledgeFacetOrigin> origins);
 
-        /// <summary>§8's probe answered: it dropped one facet, re-searched, and found this many candidates.</summary>
+        /// <summary>The probe answered: it dropped one facet, re-searched, and found this many candidates.</summary>
         /// <param name="logger">The logger of the knowledge provider.</param>
         /// <param name="agent">The id of the agent that asked.</param>
         /// <param name="facet">The facet the probe dropped.</param>
@@ -208,7 +210,7 @@ namespace AgentCore.Application.Diagnostics
         public static partial void KnowledgeProbeRan(ILogger logger, string agent, string facet, int candidateCount);
 
         /// <summary>
-        /// §8 step 4's probe search threw or timed out. The turn was told the knowledge base holds nothing
+        /// The probe search threw or timed out. The turn was told the knowledge base holds nothing
         /// rather than that it is unreachable, because the main search that already ran is what answers for
         /// reachability; the probe is an extra question on top of it.
         /// </summary>
@@ -242,7 +244,7 @@ namespace AgentCore.Application.Diagnostics
                 + "the tool from this agent.")]
         public static partial void HostedToolDropped(ILogger logger, string agentId, string toolId, string marker, string model);
 
-        /// <summary>Store 1 could not be read as a turn opened, so the turn ran on the words already held.</summary>
+        /// <summary>The conversation history could not be read as a turn opened, so the turn ran on the words already held.</summary>
         /// <param name="logger">The logger of the session.</param>
         /// <param name="conversationId">The id of the conversation.</param>
         /// <param name="turnIndex">The zero-based index of the turn that was opening.</param>

@@ -7,8 +7,8 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Sessions.Memory;
+using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.AspNetCore.Tests.Fakes;
 using AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay;
@@ -18,16 +18,13 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.AspNetCore.Tests.Sessions
 {
     /// <summary>
     /// What the relay socket asks of <see cref="IConversationSessions"/> over the life of one conversation.
     /// </summary>
-    /// <remarks>
-    /// The unit tests of the store itself live in AgentCore.Application.Tests beside the store. This
-    /// file holds only what needs a real socket to prove.
-    /// </remarks>
     public sealed class ConversationSessionsRelayTests
     {
         private const string TwoEntryPolicyYaml =
@@ -107,8 +104,8 @@ namespace AgentCore.AspNetCore.Tests.Sessions
             QueuedAuditSink queue = Assert.IsType<QueuedAuditSink>(harness.Services.GetRequiredService<IAuditSinkPort>());
             await queue.FlushAsync(Token);
             IReadOnlyList<AuditEvent> chain = Assert.IsType<InMemoryAuditSink>(queue.Store).EventsOf("conversation-held");
-            _ = Assert.Single(chain, item => item.Kind == AuditEventKind.ConversationStarted);
-            Assert.DoesNotContain(chain, item => item.Kind == AuditEventKind.ConversationEnded);
+            Assert.Equal([AuditEventKind.ConversationStarted, AuditEventKind.TurnRefused], chain.Select(item => item.Kind));
+            Assert.Equal("in_use", chain[1].Payload[AuditPayloadKeys.RefusedReason]);
 
             Assert.Same(held, await sessions.TryGetAsync(SingleEntrySessionFactories.MainEntry, "conversation-held", Token));
             Assert.False(held.IsComplete);
@@ -128,6 +125,7 @@ namespace AgentCore.AspNetCore.Tests.Sessions
                     configure: options =>
                     {
                         _ = options.UseWorkspace(root);
+                        _ = options.UseHooks(new CallDecider(gate => gate.Accept("conversation-race")));
                         _ = options.UseConversationSessions(factories => new ForcedReopenConversationSessions(
                             new InMemoryConversationSessions(factories, InMemoryConversationSessions.DefaultIdleTimeout, TimeProvider.System),
                             closingEntry: "main",
@@ -135,10 +133,11 @@ namespace AgentCore.AspNetCore.Tests.Sessions
                     },
                     entry: "main");
 
-                // Two setup frames for the same id: the loop closes its own hold, and in that window this
-                // forces "other" to open the id before the loop's reopen is attempted.
-                harness.Socket.Queue(RelayFrames.Setup(conversationSessionId: "conversation-race"));
-                harness.Socket.Queue(RelayFrames.Setup(conversationSessionId: "conversation-race"));
+                // Two setup frames for two calls the hook puts on one conversation: the loop closes the first
+                // call's hold, and in that window this forces "other" to open the id before the second
+                // call's open is attempted.
+                harness.Socket.Queue(RelayFrames.Setup(conversationSessionId: "call-first"));
+                harness.Socket.Queue(RelayFrames.Setup(conversationSessionId: "call-second"));
                 await harness.Connection.WaitAsync(Token);
 
                 Assert.Equal(WebSocketCloseStatus.PolicyViolation, harness.Socket.CloseSent?.Status);

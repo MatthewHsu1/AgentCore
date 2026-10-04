@@ -1,7 +1,10 @@
+using System.Text.Json;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Providers;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Voice.Ports;
+using AgentCore.AspNetCore.Voice.Routing;
+using AgentCore.AspNetCore.Voice.Turns;
 using Microsoft.AspNetCore.Http;
 
 namespace AgentCore.AspNetCore.DependencyInjection.Startup
@@ -56,13 +59,22 @@ namespace AgentCore.AspNetCore.DependencyInjection.Startup
             IConversationAdapter selectedConversation = VendorAdapterSelector.Select(
                 conversationEntry.Kind, conversationAdapters, ConversationSeams.Conversation);
 
-            SpeechProviderConfiguration speechEntry = configuration.Providers?.Speech
-                ?? throw MissingSpeechBlock();
+            if (selectedConversation.Traits.HasFlag(CallTraits.TakesTurnsItself))
+            {
+                RefuseOwnTurnTaking(conversationEntry, selectedConversation.Kind);
+            }
 
             // Read here, and not only where the route is mapped. Agreement between two document entries
             // is a document fact: it is true or false whether or not anything is routed, so a host that
             // forgets app.MapCall() still learns its document contradicts itself.
-            ConversationSpeechPairing.Validate(conversationEntry, speechEntry, selectedConversation);
+            if (configuration.Providers?.Speech is { } speechEntry)
+            {
+                ConversationSpeechPairing.Validate(conversationEntry, speechEntry, selectedConversation);
+            }
+            else if (!selectedConversation.Traits.HasFlag(CallTraits.SpeaksForItself))
+            {
+                throw MissingSpeechBlock();
+            }
 
             // Built here and not where the route is mapped, so an unusable limit in providers.conversation stops
             // the host rather than the first conversation that arrives on it. A vendor this process dials out to
@@ -76,6 +88,38 @@ namespace AgentCore.AspNetCore.DependencyInjection.Startup
                 : new ConversationSeamAdapters(conversationAdapters, options.Speech, transport.CreateHandler(conversationEntry), null);
         }
 
+        /// <summary>Refuses the knobs of AgentCore's own turn taking for a vendor that takes turns itself.</summary>
+        private static void RefuseOwnTurnTaking(ConversationProviderConfiguration conversation, string kind)
+        {
+            List<ConfigurationError> errors = [];
+            if (conversation.Filler.Count > 0)
+            {
+                errors.Add(OwnTurnTaking("filler", kind));
+            }
+
+            if (conversation.UserAway.ValueKind != JsonValueKind.Undefined)
+            {
+                errors.Add(OwnTurnTaking("userAway", kind));
+            }
+
+            if (errors.Count > 0)
+            {
+                throw new ConfigurationLoadException(errors);
+            }
+        }
+
+        private static ConfigurationError OwnTurnTaking(string field, string kind)
+        {
+            return new ConfigurationError
+            {
+                Pointer = $"/providers/conversation/{field}",
+                Message =
+                    $"providers.conversation is kind: {kind}, and that vendor decides when the caller's turn ends, so "
+                    + $"AgentCore's own turn taking never runs and providers.conversation.{field} would do nothing. Remove it.",
+                Check = ConfigurationCheck.ReferenceResolution,
+            };
+        }
+
         /// <summary>Refuses a configuration that turned the conversation seam on and named no transport.</summary>
         /// <returns>The failure to throw, pointed at the block that is missing.</returns>
         private static ConfigurationLoadException MissingConversationBlock()
@@ -86,8 +130,8 @@ namespace AgentCore.AspNetCore.DependencyInjection.Startup
                 Message =
                             "This host registered a conversation transport with options.UseConversation(...), and this "
                             + "configuration writes no providers.conversation block for a kind to be picked from. A "
-                            + "document that writes a providers section names both conversation and speech, because the "
-                            + "schema requires them there; a document that writes no providers section at all is "
+                            + "document that writes a providers section names a conversation block, because the "
+                            + "schema requires it there; a document that writes no providers section at all is "
                             + "valid, and so is a configuration a host built in code, which passes through no "
                             + "schema. Write providers.conversation: { kind: ... }, or drop the options.UseConversation(...) call.",
                 Check = ConfigurationCheck.ReferenceResolution,
@@ -105,9 +149,7 @@ namespace AgentCore.AspNetCore.DependencyInjection.Startup
                             "This configuration names providers.conversation and no providers.speech, so there is "
                             + "nothing to check the transport against: a transport that carries text is itself "
                             + "the recognizer, and one that carries audio needs a speech vendor named. A "
-                            + "document that writes a providers section names both, because the schema requires "
-                            + "them there; a document that writes no providers section at all is valid, and so "
-                            + "is a configuration a host built in code, which passes through no schema. Write "
+                            + "transport that does not speak for itself needs a speech vendor named. Write "
                             + "providers.speech with both of its roles: stt: { kind: ... } and tts: { kind: ... }.",
                 Check = ConfigurationCheck.ReferenceResolution,
             });

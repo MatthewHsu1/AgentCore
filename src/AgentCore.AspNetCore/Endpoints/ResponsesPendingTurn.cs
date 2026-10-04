@@ -2,6 +2,7 @@ using AgentCore.Application.Runtime;
 using AgentCore.AspNetCore.Sessions;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using AgentCore.Application.Runtime.Turn;
 
 namespace AgentCore.AspNetCore.Endpoints
 {

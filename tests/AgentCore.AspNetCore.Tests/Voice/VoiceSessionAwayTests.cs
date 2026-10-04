@@ -7,14 +7,16 @@
 // state transition, or a fresh one that started at the final transcript.
 
 using AgentCore.AspNetCore.Tests.Fakes;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Voice.Session;
+using AgentCore.AspNetCore.Voice.Speech;
+using AgentCore.AspNetCore.Voice.Turns;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace AgentCore.AspNetCore.Tests.Voice
 {
-    /// <summary>When the caller counts as away (plan B7), and what a final and an interim transcript each do
+    /// <summary>When the caller counts as away, and what a final and an interim transcript each do
     /// to that window (LiveKit's <c>_user_input_transcribed</c>, <c>agent_session.py:2254-2267</c>).</summary>
     public sealed class VoiceSessionAwayTests : IAsyncDisposable
     {
@@ -86,7 +88,7 @@ namespace AgentCore.AspNetCore.Tests.Voice
         // test_final_transcript_resets_away_timer_when_not_speaking (is_final=False half): an interim
         // transcript never calls the away-timer reset LiveKit's mock asserts on. Ours has no such reset
         // call for an interim either — OnInterimTranscript only ever moves the caller to "speaking",
-        // which cancels a pending countdown the same way any non-listening transition does (B8).
+        // which cancels a pending countdown the same way any non-listening transition does.
         [Fact]
         public void AnInterimTranscript_CancelsAPendingAwayCountdownInsteadOfResettingIt()
         {

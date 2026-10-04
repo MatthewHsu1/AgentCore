@@ -6,7 +6,7 @@ using Xunit;
 
 namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
 {
-    /// <summary>Store 0, in PostgreSQL.</summary>
+    /// <summary>The conversation store, in PostgreSQL.</summary>
     public sealed class PostgresConversationStoreTests : PostgresDatabaseTest
     {
         /// <inheritdoc />

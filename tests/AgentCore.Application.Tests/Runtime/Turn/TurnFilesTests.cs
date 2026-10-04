@@ -16,10 +16,7 @@ namespace AgentCore.Application.Tests.Runtime.Turn
         {
             TurnFiles files = new();
 
-            using (files.BeginOuterCall("call-1"))
-            {
-                files.Publish(Card("rows.csv", 8));
-            }
+            files.Publish(Card("rows.csv", 8), "call-1");
 
             IReadOnlyList<FileContent> taken = files.TakeFor("call-1");
 
@@ -28,11 +25,11 @@ namespace AgentCore.Application.Tests.Runtime.Turn
         }
 
         [Fact]
-        public void Publish_WithNoCallOpen_IsDropped()
+        public void Publish_OutsideAnyCall_IsDropped()
         {
             TurnFiles files = new();
 
-            files.Publish(Card("rows.csv", 8));
+            files.Publish(Card("rows.csv", 8), callId: null);
 
             Assert.Empty(files.TakeFor("rows.csv"));
         }
@@ -42,36 +39,14 @@ namespace AgentCore.Application.Tests.Runtime.Turn
         {
             TurnFiles files = new();
 
-            using (files.BeginOuterCall("call-1"))
-            {
-                files.Publish(Card("rows.csv", 8));
-                files.Publish(Card("chart.png", 3));
-                files.Publish(Card("rows.csv", 16));
-            }
+            files.Publish(Card("rows.csv", 8), "call-1");
+            files.Publish(Card("chart.png", 3), "call-1");
+            files.Publish(Card("rows.csv", 16), "call-1");
 
             IReadOnlyList<FileContent> taken = files.TakeFor("call-1");
 
             Assert.Equal(["rows.csv", "chart.png"], taken.Select(card => card.Name));
             Assert.Equal(16, taken[0].Length);
-        }
-
-        [Fact]
-        public void Publish_InsideANestedCall_FilesUnderTheOuterCall()
-        {
-            TurnFiles files = new();
-
-            using (files.BeginOuterCall("outer"))
-            {
-                using (files.BeginOuterCall("inner"))
-                {
-                    files.Publish(Card("rows.csv", 8));
-                }
-
-                files.Publish(Card("chart.png", 3));
-            }
-
-            _ = Assert.Single(files.TakeFor("inner"));
-            _ = Assert.Single(files.TakeFor("outer"));
         }
 
         private static FileContent Card(string name, long length)

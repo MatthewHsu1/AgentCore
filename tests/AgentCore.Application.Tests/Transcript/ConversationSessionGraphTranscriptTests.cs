@@ -4,23 +4,20 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Fakes;
 using Microsoft.Extensions.AI;
 using Xunit;
 using AgentCore.Domain;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Runtime.Cut;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Transcript
 {
     /// <summary>
     /// Pins what a graph row keeps and what it sends: the caller-facing turn, and nothing else.
     /// </summary>
-    /// <remarks>
-    /// A workflow takes no chat history provider and no session of ours, so the turn loop carries the
-    /// conversation itself. Every test here runs offline, with no network conversation and no API key.
-    /// </remarks>
     public sealed class ConversationSessionGraphTranscriptTests
     {
         /// <summary>What the first node says while it works. The caller never hears it.</summary>
@@ -44,22 +41,19 @@ namespace AgentCore.Application.Tests.Transcript
           """;
 
         /// <summary>
-        /// Store 1 holds what the caller said and what the caller heard. The graph's node-to-node
+        /// The message store holds what the caller said and what the caller heard. The graph's node-to-node
         /// chatter is neither, so it never enters the record.
         /// </summary>
         [Fact]
         public async Task Run_GraphRow_StoresOnlyCallerFacingMessages()
         {
-            // Arrange
             RecordingConversationStore store = new();
             RecordingNodeClient researcher = new(Thinking);
             RecordingNodeClient responder = new(Spoken);
             ConversationSession session = CreateSession(researcher, responder, store);
 
-            // Act
             _ = await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
 
-            // Assert
             await session.FlushTranscriptAsync();
             Assert.Equal(
                 ["where is my order", Spoken],
@@ -73,16 +67,14 @@ namespace AgentCore.Application.Tests.Transcript
         [Fact]
         public async Task Run_GraphRow_SecondTurn_ModelSeesNoIntermediateNodeReply()
         {
-            // Arrange
             RecordingNodeClient researcher = new(Thinking);
             RecordingNodeClient responder = new(Spoken);
             ConversationSession session = CreateSession(researcher, responder, new RecordingConversationStore());
             _ = await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
 
-            // Act
             _ = await session.RunTurnAsync("and the second one?", TestContext.Current.CancellationToken);
 
-            // Assert. The demotion of an assistant message to user is why the conversation rides one system
+            // The demotion of an assistant message to user is why the conversation rides one system
             // message: the node reads who said what off the line, not off the role.
             List<ChatMessage> second = researcher.Requests[1];
             Assert.Contains(
@@ -103,28 +95,24 @@ namespace AgentCore.Application.Tests.Transcript
         [Fact]
         public async Task Run_GraphRow_ReplyIsFinalNodeOnly()
         {
-            // Arrange
             RecordingConversationStore store = new();
             RecordingNodeClient researcher = new(Thinking);
             RecordingNodeClient responder = new(Spoken);
             ConversationSession session = CreateSession(researcher, responder, store);
 
-            // Act
             TurnResult turn = await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
 
-            // Assert
             Assert.Equal(Spoken, turn.ReplyText);
             Assert.DoesNotContain(Thinking, turn.ReplyText, StringComparison.Ordinal);
         }
 
         /// <summary>
-        /// R4 on a graph row: the record holds the words the caller heard, and never the tail the
+        /// On a graph row, the record holds the words the caller heard, and never the tail the
         /// answering node went on to produce.
         /// </summary>
         [Fact]
         public async Task Interrupt_MidGraphReply_StoresTheHeardWordsOnly()
         {
-            // Arrange
             RecordingConversationStore store = new();
             RecordingNodeClient researcher = new(Thinking);
             using ScriptedChatClient responder = new("Order 41 ", "ships Friday.") { GateAfterFirstFragment = true };
@@ -132,10 +120,8 @@ namespace AgentCore.Application.Tests.Transcript
             (Task? turn, Task? spoke) = StartGatedTurn(session, "where is my order");
             await spoke;
 
-            // Act
             bool recorded = session.Cut(0, new TurnCut("Order 41", TimeSpan.FromMilliseconds(300)));
 
-            // Assert
             Assert.True(recorded);
             responder.OpenGate();
             await turn;
@@ -152,7 +138,6 @@ namespace AgentCore.Application.Tests.Transcript
         [Fact]
         public async Task Interrupt_BeforeAnyGraphWordLanded_StoresTheCallerUtteranceAlone()
         {
-            // Arrange
             RecordingConversationStore store = new();
             RecordingNodeClient researcher = new(Thinking);
             using ScriptedChatClient responder = new("Order 41 ", "ships Friday.") { GateAfterFirstFragment = true };
@@ -160,10 +145,8 @@ namespace AgentCore.Application.Tests.Transcript
             (Task? turn, Task? spoke) = StartGatedTurn(session, "where is my order");
             await spoke;
 
-            // Act
             bool recorded = session.Cut(0, new TurnCut(string.Empty, TimeSpan.FromMilliseconds(40)));
 
-            // Assert
             Assert.True(recorded);
             responder.OpenGate();
             await turn;
@@ -175,11 +158,6 @@ namespace AgentCore.Application.Tests.Transcript
         /// <param name="session">The conversation to run the turn on.</param>
         /// <param name="userInput">What the caller said.</param>
         /// <returns>The running turn, and a task that completes at its first spoken update.</returns>
-        /// <remarks>
-        /// A run that has handed the host nothing is not the turn the caller is hearing, so a barge-in
-        /// before the first update takes the amendment path instead and records nothing against this
-        /// turn. Waiting for that update is what makes the cut land in the reply.
-        /// </remarks>
         private static (Task Turn, Task Spoke) StartGatedTurn(ConversationSession session, string userInput)
         {
             TaskCompletionSource spoke = new(TaskCreationOptions.RunContinuationsAsynchronously);

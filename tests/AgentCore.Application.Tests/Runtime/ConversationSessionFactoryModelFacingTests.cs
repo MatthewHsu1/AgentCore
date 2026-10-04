@@ -1,7 +1,6 @@
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.State;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Transcript;
@@ -9,6 +8,7 @@ using AgentCore.Domain.Sources;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Runtime
 {

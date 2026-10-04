@@ -1,6 +1,6 @@
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Sessions
 {

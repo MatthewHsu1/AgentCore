@@ -2,14 +2,14 @@ using AgentCore.Application.Conversation;
 
 namespace AgentCore.Application.Transcript
 {
-    /// <summary>What store 1 held beyond a session's words, read without changing them.</summary>
+    /// <summary>What the message store held beyond a session's words, read without changing them.</summary>
     /// <param name="Revision">The transcript's revision when the read began. The rows apply only while it stands.</param>
-    /// <param name="Rows">The rows store 1 read for the session.</param>
-    /// <param name="NextOrdinal">The next free ordinal of the conversation, from store 0's own counter.</param>
-    /// <param name="State">The state store 0 holds, or <see langword="null"/> when it holds none.</param>
+    /// <param name="Rows">The rows the message store read for the session.</param>
+    /// <param name="NextOrdinal">The next free ordinal of the conversation, from the conversation store's own counter.</param>
+    /// <param name="State">The state the conversation store holds, or <see langword="null"/> when it holds none.</param>
     internal sealed record TranscriptCatchUp(int Revision, IReadOnlyList<ConversationMessage> Rows, int NextOrdinal, ConversationSessionState? State)
     {
-        /// <summary>Gets the index the conversation's next turn takes, from the state store 0 holds.</summary>
+        /// <summary>Gets the index the conversation's next turn takes, from the state the conversation store holds.</summary>
         public int NextTurnIndex => State?.NextTurnIndex ?? 0;
 
         /// <summary>Gets the last of the session's lost writes counted before the read. A catch-up that takes these rows clears it and every one before it.</summary>

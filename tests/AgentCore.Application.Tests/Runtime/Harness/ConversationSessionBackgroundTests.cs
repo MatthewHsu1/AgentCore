@@ -4,13 +4,13 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Sessions.Memory;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Domain;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Runtime.Harness
 {
@@ -77,7 +77,7 @@ namespace AgentCore.Application.Tests.Runtime.Harness
             _ = await session.RunTurnAsync("go", token);
 
             // The turn is over and the conversation is not, and the child is still in its model call: the
-            // leak this step closes. Nothing has cancelled it yet.
+            // leak the release closes. Nothing has cancelled it yet.
             await child.Started.WaitAsync(TimeSpan.FromSeconds(10), token);
             Assert.False(child.Cancelled.IsCompleted);
 

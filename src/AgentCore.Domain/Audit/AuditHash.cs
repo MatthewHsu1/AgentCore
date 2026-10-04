@@ -77,7 +77,7 @@ namespace AgentCore.Domain.Audit
         /// <param name="text">The text to hash. The empty string is legal and hashes to a full digest.</param>
         /// <returns>The SHA-256 of the UTF-8 bytes of the text.</returns>
         /// <remarks>
-        /// The spoken words of a conversation live in store 1, where they stay erasable, and the chain stores
+        /// The spoken words of a conversation live in the message store, where they stay erasable, and the chain stores
         /// this instead. The bytes are UTF-8 with no byte-order mark, which is the same input
         /// <c>encode(sha256(convert_to(t, 'UTF8')), 'hex')</c> reads in PostgreSQL, so a reviewer can
         /// recompute the proof in either place.

@@ -14,14 +14,19 @@ namespace AgentCore.Application.Runtime.Turn
         {
             ArgumentNullException.ThrowIfNull(context);
 
-            string? instructions = TurnRegistry.For(context.Session)?.Instructions;
-
-            return new(new AIContext
+            TurnInvocation? turn = TurnRegistry.For(context.Session);
+            List<ChatMessage> messages = [];
+            if (turn?.Instructions is { Length: > 0 } instructions)
             {
-                Messages = string.IsNullOrEmpty(instructions)
-                    ? null
-                    : [new ChatMessage(ChatRole.System, instructions)],
-            });
+                messages.Add(new ChatMessage(ChatRole.System, instructions));
+            }
+
+            if (turn?.AddedContext is { IsEmpty: false } added)
+            {
+                messages.AddRange(added.Select(static note => new ChatMessage(ChatRole.System, note)));
+            }
+
+            return new(new AIContext { Messages = messages.Count == 0 ? null : messages });
         }
     }
 }

@@ -6,6 +6,7 @@ using System.Text.Json;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using AgentCore.Domain;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Runtime
 {
@@ -79,14 +80,14 @@ namespace AgentCore.Application.Runtime
             ArgumentNullException.ThrowIfNull(session);
             ConversationSession conversation = ResolveOwn(session).Conversation;
 
-            // A session this entry no longer holds live was unloaded: store 0's own copy of its state
+            // A session this entry no longer holds live was unloaded: the conversation store's own copy of its state
             // outranks whatever this blob would otherwise carry, so the state travels as null.
             ConversationSession? live = await _sessions
                 .TryGetAsync(EntryName, conversation.ConversationId, cancellationToken)
                 .ConfigureAwait(false);
 
             return JsonSerializer.SerializeToElement(
-                new SerializedSession(conversation.ConversationId, live?.Snapshot(), EntryName),
+                new SerializedSession(conversation.ConversationId, live?.States.Snapshot(), EntryName),
                 jsonSerializerOptions ?? ConversationStateJson.Options);
         }
 
@@ -104,7 +105,7 @@ namespace AgentCore.Application.Runtime
                 throw new ArgumentException(
                     "The serialized session names no conversation and holds no state, so it is not one this "
                     + "agent wrote. It expects { conversationId, state } — the conversation's id beside its state. A "
-                    + "bare ConversationSessionState, the value store 0 keeps in conversation.state, is the other shape "
+                    + "bare ConversationSessionState, the value the conversation store keeps in conversation.state, is the other shape "
                     + "and reading it as this one would lose the conversation's transcript.",
                     nameof(serializedState));
             }
@@ -268,7 +269,7 @@ namespace AgentCore.Application.Runtime
         }
 
         /// <summary>One serialized session: the conversation it is, the entry that wrote it, and the state it held.</summary>
-        /// <param name="ConversationId">The id of the conversation. Store 1 is keyed by it, so it is the half that finds the words.</param>
+        /// <param name="ConversationId">The id of the conversation. The message store is keyed by it, so it is the half that finds the words.</param>
         /// <param name="State">What the session alone held, or <see langword="null"/> when the blob named none.</param>
         /// <param name="Entry">
         /// The entry that wrote the blob. Written on every serialize and never read back: any entry may resume a

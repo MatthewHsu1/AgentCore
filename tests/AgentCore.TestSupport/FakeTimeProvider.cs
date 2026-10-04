@@ -3,29 +3,17 @@ namespace AgentCore.TestSupport
     /// <summary>
     /// A clock a test owns, including every timer a production seam schedules against it.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// A seam that bounds a deadline with <c>Task.Delay(delay, timeProvider, cancellationToken)</c> —
-    /// the relay connection's idle deadline is the case this was written for — arms
-    /// its completion through <see cref="TimeProvider.CreateTimer"/>, not through
-    /// <see cref="TimeProvider.GetUtcNow"/>. A fake that only overrode <c>GetUtcNow</c> would leave
-    /// that timer running on the real clock underneath it, so a test would still have to sleep for the
-    /// real delay. Overriding <see cref="CreateTimer"/> here is what lets <see cref="Advance"/> fire a
-    /// due timer synchronously, with no wall-clock wait at all.
-    /// </para>
-    /// <para>
-    /// A timer behaves as <see cref="System.Threading.Timer"/> does. A one-shot timer that fired, or one
-    /// armed with <see cref="Timeout.InfiniteTimeSpan"/>, is not scheduled but not disposed either:
-    /// <see cref="ITimer.Change"/> arms it again. <see cref="Advance"/> reschedules a periodic timer for its
-    /// next due time. The timer counts only include scheduled timers.
-    /// </para>
-    /// </remarks>
     public sealed class FakeTimeProvider(DateTimeOffset start) : TimeProvider
     {
         private readonly Lock _gate = new();
         private readonly List<FakeTimer> _timers = [];
         private readonly List<(DateTimeOffset? DueAt, int Count, TaskCompletionSource Reached)> _waiters = [];
         private DateTimeOffset _now = start;
+
+        /// <summary>Gets the zone this clock calls local; the machine's own unless a test names one.</summary>
+        public TimeZoneInfo Zone { get; init; } = TimeZoneInfo.Local;
+
+        public override TimeZoneInfo LocalTimeZone => Zone;
 
         public override DateTimeOffset GetUtcNow()
         {
@@ -35,11 +23,6 @@ namespace AgentCore.TestSupport
             }
         }
 
-        /// <remarks>
-        /// Overridden with <see cref="GetTimestamp"/>, because the base implementation reads
-        /// <see cref="System.Diagnostics.Stopwatch"/> and would leave every elapsed-time measurement
-        /// taken against this fake running on the real clock underneath it.
-        /// </remarks>
         public override long TimestampFrequency => TimeSpan.TicksPerSecond;
 
         public override long GetTimestamp()
@@ -93,12 +76,6 @@ namespace AgentCore.TestSupport
 
         /// <summary>Moves the clock forward, and fires every timer whose due time this reaches or passes.</summary>
         /// <param name="delta">How far to move the clock.</param>
-        /// <remarks>
-        /// Firing happens outside the lock: a timer's own callback here is
-        /// <see cref="CancellationTokenSource.Cancel()"/>, which can run a caller's registered
-        /// callback synchronously, and nothing this class does may still hold <see cref="_gate"/>
-        /// when a caller's own code starts running under it.
-        /// </remarks>
         public void Advance(TimeSpan delta)
         {
             List<FakeTimer> due;

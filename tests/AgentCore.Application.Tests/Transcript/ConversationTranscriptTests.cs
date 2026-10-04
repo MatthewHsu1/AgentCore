@@ -5,7 +5,7 @@ using Xunit;
 
 namespace AgentCore.Application.Tests.Transcript
 {
-    /// <summary>Pins the rules of store 1: ordinals, which reply a barge-in cuts, and what a cut keeps.</summary>
+    /// <summary>Pins the rules of the message store: ordinals, which reply a barge-in cuts, and what a cut keeps.</summary>
     public sealed class ConversationTranscriptTests
     {
         [Fact]

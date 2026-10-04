@@ -12,7 +12,7 @@ using Xunit;
 namespace AgentCore.AspNetCore.Tests.Endpoints
 {
     /// <summary>
-    /// A turn whose store 1 append failed once is still filed under its response id: no other session holds that id,
+    /// A turn whose message store append failed once is still filed under its response id: no other session holds that id,
     /// and the next turn reads the store back before it runs. Only a turn the store refused is never filed
     /// (<see cref="ResponsesTurnConflictTests"/>).
     /// </summary>

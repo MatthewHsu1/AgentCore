@@ -1,3 +1,4 @@
+using AgentCore.AspNetCore.Vendors.TelnyxRelay.Wire;
 using Microsoft.Extensions.Logging;
 
 namespace AgentCore.AspNetCore.Vendors.TelnyxRelay
@@ -7,7 +8,7 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay
     /// </summary>
     internal static partial class TelnyxRelayLog
     {
-        /// <summary>Section 3.1. An unmodelled frame type, logged once for the conversation.</summary>
+        /// <summary>An unmodelled frame type, logged once for the conversation.</summary>
         /// <param name="logger">The logger of the connection.</param>
         /// <param name="frameType">The <c>type</c> value no case matched.</param>
         /// <param name="conversationId">The id of the conversation, or a placeholder before setup.</param>
@@ -85,7 +86,7 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay
             Message = "cancelling the connection token of conversation {ConversationId} faulted.")]
         public static partial void CancellationFaulted(ILogger logger, string conversationId, Exception exception);
 
-        /// <summary>A malformed interrupt frame was refused. Section 7.1: a bad frame must not drop the conversation.</summary>
+        /// <summary>A malformed interrupt frame was refused; a bad frame must not drop the conversation.</summary>
         /// <param name="logger">The logger of the connection.</param>
         /// <param name="conversationId">The id of the conversation.</param>
         [LoggerMessage(
@@ -143,7 +144,7 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay
         [LoggerMessage(
             EventId = 22,
             Level = LogLevel.Error,
-            Message = "the session of conversation {ConversationId} could not be closed, so its last words may never reach store 1 and it waits out the idle timeout.")]
+            Message = "the session of conversation {ConversationId} could not be closed, so its last words may never reach the message store and it waits out the idle timeout.")]
         public static partial void ConversationCloseFaulted(ILogger logger, string conversationId, Exception exception);
     }
 }

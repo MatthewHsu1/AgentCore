@@ -1,4 +1,4 @@
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Voice.Threading;
 using Xunit;
 
 namespace AgentCore.AspNetCore.Tests.Voice

@@ -1,10 +1,11 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tools;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using AgentCore.Application.Runtime.Agents;
+using AgentCore.Application.Runtime.Turn;
 
 namespace AgentCore.Application.Configuration.Compilation
 {

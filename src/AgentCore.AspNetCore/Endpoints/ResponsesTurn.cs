@@ -2,6 +2,8 @@ using AgentCore.Application.Runtime;
 using AgentCore.AspNetCore.Sessions;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using AgentCore.Application.Runtime.Session;
+using AgentCore.Application.Runtime.Turn;
 
 namespace AgentCore.AspNetCore.Endpoints
 {
@@ -28,7 +30,7 @@ namespace AgentCore.AspNetCore.Endpoints
         /// Records that <see cref="ResponseId"/> continues this conversation, unless the turn's own store write
         /// was refused: the response id already names the session that saved that turn, and filing this one
         /// would misname it. A turn whose write merely failed is still recorded here: nothing else holds the
-        /// response id, and store 0's own state outranks it on any later resume.
+        /// response id, and the conversation store's own state outranks it on any later resume.
         /// </summary>
         public Task FileAsync(CancellationToken cancellationToken)
         {

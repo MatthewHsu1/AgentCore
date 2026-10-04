@@ -1,3 +1,5 @@
+using AgentCore.Application.Hooks;
+using AgentCore.Application.Tests.Audit;
 using AgentCore.TestSupport;
 using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Configuration.Compilation;
@@ -5,29 +7,20 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Domain.Audit;
 using Microsoft.Extensions.AI;
 using Xunit;
 using AgentCore.Domain;
+using AgentCore.Application.Runtime.Session;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
     /// What the caller hears is one reply, on every compiled shape.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <c>AgentResponse.Text</c> concatenates every message of the response. On a graph row that is
-    /// every node's reply, so the caller hears the graph deliberating and the audit row records the
-    /// deliberation as the spoken words. The turn loop takes the last message instead.
-    /// </para>
-    /// <para>
-    /// Every test here runs offline. There is no network conversation and no API key in this file.
-    /// </para>
-    /// </remarks>
     public sealed class ConversationSessionGraphReplyTests
     {
         /// <summary>What the first node of the graph says while it works. The caller must not hear it.</summary>
@@ -84,7 +77,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.DoesNotContain(Thinking, turn.ReplyText, StringComparison.Ordinal);
 
             AuditEvent completed = Assert.Single(
-                sink.EventsOf("conversation-graph"),
+                await session.RowsAsync(sink),
                 entry => entry.Kind == AuditEventKind.TurnCompleted);
             Assert.Equal(AuditHash.OfText(Spoken).Value, completed.Payload[AuditPayloadKeys.ReplyTextSha256]);
         }
@@ -106,7 +99,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(Spoken, turn.ReplyText);
 
             AuditEvent completed = Assert.Single(
-                sink.EventsOf("conversation-tool"),
+                await session.RowsAsync(sink),
                 entry => entry.Kind == AuditEventKind.TurnCompleted);
             Assert.Equal(AuditHash.OfText(Spoken).Value, completed.Payload[AuditPayloadKeys.ReplyTextSha256]);
         }
@@ -126,11 +119,11 @@ namespace AgentCore.Application.Tests.Runtime
             // Assert. A quiet answer is silence on a voice conversation, so the turn speaks the fallback. It must
             // never fall back to the node before it, which is the graph thinking out loud.
             Assert.Equal(ConversationSession.FallbackReply, turn.ReplyText);
-            Assert.Equal(ConversationSession.EmptyReplyReason, turn.Failure);
+            Assert.Equal(TurnFailureReasons.EmptyReply, turn.Failure);
             Assert.DoesNotContain(Thinking, turn.ReplyText, StringComparison.Ordinal);
 
             AuditEvent completed = Assert.Single(
-                sink.EventsOf("conversation-quiet"),
+                await session.RowsAsync(sink),
                 entry => entry.Kind == AuditEventKind.TurnCompleted);
             Assert.Equal(
                 AuditHash.OfText(ConversationSession.FallbackReply).Value,
@@ -159,7 +152,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(ConversationSession.FallbackReply, string.Concat(spoken).Trim());
             Assert.DoesNotContain(Thinking, string.Concat(spoken), StringComparison.Ordinal);
             Assert.NotNull(session.LastTurn);
-            Assert.Equal(ConversationSession.EmptyReplyReason, session.LastTurn.Failure);
+            Assert.Equal(TurnFailureReasons.EmptyReply, session.LastTurn.Failure);
         }
 
         [Fact]
@@ -187,7 +180,7 @@ namespace AgentCore.Application.Tests.Runtime
         [Fact]
         public async Task Streaming_GraphRow_EndsWithTheIdsOfItsAppend()
         {
-            // Arrange. Design section 6, step E5: the committed ids ride the turn's last update, on a row whose
+            // Arrange. The committed ids ride the turn's last update, on a row whose
             // output is filtered to its final node as on any other.
             using ScriptedChatClient researcher = new(Thinking);
             using ScriptedChatClient responder = new(Spoken);
@@ -238,7 +231,7 @@ namespace AgentCore.Application.Tests.Runtime
             return new ConversationSessionFactory(
                 compiled,
                 new GuardEvaluator(compiled.Configuration.Guards),
-                observers: ConversationObservers.Standard(sink, logger: null));
+                hooks: BuiltInHooks.Create(sink));
         }
     }
 }

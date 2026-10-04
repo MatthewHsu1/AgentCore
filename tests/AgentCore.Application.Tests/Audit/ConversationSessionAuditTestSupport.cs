@@ -4,11 +4,13 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Hooks;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
+using AgentCore.Domain.Audit;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Audit
 {
@@ -69,10 +71,10 @@ namespace AgentCore.Application.Tests.Audit
             ILogger? logger = null,
             IConversationStore? store = null)
         {
-            // ConversationObservers.Standard takes a required sink, because the composition root resolves
-            // providers.audit for every host and falls back to the in-process memory kind. An optional
-            // parameter has to be a compile-time constant, so the default is spelled here instead — a fact
-            // that does not care where its events land gets a fresh in-memory sink.
+            // The audit hook takes a required sink, because the composition root resolves providers.audit for
+            // every host and falls back to the in-process memory kind. An optional parameter has to be a
+            // compile-time constant, so the default is spelled here instead — a fact that does not care where
+            // its events land gets a fresh in-memory sink.
             IAuditSinkPort sink = auditSink ?? new InMemoryAuditSink();
 
             AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(yaml);
@@ -96,7 +98,14 @@ namespace AgentCore.Application.Tests.Audit
                 ConversationSessionFactory.CreateExtractor(compiled, chatClients),
                 timeProvider,
                 logger,
-                ConversationObservers.Standard(sink, logger));
+                hooks: BuiltInHooks.Create(sink, logger));
+        }
+
+        /// <summary>Waits for the audit hook, then reads the conversation's rows.</summary>
+        internal static async Task<IReadOnlyList<AuditEvent>> RowsAsync(this ConversationSession session, InMemoryAuditSink sink)
+        {
+            await session.FlushNoticesAsync();
+            return sink.EventsOf(session.ConversationId);
         }
     }
 }

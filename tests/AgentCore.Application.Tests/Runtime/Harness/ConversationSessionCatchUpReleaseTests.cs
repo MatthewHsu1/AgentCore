@@ -6,13 +6,13 @@ using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Domain;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Runtime.Harness
 {
@@ -114,7 +114,7 @@ namespace AgentCore.Application.Tests.Runtime.Harness
             await using ConversationSession b = Build(other, new DeafChatClient(), store, yaml: LingeringTodosYaml).Create("conversation-1");
 
             await StartAChildThenLetTheOtherHostTakeATurnAsync(a, b, child);
-            string own = Providers(a.Snapshot());
+            string own = Providers(a.States.Snapshot());
             ConversationRecord? record = await store.GetAsync("conversation-1", Token);
             Assert.Equal(2, record!.State!.NextTurnIndex);
             Assert.NotEqual(own, Providers(record.State));
@@ -127,11 +127,11 @@ namespace AgentCore.Application.Tests.Runtime.Harness
             List<ConversationSessionState> seen = [];
             while (!parent.Entered.Task.IsCompleted && !caughtUp.IsCompleted)
             {
-                seen.Add(a.Snapshot());
+                seen.Add(a.States.Snapshot());
                 await Task.Delay(TimeSpan.FromMilliseconds(1), Token);
             }
 
-            seen.Add(a.Snapshot());
+            seen.Add(a.States.Snapshot());
 
             Assert.All(seen, snapshot => Assert.Equal(snapshot.NextTurnIndex == 1, Providers(snapshot) == own));
             Assert.Equal(2, seen[^1].NextTurnIndex);

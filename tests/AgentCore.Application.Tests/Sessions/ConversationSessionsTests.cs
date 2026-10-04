@@ -1,8 +1,8 @@
 using AgentCore.TestSupport;
 using AgentCore.Application.Sessions.Memory;
-using AgentCore.Application.Runtime;
 using AgentCore.Domain;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Sessions.ConversationSessionsFixture;
 
 namespace AgentCore.Application.Tests.Sessions

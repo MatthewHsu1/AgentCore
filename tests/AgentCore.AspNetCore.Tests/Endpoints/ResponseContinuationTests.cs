@@ -85,7 +85,7 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
 
         // Promoted from the response-continuation probe (Q3): an old previous_response_id is not a
         // branch (D2). It runs at the conversation's current turn index and sees the current todos, live
-        // and after the session has unloaded and rebuilt from store 0.
+        // and after the session has unloaded and rebuilt from the conversation store.
         [Theory(Timeout = 60_000)]
         [InlineData(false)]
         [InlineData(true)]

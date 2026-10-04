@@ -1,21 +1,16 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using AgentCore.Application.Runtime;
 using AgentCore.Domain.Sources;
 using AgentCore.AspNetCore.Tests.Fakes;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Turn;
 
 namespace AgentCore.AspNetCore.Tests.Endpoints
 {
     /// <summary>
     /// The whole wire a source travels: a producer, the conversation's sources, and one extra SSE field.
     /// </summary>
-    /// <remarks>
-    /// Retrieval is the first producer of a source and this test deliberately does not use it. The
-    /// channel belongs to anything that can name what it read, so what is proved here is that a plain
-    /// bound tool can cite one and have it reach the browser.
-    /// </remarks>
     public sealed class SourceWireTests
     {
         private const string SourceYaml =
@@ -63,7 +58,7 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
                         Title = "Spirit CT900 owner's manual",
                         Origin = "knowledge",
                         Locator = "p.27",
-                    });
+                    }, turn.OuterCallId);
 
                     return ValueTask.FromResult<object?>("E03 is an overcurrent trip.");
                 }));
@@ -125,7 +120,7 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
                         Kind = SourceKind.Document,
                         Title = what == "left" ? "Left manual" : "Right manual",
                         Origin = "knowledge",
-                    });
+                    }, turn.OuterCallId);
 
                     return ValueTask.FromResult<object?>("looked up " + what);
                 }));
@@ -149,10 +144,6 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
         }
 
         /// <summary>Sends one turn of words and reads the answer as it arrives.</summary>
-        /// <remarks>
-        /// The dialect member opts the stream into the browser parts: without it the frames carry
-        /// text alone and a citation would never reach the browser.
-        /// </remarks>
         private static Task<HttpResponseMessage> PostStreamAsync(ResponsesHost host, string text, string? conversation = null)
         {
             return host.PostAsync(conversation is { Length: > 0 }
@@ -212,11 +203,6 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
         }
 
         /// <summary>Calls the tool it is offered twice in one round — two parallel calls — then answers in words.</summary>
-        /// <remarks>
-        /// This is the shape a real model routinely produces and the single-conversation fakes above cannot
-        /// exercise: <c>FunctionInvokingChatClient</c> batches both tool results of one round onto ONE
-        /// message before this endpoint ever sees it.
-        /// </remarks>
         private sealed class TwoParallelConversationsChatClient : IChatClient
         {
             public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(

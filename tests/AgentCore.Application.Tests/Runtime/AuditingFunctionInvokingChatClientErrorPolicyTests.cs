@@ -2,26 +2,21 @@ using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Tools.Registry;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tools;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.ToolCalls;
+using AgentCore.Application.Runtime.Turn;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
-    /// Task 7a: the tool error policy moved out of <see cref="DeclaredTool"/> and into
-    /// <see cref="AuditingFunctionInvokingChatClient.InvokeFunctionAsync"/>, the framework's single choke
-    /// point for every tool call. These tests pin the caller-observable behaviour that move must not
-    /// change, and prove the reason for the move: a plain <c>AIFunctionFactory.Create(...)</c> tool, which
-    /// is not a <see cref="DeclaredTool"/> at all, now gets identical treatment.
+    /// The tool error policy lives in <see cref="AuditingFunctionInvokingChatClient.InvokeFunctionAsync"/>, the
+    /// framework's single choke point for every tool call. These tests pin its caller-observable behaviour, including
+    /// that a plain <c>AIFunctionFactory.Create(...)</c> tool, which is not a <see cref="DeclaredTool"/> at all,
+    /// gets identical treatment.
     /// </summary>
-    /// <remarks>
-    /// Every test drives <see cref="AuditingFunctionInvokingChatClient"/> directly against a fake inner
-    /// <see cref="IChatClient"/>, with no YAML document and no <c>ConversationSession</c>, so a failure here
-    /// isolates the seam itself rather than the turn loop built on top of it.
-    /// </remarks>
     public sealed class AuditingFunctionInvokingChatClientErrorPolicyTests
     {
         private static readonly ToolConfiguration LookupOrder = new()
@@ -50,26 +45,8 @@ namespace AgentCore.Application.Tests.Runtime
                 StringComparison.Ordinal);
         }
 
-        // ---------------------------------------------------------------------------------------
-        // 4. Reporting must not change: an answerable fault never leaves the tool as an exception,
-        // so it must never reach the turn's failure listener.
-        // ---------------------------------------------------------------------------------------
-        [Fact]
-        public async Task AFaultTheModelCanAnswer_IsNeverReported()
-        {
-            List<object> reported = [];
-            TurnInvocation turn = new() { ConversationId = "conversation", TurnIndex = 0, Stage = "", OnToolFailure = reported.Add };
-
-            ThrowingDeclaredTool tool = new(LookupOrder, new InvalidOperationException("the order is already closed."));
-            _ = await RunSingleRoundAsync(tool, TestContext.Current.CancellationToken, turn: turn);
-
-            Assert.Empty(reported);
-        }
-
-        // ---------------------------------------------------------------------------------------
-        // 2. A fault the model CANNOT answer still propagates, so the framework's own consecutive-
+        // A fault the model cannot answer still propagates, so the framework's own consecutive-
         // error budget (MaximumConsecutiveErrorsPerRequest = 3) counts it and the 4th round throws.
-        // ---------------------------------------------------------------------------------------
         [Fact]
         public async Task AFaultTheModelCannotAnswer_PropagatesAndSpendsTheConsecutiveErrorBudget()
         {
@@ -102,33 +79,13 @@ namespace AgentCore.Application.Tests.Runtime
         }
 
         // ---------------------------------------------------------------------------------------
-        // 4 (other half). Reporting must not change: a propagating fault is still reported once for
-        // every round it spends of the budget, exactly as it is today.
-        // ---------------------------------------------------------------------------------------
-        [Fact]
-        public async Task AFaultTheModelCannotAnswer_IsReportedOnceForEveryPropagatingRound()
-        {
-            List<object> reported = [];
-            TurnInvocation turn = new() { ConversationId = "conversation", TurnIndex = 0, Stage = "", OnToolFailure = reported.Add };
-
-            TimeoutException failure = new("the endpoint did not answer.");
-            ThrowingDeclaredTool tool = new(LookupOrder, failure);
-            _ = await RunUntilTheBudgetThrowsAsync(tool, TestContext.Current.CancellationToken, turn);
-
-            // MaximumConsecutiveErrorsPerRequest is 3, so the 4th round is the one that spends the
-            // budget, and all four reached this middleware and were reported before they propagated.
-            Assert.Equal(4, reported.Count);
-        }
-
-        // ---------------------------------------------------------------------------------------
         // 1. Caller cancellation passes through untouched. The TOKEN decides, never the exception
-        // type, and it is never reported.
+        // type.
         // ---------------------------------------------------------------------------------------
         [Fact]
-        public async Task ACallerThatHungUp_PassesTheCancellationThroughUnreported()
+        public async Task ACallerThatHungUp_PassesTheCancellationThrough()
         {
-            List<object> reported = [];
-            TurnInvocation turn = new() { ConversationId = "conversation", TurnIndex = 0, Stage = "", OnToolFailure = reported.Add };
+            TurnInvocation turn = new() { ConversationId = "conversation", TurnIndex = 0, Stage = "" };
             using CancellationTokenSource source = new();
 
             // The tool cancels the very token the call was made with and then throws, exactly as a
@@ -147,16 +104,11 @@ namespace AgentCore.Application.Tests.Runtime
                     [new ChatMessage(ChatRole.User, "where is my order")],
                     options,
                     source.Token));
-
-            Assert.Empty(reported);
         }
 
-        // ---------------------------------------------------------------------------------------
-        // THE UNLOCK: a plain AIFunctionFactory.Create(...) tool is not a DeclaredTool at all, so
-        // before Task 7a moved the policy into this middleware, nothing classified its faults — see
-        // ThrowingToolBuilder in RuntimeFakes.cs, which throws straight at the framework today. After
-        // the move it gets the identical answerable-fault treatment a DeclaredTool gets.
-        // ---------------------------------------------------------------------------------------
+        // A plain AIFunctionFactory.Create(...) tool is not a DeclaredTool, yet its faults are classified
+        // like a DeclaredTool's: it gets the identical answerable-fault treatment. See ThrowingToolBuilder in
+        // RuntimeFakes.cs, which throws straight at the framework.
         [Fact]
         public async Task APlainAIFunctionFactoryTool_GetsTheSameErrorResultAsADeclaredTool()
         {
@@ -212,16 +164,11 @@ namespace AgentCore.Application.Tests.Runtime
         private static async Task<JsonObject> RunSingleRoundAsync(
             AIFunction tool,
             CancellationToken cancellationToken,
-            Dictionary<string, object?>? arguments = null,
-            TurnInvocation? turn = null)
+            Dictionary<string, object?>? arguments = null)
         {
             ToolCallingChatClient inner = new("the loop continues.", arguments);
             using AuditingFunctionInvokingChatClient client = new(inner);
             ChatOptions options = new() { Tools = [tool] };
-            if (turn is not null)
-            {
-                options.AdditionalProperties = new AdditionalPropertiesDictionary { [TurnInvocation.ArgumentsKey] = turn };
-            }
 
             _ = await client.GetResponseAsync(
                 [new ChatMessage(ChatRole.User, "where is my order")],
@@ -236,19 +183,11 @@ namespace AgentCore.Application.Tests.Runtime
         /// Runs rounds until the framework's own <c>MaximumConsecutiveErrorsPerRequest</c> budget throws,
         /// and returns what it threw.
         /// </summary>
-        /// <remarks>
-        /// <see cref="LoopingToolCallingChatClient"/> never stops calling the tool, so a fault that
-        /// propagates on every round spends the budget on the fourth.
-        /// </remarks>
-        private static async Task<Exception> RunUntilTheBudgetThrowsAsync(AIFunction tool, CancellationToken cancellationToken, TurnInvocation? turn = null)
+        private static async Task<Exception> RunUntilTheBudgetThrowsAsync(AIFunction tool, CancellationToken cancellationToken)
         {
             LoopingToolCallingChatClient inner = new();
             using AuditingFunctionInvokingChatClient client = new(inner);
             ChatOptions options = new() { Tools = [tool] };
-            if (turn is not null)
-            {
-                options.AdditionalProperties = new AdditionalPropertiesDictionary { [TurnInvocation.ArgumentsKey] = turn };
-            }
 
             return await Assert.ThrowsAnyAsync<Exception>(() =>
                 client.GetResponseAsync(

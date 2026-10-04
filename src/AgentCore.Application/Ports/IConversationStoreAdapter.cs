@@ -3,7 +3,7 @@ using AgentCore.Application.Configuration.Schema;
 namespace AgentCore.Application.Ports
 {
     /// <summary>
-    /// Opens the store 0 backing behind one <c>providers.conversations</c> value.
+    /// Opens the conversation store behind one <c>providers.conversations</c> value.
     /// </summary>
     public interface IConversationStoreAdapter : IVendorAdapter
     {

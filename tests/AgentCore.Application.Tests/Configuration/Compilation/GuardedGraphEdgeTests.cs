@@ -3,29 +3,17 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using Microsoft.Extensions.AI;
 using Xunit;
 using AgentCore.Domain;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Configuration.Compilation
 {
     /// <summary>
-    /// Row 4 of the section 8.2 compile table, with a guarded edge.
+    /// A graph with a guarded edge.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Two rules pull apart here. T44 makes the compiled agent a process singleton, so one graph serves
-    /// every conversation and no code path compiles one for each conversation. A guarded edge reads the state of one
-    /// conversation, and each conversation owns its own state document. The graph-state wrapper files the turn's
-    /// snapshot on the run and a gate executor reads it back, so the compiled graph captures nothing
-    /// per conversation and concurrent conversations never share it.
-    /// </para>
-    /// <para>
-    /// Every test here runs offline. There is no network conversation and no API key in this file.
-    /// </para>
-    /// </remarks>
     public sealed class GuardedGraphEdgeTests
     {
         private const int FanOut = 26;
@@ -37,7 +25,7 @@ namespace AgentCore.Application.Tests.Configuration.Compilation
         private const string HandledReply = "HANDLED";
 
         /// <summary>
-        /// One start node and two guarded exits. Check 5 of section 8.5 proves the two guards exclusive
+        /// One start node and two guarded exits. The load-time check proves the two guards exclusive
         /// over the state domain, so exactly one edge fires for each conversation.
         /// </summary>
         internal const string GuardedGraphYaml =
@@ -79,7 +67,7 @@ namespace AgentCore.Application.Tests.Configuration.Compilation
         {
             AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(GuardedGraphYaml);
 
-            // The defect this file closes: the document was valid and then failed to compile. Check 5
+            // The document was valid and then failed to compile. The load-time check
             // even proves the two guards exclusive, so the load has nothing left to object to.
             ConfigurationValidationResult result = ConfigurationValidator.Evaluate(document);
 
@@ -165,7 +153,7 @@ namespace AgentCore.Application.Tests.Configuration.Compilation
 
             (bool Escalate, string ReplyText)[] results = await Task.WhenAll(conversations);
 
-            // Rule 16: one compiled agent, and no code path compiles one for each conversation.
+            // One compiled agent, and no code path compiles one for each conversation.
             Assert.Equal(1, harness.CompileCount);
 
             // No conversation read the state of another one. Thirteen went each way, and none went both.
@@ -182,7 +170,7 @@ namespace AgentCore.Application.Tests.Configuration.Compilation
             using Harness harness = new();
 
             // The run goes straight at the shared graph, with no turn filed on it anywhere. A guarded
-            // edge that quietly became unconditional is the silent graph failure section 8.2 refuses
+            // edge that quietly became unconditional is the silent graph failure the compiler refuses
             // to ship, so the wrapper throws instead.
             Exception? failure = await Record.ExceptionAsync(() => harness.Compiled.Agent.RunAsync(
                 "hello", cancellationToken: TestContext.Current.CancellationToken));
@@ -231,7 +219,7 @@ namespace AgentCore.Application.Tests.Configuration.Compilation
 
             harness.ReleaseEscalatedReply();
 
-            // The delta arrives before the run finishes, which is what rule 13 asks. It is the OUTPUT
+            // The delta arrives before the run finishes. It is the OUTPUT
             // node's word and not the start node's: the caller hears the answer, never the graph
             // deliberating its way to one, on the streaming path exactly as on the buffered one.
             Assert.Equal("ESCALATED", first);
@@ -272,10 +260,6 @@ namespace AgentCore.Application.Tests.Configuration.Compilation
         /// <summary>
         /// One compiled graph, wired the way the composition root wires it.
         /// </summary>
-        /// <remarks>
-        /// The seam is the one <c>AddAgentCore</c> bind: the shared guard evaluator. Nothing per conversation
-        /// is captured: the turn's snapshot rides each run.
-        /// </remarks>
         private sealed class Harness : IDisposable
         {
             private readonly ScriptedChatClient _router = new("ROUTED");

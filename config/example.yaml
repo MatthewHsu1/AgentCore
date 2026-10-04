@@ -21,7 +21,7 @@
 #   5. tools        what an agent may call
 #   6. agents       models, prompts, knowledge
 #   7. entries      what a caller reaches: a stage machine or one agent
-#   8. providers    adapters: llm, conversation, speech, telephony, moderation, embeddings, knowledge,
+#   8. providers    adapters: llm, conversation, speech, moderation, embeddings, knowledge,
 #                   telemetry
 #   9. evaluation   the judge that scores finished turns
 
@@ -360,16 +360,13 @@ providers:
     - { kind: openai, model: gpt-4.1,      as: judge }      # evaluation only, chosen on judgement
     - { kind: openai, model: gpt-4.1-nano, as: cheap, webSearch: false }
 
-  # Three voice planes. They are not duplicates.
+  # Two voice planes. They are not duplicates.
   #   conversation the media pipe. It carries the audio and owns the route /v1/{entry}/call.
   #   speech      recognition (stt) and synthesis (tts), one role at a time.
-  #   telephony   call control: dial, transfer, hang up. It must outlive any one media leg,
-  #               because a warm transfer creates a second leg.
   conversation:      { kind: telnyx-relay }
   speech:
     stt: { kind: telnyx-relay }            # bundled with the relay, so it matches conversation
     tts: { kind: telnyx-relay }            # bundled with the relay, so it matches conversation
-  telephony: { kind: telnyx }
 
   # Reads what the CALLER said, before the model runs. A flagged turn never reaches the model and
   # speaks refusalReply instead. Reads the openai-api-key secret, the same one llm reads.

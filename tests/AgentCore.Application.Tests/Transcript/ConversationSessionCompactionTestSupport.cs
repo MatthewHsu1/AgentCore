@@ -4,8 +4,8 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Conversation.Memory;
+using AgentCore.Application.Hooks;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Compaction;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Transcript;
@@ -14,6 +14,7 @@ using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Transcript
 {
@@ -25,9 +26,9 @@ namespace AgentCore.Application.Tests.Transcript
         /// The stages the agent runs in place of the window-derived ones: sized to fire on a handful of
         /// fixture messages.
         /// </param>
-        /// <param name="contextWindow">The reply model's window, in tokens. The fixed stages fire at 75% of it (D7).</param>
+        /// <param name="contextWindow">The reply model's window, in tokens. The fixed stages fire at 75% of it.</param>
         internal static ConversationSession CreateSession(
-            IChatClient reply, IConversationStore store, string? conversationId = null, ILogger? logger = null, CompactionStages? compaction = null, int contextWindow = 128_000, IConversationObserver? observer = null)
+            IChatClient reply, IConversationStore store, string? conversationId = null, ILogger? logger = null, CompactionStages? compaction = null, int contextWindow = 128_000, IReadOnlyList<AgentHook>? hooks = null)
         {
             AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(ConversationSessionResumeTestSupport.OneAgentYaml);
             FakeChatClientFactory chatClients = new(reply, contextWindow);
@@ -38,14 +39,14 @@ namespace AgentCore.Application.Tests.Transcript
                     ConversationStore = store,
                     Tools = TestToolRegistry.From(document, null, TestContext.Current.CancellationToken),
                     Compaction = compaction,
+                    Hooks = hooks,
                 })["main"];
 
             ConversationSessionFactory factory = new(
                 compiled,
                 new GuardEvaluator(compiled.Configuration.Guards),
                 extractor: null,
-                logger: logger,
-                observers: observer is null ? [] : [observer]);
+                logger: logger);
 
             return factory.Create(conversationId);
         }

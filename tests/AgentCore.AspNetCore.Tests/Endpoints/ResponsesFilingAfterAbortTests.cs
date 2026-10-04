@@ -15,12 +15,14 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 
 namespace AgentCore.AspNetCore.Tests.Endpoints
 {
     /// <summary>
     /// Filing after the client aborts runs on no host token, so it needs a bound of its own: the one the
-    /// rest of the work after the reply runs under (design section 7, item 4).
+    /// rest of the work after the reply runs under.
     /// </summary>
     public sealed class ResponsesFilingAfterAbortTests
     {
@@ -36,7 +38,7 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             Task filing = ResponsesTurnStream.FileAfterAbortAsync(
                 _ => never.Task, "conv-f5", time, logs.CreateLogger("test"));
 
-            time.Advance(ConversationSession.TurnCompletionTimeout - TimeSpan.FromTicks(1));
+            time.Advance(TurnFailureReasons.CompletionTimeout - TimeSpan.FromTicks(1));
             Assert.False(filing.IsCompleted);
 
             time.Advance(TimeSpan.FromTicks(1));
@@ -47,7 +49,7 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             Assert.Equal("conv-f5", line.Field<string>("ConversationId"));
         }
 
-        // Design section 3: the turn commits even when the host cancels mid-stream, so the session is still
+        // The turn commits even when the host cancels mid-stream, so the session is still
         // filed, on a token that outlives the abort. A store that honours the aborted token would refuse it.
         [Fact]
         public async Task AStreamTheClientAborted_StillFilesTheSession()

@@ -7,6 +7,7 @@ using AgentCore.Application.Ports;
 using AgentCore.AspNetCore.Conversation;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.AspNetCore.Sessions;
+using AgentCore.AspNetCore.Vendors.OpenAiLive;
 using Microsoft.Agents.AI.Hosting;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.WebSockets;
@@ -68,6 +69,10 @@ namespace AgentCore.AspNetCore.DependencyInjection
             _ = services.AddSingleton<IAuditSinkPort>(provider => provider.GetRequiredService<QueuedAuditSink>());
 
             _ = services.AddHostedService<ConversationSweeper>();
+
+            // after the boot service: its StartAsync runs once the boot (StartingAsync) is done
+            _ = services.AddSingleton<OpenAiLiveCalls>();
+            _ = services.AddHostedService(provider => provider.GetRequiredService<OpenAiLiveCalls>());
 
             _ = services.AddSingleton(Boot(boot => boot.Telemetry!));
             _ = services.AddSingleton(Boot(boot => boot.Knowledge!));

@@ -2,24 +2,25 @@ using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Hooks;
+using AgentCore.Application.Tests.Audit;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Domain;
 using AgentCore.Domain.Audit;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Cut;
+using AgentCore.Application.Runtime.Session;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 using static AgentCore.Application.Tests.Runtime.InterruptionSessions;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
-    /// What the transcript and the reply text hold once a barge-in cuts a turn off. Item 6a of section
-    /// 11: the record holds the text the caller heard, and a side effect that already ran is not dropped.
+    /// What the transcript and the reply text hold once a barge-in cuts a turn off: the record holds the text the
+    /// caller heard, and a side effect that already ran is not dropped.
     /// </summary>
-    /// <remarks>
-    /// Every test here runs offline. There is no network conversation and no API key anywhere in this file.
-    /// </remarks>
     public sealed class ConversationSessionInterruptionTests
     {
         // What the transcript holds after the caller cuts the reply off.
@@ -65,11 +66,11 @@ namespace AgentCore.Application.Tests.Runtime
                 m => m.Contents.OfType<FunctionResultContent>().Any());
         }
 
-        [Fact]
-        public async Task AParallelToolRound_KeepsTheConversationThatFinishedAndDropsTheOneThatDidNot()
+        [Fact(Timeout = 30_000)]
+        public async Task AParallelToolRound_KeepsTheCallThatFinishedAndTheOneStillRunningAtTheCut()
         {
-            // A parallel round can pair one call and leave a sibling call, in the same message, mid-
-            // flight. The rule is per conversation id, so only the unfinished conversation is dropped.
+            // As in LiveKit, a cut lets the call still in flight finish, and keeps its call and result, so the next
+            // turn does not run it again.
             using ParallelToolCallChatClient reply = new();
             PartiallyAnsweredToolFactory tools = new();
             ConversationSession session = CreateSession(ParallelToolYaml, reply, tools.Create);
@@ -93,25 +94,16 @@ namespace AgentCore.Application.Tests.Runtime
             // The first call already answered by the time the second call is blocked in flight.
             await tools.SecondConversationStarted.Task.WaitAsync(linked.Token);
             Assert.True(session.Cut(0, new TurnCut("the first one is", TimeSpan.FromMilliseconds(1820))));
-
             await pump;
+            tools.ReleaseSecond.SetResult();
+            await session.ToolRuns.WhenIdle();
 
-            Assert.DoesNotContain(
-                session.Transcript,
-                m => m.Contents.OfType<FunctionCallContent>().Any(call => call.CallId == ParallelToolCallChatClient.SecondCallId));
-
-            // Round one's own message, holding only the finished call, survives either way and is not
-            // what pins the defect. What pins it is round two's message: a per-message rule drops it
-            // whole because it also carries the unfinished call, so the finished call only ever shows up
-            // once (from round one). The per-call-id rule instead trims round two down to the finished
-            // call and keeps it, so the finished call shows up twice.
-            List<ChatMessage> callAMessages = [.. session.Transcript.Where(m => m.Contents.OfType<FunctionCallContent>().Any(call => call.CallId == ParallelToolCallChatClient.FirstCallId))];
-            Assert.Equal(2, callAMessages.Count);
-
-            ChatMessage trimmedRoundTwo = callAMessages[^1];
-            Assert.Equal(
-                ParallelToolCallChatClient.FirstCallId,
-                Assert.Single(trimmedRoundTwo.Contents.OfType<FunctionCallContent>()).CallId);
+            // The cut turn keeps the finished call; the one in flight at the cut is stored, call then result, once it finished.
+            List<ChatMessage> transcript = [.. session.Transcript];
+            Assert.Contains(transcript.SelectMany(m => m.Contents), content => content is FunctionResultContent { CallId: ParallelToolCallChatClient.FirstCallId });
+            int call = transcript.FindIndex(m => m.Contents.OfType<FunctionCallContent>().Any(c => c.CallId == ParallelToolCallChatClient.SecondCallId));
+            FunctionResultContent second = Assert.Single(transcript[call + 1].Contents.OfType<FunctionResultContent>());
+            Assert.Equal((ParallelToolCallChatClient.SecondCallId, PartiallyAnsweredToolFactory.SecondAnswer), (second.CallId, second.Result?.ToString()));
         }
 
         [Fact(Timeout = 30_000)]
@@ -120,7 +112,7 @@ namespace AgentCore.Application.Tests.Runtime
             // A real model routinely puts a line of prose and the tool call it announces in one
             // assistant message, then answers in a second step. The caller heard the prose whole and
             // part of the answer, so the prose stays before its call and only the answer is cut
-            // (owner ruling 2026-09-23). The cut names every word heard, across steps.
+            // (the cut names every word heard, across steps).
             await using InterruptionFixture fixture = InterruptionFixture.StartWithProseBesideTool(reply: "the price is fifty");
 
             _ = await fixture.InterruptAfterFirstUpdateAsync(heard: ProseBesideToolChatClient.Prose + "the price");
@@ -144,7 +136,7 @@ namespace AgentCore.Application.Tests.Runtime
         public async Task AnInterruptAfterTheTurnEnded_AmendsTheFinishedTurn()
         {
             // No gate and no blocking client: the whole point is that the turn is already over when
-            // the frame lands. D28 and item 6a still hold — both vendor values pass through unchanged.
+            // the frame lands. Both vendor values pass through unchanged.
             using ScriptedChatClient reply = new("Hello", " there", " caller");
             InMemoryAuditSink sink = new();
             ConversationSession session = CreateSession(NoToolYaml, reply, auditSink: sink);
@@ -167,8 +159,8 @@ namespace AgentCore.Application.Tests.Runtime
             ChatMessage assistant = Assert.Single(session.Transcript, m => m.Role == ChatRole.Assistant);
             Assert.Equal("Hello there", assistant.Text);
 
-            // T23: the chain is append-only, so the correction is a second event that names the first.
-            IReadOnlyList<AuditEvent> events = sink.EventsOf(session.ConversationId);
+            // The chain is append-only, so the correction is a second event that names the first.
+            IReadOnlyList<AuditEvent> events = await session.RowsAsync(sink);
             AuditEvent completed = Assert.Single(events, item => item.Kind == AuditEventKind.TurnCompleted);
             AuditEvent amendment = Assert.Single(events, item => item.Kind == AuditEventKind.ReplyInterrupted);
             Assert.Equal(completed.EventId, amendment.AmendsEventId);
@@ -180,11 +172,11 @@ namespace AgentCore.Application.Tests.Runtime
 
             // One barge-in cuts one reply once. A repeat frame amends nothing a second time.
             Assert.False(session.Cut(0, new TurnCut("Hello there caller", TimeSpan.FromMilliseconds(2400))));
-            _ = Assert.Single(sink.EventsOf(session.ConversationId), item => item.Kind == AuditEventKind.ReplyInterrupted);
+            _ = Assert.Single(await session.RowsAsync(sink), item => item.Kind == AuditEventKind.ReplyInterrupted);
         }
 
         [Fact(Timeout = 30_000)]
-        public void AnInterruptBeforeAnyTurnEverRan_ChangesNothingAndThrowsNothing()
+        public async Task AnInterruptBeforeAnyTurnEverRan_ChangesNothingAndThrowsNothing()
         {
             using ScriptedChatClient reply = new("hello");
             InMemoryAuditSink sink = new();
@@ -195,12 +187,11 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Null(session.LastTurn);
             Assert.Empty(session.Transcript);
             Assert.DoesNotContain(
-                sink.EventsOf(session.ConversationId),
+                await session.RowsAsync(sink),
                 item => item.Kind == AuditEventKind.ReplyInterrupted);
         }
 
-        // Probe W04 (design section 3, row "Cut before output", G1 = Cut(turn, "", null)): a cut of the running turn
-        // that names nothing shown keeps its user message only.
+        // A cut of the running turn that names nothing shown (Cut(turn, "", null)) keeps its user message only.
         [Fact(Timeout = 30_000)]
         public async Task AnInterruptWhileAnUnheardSecondTurnRuns_CutsTheSecondTurnWithNothingShown_AndLeavesTheFirst()
         {
@@ -264,7 +255,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(string.Empty, session.LastTurn.ReplyText);
 
             AuditEvent amendment = Assert.Single(
-                sink.EventsOf(session.ConversationId),
+                await session.RowsAsync(sink),
                 item => item.Kind == AuditEventKind.ReplyInterrupted);
             Assert.Equal(first.TurnIndex + 1, amendment.TurnIndex);
             Assert.Equal(
@@ -274,7 +265,7 @@ namespace AgentCore.Application.Tests.Runtime
         }
 
         // A barge-in that lands while the turn is still finishing itself. The reply is over, the writers
-        // are running, and the extractor can hold the turn for up to TurnCompletionTimeout — five whole
+        // are running, and the extractor can hold the turn for up to TurnFailureReasons.CompletionTimeout — five whole
         // seconds in which the run still looks live to Cut.
 
         [Fact(Timeout = 30_000)]
@@ -299,7 +290,7 @@ namespace AgentCore.Application.Tests.Runtime
                 compiled,
                 new GuardEvaluator(compiled.Configuration.Guards),
                 ConversationSessionFactory.CreateExtractor(compiled, chatClients),
-                observers: ConversationObservers.Standard(sink, logger: null)).Create();
+                hooks: BuiltInHooks.Create(sink)).Create();
 
             using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
             using CancellationTokenSource bounded = CancellationTokenSource.CreateLinkedTokenSource(
@@ -334,14 +325,14 @@ namespace AgentCore.Application.Tests.Runtime
             finally
             {
                 // The gate ignores cancellation, so a failed assertion above must still release it
-                // rather than leave the turn parked until TurnCompletionTimeout expires.
+                // rather than leave the turn parked until TurnFailureReasons.CompletionTimeout expires.
                 extractor.OpenGate();
             }
 
             await running.WaitAsync(bounded.Token);
             TurnResult? turn = session.LastTurn;
 
-            // D28: both values are the ones the relay reported, unchanged.
+            // Both values are the ones the relay reported, unchanged.
             Assert.NotNull(turn);
             Assert.Equal(TimeSpan.FromMilliseconds(1820), turn.Cut);
             Assert.Equal("Hello there", turn.ReplyText);
@@ -350,8 +341,8 @@ namespace AgentCore.Application.Tests.Runtime
             ChatMessage assistant = Assert.Single(session.Transcript, message => message.Role == ChatRole.Assistant);
             Assert.Equal("Hello there", assistant.Text);
 
-            // T23: the correction is a second event that names the first, and never an edit of it.
-            IReadOnlyList<AuditEvent> events = sink.EventsOf(session.ConversationId);
+            // The correction is a second event that names the first, and never an edit of it.
+            IReadOnlyList<AuditEvent> events = await session.RowsAsync(sink);
             AuditEvent completed = Assert.Single(events, item => item.Kind == AuditEventKind.TurnCompleted);
             AuditEvent amendment = Assert.Single(events, item => item.Kind == AuditEventKind.ReplyInterrupted);
             Assert.Equal(completed.EventId, amendment.AmendsEventId);
@@ -363,7 +354,7 @@ namespace AgentCore.Application.Tests.Runtime
 
             // One barge-in cuts one reply once. The turn is no longer amendable, so a repeat says so.
             Assert.False(session.Cut(0, new TurnCut("Hello there caller", TimeSpan.FromMilliseconds(2400))));
-            _ = Assert.Single(sink.EventsOf(session.ConversationId), item => item.Kind == AuditEventKind.ReplyInterrupted);
+            _ = Assert.Single(await session.RowsAsync(sink), item => item.Kind == AuditEventKind.ReplyInterrupted);
         }
 
         // The deadline that bounds the work after the reply.
@@ -379,7 +370,7 @@ namespace AgentCore.Application.Tests.Runtime
             TurnResult turn = await fixture.RunTurnAsync("hi").WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
             Assert.NotNull(turn);
-            Assert.Equal(ConversationSession.ExtractionTimedOutReason, fixture.LastExtractionFailure);
+            Assert.Equal(TurnFailureReasons.ExtractionTimedOut, fixture.LastExtractionFailure);
         }
     }
 }

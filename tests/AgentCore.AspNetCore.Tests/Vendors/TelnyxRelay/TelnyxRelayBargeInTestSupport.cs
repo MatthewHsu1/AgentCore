@@ -1,6 +1,6 @@
-using AgentCore.Application.Runtime;
 using AgentCore.Domain;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
 {

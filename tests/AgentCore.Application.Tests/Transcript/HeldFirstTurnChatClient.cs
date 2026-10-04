@@ -22,6 +22,9 @@ namespace AgentCore.Application.Tests.Transcript
         /// <summary>Gets a value indicating whether the held request, once released, throws instead of answering.</summary>
         public bool FaultsHeldRequest { get; init; }
 
+        /// <summary>Gets a value indicating whether the held request, once released, answers with no text.</summary>
+        public bool EmptiesHeldRequest { get; init; }
+
         /// <summary>Gets the last request the model was sent.</summary>
         public IReadOnlyList<ChatMessage> LastRequest { get; private set; } = [];
 
@@ -45,6 +48,11 @@ namespace AgentCore.Application.Tests.Transcript
                 if (FaultsHeldRequest)
                 {
                     throw new HttpRequestException(DownModelChatClient.Message);
+                }
+
+                if (EmptiesHeldRequest)
+                {
+                    yield break;
                 }
             }
 

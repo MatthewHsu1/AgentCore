@@ -1,6 +1,5 @@
 using System.Text.Json;
 
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Harness;
 using AgentCore.Application.Runtime.Turn;
 using Microsoft.Agents.AI;
@@ -14,7 +13,7 @@ namespace AgentCore.Application.Tests.Runtime.Harness
     /// <summary>
     /// <see cref="ConversationFilesProvider"/> as a unit: it serves the framework's file tools rooted at the
     /// workspace of the turn filed for the invoking session, and serves an empty context when no turn
-    /// is filed (a delegated agent's run, design §6.3#6, inverse of probe P11c).
+    /// is filed (a delegated agent's run).
     /// </summary>
     public sealed class ConversationFilesProviderTests : IDisposable
     {
@@ -46,7 +45,7 @@ namespace AgentCore.Application.Tests.Runtime.Harness
             Assert.NotEmpty(context.Tools);
         }
 
-        // Inverse of P11c (design §6.3#6): a run with no filed turn gets an empty context, not a throw.
+        // A run with no filed turn gets an empty context, not a throw.
         [Fact]
         public async Task InvokingAsync_WithoutATurn_ServesAnEmptyContext()
         {

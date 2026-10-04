@@ -3,32 +3,18 @@ using System.Runtime.CompilerServices;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Transcript;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Transcript
 {
     /// <summary>
-    /// Where store 1 is bound: on the compiled agent of rows 1 and 2, and on nothing else.
+    /// Where the message store is bound: on the compiled agent of rows 1 and 2, and on nothing else.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The provider is bound once, at compile time, so no run has to name a conversation to keep it —
-    /// which is what lets <c>ThrowOnChatHistoryProviderConflict</c> stay at the framework default.
-    /// </para>
-    /// <para>
-    /// Rows 3 and 4 must stay unbound. A node is handed the conversation in the request messages the turn loop
-    /// renders, and it runs on a session the workflow made rather than the conversation's, so store 1 on a node
-    /// is a second history source keyed on a session it does not know.
-    /// </para>
-    /// <para>
-    /// Every test here runs offline: no network conversation and no API key.
-    /// </para>
-    /// </remarks>
     public sealed class CompiledHistoryProviderTests
     {
         private const string SingleAgentYaml =
@@ -107,9 +93,6 @@ namespace AgentCore.Application.Tests.Transcript
         /// <summary>What the delegating agent tells the caller once the sub-agent has answered.</summary>
         private const string FrontReply = "your order is on its way";
 
-        // ---------------------------------------------------------------------------------------------
-        // Hazard 3 and 4: which agents hold the provider, and that every row still constructs.
-        // ---------------------------------------------------------------------------------------------
         [Theory]
         [InlineData(SingleAgentYaml)]
         [InlineData(PolicyYaml)]
@@ -135,7 +118,7 @@ namespace AgentCore.Application.Tests.Transcript
             CompiledAgent compiled = Compile(yaml, client);
 
             // A ChatClientAgent that is handed no provider builds the framework's own in-memory one, which
-            // opens empty on each node session and never sees store 1. The fact is that store 1 is not
+            // opens empty on each node session and never sees the message store. The fact is that message store is not
             // there, not that nothing is.
             Assert.NotEmpty(compiled.Agents);
             Assert.All(
@@ -143,14 +126,11 @@ namespace AgentCore.Application.Tests.Transcript
                 agent => Assert.IsNotType<AgentCoreChatHistoryProvider>(ChatClientAgentOf(agent).ChatHistoryProvider));
         }
 
-        // ---------------------------------------------------------------------------------------------
-        // The safety check the workaround switched off.
-        // ---------------------------------------------------------------------------------------------
         [Fact]
         public async Task AModelThatKeepsTheHistoryItself_ConflictsWithStoreOne()
         {
             // A response that carries a conversation id is how a service says it keeps the history itself.
-            // That and store 1 are two answers to one question, and the framework refuses both at once.
+            // That and the message store are two answers to one question, and the framework refuses both at once.
             // Switching this check off to buy something else — a telemetry attribute, say — leaves a conversation
             // whose model silently sees one message and no history.
             ServerSideHistoryChatClient client = new("hello");
@@ -164,9 +144,6 @@ namespace AgentCore.Application.Tests.Transcript
             Assert.Contains("ChatHistoryProvider", conflict.Message, StringComparison.Ordinal);
         }
 
-        // ---------------------------------------------------------------------------------------------
-        // Hazard 1: a workflow node reads the call once.
-        // ---------------------------------------------------------------------------------------------
         [Theory]
         [InlineData(PatternGraphYaml)]
         [InlineData(ExplicitGraphYaml)]
@@ -186,9 +163,6 @@ namespace AgentCore.Application.Tests.Transcript
             Assert.Equal(1, Mentions(responder.Requests[1], FirstUtterance));
         }
 
-        // ---------------------------------------------------------------------------------------------
-        // Hazard 2: a delegated agent starts empty.
-        // ---------------------------------------------------------------------------------------------
         [Fact]
         public async Task ADelegatedAgent_NeverReadsTheCallersTranscript()
         {
@@ -199,7 +173,7 @@ namespace AgentCore.Application.Tests.Transcript
             _ = await session.RunTurnAsync(FirstUtterance, TestContext.Current.CancellationToken);
             _ = await session.RunTurnAsync(SecondUtterance, TestContext.Current.CancellationToken);
 
-            // Agent-as-tool is call and return: the inner run gets a fresh AgentSession, and store 1 keys
+            // Agent-as-tool is call and return: the inner run gets a fresh AgentSession, and the message store keys
             // on the session, so the second delegation opens on an empty history exactly like the first.
             Assert.Equal(2, specialist.Requests.Count);
             Assert.All(
@@ -347,13 +321,6 @@ namespace AgentCore.Application.Tests.Transcript
         /// <summary>
         /// Calls the one tool it is offered on every turn, then answers.
         /// </summary>
-        /// <remarks>
-        /// <see cref="ToolCallingChatClient"/> delegates once per call, because it stops as soon as the
-        /// request carries any tool result. Store 1 of rows 1 and 2 keeps the finished tool pair, so on a
-        /// second turn that client would never delegate again — and a fact about the SECOND delegation
-        /// needs one that does. The rule here reads the last message instead: a request that ends on the
-        /// caller delegates, and a request that ends on the tool result answers.
-        /// </remarks>
         private sealed class DelegatingChatClient(string reply) : IChatClient
         {
             private const string ConversationId = "conversation_1";

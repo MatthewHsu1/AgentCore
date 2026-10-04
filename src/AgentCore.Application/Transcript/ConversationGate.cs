@@ -10,8 +10,7 @@ namespace AgentCore.Application.Transcript
     /// What one conversation holds outside its state bag: its lock, its transcript, and its queue of
     /// store writes, which never faults and lets the conversation outlive a store that refuses.
     /// </summary>
-    /// <remarks>Creates the gate of one conversation.</remarks>
-    /// <param name="store">Store 1, where every queued write lands.</param>
+    /// <param name="store">The message store, where every queued write lands.</param>
     /// <param name="logger">Where a refused write is logged.</param>
     internal sealed class ConversationGate(IConversationStore store, ILogger logger)
     {
@@ -38,6 +37,13 @@ namespace AgentCore.Application.Transcript
         /// </summary>
         public List<ChatMessage> Staged { get; } = [];
 
+        /// <summary>
+        /// Gets what the running turn's finished runs were told and answered, in order. A later run of the same turn
+        /// reads it after the conversation, since the framework hands the caller's input to the first run only. It is
+        /// never committed: the turn's user row and <see cref="Staged"/> are. The next turn's start clears it.
+        /// </summary>
+        public List<ChatMessage> Replay { get; } = [];
+
         /// <summary>Takes everything staged for the running turn, and leaves nothing staged.</summary>
         public List<ChatMessage> TakeStaged()
         {
@@ -58,6 +64,13 @@ namespace AgentCore.Application.Transcript
             return Enqueue(
                 () => new ValueTask(_store.AppendAsync(conversationId, drafts, state, CancellationToken.None).AsTask()),
                 [.. drafts.Select(draft => draft.MessageId)]);
+        }
+
+        /// <summary>Queues the write of a state no rows carry, behind every write already queued.</summary>
+        public void QueueState(ConversationSessionState state)
+        {
+            string conversationId = Transcript.ConversationId;
+            _ = Enqueue(() => _store.SaveStateAsync(conversationId, state, CancellationToken.None));
         }
 
         /// <summary>Queues the rewrite of rows the transcript just changed in place.</summary>
@@ -117,11 +130,14 @@ namespace AgentCore.Application.Transcript
                 await write().ConfigureAwait(false);
                 return false;
             }
-#pragma warning disable CA1031 // A store 1 write failure never ends a conversation, and never breaks the chain behind it.
+#pragma warning disable CA1031 // A message store write failure never ends a conversation, and never breaks the chain behind it.
             catch (Exception exception)
 #pragma warning restore CA1031
             {
-                Log.TranscriptWriteFailed(_logger, conversationId, turnIndex, exception);
+                if (Losses is null)
+                {
+                    Log.TranscriptWriteFailed(_logger, conversationId, turnIndex, exception);
+                }
 
                 Losses?.Dropped(turnIndex, appended, exception);
                 return exception is ConversationTurnConflictException;

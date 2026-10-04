@@ -1,54 +1,24 @@
-using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Diagnostics;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime;
-using AgentCore.TestSupport;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using System.Diagnostics;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
+using static AgentCore.Application.Tests.Diagnostics.LibraryOpenTelemetryHarness;
 
 namespace AgentCore.Application.Tests.Diagnostics
 {
     /// <summary>
-    /// Task 6a: Microsoft.Extensions.AI's and Microsoft.Agents.AI's own GenAI instrumentation, switched on
-    /// for the first time. <c>AgentCoreTelemetry.cs</c> asserted both libraries "already emit" their spans
-    /// and metrics; before this task nothing ever called <c>UseOpenTelemetry</c>, so nothing did.
+    /// Microsoft.Extensions.AI's and Microsoft.Agents.AI's own GenAI instrumentation, switched on for every
+    /// compiled agent.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Every test here proves something an <see cref="ActivityListener"/> or a direct
-    /// <c>GetService</c> probe observed, not merely that the wiring compiles.
-    /// <see cref="ConfigurationCompiler"/>'s <c>WithToolFailureAuditing</c> and <c>Resolve</c> remarks
-    /// explain WHERE the instrumentation sits and WHY; this file is the proof those remarks describe what
-    /// the compiled pipeline actually does.
-    /// </para>
-    /// <para>
-    /// Every agent id and conversation id here is unique per test run (a fresh <see cref="Guid"/>), because an
-    /// <see cref="ActivityListener"/> subscribes to the whole process and another test class may run
-    /// beside this one on the same two library sources.
-    /// </para>
-    /// </remarks>
     public sealed class LibraryOpenTelemetryTests
     {
-        /// <summary>The default source name <c>OpenTelemetryChatClient</c> (Microsoft.Extensions.AI 10.8.3)
-        /// resolves to when a caller names none. Read out of the restored assembly; see
-        /// <c>ConfigurationCompiler.WithToolFailureAuditing</c>.</summary>
-        private const string ChatSourceName = "Experimental.Microsoft.Extensions.AI";
-
-        /// <summary>The default source name <c>OpenTelemetryAgent</c> (Microsoft.Agents.AI 1.17.0) resolves
-        /// to when a caller names none. Read out of the restored assembly; see
-        /// <c>ConfigurationCompiler.BuildAgents</c>.</summary>
-        private const string AgentSourceName = "Experimental.Microsoft.Agents.AI";
-
-        // -------------------------------------------------------------------------------------------
-        // The ordering fix: execute_tool nests under invoke_agent, not beside it.
-        // -------------------------------------------------------------------------------------------
         [Fact]
         public async Task AToolCallingTurn_NestsExecuteToolUnderInvokeAgentAndNotBesideIt()
         {
@@ -95,10 +65,10 @@ namespace AgentCore.Application.Tests.Diagnostics
             Activity executeTool = Assert.Single(
                 underInvokeAgent, span => span.OperationName.StartsWith("execute_tool", StringComparison.Ordinal));
 
-            // The actual proof the ordering fix worked: execute_tool's parent IS invoke_agent, by object
+            // The proof: execute_tool's parent IS invoke_agent, by object
             // identity and by W3C parent id — not a sibling of it, and not nested inside the whole
-            // tool-calling loop as one "chat" span the way the broken ordering produced. See the "Chat
-            // telemetry is wired here" remark on WithToolFailureAuditing for why the fix makes this true:
+            // tool-calling loop as one "chat" span. See the "Chat
+            // telemetry is wired here" remark on WithToolFailureAuditing for why this holds:
             // the per-round chat span (source "Experimental.Microsoft.Extensions.AI") closes before the
             // tool runs, so Activity.Current has reverted to invoke_agent by the time execute_tool opens.
             Assert.Same(invokeAgent, executeTool.Parent);
@@ -110,9 +80,6 @@ namespace AgentCore.Application.Tests.Diagnostics
             Assert.Equal(2, chatRounds.Count);
         }
 
-        // -------------------------------------------------------------------------------------------
-        // Exactly once: every compiled agent is wrapped for OpenTelemetry, and none is wrapped twice.
-        // -------------------------------------------------------------------------------------------
         [Fact]
         public async Task EveryCompiledAgent_IsInstrumentedExactlyOnce()
         {
@@ -138,7 +105,7 @@ namespace AgentCore.Application.Tests.Diagnostics
 
             // Reachable structurally, with no turn run at all: ConfigurationCompiler.Resolve wraps the
             // agent it just built, once, immediately before it caches it in the dictionary every later
-            // lookup (row 2's stage lookup, and the delegation tool's ResolveInner) reads back out of. A
+            // lookup (the stage lookup, and the delegation tool's ResolveInner) reads back out of. A
             // second wrap would require Resolve to reach the "var built = new ChatClientAgent(...)" branch
             // twice for one id, and the early "agents.TryGetValue" return above it is what this test would
             // catch failing to hold.
@@ -174,11 +141,6 @@ namespace AgentCore.Application.Tests.Diagnostics
                 mine, span => span.DisplayName.StartsWith("invoke_agent " + specialistId, StringComparison.Ordinal));
         }
 
-        // -------------------------------------------------------------------------------------------
-        // The absolute constraint: EnableSensitiveData stays false on both the agent-level and the
-        // chat-level instrumentation, regardless of what OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT
-        // says in the environment this test happens to run in.
-        // -------------------------------------------------------------------------------------------
         [Fact]
         public void EveryCompiledAgent_KeepsSensitiveDataCaptureOffOnBothLayers()
         {
@@ -214,23 +176,9 @@ namespace AgentCore.Application.Tests.Diagnostics
             Assert.False(chatClient.EnableSensitiveData);
         }
 
-        // -------------------------------------------------------------------------------------------
-        // gen_ai.conversation.id: the parent span carries it, and the library children do not.
-        // -------------------------------------------------------------------------------------------
-
         /// <summary>
         /// The conversation id reaches a trace once, from <c>AgentCoreTelemetry.StartTurn</c>.
         /// </summary>
-        /// <remarks>
-        /// Naming the conversation on <c>ChatOptions.ConversationId</c> would put the attribute on the library's
-        /// children as well, and it is the one thing that must not be done to get it. To
-        /// <c>ChatClientAgent</c> a conversation id means the SERVICE keeps the history, so it answers by
-        /// ignoring the agent's own <c>ChatHistoryProvider</c> for the whole run — store 1, silently
-        /// gone. Keeping it then costs a per-run override of the provider and
-        /// <c>ThrowOnChatHistoryProviderConflict = false</c> on every compiled agent. The attribute is
-        /// not worth a disabled safety check: a reader that wants the conversation id of a child span walks up
-        /// the trace to <c>agentcore.turn</c>.
-        /// </remarks>
         [Fact]
         public async Task ASingleAgentTurn_CarriesTheConversationIdOnTheTurnSpanAndOnNeitherLibrarySpan()
         {
@@ -275,21 +223,9 @@ namespace AgentCore.Application.Tests.Diagnostics
             Assert.Null(chat.GetTagItem("gen_ai.conversation.id"));
         }
 
-        // -------------------------------------------------------------------------------------------
-        // The extractor is a model call too, and a model call the trace does not show is a model call
-        // nobody pays attention to until the bill arrives.
-        // -------------------------------------------------------------------------------------------
-
         /// <summary>
         /// One turn makes two model calls, and both of them emit a chat span.
         /// </summary>
-        /// <remarks>
-        /// <c>ConversationSessionTranscriptTests.ATurn_MakesTwoModelCalls_TheReplyAndTheExtractor</c> proves the two conversations
-        /// happen. This proves both are instrumented. Until <c>ConversationSessionFactory.CreateExtractor</c>
-        /// wrapped the client it resolves, only the reply had a span: the extractor's duration, its token
-        /// usage, and its failures reached no exporter at all, so a two-turn conversation reported half the model
-        /// calls it made and roughly a third less spend than it cost.
-        /// </remarks>
         [Fact]
         public async Task ATurnWithAnExtractor_EmitsAChatSpanForTheExtractorCallAndNotOnlyForTheReply()
         {
@@ -374,99 +310,6 @@ namespace AgentCore.Application.Tests.Diagnostics
             // AddSource, and no message content on the span.
             Assert.Equal(ChatSourceName, extractorChat.Source.Name);
             Assert.Null(extractorChat.GetTagItem("gen_ai.input.messages"));
-        }
-
-        // -------------------------------------------------------------------------------------------
-        // Helpers.
-        // -------------------------------------------------------------------------------------------
-        /// <summary>
-        /// Whether one span is a per-round model call and not the relabeled invoke_agent span.
-        /// </summary>
-        /// <remarks>
-        /// <c>OpenTelemetryAgent</c> opens its own <c>invoke_agent</c> span through an internal
-        /// <c>OpenTelemetryChatClient</c> instance, so that span's own <c>Activity.OperationName</c> is
-        /// also <c>"chat"</c> — only its <c>DisplayName</c> is rewritten. A filter on <c>OperationName</c>
-        /// alone therefore matches both the real per-round chat span this predicate looks for and the
-        /// invoke_agent span beside it; excluding the renamed <c>DisplayName</c> is what tells them apart.
-        /// </remarks>
-        private static bool IsChatRoundSpan(Activity span)
-        {
-            return span.OperationName.StartsWith("chat", StringComparison.Ordinal)
-                    && !span.DisplayName.StartsWith("invoke_agent", StringComparison.Ordinal);
-        }
-
-        /// <summary>Subscribes to the two library sources this task turns on.</summary>
-        private static ActivityListener ListenToLibrarySources(List<Activity> spans)
-        {
-            return ListenTo(spans, ChatSourceName, AgentSourceName);
-        }
-
-        /// <summary>Subscribes to the named sources, collecting every span each one closes.</summary>
-        private static ActivityListener ListenTo(List<Activity> spans, params string[] sources)
-        {
-            ActivityListener listener = new()
-            {
-                ShouldListenTo = source => Array.Exists(sources, name => string.Equals(source.Name, name, StringComparison.Ordinal)),
-                Sample = (ref _) => ActivitySamplingResult.AllData,
-                ActivityStopped = activity =>
-                {
-                    lock (spans)
-                    {
-                        spans.Add(activity);
-                    }
-                },
-            };
-
-            ActivitySource.AddActivityListener(listener);
-            return listener;
-        }
-
-        /// <summary>Copies what the listener has collected so far. See the sibling helper in
-        /// <c>TurnObservabilityTests</c> for why a reader must not enumerate the live list.</summary>
-        private static List<Activity> Snapshot(List<Activity> spans)
-        {
-            lock (spans)
-            {
-                return [.. spans];
-            }
-        }
-
-        private static ConversationSessionFactory Build(string yaml, IChatClient client, Func<ToolConfiguration, AITool?>? tools)
-        {
-            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(yaml);
-            FakeChatClientFactory factory = new(client);
-
-            CompiledAgent compiled = ConfigurationCompiler.CompileAll(
-                document,
-                new AgentCompilationContext(factory)
-                {
-                    Tools = TestToolRegistry.From(document, tools, TestContext.Current.CancellationToken),
-                })["main"];
-
-            return new ConversationSessionFactory(
-                compiled,
-                new GuardEvaluator(compiled.Configuration.Guards),
-                ConversationSessionFactory.CreateExtractor(compiled, factory),
-                timeProvider: null,
-                logger: null,
-                ConversationObservers.Standard(new InMemoryAuditSink(), logger: null));
-        }
-        /// <summary>Builds a factory for a document that declares an extractor, scripting the two models
-        /// apart on the <c>ref</c> names the document uses.</summary>
-        private static ConversationSessionFactory BuildWithExtractor(string yaml, IChatClient reply, IChatClient fill)
-        {
-            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(yaml);
-            RoutingChatClientFactory factory = new RoutingChatClientFactory(reply).Route("fill", fill);
-
-            CompiledAgent compiled = ConfigurationCompiler.CompileAll(document, new AgentCompilationContext(factory))["main"];
-
-            return new ConversationSessionFactory(
-                compiled,
-                new GuardEvaluator(compiled.Configuration.Guards),
-                ConversationSessionFactory.CreateExtractor(compiled, factory),
-                timeProvider: null,
-                logger: null,
-                ConversationObservers.Standard(new InMemoryAuditSink(), logger: null));
         }
     }
 }

@@ -3,13 +3,14 @@ using System.Text.Json.Nodes;
 using AgentCore.Application.Blobs;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Diagnostics;
+using AgentCore.Application.Hooks.Notices;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Harness;
 using AgentCore.Application.Transcript;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
+using AgentCore.Application.Runtime.Turn;
 
 namespace AgentCore.Application.Tools.Builtin
 {
@@ -17,10 +18,6 @@ namespace AgentCore.Application.Tools.Builtin
     /// Copies one file out of the running conversation's workspace into the blob store, owned by the conversation, and
     /// files a <see cref="FileContent"/> on the turn so the card reaches the person.
     /// </summary>
-    /// <remarks>
-    /// A background child runs with no turn, so it has no drain to file the card on: its blob is still
-    /// stored under the parent conversation, and the link goes back to the child in the result alone.
-    /// </remarks>
     internal sealed class FilePublishTool
     {
         private readonly IBlobStore _blobs;
@@ -133,7 +130,13 @@ namespace AgentCore.Application.Tools.Builtin
                 MediaType = blob.MediaType,
                 Length = blob.Length,
                 Kept = true,
-            });
+            }, turn.OuterCallId);
+
+            if (turn?.Hooks is { } hooks)
+            {
+                _ = hooks.Raise(new FilePublished(
+                    hooks.Scope(turn.TurnIndex, turn.Stage), blob.Name, blob.Length, blob.MediaType, $"{blob.OwnerId}/{blob.Name}"));
+            }
 
             return new JsonObject
             {

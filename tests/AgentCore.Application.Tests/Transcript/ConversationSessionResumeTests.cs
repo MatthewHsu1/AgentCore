@@ -1,10 +1,10 @@
 using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Transcript;
 using AgentCore.TestSupport;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Transcript.ConversationSessionResumeTestSupport;
 
 namespace AgentCore.Application.Tests.Transcript
@@ -93,13 +93,13 @@ namespace AgentCore.Application.Tests.Transcript
                 () => resumed.RunTurnAsync("what is my name?", TestContext.Current.CancellationToken));
         }
 
-        /// <summary>A store 1 that takes words and will not give them back.</summary>
+        /// <summary>A message store that takes words and will not give them back.</summary>
         private sealed class UnreadableConversationStore(IConversationStore inner) : DelegatingConversationStore(inner)
         {
             public override ValueTask<IReadOnlyList<ConversationMessage>> ReadForSessionAsync(
                 string conversationId, CancellationToken cancellationToken = default)
             {
-                throw new InvalidOperationException("store 1 will not answer a read.");
+                throw new InvalidOperationException("the message store will not answer a read.");
             }
         }
     }

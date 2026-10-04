@@ -1,13 +1,14 @@
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Domain;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 using static AgentCore.Application.Tests.Runtime.ConversationSessionTestSupport;
 
 namespace AgentCore.Application.Tests.Runtime
 {
-    /// <summary>Section 8.7, last row: the run returns quietly with no text.</summary>
+    /// <summary>A run that returns quietly with no text.</summary>
     public sealed class ConversationSessionEmptyReplyTests
     {
         [Fact]
@@ -23,7 +24,7 @@ namespace AgentCore.Application.Tests.Runtime
             // that is silence, so the turn loop reads the reply rather than trusting the absence of a
             // failure.
             Assert.Equal(ConversationSession.FallbackReply, turn.ReplyText);
-            Assert.Equal(ConversationSession.EmptyReplyReason, turn.Failure);
+            Assert.Equal(TurnFailureReasons.EmptyReply, turn.Failure);
             Assert.Null(turn.Cut);
 
             // The writers still ran, and the transcript holds what the caller heard.
@@ -60,15 +61,15 @@ namespace AgentCore.Application.Tests.Runtime
                 updates.Add(update);
             }
 
-            // The host hears the fallback rather than nothing at all: R2 makes a quiet run an ordinary
+            // The host hears the fallback rather than nothing at all: a quiet run is an ordinary
             // successful one, and the spoken line leaves the seam the same way any reply does. The
-            // trailing update is the turn's committed ids (design section 6, step E5), not more text.
+            // trailing update is the turn's committed ids, not more text.
             Assert.Equal(
                 [ConversationSession.FallbackReply],
                 updates.Where(update => !update.Contents.OfType<TurnCommittedContent>().Any()).Select(update => update.Text));
             Assert.NotNull(session.LastTurn);
             Assert.Equal(ConversationSession.FallbackReply, session.LastTurn.ReplyText);
-            Assert.Equal(ConversationSession.EmptyReplyReason, session.LastTurn.Failure);
+            Assert.Equal(TurnFailureReasons.EmptyReply, session.LastTurn.Failure);
             Assert.Equal("close", session.Stage);
         }
     }

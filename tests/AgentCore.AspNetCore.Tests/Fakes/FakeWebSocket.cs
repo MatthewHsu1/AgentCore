@@ -1,11 +1,10 @@
-using AgentCore.TestSupport;
 using System.Net.WebSockets;
 using System.Text;
 using System.Threading.Channels;
 using AgentCore.Application.Configuration.Parsing;
-using AgentCore.AspNetCore.Voice;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
+using AgentCore.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,34 +16,6 @@ namespace AgentCore.AspNetCore.Tests.Fakes
     /// <summary>
     /// A <see cref="WebSocket"/> a test drives by hand, with no Kestrel and no client socket.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <see cref="TelnyxRelayHost"/> is still the right fake for anything the wire owns: framing, a
-    /// fragmented message, real backpressure, and the close handshake. Three things it cannot reach,
-    /// and this class exists for exactly those three.
-    /// </para>
-    /// <list type="number">
-    /// <item><description>
-    /// <b>The write loop's turn-id gate.</b> The gate sits between the dequeue and the one
-    /// <c>SendAsync</c> call the connection makes, and no real socket lets a test stop the loop in that
-    /// gap. <see cref="ParkNextStateRead"/> does: the write loop reads <see cref="State"/> immediately
-    /// after it dequeues an item, so parking that one read parks the loop with the item in hand and
-    /// the gate still ahead of it.
-    /// </description></item>
-    /// <item><description>
-    /// <b>The close status.</b> <see cref="CloseSent"/> records the arguments rather than the bytes, so
-    /// a status still reaches a test after a real socket would already have aborted.
-    /// </description></item>
-    /// <item><description>
-    /// <b>A faulting send, receive or close.</b> <see cref="FailEverySend"/>, <see cref="FailReceive"/> and
-    /// <see cref="FailClose"/> make the socket throw on demand, which nothing on a healthy loopback socket does.
-    /// </description></item>
-    /// </list>
-    /// <para>
-    /// One queued message is one WebSocket message with one fragment. Fragmentation is a wire behaviour
-    /// and it already has its own test over a real socket.
-    /// </para>
-    /// </remarks>
     internal sealed class FakeWebSocket : WebSocket
     {
         private static readonly byte[] ReceiveFaultMarker = [];
@@ -86,11 +57,6 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         public override string? SubProtocol => null;
 
         /// <inheritdoc />
-        /// <remarks>
-        /// The write loop reads this once for each item it dequeues, before its turn-id gate and before
-        /// its one send. That makes this property the only observable point between the two, so parking
-        /// here is what lets a test hold an item in the loop's own hand while a barge-in lands.
-        /// </remarks>
         public override WebSocketState State
         {
             get
@@ -135,7 +101,6 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         }
 
         /// <summary>Lets the parked read of <see cref="State"/> finish, and never parks again.</summary>
-        /// <remarks>A test calls this from a <c>finally</c>, so a failed assertion never strands the loop.</remarks>
         public void ReleaseParkedState()
         {
             _parkNextStateRead = false;
@@ -226,13 +191,6 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         }
 
         /// <inheritdoc />
-        /// <remarks>
-        /// This is the overload the connection actually reaches. It passes a <c>byte[]</c>, and C#
-        /// resolves that to the <see cref="ArraySegment{T}"/> parameter rather than to the
-        /// <see cref="ReadOnlyMemory{T}"/> one. A fake that only overrode the memory form would never
-        /// see a send at all, and every assertion about what did or did not reach the socket would then
-        /// pass for the wrong reason.
-        /// </remarks>
         public override Task SendAsync(
             ArraySegment<byte> buffer,
             WebSocketMessageType messageType,
@@ -249,7 +207,6 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         }
 
         /// <inheritdoc />
-        /// <remarks>Kept beside the <see cref="ArraySegment{T}"/> form, so either one a caller picks is recorded.</remarks>
         public override ValueTask SendAsync(
             ReadOnlyMemory<byte> buffer,
             WebSocketMessageType messageType,
@@ -324,11 +281,6 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         }
 
         /// <inheritdoc />
-        /// <remarks>
-        /// The connection never calls this: <c>CloseAsync</c> waits for the peer's close frame, and a
-        /// conversation that already dropped never sends one. A conversation that reaches here is a defect worth a red
-        /// test rather than a silent pass.
-        /// </remarks>
         public override Task CloseAsync(
             WebSocketCloseStatus closeStatus,
             string? statusDescription,
@@ -338,7 +290,6 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         }
 
         /// <inheritdoc />
-        /// <remarks>The connection receives into a <see cref="Memory{T}"/>, so nothing reaches this form.</remarks>
         public override Task<WebSocketReceiveResult> ReceiveAsync(
             ArraySegment<byte> buffer,
             CancellationToken cancellationToken)
@@ -353,11 +304,6 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         }
 
         /// <inheritdoc />
-        /// <remarks>
-        /// Completing the inbound channel here is what releases a receive the read loop abandoned to
-        /// its idle race. That receive owns a rented buffer until it finishes, so leaving it pending
-        /// forever would keep the array out of <c>ArrayPool</c> for the life of the test run.
-        /// </remarks>
         public override void Dispose()
         {
             _state = WebSocketState.Closed;

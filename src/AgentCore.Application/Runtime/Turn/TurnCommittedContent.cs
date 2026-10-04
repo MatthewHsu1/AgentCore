@@ -4,7 +4,7 @@ namespace AgentCore.Application.Runtime.Turn
 {
     /// <summary>
     /// The ids a turn's commit wrote, on the last update of the turn. A streaming caller never sees the ids any
-    /// other way, because the framework's hook runs after the last update (design probes P08b, G3).
+    /// other way, because the framework's hook runs after the last update.
     /// </summary>
     /// <param name="userMessageId">What the user's message was written under.</param>
     /// <param name="replyMessageId">What the last message was written under, or <see langword="null"/> when the user's is the only one.</param>

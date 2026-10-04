@@ -1,18 +1,19 @@
-using AgentCore.Application.Ports;
 using AgentCore.Application.Transcript;
 using AgentCore.Domain.Sources;
 
 namespace AgentCore.Application.Runtime.Turn
 {
     /// <summary>What a turn has cited and not yet attached to a message.</summary>
-    internal sealed class TurnSources : TurnAttachments<SourceContent>, ISourcePort
+    internal sealed class TurnSources : TurnAttachments<SourceContent>
     {
-        /// <inheritdoc/>
-        public void Publish(SourceReference source)
+        /// <summary>Cites one source under the outermost tool call of the citing flow, or drops it outside one.</summary>
+        /// <param name="source">Where the answer came from.</param>
+        /// <param name="callId">The outermost tool call the citing flow runs inside, or <see langword="null"/>.</param>
+        public void Publish(SourceReference source, string? callId)
         {
             ArgumentNullException.ThrowIfNull(source);
 
-            if (OuterCallId is not { } callId)
+            if (callId is null)
             {
                 return;
             }

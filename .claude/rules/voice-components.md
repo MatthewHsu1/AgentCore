@@ -35,6 +35,7 @@ flowchart TB
     Loop["VoiceConversationLoop"]
     UTH["UserTurnHandler"]
     Act["VoiceActivity"]
+    PhoneCall["Calls/PhoneCall<br/>G1, CallStarted, LineSpoken, end, CallEnded"]
   end
 
   subgraph Speech["Speech control"]
@@ -47,6 +48,7 @@ flowchart TB
     Hear["ReplyHearing<br/>what caller heard"]
     Fill["ToolFillerScope<br/>→ FillerScheduler"]
     Met["TurnMetrics"]
+    VN["VoiceNotices<br/>state → VoiceStateChanged"]
   end
 
   subgraph Engine["AgentCore.Application"]
@@ -60,16 +62,21 @@ flowchart TB
   Conn --> Pump & Sender & Loop
   Pump --> Reader --> In
   In -->|"ConversationInput:<br/>Started / Utterance / Barge"| Loop
-  Loop -->|GetOrOpen / Close| Sessions --> CS
+  Loop -->|Admit / Start / End / Close| PhoneCall -->|GetOrOpen / Close| Sessions --> CS
+  PhoneCall -.->|"replaced: a newer socket took the call id over"| Loop -.->|"cancel, close as replaced"| Conn
   Loop -->|interim / final| UTH
   Loop -->|Barge| Act
   Loop -->|Barge: StopAsync| Out
+  Act -->|each reply's ReplyHearing| Loop
+  Loop -->|"line chain: HeardAsync → LineSpoken"| PhoneCall
   UTH -->|TryGenerateReply| Act
   UTH --> VS
   Act --> Stream
   Act --> Pipe
   Act -->|schedule| Sched
   VS --> Sched
+  VS -->|AgentStateChanged / UserStateChanged| VN
+  VN -->|Hooks.Raise| CS
   VS -->|Say| Say
   Sched -->|authorize| Handle
   Pipe --> Handle
@@ -79,14 +86,14 @@ flowchart TB
   Say --> Fwd
   Pipe --> Hear -->|TurnCut| Stream
   Pipe --> Fill -->|Say| VS
-  Pipe --> Met
+  Pipe --> Met -->|TurnLatency notice| CS
   Out --> Sender -->|JSON frames| Caller
   Conn --> Obs
 
   class Conn,Pump,Reader,In,Out,Sender,Obs vendor
   class MapCall,Boot port
-  class Loop,UTH,Act turn
-  class VS,Sched,Handle,Pipe,Say,Fwd,Hear,Fill,Met speech
+  class Loop,UTH,Act,PhoneCall turn
+  class VS,Sched,Handle,Pipe,Say,Fwd,Hear,Fill,Met,VN speech
   class Stream,Sessions,CS engine
 ```
 
@@ -105,16 +112,18 @@ sequenceDiagram
 
   T->>P: setup frame
   P->>L: Started(conversationId)
-  L->>L: GetOrOpen session, make VoiceActivity + UserTurnHandler
+  L->>L: PhoneCall.AdmitAsync (G1) + StartAsync, make VoiceActivity + UserTurnHandler
   T->>P: interim transcript
   P->>L: Utterance(IsFinal=false)
   L->>U: OnInterimTranscript → user Speaking
   T->>P: final transcript
   P->>L: Utterance(IsFinal=true)
+  L->>L: queue the caller line behind any held agent line
   L->>U: OnFinalTranscript
-  U->>A: InterruptByFinalTranscript (cut old speech)
+  U->>A: InterruptByFinalTranscript (cut old speech; earlier replies' barge windows wait HeardTextWait, then close)
   U->>A: TryGenerateReply(text)
   A->>E: Start engine turn
+  A->>L: reply's ReplyHearing → held agent line queued
   A->>S: ScheduleSpeech(handle)
   S->>R: authorize speech
   R->>R: wait for user silence
@@ -128,5 +137,6 @@ sequenceDiagram
     end
   end
   R->>S: speech done → agent Listening, away timer armed
+  Note over L,R: The held agent line is raised (PhoneCall.HeardAsync, the reply's turn) with ReplyHearing.HeardText once<br/>the speech is done and its barge window closed: a barge report for it; the next final prompt, once the report<br/>that may follow it had its HeardTextWait (a later report changes nothing, and is logged); or DrainAsync, at once<br/>(an interrupted reply settled its cut already, so its window closes when its speech is done)
   Note over T,O: Barge-in: Telnyx sends Barge → Loop calls Output.StopAsync<br/>and VoiceActivity.InterruptByAudioActivity → ReplyHearing cuts the engine turn to what was heard
 ```

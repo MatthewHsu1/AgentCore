@@ -11,6 +11,12 @@ namespace AgentCore.Application.Secrets
         /// <summary>The standard OpenAI environment variable, read when the chain holds no name.</summary>
         public const string OpenAiApiKeyVariable = "OPENAI_API_KEY";
 
+        /// <summary>The <c>${secret:name}</c> name the OpenAI webhook signing secret resolves under.</summary>
+        public const string OpenAiWebhookSecretName = "openai-webhook-secret";
+
+        /// <summary>The environment variable the OpenAI webhook signing secret is read from.</summary>
+        public const string OpenAiWebhookSecretVariable = "OPENAI_WEBHOOK_SECRET";
+
         /// <summary>The <c>${secret:name}</c> name the OpenCode Go key resolves under.</summary>
         public const string OpenCodeGoApiKeyName = "opencode-go-api-key";
 
@@ -55,6 +61,9 @@ namespace AgentCore.Application.Secrets
 
         /// <summary>The one OpenAI credential, which chat, embedding, and moderation all read.</summary>
         public static readonly SecretName OpenAi = new(OpenAiApiKeyName, OpenAiApiKeyVariable);
+
+        /// <summary>The secret OpenAI signs its webhooks with (Standard Webhooks, <c>whsec_…</c>). The openai-live adapter checks every call with it.</summary>
+        public static readonly SecretName OpenAiWebhook = new(OpenAiWebhookSecretName, OpenAiWebhookSecretVariable);
 
         /// <summary>The OpenCode Go credential, which the chat adapter sends as its bearer token.</summary>
         public static readonly SecretName OpenCodeGo = new(OpenCodeGoApiKeyName, OpenCodeGoApiKeyVariable);

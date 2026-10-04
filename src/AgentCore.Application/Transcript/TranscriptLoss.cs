@@ -1,6 +1,6 @@
 namespace AgentCore.Application.Transcript
 {
-    /// <summary>One store 1 write of a session that the store did not take, or did not say it took.</summary>
+    /// <summary>One message store write of a session that the store did not take, or did not say it took.</summary>
     /// <param name="Sequence">Where the loss falls among every loss the session counted, from 1.</param>
     /// <param name="Appended">The ids of the rows the write appends, or none for a write that changes rows in place.</param>
     /// <param name="Refused">Whether the store refused the write because another session saved its turn first.</param>

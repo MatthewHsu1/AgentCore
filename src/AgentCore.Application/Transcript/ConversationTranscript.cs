@@ -44,21 +44,21 @@ namespace AgentCore.Application.Transcript
         }
 
         /// <summary>
-        /// Replaces the live history with what store 1 holds, without disturbing <see cref="TurnIndex"/>
+        /// Replaces the live history with what the message store holds, without disturbing <see cref="TurnIndex"/>
         /// or <see cref="ConversationId"/>.
         /// </summary>
         /// <param name="rows">
-        /// The rows store 1 read for the session: every row, or the newest summary and the rows above what
+        /// The rows the message store read for the session: every row, or the newest summary and the rows above what
         /// it covers. A row a summary stands in for is the caller's mistake, not this method's to catch:
         /// it lands in the live history beside the summary that already speaks for it. Order does not matter.
         /// </param>
-        /// <param name="nextOrdinal">The next free ordinal of the conversation, from store 0's own counter.</param>
+        /// <param name="nextOrdinal">The next free ordinal of the conversation, from the conversation store's own counter.</param>
         public void Resync(IReadOnlyList<ConversationMessage> rows, int nextOrdinal)
         {
             ArgumentNullException.ThrowIfNull(rows);
 
             // Stripped for the reason Append gives: the live history is serialised into the session
-            // state bag every turn, and what store 1 keeps is bigger than that bag should ever carry.
+            // state bag every turn, and what the message store keeps is bigger than that bag should ever carry.
             Messages = [.. rows
                 .OrderBy(row => row.Ordinal)
                 .Select(row => new StoredMessage
@@ -143,6 +143,17 @@ namespace AgentCore.Application.Transcript
             return new WithdrawnTurns(first, last);
         }
 
+        /// <summary>
+        /// Reads the live rows an edit hanging off one message would withdraw: every row after it, or every live row
+        /// when this transcript does not hold it.
+        /// </summary>
+        /// <param name="parentMessageId">The message the edit hangs off, or <see langword="null"/> for the whole conversation.</param>
+        public IReadOnlyList<ChatMessage> After(string? parentMessageId)
+        {
+            int from = parentMessageId is not null && OrdinalOf(parentMessageId) is { } parent ? parent + 1 : 0;
+            return [.. Messages.Where(stored => Withdrawn(stored, from)).Select(static stored => stored.Message)];
+        }
+
         /// <summary>The ids of the rows <see cref="TruncateFrom"/> withdraws from <paramref name="fromOrdinal"/> on.</summary>
         public IReadOnlyList<string> IdsFrom(int fromOrdinal)
         {
@@ -220,7 +231,7 @@ namespace AgentCore.Application.Transcript
         /// <param name="summary">The message that now speaks for those rows.</param>
         /// <param name="coversUpTo">The last ordinal it speaks for. Never below what the standing <see cref="Summary"/> covers.</param>
         /// <param name="revision">The <see cref="Revision"/> the compaction read.</param>
-        /// <returns>The row the summary became, for store 1; or <see langword="null"/> when the compaction was stale and dropped.</returns>
+        /// <returns>The row the summary became, for the message store; or <see langword="null"/> when the compaction was stale and dropped.</returns>
         public ConversationMessage? Compact(ChatMessage summary, int coversUpTo, int revision)
         {
             ArgumentNullException.ThrowIfNull(summary);
@@ -255,13 +266,16 @@ namespace AgentCore.Application.Transcript
 
         /// <summary>Adds new messages to the conversation, and returns the rows they became.</summary>
         /// <param name="messages">The messages the turn produced, oldest first.</param>
-        /// <param name="firstMessageId">
-        /// What the caller calls the first of them, or <see langword="null"/> to name it here. Only the
-        /// first: it is the one the caller sent and so the only one the caller had a name for.
+        /// <param name="userMessageId">
+        /// What the caller calls the message at <paramref name="userAt"/>, or <see langword="null"/> to name it here.
+        /// Only that one: it is the one the caller sent and so the only one the caller had a name for.
         /// </param>
+        /// <param name="userAt">Where the caller's message sits among <paramref name="messages"/>.</param>
+        /// <param name="turnIndex">The turn the rows belong to, or <see langword="null"/> for the turn running now.</param>
         public IReadOnlyList<ConversationMessage> Append(
-            IReadOnlyList<ChatMessage> messages, string? firstMessageId = null)
+            IReadOnlyList<ChatMessage> messages, string? userMessageId = null, int userAt = 0, int? turnIndex = null)
         {
+            int rowTurn = turnIndex ?? TurnIndex;
             ArgumentNullException.ThrowIfNull(messages);
 
             List<ConversationMessage> rows = new(messages.Count);
@@ -271,14 +285,14 @@ namespace AgentCore.Application.Transcript
 
                 int ordinal = NextOrdinal++;
 
-                string messageId = (index == 0 ? firstMessageId : null) ?? NewMessageId();
+                string messageId = (index == userAt ? userMessageId : null) ?? NewMessageId();
 
-                rows.Add(new ConversationMessage(ConversationId, ordinal, TurnIndex, message, messageId));
+                rows.Add(new ConversationMessage(ConversationId, ordinal, rowTurn, message, messageId));
 
                 Messages.Add(new StoredMessage
                 {
                     Ordinal = ordinal,
-                    TurnIndex = TurnIndex,
+                    TurnIndex = rowTurn,
                     MessageId = messageId,
                     Message = message.WithoutHostContent(),
                 });
@@ -312,7 +326,7 @@ namespace AgentCore.Application.Transcript
             }
 
             List<StoredMessage> replies = Messages.FindAll(stored =>
-                stored.TurnIndex == spoken.TurnIndex && stored.Message.Role == ChatRole.Assistant && stored.CoversUpTo is null);
+                stored.TurnIndex == spoken.TurnIndex && FrontVoice.IsAgentReply(stored.Message) && stored.CoversUpTo is null);
             List<ChatMessage> laid = ShownWords.Lay([.. replies.Select(stored => stored.Message)], heard);
 
             List<ConversationMessage> rows = [];

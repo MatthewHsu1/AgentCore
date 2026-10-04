@@ -2,15 +2,15 @@ using System.Collections.ObjectModel;
 using System.Text.Json;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Voice.Filler;
+using AgentCore.AspNetCore.Voice.Options;
 using Xunit;
 
 namespace AgentCore.AspNetCore.Tests.Voice
 {
     /// <summary>
     /// <c>providers.conversation</c>'s <c>userAway</c> and <c>filler</c> reach <see cref="VoiceOptions"/>,
-    /// and a value a <see cref="TimeProvider"/> wait would refuse stops the start with a pointer (plan
-    /// step 8, owner rulings 1 and 2).
+    /// and a value a <see cref="TimeProvider"/> wait would refuse stops the start with a pointer.
     /// </summary>
     public sealed class VoiceOptionsBinderTests
     {

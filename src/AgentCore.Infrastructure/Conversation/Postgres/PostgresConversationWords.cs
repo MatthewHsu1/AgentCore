@@ -11,7 +11,7 @@ using static AgentCore.Infrastructure.Conversation.Postgres.PostgresConversation
 
 namespace AgentCore.Infrastructure.Conversation.Postgres
 {
-    /// <summary>The words of every conversation, in PostgreSQL: store 1's rows, and what a turn writes beside them.</summary>
+    /// <summary>The words of every conversation, in PostgreSQL: the message store's rows, and what a turn writes beside them.</summary>
     /// <remarks>Binds the words to the pool every statement runs on. The store owns the pool; this does not.</remarks>
     /// <param name="dataSource">The pool.</param>
     internal sealed class PostgresConversationWords(NpgsqlDataSource dataSource)
@@ -131,7 +131,7 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
                 }
             }
 
-            return new InvalidOperationException($"Store 0 holds no conversation '{conversationId}' to append words to.");
+            return new InvalidOperationException($"The conversation store holds no conversation '{conversationId}' to append words to.");
         }
 
         /// <inheritdoc cref="IConversationStore.RewriteAsync"/>

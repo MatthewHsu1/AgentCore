@@ -4,7 +4,6 @@ using System.Text.Json.Nodes;
 using AgentCore.Application.Audit;
 using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Transcript;
 using AgentCore.AspNetCore.Endpoints;
 using AgentCore.AspNetCore.Tests.Fakes;
@@ -13,12 +12,13 @@ using AgentCore.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.AspNetCore.Tests.Endpoints
 {
     /// <summary>
     /// A request on a conversation another request still holds waits for the busy mark, then reads the conversation
-    /// afresh (owner ruling for soak F1). A client that sends one message at a time is never refused; a wait past the
+    /// afresh. A client that sends one message at a time is never refused; a wait past the
     /// limit is.
     /// </summary>
     public sealed class ResponsesBusyConversationTests
@@ -46,18 +46,17 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
 
         private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-        // Soak F1: a stopped turn files its words after the abort. A next message that read the conversation before
+        // A stopped turn files its words after the abort. A next message that read the conversation before
         // they landed would take the same turn index, and the store would keep only one of the two.
         [Fact(Timeout = 60_000)]
         public async Task AStreamTheClientStopped_ThenTheNextMessageAtOnce_KeepsBothTurnsInOrder()
         {
-            // Arrange
             TurnHoldingStore store = new(heldTurn: 1);
             await using ResponsesHost host = await ResponsesHost.StartAsync(
                 Yaml, new StallOnCueChatClient(), options => options.UseConversationStores(store));
             string conversation = await OpenAsync(host);
 
-            // Act: the client reads the first piece of a streamed reply and drops the connection, as a browser does.
+            // The client reads the first piece of a streamed reply and drops the connection, as a browser does.
             using (HttpClient browser = new(new SocketsHttpHandler { MaxResponseDrainSize = 0 }) { BaseAddress = host.Client.BaseAddress })
             {
                 using HttpResponseMessage stopped = await PostAsync(browser, conversation, "stall now", stream: true);
@@ -72,7 +71,6 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             store.Release();
             using HttpResponseMessage next = await sending;
 
-            // Assert
             await AssertBothTurnsKeptInOrderAsync(host, conversation, next);
         }
 
@@ -81,14 +79,12 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
         [Fact(Timeout = 60_000)]
         public async Task AStreamTheClientStopped_ThenTheNextMessageAtOnceOnAnotherHost_KeepsBothTurnsInOrder()
         {
-            // Arrange
             TurnHoldingStore store = new(heldTurn: 1);
             StallOnCueChatClient model = new();
             await using ResponsesHost host = await ResponsesHost.StartAsync(Yaml, model, options => options.UseConversationStores(store));
             await using ResponsesHost other = await ResponsesHost.StartAsync(Yaml, model, options => options.UseConversationStores(store));
             string conversation = await OpenAsync(host);
 
-            // Act
             using (HttpClient browser = new(new SocketsHttpHandler { MaxResponseDrainSize = 0 }) { BaseAddress = host.Client.BaseAddress })
             {
                 using HttpResponseMessage stopped = await PostAsync(browser, conversation, "stall now", stream: true);
@@ -101,14 +97,12 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             store.Release();
             using HttpResponseMessage next = await sending;
 
-            // Assert
             await AssertBothTurnsKeptInOrderAsync(other, conversation, next);
         }
 
         [Fact(Timeout = 60_000)]
         public async Task ATurnStillRunningOnThisHostPastTheWaitLimit_Answers409_AndLeavesATurnRefused()
         {
-            // Arrange
             FakeTimeProvider time = new(DateTimeOffset.UnixEpoch);
             await using ResponsesHost host = await ResponsesHost.StartAsync(
                 Yaml,
@@ -122,13 +116,11 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             using HttpResponseMessage running = await PostAsync(host.Client, conversation, "stall now", stream: true);
             await ReadUntilAsync(running, StallOnCueChatClient.Piece);
 
-            // Act
             Task<HttpResponseMessage> sending = PostAsync(host.Client, conversation, "next", stream: false);
             _ = await Task.WhenAny(time.WaitForTimersAsync(time.GetUtcNow() + ConversationBusyMark.WaitLimit, 1), sending);
             time.Advance(ConversationBusyMark.WaitLimit);
             using HttpResponseMessage refused = await sending;
 
-            // Assert
             Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
             JsonNode error = (await ResponsesHost.ReadJsonAsync(refused))["error"]!;
             Assert.Equal(ResponsesTurnConflict.Code, error["code"]!.GetValue<string>());
@@ -144,7 +136,6 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
         [Fact(Timeout = 60_000)]
         public async Task AConversationHeldPastTheWaitLimit_Answers409_AndLeavesAWarningAndATurnRefused()
         {
-            // Arrange
             FakeTimeProvider time = new(DateTimeOffset.UnixEpoch);
             using RecordingLoggerFactory logs = new();
             await using ResponsesHost host = await ResponsesHost.StartAsync(
@@ -160,13 +151,11 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             IConversationStore store = host.Services.GetRequiredService<IConversationStore>();
             _ = await store.TryMarkBusyAsync(conversation, "other-host", TimeSpan.FromHours(1), Ct);
 
-            // Act
             Task<HttpResponseMessage> sending = PostAsync(host.Client, conversation, "next", stream: false);
             _ = await Task.WhenAny(time.WaitForTimersAsync(time.GetUtcNow() + ConversationBusyMark.FirstPoll, 1), sending);
             time.Advance(ConversationBusyMark.WaitLimit);
             using HttpResponseMessage refused = await sending;
 
-            // Assert
             Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
             JsonNode error = (await ResponsesHost.ReadJsonAsync(refused))["error"]!;
             Assert.Equal(ResponsesTurnConflict.Code, error["code"]!.GetValue<string>());

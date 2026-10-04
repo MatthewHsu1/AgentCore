@@ -12,6 +12,7 @@ using AgentCore.TestSupport;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.AspNetCore.Tests.Sessions
 {
@@ -57,7 +58,7 @@ namespace AgentCore.AspNetCore.Tests.Sessions
             _ = await agent.RunAsync("hi", first, cancellationToken: Ct);
             await sessions.SaveSessionAsync(agent, "external-thread-1", first, Ct);
 
-            // D3: the key already names its own conversation row, so SaveSessionAsync wrote no response
+            // The key already names its own conversation row, so SaveSessionAsync wrote no response
             // row for it — nothing here for a sweep to find.
             clock.Advance(TimeSpan.FromDays(31));
             int swept = await store.SweepAsync(TimeSpan.FromDays(30), cancellationToken: Ct);

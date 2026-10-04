@@ -1,8 +1,9 @@
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tools.Binding;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.ToolCalls;
+using AgentCore.Application.Runtime.Turn;
 
 namespace AgentCore.Application.Tests.Runtime
 {

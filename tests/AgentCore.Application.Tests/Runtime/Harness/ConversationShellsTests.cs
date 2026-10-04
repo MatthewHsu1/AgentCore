@@ -38,18 +38,19 @@ namespace AgentCore.Application.Tests.Runtime.Harness
             Assert.Contains(expected, result.Stdout, StringComparison.Ordinal);
         }
 
+        // The command runs 30 times the timeout, so a run that waited for it cannot pass even on a loaded machine.
         [Fact]
-        public async Task Get_Local_TimeoutSignalsWithoutThrowing_AndReturnsUnder3Seconds()
+        public async Task Get_Local_TimeoutSignalsWithoutThrowing_AndReturnsBeforeTheCommandEnds()
         {
             await using ConversationShells shells = new(_workspace, logger: null);
             ConversationShellOptions options = new(ShellKind.Local, Policy: null, Timeout: TimeSpan.FromSeconds(1));
 
             Stopwatch stopwatch = Stopwatch.StartNew();
-            ShellResult result = await shells.Get(options).RunAsync("sleep 3", TestContext.Current.CancellationToken);
+            ShellResult result = await shells.Get(options).RunAsync("sleep 30", TestContext.Current.CancellationToken);
             stopwatch.Stop();
 
-            Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(3),
-                $"expected the timed-out run to return in under 3s; took {stopwatch.Elapsed}");
+            Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(20),
+                $"expected the timed-out run to return well before the 30 s command ended; took {stopwatch.Elapsed}");
             Assert.True(result is { TimedOut: true, ExitCode: 124 },
                 $"expected TimedOut=true and ExitCode=124; got TimedOut={result.TimedOut}, ExitCode={result.ExitCode}");
         }
@@ -75,7 +76,7 @@ namespace AgentCore.Application.Tests.Runtime.Harness
         {
             // This proves ShellPolicy's own semantics directly, at the ConversationShells layer: a null
             // allowList disables the allow check entirely, so only the deny list refuses a command.
-            // ShellPolicy also treats a supplied-but-empty allow list as deny-all (per its own remarks),
+            // ShellPolicy also treats a supplied-but-empty allow list as deny-all,
             // which is why AgentHarnessProviders.BuildPolicy must translate an agent's empty allow: into
             // null rather than pass it through — that compile-time translation, and the end-to-end
             // consequence of getting it wrong (an undenied command like pwd being refused), is proven in

@@ -1,11 +1,13 @@
 using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Configuration.Compilation;
+using AgentCore.Application.Hooks;
 using AgentCore.Application.Runtime;
 using AgentCore.Domain.Audit;
 using AgentCore.TestSupport;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Runtime.AgentCoreAgentTestSupport;
 
 namespace AgentCore.Application.Tests.Runtime
@@ -100,9 +102,11 @@ namespace AgentCore.Application.Tests.Runtime
         {
             SequencedChatClient reply = new("one", "two");
             InMemoryAuditSink sink = new();
-            AgentCoreAgent agent = BuildAgent(reply, out _, observers: ConversationObservers.Standard(sink, logger: null));
+            AgentCoreAgent agent = BuildAgent(
+                reply, out CompiledAgent compiled, hooks: BuiltInHooks.Create(sink));
 
             AgentResponse first = await agent.RunAsync("first", cancellationToken: TestContext.Current.CancellationToken);
+            await compiled.Hooks.Notices.FlushAllAsync();
 
             Assert.Equal("one", first.Text);
             AuditEvent started = Assert.Single(sink.Events, e => e.Kind == AuditEventKind.ConversationStarted);
@@ -138,7 +142,7 @@ namespace AgentCore.Application.Tests.Runtime
 
             Assert.Equal("second reply", second.Text);
 
-            // History survived the unload: the rebuilt session re-read the transcript store 0 still holds.
+            // History survived the unload: the rebuilt session re-read the transcript the conversation store still holds.
             Assert.Contains(reply.Requests[1], message => message.Role == ChatRole.User && message.Text == "hello");
             Assert.Contains(reply.Requests[1], message => message.Role == ChatRole.Assistant && message.Text == "first reply");
         }

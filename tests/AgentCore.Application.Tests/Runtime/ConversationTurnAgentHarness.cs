@@ -1,5 +1,4 @@
 using AgentCore.Application.Evaluation;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Evaluation.Fakes;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Transcript;
@@ -7,11 +6,14 @@ using AgentCore.TestSupport;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Agents;
+using AgentCore.Application.Runtime.Turn;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
-    /// The design probes' harness over the real types: one <see cref="ChatClientAgent"/> with a tool, the real
+    /// A harness over the real types: one <see cref="ChatClientAgent"/> with a tool, the real
     /// fallback and moderation layers, and <see cref="ConversationTurnAgent"/> outermost, all on one real provider.
     /// </summary>
     internal sealed class ConversationTurnAgentHarness

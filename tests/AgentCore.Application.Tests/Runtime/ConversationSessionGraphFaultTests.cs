@@ -2,7 +2,6 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Domain;
 using AgentCore.TestSupport;
@@ -10,11 +9,15 @@ using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Agents.Graph;
+using AgentCore.Application.Runtime.Session;
+using AgentCore.Application.Runtime.ToolCalls;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
-    /// Bug 2 of the 2026-09-24 round: a graph node's fault must reach the turn, on both graph rows.
+    /// A graph node's fault must reach the turn, on both graph rows.
     /// <c>AsAIAgent()</c> reports a node fault as an <see cref="ErrorContent"/> update and never throws,
     /// so without <see cref="GraphFaultAgent"/> the turn read an empty reply and lost the tool-versus-run
     /// distinction <see cref="ToolFaultMark"/> carries.
@@ -96,7 +99,7 @@ namespace AgentCore.Application.Tests.Runtime
 
             TurnResult turn = await session.RunTurnAsync("go", Ct);
 
-            Assert.StartsWith(ConversationSession.ToolFailureReason, turn.Failure, StringComparison.Ordinal);
+            Assert.StartsWith(TurnFailureReasons.ToolFailure, turn.Failure, StringComparison.Ordinal);
 
             // Not just the right bucket: the tool's own fault, not RequireOutputAgent's unrelated
             // "produced no text" message, which an explicit graph with no GraphFaultAgent throws too
@@ -113,7 +116,7 @@ namespace AgentCore.Application.Tests.Runtime
 
             TurnResult turn = await session.RunTurnAsync("go", Ct);
 
-            Assert.StartsWith(ConversationSession.RunFaultReason, turn.Failure, StringComparison.Ordinal);
+            Assert.StartsWith(TurnFailureReasons.RunFault, turn.Failure, StringComparison.Ordinal);
 
             // Same reason as above: the model's own fault must reach the turn, not RequireOutputAgent's
             // unrelated "produced no text" message.
@@ -121,7 +124,7 @@ namespace AgentCore.Application.Tests.Runtime
         }
 
         /// <summary>
-        /// Claim (R4-3): a concurrent graph whose agents keep no harness state never reuses its workflow
+        /// A concurrent graph whose agents keep no harness state never reuses its workflow
         /// session (<see cref="ConversationSession.ReusesGraphSession"/> is false), so <see cref="GraphFaultAgent"/>
         /// must throw at the broken node's first fault instead of draining the still-open slow node. The slow
         /// node's gate is never opened before the assertion, so a regression that waits for it would time out
@@ -154,7 +157,7 @@ namespace AgentCore.Application.Tests.Runtime
         }
 
         /// <summary>
-        /// Claim (F3): a graph row that reuses its workflow session must not send a faulted turn's input into
+        /// A graph row that reuses its workflow session must not send a faulted turn's input into
         /// the next turn. <c>GraphFaultAgent</c> must let MAF's stream finish (so <c>AddMessages</c> and
         /// <c>UpdateBookmark</c> run) before it throws.
         /// </summary>
@@ -176,7 +179,7 @@ namespace AgentCore.Application.Tests.Runtime
         }
 
         /// <summary>
-        /// Claim (F9): MAF documents <see cref="ExecutorFailedEvent.Data"/> as possibly null. Without a
+        /// MAF documents <see cref="ExecutorFailedEvent.Data"/> as possibly null. Without a
         /// name-the-node fallback, that event's <see cref="ErrorContent"/> passes through unread and the turn
         /// sees an empty reply.
         /// </summary>

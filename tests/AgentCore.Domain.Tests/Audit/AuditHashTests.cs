@@ -7,7 +7,7 @@ namespace AgentCore.Domain.Tests.Audit
     /// The digest the chain stores in place of the words a caller said or heard.
     /// </summary>
     /// <remarks>
-    /// The words live in store 1 and stay erasable, so the chain must be able to prove a text it does
+    /// The words live in the message store and stay erasable, so the chain must be able to prove a text it does
     /// not hold. Both halves of that proof read the same bytes: this type, and
     /// <c>encode(sha256(convert_to(t, 'UTF8')), 'hex')</c> in PostgreSQL.
     /// </remarks>

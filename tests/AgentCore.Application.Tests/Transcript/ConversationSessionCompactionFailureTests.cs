@@ -1,7 +1,7 @@
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Conversation.Memory;
+using AgentCore.Application.Hooks.Notices;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Transcript;
 using AgentCore.Domain;
@@ -10,6 +10,7 @@ using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Transcript.ConversationSessionCompactionTestSupport;
 
 namespace AgentCore.Application.Tests.Transcript
@@ -74,19 +75,19 @@ namespace AgentCore.Application.Tests.Transcript
             await SeedPlainTurnAsync(store, turnIndex: 1, "q1", "a1");
             await SeedPlainTurnAsync(store, turnIndex: 2, "q2", "a2");
 
-            RecordingObserver observer = new();
+            RecordingHook hook = new();
             ConversationSession session = CreateSession(
                 new ScriptedChatClient("a3"), store, conversationId: "c1",
                 compaction: Summary(new ScriptedChatClient("the gist of it"), minimumPreservedGroups: 0),
-                observer: observer);
+                hooks: [hook]);
 
             TurnResult result = await session.RunTurnAsync("q3", TestContext.Current.CancellationToken);
             await session.FlushTranscriptAsync();
 
             Assert.Equal("a3", result.ReplyText);
-            ConversationEvent dropped = Assert.Single(observer.Events, conversationEvent => conversationEvent.Kind == ConversationEventKind.TranscriptWriteFailed);
-            Assert.Null(dropped.EventId);
-            Assert.Contains("summary row refused", dropped.Payload![ConversationEventPayloadKeys.Reason], StringComparison.Ordinal);
+            await session.FlushNoticesAsync();
+            Fault dropped = Assert.Single(hook.Of<Fault>(), fault => fault.Kind == FaultKind.TranscriptWriteFailed);
+            Assert.Contains("summary row refused", dropped.Message, StringComparison.Ordinal);
 
             // The words landed; only the summary did not.
             Assert.DoesNotContain(await store.ReadForSessionAsync("c1", TestContext.Current.CancellationToken), row => row.CoversUpTo is not null);

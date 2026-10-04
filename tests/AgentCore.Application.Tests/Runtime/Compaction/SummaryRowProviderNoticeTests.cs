@@ -1,5 +1,4 @@
 using AgentCore.Application.Conversation.Memory;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Compaction;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Transcript;
@@ -7,12 +6,13 @@ using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Transcript.ConversationSessionCompactionTestSupport;
 
 namespace AgentCore.Application.Tests.Runtime.Compaction
 {
     /// <summary>
-    /// D2: a start notice goes out only when the summariser model is actually called, and an end
+    /// A start notice goes out only when the summariser model is actually called, and an end
     /// notice always follows it with the outcome the pass had. Every fact here comes from a real
     /// streaming turn, so the notice count is read off the wire the caller would see, not off an
     /// internal hook.

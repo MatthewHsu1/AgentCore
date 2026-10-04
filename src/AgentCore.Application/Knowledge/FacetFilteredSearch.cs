@@ -1,10 +1,10 @@
 using System.Text.Json;
 
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Runtime;
 
 using Microsoft.Extensions.AI;
 using Microsoft.Agents.AI;
+using AgentCore.Application.Runtime.Turn;
 
 namespace AgentCore.Application.Knowledge
 {

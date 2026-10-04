@@ -10,13 +10,6 @@ namespace AgentCore.Application.Tests.Audit
     /// <summary>
     /// The one queue every audit sink sits behind.
     /// </summary>
-    /// <remarks>
-    /// Section 7 measures a durable insert at 13 ms p50 and 32 ms p99, against 91 nanoseconds to enqueue,
-    /// and <see cref="IAuditSinkPort"/> turns that into a rule: an append completes when the event is
-    /// ACCEPTED and never when it is DURABLE. Before this class the rule was a doc comment, and an
-    /// adapter that awaited its database broke it silently. These tests fix the rule in one place, so a
-    /// blocking adapter behind this queue is a correct adapter.
-    /// </remarks>
     public sealed class QueuedAuditSinkTests
     {
         private const string ConversationId = "conversation-1";
@@ -59,8 +52,8 @@ namespace AgentCore.Application.Tests.Audit
 
             await sink.FlushAsync(TestContext.Current.CancellationToken);
 
-            // One reader drains the channel, so the chain of D23 reaches the store in the order the conversation
-            // produced it. That ordering is now a property of this class and not of each adapter.
+            // One reader drains the channel, so the chain reaches the store in the order the conversation
+            // produced it. That ordering belongs to this class, not to each adapter.
             Assert.Equal(ids, inner.Events.Select(item => item.EventId).ToArray());
         }
 
@@ -89,31 +82,46 @@ namespace AgentCore.Application.Tests.Audit
         }
 
         [Fact]
-        public async Task AFullQueue_DropsAndReports_AndTheCallerNeverWaits()
+        public async Task AFullQueueMakesTheCallerWaitAndDropsNothing()
         {
             RecordingLogger logger = new();
             GatedBatchAuditSink inner = new();
             await using QueuedAuditSink sink = new(inner, logger, capacity: 4);
 
             await sink.AppendAsync(Event(1), TestContext.Current.CancellationToken);
-
-            // The writer holds the first batch open, so nothing is read while the next seven arrive: four
-            // fit the queue and three have nowhere to go.
             await inner.Entered;
 
+            List<Task> appends = [];
             for (long sequence = 2; sequence <= 8; sequence++)
             {
-                ValueTask append = sink.AppendAsync(Event(sequence), TestContext.Current.CancellationToken);
-
-                // A sink that cannot keep up drops and reports rather than slowing the caller down, so
-                // even the appends that are refused cost the turn nothing and throw nothing.
-                Assert.True(append.IsCompleted);
-                await append;
+                appends.Add(sink.AppendAsync(Event(sequence), TestContext.Current.CancellationToken).AsTask());
             }
 
-            Assert.Equal(3, logger.Of(AuditQueueFullEventId).Count);
-
+            Assert.False(appends[^1].IsCompleted);
             inner.Release();
+            await Task.WhenAll(appends);
+
+            await sink.FlushAsync(TestContext.Current.CancellationToken);
+            Assert.Empty(logger.Of(AuditQueueFullEventId));
+            Assert.Equal(8, inner.Written);
+        }
+
+        // The flush first waits for what is upstream of the queue (the audit hook's delivery).
+        [Fact]
+        public async Task AFlushWaitsForTheUpstreamBeforeTheQueue()
+        {
+            InMemoryAuditSink inner = new();
+            TaskCompletionSource upstream = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            await using QueuedAuditSink sink = new(inner) { Upstream = () => upstream.Task };
+
+            Task flushing = sink.FlushAsync(TestContext.Current.CancellationToken).AsTask();
+            Assert.False(flushing.IsCompleted);
+
+            await sink.AppendAsync(Event(1), TestContext.Current.CancellationToken);
+            upstream.SetResult();
+            await flushing;
+
+            _ = Assert.Single(inner.Events);
         }
 
         [Fact]
@@ -179,10 +187,6 @@ namespace AgentCore.Application.Tests.Audit
         /// <summary>
         /// A batch-taking sink that holds its first batch open until a test releases it.
         /// </summary>
-        /// <remarks>
-        /// It records the size of each batch, which is the only way to tell a queue that batches from one
-        /// that hands the store a row at a time.
-        /// </remarks>
         private sealed class GatedBatchAuditSink : IAuditSinkPort
         {
             private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -204,6 +208,9 @@ namespace AgentCore.Application.Tests.Audit
                     }
                 }
             }
+
+            /// <summary>Gets how many events this sink took, across every batch.</summary>
+            public int Written => BatchSizes.Sum();
 
             /// <summary>Lets the held batch complete, and every batch after it.</summary>
             public void Release()

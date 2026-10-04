@@ -3,12 +3,13 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Hooks;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Runtime
 {
@@ -80,10 +81,10 @@ namespace AgentCore.Application.Tests.Runtime
             Func<ToolConfiguration, AITool?>? tools = null,
             IAuditSinkPort? auditSink = null)
         {
-            // ConversationObservers.Standard takes a required sink, because the composition root resolves
-            // providers.audit for every host and falls back to the in-process memory kind. An optional
-            // parameter has to be a compile-time constant, so the default is spelled here instead — a fact
-            // that does not care where its events land gets a fresh in-memory sink.
+            // The audit hook takes a required sink, because the composition root resolves providers.audit for
+            // every host and falls back to the in-process memory kind. An optional parameter has to be a
+            // compile-time constant, so the default is spelled here instead — a fact that does not care where
+            // its events land gets a fresh in-memory sink.
             IAuditSinkPort sink = auditSink ?? new InMemoryAuditSink();
 
             AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(yaml);
@@ -99,7 +100,7 @@ namespace AgentCore.Application.Tests.Runtime
                 compiled,
                 new GuardEvaluator(compiled.Configuration.Guards),
                 ConversationSessionFactory.CreateExtractor(compiled, chatClients),
-                observers: ConversationObservers.Standard(sink, logger: null));
+                hooks: BuiltInHooks.Create(sink));
 
             return factory.Create();
         }

@@ -1,6 +1,7 @@
 using System.Reflection;
-using AgentCore.Application.Runtime;
 using Microsoft.Extensions.AI;
+using AgentCore.Application.Runtime.ToolCalls;
+using AgentCore.Application.Runtime.Turn;
 
 namespace AgentCore.Application.Tools.Binding
 {

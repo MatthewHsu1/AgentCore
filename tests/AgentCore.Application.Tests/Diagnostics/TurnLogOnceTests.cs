@@ -2,17 +2,17 @@ using AgentCore.TestSupport;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Runtime;
 using Microsoft.Extensions.Logging;
 using Xunit;
 using AgentCore.Domain;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Diagnostics.TurnObservabilityHarness;
 
 namespace AgentCore.Application.Tests.Diagnostics
 {
     /// <summary>
-    /// The rows of section 8.7 that say "log once": a failed extraction, an empty reply, the fourth tool failure, and a
+    /// The cases that log once: a failed extraction, an empty reply, the fourth tool failure, and a
     /// guard that throws.
     /// </summary>
     public sealed class TurnLogOnceTests
@@ -26,8 +26,9 @@ namespace AgentCore.Application.Tests.Diagnostics
             ConversationSession session = Build(PolicyYaml, reply, fill, logger: logger).Create("conversation-x");
 
             TurnResult turn = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+            await session.FlushNoticesAsync();
 
-            // Row two of section 8.7: leave the slots unchanged, log once for the turn, and continue.
+            // A failed extraction leaves the slots unchanged, logs once for the turn, and continues.
             LogLine line = Assert.Single(logger.Of(1));
             Assert.Equal(LogLevel.Warning, line.Level);
             Assert.Contains("conversation-x", line.Message, StringComparison.Ordinal);
@@ -44,6 +45,7 @@ namespace AgentCore.Application.Tests.Diagnostics
             ConversationSession session = Build(PolicyYaml, reply, fill, logger: logger).Create("conversation-x");
 
             _ = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+            await session.FlushNoticesAsync();
 
             LogLine line = Assert.Single(logger.Of(3));
             Assert.Equal(LogLevel.Warning, line.Level);
@@ -60,17 +62,18 @@ namespace AgentCore.Application.Tests.Diagnostics
             ConversationSession session = Build(ToolYaml, reply, null, new ThrowingToolBuilder().Create, logger: logger).Create("conversation-x");
 
             _ = await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
+            await session.FlushNoticesAsync();
 
-            // Row six of section 8.7. The turn spoke the fallback, and the conversation is still alive.
+            // The turn spoke the fallback, and the conversation is still alive.
             //
             // ONE line, and the turn spent four tool calls to get here. Each of those four is a row in
-            // the chain of D23, which is where a record of a conversation belongs; the log gets the turn-level
+            // the audit chain, which is where a record of a conversation belongs; the log gets the turn-level
             // fact alone.
             LogLine line = Assert.Single(logger.Of(2));
             Assert.Equal(LogLevel.Error, line.Level);
 
             // The message names the turn and never the fault: the fault's message and stack trace ride
-            // the Exception object instead (owner ruling: type in spans, full error in logs), so a span
+            // the Exception object instead (spans carry the type, logs carry the full error), so a span
             // never has to repeat what the log already owns.
             Assert.DoesNotContain(ThrowingToolBuilder.Message, line.Message, StringComparison.Ordinal);
             Assert.NotNull(line.Exception);

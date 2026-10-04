@@ -12,11 +12,12 @@ using AgentCore.Application.Tests.Fakes;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Runtime.Harness
 {
     /// <summary>
-    /// The end-to-end path of harness step 4: a <c>todos:</c> item written during a turn lands in store
+    /// The end-to-end path of a <c>todos:</c> item written during a turn lands in store
     /// 0's <c>Providers</c>, and a conversation that resumes — from the same store, or from a host checkpoint —
     /// gets it re-injected by the framework's own <see cref="TodoProvider"/>.
     /// </summary>
@@ -150,7 +151,7 @@ namespace AgentCore.Application.Tests.Runtime.Harness
                 firstSession, cancellationToken: TestContext.Current.CancellationToken);
 
             // A fresh store: this proves the checkpoint carries the provider state on its own, not
-            // because store 0 still remembers the conversation.
+            // because the conversation store still remembers the conversation.
             InMemoryConversationStore secondStore = new();
             SequencedChatClient secondChatClient = new("hello there.");
             CompiledAgent secondCompiled = Compile(TodosYaml, secondChatClient, secondStore);

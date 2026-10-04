@@ -26,24 +26,9 @@ namespace AgentCore.Hosting.Tests
     /// <summary>
     /// The two calls a host makes, and the promises they carry.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This library exists so a host owns no wiring, and the whole of that promise is that a host can
-    /// still overrule any part of it. Every test here is about who wins, because that is the one thing
-    /// the ordering inside <c>Configure</c> can get wrong without failing to compile: each <c>Use*</c>
-    /// seam is a setter, so defaults written after a host's callback would silently replace it.
-    /// </para>
-    /// <para>
-    /// Every test runs offline against a fake model. There is no OpenAI account, no network conversation, and
-    /// no API key anywhere in this file — which is itself the proof that the default vendor list costs
-    /// nothing until a document names it.
-    /// </para>
-    /// </remarks>
     public sealed class AgentCoreHostTests
     {
-        // ---------------------------------------------------------------------------------------------
         // Who wins. The host does, on every seam, because its callback runs last.
-        // ---------------------------------------------------------------------------------------------
 
         [Fact]
         public async Task AHostChatClientFactoryWinsOverTheDefaultVendor()
@@ -65,9 +50,7 @@ namespace AgentCore.Hosting.Tests
             Assert.NotNull(host.Services.GetService<IChatClientFactory>());
         }
 
-        // ---------------------------------------------------------------------------------------------
         // The durable seams. Naming a vendor here is what makes providers.audit.kind: postgres startable.
-        // ---------------------------------------------------------------------------------------------
 
         [Fact]
         public async Task ProvidersAuditPostgresReachesTheAdapterRatherThanTheSelector()
@@ -124,12 +107,10 @@ namespace AgentCore.Hosting.Tests
             _ = Assert.IsType<InMemoryConversationStore>(host.Services.GetRequiredService<Conversations>().Store);
         }
 
-        // ---------------------------------------------------------------------------------------------
         // providers.knowledge.analyzer. The default QdrantKnowledgeAdapter is registered inside
         // Configure, before the host's own callback runs, so a host analyzer only reaches it if the
         // wiring reapplies it afterward in FinishConfiguring. If that ordering regresses, the failure
         // below reads "no registered IKnowledgeQueryAnalyzer" instead of a network error.
-        // ---------------------------------------------------------------------------------------------
 
         [Fact]
         public async Task AHostKnowledgeQueryAnalyzerReachesTheDefaultAdapter()
@@ -165,18 +146,11 @@ namespace AgentCore.Hosting.Tests
             Assert.DoesNotContain("no registered", failure.Message, StringComparison.Ordinal);
         }
 
-        // ---------------------------------------------------------------------------------------------
         // The mcp: block. McpToolSource is registered from this project, not from AgentCore.AspNetCore —
         // this test is what actually proves that wiring runs a real connection attempt, naming the
         // server that failed to connect.
-        // ---------------------------------------------------------------------------------------------
 
         /// <summary>A document naming an <c>mcp:</c> server whose command does not exist.</summary>
-        /// <remarks>
-        /// A missing executable fails <c>Process.Start</c> synchronously, so this reaches
-        /// <see cref="ConfigurationLoadException"/> immediately rather than waiting out any MCP
-        /// initialization timeout — the fast, offline failure this test needs.
-        /// </remarks>
         private const string McpDocument = """
         apiVersion: agentcore/v1
         agents:
@@ -220,9 +194,7 @@ namespace AgentCore.Hosting.Tests
             Assert.Contains("no-such-server", failure.Message, StringComparison.Ordinal);
         }
 
-        // ---------------------------------------------------------------------------------------------
         // The CreateCase stub. It fills a gap and never takes a name the host wanted.
-        // ---------------------------------------------------------------------------------------------
 
         [Fact]
         public async Task AHostThatBindsNothingGetsTheStub()
@@ -263,9 +235,7 @@ namespace AgentCore.Hosting.Tests
             Assert.True((bool)Assert.IsType<JsonObject>(result)["opened"]!);
         }
 
-        // ---------------------------------------------------------------------------------------------
         // What this extension registered, the container has to close.
-        // ---------------------------------------------------------------------------------------------
 
         [Fact]
         public async Task TheOutboundHttpPipelineClosesWithTheHost()
@@ -291,11 +261,42 @@ namespace AgentCore.Hosting.Tests
             // The container built this factory, so nothing else can be holding its providers.
             _ = Assert.Throws<ObjectDisposedException>(() => loggers.CreateLogger("after"));
         }
-        // ---------------------------------------------------------------------------------------------
-        // Helpers.
-        // ---------------------------------------------------------------------------------------------
+        // The host's own callback runs after the turnkey wiring, so the resolver it sets is the one every
+        // vendor must read, openai-live included.
+        [Fact]
+        public async Task TheOpenAiLiveKeysResolveThroughTheResolverTheHostSet()
+        {
+            MapSecretResolver secrets = new MapSecretResolver()
+                .With(KnownSecrets.OpenAiApiKeyName, "sk-test")
+                .With(KnownSecrets.OpenAiWebhookSecretName, "whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw");
+
+            await using WebApplication host = await StartAsync(options =>
+            {
+                options.Configuration = ConfigurationLoader.LoadYaml(LiveDocument);
+                options.SecretResolver = secrets;
+            });
+
+            Assert.Contains(KnownSecrets.OpenAiWebhookSecretName, secrets.Asked);
+        }
 
         /// <summary>The <c>providers</c> line that asks for the durable audit vendor.</summary>
+        private const string LiveDocument = """
+        apiVersion: agentcore/v1
+        agents:
+          items:
+            - { id: only, instructions: "I answer everything" }
+        entries:
+          main:
+            agent: only
+        providers:
+          conversation:
+            kind: openai-live
+            live:
+              instructions: "Be brief."
+          llm:
+            - { kind: fake, model: fake-model, as: reply }
+        """;
+
         private const string Audit = "  audit: { kind: postgres }";
 
         /// <summary>The <c>providers</c> line that asks for the durable transcript vendor.</summary>
@@ -322,10 +323,6 @@ namespace AgentCore.Hosting.Tests
         /// <param name="configure">Anything else the test says on the options.</param>
         /// <param name="providers">A further line under <c>providers</c>, or null for the plain document.</param>
         /// <returns>The started host.</returns>
-        /// <remarks>
-        /// It really starts: the document is read, and every adapter it names is opened, by the hosted
-        /// lifecycle service the composition root registers. Building alone opens nothing.
-        /// </remarks>
         private static async Task<WebApplication> StartAsync(
             Action<AgentCoreOptions>? configure = null,
             string? providers = null)
@@ -348,10 +345,6 @@ namespace AgentCore.Hosting.Tests
         }
 
         /// <summary>A chain that holds the connection string and answers nothing for it.</summary>
-        /// <remarks>
-        /// A held-but-blank name fails without falling back, so these tests reach the same failure on a
-        /// machine that happens to export POSTGRES_CONNECTION_STRING.
-        /// </remarks>
         private sealed class EmptySecretResolver : ISecretResolverPort
         {
             public ValueTask<string?> TryResolveAsync(string name, CancellationToken cancellationToken = default)
@@ -393,11 +386,6 @@ namespace AgentCore.Hosting.Tests
         }
 
         /// <summary>An embedding vendor whose generator is never actually asked to embed anything.</summary>
-        /// <remarks>
-        /// <c>QdrantKnowledgeAdapter.CreateSearchAsync</c> only needs a non-null generator to get past
-        /// its own <c>providers.embeddings</c> check; the analyzer resolves right after, and every test
-        /// using this adapter fails before either could reach the generator itself.
-        /// </remarks>
         private sealed class FakeEmbeddingAdapter : IEmbeddingGeneratorAdapter
         {
             public const string ProviderKind = "hosting-tests-embed";
@@ -461,7 +449,6 @@ namespace AgentCore.Hosting.Tests
 
         // A transport: http MCP server is reached on this host's own pipeline, minus the one part of it
         // that does not apply to a stream.
-        // ---------------------------------------------------------------------------------------------
 
         [Fact]
         public async Task AnMcpServerIsReachedOnThePipelinesOwnHandlerChain()

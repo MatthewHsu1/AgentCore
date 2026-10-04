@@ -1,7 +1,6 @@
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tools.Binding;
@@ -11,6 +10,7 @@ using AgentCore.TestSupport;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.ToolCalls;
 
 namespace AgentCore.Application.Tests.Configuration.Compilation
 {
@@ -71,7 +71,7 @@ namespace AgentCore.Application.Tests.Configuration.Compilation
             return AIFunctionFactory.Create(
                         (TurnInvocation? turn) =>
                         {
-                            turn!.Sources!.Publish(new SourceReference { SourceId = "card-1", Kind = SourceKind.Document, Title = "hi", Origin = "test.draw" });
+                            turn!.Sources!.Publish(new SourceReference { SourceId = "card-1", Kind = SourceKind.Document, Title = "hi", Origin = "test.draw" }, turn.OuterCallId);
                             return "drawn.";
                         },
                         new AIFunctionFactoryOptions

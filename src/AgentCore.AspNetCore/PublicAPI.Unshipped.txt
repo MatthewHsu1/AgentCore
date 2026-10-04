@@ -1,7 +1,7 @@
 #nullable enable
-AgentCore.AspNetCore.Voice.ConversationEndpointRouteBuilderExtensions
-AgentCore.AspNetCore.Voice.IConversationTransportAdapter
-AgentCore.AspNetCore.Voice.IConversationTransportAdapter.CreateHandler(AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration! configuration) -> Microsoft.AspNetCore.Http.RequestDelegate!
+AgentCore.AspNetCore.Voice.Routing.ConversationEndpointRouteBuilderExtensions
+AgentCore.AspNetCore.Voice.Ports.IConversationTransportAdapter
+AgentCore.AspNetCore.Voice.Ports.IConversationTransportAdapter.CreateHandler(AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration! configuration) -> Microsoft.AspNetCore.Http.RequestDelegate!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients
 AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.AgentCoreHttpClients(System.Net.Http.HttpMessageHandler? primaryHandler = null, Microsoft.Extensions.Logging.ILoggerFactory? loggers = null) -> void
 AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.CreateClient(string! name) -> System.Net.Http.HttpClient!
@@ -28,7 +28,7 @@ AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.Cache.set -> void
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.ResponseRetention.get -> System.TimeSpan?
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.ResponseRetention.set -> void
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseAuditSinks(params AgentCore.Application.Ports.IAuditSinkAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
-AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseConversation(params AgentCore.AspNetCore.Voice.IConversationAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseConversation(params AgentCore.AspNetCore.Voice.Ports.IConversationAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseConversationSessions(System.Func<System.Collections.Generic.IReadOnlyDictionary<string!, AgentCore.Application.Ports.IConversationSessionFactory!>!, AgentCore.Application.Ports.IConversationSessions!>! open) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseConversationStores(params AgentCore.Application.Ports.IConversationStoreAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseChatClients(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Ports.IChatClientFactory!>! chatClients) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
@@ -42,10 +42,9 @@ AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseKnowledgeQueryAnaly
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseKnowledgeRetrieval(System.Func<AgentCore.AspNetCore.DependencyInjection.AgentCoreStartup!, AgentCore.Application.Ports.IKnowledgeRetrievalPort!>! retrieval) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseKnowledgeStores(params AgentCore.Application.Ports.IKnowledgeStoreAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseModeration(params AgentCore.Application.Ports.IModerationAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
-AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseObservers(params AgentCore.Application.Ports.IConversationObserver![]! observers) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseSkills(Microsoft.Agents.AI.AgentSkillsSource! source) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseSkills(string! path) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
-AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseSpeech(params AgentCore.AspNetCore.Voice.ISpeechAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseSpeech(params AgentCore.AspNetCore.Voice.Ports.ISpeechAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseWorkspace(string! root) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseTelemetry(params AgentCore.Application.Ports.ITelemetryAdapter![]! adapters) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreServiceCollectionExtensions
@@ -70,8 +69,8 @@ AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayConversationAdapter.TelnyxRe
 AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelaySpeechAdapter
 AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelaySpeechAdapter.Kind.get -> string!
 AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelaySpeechAdapter.TelnyxRelaySpeechAdapter() -> void
-const AgentCore.AspNetCore.Voice.ConversationEndpointRouteBuilderExtensions.DefaultPattern = "/v1/{entry}/call" -> string!
-const AgentCore.AspNetCore.Voice.ConversationEndpointRouteBuilderExtensions.EntryRouteParameter = "entry" -> string!
+const AgentCore.AspNetCore.Voice.Routing.ConversationEndpointRouteBuilderExtensions.DefaultPattern = "/v1/{entry}/call" -> string!
+const AgentCore.AspNetCore.Voice.Routing.ConversationEndpointRouteBuilderExtensions.EntryRouteParameter = "entry" -> string!
 const AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.MaxAttempts = 3 -> int
 const AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.PipelineName = "agentcore-http" -> string!
 const AgentCore.AspNetCore.Endpoints.ResponsesEndpointRouteBuilderExtensions.DefaultPattern = "/v1/{entry}/responses" -> string!
@@ -79,9 +78,9 @@ const AgentCore.AspNetCore.Endpoints.ResponsesEndpointRouteBuilderExtensions.Ent
 const AgentCore.AspNetCore.Endpoints.ResponsesEndpointRouteBuilderExtensions.StageHeaderName = "X-AgentCore-Stage" -> string!
 const AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayConversationAdapter.TelnyxRelayKind = "telnyx-relay" -> string!
 const AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelaySpeechAdapter.TelnyxRelayKind = "telnyx-relay" -> string!
-static AgentCore.AspNetCore.Voice.ConversationEndpointRouteBuilderExtensions.EntryOf(Microsoft.AspNetCore.Http.HttpContext! http) -> string!
-static AgentCore.AspNetCore.Voice.ConversationEndpointRouteBuilderExtensions.MapCall(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
-static AgentCore.AspNetCore.Voice.ConversationEndpointRouteBuilderExtensions.MapCall(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints, string! pattern) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
+static AgentCore.AspNetCore.Voice.Routing.ConversationEndpointRouteBuilderExtensions.EntryOf(Microsoft.AspNetCore.Http.HttpContext! http) -> string!
+static AgentCore.AspNetCore.Voice.Routing.ConversationEndpointRouteBuilderExtensions.MapCall(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
+static AgentCore.AspNetCore.Voice.Routing.ConversationEndpointRouteBuilderExtensions.MapCall(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints, string! pattern) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
 static AgentCore.AspNetCore.DependencyInjection.AgentCoreServiceCollectionExtensions.AddAgentCore(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 static AgentCore.AspNetCore.DependencyInjection.AgentCoreServiceCollectionExtensions.AddAgentCoreWebSockets(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 static AgentCore.AspNetCore.Endpoints.ResponsesEndpointRouteBuilderExtensions.MapResponses(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
@@ -93,123 +92,139 @@ AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions.UseBlobStores(params A
 const AgentCore.AspNetCore.Endpoints.ResponsesEndpointRouteBuilderExtensions.TimeZoneHeaderName = "X-AgentCore-Time-Zone" -> string!
 AgentCore.AspNetCore.Conversation.ConversationSweeper
 AgentCore.AspNetCore.Conversation.ConversationSweeper.ConversationSweeper(System.IServiceProvider! services, Microsoft.Extensions.Options.IOptions<AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!>! options, System.TimeProvider! timeProvider, Microsoft.Extensions.Logging.ILogger<AgentCore.AspNetCore.Conversation.ConversationSweeper!>! logger) -> void
-AgentCore.AspNetCore.Voice.ConversationChannel
-AgentCore.AspNetCore.Voice.ConversationChannel.<Clone>$() -> AgentCore.AspNetCore.Voice.ConversationChannel!
-AgentCore.AspNetCore.Voice.ConversationChannel.ConversationChannel(AgentCore.AspNetCore.Voice.IConversationInputPort! Input, AgentCore.AspNetCore.Voice.IConversationOutputPort! Output) -> void
-AgentCore.AspNetCore.Voice.ConversationChannel.Deconstruct(out AgentCore.AspNetCore.Voice.IConversationInputPort! Input, out AgentCore.AspNetCore.Voice.IConversationOutputPort! Output) -> void
-AgentCore.AspNetCore.Voice.ConversationChannel.DisposeAsync() -> System.Threading.Tasks.ValueTask
-AgentCore.AspNetCore.Voice.ConversationChannel.Equals(AgentCore.AspNetCore.Voice.ConversationChannel? other) -> bool
-AgentCore.AspNetCore.Voice.ConversationChannel.Input.get -> AgentCore.AspNetCore.Voice.IConversationInputPort!
-AgentCore.AspNetCore.Voice.ConversationChannel.Input.init -> void
-AgentCore.AspNetCore.Voice.ConversationChannel.Output.get -> AgentCore.AspNetCore.Voice.IConversationOutputPort!
-AgentCore.AspNetCore.Voice.ConversationChannel.Output.init -> void
-AgentCore.AspNetCore.Voice.ConversationChannelContext
-AgentCore.AspNetCore.Voice.ConversationChannelContext.<Clone>$() -> AgentCore.AspNetCore.Voice.ConversationChannelContext!
-AgentCore.AspNetCore.Voice.ConversationChannelContext.ConversationChannelContext(string! ConversationId, System.Collections.Generic.IReadOnlyDictionary<string!, string!>? CustomParameters) -> void
-AgentCore.AspNetCore.Voice.ConversationChannelContext.ConversationId.get -> string!
-AgentCore.AspNetCore.Voice.ConversationChannelContext.ConversationId.init -> void
-AgentCore.AspNetCore.Voice.ConversationChannelContext.CustomParameters.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>?
-AgentCore.AspNetCore.Voice.ConversationChannelContext.CustomParameters.init -> void
-AgentCore.AspNetCore.Voice.ConversationChannelContext.Deconstruct(out string! ConversationId, out System.Collections.Generic.IReadOnlyDictionary<string!, string!>? CustomParameters) -> void
-AgentCore.AspNetCore.Voice.ConversationChannelContext.Equals(AgentCore.AspNetCore.Voice.ConversationChannelContext? other) -> bool
-AgentCore.AspNetCore.Voice.ConversationInput
-AgentCore.AspNetCore.Voice.ConversationInput.Barge
-AgentCore.AspNetCore.Voice.ConversationInput.Barge.Barge(string! HeardText, System.TimeSpan PlayedDuration) -> void
-AgentCore.AspNetCore.Voice.ConversationInput.Barge.Deconstruct(out string! HeardText, out System.TimeSpan PlayedDuration) -> void
-AgentCore.AspNetCore.Voice.ConversationInput.Barge.Equals(AgentCore.AspNetCore.Voice.ConversationInput.Barge? other) -> bool
-AgentCore.AspNetCore.Voice.ConversationInput.Barge.HeardText.get -> string!
-AgentCore.AspNetCore.Voice.ConversationInput.Barge.HeardText.init -> void
-AgentCore.AspNetCore.Voice.ConversationInput.Barge.PlayedDuration.get -> System.TimeSpan
-AgentCore.AspNetCore.Voice.ConversationInput.Barge.PlayedDuration.init -> void
-AgentCore.AspNetCore.Voice.ConversationInput.ConversationInput(AgentCore.AspNetCore.Voice.ConversationInput! original) -> void
-AgentCore.AspNetCore.Voice.ConversationInput.Keypress
-AgentCore.AspNetCore.Voice.ConversationInput.Keypress.Deconstruct(out string! Key) -> void
-AgentCore.AspNetCore.Voice.ConversationInput.Keypress.Equals(AgentCore.AspNetCore.Voice.ConversationInput.Keypress? other) -> bool
-AgentCore.AspNetCore.Voice.ConversationInput.Keypress.Key.get -> string!
-AgentCore.AspNetCore.Voice.ConversationInput.Keypress.Key.init -> void
-AgentCore.AspNetCore.Voice.ConversationInput.Keypress.Keypress(string! Key) -> void
-AgentCore.AspNetCore.Voice.ConversationInput.Utterance
-AgentCore.AspNetCore.Voice.ConversationInput.Utterance.Deconstruct(out string! Text, out string! Language, out bool IsFinal) -> void
-AgentCore.AspNetCore.Voice.ConversationInput.Utterance.Equals(AgentCore.AspNetCore.Voice.ConversationInput.Utterance? other) -> bool
-AgentCore.AspNetCore.Voice.ConversationInput.Utterance.IsFinal.get -> bool
-AgentCore.AspNetCore.Voice.ConversationInput.Utterance.IsFinal.init -> void
-AgentCore.AspNetCore.Voice.ConversationInput.Utterance.Language.get -> string!
-AgentCore.AspNetCore.Voice.ConversationInput.Utterance.Language.init -> void
-AgentCore.AspNetCore.Voice.ConversationInput.Utterance.Text.get -> string!
-AgentCore.AspNetCore.Voice.ConversationInput.Utterance.Text.init -> void
-AgentCore.AspNetCore.Voice.ConversationInput.Utterance.Utterance(string! Text, string! Language, bool IsFinal) -> void
-AgentCore.AspNetCore.Voice.ConversationSpeechPairing
-AgentCore.AspNetCore.Voice.IConversationAdapter
-AgentCore.AspNetCore.Voice.IConversationAdapter.CarriesText.get -> bool
-AgentCore.AspNetCore.Voice.IConversationChannelFactory
-AgentCore.AspNetCore.Voice.IConversationChannelFactory.OpenAsync(AgentCore.AspNetCore.Voice.ConversationChannelContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.AspNetCore.Voice.ConversationChannel!>
-AgentCore.AspNetCore.Voice.IConversationInputPort
-AgentCore.AspNetCore.Voice.IConversationInputPort.ListenAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<AgentCore.AspNetCore.Voice.ConversationInput!>!
-AgentCore.AspNetCore.Voice.IConversationOutputPort
-AgentCore.AspNetCore.Voice.IConversationOutputPort.BeginReply() -> void
-AgentCore.AspNetCore.Voice.IConversationOutputPort.CompleteAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
-AgentCore.AspNetCore.Voice.IConversationOutputPort.SpeakAsync(string! fragment, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
-AgentCore.AspNetCore.Voice.IConversationOutputPort.StopAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
-AgentCore.AspNetCore.Voice.ISpeechAdapter
-AgentCore.AspNetCore.Voice.ConversationInput.Started
-AgentCore.AspNetCore.Voice.ConversationInput.Started.Deconstruct(out string! ConversationId) -> void
-AgentCore.AspNetCore.Voice.ConversationInput.Started.Equals(AgentCore.AspNetCore.Voice.ConversationInput.Started? other) -> bool
-AgentCore.AspNetCore.Voice.ConversationInput.Started.ConversationId.get -> string!
-AgentCore.AspNetCore.Voice.ConversationInput.Started.ConversationId.init -> void
-AgentCore.AspNetCore.Voice.ConversationInput.Started.Started(string! ConversationId) -> void
-abstract AgentCore.AspNetCore.Voice.ConversationInput.<Clone>$() -> AgentCore.AspNetCore.Voice.ConversationInput!
-override AgentCore.AspNetCore.Voice.ConversationChannel.Equals(object? obj) -> bool
-override AgentCore.AspNetCore.Voice.ConversationChannel.GetHashCode() -> int
-override AgentCore.AspNetCore.Voice.ConversationChannel.ToString() -> string!
-override AgentCore.AspNetCore.Voice.ConversationChannelContext.Equals(object? obj) -> bool
-override AgentCore.AspNetCore.Voice.ConversationChannelContext.GetHashCode() -> int
-override AgentCore.AspNetCore.Voice.ConversationChannelContext.ToString() -> string!
-override AgentCore.AspNetCore.Voice.ConversationInput.Barge.<Clone>$() -> AgentCore.AspNetCore.Voice.ConversationInput.Barge!
-override AgentCore.AspNetCore.Voice.ConversationInput.Barge.Equals(object? obj) -> bool
-override AgentCore.AspNetCore.Voice.ConversationInput.Barge.GetHashCode() -> int
-override AgentCore.AspNetCore.Voice.ConversationInput.Barge.ToString() -> string!
-override AgentCore.AspNetCore.Voice.ConversationInput.Equals(object? obj) -> bool
-override AgentCore.AspNetCore.Voice.ConversationInput.GetHashCode() -> int
-override AgentCore.AspNetCore.Voice.ConversationInput.Keypress.<Clone>$() -> AgentCore.AspNetCore.Voice.ConversationInput.Keypress!
-override AgentCore.AspNetCore.Voice.ConversationInput.Keypress.Equals(object? obj) -> bool
-override AgentCore.AspNetCore.Voice.ConversationInput.Keypress.GetHashCode() -> int
-override AgentCore.AspNetCore.Voice.ConversationInput.Keypress.ToString() -> string!
-override AgentCore.AspNetCore.Voice.ConversationInput.ToString() -> string!
-override AgentCore.AspNetCore.Voice.ConversationInput.Utterance.<Clone>$() -> AgentCore.AspNetCore.Voice.ConversationInput.Utterance!
-override AgentCore.AspNetCore.Voice.ConversationInput.Utterance.Equals(object? obj) -> bool
-override AgentCore.AspNetCore.Voice.ConversationInput.Utterance.GetHashCode() -> int
-override AgentCore.AspNetCore.Voice.ConversationInput.Utterance.ToString() -> string!
-static AgentCore.AspNetCore.Voice.ConversationChannel.operator !=(AgentCore.AspNetCore.Voice.ConversationChannel? left, AgentCore.AspNetCore.Voice.ConversationChannel? right) -> bool
-static AgentCore.AspNetCore.Voice.ConversationChannel.operator ==(AgentCore.AspNetCore.Voice.ConversationChannel? left, AgentCore.AspNetCore.Voice.ConversationChannel? right) -> bool
-static AgentCore.AspNetCore.Voice.ConversationChannelContext.operator !=(AgentCore.AspNetCore.Voice.ConversationChannelContext? left, AgentCore.AspNetCore.Voice.ConversationChannelContext? right) -> bool
-static AgentCore.AspNetCore.Voice.ConversationChannelContext.operator ==(AgentCore.AspNetCore.Voice.ConversationChannelContext? left, AgentCore.AspNetCore.Voice.ConversationChannelContext? right) -> bool
-static AgentCore.AspNetCore.Voice.ConversationInput.Barge.operator !=(AgentCore.AspNetCore.Voice.ConversationInput.Barge? left, AgentCore.AspNetCore.Voice.ConversationInput.Barge? right) -> bool
-static AgentCore.AspNetCore.Voice.ConversationInput.Barge.operator ==(AgentCore.AspNetCore.Voice.ConversationInput.Barge? left, AgentCore.AspNetCore.Voice.ConversationInput.Barge? right) -> bool
-static AgentCore.AspNetCore.Voice.ConversationInput.Keypress.operator !=(AgentCore.AspNetCore.Voice.ConversationInput.Keypress? left, AgentCore.AspNetCore.Voice.ConversationInput.Keypress? right) -> bool
-static AgentCore.AspNetCore.Voice.ConversationInput.Keypress.operator ==(AgentCore.AspNetCore.Voice.ConversationInput.Keypress? left, AgentCore.AspNetCore.Voice.ConversationInput.Keypress? right) -> bool
-static AgentCore.AspNetCore.Voice.ConversationInput.Utterance.operator !=(AgentCore.AspNetCore.Voice.ConversationInput.Utterance? left, AgentCore.AspNetCore.Voice.ConversationInput.Utterance? right) -> bool
-static AgentCore.AspNetCore.Voice.ConversationInput.Utterance.operator ==(AgentCore.AspNetCore.Voice.ConversationInput.Utterance? left, AgentCore.AspNetCore.Voice.ConversationInput.Utterance? right) -> bool
-static AgentCore.AspNetCore.Voice.ConversationInput.operator !=(AgentCore.AspNetCore.Voice.ConversationInput? left, AgentCore.AspNetCore.Voice.ConversationInput? right) -> bool
-static AgentCore.AspNetCore.Voice.ConversationInput.operator ==(AgentCore.AspNetCore.Voice.ConversationInput? left, AgentCore.AspNetCore.Voice.ConversationInput? right) -> bool
-static AgentCore.AspNetCore.Voice.ConversationSpeechPairing.Validate(AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration! conversation, AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration! speech, AgentCore.AspNetCore.Voice.IConversationAdapter! selectedConversation) -> void
-virtual AgentCore.AspNetCore.Voice.ConversationInput.EqualityContract.get -> System.Type!
-virtual AgentCore.AspNetCore.Voice.ConversationInput.Equals(AgentCore.AspNetCore.Voice.ConversationInput? other) -> bool
-virtual AgentCore.AspNetCore.Voice.ConversationInput.PrintMembers(System.Text.StringBuilder! builder) -> bool
-override AgentCore.AspNetCore.Voice.ConversationInput.Started.<Clone>$() -> AgentCore.AspNetCore.Voice.ConversationInput.Started!
-override AgentCore.AspNetCore.Voice.ConversationInput.Started.Equals(object? obj) -> bool
-override AgentCore.AspNetCore.Voice.ConversationInput.Started.GetHashCode() -> int
-override AgentCore.AspNetCore.Voice.ConversationInput.Started.ToString() -> string!
-static AgentCore.AspNetCore.Voice.ConversationInput.Started.operator !=(AgentCore.AspNetCore.Voice.ConversationInput.Started? left, AgentCore.AspNetCore.Voice.ConversationInput.Started? right) -> bool
-static AgentCore.AspNetCore.Voice.ConversationInput.Started.operator ==(AgentCore.AspNetCore.Voice.ConversationInput.Started? left, AgentCore.AspNetCore.Voice.ConversationInput.Started? right) -> bool
-override sealed AgentCore.AspNetCore.Voice.ConversationInput.Barge.Equals(AgentCore.AspNetCore.Voice.ConversationInput? other) -> bool
-override sealed AgentCore.AspNetCore.Voice.ConversationInput.Keypress.Equals(AgentCore.AspNetCore.Voice.ConversationInput? other) -> bool
-override sealed AgentCore.AspNetCore.Voice.ConversationInput.Utterance.Equals(AgentCore.AspNetCore.Voice.ConversationInput? other) -> bool
-override sealed AgentCore.AspNetCore.Voice.ConversationInput.Started.Equals(AgentCore.AspNetCore.Voice.ConversationInput? other) -> bool
+AgentCore.AspNetCore.Voice.Routing.ConversationChannel
+AgentCore.AspNetCore.Voice.Routing.ConversationChannel.<Clone>$() -> AgentCore.AspNetCore.Voice.Routing.ConversationChannel!
+AgentCore.AspNetCore.Voice.Routing.ConversationChannel.ConversationChannel(AgentCore.AspNetCore.Voice.Ports.IConversationInputPort! Input, AgentCore.AspNetCore.Voice.Ports.IConversationOutputPort! Output) -> void
+AgentCore.AspNetCore.Voice.Routing.ConversationChannel.Deconstruct(out AgentCore.AspNetCore.Voice.Ports.IConversationInputPort! Input, out AgentCore.AspNetCore.Voice.Ports.IConversationOutputPort! Output) -> void
+AgentCore.AspNetCore.Voice.Routing.ConversationChannel.DisposeAsync() -> System.Threading.Tasks.ValueTask
+AgentCore.AspNetCore.Voice.Routing.ConversationChannel.Equals(AgentCore.AspNetCore.Voice.Routing.ConversationChannel? other) -> bool
+AgentCore.AspNetCore.Voice.Routing.ConversationChannel.Input.get -> AgentCore.AspNetCore.Voice.Ports.IConversationInputPort!
+AgentCore.AspNetCore.Voice.Routing.ConversationChannel.Input.init -> void
+AgentCore.AspNetCore.Voice.Routing.ConversationChannel.Output.get -> AgentCore.AspNetCore.Voice.Ports.IConversationOutputPort!
+AgentCore.AspNetCore.Voice.Routing.ConversationChannel.Output.init -> void
+AgentCore.AspNetCore.Voice.Routing.ConversationChannelContext
+AgentCore.AspNetCore.Voice.Routing.ConversationChannelContext.<Clone>$() -> AgentCore.AspNetCore.Voice.Routing.ConversationChannelContext!
+AgentCore.AspNetCore.Voice.Routing.ConversationChannelContext.ConversationChannelContext(string! ConversationId, System.Collections.Generic.IReadOnlyDictionary<string!, string!>? CustomParameters) -> void
+AgentCore.AspNetCore.Voice.Routing.ConversationChannelContext.ConversationId.get -> string!
+AgentCore.AspNetCore.Voice.Routing.ConversationChannelContext.ConversationId.init -> void
+AgentCore.AspNetCore.Voice.Routing.ConversationChannelContext.CustomParameters.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>?
+AgentCore.AspNetCore.Voice.Routing.ConversationChannelContext.CustomParameters.init -> void
+AgentCore.AspNetCore.Voice.Routing.ConversationChannelContext.Deconstruct(out string! ConversationId, out System.Collections.Generic.IReadOnlyDictionary<string!, string!>? CustomParameters) -> void
+AgentCore.AspNetCore.Voice.Routing.ConversationChannelContext.Equals(AgentCore.AspNetCore.Voice.Routing.ConversationChannelContext? other) -> bool
+AgentCore.AspNetCore.Voice.Ports.ConversationInput
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Barge
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Barge.Barge(string! HeardText, System.TimeSpan PlayedDuration) -> void
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Barge.Deconstruct(out string! HeardText, out System.TimeSpan PlayedDuration) -> void
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Barge.Equals(AgentCore.AspNetCore.Voice.Ports.ConversationInput.Barge? other) -> bool
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Barge.HeardText.get -> string!
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Barge.HeardText.init -> void
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Barge.PlayedDuration.get -> System.TimeSpan
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Barge.PlayedDuration.init -> void
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.ConversationInput(AgentCore.AspNetCore.Voice.Ports.ConversationInput! original) -> void
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Keypress
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Keypress.Deconstruct(out string! Key) -> void
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Keypress.Equals(AgentCore.AspNetCore.Voice.Ports.ConversationInput.Keypress? other) -> bool
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Keypress.Key.get -> string!
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Keypress.Key.init -> void
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Keypress.Keypress(string! Key) -> void
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Utterance
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Utterance.Deconstruct(out string! Text, out string! Language, out bool IsFinal) -> void
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Utterance.Equals(AgentCore.AspNetCore.Voice.Ports.ConversationInput.Utterance? other) -> bool
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Utterance.IsFinal.get -> bool
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Utterance.IsFinal.init -> void
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Utterance.Language.get -> string!
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Utterance.Language.init -> void
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Utterance.Text.get -> string!
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Utterance.Text.init -> void
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Utterance.Utterance(string! Text, string! Language, bool IsFinal) -> void
+AgentCore.AspNetCore.Voice.Turns.ConversationSpeechPairing
+AgentCore.AspNetCore.Voice.Ports.CallTraits
+AgentCore.AspNetCore.Voice.Ports.CallTraits.None = 0 -> AgentCore.AspNetCore.Voice.Ports.CallTraits
+AgentCore.AspNetCore.Voice.Ports.CallTraits.SpeaksForItself = 1 -> AgentCore.AspNetCore.Voice.Ports.CallTraits
+AgentCore.AspNetCore.Voice.Ports.CallTraits.TakesTurnsItself = 2 -> AgentCore.AspNetCore.Voice.Ports.CallTraits
+AgentCore.AspNetCore.Voice.Ports.IConversationAdapter
+AgentCore.AspNetCore.Voice.Ports.IConversationAdapter.CarriesText.get -> bool
+AgentCore.AspNetCore.Voice.Ports.IConversationAdapter.Traits.get -> AgentCore.AspNetCore.Voice.Ports.CallTraits
+AgentCore.AspNetCore.Voice.Routing.IConversationChannelFactory
+AgentCore.AspNetCore.Voice.Routing.IConversationChannelFactory.OpenAsync(AgentCore.AspNetCore.Voice.Routing.ConversationChannelContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.AspNetCore.Voice.Routing.ConversationChannel!>
+AgentCore.AspNetCore.Voice.Ports.IConversationInputPort
+AgentCore.AspNetCore.Voice.Ports.IConversationInputPort.ListenAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<AgentCore.AspNetCore.Voice.Ports.ConversationInput!>!
+AgentCore.AspNetCore.Voice.Ports.IConversationOutputPort
+AgentCore.AspNetCore.Voice.Ports.IConversationOutputPort.BeginReply() -> void
+AgentCore.AspNetCore.Voice.Ports.IConversationOutputPort.CompleteAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.AspNetCore.Voice.Ports.IConversationOutputPort.SpeakAsync(string! fragment, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.AspNetCore.Voice.Ports.IConversationOutputPort.StopAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+AgentCore.AspNetCore.Voice.Ports.ISpeechAdapter
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started.Deconstruct(out string! ConversationId) -> void
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started.Equals(AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started? other) -> bool
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started.ConversationId.get -> string!
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started.ConversationId.init -> void
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started.Started(string! ConversationId) -> void
+abstract AgentCore.AspNetCore.Voice.Ports.ConversationInput.<Clone>$() -> AgentCore.AspNetCore.Voice.Ports.ConversationInput!
+override AgentCore.AspNetCore.Voice.Routing.ConversationChannel.Equals(object? obj) -> bool
+override AgentCore.AspNetCore.Voice.Routing.ConversationChannel.GetHashCode() -> int
+override AgentCore.AspNetCore.Voice.Routing.ConversationChannel.ToString() -> string!
+override AgentCore.AspNetCore.Voice.Routing.ConversationChannelContext.Equals(object? obj) -> bool
+override AgentCore.AspNetCore.Voice.Routing.ConversationChannelContext.GetHashCode() -> int
+override AgentCore.AspNetCore.Voice.Routing.ConversationChannelContext.ToString() -> string!
+override AgentCore.AspNetCore.Voice.Ports.ConversationInput.Barge.<Clone>$() -> AgentCore.AspNetCore.Voice.Ports.ConversationInput.Barge!
+override AgentCore.AspNetCore.Voice.Ports.ConversationInput.Barge.Equals(object? obj) -> bool
+override AgentCore.AspNetCore.Voice.Ports.ConversationInput.Barge.GetHashCode() -> int
+override AgentCore.AspNetCore.Voice.Ports.ConversationInput.Barge.ToString() -> string!
+override AgentCore.AspNetCore.Voice.Ports.ConversationInput.Equals(object? obj) -> bool
+override AgentCore.AspNetCore.Voice.Ports.ConversationInput.GetHashCode() -> int
+override AgentCore.AspNetCore.Voice.Ports.ConversationInput.Keypress.<Clone>$() -> AgentCore.AspNetCore.Voice.Ports.ConversationInput.Keypress!
+override AgentCore.AspNetCore.Voice.Ports.ConversationInput.Keypress.Equals(object? obj) -> bool
+override AgentCore.AspNetCore.Voice.Ports.ConversationInput.Keypress.GetHashCode() -> int
+override AgentCore.AspNetCore.Voice.Ports.ConversationInput.Keypress.ToString() -> string!
+override AgentCore.AspNetCore.Voice.Ports.ConversationInput.ToString() -> string!
+override AgentCore.AspNetCore.Voice.Ports.ConversationInput.Utterance.<Clone>$() -> AgentCore.AspNetCore.Voice.Ports.ConversationInput.Utterance!
+override AgentCore.AspNetCore.Voice.Ports.ConversationInput.Utterance.Equals(object? obj) -> bool
+override AgentCore.AspNetCore.Voice.Ports.ConversationInput.Utterance.GetHashCode() -> int
+override AgentCore.AspNetCore.Voice.Ports.ConversationInput.Utterance.ToString() -> string!
+static AgentCore.AspNetCore.Voice.Routing.ConversationChannel.operator !=(AgentCore.AspNetCore.Voice.Routing.ConversationChannel? left, AgentCore.AspNetCore.Voice.Routing.ConversationChannel? right) -> bool
+static AgentCore.AspNetCore.Voice.Routing.ConversationChannel.operator ==(AgentCore.AspNetCore.Voice.Routing.ConversationChannel? left, AgentCore.AspNetCore.Voice.Routing.ConversationChannel? right) -> bool
+static AgentCore.AspNetCore.Voice.Routing.ConversationChannelContext.operator !=(AgentCore.AspNetCore.Voice.Routing.ConversationChannelContext? left, AgentCore.AspNetCore.Voice.Routing.ConversationChannelContext? right) -> bool
+static AgentCore.AspNetCore.Voice.Routing.ConversationChannelContext.operator ==(AgentCore.AspNetCore.Voice.Routing.ConversationChannelContext? left, AgentCore.AspNetCore.Voice.Routing.ConversationChannelContext? right) -> bool
+static AgentCore.AspNetCore.Voice.Ports.ConversationInput.Barge.operator !=(AgentCore.AspNetCore.Voice.Ports.ConversationInput.Barge? left, AgentCore.AspNetCore.Voice.Ports.ConversationInput.Barge? right) -> bool
+static AgentCore.AspNetCore.Voice.Ports.ConversationInput.Barge.operator ==(AgentCore.AspNetCore.Voice.Ports.ConversationInput.Barge? left, AgentCore.AspNetCore.Voice.Ports.ConversationInput.Barge? right) -> bool
+static AgentCore.AspNetCore.Voice.Ports.ConversationInput.Keypress.operator !=(AgentCore.AspNetCore.Voice.Ports.ConversationInput.Keypress? left, AgentCore.AspNetCore.Voice.Ports.ConversationInput.Keypress? right) -> bool
+static AgentCore.AspNetCore.Voice.Ports.ConversationInput.Keypress.operator ==(AgentCore.AspNetCore.Voice.Ports.ConversationInput.Keypress? left, AgentCore.AspNetCore.Voice.Ports.ConversationInput.Keypress? right) -> bool
+static AgentCore.AspNetCore.Voice.Ports.ConversationInput.Utterance.operator !=(AgentCore.AspNetCore.Voice.Ports.ConversationInput.Utterance? left, AgentCore.AspNetCore.Voice.Ports.ConversationInput.Utterance? right) -> bool
+static AgentCore.AspNetCore.Voice.Ports.ConversationInput.Utterance.operator ==(AgentCore.AspNetCore.Voice.Ports.ConversationInput.Utterance? left, AgentCore.AspNetCore.Voice.Ports.ConversationInput.Utterance? right) -> bool
+static AgentCore.AspNetCore.Voice.Ports.ConversationInput.operator !=(AgentCore.AspNetCore.Voice.Ports.ConversationInput? left, AgentCore.AspNetCore.Voice.Ports.ConversationInput? right) -> bool
+static AgentCore.AspNetCore.Voice.Ports.ConversationInput.operator ==(AgentCore.AspNetCore.Voice.Ports.ConversationInput? left, AgentCore.AspNetCore.Voice.Ports.ConversationInput? right) -> bool
+static AgentCore.AspNetCore.Voice.Turns.ConversationSpeechPairing.Validate(AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration! conversation, AgentCore.Application.Configuration.Schema.SpeechProviderConfiguration! speech, AgentCore.AspNetCore.Voice.Ports.IConversationAdapter! selectedConversation) -> void
+virtual AgentCore.AspNetCore.Voice.Ports.ConversationInput.EqualityContract.get -> System.Type!
+virtual AgentCore.AspNetCore.Voice.Ports.ConversationInput.Equals(AgentCore.AspNetCore.Voice.Ports.ConversationInput? other) -> bool
+virtual AgentCore.AspNetCore.Voice.Ports.ConversationInput.PrintMembers(System.Text.StringBuilder! builder) -> bool
+override AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started.<Clone>$() -> AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started!
+override AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started.Equals(object? obj) -> bool
+override AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started.GetHashCode() -> int
+override AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started.ToString() -> string!
+static AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started.operator !=(AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started? left, AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started? right) -> bool
+static AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started.operator ==(AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started? left, AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started? right) -> bool
+override sealed AgentCore.AspNetCore.Voice.Ports.ConversationInput.Barge.Equals(AgentCore.AspNetCore.Voice.Ports.ConversationInput? other) -> bool
+override sealed AgentCore.AspNetCore.Voice.Ports.ConversationInput.Keypress.Equals(AgentCore.AspNetCore.Voice.Ports.ConversationInput? other) -> bool
+override sealed AgentCore.AspNetCore.Voice.Ports.ConversationInput.Utterance.Equals(AgentCore.AspNetCore.Voice.Ports.ConversationInput? other) -> bool
+override sealed AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started.Equals(AgentCore.AspNetCore.Voice.Ports.ConversationInput? other) -> bool
 AgentCore.AspNetCore.Endpoints.AgentCoreEntries
-AgentCore.AspNetCore.Endpoints.EntrySelectorEndpointConventionBuilderExtensions
-AgentCore.AspNetCore.Endpoints.IEntryFeature
-AgentCore.AspNetCore.Endpoints.IEntryFeature.Entry.get -> string!
-AgentCore.AspNetCore.Endpoints.IEntrySelector
-AgentCore.AspNetCore.Endpoints.IEntrySelector.SelectAsync(Microsoft.AspNetCore.Http.HttpContext! http, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<string?>
 static AgentCore.AspNetCore.Endpoints.AgentCoreEntries.ResolveAsync(Microsoft.AspNetCore.Http.HttpContext! http, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string?>
-static AgentCore.AspNetCore.Endpoints.EntrySelectorEndpointConventionBuilderExtensions.SelectEntry<TSelector>(this Microsoft.AspNetCore.Builder.IEndpointConventionBuilder! builder) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!
+AgentCore.AspNetCore.DependencyInjection.AgentCoreHookOptions
+static AgentCore.AspNetCore.DependencyInjection.AgentCoreHookOptions.UseHooks(this AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions! options, params AgentCore.Application.Hooks.AgentHook![]! hooks) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+static AgentCore.AspNetCore.DependencyInjection.AgentCoreHookOptions.UseHooks<THook>(this AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions! options) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
+AgentCore.AspNetCore.Vendors.OpenAiLive.OpenAiLiveConversationAdapter
+AgentCore.AspNetCore.Vendors.OpenAiLive.OpenAiLiveConversationAdapter.CarriesText.get -> bool
+AgentCore.AspNetCore.Vendors.OpenAiLive.OpenAiLiveConversationAdapter.CreateHandler(AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration! configuration) -> Microsoft.AspNetCore.Http.RequestDelegate!
+AgentCore.AspNetCore.Vendors.OpenAiLive.OpenAiLiveConversationAdapter.Kind.get -> string!
+AgentCore.AspNetCore.Vendors.OpenAiLive.OpenAiLiveConversationAdapter.OpenAiLiveConversationAdapter(System.Net.Http.IHttpMessageHandlerFactory! handlers, AgentCore.Application.Ports.ISecretResolverPort? secrets = null) -> void
+AgentCore.AspNetCore.Vendors.OpenAiLive.OpenAiLiveConversationAdapter.Traits.get -> AgentCore.AspNetCore.Voice.Ports.CallTraits
+const AgentCore.AspNetCore.Vendors.OpenAiLive.OpenAiLiveConversationAdapter.HttpClientName = "openai-live" -> string!
+const AgentCore.AspNetCore.Vendors.OpenAiLive.OpenAiLiveConversationAdapter.OpenAiLiveKind = "openai-live" -> string!
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started.From.get -> string?
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started.From.init -> void
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started.Headers.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>?
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started.Headers.init -> void
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started.To.get -> string?
+AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started.To.init -> void

@@ -1,17 +1,17 @@
 using AgentCore.Application.Conversation.Memory;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Compaction;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Transcript;
 using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Transcript.ConversationSessionCompactionTestSupport;
 
 namespace AgentCore.Application.Tests.Runtime.Compaction
 {
     /// <summary>
-    /// D6: the streaming merge surfaces a compaction notice while the summariser's own model call is
+    /// The streaming merge surfaces a compaction notice while the summariser's own model call is
     /// still in flight, in order, and a cancel mid-wait ends the stream rather than hanging it. The
     /// summariser is gated rather than delayed, so "the notice arrived before the summariser finished"
     /// is a fact the test controls directly instead of a race against a clock.

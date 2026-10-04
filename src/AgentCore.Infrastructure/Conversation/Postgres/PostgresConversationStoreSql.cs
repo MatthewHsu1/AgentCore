@@ -52,6 +52,13 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
            AND {NextTurnIndex} <= ($2::jsonb ->> 'nextTurnIndex')::int
         """;
 
+        /// <summary>Writes a state no words carry. As with <see cref="StateSql"/>, a state behind the stored one is never written.</summary>
+        internal const string SaveStateSql =
+            $"""
+        UPDATE {Schema}.conversation SET state = $2, updated_at = now()
+         WHERE conversation_id = $1 AND {NextTurnIndex} <= ($2::jsonb ->> 'nextTurnIndex')::int
+        """;
+
         /// <summary>Reads the turn a conversation takes next, to tell a refused append from a missing conversation.</summary>
         internal const string NextTurnIndexSql =
             $"SELECT {NextTurnIndex} FROM {Schema}.conversation WHERE conversation_id = $1";
@@ -210,7 +217,8 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
             $"DELETE FROM {Schema}.response_continuation WHERE store_id = $1";
 
         /// <summary>
-        /// Reads what store 1 holds for each spoken turn of one conversation, beside what store 3 proves.
+        /// Reads what the conversation store holds for each spoken turn of one conversation, beside what the audit chain proves. A line a phone
+        /// vendor's front voice spoke (author <c>front_voice</c>, Application's <c>FrontVoice</c>) is not the agent's reply.
         /// </summary>
         internal const string VerifySql = $$"""
         WITH rows AS (
@@ -222,6 +230,7 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
               FROM {{Schema}}.conversation_message
              WHERE conversation_id = $1
                AND role = 'assistant'
+               AND content ->> 'authorName' IS DISTINCT FROM 'front_voice'
                AND covers_up_to IS NULL
                AND content -> 'contents' @> '[{"$type": "text"}]'
         ),

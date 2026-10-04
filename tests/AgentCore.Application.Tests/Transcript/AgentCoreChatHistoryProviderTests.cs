@@ -16,15 +16,12 @@ namespace AgentCore.Application.Tests.Transcript
         [Fact]
         public async Task ProvideChatHistory_AfterAppend_ReturnsMessagesInOrder()
         {
-            // Arrange
             (AgentCoreChatHistoryProvider? provider, RecordingConversationStore _, StubSession? session) = await NewConversation();
             AppendTurn(provider, session, turnIndex: 0, "hello", "hi there");
             AppendTurn(provider, session, turnIndex: 1, "order 41?", "it ships Friday");
 
-            // Act
             IReadOnlyList<ChatMessage> history = await ProvideAsync(provider, session);
 
-            // Assert
             Assert.Equal(
                 ["hello", "hi there", "order 41?", "it ships Friday"],
                 history.Select(message => message.Text));
@@ -33,14 +30,11 @@ namespace AgentCore.Application.Tests.Transcript
         [Fact]
         public async Task AppendTurn_MultipleTurns_OrdinalsAreDenseAndUnique()
         {
-            // Arrange
             (AgentCoreChatHistoryProvider? provider, RecordingConversationStore? store, StubSession? session) = await NewConversation();
             AppendTurn(provider, session, turnIndex: 0, "hello", "hi there");
 
-            // Act
             AppendTurn(provider, session, turnIndex: 1, "order 41?", "it ships Friday");
 
-            // Assert
             await provider.DrainAsync(session);
             Assert.Equal([0, 1, 2, 3], store.Rows.Select(row => row.Ordinal));
             Assert.Equal([0, 0, 1, 1], store.Rows.Select(row => row.TurnIndex));
@@ -50,13 +44,10 @@ namespace AgentCore.Application.Tests.Transcript
         [Fact]
         public async Task AppendTurn_RefusedTurn_IsStored()
         {
-            // Arrange
             (AgentCoreChatHistoryProvider? provider, RecordingConversationStore? store, StubSession? session) = await NewConversation();
 
-            // Act
             AppendTurn(provider, session, turnIndex: 0, "something flagged", "I can't help with that.");
 
-            // Assert
             await provider.DrainAsync(session);
             Assert.Equal(
                 ["something flagged", "I can't help with that."],
@@ -66,28 +57,24 @@ namespace AgentCore.Application.Tests.Transcript
         [Fact]
         public async Task AppendTurn_FailedTurn_IsStored()
         {
-            // Arrange
             (AgentCoreChatHistoryProvider? provider, RecordingConversationStore? store, StubSession? session) = await NewConversation();
 
-            // Act
             AppendTurn(provider, session, turnIndex: 0, "check my order", "Sorry, I had trouble with that.");
 
-            // Assert
             await provider.DrainAsync(session);
             Assert.Equal(
                 ["check my order", "Sorry, I had trouble with that."],
                 store.Rows.Select(row => row.Content.Text));
         }
 
-        // Design section 2: the hook stages and writes nothing durable; section 7 item 1: a read never returns staged messages.
+        // The hook stages and writes nothing durable. A later run of the same turn reads what the
+        // finished run was told and answered after the conversation.
         [Fact]
         public async Task StoreChatHistory_FinishedRun_StagesTheResponseAndStoresNothing()
         {
-            // Arrange
             (AgentCoreChatHistoryProvider? provider, RecordingConversationStore? store, StubSession? session) = await NewConversation();
             provider.BeginTurn(session, turnIndex: 0);
 
-            // Act
 #pragma warning disable MAAI001 // The context constructors are the framework's own experimental surface.
             await provider.InvokedAsync(
                 new ChatHistoryProvider.InvokedContext(
@@ -98,17 +85,17 @@ namespace AgentCore.Application.Tests.Transcript
                 TestContext.Current.CancellationToken);
 #pragma warning restore MAAI001
 
-            // Assert
             await provider.DrainAsync(session);
             Assert.Empty(store.Rows);
-            Assert.Empty(await ProvideAsync(provider, session));
+            Assert.Equal(
+                ["<system-reminder>ask for the id</system-reminder>\norder 41?", "it ships Friday"],
+                (await ProvideAsync(provider, session)).Select(message => message.Text));
             Assert.Equal(["it ships Friday"], provider.Staged(session).Select(message => message.Text));
         }
 
         [Fact]
         public async Task AppendTurn_ConcurrentAppends_LosesNoMessage()
         {
-            // Arrange
             (AgentCoreChatHistoryProvider? provider, RecordingConversationStore? store, StubSession? session) = await NewConversation();
             provider.BeginTurn(session, turnIndex: 0);
             TaskCompletionSource start = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -126,11 +113,9 @@ namespace AgentCore.Application.Tests.Transcript
                     },
                     TestContext.Current.CancellationToken))];
 
-            // Act
             start.SetResult();
             await Task.WhenAll(turns);
 
-            // Assert
             await provider.DrainAsync(session);
             Assert.Equal(40, store.Rows.Count);
             Assert.Equal(Enumerable.Range(0, 40), store.Rows.Select(row => row.Ordinal).Order());
@@ -139,7 +124,6 @@ namespace AgentCore.Application.Tests.Transcript
         [Fact]
         public async Task ProvideChatHistory_TwoConcurrentSessions_DoNotMix()
         {
-            // Arrange
             AgentCoreChatHistoryProvider provider = new(new RecordingConversationStore());
             StubSession first = new();
             StubSession second = new();
@@ -147,36 +131,29 @@ namespace AgentCore.Application.Tests.Transcript
             _ = provider.BeginConversation(second, "conversation-b", []);
             AppendTurn(provider, first, turnIndex: 0, "a said", "a heard");
 
-            // Act
             AppendTurn(provider, second, turnIndex: 0, "b said", "b heard");
 
-            // Assert
             Assert.Equal(["a said", "a heard"], (await ProvideAsync(provider, first)).Select(message => message.Text));
             Assert.Equal(["b said", "b heard"], (await ProvideAsync(provider, second)).Select(message => message.Text));
         }
 
-        // Design section 2: StateKeys = ["agentcore.history"].
+        // StateKeys is ["agentcore.history"].
         [Fact]
         public void StateKeys_IsTheConversationKey()
         {
-            // Arrange
             AgentCoreChatHistoryProvider provider = new();
 
-            // Assert
             Assert.Equal([StateKey], provider.StateKeys);
         }
 
-        // Design section 2: BeginConversation files the conversation id under the provider's key, and nothing else enters the bag.
+        // BeginConversation files the conversation id under the provider's key, and nothing else enters the bag.
         [Fact]
         public async Task AppendTurn_LeavesOnlyTheConversationKeyInTheStateBag()
         {
-            // Arrange
             (AgentCoreChatHistoryProvider? provider, RecordingConversationStore _, StubSession? session) = await NewConversation();
 
-            // Act
             AppendTurn(provider, session, turnIndex: 0, "order 41?", "it ships Friday");
 
-            // Assert
             Assert.Equal(1, session.StateBag.Count);
             Assert.True(session.StateBag.TryGetValue(StateKey, out string? conversationId));
             Assert.Equal(ConversationId, conversationId);
@@ -190,18 +167,15 @@ namespace AgentCore.Application.Tests.Transcript
         [Fact]
         public void AppendTurn_TwoSessions_EachHoldsItsOwnTranscript()
         {
-            // Arrange
             AgentCoreChatHistoryProvider provider = new(new RecordingConversationStore());
             StubSession first = new();
             StubSession second = new();
             _ = provider.BeginConversation(first, "conversation-a", []);
             _ = provider.BeginConversation(second, "conversation-b", []);
 
-            // Act
             AppendTurn(provider, first, turnIndex: 0, "a said", "a heard");
             AppendTurn(provider, second, turnIndex: 0, "b said", "b heard");
 
-            // Assert
             Assert.Equal(["a said", "a heard"], provider.Read(first).Select(message => message.Text));
             Assert.Equal(["b said", "b heard"], provider.Read(second).Select(message => message.Text));
         }
@@ -209,15 +183,12 @@ namespace AgentCore.Application.Tests.Transcript
         [Fact]
         public async Task AppendTurn_BackingStoreThrows_DoesNotFailTheTurn()
         {
-            // Arrange
             AgentCoreChatHistoryProvider provider = new(new ThrowingConversationStore());
             StubSession session = new();
             _ = provider.BeginConversation(session, ConversationId, []);
 
-            // Act
             AppendTurn(provider, session, turnIndex: 0, "hello", "hi there");
 
-            // Assert
             await provider.DrainAsync(session);
             Assert.Equal(["hello", "hi there"], (await ProvideAsync(provider, session)).Select(message => message.Text));
         }
@@ -225,16 +196,13 @@ namespace AgentCore.Application.Tests.Transcript
         [Fact]
         public async Task BeginConversation_BackingStoreThrows_TellsTheReporterWhichTurnWasLost()
         {
-            // Arrange
             AgentCoreChatHistoryProvider provider = new(new ThrowingConversationStore());
             StubSession session = new();
             DroppedTurns dropped = new();
             _ = provider.BeginConversation(session, ConversationId, [], dropped);
 
-            // Act
             AppendTurn(provider, session, turnIndex: 3, "hello", "hi there");
 
-            // Assert
             await provider.DrainAsync(session);
             Assert.Equal([3], dropped.Turns);
         }

@@ -6,7 +6,7 @@ using Xunit;
 namespace AgentCore.Infrastructure.Tests.Database.Postgres
 {
     /// <summary>
-    /// The PostgreSQL schema store 1 and store 3 run on.
+    /// The PostgreSQL schema the message store and the audit store run on.
     /// </summary>
     public sealed class PostgresSchemaTests : PostgresDatabaseTest
     {

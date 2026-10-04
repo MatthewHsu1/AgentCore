@@ -1,5 +1,5 @@
 using AgentCore.AspNetCore.Tests.Fakes;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Voice.Ports;
 using Xunit;
 
 namespace AgentCore.AspNetCore.Tests.Voice

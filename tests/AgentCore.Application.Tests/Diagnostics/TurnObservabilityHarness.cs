@@ -5,13 +5,14 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Diagnostics;
+using AgentCore.Application.Hooks;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Runtime;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Diagnostics
 {
@@ -103,8 +104,7 @@ namespace AgentCore.Application.Tests.Diagnostics
             IAuditSinkPort? auditSink = null,
             ILogger? logger = null)
         {
-            // ConversationObservers.Standard requires a sink. A test that does not read its events gets a fresh
-            // in-memory one.
+            // The built-in hooks require a sink. A test that does not read its events gets a fresh in-memory one.
             IAuditSinkPort sink = auditSink ?? new InMemoryAuditSink();
 
             AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(yaml);
@@ -127,7 +127,7 @@ namespace AgentCore.Application.Tests.Diagnostics
                 ConversationSessionFactory.CreateExtractor(compiled, chatClients),
                 timeProvider,
                 logger,
-                ConversationObservers.Standard(sink, logger));
+                hooks: BuiltInHooks.Create(sink, logger));
         }
     }
 }

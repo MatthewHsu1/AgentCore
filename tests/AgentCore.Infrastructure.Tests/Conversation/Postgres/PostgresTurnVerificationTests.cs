@@ -4,7 +4,7 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Conversation;
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Hooks;
 using AgentCore.Domain.Audit;
 using AgentCore.Infrastructure.Audit.Postgres;
 using AgentCore.Infrastructure.Conversation.Postgres;
@@ -12,11 +12,12 @@ using AgentCore.Infrastructure.Tests.Database.Postgres;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
 {
     /// <summary>
-    /// A real turn's words in store 1 and its events in store 3, checked the way the store's verify query checks
+    /// A real turn's words in the conversation store and its events in the audit store, checked the way the store's verify query checks
     /// them: the words the rows say must hash to what the chain proves, whatever way the turn ended.
     /// </summary>
     public sealed class PostgresTurnVerificationTests : PostgresDatabaseTest
@@ -98,14 +99,15 @@ namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
             return new ConversationSessionFactory(
                 compiled,
                 new GuardEvaluator(compiled.Configuration.Guards),
-                observers: ConversationObservers.Standard(events, logger: null)).Create();
+                hooks: BuiltInHooks.Create(events)).Create();
         }
 
-        /// <summary>Files the session's events in store 3 and runs the store's verify query over turn 0.</summary>
+        /// <summary>Files the session's events in the audit store and runs the store's verify query over turn 0.</summary>
         private async Task<TranscriptTurnDigest> VerifyAsync(
             PostgresConversationStore store, InMemoryAuditSink events, ConversationSession session)
         {
             await session.FlushTranscriptAsync();
+            await session.FlushNoticesAsync();
 
             // Not disposed: the sink would take the test's own pool with it.
             PostgresAuditSink chain = new(DataSource);

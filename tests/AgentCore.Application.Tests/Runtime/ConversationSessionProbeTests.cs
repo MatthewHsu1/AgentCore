@@ -3,24 +3,24 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.State;
 using AgentCore.Domain.Knowledge;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
-    /// §8's probe, driven through real <see cref="ConversationSession"/> turns rather than by seeding the
-    /// ambient: the genuinely two-turn row (K43's latch reset against K22's persistent counter) needs
+    /// The probe, driven through real <see cref="ConversationSession"/> turns rather than by seeding the
+    /// ambient: the genuinely two-turn row (the per-turn latch reset against the persistent ask counter) needs
     /// the real turn loop's own <c>BeginTurn</c>, which <c>KnowledgeProbeTests</c>'s ambient-level
     /// tests cannot exercise.
     /// </summary>
     public sealed class ConversationSessionProbeTests
     {
-        /// <summary>One tool-mode, scoped agent over two droppable facets, so K33 never blocks the drop.</summary>
+        /// <summary>One tool-mode, scoped agent over two droppable facets.</summary>
         private const string ProbeYaml =
             """
         apiVersion: agentcore/v1
@@ -66,7 +66,7 @@ namespace AgentCore.Application.Tests.Runtime
         [Fact]
         public async Task TwoTurns_TheProbeAlwaysThrows_TheSecondTurnStillRunsAFreshProbeSearch()
         {
-            // K43's latch is per-turn (cleared by BeginTurn); K22's probeAsks counter is not. A second
+            // The latch is per-turn (cleared by BeginTurn); the probeAsks counter is not. A second
             // turn that attempts a genuinely new probe search -- rather than replaying turn one's stored
             // failure -- is what proves BeginTurn actually ran, wired through the real turn loop rather
             // than asserted directly against Clarifications (KnowledgeProbeTests already covers that unit
@@ -104,7 +104,7 @@ namespace AgentCore.Application.Tests.Runtime
 
         /// <summary>
         /// A knowledge store that answers the full scope with nothing and throws for any narrowed one --
-        /// the shape §8 step 4's own search takes once a facet is dropped.
+        /// the shape the probe's own search takes once a facet is dropped.
         /// </summary>
         private sealed class ThrowingOnNarrowedScopePort : IKnowledgeRetrievalPort
         {

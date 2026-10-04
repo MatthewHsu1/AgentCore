@@ -8,10 +8,6 @@ namespace AgentCore.Application.Tests.Runtime.Turn
     /// <summary>
     /// What a turn has cited and not yet attached to a message.
     /// </summary>
-    /// <remarks>
-    /// Keyed by the outer tool call for the same reason the render collector is: the message a source
-    /// belongs on is the result of the call that produced it, and a nested call must not steal it.
-    /// </remarks>
     public sealed class TurnSourcesTests
     {
         [Fact]
@@ -19,10 +15,7 @@ namespace AgentCore.Application.Tests.Runtime.Turn
         {
             TurnSources sources = new();
 
-            using (OpenCall(sources, "call-1"))
-            {
-                sources.Publish(Reference("card-1"));
-            }
+            sources.Publish(Reference("card-1"), "call-1");
 
             IReadOnlyList<SourceContent> taken = sources.TakeFor("call-1");
 
@@ -31,13 +24,13 @@ namespace AgentCore.Application.Tests.Runtime.Turn
         }
 
         [Fact]
-        public void Publish_WithNoCallOpen_IsDropped()
+        public void Publish_OutsideAnyCall_IsDropped()
         {
             // mode: prefetch searches before any tool call exists. There is no message to attach to, so
             // the publish is dropped rather than attached to whatever message comes next.
             TurnSources sources = new();
 
-            sources.Publish(Reference("card-1"));
+            sources.Publish(Reference("card-1"), callId: null);
 
             Assert.Empty(sources.TakeFor("call-1"));
         }
@@ -49,11 +42,8 @@ namespace AgentCore.Application.Tests.Runtime.Turn
             // are noise, and the second publish is the fresher one.
             TurnSources sources = new();
 
-            using (OpenCall(sources, "call-1"))
-            {
-                sources.Publish(Reference("card-1") with { Title = "first" });
-                sources.Publish(Reference("card-1") with { Title = "second" });
-            }
+            sources.Publish(Reference("card-1") with { Title = "first" }, "call-1");
+            sources.Publish(Reference("card-1") with { Title = "second" }, "call-1");
 
             SourceContent content = Assert.Single(sources.TakeFor("call-1"));
             Assert.Equal("second", content.Source.Title);
@@ -64,10 +54,7 @@ namespace AgentCore.Application.Tests.Runtime.Turn
         {
             TurnSources sources = new();
 
-            using (OpenCall(sources, "call-1"))
-            {
-                sources.Publish(Reference("card-1"));
-            }
+            sources.Publish(Reference("card-1"), "call-1");
 
             _ = Assert.Single(sources.TakeFor("call-1"));
             Assert.Empty(sources.TakeFor("call-1"));
@@ -81,15 +68,9 @@ namespace AgentCore.Application.Tests.Runtime.Turn
             // whichever call happens to be findable on that shared message afterward.
             TurnSources sources = new();
 
-            using (OpenCall(sources, "call-1"))
-            {
-                sources.Publish(Reference("card-1"));
-            }
+            sources.Publish(Reference("card-1"), "call-1");
 
-            using (OpenCall(sources, "call-2"))
-            {
-                sources.Publish(Reference("card-2"));
-            }
+            sources.Publish(Reference("card-2"), "call-2");
 
             SourceContent fromCallOne = Assert.Single(sources.TakeFor("call-1"));
             Assert.Equal("call-1", fromCallOne.CallId);
@@ -98,11 +79,6 @@ namespace AgentCore.Application.Tests.Runtime.Turn
             SourceContent fromCallTwo = Assert.Single(sources.TakeFor("call-2"));
             Assert.Equal("call-2", fromCallTwo.CallId);
             Assert.Equal("card-2", fromCallTwo.Source.SourceId);
-        }
-
-        private static IDisposable OpenCall(TurnSources sources, string callId)
-        {
-            return sources.BeginOuterCall(callId);
         }
 
         private static SourceReference Reference(string id)

@@ -71,7 +71,7 @@ namespace AgentCore.Domain.Tests.Audit
             string heard = interruption.Payload[AuditPayloadKeys.UtteranceUntilInterruptSha256];
 
             // The chain holds proof of the words and never the words, so the reviewer's check is against
-            // store 1: the amendment proves what the caller heard, and it is not the whole reply.
+            // the message store: the amendment proves what the caller heard, and it is not the whole reply.
             Assert.NotEqual(produced, heard);
             Assert.Equal(AuditHash.OfText(Heard).Value, heard);
             Assert.Equal(AuditHash.OfText(Spoken).Value, produced);

@@ -2,13 +2,13 @@ using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Transcript;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.AspNetCore.Tests.Fakes;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.AspNetCore.Tests.Endpoints
 {
@@ -46,7 +46,6 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
         [Fact(Timeout = 60_000)]
         public async Task AMessageSentWhileATurnStartedAnotherWayRuns_WaitsForIt_ThenRunsAsTheNextTurn()
         {
-            // Arrange
             await using ResponsesHost host = await StartAsync();
             string conversation = await OpenAsync(host);
             IConversationSessions sessions = host.Services.GetRequiredService<EntryRegistry>().Sessions;
@@ -58,14 +57,12 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
                 .GetAsyncEnumerator(stop.Token);
             Assert.True(await other.MoveNextAsync());
 
-            // Act
             Task<HttpResponseMessage> sending = PostAsync(host.Client, conversation, "next", stream: false);
             _ = await Task.WhenAny(sending, Task.Delay(TimeSpan.FromSeconds(1), Ct));
             await stop.CancelAsync();
             await DrainAsync(other);
             using HttpResponseMessage next = await sending;
 
-            // Assert
             Assert.Equal(HttpStatusCode.OK, next.StatusCode);
             JsonNode answer = await ResponsesHost.ReadJsonAsync(next);
             Assert.Equal("2", answer["metadata"]!["turn_index"]!.GetValue<string>());
@@ -78,7 +75,6 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
         [Fact(Timeout = 60_000)]
         public async Task AMessageWaitingOnARequest_WhenTheSessionIsClosedMeanwhile_RunsOnTheReopenedConversation()
         {
-            // Arrange
             await using ResponsesHost host = await StartAsync();
             string conversation = await OpenAsync(host);
             IConversationSessions sessions = host.Services.GetRequiredService<EntryRegistry>().Sessions;
@@ -86,7 +82,6 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             HttpResponseMessage stalled = await PostAsync(browser, conversation, "stall now", stream: true);
             await ReadUntilAsync(stalled, StallOnCueChatClient.Piece);
 
-            // Act
             Task<HttpResponseMessage> sending = PostAsync(host.Client, conversation, "next", stream: false);
             _ = await Task.WhenAny(sending, Task.Delay(TimeSpan.FromMilliseconds(300), Ct));
             Task closing = sessions.CloseAsync("main", conversation, Ct).AsTask();
@@ -95,7 +90,6 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             await closing;
             using HttpResponseMessage next = await sending;
 
-            // Assert
             Assert.Equal(HttpStatusCode.OK, next.StatusCode);
             JsonNode answer = await ResponsesHost.ReadJsonAsync(next);
             Assert.Equal("2", answer["metadata"]!["turn_index"]!.GetValue<string>());

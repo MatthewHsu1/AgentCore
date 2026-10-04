@@ -4,7 +4,6 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime;
 using AgentCore.Application.Tools.Binding;
@@ -12,11 +11,13 @@ using AgentCore.Application.Transcript;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Cut;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Transcript
 {
     /// <summary>
-    /// Pins the conversation's move onto one <c>AgentSession</c>: what the run is sent, and what store 1 keeps.
+    /// Pins the conversation's move onto one <c>AgentSession</c>: what the run is sent, and what the message store keeps.
     /// </summary>
     public sealed class ConversationSessionTranscriptTests
     {
@@ -72,23 +73,20 @@ namespace AgentCore.Application.Tests.Transcript
         private const string ToolResult = /*lang=json,strict*/ """{ "price": 50 }""";
 
         /// <summary>
-        /// Item 6a and R4: the record holds the words the caller heard, and never the tail the model
-        /// produced. It is store 1 that must hold them, not only the live history.
+        /// The record holds the words the caller heard, and never the tail the model
+        /// produced. It is the message store that must hold them, not only the live history.
         /// </summary>
         [Fact]
         public async Task Interrupt_MidReply_StoredTranscriptHoldsHeardTextOnly()
         {
-            // Arrange
             RecordingConversationStore store = new();
             using ScriptedChatClient reply = new("Hello", " there", " caller") { GateAfterFirstFragment = true };
             ConversationSession session = CreateSession(OneAgentYaml, reply, store);
             (Task? turn, Task? spoke) = StartGatedTurn(session, "hi");
             await spoke;
 
-            // Act
             bool recorded = session.Cut(0, new TurnCut("Hello", TimeSpan.FromMilliseconds(300)));
 
-            // Assert
             reply.OpenGate();
             await turn;
             Assert.True(recorded);
@@ -105,16 +103,13 @@ namespace AgentCore.Application.Tests.Transcript
         [Fact]
         public async Task InterruptAfterTheTurnEnded_ToolTurnWithProse_StoresTheHeardWordsOnce()
         {
-            // Arrange
             RecordingConversationStore store = new();
             using ProseThenReplyChatClient reply = new("the price is fifty");
             ConversationSession session = CreateSession(ToolYaml, reply, store, new StubToolBuilder(ToolResult).Create);
             await DrainAsync(session.RunTurnStreamingAsync("how much?", TestContext.Current.CancellationToken));
 
-            // Act
             bool recorded = session.Cut(0, new TurnCut("the price", TimeSpan.FromMilliseconds(400)));
 
-            // Assert
             Assert.True(recorded);
             await session.FlushTranscriptAsync();
             IReadOnlyList<ConversationMessage> rows = store.Live(session.ConversationId);
@@ -131,24 +126,21 @@ namespace AgentCore.Application.Tests.Transcript
         }
 
         /// <summary>
-        /// Step 1's second failure mode: a cut that reached back a turn would replace a sentence the
+        /// A cut that reached back a turn would replace a sentence the
         /// caller heard in full, and nothing would detect it. The guard is <c>ConversationSession</c>'s, so this
         /// drives it through <see cref="ConversationSession.Cut"/> rather than through the provider.
         /// </summary>
         [Fact]
         public async Task Interrupt_AfterASecondTurn_LeavesTheFirstTurnsReplyWhole()
         {
-            // Arrange
             RecordingConversationStore store = new();
             RequestRecordingChatClient reply = new("hi there caller", "it ships Friday from the depot");
             ConversationSession session = CreateSession(OneAgentYaml, reply, store);
             _ = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
             _ = await session.RunTurnAsync("order 41?", TestContext.Current.CancellationToken);
 
-            // Act
             bool recorded = session.Cut(1, new TurnCut("it ships", TimeSpan.FromMilliseconds(500)));
 
-            // Assert
             Assert.True(recorded);
             await session.FlushTranscriptAsync();
             Assert.Equal(
@@ -159,15 +151,12 @@ namespace AgentCore.Application.Tests.Transcript
         [Fact]
         public async Task RunTurn_SecondTurn_SendsTheNewCallerMessageAloneAndTheModelStillSeesTheConversation()
         {
-            // Arrange
             RequestRecordingChatClient reply = new("hi there", "it ships Friday");
             ConversationSession session = CreateSession(OneAgentYaml, reply, new RecordingConversationStore());
             _ = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
 
-            // Act
             _ = await session.RunTurnAsync("order 41?", TestContext.Current.CancellationToken);
 
-            // Assert
             Assert.Equal(
                 ["user:hello", "assistant:hi there", "user:order 41?"],
                 reply.Requests[1]);
@@ -175,20 +164,17 @@ namespace AgentCore.Application.Tests.Transcript
 
         /// <summary>
         /// The reminder rides exactly one invocation, as instructions the framework merges and stores
-        /// nowhere. Nothing of it reaches the caller's own message, so store 1 keeps what was said.
+        /// nowhere. Nothing of it reaches the caller's own message, so the message store keeps what was said.
         /// </summary>
         [Fact]
         public async Task RunTurn_WithAnUnfilledSlot_KeepsTheReminderOutOfTheStoredTranscript()
         {
-            // Arrange
             RecordingConversationStore store = new();
             RequestRecordingChatClient reply = new("which order?");
             ConversationSession session = CreateSession(SlotYaml, reply, store);
 
-            // Act
             _ = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
 
-            // Assert
             // The reminder rides a message of its own, below the transcript, so the instructions block
             // stays byte-identical across turns and the vendor's cacheable prefix covers the transcript.
             Assert.DoesNotContain("<system-reminder>", reply.Instructions[0] ?? string.Empty, StringComparison.Ordinal);
@@ -222,11 +208,6 @@ namespace AgentCore.Application.Tests.Transcript
         /// <param name="session">The conversation to run the turn on.</param>
         /// <param name="userInput">What the caller said.</param>
         /// <returns>The running turn, and a task that completes at its first spoken update.</returns>
-        /// <remarks>
-        /// A run that has handed the host nothing is not the turn the caller is hearing, so a barge-in
-        /// before the first update takes the amendment path instead and records nothing. Waiting for that
-        /// update is what makes the cut land in the reply rather than after it.
-        /// </remarks>
         private static (Task Turn, Task Spoke) StartGatedTurn(ConversationSession session, string userInput)
         {
             TaskCompletionSource spoke = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -254,10 +235,6 @@ namespace AgentCore.Application.Tests.Transcript
         }
 
         /// <summary>Writes a line beside the tool call it announces, then answers once the result lands.</summary>
-        /// <remarks>
-        /// This is what a real model produces, and it is the shape a cut has to survive: the prose and
-        /// the conversation ride one message, so the words and the side effect cannot be dropped together.
-        /// </remarks>
         private sealed class ProseThenReplyChatClient(string reply) : IChatClient
         {
             /// <summary>The line the model speaks before it calls the tool.</summary>

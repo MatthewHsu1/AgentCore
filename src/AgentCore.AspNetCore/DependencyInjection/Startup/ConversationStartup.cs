@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 
 namespace AgentCore.AspNetCore.DependencyInjection.Startup
 {
-    /// <summary>Step 4c: open the store 0 backing the document names, before the document is compiled.</summary>
+    /// <summary>Opens the conversation store the document names, before the document is compiled.</summary>
     internal static class ConversationStartup
     {
         /// <summary>Opens the store <c>providers.conversations</c> names, or the built-in one.</summary>

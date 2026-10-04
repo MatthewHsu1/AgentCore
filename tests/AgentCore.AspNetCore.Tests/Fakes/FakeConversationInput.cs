@@ -1,5 +1,5 @@
 using System.Runtime.CompilerServices;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Voice.Ports;
 
 namespace AgentCore.AspNetCore.Tests.Fakes
 {
@@ -13,20 +13,6 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         public int Disposals { get; private set; }
 
         /// <inheritdoc />
-        /// <remarks>
-        /// <para>
-        /// The refusal is the point of this fake as much as the script is: one socket read twice would
-        /// give each reader half the conversation, and the port promises a second call throws rather than
-        /// splitting one conversation in two.
-        /// </para>
-        /// <para>
-        /// The script running out is this fake's end of the conversation, and it completes the stream. A
-        /// cancelled read throws instead, which is the rule <see cref="IConversationInputPort.ListenAsync"/>
-        /// sets and which the real relay connection obeys the same way — a double that ended quietly
-        /// where the real port throws would teach a consumer a <c>catch</c> it does not need, and hide
-        /// the one it does.
-        /// </para>
-        /// </remarks>
         public IAsyncEnumerable<ConversationInput> ListenAsync(CancellationToken cancellationToken = default)
         {
             // Thrown from here, not from the iterator below: an iterator's body does not run until

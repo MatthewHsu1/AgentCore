@@ -3,7 +3,6 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Compaction;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Domain;
@@ -12,15 +11,18 @@ using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Cut;
+using AgentCore.Application.Runtime.Session;
+using AgentCore.Application.Runtime.Turn;
 using static AgentCore.Application.Tests.Transcript.ConversationSessionCompactionTestSupport;
 
 namespace AgentCore.Application.Tests.Runtime.Harness
 {
     /// <summary>
-    /// A store 1 append that fails, or that the store saved and then reported failed, while no other session writes the
+    /// A message store append that fails, or that the store saved and then reported failed, while no other session writes the
     /// conversation: the next turn takes the store's words back and keeps the session's own harness state, which its
-    /// commit then writes again. Only a store that another session wrote in the meantime replaces that state (the P1
-    /// case in <see cref="ConversationSessionProviderStateTests"/>).
+    /// commit then writes again. Only a store that another session wrote in the meantime replaces that state (see
+    /// <see cref="ConversationSessionProviderStateTests"/>).
     /// </summary>
     public sealed class ConversationSessionDroppedWriteTests
     {

@@ -2,7 +2,9 @@ using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Hooks;
+using AgentCore.Application.Hooks.Notices;
+using AgentCore.Application.Tests.Audit;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Transcript;
 using AgentCore.Domain;
@@ -11,6 +13,7 @@ using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Runtime
 {
@@ -33,16 +36,18 @@ namespace AgentCore.Application.Tests.Runtime
         {
             using DownModelChatClient model = new();
             InMemoryAuditSink sink = new();
-            RecordingObserver observed = new();
+            RecordingHook observed = new();
             using RecordingLoggerFactory logs = new();
             ConversationSession session = Build(model, sink, observed, logs.CreateLogger("session"));
 
             TurnResult turn = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
+            await session.FlushNoticesAsync();
+
             Assert.Equal("the turn's run faulted, so it spoke the fallback. 503 from the model endpoint", turn.Failure);
-            Assert.DoesNotContain(sink.EventsOf(ConversationId), item => item.Kind == AuditEventKind.ToolFailed);
-            Assert.Contains(observed.Events, item => item.Kind == ConversationEventKind.RunFaulted);
-            Assert.DoesNotContain(observed.Events, item => item.Kind == ConversationEventKind.EmptyReply);
+            Assert.DoesNotContain(await session.RowsAsync(sink), item => item.Kind == AuditEventKind.ToolFailed);
+            TurnCompleted completed = Assert.Single(observed.Of<TurnCompleted>());
+            Assert.Equal((TurnOutcome.Fallback, false), (completed.Outcome, completed.FailedInTool));
             Assert.Empty(logs.Of(ToolBudgetSpentEvent));
             CapturedLine line = Assert.Single(logs.Of(TurnRunFaultedEvent));
             Assert.Equal(LogLevel.Error, line.Level);
@@ -50,7 +55,7 @@ namespace AgentCore.Application.Tests.Runtime
         }
 
         private static ConversationSession Build(
-            IChatClient model, InMemoryAuditSink sink, RecordingObserver observed, ILogger logger)
+            IChatClient model, InMemoryAuditSink sink, RecordingHook observed, ILogger logger)
         {
             CompiledAgent compiled = ConfigurationCompiler.CompileAll(
                 ConfigurationLoader.LoadYaml(InterruptionSessions.NoToolYaml),
@@ -61,7 +66,7 @@ namespace AgentCore.Application.Tests.Runtime
                 new GuardEvaluator(compiled.Configuration.Guards),
                 extractor: null,
                 logger: logger,
-                observers: ConversationObservers.Standard(sink, logger, [observed])).Create(ConversationId);
+                hooks: [.. BuiltInHooks.Create(sink, logger), observed]).Create(ConversationId);
         }
     }
 }

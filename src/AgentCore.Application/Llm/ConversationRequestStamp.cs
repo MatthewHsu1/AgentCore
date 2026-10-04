@@ -1,5 +1,5 @@
-using AgentCore.Application.Runtime;
 using Microsoft.Extensions.AI;
+using AgentCore.Application.Runtime.Turn;
 
 namespace AgentCore.Application.Llm
 {

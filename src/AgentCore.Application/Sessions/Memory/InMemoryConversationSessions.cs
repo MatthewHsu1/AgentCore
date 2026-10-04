@@ -1,9 +1,11 @@
 using System.Collections.Concurrent;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Diagnostics;
+using AgentCore.Application.Hooks.Notices;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using Microsoft.Extensions.Logging;
+using AgentCore.Application.Runtime.Session;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 
 namespace AgentCore.Application.Sessions.Memory
 {
@@ -91,6 +93,11 @@ namespace AgentCore.Application.Sessions.Memory
 
                 if (!string.Equals(slot.Entry, entry, StringComparison.Ordinal))
                 {
+                    if (slot.TryGetHeld(out HeldSession? holder))
+                    {
+                        TurnRefusals.Raise(holder.Session, turnIndex: null, TurnRefusal.InUse);
+                    }
+
                     throw new ConversationInUseException(id, slot.Entry, entry);
                 }
 
@@ -138,7 +145,7 @@ namespace AgentCore.Application.Sessions.Memory
 
             if (held.TryEnd())
             {
-                await TearDownAsync(conversationId, slot, held).ConfigureAwait(false);
+                await TearDownAsync(conversationId, slot, held, UnloadCause.Closed).ConfigureAwait(false);
             }
             else
             {
@@ -176,11 +183,11 @@ namespace AgentCore.Application.Sessions.Memory
         }
 
         /// <summary>
-        /// The one close routine every way out runs: flush, dispose (background children, then shells), delete
-        /// the workspace folder. A store that throws on flush must not leave the shells running with nothing
-        /// left to hold a reference to them, and a dispose that throws must not leave the folder undeleted.
+        /// The one close routine every way out runs: flush, dispose (background children, then shells, then the
+        /// unload notice), delete the workspace folder. A store that throws on flush must not leave the shells running
+        /// with nothing left to hold a reference to them, and a dispose that throws must not leave the folder undeleted.
         /// </summary>
-        private static async ValueTask CloseSessionAsync(ConversationSession session)
+        private static async ValueTask CloseSessionAsync(ConversationSession session, UnloadCause cause)
         {
             try
             {
@@ -190,7 +197,7 @@ namespace AgentCore.Application.Sessions.Memory
                 }
                 finally
                 {
-                    await session.DisposeAsync().ConfigureAwait(false);
+                    await session.Lifetime.DisposeAsync(cause).ConfigureAwait(false);
                 }
             }
             finally
@@ -207,6 +214,7 @@ namespace AgentCore.Application.Sessions.Memory
             try
             {
                 ConversationSession session = factory.Create(conversationId, state);
+                session.Lifetime.MarkOwned();
                 held = new(session, _idleTimeout, _time, expired => Expire(conversationId, slot, expired));
             }
             catch (Exception fault)
@@ -249,7 +257,7 @@ namespace AgentCore.Application.Sessions.Memory
 #pragma warning disable CA1031
             try
             {
-                await TearDownAsync(conversationId, slot, held).ConfigureAwait(false);
+                await TearDownAsync(conversationId, slot, held, UnloadCause.Idle).ConfigureAwait(false);
             }
             catch (Exception exception)
             {
@@ -262,11 +270,11 @@ namespace AgentCore.Application.Sessions.Memory
         /// Tears down a session whose close this caller began, then gives up its slot. The slot stays taken until
         /// the teardown is done, so an open of the id waits instead of racing the folder delete.
         /// </summary>
-        private async Task TearDownAsync(string conversationId, SessionSlot slot, HeldSession held)
+        private async Task TearDownAsync(string conversationId, SessionSlot slot, HeldSession held, UnloadCause cause)
         {
             try
             {
-                await CloseSessionAsync(held.Session).ConfigureAwait(false);
+                await CloseSessionAsync(held.Session, cause).ConfigureAwait(false);
             }
             finally
             {

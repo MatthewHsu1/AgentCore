@@ -22,6 +22,10 @@ namespace AgentCore.Application.Runtime.Turn
 
         private readonly HashSet<string> _callIds = new(StringComparer.Ordinal);
 
+        private readonly HashSet<string> _deniedCallIds = new(StringComparer.Ordinal);
+
+        private readonly HashSet<string> _reshownCallIds = new(StringComparer.Ordinal);
+
         private readonly List<Action<IReadOnlyList<string>>> _sweeps = [];
 
         /// <summary>The tools that answered something structured, in first-answer order.</summary>
@@ -73,6 +77,54 @@ namespace AgentCore.Application.Runtime.Turn
             {
                 _ = _callIds.Add(callId);
                 _sweeps.Add(sweep);
+            }
+        }
+
+        /// <summary>Keeps the id of one call an approval denial answered, so the turn's end does not take it for an undeclared tool.</summary>
+        /// <param name="callId">The id the model gave the call.</param>
+        internal void NoteDenied(string callId)
+        {
+            ArgumentNullException.ThrowIfNull(callId);
+
+            lock (_gate)
+            {
+                _ = _deniedCallIds.Add(callId);
+            }
+        }
+
+        /// <summary>Every call id an approval denial answered this turn, in no particular order.</summary>
+        internal IReadOnlyList<string> DeniedCallIds
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return [.. _deniedCallIds];
+                }
+            }
+        }
+
+        /// <summary>Keeps the id of one call whose request an earlier turn already asked and this turn only shows again.</summary>
+        /// <param name="callId">The id the model gave the call.</param>
+        internal void NoteReshown(string callId)
+        {
+            ArgumentNullException.ThrowIfNull(callId);
+
+            lock (_gate)
+            {
+                _ = _reshownCallIds.Add(callId);
+            }
+        }
+
+        /// <summary>Every call id whose request this turn only showed again, in no particular order.</summary>
+        internal IReadOnlyList<string> ReshownCallIds
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return [.. _reshownCallIds];
+                }
             }
         }
 

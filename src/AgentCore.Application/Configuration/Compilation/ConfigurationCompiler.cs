@@ -1,12 +1,14 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Conversation.Memory;
+using AgentCore.Application.Hooks.Engine;
+using AgentCore.Application.Hooks.Layers;
 using AgentCore.Application.Llm;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Transcript;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using AgentCore.Application.Runtime.ToolCalls;
 namespace AgentCore.Application.Configuration.Compilation
 {
     /// <summary>
@@ -76,7 +78,7 @@ namespace AgentCore.Application.Configuration.Compilation
         /// <summary>Compiles one document into one agent per entry.</summary>
         /// <param name="configuration">The loaded document.</param>
         /// <param name="context">The seams the document names.</param>
-        /// <returns>The compiled agents, keyed by entry name. Each is a process singleton: see T44.</returns>
+        /// <returns>The compiled agents, keyed by entry name. Each is a process singleton.</returns>
         /// <exception cref="ConfigurationLoadException">An entry does not compile.</exception>
         public static IReadOnlyDictionary<string, CompiledAgent> CompileAll(
             AgentCoreConfiguration configuration,
@@ -86,7 +88,8 @@ namespace AgentCore.Application.Configuration.Compilation
             ArgumentNullException.ThrowIfNull(context);
 
             IConversationStore conversations = context.ConversationStore ?? new InMemoryConversationStore();
-            CompiledDocument document = new(configuration, conversations, new AgentCoreChatHistoryProvider(conversations));
+            HookRuntime hooks = HookRuntime.Create(context.Hooks ?? [], context.Loggers, context.Clock);
+            CompiledDocument document = new(configuration, conversations, new AgentCoreChatHistoryProvider(conversations), hooks);
 
             Dictionary<string, CompiledAgentSet> built = new(StringComparer.Ordinal);
             Dictionary<string, CompiledAgent> compiled = new(StringComparer.Ordinal);
@@ -100,7 +103,7 @@ namespace AgentCore.Application.Configuration.Compilation
                 string key = shape is CompiledAgentShape.SingleAgent or CompiledAgentShape.Policy ? "session" : shape.ToString();
                 if (!built.TryGetValue(key, out CompiledAgentSet? shared))
                 {
-                    shared = BuildAgents(configuration, context, row.SessionCarriesHistory ? document.History : null);
+                    shared = BuildAgents(configuration, context, row.SessionCarriesHistory ? document.History : null, document.Hooks);
                     built[key] = shared;
                 }
 
@@ -112,7 +115,8 @@ namespace AgentCore.Application.Configuration.Compilation
                     entry.RefusalReply ?? configuration.RefusalReply,
                     context.Moderation,
                     row.SpokenAuthors(configuration, entry),
-                    document.History);
+                    document.History,
+                    document.Hooks);
 
                 compiled[entryName] = new CompiledAgentBuilder
                 {
@@ -133,12 +137,14 @@ namespace AgentCore.Application.Configuration.Compilation
         /// <summary>Builds one <c>ChatClientAgent</c> for each <c>agents.items</c> entry.</summary>
         /// <param name="configuration">The loaded document.</param>
         /// <param name="context">The seams the document names.</param>
-        /// <param name="history">Store 1, or <see langword="null"/> to leave the framework default in place.</param>
+        /// <param name="history">The conversation history, or <see langword="null"/> to leave the framework default in place.</param>
+        /// <param name="hooks">The hooks of this compile.</param>
         /// <returns>The agents keyed by id, with what every one of them declared.</returns>
         private static CompiledAgentSet BuildAgents(
             AgentCoreConfiguration configuration,
             AgentCompilationContext context,
-            AgentCoreChatHistoryProvider? history)
+            AgentCoreChatHistoryProvider? history,
+            HookRuntime hooks)
         {
             Dictionary<string, AIAgent> agents = new(StringComparer.Ordinal);
             HashSet<string> harnessStateKeys = new(StringComparer.Ordinal);
@@ -172,7 +178,8 @@ namespace AgentCore.Application.Configuration.Compilation
                 section.Defaults,
                 ResolvedClarification.From(configuration),
                 configuration.Providers?.Knowledge?.Scope,
-                backgroundProviders);
+                backgroundProviders,
+                hooks);
 
             foreach (AgentConfiguration item in section.Items)
             {
@@ -212,10 +219,10 @@ namespace AgentCore.Application.Configuration.Compilation
 
                 List<AITool>? compiledTools = AgentToolCompiler.Build(
                     item, item.Model ?? section.Defaults?.Model, tools, context, pointer, Resolve, backgroundProviders);
-                harnessStateKeys.UnionWith(AgentApproval.StateKeysFor(section.Defaults, item, compiledTools));
+                harnessStateKeys.UnionWith(AgentApproval.StateKeysFor(section.Defaults, item, compiledTools, hooks));
 
                 ChatClientAgent built = new(
-                    WithToolFailureAuditing(context.ChatClients.GetChatClient(item.Model ?? section.Defaults?.Model)),
+                    WithToolFailureAuditing(context.ChatClients.GetChatClient(item.Model ?? section.Defaults?.Model), hooks),
                     new ChatClientAgentOptions
                     {
                         Id = GraphExecutorId(item.Id),
@@ -232,12 +239,12 @@ namespace AgentCore.Application.Configuration.Compilation
 
                 path.RemoveAt(path.Count - 1);
 
-                AIAgent instrumented = new AIAgentBuilder(built)
+                AIAgent instrumented = new AIAgentBuilder(ToolHookMiddleware.Apply(built, hooks))
                     .UseOpenTelemetry(configure: static agent => agent.EnableSensitiveData = false)
                     .Build();
 
-                AIAgent approved = AgentApproval.Apply(instrumented, section.Defaults, item);
-                AIAgent looped = AgentHarnessProviders.ApplyLoop(approved, section.Defaults, item, pointer);
+                AIAgent approved = AgentApproval.Apply(instrumented, section.Defaults, item, compiledTools, hooks);
+                AIAgent looped = AgentHarnessProviders.ApplyLoop(approved, section.Defaults, item, pointer, hooks);
 
                 agents[id] = looped;
                 return looped;
@@ -253,13 +260,14 @@ namespace AgentCore.Application.Configuration.Compilation
             return Convert.ToHexStringLower(System.Text.Encoding.UTF8.GetBytes(id));
         }
 
-        /// <summary>Puts the auditing function-invocation loop into the pipeline of one agent.</summary>
-        private static AuditingFunctionInvokingChatClient WithToolFailureAuditing(IChatClient model)
+        /// <summary>Puts the auditing function-invocation loop and the model gates into the pipeline of one agent.</summary>
+        private static AuditingFunctionInvokingChatClient WithToolFailureAuditing(IChatClient model, HookRuntime hooks)
         {
             return new(model.AsBuilder()
                                 .UseOpenTelemetry(configure: static client => client.EnableSensitiveData = false)
                                 .ConfigureOptions(ConversationRequestStamp.Apply)
                                 .Use(static innerClient => new ModelFacingChatClient(innerClient))
+                                .Use(innerClient => new ModelHookChatClient(innerClient, hooks))
                                 .Build());
         }
 
@@ -292,7 +300,6 @@ namespace AgentCore.Application.Configuration.Compilation
                 Pointer = pointer,
                 Message = message,
 
-                // The compile table is a shape rule over the whole document, like check 1.
                 Check = ConfigurationCheck.DocumentSchema,
             });
         }

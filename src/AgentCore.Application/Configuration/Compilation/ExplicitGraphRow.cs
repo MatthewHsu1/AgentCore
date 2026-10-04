@@ -1,9 +1,10 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Runtime;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
+using AgentCore.Application.Runtime.Agents;
+using AgentCore.Application.Runtime.Agents.Graph;
 
 namespace AgentCore.Application.Configuration.Compilation
 {
@@ -119,7 +120,7 @@ namespace AgentCore.Application.Configuration.Compilation
                 throw ConfigurationCompiler.FailBackgroundInGraph(ConfigurationError.AppendPointer(pointer, "agent"), agentId, entryName);
             }
 
-            return new AIAgentBinding(agent, new AIAgentHostOptions { EmitAgentUpdateEvents = true });
+            return new AIAgentBinding(new GraphParticipantAgent(agent), new AIAgentHostOptions { EmitAgentUpdateEvents = true });
         }
 
         /// <summary>Adds every edge, with a gate in front of each guarded one.</summary>
@@ -193,7 +194,6 @@ namespace AgentCore.Application.Configuration.Compilation
                         true);
         }
 
-        /// <remarks>An explicit graph answers from its <c>output: true</c> nodes.</remarks>
         internal override HashSet<string>? SpokenAuthors(AgentCoreConfiguration configuration, EntryConfiguration entry)
         {
             HashSet<string> outputs = new(StringComparer.Ordinal);

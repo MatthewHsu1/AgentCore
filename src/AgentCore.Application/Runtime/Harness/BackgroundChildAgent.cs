@@ -37,8 +37,8 @@ namespace AgentCore.Application.Runtime.Harness
         }
 
         /// <summary>
-        /// The part of the parent's turn a child may share: the conversation, its workspace folder, and its
-        /// shells, so <c>files:</c> and <c>shell:</c> on the child work on the same disk. Every drain,
+        /// The part of the parent's turn a child may share: the conversation, its workspace folder, its shells, so
+        /// <c>files:</c> and <c>shell:</c> on the child work on the same disk, and the end backstop and count of its tools. Every drain,
         /// tool list, and clarification stays with the parent; a child's publish reports a
         /// link in its result instead.
         /// </summary>
@@ -53,6 +53,8 @@ namespace AgentCore.Application.Runtime.Harness
                 Shells = parent.Shells,
                 Knowledge = parent.Knowledge,
                 TimeZone = parent.TimeZone,
+                ToolStop = parent.ToolStop,
+                ToolRuns = parent.ToolRuns,
                 Nested = true,
             };
         }

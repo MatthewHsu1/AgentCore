@@ -1,7 +1,9 @@
-using AgentCore.Application.Runtime;
 using AgentCore.Domain;
 using AgentCore.Domain.Knowledge;
 using Microsoft.Extensions.AI;
+using AgentCore.Application.Runtime.Cut;
+using AgentCore.Application.Runtime.Turn;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 
 namespace AgentCore.Application.Ports
 {
@@ -20,7 +22,6 @@ namespace AgentCore.Application.Ports
         bool IsComplete { get; }
 
         /// <summary>Gets or sets the knowledge scope the host opened for this conversation, or null for none.</summary>
-        /// <remarks>Set it before the run: every turn composes its own scope from it. It outlives turns by construction — one conversation hears one customer.</remarks>
         KnowledgeScope? Scope { get; set; }
 
         /// <summary>Gets the turn that finished last, or <see langword="null"/> before the first turn ends.</summary>
@@ -48,11 +49,6 @@ namespace AgentCore.Application.Ports
         /// <param name="userInput">What the caller said.</param>
         /// <param name="cancellationToken">Cancels the model calls.</param>
         /// <returns>The reply, one update at a time. Every update carries content.</returns>
-        /// <remarks>
-        /// The turn finishes when the enumeration finishes, and <see cref="LastTurn"/> holds it after
-        /// that. The stream carries no lifecycle update: section 8.6 measured seven of those in one
-        /// 40-fragment reply, and an adapter must not have to filter them again.
-        /// </remarks>
         /// <exception cref="InvalidOperationException">
         /// The conversation already ended, or another turn of this conversation still ran after the wait limit.
         /// </exception>
@@ -86,7 +82,7 @@ namespace AgentCore.Application.Ports
         Task<TurnRun> StartTurnAsync(
             ChatMessage userInput, ConversationTurnOrigin? origin, CancellationToken cancellationToken = default);
 
-        /// <summary>Cuts one turn's reply where the user stopped seeing or hearing it (design section 3, the Cut rule).</summary>
+        /// <summary>Cuts one turn's reply where the user stopped seeing or hearing it.</summary>
         /// <param name="turnIndex">The turn the user was seeing or hearing.</param>
         /// <param name="cut">
         /// What reached the user. <see cref="TurnCut.ShownText"/> <see langword="null"/> keeps everything the turn yielded.

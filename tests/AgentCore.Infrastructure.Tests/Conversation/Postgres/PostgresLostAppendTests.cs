@@ -3,13 +3,14 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Transcript;
 using AgentCore.Domain;
 using AgentCore.Infrastructure.Conversation.Postgres;
 using AgentCore.Infrastructure.Tests.Database.Postgres;
 using AgentCore.TestSupport;
 using Xunit;
+using AgentCore.Application.Runtime.Cut;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
 {

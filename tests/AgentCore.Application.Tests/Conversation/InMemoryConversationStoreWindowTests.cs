@@ -5,7 +5,7 @@ using Xunit;
 
 namespace AgentCore.Application.Tests.Conversation
 {
-    /// <summary>Reading store 1 a window of turns at a time, newest turns first, every turn whole.</summary>
+    /// <summary>Reading the message store a window of turns at a time, newest turns first, every turn whole.</summary>
     public sealed class InMemoryConversationStoreWindowTests
     {
         private static CancellationToken Token => TestContext.Current.CancellationToken;

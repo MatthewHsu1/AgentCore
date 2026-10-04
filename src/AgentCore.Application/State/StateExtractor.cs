@@ -1,30 +1,14 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Runtime;
 using Microsoft.Extensions.AI;
+using AgentCore.Application.Runtime.Clarification;
 
 namespace AgentCore.Application.State
 {
     /// <summary>
-    /// Writer 1 of section 8.3, and the bridge from prose to typed state.
+    /// The bridge from prose to typed state.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// AgentCore builds one JSON Schema from every <c>writer: extractor</c> slot, all nullable, and asks
-    /// a model to fill what the turn shows and leave the rest null. The extractor never speaks, holds no
-    /// tools, and decides nothing. The guards decide.
-    /// </para>
-    /// <para>
-    /// Every slot is nullable on the wire, and that is not optional. A required field that the model
-    /// omits becomes the default silently, so "unfilled" and "filled false" would be the same state. A
-    /// <c>null</c> answer means the model did not answer, and it leaves the slot at its previous value.
-    /// </para>
-    /// <para>
-    /// The extractor has no retry. One conversation runs, and a reply that does not deserialize leaves the slots
-    /// unchanged. The stage machine stays where it is and the agent tries again next turn.
-    /// </para>
-    /// </remarks>
     public sealed class StateExtractor
     {
         /// <summary>The name the emitted JSON Schema answers to.</summary>
@@ -104,7 +88,7 @@ namespace AgentCore.Application.State
 
                 JsonObject property = new()
                 {
-                    // The null member is the point of this schema. See section 8.3.
+                    // The null member is the point of this schema.
                     ["type"] = new JsonArray(JsonValue.Create(TypeName(slot.Type)), JsonValue.Create("null")),
                 };
 
@@ -189,7 +173,7 @@ namespace AgentCore.Application.State
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                // State extraction must never drop a conversation. Section 8.7.
+                // State extraction must never drop a conversation.
                 return StateExtractionResult.Failed($"the extractor call failed: {exception.Message}");
             }
 
@@ -211,8 +195,8 @@ namespace AgentCore.Application.State
         /// <param name="state">The state of one conversation.</param>
         /// <param name="replyText">The raw JSON the model returned.</param>
         /// <param name="clarifications">
-        /// The conversation's ambiguity holder (K36). A write that lands clears the slot's <c>lastNamed</c>
-        /// record (K30); a refused write leaves it alone.
+        /// The conversation's ambiguity holder. A write that lands clears the slot's <c>lastNamed</c>
+        /// record; a refused write leaves it alone.
         /// </param>
         /// <returns>What the reply did to the state.</returns>
         internal StateExtractionResult Write(
@@ -278,7 +262,7 @@ namespace AgentCore.Application.State
             return true;
         }
 
-        /// <summary>K30: a successful write clears the slot's lastNamed record.</summary>
+        /// <summary>A successful write clears the slot's lastNamed record.</summary>
         private static void ClearAmbiguity(Clarifications clarifications, string slot)
         {
             clarifications.Update(slot, s => s.LastNamed = Clarifications.LastNamed.None);

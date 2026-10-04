@@ -12,8 +12,8 @@ namespace AgentCore.Application.Tests.Configuration.Compilation
     /// <summary>
     /// The <c>approval:</c> block reaching a compiled agent as <c>UseToolApproval</c> rules: an
     /// <c>auto:</c> entry lets its tool run with no request surfacing, anything else still asks, and
-    /// the layer adds no state keys — <c>toolApprovalState</c> persistence rides with the Phase 2
-    /// round trip, when standing rules can exist.
+    /// the layer adds no state keys — <c>toolApprovalState</c> persistence waits until
+    /// standing rules can exist.
     /// </summary>
     public sealed class ApprovalCompilationTests
     {
@@ -156,7 +156,7 @@ namespace AgentCore.Application.Tests.Configuration.Compilation
             CompiledAgent compiled = Compile(GatedToolYaml, client, () => { }, token);
 
             Assert.Equal(
-                ["_pendingApprovalRequests", "toolApprovalState"],
+                ["_pendingApprovalRequests", "agentcoreHeldApprovalAnswers", "toolApprovalState"],
                 compiled.HarnessStateKeys.OrderBy(key => key));
         }
 

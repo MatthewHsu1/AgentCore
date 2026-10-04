@@ -1,14 +1,14 @@
 using System.Diagnostics;
 using AgentCore.Application.Diagnostics;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Diagnostics;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Runtime.ConversationSessionTestSupport;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
-    /// Owner ruling on a row-six fault (docs/probes/r2/audit/AUDIT.md, finding F, PII table): the exception
+    /// On a turn fault, the exception
     /// TYPE goes on the <c>agentcore.turn</c> span, and the exception OBJECT -- message and stack trace both
     /// -- goes to the Error log. Neither carries the other's cut.
     /// </summary>
@@ -23,10 +23,11 @@ namespace AgentCore.Application.Tests.Runtime
 
             using LoopingToolCallingChatClient reply = new();
             ThrowingToolBuilder tools = new();
-            ConversationSession session = Build(ToolYaml, reply, null, tools.Create, logger: logger)
+            ConversationSession session = TurnObservabilityHarness.Build(ToolYaml, reply, null, tools.Create, logger: logger)
                 .Create("conversation-" + Guid.NewGuid().ToString("N"));
 
             _ = await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
+            await session.FlushNoticesAsync();
 
             // ThrowingToolBuilder.Message is the marker here: a fixed literal nothing else in this run
             // produces, thrown inside a real TimeoutException by the tool itself.

@@ -1,6 +1,10 @@
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Cut;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 using AgentCore.AspNetCore.Tests.Fakes;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Voice.Session;
+using AgentCore.AspNetCore.Voice.Speech;
+using AgentCore.AspNetCore.Voice.Speech.Replies;
+using AgentCore.AspNetCore.Voice.Turns;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -40,7 +44,7 @@ namespace AgentCore.AspNetCore.Tests.Voice
             return _output.DisposeAsync();
         }
 
-        // VoiceActivity (plan G8): engine turns run one at a time, each once the previous one has ended.
+        // VoiceActivity: engine turns run one at a time, each once the previous one has ended.
         [Fact(Timeout = 30_000)]
         public async Task ASecondReply_StartsItsEngineTurnOnlyOnceTheFirstHasEnded()
         {
@@ -64,7 +68,7 @@ namespace AgentCore.AspNetCore.Tests.Voice
         }
 
         // EngineReplyStream.Cut: a turn still waiting on the one before it takes the cut the moment it starts, so the
-        // caller's words are kept (design section 3).
+        // caller's words are kept.
         [Fact(Timeout = 30_000)]
         public async Task AReplyInterruptedBeforeItsTurnStarted_CutsThatTurnTheMomentItStarts()
         {
@@ -114,7 +118,7 @@ namespace AgentCore.AspNetCore.Tests.Voice
             _ = await handle;
         }
 
-        // PipelineReply (design section 3): an interruption with no barge-in behind it keeps the text forwarded.
+        // PipelineReply: an interruption with no barge-in behind it keeps the text forwarded.
         [Fact(Timeout = 30_000)]
         public async Task AUserTurnInterruptingAReplyWhileItsToolRuns_CutsTheTurnToTheForwardedText()
         {
@@ -213,7 +217,7 @@ namespace AgentCore.AspNetCore.Tests.Voice
                 "First question",
                 Task.CompletedTask,
                 SpeechHandle.Create(_time, NullLogger.Instance),
-                new TurnMetrics(_time, userTurnEndedAt: null),
+                new TurnMetrics(_time, userTurnEndedAt: null, static (_, _, _) => { }),
                 logs.CreateLogger("voice"),
                 CancellationToken.None);
             _ = await _port.Turn(1).Started;

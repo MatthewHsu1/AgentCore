@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using AgentCore.Application.Hooks.Layers;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Caching.Hybrid;
 
@@ -48,6 +49,7 @@ namespace AgentCore.Application.Tools
 
             if (kept is not null)
             {
+                ToolCallOutcomes.Mark(arguments, ToolCallOutcomes.CachedKey);
                 return JsonNode.Parse(kept);
             }
 

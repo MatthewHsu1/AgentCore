@@ -7,7 +7,7 @@ using Xunit;
 
 namespace AgentCore.Application.Tests.Conversation
 {
-    /// <summary>The words half of store 0, now that one store holds both halves.</summary>
+    /// <summary>The words half of the conversation store, now that one store holds both halves.</summary>
     public sealed class InMemoryConversationStoreTranscriptTests
     {
         private static CancellationToken Token => TestContext.Current.CancellationToken;

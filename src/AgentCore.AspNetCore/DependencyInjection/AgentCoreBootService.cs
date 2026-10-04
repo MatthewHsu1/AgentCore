@@ -1,3 +1,6 @@
+using AgentCore.Application.Hooks.Engine;
+using AgentCore.Application.Hooks.Notices;
+using AgentCore.AspNetCore.DependencyInjection.Startup;
 using Microsoft.Extensions.Hosting;
 
 namespace AgentCore.AspNetCore.DependencyInjection
@@ -23,20 +26,27 @@ namespace AgentCore.AspNetCore.DependencyInjection
         /// <inheritdoc/>
         public Task StartedAsync(CancellationToken cancellationToken)
         {
+            if (boot.TryGetHooks(out HookRuntime? hooks))
+            {
+                _ = HookStartup.RaiseHostNotice(
+                    hooks, scope => new HostStarted(scope, [.. boot.Entries.Entries], boot.Tools.Ids.Count));
+            }
+
             return Task.CompletedTask;
         }
 
         /// <inheritdoc/>
         public Task StoppingAsync(CancellationToken cancellationToken)
         {
+            if (boot.TryGetHooks(out HookRuntime? hooks))
+            {
+                _ = HookStartup.RaiseHostNotice(hooks, scope => new HostStopping(scope));
+            }
+
             return Task.CompletedTask;
         }
 
         /// <inheritdoc/>
-        /// <remarks>
-        /// Nothing closes here. A failed start never calls <c>StopAsync</c> at all, so shutdown lives in
-        /// <see cref="AgentCoreBoot.DisposeAsync"/>, which the container reaches on both paths.
-        /// </remarks>
         public Task StopAsync(CancellationToken cancellationToken)
         {
             return Task.CompletedTask;

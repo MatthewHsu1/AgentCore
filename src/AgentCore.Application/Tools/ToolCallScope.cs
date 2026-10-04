@@ -5,5 +5,12 @@ namespace AgentCore.Application.Tools
     /// <param name="TurnIndex">The zero-based index of the turn now running.</param>
     /// <param name="Stage">The stage the conversation's state machine holds. Empty when the document declares no policy.</param>
     /// <param name="Workspace">The conversation's folder on disk, or <see langword="null"/> when the host bound no workspace root.</param>
-    public sealed record ToolCallScope(string ConversationId, int TurnIndex, string Stage, string? Workspace = null);
+    public sealed record ToolCallScope(string ConversationId, int TurnIndex, string Stage, string? Workspace = null)
+    {
+        /// <summary>
+        /// Gets the turn's shared state: the same dictionary a hook's gate exposes as <c>Items</c>. It lives for one
+        /// turn. Durable data belongs in <c>ConversationRecord.Custom</c>.
+        /// </summary>
+        public IDictionary<string, object?>? Items { get; init; }
+    }
 }
