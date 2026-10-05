@@ -381,6 +381,10 @@ providers:
   #                                        # optional: without it GPT-Live waits for the caller to speak
   #     voice: marin                       # optional, default marin
   #     model: gpt-live-1                  # optional, default gpt-live-1
+  #     transferSeconds: 45                # optional, default 45. OpenAI never says if a transfer worked: the
+  #                                        # SIP peer hangs up the AI leg once the line took the call. A call still
+  #                                        # up after this long counts as a failed transfer and is hung up. Set it
+  #                                        # longer than the peer rings the target.
   speech:
     stt: { kind: telnyx-relay }            # bundled with the relay, so it matches conversation
     tts: { kind: telnyx-relay }            # bundled with the relay, so it matches conversation

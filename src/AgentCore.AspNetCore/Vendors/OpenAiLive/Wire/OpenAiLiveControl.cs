@@ -6,7 +6,7 @@ using AgentCore.AspNetCore.Vendors.OpenAiLive.Webhook;
 
 namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Wire
 {
-    /// <summary>OpenAI's call-control requests for a SIP call: accept, reject, hang up. URLs and bodies come from <see cref="OpenAiLiveWire"/>.</summary>
+    /// <summary>OpenAI's call-control requests for a SIP call: accept, reject, hang up, refer. URLs and bodies come from <see cref="OpenAiLiveWire"/>.</summary>
     internal sealed class OpenAiLiveControl(HttpClient http, Task<OpenAiLiveCredentials> credentials)
     {
         /// <summary>The deadline of a best-effort request that must not wait on the host's token: a hang-up at shutdown, a reject after a failed accept.</summary>
@@ -36,6 +36,10 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Wire
 
         internal Task<bool> HangupAsync(string callId, CancellationToken cancellationToken) =>
             SucceedsAsync(OpenAiLiveWire.HangupPath(callId), [], cancellationToken);
+
+        // A 2xx says only that OpenAI relayed the REFER, not that the line took the call (probe T1).
+        internal Task<bool> ReferAsync(string callId, Uri target, CancellationToken cancellationToken) =>
+            SucceedsAsync(OpenAiLiveWire.ReferPath(callId), OpenAiLiveWire.ReferBody(target), cancellationToken);
 
         /// <summary>Hangs up on its own <see cref="QuietDeadline"/>; a deadline or a cancel gives <see langword="false"/>, never an exception.</summary>
         internal Task<bool> HangupQuietlyAsync(string callId) => QuietlyAsync(token => HangupAsync(callId, token));

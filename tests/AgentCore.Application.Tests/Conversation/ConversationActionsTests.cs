@@ -52,7 +52,7 @@ namespace AgentCore.Application.Tests.Conversation
         }
 
         [Fact]
-        public void TheAttachedChannelTakesATransferAndADetachedOneNoLonger()
+        public void TheAttachedChannelTakesATransfer()
         {
             using ScriptedChatClient reply = new("hello");
             ConversationSession session = HookSessions.Create(HookSessions.OneAgentYaml, reply);
@@ -62,14 +62,11 @@ namespace AgentCore.Application.Tests.Conversation
             session.Actions.Attach(channel);
             Assert.Equal(ConversationActionResult.Scheduled, session.Request(transfer));
             Assert.Same(transfer, Assert.Single(channel.Seen));
-
-            session.Actions.Detach(channel);
-            Assert.Equal(ConversationActionResult.NotSupported, session.Request(transfer));
         }
 
-        // A call that a newer call took over detaches late: it must not drop the newer call's channel.
+        // A newer call that takes the conversation over carries its actions from then on.
         [Fact]
-        public void DetachingAnOlderChannelKeepsTheNewerOne()
+        public void ANewerChannelReplacesTheOlderOne()
         {
             using ScriptedChatClient reply = new("hello");
             ConversationSession session = HookSessions.Create(HookSessions.OneAgentYaml, reply);
@@ -77,8 +74,6 @@ namespace AgentCore.Application.Tests.Conversation
             RecordingChannel newer = new(ConversationActionResult.Scheduled);
             session.Actions.Attach(older);
             session.Actions.Attach(newer);
-
-            session.Actions.Detach(older);
 
             Assert.Equal(ConversationActionResult.Scheduled, session.Request(new TransferAction(Staff)));
             Assert.Single(newer.Seen);

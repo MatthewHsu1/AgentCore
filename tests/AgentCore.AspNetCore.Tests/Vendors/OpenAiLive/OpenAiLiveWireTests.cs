@@ -43,6 +43,14 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             Assert.Null(OpenAiLiveWire.ReadIncomingCall(Encoding.UTF8.GetBytes("""{"type":"realtime.call.ended","data":{"call_id":"rtc_123"}}""")));
         }
 
+        // The OpenAI SIP guide: POST /v1/live/sessions/{session_id}/refer with { "target_uri": "sip:agent@example.com" }.
+        [Fact]
+        public void AReferGoesToTheSessionsReferPathWithTheTargetUri()
+        {
+            Assert.Equal("v1/live/sessions/live_9/refer", OpenAiLiveWire.ReferPath("live_9"));
+            Assert.Equal("""{"target_uri":"sip:agent@example.com"}""", OpenAiLiveWire.ReferBody(new Uri("sip:agent@example.com")).ToJsonString());
+        }
+
         [Theory]
         [InlineData("\"Caller\" <sip:+15550100@sip.telnyx.com>;tag=1", "+15550100")]
         [InlineData("<tel:+15550100>", "+15550100")]

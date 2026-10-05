@@ -17,12 +17,6 @@ namespace AgentCore.Application.Runtime.Session
             Volatile.Write(ref _channel, channel);
         }
 
-        /// <summary>Compare-and-clear, because an older call can detach after a newer call attached, and must not drop it.</summary>
-        internal void Detach(IConversationChannel channel)
-        {
-            _ = Interlocked.CompareExchange(ref _channel, null, channel);
-        }
-
         /// <inheritdoc />
         public ConversationActionResult Request(ConversationAction action)
         {

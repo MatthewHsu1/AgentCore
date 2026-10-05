@@ -5,7 +5,7 @@ using Xunit;
 
 namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
 {
-    /// <summary>The live: block holds instructions, greeting, voice and model, and nothing else.</summary>
+    /// <summary>The live: block holds instructions, greeting, voice, model and transferSeconds, and nothing else.</summary>
     public sealed class OpenAiLiveSettingsTests
     {
         [Fact]
@@ -30,7 +30,16 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
                 OpenAiLiveSettings.From(Conversation("live: { instructions: \"Be brief.\", greeting: \"Say hello, then listen.\" }")));
         }
 
+        [Fact]
+        public void TheTransferWaitIsTakenInSecondsAndDefaultsTo45()
+        {
+            Assert.Equal(TimeSpan.FromSeconds(45), OpenAiLiveSettings.From(Conversation("live: { instructions: \"x\" }")).TransferWait);
+            Assert.Equal(TimeSpan.FromSeconds(60), OpenAiLiveSettings.From(Conversation("live: { instructions: \"x\", transferSeconds: 60 }")).TransferWait);
+        }
+
         [Theory]
+        [InlineData("live: { instructions: \"x\", transferSeconds: 0 }", "/providers/conversation/live/transferSeconds")]
+        [InlineData("live: { instructions: \"x\", transferSeconds: \"45\" }", "/providers/conversation/live/transferSeconds")]
         [InlineData("live: { voice: marin }", "/providers/conversation/live/instructions")]
         [InlineData("live: { instructions: \"x\", webhookSecret: \"${secret:OPENAI_WEBHOOK_SECRET}\" }", "/providers/conversation/live/webhookSecret")]
         [InlineData("answerSeconds: 5", "/providers/conversation/live")]

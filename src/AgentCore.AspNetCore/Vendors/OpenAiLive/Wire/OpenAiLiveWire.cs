@@ -31,6 +31,11 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Wire
 
         internal static string HangupPath(string callId) => $"v1/live/sessions/{Uri.EscapeDataString(callId)}/hangup";
 
+        // Proven on a real call (probe T1): the peer gets an in-dialog REFER with Refer-To set to the target.
+        internal static string ReferPath(string callId) => $"v1/live/sessions/{Uri.EscapeDataString(callId)}/refer";
+
+        internal static JsonObject ReferBody(Uri target) => new() { ["target_uri"] = target.OriginalString };
+
         internal static Uri AttachUri(Uri apiBase, string callId)
         {
             ArgumentNullException.ThrowIfNull(apiBase);

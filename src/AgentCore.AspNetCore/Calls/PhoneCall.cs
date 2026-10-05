@@ -23,6 +23,8 @@ namespace AgentCore.AspNetCore.Calls
 
         private readonly CallEndNotice _end;
 
+        private readonly CallBrief _brief;
+
         private ConversationSession _session;
 
         private DateTimeOffset? _keptStart;
@@ -46,7 +48,7 @@ namespace AgentCore.AspNetCore.Calls
             _end = new CallEndNotice(offer.CallId, host.Time, host.Logger);
             _session = session;
             ConversationId = conversationId;
-            Brief = brief;
+            _brief = new CallBrief(host, conversationId, brief);
             Asks = new CallAsks(this);
         }
 
@@ -59,7 +61,7 @@ namespace AgentCore.AspNetCore.Calls
         internal string ConversationId { get; }
 
         /// <summary>Gets the brief the hook accepted the call with, for the vendor's own voice; <see langword="null"/> for none.</summary>
-        internal string? Brief { get; }
+        internal string? Brief => _brief.Text;
 
         internal ConversationSession Session => Volatile.Read(ref _session);
 
@@ -83,6 +85,8 @@ namespace AgentCore.AspNetCore.Calls
 
         /// <summary>Gets the engine turns the vendor asks for, one per delegation.</summary>
         internal CallAsks Asks { get; }
+
+        internal CallChannel Channel { get; } = new();
 
         /// <summary>
         /// Runs the call gate, then opens the conversation the hook named. A conversation that
@@ -175,21 +179,13 @@ namespace AgentCore.AspNetCore.Calls
 
             Volatile.Write(ref _startedAt, new StrongBox<DateTimeOffset>(startedAt));
 
-            // The brief is filed under the conversation id, so a call with none must not inherit an earlier call's.
-            if (string.IsNullOrEmpty(Brief) && !Host.FrontVoice)
-            {
-                Host.Briefs?.Clear(ConversationId);
-            }
-            else
-            {
-                Host.Briefs?.Set(ConversationId, string.IsNullOrEmpty(Brief) ? null : Brief, Host.FrontVoice);
-            }
+            _brief.File();
 
             // An end that landed after the check above may have forgotten the brief before it was set here, and it
             // raises its own end: the call does not start.
             if (HasEnded)
             {
-                Host.Briefs?.Clear(ConversationId);
+                _brief.Clear();
                 return;
             }
 
@@ -290,7 +286,7 @@ namespace AgentCore.AspNetCore.Calls
             }
 
             _end.Left(holder, own, CallEndReason.Ended, cause);
-            ForgetBrief(holder, own);
+            _brief.Forget(holder, own);
         }
 
         /// <summary>
@@ -307,7 +303,7 @@ namespace AgentCore.AspNetCore.Calls
             }
 
             _end.Left(holder, own, CallEndReason.Closed, cause: null);
-            ForgetBrief(holder, own);
+            _brief.Forget(holder, own);
             if (Owns(holder, own))
             {
                 await Host.Sessions.CloseAsync(Entry, ConversationId, CancellationToken.None).ConfigureAwait(false);
@@ -343,10 +339,11 @@ namespace AgentCore.AspNetCore.Calls
             }
 
             Volatile.Write(ref _session, reopened);
+            Channel.Follow(reopened);
             return true;
         }
 
-        private static bool Owns(ConversationSession? holder, ConversationSession own)
+        internal static bool Owns(ConversationSession? holder, ConversationSession own)
         {
             return holder is null || ReferenceEquals(holder, own);
         }
@@ -363,16 +360,6 @@ namespace AgentCore.AspNetCore.Calls
             CallLog.CallReplaced(Host.Logger, CallId, ConversationId);
             _end.Left(Session, CallEndReason.Replaced, cause: null);
             _replaced?.Invoke(this);
-        }
-
-        // The brief is filed under the conversation id. A newer session that another call holds carries that call's
-        // brief, so only then is it left in place.
-        private void ForgetBrief(ConversationSession? holder, ConversationSession own)
-        {
-            if (Owns(holder, own) || !holder!.Lifetime.Ending.HasCall)
-            {
-                Host.Briefs?.Clear(ConversationId);
-            }
         }
 
         // The id may have moved on: this call's session unloaded and a later caller reopened it. Ending or closing that
