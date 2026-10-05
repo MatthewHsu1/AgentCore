@@ -25,6 +25,8 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
     {
         private static readonly Uri Staff = new("tel:+15550002222");
 
+        private const string SayTheTransferFailed = "Tell the caller the transfer did not go through.";
+
         private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
         // GPT-Live's ack marks the start of speech, so time alone must not send the refer before the answer was heard.
@@ -114,6 +116,40 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             Assert.Single(hook.Of<TurnStarted>());
         }
 
+        // A host that moves the call itself knows at once whether the line took it: nothing waits for the peer's close.
+        [Fact(Timeout = 30_000)]
+        public async Task ATransferTheHostCarriedOutEndsTheCallAsTransferredAtOnce()
+        {
+            RecordingHook hook = new();
+            await using RunningLiveCall running = await RunningLiveCall.StartAsync(
+                new GatedToolCallingChatClient(), [hook], tools: TransferTool(new()), hostAnswers: CallTransferOutcome.Taken);
+
+            await ReferAsync(running);
+            _ = await running.HungUp.Task;
+            ConversationEnded ended = await hook.WaitForAsync<ConversationEnded>();
+
+            Assert.Equal((ConversationEndReason.TransferredToHuman, OpenAiLiveCall.TransferredCause), (ended.Reason, ended.Call!.Cause));
+        }
+
+        // GPT-Live says the host's words under no delegation, as it says the greeting, and the caller can go on talking.
+        [Fact(Timeout = 30_000)]
+        public async Task ATransferTheHostCouldNotCarryOutSaysTheHostsWordsAndTheCallGoesOn()
+        {
+            RecordingHook hook = new();
+            await using RunningLiveCall running = await RunningLiveCall.StartAsync(
+                new GatedToolCallingChatClient(), [hook], tools: TransferTool(new(), SayTheTransferFailed), hostAnswers: CallTransferOutcome.NotTaken);
+
+            await ReferAsync(running);
+            JsonObject said = await running.Sideband.WaitForSentAsync(sent => (string?)sent["content"] == SayTheTransferFailed);
+            running.Sideband.Push(Ask("item_2", "Okay, thanks.", 9000));
+            _ = await running.Sideband.WaitForSentAsync(sent => IsCommentary(sent) && (string?)sent["delegation_id"] == "item_2");
+
+            Assert.Equal("session.instructions.append", (string?)said["type"]);
+            Assert.Null(said["delegation_id"]);
+            Assert.False(running.HungUp.Task.IsCompleted);
+            Assert.False(running.Call.HasEnded);
+        }
+
         [Fact(Timeout = 30_000)]
         public async Task ACallWithNoReferAnswersATransferAsNotSupportedAndStaysUp()
         {
@@ -130,11 +166,11 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
         }
 
         // Every tool of the harness's document asks for a transfer through the scope the binder fills, as a host's would.
-        private static Func<ToolConfiguration, AITool?> TransferTool(ConcurrentQueue<ConversationActionResult> answers) =>
+        private static Func<ToolConfiguration, AITool?> TransferTool(ConcurrentQueue<ConversationActionResult> answers, string? ifFailed = null) =>
             tool => AIFunctionFactory.Create(
                 (ToolCallScope scope) =>
                 {
-                    ConversationActionResult answer = scope.Conversation.Request(new TransferAction(Staff));
+                    ConversationActionResult answer = scope.Conversation.Request(new TransferAction(Staff) { IfFailed = ifFailed });
                     answers.Enqueue(answer);
                     return answer.ToString();
                 },

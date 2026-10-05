@@ -3161,3 +3161,25 @@ virtual AgentCore.Application.Conversation.Actions.ConversationAction.PrintMembe
 const AgentCore.Application.Secrets.KnownSecrets.TelnyxRelayKeyName = "telnyx-relay-key" -> string!
 const AgentCore.Application.Secrets.KnownSecrets.TelnyxRelayKeyVariable = "TELNYX_RELAY_KEY" -> string!
 static readonly AgentCore.Application.Secrets.KnownSecrets.TelnyxRelay -> AgentCore.Application.Secrets.SecretName!
+AgentCore.Application.Conversation.Actions.TransferAction.IfFailed.get -> string?
+AgentCore.Application.Conversation.Actions.TransferAction.IfFailed.init -> void
+AgentCore.Application.Conversation.Actions.CallTransfer
+AgentCore.Application.Conversation.Actions.CallTransfer.<Clone>$() -> AgentCore.Application.Conversation.Actions.CallTransfer!
+AgentCore.Application.Conversation.Actions.CallTransfer.CallTransfer() -> void
+AgentCore.Application.Conversation.Actions.CallTransfer.ConversationId.get -> string!
+AgentCore.Application.Conversation.Actions.CallTransfer.ConversationId.init -> void
+AgentCore.Application.Conversation.Actions.CallTransfer.Equals(AgentCore.Application.Conversation.Actions.CallTransfer? other) -> bool
+AgentCore.Application.Conversation.Actions.CallTransfer.Headers.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!
+AgentCore.Application.Conversation.Actions.CallTransfer.Headers.init -> void
+AgentCore.Application.Conversation.Actions.CallTransferOutcome
+AgentCore.Application.Conversation.Actions.CallTransferOutcome.NotTaken = 0 -> AgentCore.Application.Conversation.Actions.CallTransferOutcome
+AgentCore.Application.Conversation.Actions.CallTransferOutcome.Taken = 1 -> AgentCore.Application.Conversation.Actions.CallTransferOutcome
+AgentCore.Application.Conversation.Actions.CallTransfer.Target.get -> System.Uri!
+AgentCore.Application.Conversation.Actions.CallTransfer.Target.init -> void
+AgentCore.Application.Conversation.Actions.ICallTransfer
+AgentCore.Application.Conversation.Actions.ICallTransfer.TransferAsync(AgentCore.Application.Conversation.Actions.CallTransfer! transfer, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<AgentCore.Application.Conversation.Actions.CallTransferOutcome>!
+override AgentCore.Application.Conversation.Actions.CallTransfer.Equals(object? obj) -> bool
+override AgentCore.Application.Conversation.Actions.CallTransfer.GetHashCode() -> int
+override AgentCore.Application.Conversation.Actions.CallTransfer.ToString() -> string!
+static AgentCore.Application.Conversation.Actions.CallTransfer.operator ==(AgentCore.Application.Conversation.Actions.CallTransfer? left, AgentCore.Application.Conversation.Actions.CallTransfer? right) -> bool
+static AgentCore.Application.Conversation.Actions.CallTransfer.operator !=(AgentCore.Application.Conversation.Actions.CallTransfer? left, AgentCore.Application.Conversation.Actions.CallTransfer? right) -> bool

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using AgentCore.Application.Conversation.Actions;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Vendors.OpenAiLive.Call;
 using AgentCore.Domain.Audit;
@@ -24,6 +25,12 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive
         private readonly ConcurrentDictionary<OpenAiLiveCall, Task> _running = new();
 
         private readonly CancellationTokenSource _stopping = new();
+
+        /// <summary>
+        /// Gets the host's own transfer, or <see langword="null"/> when it registered none. It comes from the root
+        /// services: a call outlives the request that started it, so a scoped one would be used after its scope ended.
+        /// </summary>
+        internal ICallTransfer? HostTransfer => services.GetService<ICallTransfer>();
 
         private readonly Lock _gate = new();
 

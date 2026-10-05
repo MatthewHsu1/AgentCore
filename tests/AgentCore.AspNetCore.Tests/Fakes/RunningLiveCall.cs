@@ -1,6 +1,8 @@
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Conversation.Actions;
 using AgentCore.Application.Hooks;
 using AgentCore.AspNetCore.Calls;
+using AgentCore.AspNetCore.Vendors.OpenAiLive;
 using AgentCore.AspNetCore.Vendors.OpenAiLive.Call;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
@@ -46,12 +48,13 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         public TaskCompletionSource<Uri> Referred { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         /// <summary>
-        /// Starts the call. With <paramref name="refers"/> unset the call cannot transfer, as on a host that wired no
-        /// refer; set, each refer answers it.
+        /// Starts the call. With <paramref name="refers"/> and <paramref name="hostAnswers"/> unset the call cannot
+        /// transfer. <paramref name="refers"/> transfers by refer, and each refer answers it; <paramref name="hostAnswers"/>
+        /// transfers through a host's own <see cref="ICallTransfer"/>, which answers it.
         /// </summary>
         public static async Task<RunningLiveCall> StartAsync(
             IChatClient model, IReadOnlyList<AgentHook> hooks, string yaml = PhoneCallHarness.OneEntryYaml, ILogger? logger = null, FakeSideband? sideband = null,
-            string? greeting = Greeting, Func<ToolConfiguration, AITool?>? tools = null, bool? refers = null)
+            string? greeting = Greeting, Func<ToolConfiguration, AITool?>? tools = null, bool? refers = null, CallTransferOutcome? hostAnswers = null)
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
             FakeTimeProvider time = new(Noon) { Zone = TimeZoneInfo.Utc };
@@ -59,8 +62,14 @@ namespace AgentCore.AspNetCore.Tests.Fakes
             PhoneCall call = (await PhoneCall.AdmitAsync(harness.Host, PhoneCallHarness.Offer(), ct)).Call!;
             await call.StartAsync(ct);
             RunningLiveCall running = new(harness, time, call, sideband ?? new FakeSideband());
-            Func<Uri, CancellationToken, Task<bool>>? refer = refers is { } answer ? (target, _) => running.ReferAsync(target, answer) : null;
-            OpenAiLiveCall live = new(call, running.Sideband, running.HangUpAsync, logger ?? NullLogger.Instance, greeting, refer);
+            logger ??= NullLogger.Instance;
+            ILiveTransferLine? line = (hostAnswers, refers) switch
+            {
+                ({ } outcome, _) => new LiveHostTransfer(new AnsweringTransfer(running, outcome), call.ConversationId, new Dictionary<string, string>(), logger, call.CallId),
+                (null, { } answer) => new LiveReferTransfer((target, _) => running.ReferAsync(target, answer), OpenAiLiveSettings.DefaultTransferWait, logger, call.CallId),
+                _ => null,
+            };
+            OpenAiLiveCall live = new(call, running.Sideband, running.HangUpAsync, logger, greeting, line);
             running.Loop = live.RunAsync(ct);
             return running;
         }
@@ -82,6 +91,15 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         {
             _ = HungUp.TrySetResult(Sideband.Pushed);
             return Task.FromResult(true);
+        }
+
+        private sealed class AnsweringTransfer(RunningLiveCall running, CallTransferOutcome outcome) : ICallTransfer
+        {
+            public Task<CallTransferOutcome> TransferAsync(CallTransfer transfer, CancellationToken cancellationToken)
+            {
+                _ = running.Referred.TrySetResult(transfer.Target);
+                return Task.FromResult(outcome);
+            }
         }
     }
 }

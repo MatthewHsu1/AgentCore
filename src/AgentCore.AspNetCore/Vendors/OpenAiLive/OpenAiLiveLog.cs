@@ -51,7 +51,10 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive
         [LoggerMessage(EventId = 325, Level = LogLevel.Warning, Message = "transferring the call {CallId} failed: {Why}. The call is hung up.")]
         internal static partial void TransferFailed(ILogger logger, string callId, string why);
 
-        [LoggerMessage(EventId = 326, Level = LogLevel.Error, Message = "sending the refer of the call {CallId} threw.")]
+        [LoggerMessage(EventId = 326, Level = LogLevel.Error, Message = "sending the transfer of the call {CallId} threw.")]
         internal static partial void ReferFaulted(ILogger logger, string callId, Exception fault);
+
+        [LoggerMessage(EventId = 327, Level = LogLevel.Warning, Message = "transferring the call {CallId} failed: {Why}. The caller is told, and the call goes on.")]
+        internal static partial void TransferFailedGoingOn(ILogger logger, string callId, string why);
     }
 }

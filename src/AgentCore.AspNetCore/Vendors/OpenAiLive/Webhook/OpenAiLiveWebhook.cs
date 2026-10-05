@@ -114,14 +114,17 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Webhook
                 return false;
             }
 
+            ILiveTransferLine transferLine = calls.HostTransfer is { } hostTransfer
+                ? new LiveHostTransfer(hostTransfer, call.ConversationId, incoming.Headers, logger, incoming.CallId)
+                : new LiveReferTransfer((target, token) => control.ReferAsync(incoming.CallId, target, token), settings.TransferWait, logger, incoming.CallId);
+
             calls.Run(new OpenAiLiveCall(
                 call,
                 sideband,
                 _ => control.HangupQuietlyAsync(incoming.CallId),
                 logger,
                 settings.Greeting,
-                (target, token) => control.ReferAsync(incoming.CallId, target, token),
-                settings.TransferWait));
+                transferLine));
             return true;
         }
 

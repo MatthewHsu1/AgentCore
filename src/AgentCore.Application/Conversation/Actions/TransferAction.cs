@@ -23,5 +23,13 @@ namespace AgentCore.Application.Conversation.Actions
 
         /// <summary>Gets the target. It is a URI and not a phone number, so a PSTN number and a SIP endpoint both fit.</summary>
         public Uri Target { get; }
+
+        /// <summary>
+        /// Gets the instruction the voice follows when the line did not take the call, after which the call goes on. The
+        /// host writes it, because AgentCore writes no text for the model. Without it a failed transfer hangs up. A voice
+        /// may keep it for the rest of the call (GPT-Live appends it to its session instructions, as it does the
+        /// greeting), so word it as one past event, such as "the transfer you just started did not go through".
+        /// </summary>
+        public string? IfFailed { get; init; }
     }
 }

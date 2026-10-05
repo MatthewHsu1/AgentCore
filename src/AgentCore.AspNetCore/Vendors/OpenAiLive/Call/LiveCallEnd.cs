@@ -12,9 +12,12 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
     /// <param name="logger">Where a late ack is logged.</param>
     internal sealed class LiveCallEnd(TimeProvider time, string callId, ILogger logger) : IDisposable
     {
-        private readonly TaskCompletionSource<(ConversationEndReason Reason, string Cause)> _endNow = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
         private readonly Lock _gate = new();
+
+        private TaskCompletionSource<(ConversationEndReason Reason, string Cause)> _endNow = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // An end asked for while the loop acts on an earlier one, such as during a transfer that may fail and go on.
+        private (ConversationEndReason Reason, string Cause)? _endAfter;
 
         private string? _endAfterAck;
 
@@ -27,7 +30,16 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
         private int _finished;
 
         /// <summary>Gets the end asked for, once one is.</summary>
-        internal Task<(ConversationEndReason Reason, string Cause)> Requested => _endNow.Task;
+        internal Task<(ConversationEndReason Reason, string Cause)> Requested
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _endNow.Task;
+                }
+            }
+        }
 
         /// <summary>Gets whether the call finished: nothing goes out on its socket any more.</summary>
         internal bool Finished => Volatile.Read(ref _finished) == 1;
@@ -47,7 +59,38 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
         /// <returns><see langword="false"/> when it already was.</returns>
         internal bool TryFinish() => Interlocked.Exchange(ref _finished, 1) == 0;
 
-        internal void Now(ConversationEndReason reason, string cause) => _endNow.TrySetResult((reason, cause));
+        internal void Now(ConversationEndReason reason, string cause)
+        {
+            lock (_gate)
+            {
+                if (!_endNow.TrySetResult((reason, cause)))
+                {
+                    _endAfter ??= (reason, cause);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Listens for the next end, once the loop chose to go on after the one it was given. An end asked for in the
+        /// meantime is the next end.
+        /// </summary>
+        internal void Rearm()
+        {
+            lock (_gate)
+            {
+                _quietTimer?.Dispose();
+                _quietTimer = null;
+                _ackTimer?.Dispose();
+                _ackTimer = null;
+                _endAfterAck = null;
+                _endNow = new TaskCompletionSource<(ConversationEndReason Reason, string Cause)>(TaskCreationOptions.RunContinuationsAsynchronously);
+                if (_endAfter is { } next)
+                {
+                    _endAfter = null;
+                    _ = _endNow.TrySetResult(next);
+                }
+            }
+        }
 
         /// <summary>GPT-Live is still speaking: a quiet wait already running starts again.</summary>
         internal void AgentSpoke()

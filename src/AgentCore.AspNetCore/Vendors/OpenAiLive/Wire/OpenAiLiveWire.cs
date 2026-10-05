@@ -75,6 +75,9 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Wire
         /// </summary>
         internal static JsonObject GreetFirst(string eventId, string greeting) => SessionFact(eventId, greeting);
 
+        /// <summary>Words GPT-Live says at once, outside every delegation: the event that makes it greet first.</summary>
+        internal static JsonObject SayNow(string eventId, string words) => SessionFact(eventId, words);
+
         /// <summary>
         /// A fact for the whole session, under no delegation, from OpenAI's delegation guide: at most 500 tokens, such as
         /// <c>"The current date is December 10, 2024. Today is Tuesday."</c>
