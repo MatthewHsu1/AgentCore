@@ -1,3 +1,5 @@
+using AgentCore.Application.Hooks.Notices;
+using AgentCore.Application.Runtime.Turn;
 using Microsoft.Agents.AI;
 
 namespace AgentCore.Application.Skills
@@ -41,10 +43,17 @@ namespace AgentCore.Application.Skills
             InvokingContext context,
             CancellationToken cancellationToken = default)
         {
-            return new AIContext
+            string instructions = _instructions ?? await ReadAsync(context, cancellationToken).ConfigureAwait(false);
+
+            if (TurnRegistry.For(context.Session) is { Hooks: { } hooks } turn && hooks.Wants<SkillLoaded>())
             {
-                Instructions = _instructions ?? await ReadAsync(context, cancellationToken).ConfigureAwait(false),
-            };
+                foreach (string name in _names)
+                {
+                    _ = hooks.Raise(new SkillLoaded(hooks.Scope(turn.TurnIndex, turn.Stage), name, Pinned: true));
+                }
+            }
+
+            return new AIContext { Instructions = instructions };
         }
 
         /// <summary>

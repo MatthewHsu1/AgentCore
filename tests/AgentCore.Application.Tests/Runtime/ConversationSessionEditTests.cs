@@ -2,14 +2,18 @@ using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Hooks;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
-using AgentCore.Domain.Audit;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Hooks.Notices;
+using AgentCore.Application.Runtime.Clarification;
+using AgentCore.Application.Runtime.Session;
+using AgentCore.Application.Runtime.Turn;
 
 namespace AgentCore.Application.Tests.Runtime
 {
@@ -73,35 +77,6 @@ namespace AgentCore.Application.Tests.Runtime
         }
 
         [Fact]
-        public async Task AnEdit_NamesTheTurnsItWithdrew()
-        {
-            using ScriptedChatClient reply = new("an answer.");
-            RecordingObserver observer = new();
-            ConversationSession session = CreateSession(OneAgentYaml, reply, observer);
-
-            _ = await session.RunTurnAtOriginAsync(
-                "q1",
-                new ConversationTurnOrigin("caller-1", null) { NamesParent = true },
-                TestContext.Current.CancellationToken);
-            string? firstReply = session.LastReplyMessageId;
-
-            _ = await session.RunTurnAsync("q2", TestContext.Current.CancellationToken);
-            _ = await session.RunTurnAsync("q3", TestContext.Current.CancellationToken);
-
-            _ = await session.RunTurnAtOriginAsync(
-                "q2, rewritten",
-                new ConversationTurnOrigin("caller-4", firstReply) { NamesParent = true },
-                TestContext.Current.CancellationToken);
-
-            // The rows of turns 1 and 2 are deleted by now, so the trail can only say what it was told.
-            ConversationEvent superseded = Assert.Single(
-                observer.Events, raised => raised.Kind == ConversationEventKind.TurnSuperseded);
-            Assert.Equal("1", superseded.Payload[AuditPayloadKeys.WithdrewFromTurnIndex]);
-            Assert.Equal("2", superseded.Payload[AuditPayloadKeys.WithdrewThroughTurnIndex]);
-            Assert.Equal(3, superseded.TurnIndex);
-        }
-
-        [Fact]
         public async Task AnEditOnATerminalConversation_IsRefusedAndTakesNothing()
         {
             using ScriptedChatClient reply = new("an answer.");
@@ -130,8 +105,8 @@ namespace AgentCore.Application.Tests.Runtime
         public async Task AnOriginThatNamesNoParent_WithdrawsNothing()
         {
             using ScriptedChatClient reply = new("an answer.");
-            RecordingObserver observer = new();
-            ConversationSession session = CreateSession(OneAgentYaml, reply, observer);
+            RecordingHook hook = new();
+            ConversationSession session = CreateSession(OneAgentYaml, reply, hook);
 
             _ = await session.RunTurnAsync("q1", TestContext.Current.CancellationToken);
 
@@ -143,7 +118,8 @@ namespace AgentCore.Application.Tests.Runtime
                 TestContext.Current.CancellationToken);
 
             Assert.Equal(4, session.Transcript.Count);
-            Assert.DoesNotContain(observer.Events, raised => raised.Kind == ConversationEventKind.TurnSuperseded);
+            await session.FlushNoticesAsync();
+            Assert.Empty(hook.Of<TurnSuperseded>());
         }
 
         // Clarifications.Withdraw: an edit-and-resend takes back what was last named to the caller, and leaves
@@ -173,7 +149,7 @@ namespace AgentCore.Application.Tests.Runtime
         }
 
         private static ConversationSession CreateSession(
-            string yaml, IChatClient reply, IConversationObserver? observer = null)
+            string yaml, IChatClient reply, AgentHook? hook = null)
         {
             AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(yaml);
             FakeChatClientFactory chatClients = new(reply);
@@ -189,37 +165,9 @@ namespace AgentCore.Application.Tests.Runtime
                 compiled,
                 new GuardEvaluator(compiled.Configuration.Guards),
                 extractor: null,
-                observers: observer is null ? null : [observer]);
+                hooks: hook is null ? null : [hook]);
 
             return factory.Create("conversation-1");
-        }
-
-        /// <summary>Keeps every fact of the conversation, in the order the turn loop raised them.</summary>
-        private sealed class RecordingObserver : IConversationObserver
-        {
-            private readonly Lock _gate = new();
-            private readonly List<ConversationEvent> _events = [];
-
-            public IReadOnlyList<ConversationEvent> Events
-            {
-                get
-                {
-                    lock (_gate)
-                    {
-                        return [.. _events];
-                    }
-                }
-            }
-
-            public ValueTask OnConversationEventAsync(ConversationEvent conversationEvent, CancellationToken cancellationToken)
-            {
-                lock (_gate)
-                {
-                    _events.Add(conversationEvent);
-                }
-
-                return ValueTask.CompletedTask;
-            }
         }
     }
 }

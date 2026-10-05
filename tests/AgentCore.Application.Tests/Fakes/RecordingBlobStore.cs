@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using AgentCore.Application.Blobs;
 using AgentCore.Application.Ports;
 
@@ -6,7 +7,8 @@ namespace AgentCore.Application.Tests.Fakes
     /// <summary>An in-memory <see cref="IBlobStore"/> that keeps every write, so a test reads what was stored.</summary>
     internal sealed class RecordingBlobStore : IBlobStore
     {
-        private readonly Dictionary<(string Owner, string Name), (string MediaType, byte[] Bytes)> _blobs = [];
+        // Concurrent: graph participants of one turn may store at the same time.
+        private readonly ConcurrentDictionary<(string Owner, string Name), (string MediaType, byte[] Bytes)> _blobs = [];
 
         /// <summary>Gets every blob stored, keyed by owner and name, in no particular order.</summary>
         public IReadOnlyDictionary<(string Owner, string Name), (string MediaType, byte[] Bytes)> Blobs => _blobs;
@@ -43,7 +45,7 @@ namespace AgentCore.Application.Tests.Fakes
         {
             foreach ((string Owner, string Name) key in _blobs.Keys.Where(key => key.Owner == ownerId).ToList())
             {
-                _ = _blobs.Remove(key);
+                _ = _blobs.TryRemove(key, out _);
             }
 
             return ValueTask.CompletedTask;

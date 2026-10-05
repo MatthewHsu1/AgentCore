@@ -3,16 +3,16 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Conversation.Memory;
-using AgentCore.Application.Runtime;
 using AgentCore.Domain;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
-    /// Bug 1 of the 2026-09-24 round: a graph node's checkpoint must resume under a second compile of the
+    /// A graph node's checkpoint must resume under a second compile of the
     /// same document (a restart, or a second host). MAF's <c>InProcessRunner</c> matches a checkpoint by
     /// executor id, and an agent's executor id folds in <see cref="ChatClientAgentOptions.Id"/>
     /// (<c>AIAgentExtensions.GetDescriptiveId</c>). <see cref="ConfigurationCompiler"/> gives every agent a
@@ -85,9 +85,9 @@ namespace AgentCore.Application.Tests.Runtime
         private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
         /// <summary>
-        /// Claim: <c>order-lookup</c> and <c>order_lookup</c> are distinct, schema-valid ids. Before the fix,
-        /// <c>Id = item.Id</c> let MAF's sanitizer (<c>Regex.Replace(Name + "_" + Id, "[^0-9A-Za-z]+", "_")</c>)
-        /// collapse them to the same executor id, and the compile threw. Both nodes must run and the graph
+        /// <c>order-lookup</c> and <c>order_lookup</c> are distinct, schema-valid ids. With <c>Id = item.Id</c>,
+        /// MAF's sanitizer (<c>Regex.Replace(Name + "_" + Id, "[^0-9A-Za-z]+", "_")</c>) would
+        /// collapse them to the same executor id, and the compile would throw. Both nodes must run and the graph
         /// must answer with the second node's reply.
         /// </summary>
         [Theory]

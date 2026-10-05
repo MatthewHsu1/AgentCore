@@ -1,5 +1,5 @@
 using AgentCore.Application.Conversation;
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Ports
 {
@@ -46,7 +46,7 @@ namespace AgentCore.Application.Ports
         ValueTask<ConversationSession?> TryGetAsync(string entry, string conversationId, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// Closes one conversation's session: waits for the words it still owes store 1, disposes its background
+        /// Closes one conversation's session: waits for the words it still owes the message store, disposes its background
         /// children and shells, then deletes its workspace folder. This writes no <c>conversation.ended</c>
         /// event; a caller that wants the close to be a real end calls
         /// <see cref="ConversationSession.EndConversation"/> itself, before this. The id stays taken until the

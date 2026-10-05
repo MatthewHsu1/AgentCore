@@ -1,5 +1,6 @@
-using AgentCore.AspNetCore.Vendors.TelnyxRelay;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Vendors.TelnyxRelay.Connection;
+using AgentCore.AspNetCore.Vendors.TelnyxRelay.Wire;
+using AgentCore.AspNetCore.Voice.Ports;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;

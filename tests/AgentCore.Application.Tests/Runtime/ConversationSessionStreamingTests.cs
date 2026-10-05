@@ -1,9 +1,9 @@
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Domain;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Runtime.ConversationSessionTestSupport;
 
 namespace AgentCore.Application.Tests.Runtime
@@ -95,7 +95,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(2, session.State.TurnIndex);
         }
 
-        // Section 8.6: the update stream carries content only.
+        // The update stream carries content only.
         [Fact]
         public async Task Streaming_DropsEveryUpdateThatCarriesNoContent()
         {
@@ -110,7 +110,7 @@ namespace AgentCore.Application.Tests.Runtime
 
             // AsAIAgent() yields 47 updates for 40 text fragments, and seven carry no content. The seam
             // filters them once, so no host writes the filter again. The trailing update is the turn's
-            // committed ids (design section 6, step E5): it carries content but no text.
+            // committed ids: it carries content but no text.
             Assert.Equal(6, reply.Yielded);
             Assert.Equal(
                 ["hello", " there."],

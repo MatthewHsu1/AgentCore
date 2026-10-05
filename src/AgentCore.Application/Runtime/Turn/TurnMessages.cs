@@ -111,6 +111,36 @@ namespace AgentCore.Application.Runtime.Turn
             return kept;
         }
 
+        /// <summary>Keeps only the tool calls that have a result, and those results, without the words beside them.</summary>
+        /// <param name="messages">The messages of the turns a withdrawal takes, oldest first.</param>
+        /// <returns>One message per message that held a kept call or result, in the original order.</returns>
+        internal static List<ChatMessage> ToolPairs(IReadOnlyList<ChatMessage> messages)
+        {
+            HashSet<string> answered = [.. messages.SelectMany(message => message.Contents).OfType<FunctionResultContent>().Select(result => result.CallId)];
+            HashSet<string> called = [.. messages.SelectMany(message => message.Contents).OfType<FunctionCallContent>().Select(call => call.CallId).Where(answered.Contains)];
+
+            List<ChatMessage> pairs = [];
+            foreach (ChatMessage message in messages)
+            {
+                List<AIContent> kept =
+                [
+                    .. message.Contents.Where(content => content switch
+                    {
+                        FunctionCallContent call => called.Contains(call.CallId),
+                        FunctionResultContent result => called.Contains(result.CallId),
+                        _ => false,
+                    }),
+                ];
+
+                if (kept.Count > 0)
+                {
+                    pairs.Add(new ChatMessage(message.Role, kept) { AuthorName = message.AuthorName });
+                }
+            }
+
+            return pairs;
+        }
+
         /// <summary>
         /// The whole reply a turn's run produced, every step's text in order.
         /// </summary>

@@ -2,28 +2,16 @@ using AgentCore.TestSupport;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
     /// Tools that belong to one conversation, offered to the runs that call delegates and to nothing else.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The compiled agent is a process singleton, so a tool that belongs to one conversation cannot be compiled
-    /// onto it. It travels on the turn instead, and the gate is the id of the delegating tool the run
-    /// sits under. A gate on the agent NAME would be wrong: <c>CompiledAgentRegistry</c> makes compiled
-    /// agents singletons, so two <c>kind: agent</c> declarations can name one agent and both would be
-    /// handed the tool.
-    /// </para>
-    /// <para>
-    /// Every test here runs offline: no network conversation and no API key.
-    /// </para>
-    /// </remarks>
     public sealed class DelegatedToolsTests
     {
         private const string DelegationYaml =

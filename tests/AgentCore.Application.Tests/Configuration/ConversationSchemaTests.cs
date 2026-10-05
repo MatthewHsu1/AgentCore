@@ -7,12 +7,6 @@ namespace AgentCore.Application.Tests.Configuration
     /// <summary>
     /// <c>providers.conversation</c> names the vendor that carries the conversation, and the limits of its socket.
     /// </summary>
-    /// <remarks>
-    /// The media plane is not <c>providers.speech</c>, which names recognition and synthesis one role
-    /// at a time, and it is not <c>providers.telephony</c>, which is conversation control. Section 8.2 asks a
-    /// document that writes a <c>providers:</c> section to name both the pipe and the ears, so the two
-    /// blocks are required together — and the speech block requires both of its own roles in turn.
-    /// </remarks>
     public sealed class ConversationSchemaTests
     {
         [Fact]
@@ -69,17 +63,37 @@ namespace AgentCore.Application.Tests.Configuration
             Assert.Contains("conversation", failure.Message, StringComparison.Ordinal);
         }
 
+        // answerSeconds and the vendor-owned live: block.
         [Fact]
-        public void AMissingSpeechBlockFailsTheLoad()
+        public void TheAnswerDeadlineAndTheVendorBlockBind()
+        {
+            AgentCoreConfiguration configuration = Load("""
+            providers:
+              conversation:
+                kind: openai-live
+                answerSeconds: 3
+                live:
+                  instructions: "Be brief."
+                  voice: marin
+            """);
+
+            ConversationProviderConfiguration conversation = configuration.Providers!.Conversation!;
+            Assert.Equal(3, conversation.AnswerSeconds);
+            Assert.Equal("Be brief.", conversation.Live.GetProperty("instructions").GetString());
+            Assert.Equal("marin", conversation.Live.GetProperty("voice").GetString());
+        }
+
+        [Fact]
+        public void AnAnswerDeadlineOfZeroFailsTheLoad()
         {
             ConfigurationLoadException failure = Assert.Throws<ConfigurationLoadException>(
                 () => Load("""
                 providers:
-                  conversation: { kind: telnyx-relay }
+                  conversation: { kind: openai-live, answerSeconds: 0 }
                 """));
 
             Assert.Equal(ConfigurationCheck.DocumentSchema, failure.Check);
-            Assert.Contains("speech", failure.Message, StringComparison.Ordinal);
+            Assert.Contains("answerSeconds", failure.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -182,11 +196,6 @@ namespace AgentCore.Application.Tests.Configuration
         /// <summary>Loads one <c>providers:</c> section under the smallest complete document header.</summary>
         /// <param name="providers">The <c>providers:</c> section, written at the document's own margin.</param>
         /// <returns>The loaded document.</returns>
-        /// <remarks>
-        /// Check 1 of section 8.5 is the only check <c>ConfigurationLoader.LoadYaml</c> runs, and the
-        /// document root requires <c>apiVersion</c>, <c>agents</c>, and <c>entries</c>. Every other test
-        /// in this folder loads the same way.
-        /// </remarks>
         private static AgentCoreConfiguration Load(string providers)
         {
             return ConfigurationLoader.LoadYaml(

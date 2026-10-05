@@ -38,7 +38,7 @@ namespace AgentCore.Domain.Audit
             {
                 // An empty value here is the one thing that cannot be true: every text hashes to 64
                 // characters, the empty string included, so an empty hash proves nothing and would leave
-                // the row unverifiable against store 1 forever.
+                // the row unverifiable against the message store forever.
                 RequireHash(AuditPayloadKeys.ReplyTextSha256, replyText, nameof(auditEvent));
             }
 
@@ -78,7 +78,7 @@ namespace AgentCore.Domain.Audit
                 }
 
                 // Section 11, item 6a: the event proves the text the caller ACTUALLY HEARD. The words
-                // are in store 1, where they stay erasable, so what is required here is the digest.
+                // are in the message store, where they stay erasable, so what is required here is the digest.
                 if (!auditEvent.Payload.TryGetValue(AuditPayloadKeys.UtteranceUntilInterruptSha256, out string? utterance))
                 {
                     throw new ArgumentException(

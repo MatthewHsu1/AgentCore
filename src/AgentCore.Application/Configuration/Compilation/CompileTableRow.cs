@@ -12,7 +12,7 @@ namespace AgentCore.Application.Configuration.Compilation
         /// <summary>Gets the <see cref="CompiledAgentShape"/> this row compiles.</summary>
         internal abstract CompiledAgentShape Shape { get; }
 
-        /// <summary>Gets whether the row answers its runs out of store 1 on its own session.</summary>
+        /// <summary>Gets whether the row answers its runs out of the conversation history on its own session.</summary>
         internal virtual bool SessionCarriesHistory => false;
 
         /// <summary>Builds the entry agent of one entry, and the stage table when the row has one.</summary>
@@ -25,7 +25,7 @@ namespace AgentCore.Application.Configuration.Compilation
         /// <param name="reusesGraphSession">
         /// <see langword="true"/> when a conversation on this entry keeps one MAF session across turns
         /// (<c>!SessionCarriesHistory &amp;&amp; HarnessStateKeys.Count &gt; 0</c>, the same test
-        /// <see cref="AgentCore.Application.Runtime.ConversationSession.ReusesGraphSession"/> runs). Only the graph rows read it.
+        /// <see cref="AgentCore.Application.Runtime.Session.ConversationSession.ReusesGraphSession"/> runs). Only the graph rows read it.
         /// </param>
         /// <returns>The agent a turn runs, and the agent id each <c>policy.stages</c> entry names.</returns>
         /// <exception cref="ConfigurationLoadException">The entry does not compile through this row.</exception>

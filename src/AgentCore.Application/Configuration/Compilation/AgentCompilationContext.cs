@@ -1,6 +1,7 @@
 using AgentCore.Application.Runtime.Compaction;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Evaluation;
+using AgentCore.Application.Hooks;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
@@ -46,7 +47,7 @@ namespace AgentCore.Application.Configuration.Compilation
         public PromptModerator? Moderation { get; init; }
 
         /// <summary>
-        /// Gets or sets the backing store of store 1, or <see langword="null"/> for memory.
+        /// Gets or sets the backing store of the conversation history, or <see langword="null"/> for memory.
         /// </summary>
         public IConversationStore? ConversationStore { get; init; }
 
@@ -72,8 +73,9 @@ namespace AgentCore.Application.Configuration.Compilation
         public ILoggerFactory? Loggers { get; init; }
 
         /// <summary>
-        /// Gets or sets the clock a <c>clock:</c> agent reads the date from, or <see langword="null"/>
-        /// for <see cref="TimeProvider.System"/>.
+        /// Gets or sets the compile's clock, or <see langword="null"/> for <see cref="TimeProvider.System"/>. A
+        /// <c>clock:</c> agent reads the date from it, and the hooks' gate deadlines, notice timeouts and idle
+        /// eviction run on its timers.
         /// </summary>
         public TimeProvider? Clock { get; init; }
 
@@ -88,6 +90,13 @@ namespace AgentCore.Application.Configuration.Compilation
         /// references against, or <see langword="null"/> to treat every such reference as unresolved.
         /// </summary>
         public ResolvedSecrets? Secrets { get; init; }
+
+        /// <summary>
+        /// Gets or sets the hooks every compiled agent runs, AgentCore's built-ins first, or <see langword="null"/>
+        /// for none. Gates compile into the agents from this list; a hook passed only to a
+        /// <see cref="Runtime.Session.ConversationSessionFactory"/> hears notices but runs no gate.
+        /// </summary>
+        public IReadOnlyList<AgentHook>? Hooks { get; init; }
 
         /// <summary>
         /// Gets or sets the compaction stages every agent runs.

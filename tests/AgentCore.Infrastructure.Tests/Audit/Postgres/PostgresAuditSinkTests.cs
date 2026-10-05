@@ -7,7 +7,7 @@ using Xunit;
 namespace AgentCore.Infrastructure.Tests.Audit.Postgres
 {
     /// <summary>
-    /// Store 3 in PostgreSQL.
+    /// The audit store in PostgreSQL.
     /// </summary>
     /// <remarks>
     /// These need a live PostgreSQL and skip without one — <see cref="PostgresFactAttribute"/> names the

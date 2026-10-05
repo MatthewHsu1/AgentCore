@@ -1,7 +1,10 @@
 using System.Net;
+using AgentCore.Application.Secrets;
+using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Tests.Fakes;
 using AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
+using AgentCore.TestSupport;
 using Xunit;
 
 namespace AgentCore.AspNetCore.Tests.Conversation
@@ -9,23 +12,6 @@ namespace AgentCore.AspNetCore.Tests.Conversation
     /// <summary>
     /// The one place the shipped vendor and the vendor-neutral route meet in a running host.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <c>ConversationRouteSelectionTests</c> proves the selection over fakes and names no vendor, which is
-    /// spec §12. <c>ConversationOptionsFromDocumentTests</c> proves
-    /// <c>TelnyxRelayConversationAdapter.BuildOptions</c> over a document. Neither of them runs
-    /// <c>TelnyxRelayConversationAdapter.Map</c>, and that method is the single executable line joining the
-    /// shipped vendor to the seam. This file is where it runs.
-    /// </para>
-    /// <para>
-    /// This file may name Telnyx freely: joining the real vendor to the real route is precisely what it
-    /// exists to prove, and a version of it written over a fake would prove nothing new.
-    /// </para>
-    /// <para>
-    /// It runs offline against a fake model. There is no Telnyx account, no network conversation, and no API
-    /// key here.
-    /// </para>
-    /// </remarks>
     public sealed class TelnyxRelayThroughTheConversationSeamTests
     {
         [Fact(Timeout = 30_000)]
@@ -38,9 +24,9 @@ namespace AgentCore.AspNetCore.Tests.Conversation
             await using TelnyxRelayHost host = await TelnyxRelayHost.StartThroughConversationSeamAsync(
                 TelnyxRelayTurnTests.PolicyYaml,
                 reply,
-                options => options.UseConversation(new TelnyxRelayConversationAdapter()));
+                options => options.UseConversation(TelnyxRelayHost.KeyedAdapter()));
 
-            HttpResponseMessage answer = await host.GetAsync(TelnyxRelayHost.MainConversation);
+            HttpResponseMessage answer = await host.GetAsync(TelnyxRelayHost.KeyedMainConversation);
 
             // 404 would mean MapCall mapped nothing, and every call to this deployment would be lost
             // with nothing to read. 400 is the relay's own HandleAsync refusing a request that is not a
@@ -48,6 +34,38 @@ namespace AgentCore.AspNetCore.Tests.Conversation
             // behind it is the Telnyx one.
             Assert.NotEqual(HttpStatusCode.NotFound, answer.StatusCode);
             Assert.Equal(HttpStatusCode.BadRequest, answer.StatusCode);
+        }
+
+        // Telnyx signs no relay socket, so the key in its URL is the only proof a caller is Telnyx.
+        [Theory(Timeout = 30_000)]
+        [InlineData(TelnyxRelayHost.MainConversation)]
+        [InlineData(TelnyxRelayHost.MainConversation + "?key=wrong")]
+        [InlineData(TelnyxRelayHost.MainConversation + "?key=relay-key-")]
+        public async Task ACallerWithoutTheRelayKeyIsRefusedBeforeTheRelayOrTheEntryGate(string route)
+        {
+            using FragmentingChatClient reply = new("hello");
+            EntryCounter entries = new();
+            await using TelnyxRelayHost host = await TelnyxRelayHost.StartThroughConversationSeamAsync(
+                TelnyxRelayTurnTests.PolicyYaml,
+                reply,
+                options => options.UseConversation(TelnyxRelayHost.KeyedAdapter()).UseHooks(entries));
+
+            HttpResponseMessage answer = await host.GetAsync(route);
+
+            Assert.Equal(HttpStatusCode.Unauthorized, answer.StatusCode);
+            Assert.Equal(0, entries.Count);
+        }
+
+        // A relay route with no key to check would be open to anyone, so the host does not start.
+        [Fact(Timeout = 30_000)]
+        public async Task AHostWhoseRelayHasNoKeyDoesNotStart()
+        {
+            using FragmentingChatClient reply = new("hello");
+
+            _ = await Assert.ThrowsAsync<SecretResolutionException>(() => TelnyxRelayHost.StartThroughConversationSeamAsync(
+                TelnyxRelayTurnTests.PolicyYaml,
+                reply,
+                options => options.UseConversation(new TelnyxRelayConversationAdapter(() => new MapSecretResolver()))));
         }
     }
 }

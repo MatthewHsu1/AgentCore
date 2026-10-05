@@ -12,7 +12,7 @@ using Xunit;
 namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
 {
     /// <summary>
-    /// Store 1 against store 3: what <see cref="PostgresConversationVerification.ReadSpokenTurnsAsync"/>
+    /// The conversation store against the audit store: what <see cref="PostgresConversationVerification.ReadSpokenTurnsAsync"/>
     /// rebuilds from the words, beside the hash the audit chain holds for them.
     /// </summary>
     public sealed class PostgresConversationVerificationTests : PostgresDatabaseTest
@@ -56,7 +56,7 @@ namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
             // Act
             IReadOnlyList<TranscriptTurnDigest> turns = await store.ReadSpokenTurnsAsync("C1", Token);
 
-            // Assert — what the nightly check does: hash the words store 1 holds, and compare.
+            // Assert — what the nightly check does: hash the words the conversation store holds, and compare.
             Assert.Equal(AuditHash.OfText(turns[0].Spoken).Value, turns[0].ReplyTextSha256);
         }
 
@@ -137,7 +137,43 @@ namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
             Assert.NotEqual(AuditHash.OfText(after.Spoken).Value, after.ReplyTextSha256);
         }
 
-        /// <summary>Writes a tool-calling turn to store 1 and its <c>turn.completed</c> row to store 3.</summary>
+        // A phone turn writes what the vendor's front voice said ahead of the caller's words; the chain hashes only
+        // the agent's reply, so the rebuild must leave those lines out, found by the author stored in the jsonb.
+        [PostgresFact]
+        public async Task ReadSpokenTurnsAsync_ATurnThatCarriesFrontVoiceLines_MatchesTheHashOfTheAgentsReplyOnly()
+        {
+            PostgresConversationStore store = await OpenAsync();
+            _ = await store.AppendAsync(
+                "C1",
+                [
+                    new ConversationMessageDraft(0, new ChatMessage(ChatRole.User, "do you know what day it is today"), "m0"),
+                    new ConversationMessageDraft(0, new ChatMessage(ChatRole.Assistant, "It's Wednesday.") { AuthorName = "front_voice" }, "m1"),
+                    new ConversationMessageDraft(0, new ChatMessage(ChatRole.User, "please end the call now"), "m2"),
+                    new ConversationMessageDraft(0, new ChatMessage(ChatRole.Assistant, "Today is Sunday. Goodbye!"), "m3"),
+                ],
+                cancellationToken: Token);
+            await new PostgresAuditSink(DataSource).AppendAsync(
+                new AuditEvent
+                {
+                    ConversationId = "C1",
+                    EventId = Guid.CreateVersion7(),
+                    Kind = AuditEventKind.TurnCompleted,
+                    OccurredAt = new DateTimeOffset(2026, 10, 4, 9, 0, 1, TimeSpan.Zero),
+                    TurnIndex = 0,
+                    Payload = new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        [AuditPayloadKeys.ReplyTextSha256] = AuditHash.OfText("Today is Sunday. Goodbye!").Value,
+                    },
+                },
+                Token);
+
+            TranscriptTurnDigest turn = Assert.Single(await store.ReadSpokenTurnsAsync("C1", Token));
+
+            Assert.Equal("Today is Sunday. Goodbye!", turn.Spoken);
+            Assert.Equal(AuditHash.OfText(turn.Spoken).Value, turn.ReplyTextSha256);
+        }
+
+        /// <summary>Writes a tool-calling turn to the conversation store and its <c>turn.completed</c> row to the audit store.</summary>
         private async Task<Guid> WriteToolCallingTurnAsync(
             PostgresConversationStore store, string conversationId, int turnIndex, string spoken, bool cited = false)
         {
@@ -190,8 +226,8 @@ namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
         }
 
         /// <summary>
-        /// Writes a two-step turn to store 1 — the tool announced on the same message as its call, then the
-        /// reply once the result is in — and its <c>turn.completed</c> row to store 3, hashed over both steps.
+        /// Writes a two-step turn to the conversation store — the tool announced on the same message as its call, then the
+        /// reply once the result is in — and its <c>turn.completed</c> row to the audit store, hashed over both steps.
         /// </summary>
         private async Task<Guid> WriteMultiStepTurnAsync(
             PostgresConversationStore store, string conversationId, int turnIndex, string announced, string spoken)

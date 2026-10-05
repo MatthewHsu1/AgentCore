@@ -1,5 +1,6 @@
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Hooks.Engine;
 using AgentCore.Application.Policy;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Transcript;
@@ -46,7 +47,7 @@ namespace AgentCore.Application.Configuration.Compilation
         }
 
         /// <summary>
-        /// Gets whether the row answers its runs out of store 1 on its own session, rather than the
+        /// Gets whether the row answers its runs out of the conversation history on its own session, rather than the
         /// request messages.
         /// </summary>
         internal bool SessionCarriesHistory => _row.SessionCarriesHistory;
@@ -83,9 +84,12 @@ namespace AgentCore.Application.Configuration.Compilation
         internal IReadOnlySet<string>? OutputAgents => _layers.OutputAgents;
 
         /// <summary>
-        /// Gets store 1 of every conversation this agent answers.
+        /// Gets the conversation history of every conversation this agent answers.
         /// </summary>
         internal AgentCoreChatHistoryProvider History => _document.History;
+
+        /// <summary>Gets the hooks this entry was compiled with.</summary>
+        internal HookRuntime Hooks => _document.Hooks;
 
         /// <summary>Gets the store this agent's conversations and every word of them are kept in.</summary>
         internal IConversationStore ConversationStore => _document.Conversations;

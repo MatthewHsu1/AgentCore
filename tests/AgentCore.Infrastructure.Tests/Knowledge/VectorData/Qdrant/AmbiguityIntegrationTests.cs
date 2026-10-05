@@ -3,7 +3,6 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.State;
 using AgentCore.Domain.Knowledge;
 using AgentCore.Infrastructure.Knowledge.VectorData.Qdrant;
@@ -14,35 +13,14 @@ using Microsoft.Extensions.AI;
 using Qdrant.Client;
 using Qdrant.Client.Grpc;
 using Xunit;
+using AgentCore.Application.Runtime.Clarification;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant
 {
     /// <summary>
-    /// Section 12's "probe -- against real Qdrant" list.
+    /// The ambiguity probe against a real Qdrant server.
     /// </summary>
-    /// <see cref="KnowledgeProviderFactory"/>, <see cref="Clarifications"/> and <see cref="ClarificationText"/>
-    /// are internal to <c>AgentCore.Application</c>, and this project carries no grant to reach them. Every
-    /// row here is instead driven through the same seam a production host uses: a real YAML document
-    /// compiled by <see cref="ConfigurationCompiler"/> with a real <see cref="QdrantKnowledgeStore"/> handed
-    /// in as <see cref="AgentCompilationContext.Knowledge"/>, and a real <see cref="ConversationSession"/> turn. The
-    /// turn's own "reply" model is a fake that calls the compiled agent's own <c>Search</c> tool with the
-    /// row's question, the way a model that needs the cards would; the framework's own tool-calling loop
-    /// then runs the real search with the running turn. Reading the tool's answer back off the transcript
-    /// is what keeps every row on the production path: the loop's own flow is only entered around
-    /// <c>ConversationSession</c>'s call into the reply model.
-    /// </para>
-    /// <para>
-    /// The store fuses a plain dense leg with a required-term leg by RRF (K49's amendment): a card the
-    /// required-term leg does not match can still surface through the dense leg alone, and
-    /// <c>QdrantKnowledgeStoreTests.SearchAsync_LookalikeIdentifier_RanksTheIdentifierCardFirst</c> already
-    /// pins that a matching identifier only lifts a card to the top rank, never excludes a non-matching
-    /// one. A required-term token therefore cannot isolate a single card from the shared corpus by itself;
-    /// the row that needs exactly one card (the two-machine card) combines a distinctive token with a
-    /// store <c>Limit</c> of 1, so only the fused winner survives. Every row that needs a card population
-    /// this shared fixture must not carry for every other row -- the company-wide card, the one-machine
-    /// multi-card union, and the empty-search row -- builds and drops its own small collection instead.
-    /// </para>
-    /// </remarks>
     public sealed class AmbiguityCorpusFixture : IAsyncLifetime
     {
         /// <summary>The id of the added card whose <c>facets.model</c> names two machines.</summary>
@@ -74,9 +52,9 @@ namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant
             Client = QdrantServer.CreateClient();
 
             // The 30-card synthetic corpus, unmodified, plus the multi-machine card the brief conversations for.
-            // Composing with KbShapedCorpus rather than inventing a second one: A4's own facet-read tests
+            // Composing with KbShapedCorpus rather than inventing a second one: the facet-read tests
             // already proved this corpus's payload shape works, and a wrong facet path is this design's
-            // own central failure mode (section 12), so reusing the shape that is already proven is the
+            // own central failure mode, so reusing the shape that is already proven is the
             // point. The "*" card lives in its own throwaway collection instead (see
             // CompanyWideQuestion_ExactlyOneMatchingCard_Answers_ProbeDoesNotRun): giving every card here
             // model: "*" would make it the only card any scope: { model: "*" } search could ever find,
@@ -185,7 +163,7 @@ namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant
 
         private const string NoticeSourceName = "agentcore:notice";
 
-        /// <summary>Two droppable-shaped facets: <c>model</c> (the one the probe drops) and the always-concrete <c>audience</c>, so K33 never blocks the drop.</summary>
+        /// <summary>Two droppable-shaped facets: <c>model</c> (the one the probe drops) and the always-concrete <c>audience</c>, so the probe is never skipped for having a single facet.</summary>
         private const string TwoFacetYaml =
             """
         apiVersion: agentcore/v1
@@ -225,7 +203,7 @@ namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant
             agent: only
         """;
 
-        /// <summary>One droppable-shaped facet only: dropping it would open the scope empty (K33).</summary>
+        /// <summary>One droppable-shaped facet only: dropping it would open the scope empty.</summary>
         private const string SingleFacetYaml =
             """
         apiVersion: agentcore/v1
@@ -273,18 +251,8 @@ namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant
 
         private readonly AmbiguityCorpusFixture _corpus = corpus;
 
-        // -----------------------------------------------------------------------------------------
-        // Section 12's twelve real-Qdrant rows.
-        // -----------------------------------------------------------------------------------------
 
         /// <summary>A company-wide question with exactly one matching card answers, and the probe does not run.</summary>
-        /// <remarks>
-        /// This card's own <c>facets.model</c> is the wildcard value, so a <c>scope: { model: "*" }</c>
-        /// search finds it under any query. It cannot live in the shared 31-card fixture: it would then be
-        /// the one card every other row's "unknown model" scope can always find too, since that scope
-        /// filter only ever admits a card whose own facet is literally "*". A throwaway collection, built
-        /// and dropped here, is what keeps this row's fact from leaking into every other one.
-        /// </remarks>
         [QdrantFact]
         public async Task CompanyWideQuestion_ExactlyOneMatchingCard_Answers_ProbeDoesNotRun()
         {
@@ -324,14 +292,6 @@ namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant
         }
 
         /// <summary>A question whose cards all belong to one machine produces the one-candidate confirm text, not "holds nothing".</summary>
-        /// <remarks>
-        /// §12's row names "cards", plural: several cards must actually reach the probe's union and
-        /// collapse to one value, not a single card standing in for the whole row (that shape is already
-        /// <c>KnowledgeProbeTests.K24_OneCardIsNeverASpread</c>'s job, at the unit level). Four cards, all
-        /// carrying <c>facets.model: ct900</c>, live in their own throwaway collection so the union is
-        /// exactly {ct900} by real collapsing over multiple cards, not because there was nothing else to
-        /// find.
-        /// </remarks>
         [QdrantFact]
         public async Task QuestionWhoseCardsAllBelongToOneMachine_ProducesTheOneCandidateConfirmText()
         {
@@ -414,7 +374,7 @@ namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant
             Assert.All(named.Results, r => Assert.Equal(NoticeSourceName, r.SourceName));
         }
 
-        /// <summary>A single-facet <c>fromState</c> deployment does not throw: the probe is skipped and the turn returns "holds nothing" (K33).</summary>
+        /// <summary>A single-facet <c>fromState</c> deployment does not throw: the probe is skipped and the turn returns "holds nothing".</summary>
         [QdrantFact]
         public async Task SingleFacetFromStateDeployment_DoesNotThrow_ProbeIsSkipped_HoldsNothing()
         {
@@ -423,14 +383,7 @@ namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant
             Assert.Contains("holds nothing", Assert.Single(client.Results).Text, StringComparison.Ordinal);
         }
 
-        /// <summary>An unscoped agent's empty search returns an empty list (§8 step 2).</summary>
-        /// <remarks>
-        /// An unscoped agent opens <c>WholeCorpus</c> -- no facets at all -- so the store's own filter is
-        /// empty and admits every point. Against the shared fixture that would always find something (the
-        /// closest card by dense rank, regardless of the query's own text, since a fixed test embedding
-        /// answers every query alike); a genuinely empty collection is what makes the search answer
-        /// nothing, and is the one true test of "empty", independent of ranking.
-        /// </remarks>
+        /// <summary>An unscoped agent's empty search returns an empty list.</summary>
         [QdrantFact]
         public async Task UnscopedAgent_EmptySearch_ReturnsAnEmptyList()
         {
@@ -452,14 +405,8 @@ namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant
 
         /// <summary>
         /// A probe that throws returns "holds nothing", logs its own event, and leaves the main search's
-        /// audit record intact (K32).
+        /// audit record intact.
         /// </summary>
-        /// <remarks>
-        /// The real store answers the main search; only the probe's own narrowed second search is a
-        /// synthetic throw, because the two searches share every scope facet but the one being dropped, so
-        /// there is no real Qdrant misconfiguration that fails one and not the other (verified by reading
-        /// <c>QdrantKnowledgeStore</c>'s filter construction before choosing this shape).
-        /// </remarks>
         [QdrantFact]
         public async Task ProbeThatThrows_ReturnsHoldsNothing_LogsItsOwnEvent_LeavesTheMainSearchAuditRecordIntact()
         {
@@ -483,9 +430,6 @@ namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant
             Assert.Empty(loggers.Of(12));
         }
 
-        // -----------------------------------------------------------------------------------------
-        // Helpers.
-        // -----------------------------------------------------------------------------------------
 
         private async Task<SearchCapturingChatClient> RunAsync(
             string yaml,
@@ -549,16 +493,8 @@ namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant
         /// <summary>
         /// Creates and fills one throwaway collection, already named by the caller, for one test. Used by
         /// the rows whose own card population must not be visible to any other row's search of the shared
-        /// fixture (see <see cref="AmbiguityCorpusFixture"/>'s remarks).
+        /// fixture.
         /// </summary>
-        /// <remarks>
-        /// The caller generates <paramref name="collection"/> and opens its own <c>try</c> **before**
-        /// calling this -- never the reverse. Collection creation, every index, and the upsert can each
-        /// throw against a live, sometimes-contended server, and if that happened inside an un-tried
-        /// helper the collection this conversation already created on the server would be orphaned with nothing
-        /// left to drop it. Creation, indexing and upsert all sit inside one <c>try</c>, with one
-        /// unconditional <c>DeleteCollectionAsync</c> in the caller's own <c>finally</c>.
-        /// </remarks>
         private async Task<QdrantKnowledgeStore> FillAdHocCollectionAsync(
             string collection, PointStruct[] points, bool scoped)
         {
@@ -589,7 +525,7 @@ namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant
 
         /// <summary>
         /// A knowledge store that answers the full-scope (main) search from a real backing store and
-        /// throws for any narrowed one -- the shape §8 step 4's own probe search takes once a facet is
+        /// throws for any narrowed one -- the shape the probe's own search takes once a facet is
         /// dropped. Used only for the row that needs the probe's own second search to fail.
         /// </summary>
         private sealed class ThrowingOnNarrowedScopePort : IKnowledgeRetrievalPort

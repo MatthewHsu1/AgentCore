@@ -2,12 +2,12 @@ using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Transcript
 {
-    /// <summary>One stored message of one conversation. It is one row of store 1.</summary>
+    /// <summary>One stored message of one conversation. It is one row of the message store.</summary>
     /// <param name="ConversationId">The conversation the message belongs to.</param>
     /// <param name="Ordinal">
     /// The message's position within the conversation. It is monotonic and never reused. It is not dense: an
     /// edit deletes the rows it replaces and the ordinals they held are not issued again, because
-    /// store 3 still holds audit rows against the turns those ordinals belonged to.
+    /// the audit store still holds audit rows against the turns those ordinals belonged to.
     /// </param>
     /// <param name="TurnIndex">The turn the message belongs to. It is the join to the audit chain.</param>
     /// <param name="Content">The message itself.</param>
@@ -25,7 +25,7 @@ namespace AgentCore.Application.Transcript
         /// <summary>
         /// Gets the last ordinal this row stands in for, when it is a summary the session wrote in place
         /// of every row at or below it; <see langword="null"/> for a row somebody said. Every consumer
-        /// read of store 1 leaves summary rows out; only the session's own read returns one.
+        /// read of the message store leaves summary rows out; only the session's own read returns one.
         /// </summary>
         public int? CoversUpTo { get; init; }
     }

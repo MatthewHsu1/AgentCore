@@ -1,4 +1,3 @@
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Transcript;
@@ -6,6 +5,7 @@ using AgentCore.TestSupport;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 
 namespace AgentCore.Application.Tests.Runtime
 {
@@ -17,7 +17,7 @@ namespace AgentCore.Application.Tests.Runtime
     {
         private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-        // The layer's remarks: a nested run shares its parent's turn but never seals it.
+        // A nested run shares its parent's turn but never seals it.
         [Fact]
         public async Task ANestedRun_PassesStraightThrough_AndLeavesTheParentTurnUnsealed()
         {
@@ -41,7 +41,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.True(o.Turn.Slot.TrySeal(out _));
         }
 
-        // Section 8.7, row six: a fault above every fallback still ends in a turn sealed with that fault, and the
+        // A fault above every fallback still ends in a turn sealed with that fault, and the
         // reader's stream ends without it.
         [Fact]
         public async Task AFaultAboveEveryFallback_IsSealedAsAFault_AndTheReaderSeesNoException()
@@ -65,7 +65,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(["hi", "Hel", "fallback"], Texts(o.Store.Rows.Select(row => row.Content)));
         }
 
-        // Design row W06: a reader that stops reading disposes the layer's stream, and the layer disposes the run
+        // A reader that stops reading disposes the layer's stream, and the layer disposes the run
         // beneath it rather than leaving it suspended.
         [Fact]
         public async Task AReaderThatStopsReading_ClosesTheRunBeneathTheLayer()

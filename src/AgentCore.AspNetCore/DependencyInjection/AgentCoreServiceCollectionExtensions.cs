@@ -7,10 +7,13 @@ using AgentCore.Application.Ports;
 using AgentCore.AspNetCore.Conversation;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.AspNetCore.Sessions;
+using AgentCore.AspNetCore.Vendors.OpenAiLive;
 using Microsoft.Agents.AI.Hosting;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.WebSockets;
 using Microsoft.Extensions.DependencyInjection;
+using AgentCore.AspNetCore.Voice.Routing;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
@@ -69,6 +72,10 @@ namespace AgentCore.AspNetCore.DependencyInjection
 
             _ = services.AddHostedService<ConversationSweeper>();
 
+            // after the boot service: its StartAsync runs once the boot (StartingAsync) is done
+            _ = services.AddSingleton<OpenAiLiveCalls>();
+            _ = services.AddHostedService(provider => provider.GetRequiredService<OpenAiLiveCalls>());
+
             _ = services.AddSingleton(Boot(boot => boot.Telemetry!));
             _ = services.AddSingleton(Boot(boot => boot.Knowledge!));
             _ = services.AddSingleton(Boot(boot => boot.Blobs!));
@@ -78,6 +85,13 @@ namespace AgentCore.AspNetCore.DependencyInjection
             services.TryAddSingleton(provider =>
                 provider.GetRequiredService<IOptions<AgentCoreOptions>>().Value.TimeProvider
                 ?? TimeProvider.System);
+
+            // The call route requires this scheme. It never becomes the default, so a host's own sign-in stays in charge
+            // of every other route. Registered after the clock: AddAuthentication registers the system clock if none is,
+            // and would win over AgentCoreOptions.TimeProvider.
+            _ = services.AddAuthentication()
+                .AddScheme<AuthenticationSchemeOptions, CallerAuthenticationHandler>(ConversationEndpointRouteBuilderExtensions.CallerScheme, configureOptions: null);
+            _ = services.AddAuthorization();
 
             services.TryAddSingleton(provider =>
                 provider.GetRequiredService<IOptions<AgentCoreOptions>>().Value.Cache

@@ -39,7 +39,7 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
             }
 
             return await GetAsync(conversationId, cancellationToken).ConfigureAwait(false)
-                ?? throw new InvalidOperationException($"Store 0 lost conversation '{conversationId}' between its write and its read.");
+                ?? throw new InvalidOperationException($"The conversation store lost conversation '{conversationId}' between its write and its read.");
         }
 
         /// <inheritdoc />
@@ -268,6 +268,22 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
             CancellationToken cancellationToken = default)
         {
             return _words.AppendAsync(conversationId, messages, state, cancellationToken);
+        }
+
+        /// <inheritdoc />
+        public ValueTask SaveStateAsync(
+            string conversationId, ConversationSessionState state, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(conversationId);
+            ArgumentNullException.ThrowIfNull(state);
+
+            NpgsqlParameter parameter = new()
+            {
+                NpgsqlDbType = NpgsqlDbType.Jsonb,
+                Value = JsonSerializer.Serialize(state, ConversationStateJson.Options),
+            };
+
+            return AmendAsync(SaveStateSql, conversationId, parameter, cancellationToken);
         }
 
         /// <inheritdoc />

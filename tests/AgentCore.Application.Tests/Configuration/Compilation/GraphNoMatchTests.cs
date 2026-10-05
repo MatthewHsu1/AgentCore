@@ -3,31 +3,21 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.State;
 using AgentCore.Application.Tests.Fakes;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
 using AgentCore.Domain;
+using AgentCore.Application.Runtime.Agents;
+using AgentCore.Application.Runtime.Session;
+using AgentCore.Application.Runtime.Turn;
 
 namespace AgentCore.Application.Tests.Configuration.Compilation
 {
     /// <summary>
-    /// Row 4 of the section 8.2 compile table, where no edge guard is true.
+    /// A graph where no edge guard is true.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// A stage says <c>onNoMatch: error</c>, and a graph node has no such key. Measured on
-    /// <c>Microsoft.Agents.AI.Workflows</c> 1.17.0: a run whose outgoing guards are all false ends at
-    /// idle, <c>InProcessRunner</c> raises no exception, and the <c>AsAIAgent()</c> wrapper emits no
-    /// update. The caller therefore reads an empty run and no error, which is the silent graph failure
-    /// section 8.2 refuses to ship.
-    /// </para>
-    /// <para>
-    /// Every test here runs offline. There is no network conversation and no API key in this file.
-    /// </para>
-    /// </remarks>
     public sealed class GraphNoMatchTests
     {
         /// <summary>The text the one output node produces when the run reaches it.</summary>
@@ -139,7 +129,7 @@ namespace AgentCore.Application.Tests.Configuration.Compilation
 
             TurnResult turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
 
-            // Section 8.7, sixth row. The run throws, the turn speaks the fallback, and the conversation lives.
+            // The run throws, the turn speaks the fallback, and the conversation lives.
             // A live conversation therefore does not change: only a host that runs the compiled agent itself
             // reads the exception.
             Assert.Equal(ConversationSession.FallbackReply, turn.ReplyText);

@@ -1,7 +1,7 @@
 namespace AgentCore.Application.Transcript
 {
     /// <summary>
-    /// The store 1 writes of one session that the store did not take, since the session last caught up with it.
+    /// The message store writes of one session that the store did not take, since the session last caught up with it.
     /// </summary>
     /// <remarks>
     /// A catch-up clears the losses counted up to the mark it read before its store read, not every loss: a write the

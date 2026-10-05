@@ -5,11 +5,21 @@ namespace AgentCore.AspNetCore.Tests.Fakes
     /// <summary>Calls the first tool it is offered, once, then answers in words.</summary>
     internal sealed class GatedToolCallingChatClient : IChatClient
     {
+        private int _requests;
+
+        /// <summary>Gets a task that completes once a second request reached the model.</summary>
+        public TaskCompletionSource SecondRequest { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
+            if (Interlocked.Increment(ref _requests) == 2)
+            {
+                _ = SecondRequest.TrySetResult();
+            }
+
             await Task.Yield();
 
             bool alreadyCalled = messages.Any(message => message.Contents.OfType<FunctionResultContent>().Any());

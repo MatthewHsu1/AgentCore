@@ -1,11 +1,13 @@
 using System.Text.Json.Nodes;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Conversation.Memory;
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Hooks.Notices;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Transcript;
+using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Transcript.ConversationSessionResumeTestSupport;
 
 namespace AgentCore.Application.Tests.Transcript
@@ -34,7 +36,7 @@ namespace AgentCore.Application.Tests.Transcript
             // StageBefore, and not Stage. The stage is restored when the session OPENS and the session
             // opens on the first turn, so the restored stage is the one that turn spoke in, and 'intake'
             // is what a session that forgot would report. Reading Stage after the turn would prove
-            // nothing: this document's only guard reads the reserved turnIndex slot, which store 1
+            // nothing: this document's only guard reads the reserved turnIndex slot, which the message store
             // restores off the words on its own, so even a session that remembered nothing would land in
             // 'help' by the end of the turn.
             Assert.Equal("help", resumed.LastTurn!.StageBefore);
@@ -108,8 +110,8 @@ namespace AgentCore.Application.Tests.Transcript
                 TestContext.Current.CancellationToken);
 
             using ScriptedChatClient reply = new("sure");
-            RecordingObserver observer = new();
-            ConversationSession resumed = CreateSession(StagedYaml, reply, store, "C-drift", observer);
+            RecordingHook hook = new();
+            ConversationSession resumed = CreateSession(StagedYaml, reply, store, "C-drift", hook);
             _ = await resumed.RunTurnAsync("still there?", TestContext.Current.CancellationToken);
 
             Assert.Equal(5L, resumed.State.Read("turnsTaken")!.GetValue<long>());
@@ -117,10 +119,11 @@ namespace AgentCore.Application.Tests.Transcript
 
             // Dropped, and said so. A document change that quietly costs a conversation one slot is a change
             // nobody can price afterwards, so the slot that went is named in the fact.
-            ConversationEvent dropped = Assert.Single(observer.Events, fact => fact.Kind == ConversationEventKind.StateRestorePartial);
+            await resumed.FlushNoticesAsync();
+            Fault dropped = Assert.Single(hook.Of<Fault>(), fault => fault.Kind == FaultKind.StateRestorePartial);
             Assert.Equal(
                 "the document no longer declares the slot 'retired'.",
-                dropped.Payload[ConversationEventPayloadKeys.Reason]);
+                dropped.Message);
         }
 
         [Fact]
@@ -144,8 +147,8 @@ namespace AgentCore.Application.Tests.Transcript
                 TestContext.Current.CancellationToken);
 
             using ScriptedChatClient reply = new("sure");
-            RecordingObserver observer = new();
-            ConversationSession resumed = CreateSession(StagedYaml, reply, store, "C-retyped", observer);
+            RecordingHook hook = new();
+            ConversationSession resumed = CreateSession(StagedYaml, reply, store, "C-retyped", hook);
             _ = await resumed.RunTurnAsync("still there?", TestContext.Current.CancellationToken);
 
             // Back to the declared default, and then this turn's own increment.
@@ -153,10 +156,11 @@ namespace AgentCore.Application.Tests.Transcript
 
             // The other half of what TryWrite answers false for. An operator fixes a retyped slot and a
             // deleted slot differently, so the two reasons have to read differently.
-            ConversationEvent dropped = Assert.Single(observer.Events, fact => fact.Kind == ConversationEventKind.StateRestorePartial);
+            await resumed.FlushNoticesAsync();
+            Fault dropped = Assert.Single(hook.Of<Fault>(), fault => fault.Kind == FaultKind.StateRestorePartial);
             Assert.Equal(
                 "the slot 'turnsTaken' no longer takes the value it was stored with.",
-                dropped.Payload[ConversationEventPayloadKeys.Reason]);
+                dropped.Message);
         }
 
         [Fact]
@@ -165,7 +169,7 @@ namespace AgentCore.Application.Tests.Transcript
             InMemoryConversationStore store = new();
             _ = await store.CreateAsync("C-reserved", TestContext.Current.CancellationToken);
 
-            // No writer produces this, but the blob is arbitrary JSON out of store 0 and a host can hand
+            // No writer produces this, but the blob is arbitrary JSON out of the conversation store and a host can hand
             // one in directly. StateDocument.TryWrite THROWS on a reserved slot rather than answering
             // false, so a Restore that just asked it would take the conversation down on its first turn.
             _ = await store.AppendAsync(
@@ -183,8 +187,8 @@ namespace AgentCore.Application.Tests.Transcript
                 TestContext.Current.CancellationToken);
 
             using ScriptedChatClient reply = new("sure");
-            RecordingObserver observer = new();
-            ConversationSession resumed = CreateSession(StagedYaml, reply, store, "C-reserved", observer);
+            RecordingHook hook = new();
+            ConversationSession resumed = CreateSession(StagedYaml, reply, store, "C-reserved", hook);
 
             _ = await resumed.RunTurnAsync("still there?", TestContext.Current.CancellationToken);
 
@@ -192,10 +196,11 @@ namespace AgentCore.Application.Tests.Transcript
             Assert.NotNull(resumed.LastTurn);
             Assert.Equal(5L, resumed.State.Read("turnsTaken")!.GetValue<long>());
 
-            ConversationEvent dropped = Assert.Single(observer.Events, fact => fact.Kind == ConversationEventKind.StateRestorePartial);
+            await resumed.FlushNoticesAsync();
+            Fault dropped = Assert.Single(hook.Of<Fault>(), fault => fault.Kind == FaultKind.StateRestorePartial);
             Assert.Equal(
                 "the slot 'stage' is reserved, and a reserved slot is never restored.",
-                dropped.Payload[ConversationEventPayloadKeys.Reason]);
+                dropped.Message);
         }
 
         [Fact]
@@ -219,8 +224,8 @@ namespace AgentCore.Application.Tests.Transcript
                 TestContext.Current.CancellationToken);
 
             using ScriptedChatClient reply = new("sure");
-            RecordingObserver observer = new();
-            ConversationSession resumed = CreateSession(StagedYaml, reply, store, "C-future", observer);
+            RecordingHook hook = new();
+            ConversationSession resumed = CreateSession(StagedYaml, reply, store, "C-future", hook);
 
             _ = await resumed.RunTurnAsync("still there?", TestContext.Current.CancellationToken);
 
@@ -229,11 +234,12 @@ namespace AgentCore.Application.Tests.Transcript
             Assert.Equal("intake", resumed.LastTurn!.StageBefore);
             Assert.Equal(1L, resumed.State.Read("turnsTaken")!.GetValue<long>());
 
-            ConversationEvent dropped = Assert.Single(observer.Events, fact => fact.Kind == ConversationEventKind.StateRestorePartial);
+            await resumed.FlushNoticesAsync();
+            Fault dropped = Assert.Single(hook.Of<Fault>(), fault => fault.Kind == FaultKind.StateRestorePartial);
             Assert.Equal(
                 $"the stored state is version {ConversationSessionState.CurrentVersion + 1} "
                     + $"and this build writes {ConversationSessionState.CurrentVersion}.",
-                dropped.Payload[ConversationEventPayloadKeys.Reason]);
+                dropped.Message);
         }
 
         [Fact]
@@ -249,11 +255,11 @@ namespace AgentCore.Application.Tests.Transcript
                 TestContext.Current.CancellationToken);
 
             using ScriptedChatClient reply = new("sure");
-            RecordingObserver observer = new();
+            RecordingHook hook = new();
 
             // OneAgentYaml declares no policy: at all, which is the shape a document takes when its
             // policy section is removed between one session of a conversation and the next.
-            ConversationSession resumed = CreateSession(OneAgentYaml, reply, store, "C-nopolicy", observer);
+            ConversationSession resumed = CreateSession(OneAgentYaml, reply, store, "C-nopolicy", hook);
 
             _ = await resumed.RunTurnAsync("still there?", TestContext.Current.CancellationToken);
 
@@ -261,10 +267,11 @@ namespace AgentCore.Application.Tests.Transcript
             // reserved slot anyway would hand the guards and the audit chain a stage nothing is in.
             Assert.Equal(string.Empty, resumed.Stage);
 
-            ConversationEvent dropped = Assert.Single(observer.Events, fact => fact.Kind == ConversationEventKind.StateRestorePartial);
+            await resumed.FlushNoticesAsync();
+            Fault dropped = Assert.Single(hook.Of<Fault>(), fault => fault.Kind == FaultKind.StateRestorePartial);
             Assert.Equal(
                 "the entry declares no policy, so the stage 'intake' has nowhere to go.",
-                dropped.Payload[ConversationEventPayloadKeys.Reason]);
+                dropped.Message);
         }
 
         [Fact]
@@ -303,8 +310,8 @@ namespace AgentCore.Application.Tests.Transcript
                 TestContext.Current.CancellationToken);
 
             using ScriptedChatClient reply = new("sure");
-            RecordingObserver observer = new();
-            ConversationSession resumed = CreateSession(StagedYaml, reply, store, "C-nostage", observer);
+            RecordingHook hook = new();
+            ConversationSession resumed = CreateSession(StagedYaml, reply, store, "C-nostage", hook);
 
             _ = await resumed.RunTurnAsync("still there?", TestContext.Current.CancellationToken);
 
@@ -313,9 +320,10 @@ namespace AgentCore.Application.Tests.Transcript
             Assert.NotNull(resumed.LastTurn);
             Assert.Equal("intake", resumed.LastTurn!.StageBefore);
 
-            ConversationEvent dropped = Assert.Single(observer.Events, fact => fact.Kind == ConversationEventKind.StateRestorePartial);
+            await resumed.FlushNoticesAsync();
+            Fault dropped = Assert.Single(hook.Of<Fault>(), fault => fault.Kind == FaultKind.StateRestorePartial);
             Assert.Contains(
-                "a-stage-nobody-declares", dropped.Payload[ConversationEventPayloadKeys.Reason], StringComparison.Ordinal);
+                "a-stage-nobody-declares", dropped.Message, StringComparison.Ordinal);
         }
 
         [Fact]

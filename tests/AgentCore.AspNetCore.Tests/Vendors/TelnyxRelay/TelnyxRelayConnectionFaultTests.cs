@@ -3,7 +3,6 @@ using AgentCore.Application.Audit;
 using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Sessions.Memory;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.AspNetCore.Tests.Fakes;
@@ -12,6 +11,7 @@ using AgentCore.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
 {
@@ -103,7 +103,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
             Assert.False(fault.Observed.IsCompleted, "a close on a socket already aborted was logged as a fault.");
         }
 
-        // P7x: the relay stops reading, so a reply fills the outbound queue, and then the relay drops. Teardown must not
+        // The relay stops reading, so a reply fills the outbound queue, and then the relay drops. Teardown must not
         // wait on a speech blocked on that queue: the socket is gone and nothing queued can be sent. The voice clock is
         // fake, so the interruption backstop never frees it; only the real close timeout would.
         [Fact(Timeout = 30_000)]
@@ -135,7 +135,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
             Assert.Equal("caller.hangup", await EndReasonAsync(harness, "conversation-stalled-drop"));
         }
 
-        // Section 7.1: teardown never throws out of the request handler, so a close that fails still ends the conversation.
+        // Teardown never throws out of the request handler, so a close that fails still ends the conversation.
         [Fact(Timeout = 30_000)]
         public async Task ACloseThatThrows_StillEndsTheConversationAndReleasesItsSession()
         {

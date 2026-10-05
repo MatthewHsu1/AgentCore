@@ -1,3 +1,5 @@
+using AgentCore.Application.Hooks;
+using AgentCore.Application.Tests.Audit;
 using AgentCore.TestSupport;
 using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Configuration.Compilation;
@@ -6,7 +8,6 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Evaluation;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Evaluation.Fakes;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Domain.Audit;
@@ -14,20 +15,14 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
 using AgentCore.Domain;
+using AgentCore.Application.Runtime.Session;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
     /// Every audible turn is an ordinary successful run.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// R1, R2 and R3 are two pipeline layers: <c>ModerationAgent</c> refuses a flagged turn before the model
-    /// runs, and <c>FallbackAgent</c> answers a run that threw or produced no text. Both report what they did
-    /// on a <c>TurnDisposition</c>, and the turn loop reads it to raise the turn's rows.
-    /// </para>
-    /// <para>Every test here runs offline. There is no network conversation and no API key in this file.</para>
-    /// </remarks>
     public sealed class TurnPipelineTests
     {
         private const string RefusalReply = "I am sorry. I cannot help with that request.";
@@ -62,21 +57,16 @@ namespace AgentCore.Application.Tests.Runtime
             agent: only
         """;
 
-        // -------------------------------------------------------------------------------------------
-        // R3 — moderation judges the caller, and a flagged turn never reaches the model.
-        // -------------------------------------------------------------------------------------------
         [Fact]
         public async Task Run_FlaggedInput_CompletesWithRefusalReply()
         {
-            // Arrange.
             using SequencedChatClient model = new("never spoken");
             ConversationSession session = Build(PlainYaml, model, moderation: ScriptedModerationEvaluator.Flagging("hate"))
                 .Create("conversation-1");
 
-            // Act.
             TurnResult turn = await session.RunTurnAsync("...", TestContext.Current.CancellationToken);
 
-            // Assert. The run succeeded, so nothing threw and the turn is not a failure.
+            // The run succeeded, so nothing threw and the turn is not a failure.
             Assert.Equal(RefusalReply, turn.ReplyText);
             Assert.Null(turn.Failure);
             Assert.Equal(0, model.Calls);
@@ -85,19 +75,17 @@ namespace AgentCore.Application.Tests.Runtime
         [Fact]
         public async Task RunStreaming_FlaggedInput_CompletesWithRefusalReply()
         {
-            // Arrange.
             using SequencedChatClient model = new("never spoken");
             ConversationSession session = Build(PlainYaml, model, moderation: ScriptedModerationEvaluator.Flagging("hate"))
                 .Create("conversation-1");
 
-            // Act. The refusal arrives on the ordinary stream path, not on a branch of its own.
+            // The refusal arrives on the ordinary stream path, not on a branch of its own.
             List<string> spoken = [];
             await foreach (ChatResponseUpdate update in session.RunTurnStreamingAsync("...", TestContext.Current.CancellationToken))
             {
                 spoken.Add(update.Text);
             }
 
-            // Assert.
             Assert.Equal(RefusalReply, string.Concat(spoken));
             Assert.Equal(0, model.Calls);
         }
@@ -105,33 +93,27 @@ namespace AgentCore.Application.Tests.Runtime
         [Fact]
         public async Task Run_FlaggedInput_InvokesNoTools()
         {
-            // Arrange. The model would call the tool if it ever ran.
+            // The model would call the tool if it ever ran.
             using ToolCallingChatClient model = new("never spoken");
             StubToolBuilder tools = new(/*lang=json,strict*/ """{ "status": "shipped" }""");
             ConversationSession session = Build(ToolYaml, model, tools: tools.Create, moderation: ScriptedModerationEvaluator.Flagging("hate"))
                 .Create("conversation-1");
 
-            // Act.
             _ = await session.RunTurnAsync("...", TestContext.Current.CancellationToken);
 
-            // Assert. The refusal is returned above the function-invoking loop, so no tool ran.
+            // The refusal is returned above the function-invoking loop, so no tool ran.
             Assert.Empty(model.Called);
         }
 
-        // -------------------------------------------------------------------------------------------
-        // R1 and R2 — a failed turn and a quiet turn both speak the fallback.
-        // -------------------------------------------------------------------------------------------
         [Fact]
         public async Task Run_ModelThrows_CompletesWithFallbackReply()
         {
-            // Arrange.
             using ThrowingChatClient model = new(new InvalidOperationException("the vendor is down"));
             ConversationSession session = Build(PlainYaml, model).Create("conversation-1");
 
-            // Act. Nothing escapes: the layer below the agent caught it.
+            // Nothing escapes: the layer below the agent caught it.
             TurnResult turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
 
-            // Assert.
             Assert.Equal(ConversationSession.FallbackReply, turn.ReplyText);
             Assert.NotNull(turn.Failure);
             Assert.Contains("the vendor is down", turn.Failure, StringComparison.Ordinal);
@@ -141,22 +123,20 @@ namespace AgentCore.Application.Tests.Runtime
         [Fact]
         public async Task Run_EmptyModelReply_CompletesWithFallbackReply()
         {
-            // Arrange. Request 41 goes out with no tools and returns quietly.
+            // Request 41 goes out with no tools and returns quietly.
             using SequencedChatClient model = new("   ");
             ConversationSession session = Build(PlainYaml, model).Create("conversation-1");
 
-            // Act.
             TurnResult turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
 
-            // Assert.
             Assert.Equal(ConversationSession.FallbackReply, turn.ReplyText);
-            Assert.Equal(ConversationSession.EmptyReplyReason, turn.Failure);
+            Assert.Equal(TurnFailureReasons.EmptyReply, turn.Failure);
         }
 
         [Fact]
         public async Task Run_ModerationEndpointDown_RunsTurnAndReportsUnavailable()
         {
-            // Arrange. A vendor outage must not refuse every caller on a support line.
+            // A vendor outage must not refuse every caller on a support line.
             InMemoryAuditSink sink = new();
             using SequencedChatClient model = new("the ordinary reply");
             ConversationSession session = Build(
@@ -166,32 +146,26 @@ namespace AgentCore.Application.Tests.Runtime
                     moderation: ScriptedModerationEvaluator.Throwing(new InvalidOperationException("boom")))
                 .Create("conversation-1");
 
-            // Act.
             TurnResult turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
 
-            // Assert. The turn ran unchecked rather than being refused.
+            // The turn ran unchecked rather than being refused.
             Assert.Equal("the ordinary reply", turn.ReplyText);
             Assert.Equal(1, model.Calls);
-            Assert.DoesNotContain(sink.EventsOf("conversation-1"), entry => entry.Kind == AuditEventKind.PromptFlagged);
+            Assert.DoesNotContain(await session.RowsAsync(sink), entry => entry.Kind == AuditEventKind.PromptFlagged);
         }
 
-        // -------------------------------------------------------------------------------------------
-        // The chain is unchanged. The layers moved; the rows did not.
-        // -------------------------------------------------------------------------------------------
         [Fact]
         public async Task Run_FlaggedOutcome_RaisesSameAuditRowsAsBefore()
         {
-            // Arrange.
             InMemoryAuditSink sink = new();
             ConversationSession session = Build(PlainYaml, new SequencedChatClient("never spoken"), sink: sink,
                 moderation: ScriptedModerationEvaluator.Flagging("violence", "harassment")).Create("conversation-1");
 
-            // Act.
             _ = await session.RunTurnAsync("...", TestContext.Current.CancellationToken);
 
-            // Assert. conversation.started, prompt.flagged, turn.completed — the flag still precedes the turn
+            // conversation.started, prompt.flagged, turn.completed — the flag still precedes the turn
             // event, because the verdict is known before the model runs.
-            IReadOnlyList<AuditEvent> events = sink.EventsOf("conversation-1");
+            IReadOnlyList<AuditEvent> events = await session.RowsAsync(sink);
             Assert.Equal(
                 [AuditEventKind.ConversationStarted, AuditEventKind.PromptFlagged, AuditEventKind.TurnCompleted],
                 events.Select(entry => entry.Kind));
@@ -201,37 +175,30 @@ namespace AgentCore.Application.Tests.Runtime
         [Fact]
         public async Task Run_ThrownOutcome_WritesNoToolFailedRow()
         {
-            // Arrange.
             InMemoryAuditSink sink = new();
             using ThrowingChatClient model = new(new InvalidOperationException("the vendor is down"));
             ConversationSession session = Build(PlainYaml, model, sink: sink).Create("conversation-1");
 
-            // Act.
             TurnResult turn = await session.RunTurnAsync("hello", TestContext.Current.CancellationToken);
 
-            // Assert. The model threw, not a tool, so the turn fails as a run fault and names no tool.
-            IReadOnlyList<AuditEvent> events = sink.EventsOf("conversation-1");
+            // The model threw, not a tool, so the turn fails as a run fault and names no tool.
+            IReadOnlyList<AuditEvent> events = await session.RowsAsync(sink);
             Assert.Equal(
                 [AuditEventKind.ConversationStarted, AuditEventKind.TurnCompleted],
                 events.Select(entry => entry.Kind));
             Assert.Equal("the turn's run faulted, so it spoke the fallback. the vendor is down", turn.Failure);
         }
 
-        // -------------------------------------------------------------------------------------------
-        // Where the marker is readable. The read site differs by run shape, and that is measured.
-        // -------------------------------------------------------------------------------------------
         [Fact]
         public async Task Run_BufferedTurn_TurnDispositionReadableOnResponse()
         {
-            // Arrange.
             using SequencedChatClient model = new("the ordinary reply");
             CompiledAgent compiled = Compile(PlainYaml, model, out _, moderation: ScriptedModerationEvaluator.Clean());
 
-            // Act.
             AgentResponse response = await compiled.TurnAgent.RunAsync(
                 "hello", cancellationToken: TestContext.Current.CancellationToken);
 
-            // Assert. The marker rides the run itself, so nothing about the reply is disturbed.
+            // The marker rides the run itself, so nothing about the reply is disturbed.
             AdditionalPropertiesDictionary? properties = response.AdditionalProperties;
             Assert.NotNull(properties);
             Assert.True(AdditionalPropertiesExtensions.TryGetValue(properties, out TurnDisposition? disposition));
@@ -241,11 +208,9 @@ namespace AgentCore.Application.Tests.Runtime
         [Fact]
         public async Task RunStreaming_CleanTurn_MarkerOnLeadingUpdateAddsNoText()
         {
-            // Arrange.
             using SequencedChatClient model = new("the ordinary reply");
             CompiledAgent compiled = Compile(PlainYaml, model, out _, moderation: ScriptedModerationEvaluator.Clean());
 
-            // Act.
             List<AgentResponseUpdate> updates = [];
             await foreach (AgentResponseUpdate update in compiled.TurnAgent.RunStreamingAsync(
                 "hello", cancellationToken: TestContext.Current.CancellationToken))
@@ -253,7 +218,7 @@ namespace AgentCore.Application.Tests.Runtime
                 updates.Add(update);
             }
 
-            // Assert. The marker rides an update with empty contents, so the caller's audio is untouched.
+            // The marker rides an update with empty contents, so the caller's audio is untouched.
             Assert.Equal("the ordinary reply", string.Concat(updates.Select(update => update.Text)));
             Assert.Contains(
                 updates,
@@ -261,22 +226,18 @@ namespace AgentCore.Application.Tests.Runtime
                     && AdditionalPropertiesExtensions.Contains<TurnDisposition>(properties));
         }
 
-        // -------------------------------------------------------------------------------------------
-        // The layers wrap the agent a TURN runs, and never a graph node.
-        // -------------------------------------------------------------------------------------------
         [Fact]
         public async Task Run_GraphRow_ModeratesTheCallerOnceAndNotOncePerNode()
         {
-            // Arrange. Two nodes run for one turn.
+            // Two nodes run for one turn.
             using SequencedChatClient researcher = new("Let me check the order system.");
             using SequencedChatClient responder = new("Order 41 ships Friday.");
             ScriptedModerationEvaluator endpoint = ScriptedModerationEvaluator.Clean();
             ConversationSession session = BuildGraph(researcher, responder, endpoint).Create("conversation-1");
 
-            // Act.
             _ = await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
 
-            // Assert. R3 is a rule about a turn, and one turn is one run of one agent on every row.
+            // Moderation is a rule about a turn, and one turn is one run of one agent on every row.
             Assert.Equal(["where is my order"], endpoint.Moderated);
             Assert.Equal(1, researcher.Calls);
             Assert.Equal(1, responder.Calls);
@@ -285,25 +246,21 @@ namespace AgentCore.Application.Tests.Runtime
         [Fact]
         public async Task Run_GraphRowWhereNoNodeSpeaks_SpeaksTheFallbackOnceForTheTurn()
         {
-            // Arrange. Every node runs and none of them produces a word.
+            // Every node runs and none of them produces a word.
             using SequencedChatClient researcher = new("   ");
             using SequencedChatClient responder = new("   ");
             ConversationSession session = BuildGraph(researcher, responder, moderation: null).Create("conversation-1");
 
-            // Act.
             TurnResult turn = await session.RunTurnAsync("where is my order", TestContext.Current.CancellationToken);
 
-            // Assert. R2 is a rule about a turn: one fallback is spoken to the caller, and none of it is
+            // The fallback is a rule about a turn: one fallback is spoken to the caller, and none of it is
             // fed back into the graph as a node reply.
             Assert.Equal(ConversationSession.FallbackReply, turn.ReplyText);
-            Assert.Equal(ConversationSession.EmptyReplyReason, turn.Failure);
+            Assert.Equal(TurnFailureReasons.EmptyReply, turn.Failure);
             Assert.Equal(1, researcher.Calls);
             Assert.Equal(1, responder.Calls);
         }
 
-        // -------------------------------------------------------------------------------------------
-        // Helpers.
-        // -------------------------------------------------------------------------------------------
         private const string GraphYaml =
             """
           apiVersion: agentcore/v1
@@ -336,7 +293,7 @@ namespace AgentCore.Application.Tests.Runtime
             return new ConversationSessionFactory(
                 compiled,
                 new GuardEvaluator(compiled.Configuration.Guards),
-                observers: ConversationObservers.Standard(new InMemoryAuditSink(), logger: null));
+                hooks: BuiltInHooks.Create(new InMemoryAuditSink()));
         }
 
         private static CompiledAgent Compile(
@@ -366,11 +323,12 @@ namespace AgentCore.Application.Tests.Runtime
             ScriptedModerationEvaluator? moderation = null)
         {
             CompiledAgent compiled = Compile(yaml, reply, out _, tools, moderation);
+            IAuditSinkPort rows = sink ?? new InMemoryAuditSink();
 
             return new ConversationSessionFactory(
                 compiled,
                 new GuardEvaluator(compiled.Configuration.Guards),
-                observers: ConversationObservers.Standard(sink ?? new InMemoryAuditSink(), logger: null));
+                hooks: BuiltInHooks.Create(rows));
         }
     }
 }

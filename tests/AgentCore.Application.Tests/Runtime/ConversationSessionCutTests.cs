@@ -1,25 +1,27 @@
 using AgentCore.Application.Audit.Memory;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
+using AgentCore.Application.Tests.Audit;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Domain;
 using AgentCore.Domain.Audit;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Cut;
+using AgentCore.Application.Runtime.Session;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 using static AgentCore.Application.Tests.Runtime.ConversationSessionCutTestSupport;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
-    /// <see cref="ConversationSession.Cut"/> and the Cut rule over a whole conversation
-    /// (docs/handoff/2026-09-22-maf-native-engine-design.md, section 3).
+    /// <see cref="ConversationSession.Cut"/> and the Cut rule over a whole conversation.
     /// </summary>
     public sealed class ConversationSessionCutTests
     {
         private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-        // Inverse of probe P14a (row "Host cancel / text Stop", W05): a host cancel mid-reply keeps the user
+        // A host cancel mid-reply keeps the user
         // message and everything yielded, and the host still gets its cancellation.
         [Fact]
         public async Task HostCancelMidReply_KeepsTheUserMessageAndTheYieldedText()
@@ -45,7 +47,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal("Hel", session.LastTurn.ReplyText);
         }
 
-        // Probe W06 through the conversation: a host that stops reading still gets the turn committed, and the
+        // A host that stops reading still gets the turn committed, and the
         // conversation takes the next turn.
         [Fact]
         public async Task HostAbandonsTheStream_KeepsTheUserAndTheYieldedText_AndTheNextTurnRuns()
@@ -71,7 +73,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(2, store.Appends);
         }
 
-        // Inverse of probe P14b (W04, G1): an interrupt before the running turn yields anything keeps that turn's user
+        // An interrupt before the running turn yields anything keeps that turn's user
         // message only, and the turn before it is untouched.
         [Fact]
         public async Task CutBeforeAnyContent_KeepsTheUserMessageOnly_AndLeavesThePreviousTurn()
@@ -105,7 +107,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(string.Empty, session.LastTurn.ReplyText);
         }
 
-        // Design section 2, seams: StartTurnAsync hands back the turn's index before the reply is read, and the
+        // StartTurnAsync hands back the turn's index before the reply is read, and the
         // reply is the turn's streamed updates.
         [Fact]
         public async Task StartTurn_NamesTheTurnBeforeItsReplyIsRead()
@@ -119,7 +121,7 @@ namespace AgentCore.Application.Tests.Runtime
             List<string> texts = [];
             await foreach (ChatResponseUpdate update in run.Updates)
             {
-                // The trailing update is the turn's committed ids (design section 6, step E5), not text.
+                // The trailing update is the turn's committed ids, not text.
                 if (update.Contents.OfType<TurnCommittedContent>().Any())
                 {
                     continue;
@@ -134,7 +136,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(1, session.LastTurn!.TurnIndex);
         }
 
-        // Probe W04 (G1) on the voice seam: a cut that reaches a started turn before its reply is read keeps the
+        // On the voice seam: a cut that reaches a started turn before its reply is read keeps the
         // user message only, and the turn before it is untouched.
         [Fact]
         public async Task CutBeforeTheReplyIsRead_KeepsTheUserMessageOnly_AndLeavesThePreviousTurn()
@@ -161,7 +163,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(string.Empty, session.LastTurn.ReplyText);
         }
 
-        // Section 3, row "sealed": a cut of a committed turn rewrites its reply, never appends, and raises
+        // A cut of a committed turn rewrites its reply, never appends, and raises
         // reply.interrupted amending turn.completed, with no duration when nothing played.
         [Fact]
         public async Task CutOfACommittedTurn_RewritesTheReply_AndAmendsTurnCompletedWithoutADuration()
@@ -179,7 +181,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(["hi", "Hello"], Texts(session.Transcript));
             Assert.Equal(1, store.Appends);
             _ = Assert.Single(store.Rewrites);
-            IReadOnlyList<AuditEvent> events = sink.EventsOf(session.ConversationId);
+            IReadOnlyList<AuditEvent> events = await session.RowsAsync(sink);
             AuditEvent completed = Assert.Single(events, item => item.Kind == AuditEventKind.TurnCompleted);
             AuditEvent amendment = Assert.Single(events, item => item.Kind == AuditEventKind.ReplyInterrupted);
             Assert.Equal(completed.EventId, amendment.AmendsEventId);
@@ -187,7 +189,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.False(amendment.Payload.ContainsKey(AuditPayloadKeys.DurationUntilInterruptMs));
         }
 
-        // Section 3, row "unknown or older": false, and nothing changes.
+        // An unknown or older turn: false, and nothing changes.
         [Fact]
         public async Task CutOfAnUnknownOrOlderTurn_ReportsFalseAndChangesNothing()
         {
@@ -208,7 +210,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(["q1", "a1", "q2", "a2"], Texts(session.Transcript));
         }
 
-        // Probe W10: a cut racing the turn's completion, 300 runs. Always one append and at most one rewrite, the
+        // A cut racing the turn's completion, 300 runs. Always one append and at most one rewrite, the
         // final text is the shown text, and both branches (cut while running, rewrite after the seal) are hit.
         [Fact]
         public async Task CutRacesCompletion_AlwaysOneAppend_AtMostOneRewrite_FinalTextIsShown_BothBranchesHit()
@@ -264,7 +266,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.True(amended > 0, $"amended={amended}");
         }
 
-        // Owner ruling 2026-09-23: disposing a run nobody read frees the conversation, and the turn commits nothing.
+        // Disposing a run nobody read frees the conversation, and the turn commits nothing.
         [Fact]
         public async Task AnUnreadRunDisposed_FreesTheConversationForTheNextTurn()
         {
@@ -283,7 +285,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(["one", "first reply", "three", "second reply"], Texts(session.Transcript));
         }
 
-        // Owner ruling 2026-09-23: a half-read run disposed frees the conversation, and disposing it twice is safe.
+        // A half-read run disposed frees the conversation, and disposing it twice is safe.
         [Fact]
         public async Task AHalfReadRunDisposedTwice_FreesTheConversationForTheNextTurn()
         {

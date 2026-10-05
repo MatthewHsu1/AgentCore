@@ -1,4 +1,6 @@
+using AgentCore.Application.Hooks.Notices;
 using AgentCore.AspNetCore.DependencyInjection;
+using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.Application.Ports;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -43,6 +45,8 @@ namespace AgentCore.AspNetCore.Conversation
                         .ConfigureAwait(false);
 
                     ConversationSweeperLog.Swept(logger, swept);
+                    _ = HookStartup.RaiseHostNotice(
+                        services.GetRequiredService<AgentCoreBoot>().Hooks, scope => new RetentionSwept(scope, swept));
                 }
                 catch (Exception fault) when (fault is not OperationCanceledException)
                 {

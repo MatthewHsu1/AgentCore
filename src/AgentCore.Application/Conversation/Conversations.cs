@@ -175,6 +175,12 @@ namespace AgentCore.Application.Conversation
         }
 
         /// <inheritdoc />
+        public ValueTask SaveStateAsync(string conversationId, ConversationSessionState state, CancellationToken cancellationToken = default)
+        {
+            return Store.SaveStateAsync(conversationId, state, cancellationToken);
+        }
+
+        /// <inheritdoc />
         public ValueTask<ConversationMessage> AppendMessageAsync(string conversationId, ChatMessage message, CancellationToken cancellationToken = default)
         {
             return Store.AppendMessageAsync(conversationId, message, cancellationToken);

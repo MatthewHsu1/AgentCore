@@ -1,4 +1,5 @@
 using AgentCore.Application.Configuration.Parsing;
+using AgentCore.Application.Secrets;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.TestSupport;
 using Microsoft.AspNetCore.Builder;
@@ -11,13 +12,10 @@ namespace AgentCore.Hosting.Tests
     /// <summary>The one host every test in this project builds, over a fake model and no key.</summary>
     internal static class HostingTestHost
     {
+        /// <summary>The shared key the document's Telnyx relay checks callers with: without one the host does not start.</summary>
+        internal const string RelayKey = "test-relay-key";
+
         /// <summary>The smallest document the schema accepts: one agent, one model, and the required pair.</summary>
-        /// <remarks>
-        /// A document that writes a <c>providers</c> block at all must write <c>conversation</c> and
-        /// <c>speech</c> too, and both speech roles must name the same vendor the conversation does. Those kinds
-        /// resolve here because the default list this library registers already names that transport —
-        /// which is the point: a test writes no vendor of its own except the model.
-        /// </remarks>
         internal const string Document = """
         apiVersion: agentcore/v1
         agents:
@@ -54,6 +52,7 @@ namespace AgentCore.Hosting.Tests
             _ = builder.AddAgentCoreHost(options =>
             {
                 options.Configuration = ConfigurationLoader.LoadYaml(document);
+                options.SecretResolver = new MapSecretResolver().With(KnownSecrets.TelnyxRelayKeyName, RelayKey);
                 _ = options.UseChatClients(_ => new RecordingChatClientFactory(new FakeChatClient()));
                 configure?.Invoke(options);
             });

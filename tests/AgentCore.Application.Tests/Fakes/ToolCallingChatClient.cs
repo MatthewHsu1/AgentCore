@@ -6,20 +6,7 @@ namespace AgentCore.Application.Tests.Fakes
     /// <summary>
     /// A deterministic offline model that calls the first tool it is offered, once, then answers.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// A delegating agent needs a model that actually emits a tool call, and
-    /// <see cref="ScriptedChatClient"/> only emits text. This client emits one
-    /// <see cref="FunctionCallContent"/> when the request carries a tool and the transcript holds no
-    /// tool result yet. Every other request answers with text, so the inner agent of a
-    /// <c>kind: agent</c> tool, which is offered no tool, always replies.
-    /// </para>
-    /// <para>
-    /// The one call and the "no result yet" test together keep the run finite. Nothing here depends on
-    /// the 40-iteration cap of section 8.7.
-    /// </para>
-    /// </remarks>
-    internal sealed class ToolCallingChatClient(string reply, Dictionary<string, object?>? arguments = null) : IChatClient
+    internal sealed class ToolCallingChatClient(string reply, Dictionary<string, object?>? arguments = null, bool everyRun = false) : IChatClient
     {
         private const string ConversationId = "conversation_1";
 
@@ -56,7 +43,8 @@ namespace AgentCore.Application.Tests.Fakes
 
             lock (Prompts)
             {
-                foreach (ChatMessage? message in transcript)
+                int lastUser = everyRun ? transcript.FindLastIndex(message => message.Role == ChatRole.User) : -1;
+                foreach (ChatMessage? message in transcript.Skip(lastUser + 1))
                 {
                     foreach (AIContent content in message.Contents)
                     {

@@ -1,6 +1,6 @@
 using System.Text;
 using System.Text.Json;
-using AgentCore.AspNetCore.Vendors.TelnyxRelay;
+using AgentCore.AspNetCore.Vendors.TelnyxRelay.Wire;
 using Xunit;
 
 namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
@@ -8,16 +8,8 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
     /// <summary>
     /// The reader against the frames the vendor documents.
     /// </summary>
-    /// <remarks>
-    /// Every JSON body below is copied from the Telnyx Conversation Relay page, so these are golden
-    /// inputs and not invented ones. Every test here runs offline. There is no network conversation and no API
-    /// key anywhere in this file.
-    /// </remarks>
     public sealed class TelnyxRelayFrameReaderTests
     {
-        // -------------------------------------------------------------------------------------------
-        // The five inbound frames.
-        // -------------------------------------------------------------------------------------------
 
         [Fact]
         public void ASetupFrame_ReadsTheIdsTheTransferWillNeed()
@@ -62,7 +54,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
         [Fact]
         public void AnInterruptFrame_ReadsTheHeardTextAndTheDurationInMilliseconds()
         {
-            // Section 7.1 first printed a TimeSpan here. The wire carries an integer of milliseconds.
+            // The wire carries an integer of milliseconds.
             const string Json =
                                      /*lang=json,strict*/
                                      """
@@ -95,14 +87,12 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
             Assert.StartsWith("Invalid message", Assert.IsType<RelayFrame.Error>(frame).Description);
         }
 
-        // -------------------------------------------------------------------------------------------
         // What the reader refuses, and how. It never throws on vendor input.
-        // -------------------------------------------------------------------------------------------
 
         [Fact]
         public void AnUnknownType_IsRefusedAndNamed()
         {
-            // A vendor that adds a frame must not be able to drop a conversation. Section 7.1.
+            // A vendor that adds a frame must not be able to drop a conversation.
             Assert.False(Read(/*lang=json,strict*/ """{"type":"whisper","text":"x"}""", out RelayFrame? frame, out string? unknown));
             Assert.Null(frame);
             Assert.Equal("whisper", unknown);
@@ -122,7 +112,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
         {
             // The wire carries an integer of milliseconds, and the record binds one. A vendor that
             // starts sending 1820.5 must not thereby end a conversation at the exact moment of a barge-in, so
-            // the type is named on refusedType and the caller keeps the socket. Section 7.1.
+            // the type is named on refusedType and the caller keeps the socket.
             const string Json =
                                      /*lang=json,strict*/
                                      """
@@ -217,9 +207,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
             Assert.Equal("1", Assert.IsType<RelayFrame.Dtmf>(frame).Digit);
         }
 
-        // -------------------------------------------------------------------------------------------
         // The outbound wire, so a future change to Type cannot silently drop the discriminator.
-        // -------------------------------------------------------------------------------------------
 
         [Fact]
         public void ARelayToken_SerializesWithTheTextDiscriminator()

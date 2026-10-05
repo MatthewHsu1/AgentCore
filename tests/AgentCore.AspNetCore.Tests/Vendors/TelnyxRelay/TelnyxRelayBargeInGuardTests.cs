@@ -1,11 +1,11 @@
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json.Nodes;
-using AgentCore.Application.Runtime;
 using AgentCore.AspNetCore.Tests.Fakes;
 using AgentCore.Domain;
 using Microsoft.Extensions.Logging;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
 {
@@ -18,7 +18,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
         [Fact(Timeout = 30_000)]
         public async Task AnInterruptDuringAReply_RecordsWhatTheCallerHeard()
         {
-            // The vendor measured both values, so nothing here is estimated. D28 and item 6a.
+            // The vendor measured both values, so nothing here is estimated.
             //
             // BlockingChatClient's gate ignores cancellation, so a defect that left the turn
             // machinery stuck would hang this test rather than fail it red. The ten-second deadline

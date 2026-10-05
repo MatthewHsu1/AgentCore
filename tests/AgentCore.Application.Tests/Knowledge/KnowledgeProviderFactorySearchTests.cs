@@ -1,11 +1,11 @@
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Knowledge.Fakes;
 using AgentCore.Domain.Knowledge;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Clarification;
 using static AgentCore.Application.Tests.Knowledge.KnowledgeProviderFactoryTestSupport;
 
 namespace AgentCore.Application.Tests.Knowledge

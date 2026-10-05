@@ -4,7 +4,6 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Knowledge.Fakes;
 using AgentCore.Domain.Knowledge;
 using AgentCore.TestSupport;
@@ -14,6 +13,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
 using Xunit;
+using AgentCore.Application.Runtime.Turn;
 
 namespace AgentCore.Application.Tests.Knowledge
 {

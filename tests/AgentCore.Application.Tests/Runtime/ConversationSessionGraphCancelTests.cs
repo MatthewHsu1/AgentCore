@@ -1,16 +1,18 @@
 using System.Runtime.CompilerServices;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Runtime;
 using AgentCore.Domain;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Agents.Graph;
+using AgentCore.Application.Runtime.Session;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
-    /// F2 of the 2026-09-24 round: on a graph row, a caller cancel is a cancel and a model timeout is a fault.
+    /// On a graph row, a caller cancel is a cancel and a model timeout is a fault.
     /// MAF's workflow agent throws for neither; it reports a fault as an update and ends its stream quietly on
     /// a cancel, so <see cref="GraphFaultAgent"/> has to raise both.
     /// </summary>
@@ -50,7 +52,7 @@ namespace AgentCore.Application.Tests.Runtime
         private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
         /// <summary>
-        /// Claim (F2): HttpClient reports a request timeout as <see cref="TaskCanceledException"/> even when
+        /// HttpClient reports a request timeout as <see cref="TaskCanceledException"/> even when
         /// nobody cancelled the turn. That must still reach the turn as a run fault that speaks the fallback,
         /// not escape as a cancel.
         /// </summary>
@@ -61,12 +63,12 @@ namespace AgentCore.Application.Tests.Runtime
 
             TurnResult turn = await session.RunTurnAsync("go", Ct);
 
-            Assert.StartsWith(ConversationSession.RunFaultReason, turn.Failure, StringComparison.Ordinal);
+            Assert.StartsWith(TurnFailureReasons.RunFault, turn.Failure, StringComparison.Ordinal);
             Assert.Equal(AgentCoreConfiguration.DefaultFallbackReply, turn.ReplyText);
         }
 
         /// <summary>
-        /// Control for F2: a real caller cancel must still propagate as a cancel, and the stopped turn must not
+        /// Control: a real caller cancel must still propagate as a cancel, and the stopped turn must not
         /// keep the fallback line as its reply. A cancel is not a fault, so nothing spoke that line.
         /// </summary>
         [Theory]
@@ -89,10 +91,10 @@ namespace AgentCore.Application.Tests.Runtime
         }
 
         /// <summary>
-        /// The same claim one layer down, with no turn loop above it. The turn loop's own notice reader also
+        /// The same behaviour one layer down, with no turn loop above it. The turn loop's own notice reader also
         /// watches the caller's token and can throw first, which hid this in the session test about two runs in
-        /// three; here nothing but <see cref="GraphFaultAgent"/> can turn MAF's quiet end into a cancel. R4-3:
-        /// the cancel check runs the same way whether the row drains the inner stream or throws at the first
+        /// three; here nothing but <see cref="GraphFaultAgent"/> can turn MAF's quiet end into a cancel.
+        /// The cancel check runs the same way whether the row drains the inner stream or throws at the first
         /// fault, so this must hold on both.
         /// </summary>
         [Theory]

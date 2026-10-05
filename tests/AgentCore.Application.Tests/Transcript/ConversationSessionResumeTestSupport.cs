@@ -2,12 +2,13 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Hooks;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Transcript
 {
@@ -101,7 +102,7 @@ namespace AgentCore.Application.Tests.Transcript
             IChatClient reply,
             IConversationStore store,
             string? conversationId = null,
-            IConversationObserver? observer = null)
+            AgentHook? hook = null)
         {
             AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(yaml);
             FakeChatClientFactory chatClients = new(reply);
@@ -117,38 +118,9 @@ namespace AgentCore.Application.Tests.Transcript
                 compiled,
                 new GuardEvaluator(compiled.Configuration.Guards),
                 extractor: null,
-                observers: observer is null ? null : [observer]);
+                hooks: hook is null ? null : [hook]);
 
             return factory.Create(conversationId);
-        }
-    }
-
-    /// <summary>Keeps every fact of the conversation, in the order the turn loop raised them.</summary>
-    internal sealed class RecordingObserver : IConversationObserver
-    {
-        private readonly Lock _gate = new();
-        private readonly List<ConversationEvent> _events = [];
-
-        /// <summary>Gets what the conversation raised, oldest first.</summary>
-        public IReadOnlyList<ConversationEvent> Events
-        {
-            get
-            {
-                lock (_gate)
-                {
-                    return [.. _events];
-                }
-            }
-        }
-
-        public ValueTask OnConversationEventAsync(ConversationEvent conversationEvent, CancellationToken cancellationToken)
-        {
-            lock (_gate)
-            {
-                _events.Add(conversationEvent);
-            }
-
-            return ValueTask.CompletedTask;
         }
     }
 }

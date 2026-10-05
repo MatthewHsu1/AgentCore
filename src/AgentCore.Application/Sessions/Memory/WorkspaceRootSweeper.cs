@@ -1,6 +1,6 @@
 using AgentCore.Application.Diagnostics;
-using AgentCore.Application.Runtime;
 using Microsoft.Extensions.Logging;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Sessions.Memory
 {

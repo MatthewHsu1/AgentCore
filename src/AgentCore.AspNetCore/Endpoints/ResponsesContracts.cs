@@ -1,8 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
-using AgentCore.Application.Runtime;
 using AgentCore.Domain;
+using AgentCore.Application.Runtime.Session;
+using AgentCore.Application.Runtime.Turn;
 
 namespace AgentCore.AspNetCore.Endpoints
 {

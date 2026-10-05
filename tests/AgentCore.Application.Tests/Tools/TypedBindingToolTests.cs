@@ -3,12 +3,13 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Tools.Registry;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.ToolCalls;
+using AgentCore.Application.Runtime.Turn;
 
 namespace AgentCore.Application.Tests.Tools
 {
@@ -16,10 +17,6 @@ namespace AgentCore.Application.Tests.Tools
     /// The typed half of <c>kind: binding</c>: the host registers a method, and its signature is the
     /// argument schema the model reads.
     /// </summary>
-    /// <remarks>
-    /// The document writes <c>binds: CreateCase</c> and no <c>parameters:</c>. Everything the model
-    /// needs to fill the conversation comes off the method, so the two can never drift apart.
-    /// </remarks>
     public sealed class TypedBindingToolTests
     {
         private static readonly ToolConfiguration OpenCase = new()
@@ -236,7 +233,7 @@ namespace AgentCore.Application.Tests.Tools
             Assert.Equal("ws", captured.Workspace);
         }
 
-        /// <summary>The error policy of section 8.7 keys off <see cref="DeclaredTool"/>, not off the delegate.</summary>
+        /// <summary>The error policy keys off <see cref="DeclaredTool"/>, not off the delegate.</summary>
         [Fact]
         public async Task ATypedBinding_IsStillADeclaredTool()
         {

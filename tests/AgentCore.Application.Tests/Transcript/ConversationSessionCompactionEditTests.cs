@@ -1,11 +1,12 @@
 using AgentCore.Application.Conversation.Memory;
+using AgentCore.Application.Hooks.Notices;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Transcript;
-using AgentCore.Domain.Audit;
 using AgentCore.TestSupport;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
+using AgentCore.Application.Runtime.Turn;
 using static AgentCore.Application.Tests.Transcript.ConversationSessionCompactionTestSupport;
 
 namespace AgentCore.Application.Tests.Transcript
@@ -27,14 +28,14 @@ namespace AgentCore.Application.Tests.Transcript
             await SeedPlainTurnAsync(store, turnIndex: 2, "q2", "a2");
 
             CapturingChatClient reply = new(_ => Task.CompletedTask, "a3", "a0, rewritten reply");
-            RecordingObserver observer = new();
+            RecordingHook hook = new();
             ConversationSession session = CreateSession(
-                reply, store, conversationId: "c1", compaction: Summary(new ScriptedChatClient("the gist of it"), minimumPreservedGroups: 0), observer: observer);
+                reply, store, conversationId: "c1", compaction: Summary(new ScriptedChatClient("the gist of it"), minimumPreservedGroups: 0), hooks: [hook]);
 
             _ = await session.RunTurnAsync("q3", TestContext.Current.CancellationToken);
             await session.FlushTranscriptAsync();
 
-            // Turns 0 and 1 (q0/a0, q1/a1) are under the summary (D11: turn 2 stayed live as the newest
+            // Turns 0 and 1 (q0/a0, q1/a1) are under the summary (turn 2 stays live as the newest
             // existing turn). "m-0-a" — turn 0's reply — sits inside that span.
             _ = Assert.Single(await store.ReadForSessionAsync("c1", TestContext.Current.CancellationToken), row => row.CoversUpTo == 3);
             store.RowsRead.Clear();
@@ -58,9 +59,9 @@ namespace AgentCore.Application.Tests.Transcript
 
             // Turns 1 through 3 (q1/a1, q2/a2, q3/a3) went, and the trail says so even though the session
             // never held turn 1's rows.
-            ConversationEvent superseded = Assert.Single(observer.Events, raised => raised.Kind == ConversationEventKind.TurnSuperseded);
-            Assert.Equal("1", superseded.Payload![AuditPayloadKeys.WithdrewFromTurnIndex]);
-            Assert.Equal("3", superseded.Payload[AuditPayloadKeys.WithdrewThroughTurnIndex]);
+            await session.FlushNoticesAsync();
+            TurnSuperseded superseded = Assert.Single(hook.Of<TurnSuperseded>());
+            Assert.Equal((1, 3), (superseded.WithdrewFrom, superseded.WithdrewThrough));
         }
 
         [Fact]
@@ -73,9 +74,9 @@ namespace AgentCore.Application.Tests.Transcript
             await SeedPlainTurnAsync(store, turnIndex: 2, "q2", "a2");
 
             CapturingChatClient reply = new(_ => Task.CompletedTask, "a3", "a4");
-            RecordingObserver observer = new();
+            RecordingHook hook = new();
             ConversationSession session = CreateSession(
-                reply, store, conversationId: "c1", compaction: Summary(new ScriptedChatClient("the gist of it"), minimumPreservedGroups: 0), observer: observer);
+                reply, store, conversationId: "c1", compaction: Summary(new ScriptedChatClient("the gist of it"), minimumPreservedGroups: 0), hooks: [hook]);
 
             _ = await session.RunTurnAsync("q3", TestContext.Current.CancellationToken);
             await session.FlushTranscriptAsync();
@@ -86,12 +87,13 @@ namespace AgentCore.Application.Tests.Transcript
                 TestContext.Current.CancellationToken);
             await session.FlushTranscriptAsync();
 
-            // Nothing went: the summary stands, and the turn compacts again over it (D11: q3/a3 was the
+            // Nothing went: the summary stands, and the turn compacts again over it (q3/a3 was the
             // newest existing turn, so it stays live and the summary now covers everything before it).
             Assert.Equal(["assistant:[Summary]\nthe gist of it", "user:q3", "assistant:a3", "user:q4"], reply.Requests[1]);
             _ = Assert.Single(await store.ReadForSessionAsync("c1", TestContext.Current.CancellationToken), row => row.CoversUpTo == 5);
             Assert.Equal(10, (await store.ReadAllAsync("c1", TestContext.Current.CancellationToken)).Count);
-            Assert.DoesNotContain(observer.Events, raised => raised.Kind == ConversationEventKind.TurnSuperseded);
+            await session.FlushNoticesAsync();
+            Assert.Empty(hook.Of<TurnSuperseded>());
         }
 
         [Fact]

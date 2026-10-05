@@ -3,8 +3,8 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Diagnostics;
+using AgentCore.Application.Hooks.Notices;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Domain.Knowledge;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging;
@@ -49,9 +49,8 @@ namespace AgentCore.Application.Knowledge
             // No scope filters nothing, so it is the absent scope in disguise. The shared store
             // can only fail closed when EVERY agent is scoped, so in a mixed deployment this is
             // the only check standing between a scoped agent and every customer's cards. A null
-            // turn — a framework-driven sub-run (graph node, background child) the loop never
-            // invoked — searches the whole corpus unscoped and names NoScope scoped: loud, never
-            // a leak.
+            // turn — a run no conversation turn reached — searches the whole corpus unscoped and
+            // names NoScope scoped: loud, never a leak.
             KnowledgeScope? composed = knowledge.Scoped ? turn?.Knowledge : WholeCorpus;
 
             if (knowledge.Scoped && composed is not { Facets.Count: > 0 })
@@ -68,6 +67,8 @@ namespace AgentCore.Application.Knowledge
             double? searched = null;
             KnowledgeScope under = narrowed;
 
+            // One KnowledgeSearched per search, raised once its outcome is known: a search the store answered can
+            // still fail on the agent's limit, the citations or the probe.
             try
             {
                 (IReadOnlyList<KnowledgeCard>? cards, double latency) = await Under(narrowed).ConfigureAwait(false);
@@ -76,22 +77,28 @@ namespace AgentCore.Application.Knowledge
                 if (cards.Count == 0 && byTool)
                 {
                     under = scope;
-                    (cards, _) = await Under(scope).ConfigureAwait(false);
+                    (cards, latency) = await Under(scope).ConfigureAwait(false);
+                    searched = latency;
                 }
 
+                IReadOnlyList<TextSearchProvider.TextSearchResult> results;
                 if (cards.Count == 0
                     && knowledge.Mode == KnowledgeMode.Tool
                     && under.Facets.Count > 0)
                 {
-                    return await KnowledgeProbe
+                    results = await KnowledgeProbe
                         .RunAsync(binding, under, query, turn?.Clarifications, turn?.CarriesHistory ?? false, cancellationToken)
                         .ConfigureAwait(false);
                 }
+                else
+                {
+                    List<KnowledgeCard> shown = Kept(cards, knowledge);
+                    Cite(shown, knowledge, citations, turn?.Sources, turn?.OuterCallId);
+                    results = Map(shown, knowledge, citations);
+                }
 
-                List<KnowledgeCard> shown = Kept(cards, knowledge);
-                Cite(shown, knowledge, citations, turn?.Sources);
-
-                return Map(shown, knowledge, citations);
+                RaiseSearched(turn, query, under, cards.Count, latency, failure: null);
+                return results;
             }
             catch (Exception failure) when (!KnowledgeCancellation.ByCaller(failure, cancellationToken))
             {
@@ -101,6 +108,8 @@ namespace AgentCore.Application.Knowledge
                     .ForLog();
 
                 Log.KnowledgeRetrievalFailed(logger, agent, record, failure);
+
+                RaiseSearched(turn, query, under, hits: 0, latency, $"{failure.GetType().Name}: {failure.Message}");
 
                 return [KnowledgeNotices.Of(KnowledgeNotices.Unreachable)];
             }
@@ -121,6 +130,15 @@ namespace AgentCore.Application.Knowledge
                 }
 
                 return (cards, latency);
+            }
+        }
+
+        private static void RaiseSearched(TurnInvocation? turn, string query, KnowledgeScope under, int hits, double latency, string? failure)
+        {
+            if (turn?.Hooks is { } hooks)
+            {
+                _ = hooks.Raise(new KnowledgeSearched(
+                    hooks.Scope(turn.TurnIndex, turn.Stage), query, under, hits, TimeSpan.FromMilliseconds(latency), failure));
             }
         }
 
@@ -151,11 +169,13 @@ namespace AgentCore.Application.Knowledge
         /// <param name="knowledge">The agent's resolved <c>knowledge:</c> block.</param>
         /// <param name="citations">The wording <c>providers.knowledge.citation</c> named.</param>
         /// <param name="port">What the turn cites into, or <see langword="null"/> outside a turn.</param>
+        /// <param name="callId">The outermost tool call this search runs inside, or <see langword="null"/> outside one.</param>
         private static void Cite(
             IReadOnlyList<KnowledgeCard> cards,
             ResolvedKnowledge knowledge,
             IKnowledgeCitationFormatter citations,
-            TurnSources? port)
+            TurnSources? port,
+            string? callId)
         {
             if (!knowledge.Citations || port is null)
             {
@@ -166,7 +186,7 @@ namespace AgentCore.Application.Knowledge
             {
                 if (KnowledgeSourceMapper.ToSource(card, citations) is { } source)
                 {
-                    port.Publish(source);
+                    port.Publish(source, callId);
                 }
             }
         }

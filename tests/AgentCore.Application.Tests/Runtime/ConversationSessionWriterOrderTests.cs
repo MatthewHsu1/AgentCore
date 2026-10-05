@@ -1,9 +1,9 @@
-using AgentCore.Application.Runtime;
 using AgentCore.Application.State;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Domain;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Runtime.ConversationSessionTestSupport;
 
 namespace AgentCore.Application.Tests.Runtime
@@ -137,7 +137,7 @@ namespace AgentCore.Application.Tests.Runtime
 
             TurnResult turn = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
-            // Section 8.7: the extractor never drops a conversation. The turn ends, and it carries the reason.
+            // The extractor never drops a conversation. The turn ends, and it carries the reason.
             Assert.NotNull(turn.ExtractionFailure);
             Assert.Equal("hello there.", turn.ReplyText);
             Assert.Equal("greeting", turn.StageAfter);

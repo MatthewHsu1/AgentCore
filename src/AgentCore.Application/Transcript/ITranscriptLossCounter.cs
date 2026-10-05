@@ -8,7 +8,7 @@ namespace AgentCore.Application.Transcript
     /// </summary>
     internal interface ITranscriptLossCounter
     {
-        /// <summary>Reports one dropped store 1 write, and counts it lost. Never throws.</summary>
+        /// <summary>Reports one dropped message store write, and counts it lost. Never throws.</summary>
         /// <param name="turnIndex">The turn the transcript was on when the write was queued.</param>
         /// <param name="appended">
         /// The ids of the rows the write would have appended, or none for a write that changes rows in place. The store

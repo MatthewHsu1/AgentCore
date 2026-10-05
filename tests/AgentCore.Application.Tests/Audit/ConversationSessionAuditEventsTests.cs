@@ -1,37 +1,54 @@
 using AgentCore.TestSupport;
 using AgentCore.Application.Audit.Memory;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime;
 using AgentCore.Domain;
 using AgentCore.Domain.Audit;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Cut;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Audit.ConversationSessionAuditTestSupport;
 
 namespace AgentCore.Application.Tests.Audit
 {
     /// <summary>
-    /// The turn loop writes the audit chain of D23, and the sink never sits on the turn.
+    /// The turn loop writes the audit chain, and the sink never sits on the turn.
     /// </summary>
     public sealed class ConversationSessionAuditEventsTests
     {
         // The events, and the identity a later amendment names.
+        // The start is raised when the session opens the store, so a turn runs first.
         [Fact]
-        public void ANewSession_WritesTheConversationStartedEvent()
+        public async Task AFirstTurn_WritesTheConversationStartedEventFirst()
         {
             using SequencedChatClient reply = new("hello there.");
             using SequencedChatClient fill = new(StayingNull);
             InMemoryAuditSink sink = new();
 
             ConversationSession session = Build(PolicyYaml, reply, fill, auditSink: sink).Create("conversation-1");
+            _ = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
-            AuditEvent started = Assert.Single(sink.EventsOf("conversation-1"));
+            AuditEvent started = (await session.RowsAsync(sink))[0];
             Assert.Equal(AuditEventKind.ConversationStarted, started.Kind);
             Assert.NotEqual(Guid.Empty, started.EventId);
             Assert.Null(started.TurnIndex);
             Assert.Null(started.AmendsEventId);
             Assert.Equal(session.ConversationId, started.ConversationId);
+        }
+
+        // The audit hook alone writes the rows, so one turn is exactly two of them.
+        [Fact]
+        public async Task OneTurnWritesEachOfItsRowsOnce()
+        {
+            using SequencedChatClient reply = new("hello there.");
+            using SequencedChatClient fill = new(StayingNull);
+            InMemoryAuditSink sink = new();
+            ConversationSession session = Build(PolicyYaml, reply, fill, auditSink: sink).Create("conversation-1");
+
+            _ = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
+
+            Assert.Equal([AuditEventKind.ConversationStarted, AuditEventKind.TurnCompleted], (await session.RowsAsync(sink)).Select(row => row.Kind));
         }
 
         [Fact]
@@ -53,12 +70,12 @@ namespace AgentCore.Application.Tests.Audit
             _ = await second.RunTurnAsync("still there?", TestContext.Current.CancellationToken);
             await second.FlushTranscriptAsync();
 
-            IReadOnlyList<AuditEvent> written = sink.EventsOf("conversation-1");
+            IReadOnlyList<AuditEvent> written = await second.RowsAsync(sink);
 
             // The shape is the assertion, and both halves of it are the point.
             //
             // ARRIVAL: a second session that restarted its counter at zero would have every event it raised
-            // refused by store 3, and a resumed conversation would lose its whole audit trail. The proof is
+            // refused by the store, and a resumed conversation would lose its whole audit trail. The proof is
             // that the second session's two events are HERE — distinctness proves nothing,
             // because InMemoryAuditSink enforces no key and Guid.CreateVersion7 is unique by
             // construction, so that assertion passed just as well over the two events that never arrived.
@@ -92,8 +109,9 @@ namespace AgentCore.Application.Tests.Audit
             clock.Advance(TimeSpan.FromSeconds(12));
             TurnResult turn = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
-            AuditEvent completed = Assert.Single(sink.EventsOf("conversation-1"), item => item.Kind == AuditEventKind.TurnCompleted);
-            Assert.Same(completed, sink.EventsOf("conversation-1")[1]);
+            IReadOnlyList<AuditEvent> rows = await session.RowsAsync(sink);
+            AuditEvent completed = Assert.Single(rows, item => item.Kind == AuditEventKind.TurnCompleted);
+            Assert.Same(completed, rows[1]);
             Assert.Equal(0, completed.TurnIndex);
             Assert.Equal(AuditHash.OfText("hello there.").Value, completed.Payload[AuditPayloadKeys.ReplyTextSha256]);
             Assert.Equal("greeting", completed.Payload[AuditPayloadKeys.StageBefore]);
@@ -123,17 +141,18 @@ namespace AgentCore.Application.Tests.Audit
                 Assert.False(await updates.MoveNextAsync());
             }
 
-            IReadOnlyList<AuditEvent> events = sink.EventsOf("conversation-1");
+            IReadOnlyList<AuditEvent> events = await session.RowsAsync(sink);
             AuditEvent completed = Assert.Single(events, item => item.Kind == AuditEventKind.TurnCompleted);
             AuditEvent cut = Assert.Single(events, item => item.Kind == AuditEventKind.ReplyInterrupted);
 
-            // T23: the chain is append-only, so an amendment is a second event that references the first.
-            IReadOnlyList<AuditEvent> chain = sink.EventsOf("conversation-1");
+            // The chain is append-only, so an amendment is a second event that references the first.
+            IReadOnlyList<AuditEvent> chain = events;
             Assert.Equal(completed.EventId, cut.AmendsEventId);
+            Assert.Equal(completed.OccurredAt, cut.OccurredAt);
             Assert.True(chain.ToList().IndexOf(cut) > chain.ToList().IndexOf(completed));
             Assert.Equal(completed.TurnIndex, cut.TurnIndex);
 
-            // Item 6a: the event records the text the caller ACTUALLY HEARD. Nothing here is estimated,
+            // The event records the text the caller ACTUALLY HEARD. Nothing here is estimated,
             // because the relay reported both values on its interrupt frame.
             Assert.Equal(AuditHash.OfText("hel").Value, cut.Payload[AuditPayloadKeys.UtteranceUntilInterruptSha256]);
             Assert.Equal("120", cut.Payload[AuditPayloadKeys.DurationUntilInterruptMs]);

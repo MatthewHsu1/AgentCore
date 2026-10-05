@@ -1,23 +1,28 @@
+using System.Diagnostics.CodeAnalysis;
 using AgentCore.Application.Audit;
-using AgentCore.Application.Conversation;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Conversation;
 using AgentCore.Application.Evaluation;
+using AgentCore.Application.Hooks;
+using AgentCore.Application.Hooks.Engine;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Secrets;
+using AgentCore.Application.Skills;
 using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Tools.Builtin;
 using AgentCore.Application.Tools.Registry;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Voice.Ports;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Microsoft.Extensions.AI;
-using AgentCore.Application.Skills;
 
 namespace AgentCore.AspNetCore.DependencyInjection
 {
@@ -33,6 +38,8 @@ namespace AgentCore.AspNetCore.DependencyInjection
         private readonly Lock _gate = new();
         
         private int _closed;
+
+        private BootState? _state;
 
         /// <summary>Takes the options a host filled and the loggers the container holds.</summary>
         /// <param name="options">The options every <c>Use*</c> seam wrote into.</param>
@@ -94,7 +101,7 @@ namespace AgentCore.AspNetCore.DependencyInjection
         internal IBlobStore? Blobs => Started.Blobs;
 
         /// <summary>Gets what the conversation route runs, or <see langword="null"/> when no conversation routes here.</summary>
-        internal RequestDelegate? ConversationHandler => Started.ConversationHandler;
+        internal ConversationRoute? ConversationRoute => Started.ConversationRoute;
 
         /// <summary>Gets why no conversation routes here, or <see langword="null"/> when conversations route.</summary>
         internal string? ConversationUnroutable => Started.ConversationUnroutable;
@@ -108,7 +115,13 @@ namespace AgentCore.AspNetCore.DependencyInjection
         /// <summary>Gets the telemetry export, or <see langword="null"/> when the host registered no vendor.</summary>
         internal ITelemetrySession? Telemetry => Started.Telemetry;
 
-        private BootState Started { get => field ?? throw NotStarted(); set; }
+        /// <summary>Gets the hooks every entry was compiled with.</summary>
+        internal HookRuntime Hooks => Started.Hooks;
+
+        private BootState Started { get => _state ?? throw NotStarted(); set => _state = value; }
+
+        /// <summary>Gets the hooks, or <see langword="false"/> when the boot never finished: a stop after a failed boot.</summary>
+        internal bool TryGetHooks([NotNullWhen(true)] out HookRuntime? hooks) => (hooks = _state?.Hooks) is not null;
 
         /// <summary>Takes ownership of one resource, and hands it straight back.</summary>
         /// <typeparam name="T">The resource's own type, so a caller loses nothing by owning it.</typeparam>
@@ -235,6 +248,10 @@ namespace AgentCore.AspNetCore.DependencyInjection
                 .CreateRegistryAsync(configuration, _options, cancellationToken)
                 .ConfigureAwait(false);
 
+            (IReadOnlyList<AgentHook> hooks, QueuedAuditSink auditQueue) = await HookStartup
+                .OpenAsync(this, configuration, _options, _loggers, Services, cancellationToken)
+                .ConfigureAwait(false);
+
             CompiledGraph graph = await CompilationStartup
                 .CompileAsync(
                     configuration,
@@ -250,15 +267,24 @@ namespace AgentCore.AspNetCore.DependencyInjection
                         Loggers = _loggers,
                         WorkspaceRoot = _options.WorkspaceRoot,
                         Clock = _options.TimeProvider,
+                        Hooks = hooks,
                         Secrets = secrets,
                     })
                 .ConfigureAwait(false);
 
+            HookRuntime runtime = Track(graph.Entries.Values.First().Hooks);
+            runtime.StopTimeout = Services?.GetService<IOptions<HostOptions>>()?.Value.ShutdownTimeout ?? HookRuntime.DefaultStopTimeout;
+            auditQueue.Upstream = runtime.Notices.FlushAllAsync;
+
             ConversationSeamAdapters seams = ConversationSeamStartup.Build(configuration, _options);
 
-            ConversationSessionSeam conversation = await ConversationSessionStartup
-                .OpenAsync(this, configuration, _options, graph, _loggers, cancellationToken)
-                .ConfigureAwait(false);
+            // A caller check whose secret is missing stops the host here, rather than refusing every call later.
+            if (seams.Route is { } route)
+            {
+                await route.Ready.ConfigureAwait(false);
+            }
+
+            ConversationSessionSeam conversation = ConversationSessionStartup.Open(this, _options, graph, auditQueue, _loggers);
 
             Started = new BootState(
                 configuration,
@@ -274,8 +300,9 @@ namespace AgentCore.AspNetCore.DependencyInjection
                 knowledge,
                 seams.Conversation,
                 seams.Speech,
-                seams.Handler,
-                seams.Unroutable);
+                seams.Route,
+                seams.Unroutable,
+                runtime);
         }
 
         /// <inheritdoc/>
@@ -355,14 +382,15 @@ namespace AgentCore.AspNetCore.DependencyInjection
             IKnowledgeRetrievalPort? Knowledge,
             IReadOnlyList<IConversationAdapter>? ConversationAdapters,
             IReadOnlyList<ISpeechAdapter>? SpeechAdapters,
-            RequestDelegate? ConversationHandler,
-            string? ConversationUnroutable);
+            ConversationRoute? ConversationRoute,
+            string? ConversationUnroutable,
+            HookRuntime Hooks);
     }
 
     /// <summary>Every line <see cref="AgentCoreBoot"/> writes itself, below what each startup step logs.</summary>
     internal static partial class AgentCoreBootLog
     {
-        /// <summary>One of section 8.5's structural warnings, or one of section 10's two (K33, K39).</summary>
+        /// <summary>One structural warning from the configuration checks.</summary>
         /// <param name="logger">The boot's own logger.</param>
         /// <param name="warning">The warning's <c>ToString()</c>: its pointer, its message, and its check.</param>
         [LoggerMessage(

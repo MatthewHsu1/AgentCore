@@ -1,6 +1,10 @@
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Cut;
 using AgentCore.AspNetCore.Tests.Fakes;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Voice.Options;
+using AgentCore.AspNetCore.Voice.Session;
+using AgentCore.AspNetCore.Voice.Speech;
+using AgentCore.AspNetCore.Voice.Speech.Replies;
+using AgentCore.AspNetCore.Voice.Turns;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -69,7 +73,7 @@ namespace AgentCore.AspNetCore.Tests.Voice
             await _session.WaitForIdleAsync(Ct);
         }
 
-        // generation.py:748-768 and the owner's ruling that a cut keeps exactly the heard text: a final prompt cuts a
+        // generation.py:748-768, and a cut keeps exactly the heard text: a final prompt cuts a
         // step mid-way, which stops the turn at once with the text forwarded; the reply then waits for the
         // transport's report of what was heard, recuts its turn to it, and only then does the next reply's turn start.
         [Fact(Timeout = 30_000)]
@@ -94,6 +98,42 @@ namespace AgentCore.AspNetCore.Tests.Voice
             Assert.Equal("wait", await _port.Turn(2).Started);
             _port.Turn(2).End();
             await _session.WaitForIdleAsync(Ct);
+        }
+
+        // The reply was all sent and its speech done when the final prompt came; the report that follows
+        // the prompt inside the wait cuts the line and the turn alike.
+        [Fact(Timeout = 30_000)]
+        public async Task AReportInsideTheWaitAFinalPromptLeftOpen_CutsTheLineAndTheTurn()
+        {
+            (VoiceActivity activity, UserTurnHandler handler, Func<ReplyHearing> line, _) = WithLines();
+            await SpokenWholeAsync(activity, "hello there caller");
+
+            handler.OnFinalTranscript("thanks");
+            await _time.WaitForTimersAsync(_time.GetUtcNow() + VoiceOptions.DefaultHeardTextWait, 1);
+            await activity.InterruptByAudioActivity("hello there", TimeSpan.FromMilliseconds(400));
+
+            Assert.Equal("hello there", await line().HeardWhenSettledAsync());
+            Assert.Equal([(0, new TurnCut("hello there", TimeSpan.FromMilliseconds(400)))], _port.Cuts);
+            _port.Turn(2).End();
+        }
+
+        // A report that lands once the wait is over changes neither the line nor the turn, and is logged.
+        [Fact(Timeout = 30_000)]
+        public async Task AReportAfterTheWaitAFinalPromptLeftOpen_ChangesNeitherTheLineNorTheTurn()
+        {
+            (VoiceActivity activity, UserTurnHandler handler, Func<ReplyHearing> line, RecordingLoggerFactory logs) = WithLines();
+            await SpokenWholeAsync(activity, "hello there caller");
+
+            handler.OnFinalTranscript("thanks");
+            await _time.WaitForTimersAsync(_time.GetUtcNow() + VoiceOptions.DefaultHeardTextWait, 1);
+            _time.Advance(VoiceOptions.DefaultHeardTextWait);
+            Assert.Equal("hello there caller", await line().HeardWhenSettledAsync());
+            await activity.InterruptByAudioActivity("hello there", TimeSpan.FromMilliseconds(400));
+
+            Assert.Equal("hello there caller", line().HeardText);
+            Assert.Empty(_port.Cuts);
+            _ = Assert.Single(logs.Of(37));
+            _port.Turn(2).End();
         }
 
         // agent_activity.py:2788-2796: scheduling paused by a close while the user turn waited for the speech it
@@ -122,6 +162,25 @@ namespace AgentCore.AspNetCore.Tests.Voice
             _ = Assert.Single(logs.Of(31));
             Assert.Empty(logs.Of(28));
             Assert.False(_port.Turn(2).Started.IsCompleted);
+        }
+
+        // A session of its own, logged, whose activity hands out what the caller heard of its first reply.
+        private (VoiceActivity Activity, UserTurnHandler Handler, Func<ReplyHearing> Line, RecordingLoggerFactory Logs) WithLines()
+        {
+            RecordingLoggerFactory logs = new();
+            VoiceSession session = new(_output, _time, logs.CreateLogger("voice"));
+            ReplyHearing? line = null;
+            VoiceActivity activity = new(session, _port, CancellationToken.None, agentLine: hearing => line ??= hearing);
+            return (activity, new UserTurnHandler(session, activity), () => line!, logs);
+        }
+
+        private async Task SpokenWholeAsync(VoiceActivity activity, string text)
+        {
+            SpeechHandle reply = activity.GenerateReply("hi");
+            ScriptedVoiceTurn turn = _port.Turn(1);
+            await turn.TextAsync(text);
+            turn.End();
+            _ = await reply;
         }
     }
 }

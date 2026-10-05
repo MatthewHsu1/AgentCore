@@ -2,12 +2,13 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Domain;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Cut;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Runtime.InterruptionSessions;
 
 namespace AgentCore.Application.Tests.Runtime
@@ -75,7 +76,7 @@ namespace AgentCore.Application.Tests.Runtime
             return new InterruptionFixture(session, client, client.OpenGate, TestContext.Current.CancellationToken);
         }
 
-        /// <summary>Builds a session whose extractor model never answers, so the deadline of §8.7 must act.</summary>
+        /// <summary>Builds a session whose extractor model never answers, so the extraction deadline must act.</summary>
         public static InterruptionFixture StartWithHangingExtractor(string reply)
         {
             ScriptedChatClient replyClient = new(reply.Split(' '));
@@ -109,7 +110,7 @@ namespace AgentCore.Application.Tests.Runtime
         {
             await _firstUpdate.Task.WaitAsync(_cancellation.Token).ConfigureAwait(false);
 
-            // Section 7.1: the relay reports both the heard text and the played duration together.
+            // The relay reports both the heard text and the played duration together.
             _ = Session.Cut(0, new TurnCut(heard, TimeSpan.FromMilliseconds(1820)));
             _openGate();
 

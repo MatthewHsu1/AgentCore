@@ -1,5 +1,9 @@
+using AgentCore.Application.Hooks.Notices;
 using AgentCore.AspNetCore.Tests.Fakes;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Voice.Options;
+using AgentCore.AspNetCore.Voice.Session;
+using AgentCore.AspNetCore.Voice.Speech;
+using AgentCore.AspNetCore.Voice.Turns;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -7,28 +11,24 @@ using Xunit;
 namespace AgentCore.AspNetCore.Tests.Voice
 {
     /// <summary>
-    /// The four latency readings of a pipeline reply, taken at LiveKit's points (plan 2.5) off a clock the
+    /// The four latency readings of a pipeline reply, taken at LiveKit's points off a clock the
     /// test owns.
     /// </summary>
-    [Collection(ConversationTurnLatencySuite.Name)]
     public sealed class TurnMetricsTests : IAsyncDisposable
     {
-        private const string FirstToken = "agentcore.turn.time_to_first_token";
-        private const string FirstSpeech = "agentcore.turn.time_to_first_speech";
-        private const string ReplyEnd = "agentcore.turn.time_to_reply_end";
-        private const string BargeIn = "agentcore.barge_in.latency";
-
         private readonly FakeTimeProvider _time = new(DateTimeOffset.UnixEpoch);
 
         private readonly FakeConversationOutput _output = new();
 
         private readonly ScriptedVoicePort _port = new();
 
+        private readonly LatencyRecorder _latency = new();
+
         private readonly VoiceActivity _activity;
 
         public TurnMetricsTests()
         {
-            _activity = new VoiceActivity(new VoiceSession(_output, _time, NullLogger.Instance), _port, CancellationToken.None);
+            _activity = new VoiceActivity(new VoiceSession(_output, _time, NullLogger.Instance), _port, CancellationToken.None, latency: _latency.Record);
         }
 
         public ValueTask DisposeAsync()
@@ -36,12 +36,11 @@ namespace AgentCore.AspNetCore.Tests.Voice
             return _output.DisposeAsync();
         }
 
-        // Plan 2.5: a reply with no tool is one step, so each clock reports once, at LiveKit's points.
+        // A reply with no tool is one step, so each clock reports once, at LiveKit's points.
         [Fact(Timeout = 30_000)]
         public async Task AReplyThatEndsOnItsOwn_ReportsOneReadingOnEachOfTheThreeTurnClocks()
         {
             long userTurnEndedAt = _time.GetTimestamp();
-            using LatencyReadings readings = new();
 
             SpeechHandle handle = _activity.GenerateReply("one", userTurnEndedAt: userTurnEndedAt);
             ScriptedVoiceTurn turn = _port.Turn(1);
@@ -53,9 +52,9 @@ namespace AgentCore.AspNetCore.Tests.Voice
             turn.End();
             _ = await handle;
 
-            Assert.Equal([0.200], readings.Of(FirstToken));
-            Assert.Equal([0.200], readings.Of(FirstSpeech));
-            Assert.Equal([0.200], readings.Of(ReplyEnd));
+            Assert.Equal([0.200], _latency.Of(LatencyMetric.TimeToFirstToken));
+            Assert.Equal([0.200], _latency.Of(LatencyMetric.TimeToFirstSpeech));
+            Assert.Equal([0.200], _latency.Of(LatencyMetric.TimeToReplyEnd));
         }
 
         [Fact(Timeout = 30_000)]
@@ -63,7 +62,6 @@ namespace AgentCore.AspNetCore.Tests.Voice
         {
             long userTurnEndedAt = _time.GetTimestamp();
             _time.Advance(TimeSpan.FromMilliseconds(50));
-            using LatencyReadings readings = new();
 
             SpeechHandle handle = _activity.GenerateReply("What's the weather?", userTurnEndedAt: userTurnEndedAt);
             ScriptedVoiceTurn turn = _port.Turn(1);
@@ -82,17 +80,15 @@ namespace AgentCore.AspNetCore.Tests.Voice
             turn.End();
             _ = await handle;
 
-            Assert.Equal([0.100, 0.150], readings.Of(FirstToken));
-            Assert.Equal([0.150], readings.Of(FirstSpeech));
-            Assert.Equal([0.600], readings.Of(ReplyEnd));
+            Assert.Equal([0.100, 0.150], _latency.Of(LatencyMetric.TimeToFirstToken));
+            Assert.Equal([0.150], _latency.Of(LatencyMetric.TimeToFirstSpeech));
+            Assert.Equal([0.600], _latency.Of(LatencyMetric.TimeToReplyEnd));
         }
 
         // EngineReplyStream.Start: no reading is taken once the speech is interrupted.
         [Fact(Timeout = 30_000)]
         public async Task ContentAfterTheSpeechWasInterrupted_TakesNoTimeToFirstTokenReading()
         {
-            using LatencyReadings readings = new();
-
             SpeechHandle handle = _activity.GenerateReply("Where is my order?", userTurnEndedAt: _time.GetTimestamp());
             ScriptedVoiceTurn turn = _port.Turn(1);
             _ = await turn.Started;
@@ -108,14 +104,13 @@ namespace AgentCore.AspNetCore.Tests.Voice
             turn.End();
             _ = await handle;
 
-            Assert.Equal([0.100], readings.Of(FirstToken));
+            Assert.Equal([0.100], _latency.Of(LatencyMetric.TimeToFirstToken));
         }
 
         [Fact(Timeout = 30_000)]
         public async Task ABargeIn_ReportsTheTimeUntilTheSpeechIsDoneAndNoReplyEnd()
         {
             long userTurnEndedAt = _time.GetTimestamp();
-            using LatencyReadings readings = new();
 
             SpeechHandle handle = _activity.GenerateReply("Tell me a story.", userTurnEndedAt: userTurnEndedAt);
             ScriptedVoiceTurn turn = _port.Turn(1);
@@ -134,10 +129,10 @@ namespace AgentCore.AspNetCore.Tests.Voice
             await interrupted;
 
             Assert.True(handle.IsDone);
-            Assert.Equal([0.120], readings.Of(BargeIn));
-            Assert.Equal([0.080], readings.Of(FirstToken));
-            Assert.Equal([0.080], readings.Of(FirstSpeech));
-            Assert.Empty(readings.Of(ReplyEnd));
+            Assert.Equal([0.120], _latency.Of(LatencyMetric.BargeIn));
+            Assert.Equal([0.080], _latency.Of(LatencyMetric.TimeToFirstToken));
+            Assert.Equal([0.080], _latency.Of(LatencyMetric.TimeToFirstSpeech));
+            Assert.Empty(_latency.Of(LatencyMetric.TimeToReplyEnd));
         }
 
         // agent_activity.py interrupt: the barge-in reading is taken once the interrupted speech is done, also when a
@@ -145,8 +140,6 @@ namespace AgentCore.AspNetCore.Tests.Voice
         [Fact(Timeout = 30_000)]
         public async Task ABargeInAfterAFinalPrompt_ReportsOneReadingOnceTheSpeechIsDone()
         {
-            using LatencyReadings readings = new();
-
             SpeechHandle handle = _activity.GenerateReply("hi", userTurnEndedAt: _time.GetTimestamp());
             ScriptedVoiceTurn turn = _port.Turn(1);
             _ = await turn.Started;
@@ -163,27 +156,25 @@ namespace AgentCore.AspNetCore.Tests.Voice
             await Task.WhenAll(recorded, repeated);
             _ = await handle;
 
-            Assert.Equal([0.150], readings.Of(BargeIn));
+            Assert.Equal([0.150], _latency.Of(LatencyMetric.BargeIn));
         }
 
         // generation.py perform_llm_inference: ttft is measured from a step's start, so with no step there is none.
         [Fact]
         public void FirstContentBeforeAnyStep_ReportsNoTimeToFirstToken()
         {
-            using LatencyReadings readings = new();
-            TurnMetrics metrics = new(_time, _time.GetTimestamp());
+            TurnMetrics metrics = new(_time, _time.GetTimestamp(), _latency.Record);
 
             metrics.MarkFirstContent();
 
-            Assert.Empty(readings.Of(FirstToken));
+            Assert.Empty(_latency.Of(LatencyMetric.TimeToFirstToken));
         }
 
         [Fact]
         public void EndingAReplyTwice_ReportsOneReplyEnd()
         {
             long userTurnEndedAt = _time.GetTimestamp();
-            using LatencyReadings readings = new();
-            TurnMetrics metrics = new(_time, userTurnEndedAt);
+            TurnMetrics metrics = new(_time, userTurnEndedAt, _latency.Record);
             _time.Advance(TimeSpan.FromMilliseconds(300));
             metrics.MarkSpeechEnded();
 
@@ -192,7 +183,7 @@ namespace AgentCore.AspNetCore.Tests.Voice
             metrics.MarkSpeechEnded();
             metrics.EndReply();
 
-            Assert.Equal([0.300], readings.Of(ReplyEnd));
+            Assert.Equal([0.300], _latency.Of(LatencyMetric.TimeToReplyEnd));
         }
     }
 }

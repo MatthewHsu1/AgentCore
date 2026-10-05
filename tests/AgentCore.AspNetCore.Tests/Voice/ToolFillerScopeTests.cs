@@ -2,11 +2,13 @@
 // :380, test_run_context_with_filler_cancels_on_exit :399), commit
 // d8405f132e1bd960f298190c18daf81ffc1faf45. Copyright 2023 LiveKit, Inc.
 // Licensed under the Apache License, Version 2.0. Modified: translated to C#; a tool cannot open this
-// itself (G5), so the scope is opened directly with the tool id's options rather than through
+// itself, so the scope is opened directly with the tool id's options rather than through
 // RunContext.with_filler.
 
 using AgentCore.AspNetCore.Tests.Fakes;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Voice.Filler;
+using AgentCore.AspNetCore.Voice.Session;
+using AgentCore.AspNetCore.Voice.Speech;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;

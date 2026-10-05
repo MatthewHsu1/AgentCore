@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using System.Reflection;
-using AgentCore.Application.Runtime;
 using Microsoft.Agents.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Runtime
 {

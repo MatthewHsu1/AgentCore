@@ -7,7 +7,7 @@ using AgentCore.Application.Providers;
 namespace AgentCore.Application.Conversation
 {
     /// <summary>
-    /// Opens the store 0 backing the document names, from the adapters the host registered.
+    /// Opens the conversation store the document names, from the adapters the host registered.
     /// </summary>
     public static class ConversationStoreFactory
     {

@@ -1,5 +1,4 @@
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Harness;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tools;
@@ -7,6 +6,7 @@ using AgentCore.Application.Tools.Builtin;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Turn;
 
 namespace AgentCore.Application.Tests.Tools
 {
@@ -14,11 +14,6 @@ namespace AgentCore.Application.Tests.Tools
     /// A background child runs with no turn, so <c>file.publish</c> finds the owning conversation on the stamp
     /// its session carries and stores the file under the parent conversation.
     /// </summary>
-    /// <remarks>
-    /// The child session is created inside the parent's run, the way <c>BackgroundAgentsProvider</c>
-    /// creates it, so <see cref="BackgroundChildAgent"/> stamps it. The child then runs on that session
-    /// with null run options, which is what the provider passes it.
-    /// </remarks>
     public sealed class FilePublishBackgroundChildTests : IDisposable
     {
         private readonly string _root = Path.Combine(Path.GetTempPath(), "agentcore-publish-child-" + Guid.NewGuid().ToString("N"));
@@ -36,7 +31,6 @@ namespace AgentCore.Application.Tests.Tools
         [Fact]
         public async Task AChildThatPublishes_StoresTheFileUnderTheParentConversation()
         {
-            // Arrange
             CancellationToken token = TestContext.Current.CancellationToken;
             File.WriteAllText(Path.Combine(_root, "conversation-9", "rows.csv"), "a,b");
             RecordingBlobStore blobs = new();
@@ -56,10 +50,9 @@ namespace AgentCore.Application.Tests.Tools
 
             _ = await parent.RunAsync("go", await parent.CreateSessionAsync(token), turn.RunOptions(), token);
 
-            // Act: the child runs on its stamped session with no run options, as the provider runs it.
+            // The child runs on its stamped session with no run options, as the provider runs it.
             _ = await child.RunAsync("publish the rows", creating.Created!, options: null, token);
 
-            // Assert
             Assert.Equal(["publish"], childModel.Called);
             string result = Assert.Single(childModel.ToolResults);
             Assert.Contains("https://blobs.test/conversation-9/rows.csv", result, StringComparison.Ordinal);

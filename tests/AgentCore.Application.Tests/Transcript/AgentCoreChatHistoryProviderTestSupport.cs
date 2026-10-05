@@ -7,6 +7,7 @@ using AgentCore.TestSupport;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 
 namespace AgentCore.Application.Tests.Transcript
 {
@@ -16,7 +17,7 @@ namespace AgentCore.Application.Tests.Transcript
     {
         internal const string ConversationId = "conversation-1";
 
-        /// <summary>The key that binds a session to its conversation (design section 2, "StateKeys").</summary>
+        /// <summary>The key that binds a session to its conversation.</summary>
         internal const string StateKey = "agentcore.history";
 
         /// <summary>

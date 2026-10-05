@@ -1,5 +1,6 @@
 using AgentCore.AspNetCore.Tests.Fakes;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Voice.Speech;
+using AgentCore.AspNetCore.Voice.Speech.Replies;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;

@@ -5,8 +5,8 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Evaluation;
+using AgentCore.Application.Hooks;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Diagnostics;
 using AgentCore.Application.Tests.Evaluation.Fakes;
@@ -16,25 +16,13 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Xunit;
 using AgentCore.Domain;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Audit
 {
     /// <summary>
     /// Moderation reads what the caller said before the model runs, and refuses a flagged turn.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The owner decided this on 2026-08-13. It departs from section 11 item 11, which asked for the
-    /// agent's REPLY to be moderated and recorded. Recording a harmful reply protects nobody, because
-    /// the caller already heard it. Reply moderation is withdrawn, because the model carries its own
-    /// safety training, so <c>prompt.flagged</c> is the only moderation kind the chain has.
-    /// </para>
-    /// <para>
-    /// The one rule that separates <c>prompt.flagged</c> from <c>reply.interrupted</c> is here: the
-    /// verdict is known BEFORE the model runs, so the event is written before <c>turn.completed</c> and
-    /// amends nothing.
-    /// </para>
-    /// </remarks>
     public sealed class ConversationSessionModerationTests
     {
         private const string PlainYaml =
@@ -79,7 +67,7 @@ namespace AgentCore.Application.Tests.Audit
 
             _ = await session.RunTurnAsync("...", TestContext.Current.CancellationToken);
 
-            IReadOnlyList<AuditEvent> events = sink.EventsOf("conversation-1");
+            IReadOnlyList<AuditEvent> events = await session.RowsAsync(sink);
             AuditEvent flagged = Assert.Single(events, e => e.Kind == AuditEventKind.PromptFlagged);
             AuditEvent completed = Assert.Single(events, e => e.Kind == AuditEventKind.TurnCompleted);
 
@@ -99,7 +87,7 @@ namespace AgentCore.Application.Tests.Audit
 
             _ = await session.RunTurnAsync("...", TestContext.Current.CancellationToken);
 
-            AuditEvent flagged = Assert.Single(sink.EventsOf("conversation-1"), e => e.Kind == AuditEventKind.PromptFlagged);
+            AuditEvent flagged = Assert.Single(await session.RowsAsync(sink), e => e.Kind == AuditEventKind.PromptFlagged);
             Assert.Equal("violence,harassment", flagged.Payload[AuditPayloadKeys.ModerationCategories]);
         }
 
@@ -136,7 +124,7 @@ namespace AgentCore.Application.Tests.Audit
 
             TurnResult result = await session.RunTurnAsync("...", TestContext.Current.CancellationToken);
 
-            // A refusal is not a section 8.7 failure. Nothing broke, and the model was never asked.
+            // A refusal is not a failure. Nothing broke, and the model was never asked.
             Assert.Null(result.Failure);
         }
 
@@ -149,7 +137,7 @@ namespace AgentCore.Application.Tests.Audit
 
             _ = await session.RunTurnAsync("...", TestContext.Current.CancellationToken);
 
-            AuditEvent completed = Assert.Single(sink.EventsOf("conversation-1"), e => e.Kind == AuditEventKind.TurnCompleted);
+            AuditEvent completed = Assert.Single(await session.RowsAsync(sink), e => e.Kind == AuditEventKind.TurnCompleted);
             Assert.Equal(
                 AuditHash.OfText("I am sorry. I cannot help with that request.").Value,
                 completed.Payload[AuditPayloadKeys.ReplyTextSha256]);
@@ -177,12 +165,13 @@ namespace AgentCore.Application.Tests.Audit
                 moderation: ScriptedModerationEvaluator.Flagging("harassment")).Create("conversation-1");
 
             _ = await session.RunTurnAsync("the words that were flagged", TestContext.Current.CancellationToken);
+            await session.FlushNoticesAsync();
 
             LogLine entry = Assert.Single(logger.Of(6));
             Assert.Equal(LogLevel.Warning, entry.Level);
             Assert.Contains("harassment", entry.Message, StringComparison.Ordinal);
 
-            // The flagged words are the content. A log store holds none of the three defences of D23,
+            // The flagged words are the content. A log store is no place for the words,
             // so the categories travel and the words do not.
             Assert.DoesNotContain("the words that were flagged", entry.Message, StringComparison.Ordinal);
         }
@@ -196,7 +185,7 @@ namespace AgentCore.Application.Tests.Audit
 
             _ = await session.RunTurnAsync("...", TestContext.Current.CancellationToken);
 
-            IReadOnlyList<AuditEvent> events = sink.EventsOf("conversation-1");
+            IReadOnlyList<AuditEvent> events = await session.RowsAsync(sink);
             Assert.Equal(
                 [AuditEventKind.ConversationStarted, AuditEventKind.PromptFlagged, AuditEventKind.TurnCompleted],
                 events.Select(e => e.Kind).ToArray());
@@ -218,7 +207,7 @@ namespace AgentCore.Application.Tests.Audit
             Assert.Equal("the ordinary reply", result.ReplyText);
 
             // The vocabulary holds no reply.cleared. A turn.completed that no flag precedes is the record.
-            Assert.DoesNotContain(sink.EventsOf("conversation-1"), e => e.Kind == AuditEventKind.PromptFlagged);
+            Assert.DoesNotContain(await session.RowsAsync(sink), e => e.Kind == AuditEventKind.PromptFlagged);
         }
 
         [Fact]
@@ -245,7 +234,7 @@ namespace AgentCore.Application.Tests.Audit
 
             Assert.Equal(1, model.Calls);
             Assert.Equal("the ordinary reply", result.ReplyText);
-            Assert.DoesNotContain(sink.EventsOf("conversation-1"), e => e.Kind == AuditEventKind.PromptFlagged);
+            Assert.DoesNotContain(await session.RowsAsync(sink), e => e.Kind == AuditEventKind.PromptFlagged);
         }
 
         [Fact]
@@ -258,6 +247,7 @@ namespace AgentCore.Application.Tests.Audit
                 .Create("conversation-1");
 
             TurnResult result = await session.RunTurnAsync("...", TestContext.Current.CancellationToken);
+            await session.FlushNoticesAsync();
 
             Assert.Equal("the ordinary reply", result.ReplyText);
             Assert.Equal(1, model.Calls);
@@ -278,7 +268,7 @@ namespace AgentCore.Application.Tests.Audit
 
             // A missing fact is an absent event, never an event carrying "unknown". The chain rule would
             // refuse a prompt.flagged with no category anyway.
-            Assert.DoesNotContain(sink.EventsOf("conversation-1"), e => e.Kind == AuditEventKind.PromptFlagged);
+            Assert.DoesNotContain(await session.RowsAsync(sink), e => e.Kind == AuditEventKind.PromptFlagged);
         }
 
         [Fact]
@@ -291,7 +281,7 @@ namespace AgentCore.Application.Tests.Audit
             TurnResult result = await session.RunTurnAsync("...", TestContext.Current.CancellationToken);
 
             Assert.Equal("the ordinary reply", result.ReplyText);
-            Assert.Equal(2, sink.EventsOf("conversation-1").Count);
+            Assert.Equal(2, (await session.RowsAsync(sink)).Count);
         }
 
         // The streaming path takes the same decision.
@@ -306,7 +296,7 @@ namespace AgentCore.Application.Tests.Audit
             List<string> spoken = [];
             await foreach (ChatResponseUpdate update in session.RunTurnStreamingAsync("...", TestContext.Current.CancellationToken))
             {
-                // The trailing update is the turn's committed ids (design section 6, step E5), not text.
+                // The trailing update is the turn's committed ids, not text.
                 if (update.Contents.OfType<TurnCommittedContent>().Any())
                 {
                     continue;
@@ -317,7 +307,7 @@ namespace AgentCore.Application.Tests.Audit
 
             Assert.Equal(["I am sorry. I cannot help with that request."], spoken);
             Assert.Equal(0, model.Calls);
-            Assert.Contains(sink.EventsOf("conversation-1"), e => e.Kind == AuditEventKind.PromptFlagged);
+            Assert.Contains(await session.RowsAsync(sink), e => e.Kind == AuditEventKind.PromptFlagged);
         }
 
         [Fact]
@@ -343,10 +333,10 @@ namespace AgentCore.Application.Tests.Audit
             ILogger? logger = null,
             ScriptedModerationEvaluator? moderation = null)
         {
-            // ConversationObservers.Standard takes a required sink, because the composition root resolves
-            // providers.audit for every host and falls back to the in-process memory kind. An optional
-            // parameter has to be a compile-time constant, so the default is spelled here instead — a fact
-            // that does not care where its events land gets a fresh in-memory sink.
+            // The audit hook takes a required sink, because the composition root resolves providers.audit for
+            // every host and falls back to the in-process memory kind. An optional parameter has to be a
+            // compile-time constant, so the default is spelled here instead — a fact that does not care where
+            // its events land gets a fresh in-memory sink.
             IAuditSinkPort auditSink = sink ?? new InMemoryAuditSink();
 
             AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(yaml);
@@ -356,7 +346,7 @@ namespace AgentCore.Application.Tests.Audit
                 _ = chatClients.Route("fill", fill);
             }
 
-            // R3 puts moderation in the chat pipeline of every compiled agent, so the moderator is
+            // Moderation sits in the chat pipeline of every compiled agent, so the moderator is
             // bound at compile time and not on the session factory.
             CompiledAgent compiled = ConfigurationCompiler.CompileAll(
                 document,
@@ -371,7 +361,7 @@ namespace AgentCore.Application.Tests.Audit
                 ConversationSessionFactory.CreateExtractor(compiled, chatClients),
                 timeProvider: null,
                 logger,
-                ConversationObservers.Standard(auditSink, logger));
+                hooks: BuiltInHooks.Create(auditSink, logger));
         }
     }
 }

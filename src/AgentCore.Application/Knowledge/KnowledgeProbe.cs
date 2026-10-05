@@ -1,15 +1,15 @@
 using System.Diagnostics;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Diagnostics;
-using AgentCore.Application.Runtime;
 using AgentCore.Domain.Knowledge;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging;
+using AgentCore.Application.Runtime.Clarification;
 
 namespace AgentCore.Application.Knowledge
 {
     /// <summary>
-    /// §8 steps 3-6: the probe. When a scoped search clears no card, it drops one wildcard-filled facet,
+    /// The probe. When a scoped search clears no card, it drops one wildcard-filled facet,
     /// searches again, and names what the wider search holds.
     /// </summary>
     internal static class KnowledgeProbe
@@ -30,7 +30,7 @@ namespace AgentCore.Application.Knowledge
             bool carriesHistory,
             CancellationToken cancellationToken)
         {
-            // K42: a nested tool call runs with the holder stripped from its invocation, so a delegated
+            // A nested tool call runs with the holder stripped from its invocation, so a delegated
             // run's own search cannot latch, count or record — but a scoped run still owes the caller
             // the notice.
             if (clarifications is null || ProbeWiring.From(binding.Knowledge.Clarification) is not { } wiring)
@@ -38,7 +38,7 @@ namespace AgentCore.Application.Knowledge
                 return [KnowledgeNotices.Of(KnowledgeNotices.Empty)];
             }
 
-            // §8 step 3. Recomputed fresh on every call in the turn — including one that arrives after the
+            // Recomputed fresh on every call in the turn — including one that arrives after the
             // turn's probe has already run — so it must stay cheap, deterministic and repeatable rather
             // than mutate anything. Nothing is latched by this exit: a second call that also finds no
             // droppable facet simply reaches this same conclusion again.
@@ -61,7 +61,7 @@ namespace AgentCore.Application.Knowledge
             // that a throw already took away.
             try
             {
-                // §8 step 4: the latch and the increment both belong before the search runs. An increment
+                // The latch and the increment both belong before the search runs. An increment
                 // placed after it would let a probe that always times out offer the same facet forever; a
                 // latch placed after it would leave a throwing first call's latch unset, so a second call
                 // in the same turn would re-run the search and advance probeAsks a second time.
@@ -104,7 +104,7 @@ namespace AgentCore.Application.Knowledge
             }
         }
 
-        /// <summary>§8 step 4: the probe's own second search, under the narrowed scope, logged like the main one.</summary>
+        /// <summary>The probe's own second search, under the narrowed scope, logged like the main one.</summary>
         private static async Task<IReadOnlyList<KnowledgeCard>> SearchAsync(
             KnowledgeBinding binding,
             KnowledgeScope narrowedScope,
@@ -132,7 +132,7 @@ namespace AgentCore.Application.Knowledge
             return probeCards;
         }
 
-        /// <summary>K43: replays the outcome of the one probe this turn already claimed.</summary>
+        /// <summary>Replays the outcome of the one probe this turn already claimed.</summary>
         private static async Task<IReadOnlyList<TextSearchProvider.TextSearchResult>> ReplayAsync(
             Clarifications.Probe probe,
             KnowledgeAmbiguityConfiguration ambiguity,
@@ -146,14 +146,14 @@ namespace AgentCore.Application.Knowledge
             }
             catch (Exception failure) when (!KnowledgeCancellation.ByCaller(failure, cancellationToken))
             {
-                // The winner's own search already answered for reachability (§8 step 4's own catch says
-                // the same thing): a wait that timed out, or a payload the winner failed via Probe.Fail(),
+                // The winner's own search already answered for reachability (the catch around the probe's own
+                // search says the same thing): a wait that timed out, or a payload the winner failed via Probe.Fail(),
                 // is never grounds to tell this caller the store is unreachable.
                 return [KnowledgeNotices.Of(KnowledgeNotices.Empty)];
             }
         }
 
-        /// <summary>§8 steps 5-6: reads the candidates out of the probe's cards and decides what to say.</summary>
+        /// <summary>Reads the candidates out of the probe's cards and decides what to say.</summary>
         private static IReadOnlyList<TextSearchProvider.TextSearchResult> Name(
             KnowledgeBinding binding,
             ProbeWiring wiring,
@@ -163,7 +163,7 @@ namespace AgentCore.Application.Knowledge
         {
             (Clarifications? clarifications, Clarifications.Probe? probe, string? facet) = claimed;
 
-            // §8 step 5: the value at the facet's payload path is a string or a list of strings alike —
+            // The value at the facet's payload path is a string or a list of strings alike —
             // the real corpus stores arrays, and a cast straight to string would silently return null for
             // every card on a multi-model collection.
             string path = wiring.Template.Resolve(facet);
@@ -180,14 +180,14 @@ namespace AgentCore.Application.Knowledge
                 return Publish(probe, KnowledgeNotices.Empty);
             }
 
-            // §8 step 6. probeAsks was already advanced in step 4; nothing below chooses anything but the
+            // probeAsks was already advanced before the second search; nothing below chooses anything but the
             // message.
             Clarifications.LastNamed wouldName = Clarifications.LastNamed.For(union, wiring.Ambiguity.MaxCandidates);
             List<string> candidates = [.. union];
 
-            // K39, drawn for the record rather than for the message: on a graph row AgentCore cannot know
+            // Drawn for the record rather than for the message: on a graph row AgentCore cannot know
             // whether the participant's own tool result ever reached the caller, so the note still goes
-            // out, but the record of what was named — which arms K21's tie-break — does not. The flag
+            // out, but the record of what was named — which arms the tie-break — does not. The flag
             // arrives as a parameter because the probe runs inside a search delegate that is never
             // handed a session to compare.
 
@@ -226,12 +226,12 @@ namespace AgentCore.Application.Knowledge
         }
 
         /// <summary>
-        /// §8 step 3: the first facet, in <c>fromState</c> declaration order, the wildcard filled and that
+        /// The first facet, in <c>fromState</c> declaration order, the wildcard filled and that
         /// dropping would not empty the scope or skip a slot at its ask cap.
         /// </summary>
         private static string? DroppableFacet(ProbeWiring wiring, KnowledgeScope scope, Clarifications clarifications)
         {
-            // K33: the scope's only facet is undroppable — opening it empty is what a scoped store
+            // The scope's only facet is undroppable — opening it empty is what a scoped store
             // refuses. This holds for every candidate alike, so no candidate can be droppable at all.
             if (scope.Facets.Count <= 1)
             {
@@ -240,7 +240,7 @@ namespace AgentCore.Application.Knowledge
 
             foreach (string name in wiring.FromState)
             {
-                // K14: the wildcard filled it — its value is the wildcard's own, and the facet is named
+                // The wildcard filled it — its value is the wildcard's own, and the facet is named
                 // among the ones the wildcard is allowed to widen. Origins overrules the value where it
                 // has an entry: a host that pinned a facet to the wildcard literal meant "every value of
                 // it", and widening that facet would overrule an instruction rather than recover a lost
@@ -255,7 +255,7 @@ namespace AgentCore.Application.Knowledge
                     continue;
                 }
 
-                // K22: the probe's own counter is monotone and capped at maxAsks.
+                // The probe's own counter is monotone and capped at maxAsks.
                 if (clarifications.Read(name).ProbeAsks >= wiring.Ambiguity.MaxAsks)
                 {
                     continue;
@@ -267,17 +267,10 @@ namespace AgentCore.Application.Knowledge
             return null;
         }
 
-        /// <summary>Opens the same scope with one facet removed, for §8 step 4's second search.</summary>
+        /// <summary>Opens the same scope with one facet removed, for the probe's second search.</summary>
         /// <param name="scope">The scope the main search ran under.</param>
         /// <param name="facet">The facet to drop.</param>
         /// <returns>The narrowed scope.</returns>
-        /// <remarks>
-        /// Each map keeps its own comparer. Rebuilding on a fixed ordinal comparer would narrow how a
-        /// case-insensitive caller's facets match, so the second search would run under different matching
-        /// rules than the first. Origins loses the facet alongside Facets, because it describes what the
-        /// query actually filters on — a retrieval record built from a scope that kept it would name a
-        /// facet the probe's search never constrained.
-        /// </remarks>
         private static KnowledgeScope WithoutFacet(KnowledgeScope scope, string facet)
         {
             Dictionary<string, string> facets = new(scope.Facets, ComparerOf(scope.Facets));
@@ -296,7 +289,7 @@ namespace AgentCore.Application.Knowledge
         }
 
         /// <summary>
-        /// §8 step 5: walks a dotted path into one card's <c>Extras</c>, reading a string or a list of
+        /// Walks a dotted path into one card's <c>Extras</c>, reading a string or a list of
         /// strings alike — the shape <c>QdrantPointConverter</c> gives a Qdrant scalar or list value.
         /// </summary>
         private static IEnumerable<string> FacetValues(KnowledgeCard card, string path)

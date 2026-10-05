@@ -3,7 +3,7 @@ using static AgentCore.Infrastructure.Conversation.Postgres.PostgresConversation
 
 namespace AgentCore.Infrastructure.Conversation.Postgres
 {
-    /// <summary>Reads store 1's words beside the hashes store 3 holds for them, for a retroactive check.</summary>
+    /// <summary>Reads the message store's words beside the hashes the audit store holds for them, for a retroactive check.</summary>
     internal static class PostgresConversationVerification
     {
         /// <summary>Reads one conversation's spoken turns beside the hashes the audit chain holds for them.</summary>
@@ -35,10 +35,10 @@ namespace AgentCore.Infrastructure.Conversation.Postgres
         }
     }
 
-    /// <summary>One spoken turn, as store 1 holds it and as store 3 proves it.</summary>
+    /// <summary>One spoken turn, as the message store holds it and as the audit store proves it.</summary>
     /// <param name="TurnIndex">The turn, which is the join between the two stores.</param>
     /// <param name="Spoken">
-    /// Every step's text store 1 holds for the turn, concatenated in row order. A barge-in cuts these rows
+    /// Every step's text the message store holds for the turn, concatenated in row order. A barge-in cuts these rows
     /// down to what the caller heard, so for a cut turn this already holds the shown words, not the words
     /// the model produced.
     /// </param>

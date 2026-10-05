@@ -1,13 +1,14 @@
 using AgentCore.Application.Conversation;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Transcript;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using AgentCore.Application.Runtime.Cut;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
-    /// Stands in for the conversation's completer, as the design probes' <c>ProtoCommitAgent</c> did: its state is
+    /// Stands in for the conversation's completer: its state is
     /// <c>stage-after:</c> plus the reply, so a test can tell the state after the stage advance from any other.
     /// It logs <c>staged</c> when the framework's hook had staged the run by the time it ran, then <c>complete</c>.
     /// </summary>

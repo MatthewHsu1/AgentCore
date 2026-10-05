@@ -2,7 +2,6 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Sessions.Memory;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Domain;
@@ -10,6 +9,7 @@ using AgentCore.TestSupport;
 using Microsoft.Agents.AI.Tools.Shell;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Sessions.ConversationSessionsFixture;
 
 namespace AgentCore.Application.Tests.Runtime.Harness
@@ -74,7 +74,7 @@ namespace AgentCore.Application.Tests.Runtime.Harness
         [Fact]
         public async Task FirstRequest_ListsATool_NamedRunShell()
         {
-            // One literal assertion, as the brief allows: it pins the name the model actually sees.
+            // One literal assertion: it pins the name the model actually sees.
             Assert.Equal("run_shell", RunShellToolName);
 
             ShellScriptedClient client = new(RunShellToolName, "pwd", "rm -rf x", "echo $$");
@@ -183,9 +183,9 @@ namespace AgentCore.Application.Tests.Runtime.Harness
             // AgentCoreChatHistoryProvider.WriteAfterAsync catches every exception a store write
             // raises and reports it through ITranscriptLossCounter.Dropped, whose own contract is that it
             // never throws back out — "the conversation outlives a store that refuses" — so FlushTranscriptAsync
-            // itself surfaces nothing here, which is today's behaviour: CloseAsync completes rather than
-            // throw. What this proves is the part that used to be at risk: even though the flush ate the
-            // fault silently, the shell this conversation started is still disposed once CloseAsync returns.
+            // itself surfaces nothing here and CloseAsync completes rather than throw. What this proves: even
+            // though the flush ate the fault silently, the shell this conversation started is still disposed
+            // once CloseAsync returns.
             ThrowingConversationStore store = new();
             ShellScriptedClient client = new(RunShellToolName, "echo $$");
             AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(ShellYaml);

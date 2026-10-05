@@ -10,13 +10,14 @@ using System.Text.Json.Nodes;
 using Xunit;
 using static AgentCore.Application.Tests.Runtime.AgentCoreAgentTestSupport;
 using Microsoft.Agents.AI;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
     /// The <see cref="AgentCoreAgent"/> shim's session envelope: what
     /// <c>SerializeSessionAsync</c>/<c>DeserializeSessionAsync</c> carry across a checkpoint, and what a
-    /// resumed conversation keeps of store 0's own record.
+    /// resumed conversation keeps of the conversation store's own record.
     /// </summary>
     public sealed class AgentCoreAgentSessionTests
     {
@@ -51,7 +52,7 @@ namespace AgentCore.Application.Tests.Runtime
             JsonElement serialized = await agent.SerializeSessionAsync(
                 session, cancellationToken: TestContext.Current.CancellationToken);
 
-            // Store 1 is keyed by conversation id. State that travelled without one would come back on a conversation
+            // The message store is keyed by conversation id. State that travelled without one would come back on a conversation
             // that has no words behind it, which is the one failure this envelope exists to prevent.
             Assert.Equal("conversation-42", serialized.GetProperty("conversationId").GetString());
         }
@@ -82,7 +83,7 @@ namespace AgentCore.Application.Tests.Runtime
             JsonElement serialized = await agent.SerializeSessionAsync(
                 session, cancellationToken: TestContext.Current.CancellationToken);
 
-            // Store 0's own copy of the state outranks whatever this session held before it unloaded, so
+            // The conversation store's own copy of the state outranks whatever this session held before it unloaded, so
             // the blob carries only the id: a live session's snapshot would be stale the moment it wrote.
             Assert.Equal("conversation-42", serialized.GetProperty("conversationId").GetString());
             Assert.Equal(JsonValueKind.Null, serialized.GetProperty("state").ValueKind);
@@ -164,8 +165,8 @@ namespace AgentCore.Application.Tests.Runtime
 
             // And the ordinary path is untouched. Once the turn opens the conversation, the document is what
             // the conversation would resume from and the checkpoint is spent — so a value written after that
-            // turn is what comes back, not the one the checkpoint still holds. Store 1's writer reads
-            // this same method, so a snapshot that kept answering the checkpoint would freeze store 0
+            // turn is what comes back, not the one the checkpoint still holds. The message store's writer reads
+            // this same method, so a snapshot that kept answering the checkpoint would freeze the conversation store
             // at the moment the conversation was revived and never record another thing the conversation learned.
             _ = await agent.RunAsync("hello", revived, cancellationToken: TestContext.Current.CancellationToken);
 
@@ -234,7 +235,7 @@ namespace AgentCore.Application.Tests.Runtime
             // scalars, and an implementation that wrote {} would pass the two assertions below.
             Assert.Contains("escalate", raw, StringComparison.Ordinal);
 
-            // Store 1 is durable already. A checkpoint that carried the words would give one conversation
+            // The message store is durable already. A checkpoint that carried the words would give one conversation
             // two records and one chance to disagree.
             Assert.DoesNotContain("remember this sentence", raw, StringComparison.Ordinal);
             Assert.DoesNotContain("a reply", raw, StringComparison.Ordinal);
@@ -246,7 +247,7 @@ namespace AgentCore.Application.Tests.Runtime
             InMemoryConversationStore store = new();
             _ = await store.CreateAsync("conversation-42", TestContext.Current.CancellationToken);
 
-            // Store 0's own copy of this conversation: one word, and the state written in the same batch.
+            // The conversation store's own copy of this conversation: one word, and the state written in the same batch.
             _ = await store.AppendAsync(
                 "conversation-42",
                 [new ConversationMessageDraft(0, new ChatMessage(ChatRole.User, "an earlier turn"), "m0")],
@@ -261,8 +262,8 @@ namespace AgentCore.Application.Tests.Runtime
 
             AgentCoreAgent agent = BuildAgent(new SequencedChatClient("a reply"), out _, SlottedAgentYaml, store);
 
-            // It disagrees with store 0 on one slot and carries a second store 0 knows nothing about.
-            // The second is what a merge would leak: store 0 has no value to write over it.
+            // It disagrees with the conversation store on one slot and carries a second slot the conversation store knows nothing about.
+            // The second is what a merge would leak: the conversation store has no value to write over it.
             ConversationSessionState checkpoint = new()
             {
                 Slots = new Dictionary<string, JsonNode?>(StringComparer.Ordinal)
@@ -280,13 +281,13 @@ namespace AgentCore.Application.Tests.Runtime
             ConversationSession? conversation = revived.GetService<ConversationSession>();
             Assert.NotNull(conversation);
 
-            // False, which is store 0's value and not the checkpoint's. Store 0's blob rides the same
-            // batch as the words above, so its state and store 1's words are of one moment; a
+            // False, which is the conversation store's value and not the checkpoint's. The conversation store's blob rides the same
+            // batch as the words above, so its state and the message store's words are of one moment; a
             // checkpoint's state beside those same words can be of two. One precedence, stated.
             Assert.False(conversation.State.Read("escalate")!.GetValue<bool>());
 
-            // And store 0 wins outright rather than per slot. Where store 0 holds state, the checkpoint
-            // contributes nothing at all — not even the slot store 0 never heard of.
+            // And the conversation store wins outright rather than per slot. Where the conversation store holds state, the checkpoint
+            // contributes nothing at all — not even the slot the conversation store never heard of.
             Assert.True(conversation.State.IsUnfilled("note"));
         }
 
@@ -295,7 +296,7 @@ namespace AgentCore.Application.Tests.Runtime
         {
             AgentCoreAgent agent = BuildAgent(new SequencedChatClient("unused"), out _, SlottedAgentYaml);
 
-            // The bare ConversationSessionState: the literal value store 0 keeps in conversation.state, and the other
+            // The bare ConversationSessionState: the literal value the conversation store keeps in conversation.state, and the other
             // of the two shapes in this system. Read as an envelope it names no conversation, and a new random
             // id would take the conversation's whole transcript with it.
             JsonElement bare = JsonSerializer.SerializeToElement(
@@ -357,8 +358,7 @@ namespace AgentCore.Application.Tests.Runtime
             AgentSession revived = await agent.DeserializeSessionAsync(
                 serialized, cancellationToken: TestContext.Current.CancellationToken);
 
-            // A behaviour change worth pinning rather than inferring: before the conversation state blob, a
-            // reloaded page met a conversation that had forgotten it ended and answered one more turn.
+            // A reloaded page must meet a conversation that remembers it ended, not answer one more turn.
             InvalidOperationException failure = await Assert.ThrowsAsync<InvalidOperationException>(
                 () => agent.RunAsync("again", revived, cancellationToken: TestContext.Current.CancellationToken));
 
@@ -378,7 +378,7 @@ namespace AgentCore.Application.Tests.Runtime
 
             // The state is read as the session opens and never again, so a late hand-off would be a
             // silent no-op. Saying so is the whole reason the guard is here.
-            InvalidOperationException failure = Assert.Throws<InvalidOperationException>(() => conversation.Resume(new ConversationSessionState()));
+            InvalidOperationException failure = Assert.Throws<InvalidOperationException>(() => conversation.States.Resume(new ConversationSessionState()));
 
             Assert.Contains("already run a turn", failure.Message, StringComparison.Ordinal);
         }

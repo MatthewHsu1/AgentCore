@@ -1,4 +1,4 @@
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Sessions.Memory
 {

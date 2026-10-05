@@ -1,28 +1,22 @@
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Knowledge.Fakes;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Clarification;
+using AgentCore.Application.Runtime.Session;
+using AgentCore.Application.Runtime.ToolCalls;
+using AgentCore.Application.Runtime.Turn;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
-    /// K42's strip: <see cref="AuditingFunctionInvokingChatClient.InvokeFunctionAsync"/> hands a
-    /// nested tool call the turn with its <see cref="Clarifications"/> stripped, and hands the
-    /// outermost call the whole turn.
+    /// <see cref="AuditingFunctionInvokingChatClient.InvokeFunctionAsync"/> hands a nested tool call the turn
+    /// with its <see cref="Clarifications"/> stripped, and hands the outermost call the whole turn.
     /// </summary>
-    /// <remarks>
-    /// The first two facts drive <see cref="AuditingFunctionInvokingChatClient"/> directly, the same way
-    /// <see cref="AuditingFunctionInvokingChatClientRenderTests"/> does, with the turn filed
-    /// on the conversation's own options. The third drives a real <see cref="ConversationSession"/> turn,
-    /// because that is the only place that proves the session actually threads its
-    /// own <c>Clarifications</c> instance through — a fact the first two cannot see, since they file the
-    /// turn by hand.
-    /// </remarks>
     public sealed class AuditingFunctionInvokingChatClientStripTests
     {
         [Fact]
@@ -65,7 +59,7 @@ namespace AgentCore.Application.Tests.Runtime
         {
             // The outer tool's own invocation reads the filed turn before starting the nested loop, and the
             // inner tool reads it from inside that nested loop's own InvokeFunctionAsync. The two reads
-            // must disagree: K42's strip is conditional on being nested, not on being any tool call at
+            // must disagree: the strip is conditional on being nested, not on being any tool call at
             // all, or it would blind the caller's own search too.
             Clarifications clarifications = new();
             Clarifications? seenOutside = null;
@@ -139,11 +133,9 @@ namespace AgentCore.Application.Tests.Runtime
             };
         }
 
-        // -------------------------------------------------------------------------------------------
-        // The wiring fact: a real ConversationSession turn opens its own Clarifications and files it on the
+        // A real ConversationSession turn opens its own Clarifications and files it on the
         // run, so the probe — not the store — sees it. The increment below proves both halves: no
         // holder, or no filing, and the probe's search never runs.
-        // -------------------------------------------------------------------------------------------
         [Fact]
         public async Task RunTurnAsync_AToolModeKnowledgeSearch_SeesTheHolder()
         {

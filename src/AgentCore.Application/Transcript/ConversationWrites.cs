@@ -11,9 +11,8 @@ namespace AgentCore.Application.Transcript
     /// The durable writes of a conversation: each changes the session's transcript under its lock and queues the
     /// matching store write in the same step, so the store sees the writes in the order the transcript took them.
     /// </summary>
-    /// <remarks>Creates the writes over the sessions' gates.</remarks>
     /// <param name="gates">The gate of every session.</param>
-    /// <param name="store">Store 1, which an edit under the summary cuts directly.</param>
+    /// <param name="store">The message store, which an edit under the summary cuts directly.</param>
     /// <param name="logger">Where cuts and withdrawals are logged.</param>
     internal sealed class ConversationWrites(ConversationGates gates, IConversationStore store, ILogger logger)
     {
@@ -34,14 +33,35 @@ namespace AgentCore.Application.Transcript
                 session,
                 (transcript, gate) =>
                 {
+                    int user = commit.Before.Count;
                     IReadOnlyList<ConversationMessage> rows = transcript.Append(
-                        TurnWords.Compose(commit, gate.TakeStaged()), commit.UserMessageId);
+                        TurnWords.Compose(commit, gate.TakeStaged()), commit.UserMessageId, user);
                     Task<bool> refused = gate.QueueAppend(rows, commit.State);
                     return new TurnWrite(
-                        rows[0].MessageId,
-                        rows.Count > 1 ? rows[^1].MessageId : null,
+                        rows[user].MessageId,
+                        rows.Count > user + 1 ? rows[^1].MessageId : null,
                         TurnWords.Spoken(rows.Select(row => row.Content)),
                         refused);
+                });
+        }
+
+        /// <summary>Appends rows between turns, under the turn the conversation takes next.</summary>
+        public void AppendBetweenTurns(AgentSession session, IReadOnlyList<ChatMessage> messages, int nextTurnIndex)
+        {
+            _ = _gates.Under(
+                session,
+                (transcript, gate) => gate.QueueAppend(transcript.Append(messages, turnIndex: nextTurnIndex), state: null));
+        }
+
+        /// <summary>Queues the write of a state no turn's words carry.</summary>
+        public void SaveState(AgentSession session, ConversationSessionState state)
+        {
+            _ = _gates.Under(
+                session,
+                (_, gate) =>
+                {
+                    gate.QueueState(state);
+                    return true;
                 });
         }
 
@@ -151,7 +171,7 @@ namespace AgentCore.Application.Transcript
 
             ConversationRecord refreshed = await _store.GetAsync(conversationId, cancellationToken).ConfigureAwait(false)
                 ?? throw new InvalidOperationException(
-                    $"Store 0 holds no conversation '{conversationId}' for its own session to edit.");
+                    $"The conversation store holds no conversation '{conversationId}' for its own session to edit.");
             IReadOnlyList<ConversationMessage> rows = await _store.ReadForSessionAsync(conversationId, cancellationToken).ConfigureAwait(false);
 
             _ = _gates.Under(

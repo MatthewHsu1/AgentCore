@@ -1,5 +1,5 @@
 using AgentCore.Application.Conversation;
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Ports
 {

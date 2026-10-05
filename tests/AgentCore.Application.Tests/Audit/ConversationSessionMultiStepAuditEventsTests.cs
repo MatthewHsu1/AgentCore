@@ -1,5 +1,4 @@
 using AgentCore.Application.Audit.Memory;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Runtime;
 using AgentCore.Application.Transcript;
 using AgentCore.Domain;
@@ -7,6 +6,8 @@ using AgentCore.Domain.Audit;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Cut;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Audit
 {
@@ -26,7 +27,7 @@ namespace AgentCore.Application.Tests.Audit
             _ = await session.RunTurnAsync("hi", TestContext.Current.CancellationToken);
 
             AuditEvent completed = Assert.Single(
-                sink.EventsOf(session.ConversationId), item => item.Kind == AuditEventKind.TurnCompleted);
+                await session.RowsAsync(sink), item => item.Kind == AuditEventKind.TurnCompleted);
             Assert.Equal(
                 "92ea4f7debacecc2bb655776bd3406477c3c75d2575d40e3d9d67e763b5d5cec",
                 completed.Payload[AuditPayloadKeys.ReplyTextSha256]);
@@ -49,7 +50,7 @@ namespace AgentCore.Application.Tests.Audit
             _ = await session.RunTurnAsync("what does it cost", TestContext.Current.CancellationToken);
 
             AuditEvent completed = Assert.Single(
-                sink.EventsOf(session.ConversationId), item => item.Kind == AuditEventKind.TurnCompleted);
+                await session.RowsAsync(sink), item => item.Kind == AuditEventKind.TurnCompleted);
             Assert.Equal(
                 "0aeee3157d498f34407043e72714af88cbb07c27dc76050b8a294e7b96a6df9b",
                 completed.Payload[AuditPayloadKeys.ReplyTextSha256]);
@@ -58,7 +59,7 @@ namespace AgentCore.Application.Tests.Audit
         [Fact]
         public async Task ACutMultiStepTurn_HashesTheGeneratedReplyAndTheHeardTextSeparately()
         {
-            // The barge-in is reported after the turn already ran to completion (D28, item 6a), so the
+            // The barge-in is reported after the turn already ran to completion, so the
             // model's own output is fixed and deterministic: the whole two-step reply. The relay's report
             // of what the caller heard is a separate, independent value. turn.completed proves the first;
             // reply.interrupted proves the second, and the two must not be conflated into one hash.
@@ -75,7 +76,7 @@ namespace AgentCore.Application.Tests.Audit
             Assert.True(session.Cut(
                 0, new TurnCut(ProseBesideToolChatClient.Prose + "the total", TimeSpan.FromMilliseconds(1820))));
 
-            IReadOnlyList<AuditEvent> events = sink.EventsOf(session.ConversationId);
+            IReadOnlyList<AuditEvent> events = await session.RowsAsync(sink);
             AuditEvent completed = Assert.Single(events, item => item.Kind == AuditEventKind.TurnCompleted);
             AuditEvent interrupted = Assert.Single(events, item => item.Kind == AuditEventKind.ReplyInterrupted);
 
@@ -102,7 +103,7 @@ namespace AgentCore.Application.Tests.Audit
                 "Checking 1. Checking 2. Checking 3. Checking 4.I am sorry. I could not finish that. Please say it again.",
                 await SpokenAsync(session, turnIndex: 0));
             AuditEvent completed = Assert.Single(
-                sink.EventsOf(session.ConversationId), item => item.Kind == AuditEventKind.TurnCompleted);
+                await session.RowsAsync(sink), item => item.Kind == AuditEventKind.TurnCompleted);
             Assert.Equal(
                 "40e79eac3b0c25fe5d27e0fd6e0ee02aecc48ff93b81af341e0ec3cdb875812d",
                 completed.Payload[AuditPayloadKeys.ReplyTextSha256]);
@@ -130,7 +131,7 @@ namespace AgentCore.Application.Tests.Audit
             Assert.Equal("Let me check that for youthe", await SpokenAsync(session, turnIndex: 0));
             Assert.Equal("Let me check that for youthe", session.LastTurn?.ReplyText);
             AuditEvent interrupted = Assert.Single(
-                sink.EventsOf(session.ConversationId), item => item.Kind == AuditEventKind.ReplyInterrupted);
+                await session.RowsAsync(sink), item => item.Kind == AuditEventKind.ReplyInterrupted);
             Assert.Equal(
                 "7b1485a90a236eb1d3a77c433b1e9371d93481283ab337b76b59c3c059bc1d51",
                 interrupted.Payload[AuditPayloadKeys.UtteranceUntilInterruptSha256]);
@@ -153,7 +154,7 @@ namespace AgentCore.Application.Tests.Audit
 
             Assert.Equal("Let me check that for youthe total comes to eighty", await SpokenAsync(session, turnIndex: 0));
             AuditEvent interrupted = Assert.Single(
-                sink.EventsOf(session.ConversationId), item => item.Kind == AuditEventKind.ReplyInterrupted);
+                await session.RowsAsync(sink), item => item.Kind == AuditEventKind.ReplyInterrupted);
             Assert.Equal(
                 "2321bd05672f296a576e169190756dce4be21568a9d3d0542d45375ad056a7d8",
                 interrupted.Payload[AuditPayloadKeys.UtteranceUntilInterruptSha256]);

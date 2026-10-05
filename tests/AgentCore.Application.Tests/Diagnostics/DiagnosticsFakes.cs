@@ -71,16 +71,15 @@ namespace AgentCore.Application.Tests.Diagnostics
     /// <summary>
     /// A sink that holds every append open until a test releases it.
     /// </summary>
-    /// <remarks>
-    /// Section 7 measures a durable insert at 13 ms p50 and 32 ms p99, against 91 nanoseconds to
-    /// enqueue, so the turn must never wait for the row. This sink turns that into a question a test
-    /// answers without a stopwatch: the turn finishes while every append is still open.
-    /// </remarks>
     internal sealed class BlockingAuditSink : IAuditSinkPort
     {
         private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly Lock _lock = new();
         private readonly List<AuditEvent> _events = [];
+
+        /// <summary>Completes once the first append is inside the sink.</summary>
+        public Task Entered => _entered.Task;
 
         /// <summary>Gets the events this sink took, in the order they arrived.</summary>
         public IReadOnlyList<AuditEvent> Events
@@ -107,6 +106,7 @@ namespace AgentCore.Application.Tests.Diagnostics
                 _events.Add(auditEvent);
             }
 
+            _ = _entered.TrySetResult();
             await _gate.Task.ConfigureAwait(false);
         }
     }
@@ -114,10 +114,6 @@ namespace AgentCore.Application.Tests.Diagnostics
     /// <summary>
     /// A sink that refuses every event.
     /// </summary>
-    /// <remarks>
-    /// Audit is a record of the conversation and never a part of it, so a sink that fails must be reported and
-    /// the turn must go on.
-    /// </remarks>
     internal sealed class ThrowingAuditSink : IAuditSinkPort
     {
         /// <summary>The message every refusal carries.</summary>

@@ -1,5 +1,9 @@
 using AgentCore.AspNetCore.Tests.Fakes;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Voice.Filler;
+using AgentCore.AspNetCore.Voice.Session;
+using AgentCore.AspNetCore.Voice.Speech;
+using AgentCore.AspNetCore.Voice.Speech.Replies;
+using AgentCore.AspNetCore.Voice.Turns;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -29,7 +33,6 @@ namespace AgentCore.AspNetCore.Tests.Voice
             return _output.DisposeAsync();
         }
 
-        // Final review probe D (2026-09-23).
         [Fact(Timeout = 30_000)]
         public async Task AFastToolsFiller_StopsWhenItsOwnToolReturns_WhileASlowToolStillRuns()
         {

@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AgentCore.AspNetCore.DependencyInjection;
+using AgentCore.AspNetCore.Vendors.OpenAiLive;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
 using AgentCore.Hosting.Secrets;
 using AgentCore.Infrastructure.Audit.Postgres;
@@ -79,11 +80,6 @@ namespace AgentCore.Hosting
         /// <param name="options">The options <see cref="AgentCoreServiceCollectionExtensions.AddAgentCore"/> registered.</param>
         /// <param name="httpClients">The one outbound pipeline every adapter shares.</param>
         /// <param name="loggers">The host's own logging, for the adapters that report what they are doing.</param>
-        /// <remarks>
-        /// The host's own <c>configure</c> callback is registered after this one, and configure
-        /// callbacks run in registration order — so the host still has the last word, which it has to
-        /// have: every <c>Use*</c> seam is a setter rather than a list, so whoever writes last wins.
-        /// </remarks>
         private static void Configure(
             IConfiguration hostConfiguration,
             AgentCoreOptions options,
@@ -103,27 +99,23 @@ namespace AgentCore.Hosting
             // Every vendor's models.dev lookup shares one fetch of the catalog.
             _ = options.UseModelCatalog(ModelsDevCatalogPort.CreateFromConfiguration(httpClients, hostConfiguration));
 
-            // providers.llm[].kind picks the adapter for each entry.
             _ = options.UseChatClients(
                 new OpenAiChatClientAdapter(),
                 OpenCodeGoChatClientAdapter.CreateFromConfiguration(httpClients, hostConfiguration));
 
-            // providers.embeddings.kind picks the adapter.
             _ = options.UseEmbeddings(new OpenAiEmbeddingGeneratorAdapter());
 
-            // providers.knowledge.kind picks the adapter.
             _ = options.UseKnowledgeStores(new QdrantKnowledgeAdapter());
 
-            // providers.moderation.kind picks the adapter.
             _ = options.UseModeration(new OpenAiModerationAdapter(httpClients));
 
-            // providers.telemetry.kind picks the adapter.
             _ = options.UseTelemetry(new GrafanaOtlpTelemetryAdapter());
 
-            // providers.conversation.kind picks one.
-            _ = options.UseConversation(new TelnyxRelayConversationAdapter());
+            // The host's own callback runs after this one and may set another resolver, so each adapter reads it late.
+            _ = options.UseConversation(
+                new TelnyxRelayConversationAdapter(() => options.SecretResolver),
+                new OpenAiLiveConversationAdapter(httpClients, () => options.SecretResolver));
 
-            // The speech vendor.
             _ = options.UseSpeech(new TelnyxRelaySpeechAdapter());
 
             // kind: http. Every header resolved at startup, so no tool call costs a lookup.
@@ -134,13 +126,10 @@ namespace AgentCore.Hosting
             _ = options.AddToolSource(startup => new McpToolSource(
                 startup.Secrets, () => McpHttpClient(httpClients), loggers));
 
-            // providers.audit.kind picks the adapter.
             _ = options.UseAuditSinks(new PostgresAuditSinkAdapter());
 
-            // providers.conversations.kind picks the adapter.
             _ = options.UseConversationStores(new PostgresConversationStoreAdapter());
 
-            // providers.blobs.kind picks the adapter.
             _ = options.UseBlobStores(new S3BlobStoreAdapter());
         }
 

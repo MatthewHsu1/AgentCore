@@ -1,10 +1,10 @@
 using AgentCore.TestSupport;
 using AgentCore.Application.Diagnostics;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Runtime;
 using Microsoft.Extensions.AI;
 using System.Diagnostics;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Diagnostics.TurnObservabilityHarness;
 
 namespace AgentCore.Application.Tests.Diagnostics
@@ -24,7 +24,7 @@ namespace AgentCore.Application.Tests.Diagnostics
 
             Assert.Equal(AgentCoreTelemetry.TurnActivityName, span.OperationName);
 
-            // Item 7 asks for gen_ai.* attributes on the trace, and gen_ai.conversation.id is the
+            // gen_ai.conversation.id is the
             // convention's own name for the conversation a request belongs to. A conversation is that
             // conversation, and a span attribute costs no series.
             Assert.Equal(conversationId, span.GetTagItem("gen_ai.conversation.id"));
@@ -53,10 +53,10 @@ namespace AgentCore.Application.Tests.Diagnostics
             Assert.Equal("failed", span.GetTagItem("agentcore.turn.outcome"));
             Assert.Equal(ActivityStatusCode.Error, span.Status);
 
-            // The span carries only the closed failure-kind token, never ConversationSession.EmptyReplyReason's
+            // The span carries only the closed failure-kind token, never TurnFailureReasons.EmptyReply's
             // own text: nothing threw here, so there is no exception type to report, and the fixed reason
-            // stays off the span the same way a raw exception message would (owner ruling: type in spans,
-            // full error in logs).
+            // stays off the span the same way a raw exception message would (spans carry the type,
+            // logs carry the full error).
             Assert.Equal(AgentCoreTelemetry.FailureEmptyReply, span.StatusDescription);
             Assert.Equal(AgentCoreTelemetry.FailureEmptyReply, span.GetTagItem("error.type"));
         }

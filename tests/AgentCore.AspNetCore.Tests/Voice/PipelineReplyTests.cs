@@ -5,9 +5,12 @@
 // turn instead of fake VAD/STT/LLM/TTS; chat-context assertions become assertions on the engine calls.
 
 using System.Text.Json;
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Cut;
 using AgentCore.AspNetCore.Tests.Fakes;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Voice.Session;
+using AgentCore.AspNetCore.Voice.Speech;
+using AgentCore.AspNetCore.Voice.Speech.Replies;
+using AgentCore.AspNetCore.Voice.Turns;
 using AgentCore.Domain;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -164,7 +167,7 @@ namespace AgentCore.AspNetCore.Tests.Voice
         public async Task ATurnThatEndsWithACallThatNeverAnswered_SpeaksTheTextAfterItOnceAsItsOwnStep()
         {
             // A tool that throws out of the run leaves its call with no result, and the fallback line follows it
-            // (owner ruling 2026-09-23: the caller hears the fallback).
+            // (the caller hears the fallback).
             SpeechHandle handle = _activity.GenerateReply("Where is my order?");
             ScriptedVoiceTurn turn = _port.Turn(1);
             await turn.TextAsync("Let me check.");
@@ -202,7 +205,7 @@ namespace AgentCore.AspNetCore.Tests.Voice
         [Fact(Timeout = 30_000)]
         public async Task ABargeInBeforeTheSpeechSaidAnything_CutsNoTurnAndLeavesTheSpeechToSpeak()
         {
-            // Turn identity (design section 3): a speech that has put no words out is not what the caller hears,
+            // Turn identity: a speech that has put no words out is not what the caller hears,
             // and with no earlier reply heard there is no turn to cut.
             SpeechHandle handle = _activity.GenerateReply("And the other one?");
             ScriptedVoiceTurn turn = _port.Turn(1);
@@ -222,7 +225,7 @@ namespace AgentCore.AspNetCore.Tests.Voice
         [Fact(Timeout = 30_000)]
         public async Task AUserTurnBeforeTheSpeechSaidAnything_CutsItsTurnWithNothingHeard()
         {
-            // Design section 3 row "Cut before output" (W04, G1 = Cut(turn, "", null)): the turn stops and keeps the
+            // Cut before output, Cut(turn, "", null): the turn stops and keeps the
             // caller's message, and the next reply's turn follows it.
             SpeechHandle handle = _activity.GenerateReply("First question");
             ScriptedVoiceTurn first = _port.Turn(1);
@@ -247,7 +250,7 @@ namespace AgentCore.AspNetCore.Tests.Voice
         [Fact(Timeout = 30_000)]
         public async Task AReplyEndingOnAPendingApproval_SpeaksTheNotice()
         {
-            // Plan B11: a voice conversation has no surface to answer an approval on.
+            // A voice conversation has no surface to answer an approval on.
             SpeechHandle handle = _activity.GenerateReply("Send the email");
             using JsonDocument empty = JsonDocument.Parse("{}");
             _port.LastTurn = new TurnResult(_port.ConversationId, 0, string.Empty, string.Empty, string.Empty, false, null)

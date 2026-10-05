@@ -2,12 +2,13 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Hooks;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Sessions
 {
@@ -34,7 +35,7 @@ namespace AgentCore.Application.Tests.Sessions
         internal static ConversationSessionFactory Factory(
             IConversationStore? transcript = null,
             IChatClient? reply = null,
-            IConversationObserver? observer = null,
+            AgentHook? hook = null,
             string? workspaceRoot = null,
             TimeProvider? timeProvider = null)
         {
@@ -49,8 +50,8 @@ namespace AgentCore.Application.Tests.Sessions
                 new GuardEvaluator(compiled.Configuration.Guards),
                 ConversationSessionFactory.CreateExtractor(compiled, chatClients),
                 timeProvider: timeProvider,
-                observers: observer is null ? null : [observer],
-                workspaceRoot: workspaceRoot);
+                workspaceRoot: workspaceRoot,
+                hooks: hook is null ? null : [hook]);
         }
 
         /// <summary>Waits for a condition that background work makes true.</summary>

@@ -10,7 +10,7 @@ namespace AgentCore.Application.Transcript
     /// every conversation, so this is what keeps two sessions on two transcripts.
     /// </summary>
     /// <remarks>Creates the registry over one backing store.</remarks>
-    /// <param name="store">Store 1, which every gate writes through to.</param>
+    /// <param name="store">The message store, which every gate writes through to.</param>
     /// <param name="logger">Where a refused write is logged.</param>
     internal sealed class ConversationGates(IConversationStore store, ILogger logger)
     {

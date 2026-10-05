@@ -15,7 +15,7 @@ namespace AgentCore.Application.Transcript
     {
         /// <summary>
         /// The state bag key that binds a session to its conversation. A session without it reads nothing, stages
-        /// nothing and commits nothing, whatever else its bag carries (design probe G4).
+        /// nothing and commits nothing, whatever else its bag carries.
         /// </summary>
         internal const string ConversationKey = "agentcore.history";
 
@@ -26,7 +26,7 @@ namespace AgentCore.Application.Transcript
         private readonly ConversationWrites _writes;
 
         /// <summary>Creates the provider over a backing store.</summary>
-        /// <param name="store">Store 1, or <see langword="null"/> for one kept in this process.</param>
+        /// <param name="store">The message store, or <see langword="null"/> for one kept in this process.</param>
         /// <param name="logger">Where refused writes and cuts are logged.</param>
         public AgentCoreChatHistoryProvider(IConversationStore? store = null, ILogger? logger = null)
             : base(storeInputRequestMessageFilter: ExternalOnly)
@@ -47,12 +47,12 @@ namespace AgentCore.Application.Transcript
         /// <param name="session">The session this conversation runs on.</param>
         /// <param name="conversationId">The conversation being opened.</param>
         /// <param name="spoken">
-        /// What store 1 already holds for this conversation, which is empty for a conversation that is new. A second
+        /// What the message store already holds for this conversation, which is empty for a conversation that is new. A second
         /// session of one conversation is handed the first session's words here, and nowhere else.
         /// </param>
-        /// <param name="losses">Where a dropped store 1 write is counted, if anywhere.</param>
+        /// <param name="losses">Where a dropped message store write is counted, if anywhere.</param>
         /// <param name="marks">
-        /// How far the conversation had got, from store 0's own counters — or the zero marks of a conversation that has
+        /// How far the conversation had got, from the conversation store's own counters — or the zero marks of a conversation that has
         /// never spoken. The words cannot say this on their own, because an edit deletes the rows that
         /// would otherwise answer for it.
         /// </param>
@@ -83,7 +83,7 @@ namespace AgentCore.Application.Transcript
         /// <summary>Reads where the session's words stand: the writes queued so far, the revision, and the next ordinal, together.</summary>
         /// <param name="session">The session this conversation runs on.</param>
         /// <returns>
-        /// The position. Once <see cref="TranscriptPosition.Written"/> completes, store 0's counter equals
+        /// The position. Once <see cref="TranscriptPosition.Written"/> completes, the conversation store's counter equals
         /// <see cref="TranscriptPosition.NextOrdinal"/> unless a row was written by someone else, or one of this
         /// session's own writes was dropped.
         /// </returns>
@@ -97,11 +97,11 @@ namespace AgentCore.Application.Transcript
         }
 
         /// <summary>
-        /// Replaces the conversation's live history with what store 1 holds, unless the session's words moved since
-        /// the read began. Words that moved hold a write store 1 may not have yet, and replacing them would lose it.
+        /// Replaces the conversation's live history with what the message store holds, unless the session's words moved since
+        /// the read began. Words that moved hold a write the message store may not have yet, and replacing them would lose it.
         /// </summary>
         /// <param name="session">The session this conversation runs on.</param>
-        /// <param name="catchUp">What store 1 held, and the revision the read began at.</param>
+        /// <param name="catchUp">What the message store held, and the revision the read began at.</param>
         /// <returns><see langword="false"/> when the words moved and nothing was replaced.</returns>
         public bool TryResync(AgentSession session, TranscriptCatchUp catchUp)
         {
@@ -143,7 +143,7 @@ namespace AgentCore.Application.Transcript
 
         /// <summary>
         /// Puts one summary in place of every row at or below <paramref name="coversUpTo"/>, unless the
-        /// words moved since <see cref="Floor"/> was read, and queues the summary's row for store 1 ahead
+        /// words moved since <see cref="Floor"/> was read, and queues the summary's row for the message store ahead
         /// of the turn's own words.
         /// </summary>
         /// <param name="session">The session this conversation runs on.</param>
@@ -185,6 +185,7 @@ namespace AgentCore.Application.Transcript
                 {
                     transcript.BeginTurn(turnIndex);
                     gate.Staged.Clear();
+                    gate.Replay.Clear();
                     return true;
                 });
         }
@@ -227,6 +228,24 @@ namespace AgentCore.Application.Transcript
             return IsBound(session) ? _writes.Commit(session, commit) : null;
         }
 
+        /// <summary>Appends rows between turns, under the turn the conversation takes next. An unbound session writes nothing.</summary>
+        public void AppendBetweenTurns(AgentSession session, IReadOnlyList<ChatMessage> messages, int nextTurnIndex)
+        {
+            if (IsBound(session))
+            {
+                _writes.AppendBetweenTurns(session, messages, nextTurnIndex);
+            }
+        }
+
+        /// <summary>Queues the write of a state no turn's words carry, behind every write already queued. An unbound session writes nothing.</summary>
+        public void SaveState(AgentSession session, ConversationSessionState state)
+        {
+            if (IsBound(session))
+            {
+                _writes.SaveState(session, state);
+            }
+        }
+
         /// <summary>Withdraws everything the conversation said after one message, because a caller replaced it.</summary>
         /// <param name="session">The session this conversation runs on.</param>
         /// <param name="parentMessageId">
@@ -249,6 +268,20 @@ namespace AgentCore.Application.Transcript
             ArgumentNullException.ThrowIfNull(session);
 
             return _writes.TruncateFromAsync(session, parentMessageId, cancellationToken);
+        }
+
+        /// <summary>
+        /// Reads the live rows an edit hanging off one message would withdraw: every row after it, or every live row when
+        /// the session does not hold it, as an edit under the summary reads them.
+        /// </summary>
+        /// <param name="session">The session this conversation runs on.</param>
+        /// <param name="parentMessageId">The message the edit hangs off, or <see langword="null"/> for the whole conversation.</param>
+        /// <returns>The rows, oldest first, and whether the session holds the parent (always, for the whole conversation).</returns>
+        public (IReadOnlyList<ChatMessage> Rows, bool Held) RowsAfter(AgentSession session, string? parentMessageId)
+        {
+            ArgumentNullException.ThrowIfNull(session);
+
+            return UnderLock(session, transcript => (transcript.After(parentMessageId), parentMessageId is null || transcript.OrdinalOf(parentMessageId) is not null));
         }
 
         /// <summary>
@@ -297,14 +330,17 @@ namespace AgentCore.Application.Transcript
         {
             ArgumentNullException.ThrowIfNull(context);
 
-            return new(context.Session is { } session && IsBound(session) ? Read(session) : []);
+            return new(context.Session is { } session && IsBound(session)
+                ? UnderLock(session, static (transcript, gate) => gate.Replay.Count == 0 ? transcript.Read() : [.. transcript.Read(), .. gate.Replay])
+                : []);
         }
 
         /// <summary>
         /// Stages the run's response for the turn. It writes nothing durable: the hook runs before the stage
         /// machine and the fallback layer, so the words and their state are written together by
-        /// <see cref="CommitTurn"/>. Staging appends, and <see cref="ProvideChatHistoryAsync"/> never returns
-        /// staged messages (design section 7, item 1).
+        /// <see cref="CommitTurn"/>. Staging appends. The first run of a turn reads the conversation only; a later
+        /// run of the same turn (a <c>loop:</c> round, an AfterRun continue, an approval re-entry) also reads what the
+        /// earlier runs were told and answered, which is never committed beyond the staged response.
         /// </summary>
         protected override ValueTask StoreChatHistoryAsync(
             InvokedContext context, CancellationToken cancellationToken = default)
@@ -318,6 +354,8 @@ namespace AgentCore.Application.Transcript
                     (_, gate) =>
                     {
                         gate.Staged.AddRange(response);
+                        gate.Replay.AddRange(ExternalOnly(context.RequestMessages).Select(Detached));
+                        gate.Replay.AddRange(response.Select(Detached));
                         return true;
                     });
             }
@@ -331,10 +369,19 @@ namespace AgentCore.Application.Transcript
         }
 
         // The user row comes from the turn, so the hook keeps only what the caller sent: context providers'
-        // system lines (clock, reminders, skills) arrive in the request too (design probe G1).
+        // system lines (clock, reminders, skills) arrive in the request too.
         private static IEnumerable<ChatMessage> ExternalOnly(IEnumerable<ChatMessage> messages)
         {
             return messages.Where(message => message.GetAgentRequestMessageSourceType() == AgentRequestMessageSourceType.External);
+        }
+
+        // MAF tags each message it reads from this provider in the message's property bag. A replayed message shares
+        // nothing with the staged one, so the tag never reaches a stored row.
+        private static ChatMessage Detached(ChatMessage message)
+        {
+            ChatMessage copy = message.Clone();
+            copy.AdditionalProperties = message.AdditionalProperties?.Clone();
+            return copy;
         }
 
         private TResult UnderLock<TResult>(AgentSession session, Func<ConversationTranscript, ConversationGate, TResult> work)

@@ -11,7 +11,7 @@ namespace AgentCore.Application.Ports
         /// <returns>The title in pieces, in order.</returns>
         IAsyncEnumerable<string> GenerateAsync(string conversationId, CancellationToken cancellationToken = default);
 
-        // A turn reaches store 1 only once it has finished, so a browser naming a conversation the
+        // A turn reaches the message store only once it has finished, so a browser naming a conversation the
         // moment it starts finds nothing there to read. It hands over what it is showing instead.
         /// <summary>Generates one conversation's title from messages the caller holds, streaming it as it arrives.</summary>
         /// <param name="conversationId">The conversation to title. Its stored messages are not read.</param>

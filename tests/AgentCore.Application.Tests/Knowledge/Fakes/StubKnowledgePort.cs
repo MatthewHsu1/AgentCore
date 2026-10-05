@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Domain.Knowledge;
+using AgentCore.Application.Runtime.Clarification;
 
 namespace AgentCore.Application.Tests.Knowledge.Fakes
 {
@@ -17,11 +17,6 @@ namespace AgentCore.Application.Tests.Knowledge.Fakes
         public int Calls { get; private set; }
 
         /// <summary>Gets the scope the last search was handed, or <see langword="null"/> when none ran.</summary>
-        /// <remarks>
-        /// Read here rather than in the test body on purpose: the real store reads the passed scope at
-        /// exactly this point, deep inside the provider's delegate. A test that reads it anywhere else
-        /// proves something easier.
-        /// </remarks>
         public KnowledgeScope? ScopeAtTheStore { get; private set; }
 
         /// <summary>Always <see langword="null"/>: the store is handed a scope, never the turn's holder.</summary>
@@ -56,19 +51,6 @@ namespace AgentCore.Application.Tests.Knowledge.Fakes
     /// <summary>
     /// A store that hangs, with a deadline of its own linked into the caller's token.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This is <c>QdrantKnowledgeStore</c>'s cancellation shape, reproduced rather than described: a
-    /// linked source, <c>CancelAfter</c>, and an await that ends when either side fires. Hand-throwing
-    /// an <see cref="OperationCanceledException"/> instead would let a test pass against a classifier
-    /// that read the exception's own token — which in the real store is the LINKED token on both paths,
-    /// and so tells the two cases apart in neither.
-    /// </para>
-    /// <para>
-    /// Whichever side fires, the exception is the same type and carries the same token. Only the
-    /// caller's own token differs between the two, which is what the provider must read.
-    /// </para>
-    /// </remarks>
     internal sealed class HangingKnowledgePort(TimeSpan deadline) : IKnowledgeRetrievalPort
     {
         private readonly TimeSpan _deadline = deadline;
@@ -90,11 +72,6 @@ namespace AgentCore.Application.Tests.Knowledge.Fakes
     /// <summary>
     /// A store that filters the way the real one does: it folds the passed scope's facets into its answer.
     /// </summary>
-    /// <remarks>
-    /// <see cref="StubKnowledgePort"/> ignores the scope, so it can prove which scope arrived but never
-    /// what the scope costs. This one answers differently under a different scope, which is what makes
-    /// "an unscoped agent still sees the whole corpus" a fact rather than a restatement of the wiring.
-    /// </remarks>
     internal sealed class ScopeFilteringKnowledgePort(
         params (KnowledgeCard Card, IReadOnlyDictionary<string, string> Facets)[] corpus) : IKnowledgeRetrievalPort
     {

@@ -4,14 +4,6 @@ using AgentCore.Application.Runtime;
 namespace AgentCore.AspNetCore.DependencyInjection.Startup
 {
     /// <summary>One factory and one agent shim per entry, over the one session owner shared by every entry.</summary>
-    /// <remarks>
-    /// Each entry compiles its own shape over the shared pool, so each entry gets its own session factory.
-    /// The session owner is shared, because it is the one dictionary, keyed by conversation id, that knows
-    /// which entry holds a conversation live: a vendor call id arriving on a second route is refused while
-    /// the first route still holds it. The audit chain, the observers, and the workspace root are shared
-    /// across entries too, because they describe the deployment rather than the shape. Agents are named by
-    /// entry key.
-    /// </remarks>
     internal sealed class EntryRegistry : IConversationSessionRegistry
     {
         /// <summary>Creates the registry over the per-entry seams and the one session owner.</summary>

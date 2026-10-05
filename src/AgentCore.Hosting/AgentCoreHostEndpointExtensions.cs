@@ -1,5 +1,5 @@
-using AgentCore.AspNetCore.Voice;
 using AgentCore.AspNetCore.Endpoints;
+using AgentCore.AspNetCore.Voice.Routing;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 
@@ -17,12 +17,12 @@ namespace AgentCore.Hosting
         /// <param name="app">The application to map on.</param>
         /// <param name="responsesPattern">
         /// The route the OpenAI-compatible Responses endpoint answers on, with <c>{entry}</c> naming
-        /// the entry unless the host attaches an entry selector, or <see langword="null"/> for
+        /// the entry unless a hook's <c>BeforeEntryAsync</c> picks it, or <see langword="null"/> for
         /// <see cref="ResponsesEndpointRouteBuilderExtensions.DefaultPattern"/>.
         /// </param>
         /// <param name="conversationPattern">
-        /// The route the conversation socket answers on, with <c>{entry}</c> naming the entry unless the
-        /// host attaches an entry selector, or
+        /// The route the conversation socket answers on, with <c>{entry}</c> naming the entry unless a hook's
+        /// <c>BeforeEntryAsync</c> picks it, or
         /// <see langword="null"/> for <see cref="ConversationEndpointRouteBuilderExtensions.DefaultPattern"/>.
         /// </param>
         /// <returns>The mapped routes, so a host adds its own conventions to each.</returns>

@@ -1,4 +1,3 @@
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Evaluation.Fakes;
 using AgentCore.Application.Tests.Fakes;
@@ -8,19 +7,19 @@ using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
-    /// <see cref="ConversationTurnAgent"/> as the one trigger of a turn's durable write: the design's revision 2
-    /// probes, ported over the real layer, provider, fallback and moderation layers
-    /// (docs/handoff/2026-09-22-maf-native-engine-design.md, section 5a).
+    /// <see cref="ConversationTurnAgent"/> as the one trigger of a turn's durable write, tested
+    /// over the real layer, provider, fallback and moderation layers.
     /// </summary>
     public sealed class ConversationTurnAgentTests
     {
         private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-        // Probe W01: the hook stages, the stage machine runs, then one write holds the words and the fresh state.
+        // The hook stages, the stage machine runs, then one write holds the words and the fresh state.
         [Fact]
         public async Task CompletedTurn_HookStagesThenCompleteThenOneAppend_WithTheStateAfterTheAdvance()
         {
@@ -40,7 +39,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Empty(h.History.Staged(h.Session));
         }
 
-        // Probe W02: a buffered caller gets the reply, and the turn is the same single write.
+        // A buffered caller gets the reply, and the turn is the same single write.
         [Fact]
         public async Task BufferedCaller_GetsTheReply_AndTheTurnIsOneAppendFromTheHook()
         {
@@ -61,7 +60,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(["hi", "hello"], Texts(h.Store.Rows.Select(row => row.Content)));
         }
 
-        // Probe W07: a tool fault keeps the user, the finished pair and the fallback, in one write the hook never fed.
+        // A tool fault keeps the user, the finished pair and the fallback, in one write the hook never fed.
         [Fact]
         public async Task ToolFault_KeepsTheUserTheFinishedPairAndTheFallback_InOneAppend()
         {
@@ -78,7 +77,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal("fallback", h.Store.Rows[^1].Content.Text);
         }
 
-        // Probe W08: a moderation refusal keeps the user and the refusal in one write, and the model is never called.
+        // A moderation refusal keeps the user and the refusal in one write, and the model is never called.
         [Fact]
         public async Task ModerationRefusal_KeepsTheUserAndTheRefusal_InOneAppend()
         {
@@ -95,7 +94,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(0, model.Calls);
         }
 
-        // Probe W09: the hook stages the empty reply and never sees the fallback; the seal writes the fallback.
+        // The hook stages the empty reply and never sees the fallback; the seal writes the fallback.
         [Fact]
         public async Task EmptyReply_HookStagesNoFallback_TheSealWritesIt_InOneAppend()
         {
@@ -112,7 +111,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(["hi", "fallback"], Texts(h.Store.Rows.Select(row => row.Content)));
         }
 
-        // Probe G2: a graph's output reaches the conversation through the layer; the node sessions write nothing.
+        // A graph's output reaches the conversation through the layer; the node sessions write nothing.
         [Fact]
         public async Task GraphRow_TheOutputReachesTheConversationThroughTheLayer_TheNodesWriteNothing()
         {
@@ -140,7 +139,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(["hi", "two"], Texts(h.Store.Rows.Select(row => row.Content)));
         }
 
-        // Probe G3: the committed ids reach a streaming caller on the turn's last update.
+        // The committed ids reach a streaming caller on the turn's last update.
         [Fact]
         public async Task StreamingCaller_GetsTheCommittedIds_OnTheLastUpdate()
         {
@@ -156,7 +155,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(h.Store.Rows[^1].MessageId, committed.ReplyMessageId);
         }
 
-        // Probe G5: an edit is a provider command the layer triggers: the truncate, then one append, and the model
+        // An edit is a provider command the layer triggers: the truncate, then one append, and the model
         // no longer reads the withdrawn words.
         [Fact]
         public async Task Edit_TheLayerTruncatesThenAppendsOnce_AndTheModelNoLongerReadsTheWithdrawnWords()

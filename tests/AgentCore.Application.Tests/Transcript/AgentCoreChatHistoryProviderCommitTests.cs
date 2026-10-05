@@ -2,7 +2,6 @@ using System.Text.Json;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Harness;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Fakes;
@@ -12,13 +11,14 @@ using AgentCore.TestSupport;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Cut;
 using static AgentCore.Application.Tests.Transcript.AgentCoreChatHistoryProviderTestSupport;
 
 namespace AgentCore.Application.Tests.Transcript
 {
     /// <summary>
-    /// The provider as the only door to store 1: the framework's hook stages, and <c>CommitTurn</c> and
-    /// <c>RewriteReply</c> are the durable writes (docs/handoff/2026-09-22-maf-native-engine-design.md).
+    /// The provider as the only door to the message store: the framework's hook stages, and <c>CommitTurn</c> and
+    /// <c>RewriteReply</c> are the durable writes.
     /// </summary>
     public sealed class AgentCoreChatHistoryProviderCommitTests
     {
@@ -51,33 +51,31 @@ namespace AgentCore.Application.Tests.Transcript
 
         private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-        // Design section 7 item 1 (owner ruling): a loop: entry calls the hook once per iteration inside one
+        // A loop: entry calls the hook once per iteration inside one
         // turn; staging accumulates and the commit writes all of it once. maxRounds: 3 with an open todo runs
         // three iterations (LoopCompilationTests), each a call, its result and a line.
         [Fact]
         public async Task CommitTurn_LoopEntry_StagesEveryIteration_AndWritesThemInOneAppend()
         {
-            // Arrange
             RecordingConversationStore store = new();
             ToolCallingChatClient client = new(
                 "added",
                 new Dictionary<string, object?>(StringComparer.Ordinal)
                 {
                     ["todos"] = new object[] { new Dictionary<string, object?>(StringComparer.Ordinal) { ["title"] = "T" } },
-                });
+                },
+                everyRun: true);
             CompiledAgent compiled = ConfigurationCompiler.CompileAll(
                 ConfigurationLoader.LoadYaml(LoopYaml),
                 new AgentCompilationContext(new FakeChatClientFactory(client)) { ConversationStore = store })["main"];
             AIAgent agent = compiled.Agents["coder"];
             AgentSession session = await OpenAsync(compiled, agent, store);
 
-            // Act
             _ = await agent.RunAsync("fix it", session, cancellationToken: Ct);
             IReadOnlyList<ChatMessage> staged = compiled.History.Staged(session);
             _ = compiled.History.CommitTurn(session, new TurnCommit(new ChatMessage(ChatRole.User, "fix it")));
             await compiled.History.DrainAsync(session);
 
-            // Assert
             string[] iteration = ["assistant:call", "tool:result", "assistant:text"];
             Assert.Equal([.. iteration, .. iteration, .. iteration], Kinds(staged));
             Assert.Equal(1, store.Appends);
@@ -85,12 +83,11 @@ namespace AgentCore.Application.Tests.Transcript
             Assert.Empty(compiled.History.Staged(session));
         }
 
-        // Design section 7 item 1 (owner ruling): an approval re-entry runs the agent again inside the same
+        // An approval re-entry runs the agent again inside the same
         // turn. The first run ends on the approval request, the second runs the tool and answers "done.".
         [Fact]
         public async Task CommitTurn_ApprovalReEntry_StagesBothRuns_AndWritesThemInOneAppend()
         {
-            // Arrange
             RecordingConversationStore store = new();
             ToolCallingChatClient client = new("done.", new Dictionary<string, object?>(StringComparer.Ordinal) { ["to"] = "a@b.com" });
             AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(AutoApprovedYaml);
@@ -104,13 +101,11 @@ namespace AgentCore.Application.Tests.Transcript
             AIAgent agent = compiled.Agents["only"];
             AgentSession session = await OpenAsync(compiled, agent, store);
 
-            // Act
             _ = await agent.RunAsync("send it", session, cancellationToken: Ct);
             IReadOnlyList<ChatMessage> staged = compiled.History.Staged(session);
             _ = compiled.History.CommitTurn(session, new TurnCommit(new ChatMessage(ChatRole.User, "send it")));
             await compiled.History.DrainAsync(session);
 
-            // Assert
             Assert.Contains(staged.SelectMany(message => message.Contents), content => content is ToolApprovalRequestContent);
             Assert.Equal("done.", staged[^1].Text);
             Assert.Equal(1, store.Appends);
@@ -118,11 +113,10 @@ namespace AgentCore.Application.Tests.Transcript
             Assert.Equal("done.", store.Rows[^1].Content.Text);
         }
 
-        // Probe G1: an AIContextProvider's system line reaches the model, and never the committed turn.
+        // An AIContextProvider's system line reaches the model, and never the committed turn.
         [Fact]
         public async Task CommitTurn_ContextProviderSystemLine_ReachesTheModelButNotTheTranscript()
         {
-            // Arrange
             (AgentCoreChatHistoryProvider provider, RecordingConversationStore store, StubSession _) = await NewConversation();
             RequestRecordingChatClient model = new("x");
             ChatClientAgent agent = new(
@@ -132,22 +126,19 @@ namespace AgentCore.Application.Tests.Transcript
             _ = provider.BeginConversation(session, ConversationId, []);
             provider.BeginTurn(session, 0);
 
-            // Act
             _ = await agent.RunAsync("hi", session, cancellationToken: Ct);
             _ = provider.CommitTurn(session, new TurnCommit(new ChatMessage(ChatRole.User, "hi")));
             await provider.DrainAsync(session);
 
-            // Assert
             Assert.Contains("system:Today is Tuesday.", model.Requests[0]);
             Assert.Equal(["user:hi", "assistant:x"], store.Rows.Select(row => $"{row.Content.Role}:{row.Content.Text}"));
         }
 
-        // Probe G4: a background child carries the parent's TurnRegistry entry and BlobOwnerKey, but not the
+        // A background child carries the parent's TurnRegistry entry and BlobOwnerKey, but not the
         // provider's own key, so it stages nothing and commits nothing.
         [Fact]
         public async Task BackgroundChild_WithoutTheProviderKey_StagesAndCommitsNothing()
         {
-            // Arrange
             (AgentCoreChatHistoryProvider provider, RecordingConversationStore store, StubSession _) = await NewConversation();
             using SequencedChatClient model = new("child words");
             BackgroundChildAgent child = new(new ChatClientAgent(model, new ChatClientAgentOptions { ChatHistoryProvider = provider }));
@@ -159,12 +150,10 @@ namespace AgentCore.Application.Tests.Transcript
                 _ = await child.RunAsync("do it", childSession, cancellationToken: Ct);
             });
 
-            // Act
             _ = await outer.RunAsync("go", options: parent.RunOptions(), cancellationToken: Ct);
             TurnWrite? committed = provider.CommitTurn(childSession!, new TurnCommit(new ChatMessage(ChatRole.User, "do it")));
             await provider.DrainAsync(childSession!);
 
-            // Assert
             Assert.NotNull(TurnRegistry.For(childSession));
             Assert.True(childSession!.StateBag.TryGetValue(BlobOwnerKey.Value, out string? _));
             Assert.False(childSession.StateBag.TryGetValue(StateKey, out string? _));
@@ -173,11 +162,10 @@ namespace AgentCore.Application.Tests.Transcript
             Assert.Empty(store.Rows);
         }
 
-        // Design section 3, "Cut mid-text": the user, the finished tool pairs, and exactly the shown text.
+        // A cut mid-text keeps the user, the finished tool pairs, and exactly the shown text.
         [Fact]
         public async Task CommitTurn_CutMidText_KeepsTheFinishedPairAndTheShownText()
         {
-            // Arrange
             (AgentCoreChatHistoryProvider provider, RecordingConversationStore store, StubSession session) = await NewConversation();
             provider.BeginTurn(session, 0);
             AgentResponse seen = new(
@@ -188,32 +176,27 @@ namespace AgentCore.Application.Tests.Transcript
                 new ChatMessage(ChatRole.Assistant, "Hello there"),
             ]);
 
-            // Act
             _ = provider.CommitTurn(
                 session,
                 new TurnCommit(new ChatMessage(ChatRole.User, "hi")) { Seen = seen, Cut = new TurnCut("Hel", TimeSpan.FromMilliseconds(300)) });
             await provider.DrainAsync(session);
 
-            // Assert
             Assert.Equal(["user:text", "assistant:call", "tool:result", "assistant:text"], Kinds(store.Rows.Select(row => row.Content)));
             Assert.Equal("Hel", store.Rows[^1].Content.Text);
         }
 
-        // Design section 3, Cut table: a sealed turn is rewritten, never appended to; an older turn answers false.
+        // A sealed turn is rewritten, never appended to; an older turn answers false.
         [Fact]
         public async Task RewriteReply_OnlyTheLastTurnIsRewritten_AndNothingIsAppended()
         {
-            // Arrange
             (AgentCoreChatHistoryProvider provider, RecordingConversationStore store, StubSession session) = await NewConversation();
             AppendTurn(provider, session, turnIndex: 0, "one", "first");
             AppendTurn(provider, session, turnIndex: 1, "two", "second reply");
 
-            // Act
             bool older = provider.RewriteReply(session, 0, "fir");
             bool last = provider.RewriteReply(session, 1, "second");
             await provider.DrainAsync(session);
 
-            // Assert
             Assert.False(older);
             Assert.True(last);
             Assert.Equal(2, store.Appends);
@@ -224,16 +207,13 @@ namespace AgentCore.Application.Tests.Transcript
         [Fact]
         public async Task CommitTurn_CutBeforeAnyWord_NamesTheUserMessageAndNoReply()
         {
-            // Arrange
             (AgentCoreChatHistoryProvider provider, RecordingConversationStore store, StubSession session) = await NewConversation();
             provider.BeginTurn(session, 0);
 
-            // Act
             (string UserMessageId, string? ReplyMessageId)? ids = provider.CommitTurn(
                 session, new TurnCommit(new ChatMessage(ChatRole.User, "hi")) { Cut = new TurnCut(string.Empty, null) })?.Ids;
             await provider.DrainAsync(session);
 
-            // Assert
             ConversationMessage only = Assert.Single(store.Rows);
             Assert.Equal((only.MessageId, (string?)null), ids);
         }

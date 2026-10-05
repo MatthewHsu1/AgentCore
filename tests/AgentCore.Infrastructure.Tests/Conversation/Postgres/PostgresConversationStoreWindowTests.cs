@@ -6,7 +6,7 @@ using Xunit;
 
 namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
 {
-    /// <summary>Reading store 1 in PostgreSQL a window of turns at a time: newest turns first, every turn whole.</summary>
+    /// <summary>Reading the message store in PostgreSQL a window of turns at a time: newest turns first, every turn whole.</summary>
     public sealed class PostgresConversationStoreWindowTests : PostgresDatabaseTest
     {
         /// <inheritdoc />

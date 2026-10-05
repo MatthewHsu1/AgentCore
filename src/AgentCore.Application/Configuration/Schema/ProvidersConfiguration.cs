@@ -6,12 +6,6 @@ namespace AgentCore.Application.Configuration.Schema
     /// <summary>
     /// How a card's payload is named in the collection this deployment reads.
     /// </summary>
-    /// <remarks>
-    /// AgentCore ships no field names. Every role starts unmapped, and stays unmapped until this
-    /// document names the payload path that fills it. A collection built by any ingester is therefore
-    /// expressible here, and no ingester's naming is privileged. An unmapped role is simply absent from
-    /// the card: it is never guessed, and never silently read off a name AgentCore chose.
-    /// </remarks>
     public sealed record KnowledgeFieldsConfiguration
     {
         /// <summary>
@@ -22,11 +16,9 @@ namespace AgentCore.Application.Configuration.Schema
         public string? Body { get; init; }
 
         /// <summary>Gets the field holding the card id, or null when the collection carries none.</summary>
-        /// <remarks>The point's own key stands in for an unmapped id.</remarks>
         public string? Id { get; init; }
 
         /// <summary>Gets the full-text-indexed field the required-term leg matches on.</summary>
-        /// <remarks>Unmapped, the search ranks by vector alone and the analyzer is never consulted.</remarks>
         public string? Lexical { get; init; }
 
         /// <summary>Gets the field holding the citation's source label.</summary>
@@ -40,11 +32,6 @@ namespace AgentCore.Application.Configuration.Schema
     }
 
     /// <summary>How an open <c>KnowledgeScope</c>'s facet keys become payload paths.</summary>
-    /// <remarks>
-    /// There is no default template, because a template is a claim about where one particular
-    /// collection keeps its facets. A deployment whose agents never scope needs none; one whose agents
-    /// do must say where to look.
-    /// </remarks>
     public sealed record KnowledgeScopeConfiguration
     {
         /// <summary>
@@ -83,11 +70,6 @@ namespace AgentCore.Application.Configuration.Schema
     /// <summary>
     /// The lookup that turns what the person said into the one value a facet is stored under.
     /// </summary>
-    /// <remarks>
-    /// A vocabulary of thousands cannot sit in a prompt. The model instead searches a small index — the
-    /// cards under one other facet — and copies the value off the card it finds. This block is printed
-    /// on the search tool, not run by the host: the model does the lookup itself.
-    /// </remarks>
     public sealed record KnowledgeFacetResolveConfiguration
     {
         /// <summary>Gets the facet and value that narrow the lookup search to the index cards.</summary>
@@ -111,10 +93,6 @@ namespace AgentCore.Application.Configuration.Schema
     }
 
     /// <summary>Which facets a card may opt out of, and the value it opts out with.</summary>
-    /// <remarks>
-    /// Named per facet, never global. A wildcard reaching an isolation facet such as a customer id
-    /// would serve one mis-tagged card to every caller, which is the failure the scope exists to stop.
-    /// </remarks>
     public sealed record KnowledgeWildcardConfiguration
     {
         /// <summary>Gets the payload value that satisfies any scope on a named facet.</summary>
@@ -138,17 +116,9 @@ namespace AgentCore.Application.Configuration.Schema
     }
 
     /// <summary>How a card's links to other cards are read and followed.</summary>
-    /// <remarks>
-    /// The whole block is opt-in: a document without <c>links:</c> never expands. On a configured
-    /// block, a collection carrying nothing at <see cref="Field"/> is still inert.
-    /// </remarks>
     public sealed record KnowledgeLinksConfiguration
     {
         /// <summary>The uuid5 namespace used when the document names none.</summary>
-        /// <remarks>
-        /// This is RFC 4122's own URL namespace, not any ingester's choice. <c>uuid5</c> is undefined
-        /// without a namespace, so unlike a field name it cannot be left unset.
-        /// </remarks>
         public const string DefaultNamespace = "url";
 
         /// <summary>
@@ -226,7 +196,6 @@ namespace AgentCore.Application.Configuration.Schema
         /// <summary>
         /// Gets the <c>IKnowledgeCitationFormatter</c> name that writes each card's source label.
         /// </summary>
-        /// <remarks>Read only by agents that declare <c>knowledge: { citations: true }</c>.</remarks>
         public string Citation { get; init; } = DefaultCitation;
 
         /// <summary>
@@ -246,7 +215,7 @@ namespace AgentCore.Application.Configuration.Schema
 
     /// <summary>
     /// How the knowledge search asks the caller which machine they meant, when the scope narrows to more
-    /// than one and the search itself came back empty. See section 4 of the ambiguity design.
+    /// than one and the search itself came back empty.
     /// </summary>
     public sealed record KnowledgeAmbiguityConfiguration
     {
@@ -293,7 +262,7 @@ namespace AgentCore.Application.Configuration.Schema
         /// </summary>
         public const int DefaultExportIntervalMilliseconds = 60_000;
 
-        /// <summary>The lowest interval T61 allows, in milliseconds.</summary>
+        /// <summary>The lowest export interval allowed, in milliseconds.</summary>
         public const int MinimumExportIntervalMilliseconds = 60_000;
 
         /// <summary>The extra <c>ActivitySource</c> names listened to when the document lists none.</summary>
@@ -319,7 +288,7 @@ namespace AgentCore.Application.Configuration.Schema
         /// <summary>Gets the <c>service.name</c> every exported signal carries.</summary>
         public string ServiceName { get; init; } = DefaultServiceName;
 
-        /// <summary>Gets how often metrics are sent, in milliseconds, never below the T61 floor.</summary>
+        /// <summary>Gets how often metrics are sent, in milliseconds, never below the minimum.</summary>
         [JsonPropertyName("exportIntervalMs")]
         public int ExportIntervalMilliseconds
         {
@@ -347,9 +316,6 @@ namespace AgentCore.Application.Configuration.Schema
 
         /// <summary>Gets the two speech roles, or <see langword="null"/>.</summary>
         public SpeechProviderConfiguration? Speech { get; init; }
-
-        /// <summary>Gets the telephony provider, or <see langword="null"/>.</summary>
-        public VendorProviderConfiguration? Telephony { get; init; }
 
         /// <summary>Gets the moderation provider, or <see langword="null"/>.</summary>
         public VendorProviderConfiguration? Moderation { get; init; }

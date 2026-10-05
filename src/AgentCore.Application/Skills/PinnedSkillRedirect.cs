@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AgentCore.Application.Hooks.Layers;
 using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Skills
@@ -31,6 +32,7 @@ namespace AgentCore.Application.Skills
 
             if (ReadName(arguments) is { } name && _pinned.Contains(name))
             {
+                ToolCallOutcomes.Mark(arguments, ToolCallOutcomes.RedirectedKey);
                 return ValueTask.FromResult<object?>(
                     $"The '{name}' skill is already in your instructions, inside <skill name=\"{name}\">. Use it from there.");
             }
@@ -38,7 +40,7 @@ namespace AgentCore.Application.Skills
             return base.InvokeCoreAsync(arguments, cancellationToken);
         }
 
-        private static string? ReadName(AIFunctionArguments arguments)
+        internal static string? ReadName(AIFunctionArguments arguments)
         {
             _ = arguments.TryGetValue(SkillNameArgument, out object? value);
             return value switch

@@ -15,7 +15,7 @@ namespace AgentCore.Application.Audit
     /// </summary>
     public sealed class QueuedAuditSink : IAuditSinkPort, IAsyncDisposable, IDisposable
     {
-        /// <summary>The number of events the queue holds before it starts dropping.</summary>
+        /// <summary>The number of events the queue holds before an append waits.</summary>
         public const int DefaultCapacity = 10_000;
 
         /// <summary>The most events the writer hands the store in one conversation.</summary>
@@ -60,7 +60,7 @@ namespace AgentCore.Application.Audit
         /// <see cref="NullLogger.Instance"/>. The library never throws for want of one.
         /// </param>
         /// <param name="capacity">
-        /// The number of events the queue holds before it drops, or <see cref="DefaultCapacity"/>.
+        /// The number of events the queue holds before an append waits, or <see cref="DefaultCapacity"/>.
         /// </param>
         /// <param name="batchSize">
         /// The most events one call to the store carries, or <see cref="DefaultBatchSize"/>.
@@ -101,26 +101,32 @@ namespace AgentCore.Application.Audit
             _writer = Task.Run(WriteAsync, CancellationToken.None);
         }
 
+        /// <summary>
+        /// Gets or sets what <see cref="FlushAsync"/> waits for before it waits for the queue: the delivery of every
+        /// notice already raised to the audit hook. The ASP.NET boot sets it.
+        /// </summary>
+        internal Func<Task>? Upstream { get; set; }
+
         /// <inheritdoc />
-        public ValueTask AppendAsync(AuditEvent auditEvent, CancellationToken cancellationToken = default)
+        public async ValueTask AppendAsync(AuditEvent auditEvent, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(auditEvent);
 
             // Counted before the write, so FlushAsync never reads zero while an event is in the channel.
             _ = Interlocked.Increment(ref _pending);
 
-            if (_queue.Writer.TryWrite(auditEvent))
+            try
             {
-                return ValueTask.CompletedTask;
+                // A full queue makes any caller wait. Behind the audit hook the caller is the hook's own reader, off
+                // the turn; code that calls this directly waits on its own thread until the writer makes room.
+                await _queue.Writer.WriteAsync(auditEvent, cancellationToken).ConfigureAwait(false);
             }
-
-            // Either the queue is full or the sink is disposed. Both are a drop, and both are reported:
-            // the caller is a turn loop, and a turn is never told that its record was lost.
-            _ = Interlocked.Decrement(ref _pending);
-
-            Report(auditEvent);
-
-            return ValueTask.CompletedTask;
+            catch (Exception exception) when (exception is ChannelClosedException or OperationCanceledException)
+            {
+                // The sink is disposed, or the caller gave up: nothing will take the row, so it is reported.
+                _ = Interlocked.Decrement(ref _pending);
+                Report(auditEvent);
+            }
         }
 
         /// <summary>Waits until every accepted event has been handed to the store.</summary>
@@ -128,6 +134,11 @@ namespace AgentCore.Application.Audit
         /// <returns>A task that completes when nothing is left in the queue.</returns>
         public async ValueTask FlushAsync(CancellationToken cancellationToken = default)
         {
+            if (Upstream is { } upstream)
+            {
+                await upstream().WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             while (Volatile.Read(ref _pending) > 0)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -249,7 +260,7 @@ namespace AgentCore.Application.Audit
         }
 
         /// <summary>Writes the one line a dropped event is worth, and never throws.</summary>
-        /// <param name="auditEvent">The event the queue had no room for.</param>
+        /// <param name="auditEvent">The event nothing will take: the queue was closed, or the caller gave up.</param>
         private void Report(AuditEvent auditEvent)
         {
             try

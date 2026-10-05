@@ -1,6 +1,6 @@
 using AgentCore.AspNetCore.Tests.Fakes;
-using AgentCore.AspNetCore.Vendors.TelnyxRelay;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Vendors.TelnyxRelay.Connection;
+using AgentCore.AspNetCore.Voice.Transport;
 using Xunit;
 
 namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay

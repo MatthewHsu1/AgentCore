@@ -2,7 +2,7 @@
 // commit d8405f132e1bd960f298190c18daf81ffc1faf45. Copyright 2023 LiveKit, Inc.
 // Licensed under the Apache License, Version 2.0. Modified: translated to C#; realtime session removed.
 
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Voice.Speech;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;

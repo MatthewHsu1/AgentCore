@@ -2,6 +2,7 @@ using AgentCore.Application.Conversation;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
+using AgentCore.Application.Hooks;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Sessions.Memory;
@@ -10,6 +11,7 @@ using Microsoft.Extensions.AI;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Runtime
 {
@@ -74,17 +76,17 @@ namespace AgentCore.Application.Tests.Runtime
             string yaml = SingleAgentYaml,
             IConversationStore? store = null,
             string entryName = "main",
-            IEnumerable<IConversationObserver>? observers = null,
             TimeProvider? timeProvider = null,
-            TimeSpan? idleTimeout = null)
+            TimeSpan? idleTimeout = null,
+            IReadOnlyList<AgentHook>? hooks = null)
         {
             AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(yaml);
             IReadOnlyDictionary<string, CompiledAgent> entries = ConfigurationCompiler.CompileAll(
                 document,
-                new AgentCompilationContext(new RoutingChatClientFactory(reply)) { ConversationStore = store });
+                new AgentCompilationContext(new RoutingChatClientFactory(reply)) { ConversationStore = store, Hooks = hooks });
             compiled = entries[entryName];
 
-            ConversationSessionFactory factory = new(compiled, new GuardEvaluator(compiled.Configuration.Guards), observers: observers);
+            ConversationSessionFactory factory = new(compiled, new GuardEvaluator(compiled.Configuration.Guards));
             InMemoryConversationSessions sessions = new(
                 new Dictionary<string, IConversationSessionFactory>(StringComparer.Ordinal) { [entryName] = factory },
                 idleTimeout ?? TimeSpan.FromMinutes(30),

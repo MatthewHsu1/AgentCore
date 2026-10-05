@@ -1,11 +1,10 @@
 using AgentCore.Application.Audit;
-using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Configuration.Parsing;
-using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Sessions.Memory;
 using Microsoft.Extensions.Logging;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.AspNetCore.DependencyInjection.Startup
 {
@@ -15,44 +14,24 @@ namespace AgentCore.AspNetCore.DependencyInjection.Startup
     internal readonly record struct ConversationSessionSeam(
         EntryRegistry Entries, QueuedAuditSink Queue);
 
-    /// <summary>The seam a conversation arrives on: the audit queue, the observers, and one session factory per entry.</summary>
+    /// <summary>The seam a conversation arrives on: the audit queue and one session factory per entry.</summary>
     internal static class ConversationSessionStartup
     {
-        /// <summary>Opens the audit store the document names, and builds the one session owner over every entry's factory.</summary>
-        /// <param name="boot">The owner the audit chain is tracked against.</param>
-        /// <param name="configuration">The loaded document. It carries <c>providers.audit</c>.</param>
-        /// <param name="options">The options the host filled. It carries the audit vendors, the clock, and any observer.</param>
-        /// <param name="graph">The compiled entries and the seams step 5 made.</param>
-        /// <param name="loggers">The factory the session and the audit queue take their loggers from.</param>
-        /// <param name="cancellationToken">Cancels the store open.</param>
+        /// <summary>Builds the one session owner over every entry's factory.</summary>
+        /// <param name="boot">The owner the session owner is tracked against.</param>
+        /// <param name="options">The options the host filled. It carries the clock and the workspace.</param>
+        /// <param name="graph">The compiled entries and the seams built from them.</param>
+        /// <param name="auditSink">The queue that answers the audit port, opened before the compile.</param>
+        /// <param name="loggers">The factory the session takes its logger from.</param>
         /// <returns>The per-entry seams, and the queue in front of the store.</returns>
-        internal static async ValueTask<ConversationSessionSeam> OpenAsync(
+        internal static ConversationSessionSeam Open(
             AgentCoreBoot boot,
-            AgentCoreConfiguration configuration,
             AgentCoreOptions options,
             CompiledGraph graph,
-            ILoggerFactory loggers,
-            CancellationToken cancellationToken)
+            QueuedAuditSink auditSink,
+            ILoggerFactory loggers)
         {
-            IAuditSinkPort store = boot.Track(await AuditSinkFactory
-                .OpenAsync(
-                    configuration,
-                    options.SecretResolver,
-                    options.AuditSinks ?? [],
-                    cancellationToken)
-                .ConfigureAwait(false));
-
-            if (store is InMemoryAuditSink && configuration.Providers?.Audit is null)
-            {
-                StartupLog.AuditSinkDefaulted(loggers.CreateLogger<QueuedAuditSink>());
-            }
-
             TimeProvider timeProvider = options.TimeProvider ?? TimeProvider.System;
-
-            QueuedAuditSink auditSink = boot.Track(new QueuedAuditSink(
-                store,
-                loggers.CreateLogger<QueuedAuditSink>(),
-                timeProvider: timeProvider));
 
             ILogger<ConversationSession> sessionLogger = loggers.CreateLogger<ConversationSession>();
 
@@ -72,8 +51,6 @@ namespace AgentCore.AspNetCore.DependencyInjection.Startup
                 }
             }
 
-            IReadOnlyList<IConversationObserver> observers = ConversationObservers.Standard(auditSink, sessionLogger, options.Observers);
-
             Dictionary<string, IConversationSessionFactory> factories = new(StringComparer.Ordinal);
 
             foreach ((string? entryName, Application.Configuration.Compilation.CompiledAgent? compiled) in graph.Entries)
@@ -84,8 +61,7 @@ namespace AgentCore.AspNetCore.DependencyInjection.Startup
                     ConversationSessionFactory.CreateExtractor(compiled, graph.ChatClients),
                     options.TimeProvider,
                     sessionLogger,
-                    observers,
-                    options.WorkspaceRoot);
+                    workspaceRoot: options.WorkspaceRoot);
             }
 
             IConversationSessions sessions = options.ConversationSessions?.Invoke(factories)

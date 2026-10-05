@@ -45,22 +45,18 @@ namespace AgentCore.Application.Tests.Knowledge
         [Fact]
         public async Task Create_CitationsOn_PublishesASourceForEachCardShown()
         {
-            // Task 5 fix round 1, Finding 1. Nothing in this suite drove the sources port to a
-            // non-null value for a citing search before this test, so the body of the publish loop had
-            // never executed. A collector plus an outer call, both open around the same InvokingAsync
-            // the other tests already drive, is what proves the wiring rather than just reading it.
+            // This drives the sources port to a non-null value for a citing search,
+            // which runs the body of the publish loop. A collector plus an outer call, both on the turn the same InvokingAsync
+            // the other tests already drive reads, is what proves the wiring rather than just reading it.
             StubKnowledgePort port = new([Card("a"), Card("b")]);
             AIContextProvider provider = Provider(port, Resolved(KnowledgeMode.Prefetch, citations: true));
 
             TurnSources sources = new();
 
             StubSession session = new();
-            TurnRegistry.Set(session, PrefetchTurn(sources: sources));
-            using (sources.BeginOuterCall("conversation-1"))
-            {
-                _ = await provider.InvokingAsync(
-                    Invoking("the screen says e33", session), TestContext.Current.CancellationToken);
-            }
+            TurnRegistry.Set(session, PrefetchTurn(sources: sources) with { OuterCallId = "conversation-1" });
+            _ = await provider.InvokingAsync(
+                Invoking("the screen says e33", session), TestContext.Current.CancellationToken);
 
             IReadOnlyList<SourceContent> cited = sources.TakeFor("conversation-1");
             Assert.Equal(2, cited.Count);
@@ -75,19 +71,16 @@ namespace AgentCore.Application.Tests.Knowledge
             // The leak test, and the most important one in this task. citations: false is the single
             // switch a deployment uses to decide whether it discloses its sources at all -- a chip on
             // screen is a disclosure just as much as the label the model is shown -- so this must
-            // publish nothing even with a collector and an outer call both open and cards coming back.
+            // publish nothing even with a collector and an outer call both on the turn and cards coming back.
             StubKnowledgePort port = new([Card("a"), Card("b")]);
             AIContextProvider provider = Provider(port, Resolved(KnowledgeMode.Prefetch, citations: false));
 
             TurnSources sources = new();
 
             StubSession session = new();
-            TurnRegistry.Set(session, PrefetchTurn(sources: sources));
-            using (sources.BeginOuterCall("conversation-1"))
-            {
-                _ = await provider.InvokingAsync(
-                    Invoking("the screen says e33", session), TestContext.Current.CancellationToken);
-            }
+            TurnRegistry.Set(session, PrefetchTurn(sources: sources) with { OuterCallId = "conversation-1" });
+            _ = await provider.InvokingAsync(
+                Invoking("the screen says e33", session), TestContext.Current.CancellationToken);
 
             Assert.Empty(sources.TakeFor("conversation-1"));
         }

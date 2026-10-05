@@ -1,12 +1,12 @@
 using System.Text.Json.Nodes;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Conversation.Memory;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Transcript;
 using AgentCore.Domain;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Transcript.ConversationSessionResumeTestSupport;
 
 namespace AgentCore.Application.Tests.Transcript
@@ -48,12 +48,10 @@ namespace AgentCore.Application.Tests.Transcript
                   - { id: closed, agent: done, terminal: true }
           """;
 
-        // IConversationStore.AppendAsync refuses a turn index the conversation already saved (owner ruling 2026-09-24,
-        // "refuse at save"). Session B saved turn 1, so session A, which ran turn 0, must run its next turn as turn 2.
+        // IConversationStore.AppendAsync refuses a turn index the conversation already saved. Session B saved turn 1, so session A, which ran turn 0, must run its next turn as turn 2.
         [Fact]
         public async Task ASessionThatCaughtUpOnAnotherSessionsTurn_SavesItsNextTurnUnderTheNextIndex()
         {
-            // Arrange
             InMemoryConversationStore store = new();
             using ScriptedChatClient replyA = new("a");
             ConversationSession a = CreateSession(OneAgentYaml, replyA, store);
@@ -65,11 +63,9 @@ namespace AgentCore.Application.Tests.Transcript
             _ = await b.RunTurnAsync("q1", Ct);
             await b.FlushTranscriptAsync();
 
-            // Act
             TurnResult third = await a.RunTurnAsync("q2", Ct);
             await a.FlushTranscriptAsync();
 
-            // Assert
             Assert.Equal(2, third.TurnIndex);
             IReadOnlyList<ConversationMessage> rows = await store.ReadForSessionAsync(a.ConversationId, Ct);
             Assert.Equal(
@@ -80,7 +76,6 @@ namespace AgentCore.Application.Tests.Transcript
         [Fact]
         public async Task ASessionThatCaughtUpOnAnotherSessionsTurn_RunsInTheStageAndSeesTheSlotsThatTurnStored()
         {
-            // Arrange
             InMemoryConversationStore store = new();
             using RequestRecordingChatClient reply = new("a0", "a2");
             ConversationSession a = CreateSession(OrderYaml, reply, store);
@@ -93,11 +88,9 @@ namespace AgentCore.Application.Tests.Transcript
                 Slots = new Dictionary<string, JsonNode?> { ["orderStatus"] = "shipped", ["turnsInAlpha"] = 2L },
             });
 
-            // Act
             TurnResult third = await a.RunTurnAsync("q2", Ct);
             await a.FlushTranscriptAsync();
 
-            // Assert
             Assert.Equal((2, "beta"), (third.TurnIndex, third.StageBefore));
             Assert.EndsWith("STAGE-BETA", reply.Instructions[^1], StringComparison.Ordinal);
             ConversationSessionState? stored = (await store.GetAsync(a.ConversationId, Ct))?.State;
@@ -112,7 +105,6 @@ namespace AgentCore.Application.Tests.Transcript
         [Fact]
         public async Task ASessionThatCaughtUpOnAnotherSessionsTurn_HoldsNoSlotThatTurnDidNotStore()
         {
-            // Arrange
             InMemoryConversationStore store = new();
             using ScriptedChatClient reply = new("a");
             ConversationSession a = CreateSession(OrderYaml, reply, store);
@@ -120,17 +112,14 @@ namespace AgentCore.Application.Tests.Transcript
             await a.FlushTranscriptAsync();
             await SaveAnotherSessionsTurnAsync(store, a.ConversationId, new ConversationSessionState { NextTurnIndex = 2, Stage = "alpha" });
 
-            // Act
             _ = await a.RunTurnAsync("q2", Ct);
 
-            // Assert
             Assert.Equal(1, a.State.Read("turnsInAlpha")?.GetValue<long>());
         }
 
         [Fact]
         public async Task ASessionThatCaughtUpOnAnotherSessionsTurn_RefusesTheTurnWhenThatTurnEndedTheConversation()
         {
-            // Arrange
             InMemoryConversationStore store = new();
             using ScriptedChatClient reply = new("a");
             ConversationSession a = CreateSession(OrderYaml, reply, store);
@@ -139,10 +128,8 @@ namespace AgentCore.Application.Tests.Transcript
             await SaveAnotherSessionsTurnAsync(
                 store, a.ConversationId, new ConversationSessionState { NextTurnIndex = 2, Stage = "closed", IsComplete = true });
 
-            // Act
             Exception? refused = await Record.ExceptionAsync(() => a.RunTurnAsync("q2", Ct));
 
-            // Assert
             Assert.IsType<InvalidOperationException>(refused);
             IReadOnlyList<ConversationMessage> rows = await store.ReadForSessionAsync(a.ConversationId, Ct);
             Assert.Equal(4, rows.Count);

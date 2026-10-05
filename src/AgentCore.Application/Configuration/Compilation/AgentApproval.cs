@@ -1,4 +1,7 @@
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Hooks;
+using AgentCore.Application.Hooks.Engine;
+using AgentCore.Application.Hooks.Layers;
 using AgentCore.Application.Runtime.Harness;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -47,45 +50,71 @@ namespace AgentCore.Application.Configuration.Compilation
         /// <param name="defaults">The <c>agents.defaults</c> section, or <see langword="null"/>.</param>
         /// <param name="item">The agent being compiled.</param>
         /// <param name="tools">The tools the agent offers the model, if any.</param>
+        /// <param name="hooks">The hooks of the compile.</param>
         /// <returns>
-        /// The pending queue and the standing-rule keys when the agent may surface an approval —
-        /// through <c>auto:</c>, which adds the approval layer, or through an approval-required tool —
-        /// else empty. An absent key is never kept, so both ride together.
+        /// The pending queue, the standing-rule and the held-answer keys when the agent may surface an approval —
+        /// through <c>auto:</c>, which adds the approval layer, through an approval-required tool, or through a
+        /// BeforeRun hook, which can add one at run time — else empty. An absent key is never kept, so all three ride together.
         /// </returns>
         public static IReadOnlyList<string> StateKeysFor(
-            AgentDefaults? defaults, AgentConfiguration item, IEnumerable<AITool>? tools)
+            AgentDefaults? defaults, AgentConfiguration item, IEnumerable<AITool>? tools, HookRuntime hooks)
         {
             ArgumentNullException.ThrowIfNull(item);
+            ArgumentNullException.ThrowIfNull(hooks);
 
-            return Compose(defaults, item).Count == 0
-                && tools?.OfType<ApprovalRequiredAIFunction>().Any() != true
+            return !MayAsk(defaults, item, tools, hooks)
                 ? []
-                : [PendingApprovalQueue.PendingStateKey, PendingApprovalQueue.StandingStateKey];
+                : [PendingApprovalQueue.PendingStateKey, PendingApprovalQueue.StandingStateKey, PendingApprovalQueue.HeldStateKey];
         }
 
         /// <summary>
-        /// Bakes one agent's <c>auto:</c> into its pipeline as <c>UseToolApproval</c> rules. No
-        /// patterns, no layer — the document pays nothing for approval it never declares.
+        /// Bakes one agent's <c>auto:</c> and the BeforeToolApproval hooks into its pipeline as one <c>UseToolApproval</c> rule,
+        /// with the deny layer outside it when a hook overrides BeforeToolApproval, <see cref="ApprovalQueueDrain"/> directly outside
+        /// it, and <see cref="ApprovalAnswerHold"/> innermost whenever the agent can ask. An agent that can ask nothing gets no layer — the document pays nothing for
+        /// approval it never declares.
         /// </summary>
         /// <param name="agent">The compiled agent.</param>
         /// <param name="defaults">The <c>agents.defaults</c> section, or <see langword="null"/>.</param>
         /// <param name="item">The agent being compiled.</param>
+        /// <param name="tools">The tools the agent offers the model, if any.</param>
+        /// <param name="hooks">The hooks of the compile.</param>
         /// <returns>The approval-wrapped agent, or <paramref name="agent"/> unchanged.</returns>
-        public static AIAgent Apply(AIAgent agent, AgentDefaults? defaults, AgentConfiguration item)
+        public static AIAgent Apply(
+            AIAgent agent, AgentDefaults? defaults, AgentConfiguration item, IEnumerable<AITool>? tools, HookRuntime hooks)
         {
             ArgumentNullException.ThrowIfNull(agent);
             ArgumentNullException.ThrowIfNull(item);
+            ArgumentNullException.ThrowIfNull(hooks);
 
-            return Compose(defaults, item) is not { Count: > 0 } auto
-                ? agent
-                : new AIAgentBuilder(agent)
-                .UseToolApproval(new ToolApprovalAgentOptions { AutoApprovalRules = [.. auto.Select(ToRule)] })
+            IReadOnlyList<string> auto = Compose(defaults, item);
+            bool gated = hooks.Gates.Overrides(GatePoint.BeforeToolApproval);
+            if (!gated && !MayAsk(defaults, item, tools, hooks))
+            {
+                return agent;
+            }
+
+            AIAgent held = ApprovalAnswerHold.Use(new AIAgentBuilder(agent)).Build();
+            if (auto.Count == 0 && !gated)
+            {
+                return held;
+            }
+
+            AIAgentBuilder builder = new(held);
+            if (gated)
+            {
+                builder = ApprovalGateLayer.UseDenials(builder);
+            }
+
+            return ApprovalQueueDrain.Use(builder)
+                .UseToolApproval(new ToolApprovalAgentOptions { AutoApprovalRules = [ApprovalGateLayer.Rule(auto, hooks)] })
                 .Build();
         }
 
-        private static Func<ToolAutoApprovalRuleContext, ValueTask<bool>> ToRule(string pattern)
+        private static bool MayAsk(AgentDefaults? defaults, AgentConfiguration item, IEnumerable<AITool>? tools, HookRuntime hooks)
         {
-            return context => ValueTask.FromResult(Matches(pattern, context.FunctionCallContent.Name));
+            return Compose(defaults, item).Count > 0
+                || tools?.OfType<ApprovalRequiredAIFunction>().Any() == true
+                || hooks.Gates.Overrides(GatePoint.BeforeRun);
         }
     }
 }

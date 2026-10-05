@@ -1,9 +1,10 @@
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Transcript;
 using AgentCore.TestSupport;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Cut;
+using AgentCore.Application.Runtime.Turn;
 
 namespace AgentCore.Application.Tests.Runtime
 {

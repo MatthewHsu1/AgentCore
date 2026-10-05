@@ -21,7 +21,7 @@
 #   5. tools        what an agent may call
 #   6. agents       models, prompts, knowledge
 #   7. entries      what a caller reaches: a stage machine or one agent
-#   8. providers    adapters: llm, conversation, speech, telephony, moderation, embeddings, knowledge,
+#   8. providers    adapters: llm, conversation, speech, moderation, embeddings, knowledge,
 #                   telemetry
 #   9. evaluation   the judge that scores finished turns
 
@@ -360,16 +360,38 @@ providers:
     - { kind: openai, model: gpt-4.1,      as: judge }      # evaluation only, chosen on judgement
     - { kind: openai, model: gpt-4.1-nano, as: cheap, webSearch: false }
 
-  # Three voice planes. They are not duplicates.
+  # Two voice planes. They are not duplicates.
   #   conversation the media pipe. It carries the audio and owns the route /v1/{entry}/call.
   #   speech      recognition (stt) and synthesis (tts), one role at a time.
-  #   telephony   call control: dial, transfer, hang up. It must outlive any one media leg,
-  #               because a warm transfer creates a second leg.
   conversation:      { kind: telnyx-relay }
+  # The call route only answers a caller that proves it is the vendor. Telnyx signs no relay socket, so its
+  # TeXML URL carries a shared key: wss://<host>/v1/<entry>/call?key=<TELNYX_RELAY_KEY>. Without the
+  # TELNYX_RELAY_KEY secret the host does not start.
+  # The GPT-Live phone path instead. It speaks for itself, so it needs no speech: block. AgentCore adds
+  # no prompt text of its own: GPT-Live hears only what this block says, plus the host's per-call brief.
+  # Without a "never guess, delegate" paragraph GPT-Live made up product facts in 4 of 6 test calls,
+  # and it cannot hang up, so tell it to pass an end request to the backend. OpenAI signs every call's
+  # webhook, and the route checks it with the OPENAI_WEBHOOK_SECRET secret.
+  # conversation:
+  #   kind: openai-live
+  #   live:
+  #     instructions: |                    # required: GPT-Live's whole prompt
+  #       You are the phone voice of the backend. Be brief.
+  #       You know no facts yourself. For any question that needs a fact, delegate to the backend and
+  #       wait for its answer. Never guess a fact.
+  #       You cannot end the call yourself. When the caller wants to end or hang up the call, do not
+  #       say goodbye. Delegate it to the backend right away, then speak only the backend's answer.
+  #     greeting: "Greet the caller as your instructions say, then pause and listen."
+  #                                        # optional: without it GPT-Live waits for the caller to speak
+  #     voice: marin                       # optional, default marin
+  #     model: gpt-live-1                  # optional, default gpt-live-1
+  #     transferSeconds: 45                # optional, default 45. OpenAI never says if a transfer worked: the
+  #                                        # SIP peer hangs up the AI leg once the line took the call. A call still
+  #                                        # up after this long counts as a failed transfer and is hung up. Set it
+  #                                        # longer than the peer rings the target.
   speech:
     stt: { kind: telnyx-relay }            # bundled with the relay, so it matches conversation
     tts: { kind: telnyx-relay }            # bundled with the relay, so it matches conversation
-  telephony: { kind: telnyx }
 
   # Reads what the CALLER said, before the model runs. A flagged turn never reaches the model and
   # speaks refusalReply instead. Reads the openai-api-key secret, the same one llm reads.

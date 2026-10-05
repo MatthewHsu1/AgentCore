@@ -2,7 +2,6 @@ using System.Text.Json;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Harness;
 using AgentCore.Application.Sessions.Memory;
 using AgentCore.Application.Tests.Fakes;
@@ -11,6 +10,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Sessions.ConversationSessionsFixture;
 
 namespace AgentCore.Application.Tests.Sessions
@@ -177,7 +177,7 @@ namespace AgentCore.Application.Tests.Sessions
         [Fact]
         public async Task AChildThatEndsWellBeforeTheIdleTimeoutStillCountsAsActivity()
         {
-            // Issue #31 fix round, defect 2: the child is released long before the idle timeout comes due at
+            // The child is released long before the idle timeout comes due at
             // all. A check only at the deadline would find it already gone and expire right there, on schedule,
             // as if the child had never run. The document is polled through the whole window instead, so the
             // child's end (not the original deadline) is what the idle timeout counts from.
@@ -208,7 +208,7 @@ namespace AgentCore.Application.Tests.Sessions
             clock.Advance(HeldSession.BackgroundChildPollInterval);
 
             // The moment the original idle timeout, counted from session open rather than from the child's end,
-            // would have expired the session under the old bug. It must still be held.
+            // would have expired the session. It must still be held.
             TimeSpan sinceOpen = childReleasedAt + HeldSession.BackgroundChildPollInterval;
             clock.Advance(IdleTimeout - sinceOpen);
             Assert.Equal(1, sessions.Count);
@@ -223,7 +223,7 @@ namespace AgentCore.Application.Tests.Sessions
         [Fact]
         public async Task TheBackgroundPollIntervalIsClampedToTheIdleTimeout()
         {
-            // Issue #31 fix round, defect 4: an idle timeout shorter than the poll interval must not let the
+            // An idle timeout shorter than the poll interval must not let the
             // session outlive its own timeout just because nothing polled it in time.
             FakeTimeProvider clock = Clock();
             TimeSpan shortIdleTimeout = TimeSpan.FromSeconds(5);
@@ -243,12 +243,11 @@ namespace AgentCore.Application.Tests.Sessions
         [Fact]
         public async Task AFaultReadingWhetherAChildIsRunningIsTreatedAsOneStillRunningAndLogged()
         {
-            // Issue #31 fix round, defect 1: GetIncompleteTasks can throw. A state bag entry set through a live
-            // SetValue<T> call always short-circuits to a CLR type check (proven while chasing this down: a
-            // mismatched cached type returns false, never touching JSON), so the only path that reaches a real
+            // GetIncompleteTasks can throw. A state bag entry set through a live
+            // SetValue<T> call always short-circuits to a CLR type check, so the only path that reaches a real
             // JsonException is a session resumed from stored JSON, where a key comes back shaped for a
             // different provider version. Thrown on the idle timer thread with no catch, this either crashes the
-            // process (TimeProvider.System) or leaves the timer never re-armed (a fake clock): reviewer-proven.
+            // process (TimeProvider.System) or leaves the timer never re-armed (a fake clock).
             RecordingLoggerFactory logs = new();
             ConversationSessionFactory factory =
                 BuildFactory(new GatedChatClient(new ScriptedChatClient("done")), logs.CreateLogger("session"));

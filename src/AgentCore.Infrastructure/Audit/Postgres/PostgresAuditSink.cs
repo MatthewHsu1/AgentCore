@@ -10,7 +10,7 @@ using NpgsqlTypes;
 namespace AgentCore.Infrastructure.Audit.Postgres
 {
     /// <summary>
-    /// Store 3, in PostgreSQL. It appends and it never updates.
+    /// The audit store, in PostgreSQL. It appends and it never updates.
     /// </summary>
     internal sealed class PostgresAuditSink : IAuditSinkPort, IAsyncDisposable
     {

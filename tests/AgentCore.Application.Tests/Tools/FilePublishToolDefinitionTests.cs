@@ -3,7 +3,6 @@ using System.Text.Json.Nodes;
 using AgentCore.Application.Blobs;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tools;
@@ -131,7 +130,6 @@ namespace AgentCore.Application.Tests.Tools
         {
             File.WriteAllText(Path.Combine(_root, "conversation-1", "rows.csv"), "a,b\n1,2\n");
             TurnFiles files = new();
-            using IDisposable outer = files.BeginOuterCall("tc_1");
 
             JsonObject result = await PublishAsync("rows.csv", title: "Sales by month", files: files);
 
@@ -200,6 +198,7 @@ namespace AgentCore.Application.Tests.Tools
                     Stage = string.Empty,
                     Workspace = Path.Combine(_root, "conversation-1"),
                     Files = files,
+                    OuterCallId = "tc_1",
                 }.FileIn(arguments);
             }
 

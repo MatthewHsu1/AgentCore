@@ -1,7 +1,10 @@
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using AgentCore.Application.Hooks.Notices;
+using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Tests.Fakes;
+using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
 
@@ -74,6 +77,35 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             Assert.Equal(HttpStatusCode.OK, second.StatusCode);
             Assert.Equal(1, sent);
             Assert.Contains("done.", replied.OutputText(), StringComparison.Ordinal);
+        }
+
+        // The answer is raised when the turn takes it in, under the function call id the gated fake gives its call.
+        [Fact]
+        public async Task ApprovalAnswer_IsRaisedOnceAsAHumansApproval()
+        {
+            RecordingHook hook = new();
+            await using ResponsesHost host = await ResponsesHost.StartAsync(
+                ApprovalYaml,
+                new GatedToolCallingChatClient(),
+                configure: options =>
+                {
+                    options.AddToolSource(_ => new GatedSource(() => GatedSendEmail(() => { })));
+                    _ = options.UseHooks(hook);
+                });
+
+            using HttpResponseMessage first = await host.PostAsync(/*lang=json,strict*/ """{ "stream": false, "input": "send it" }""");
+            JsonNode asked = await ResponsesHost.ReadJsonAsync(first);
+            string? requestId = JsonDocument.Parse(
+                asked["metadata"]!["approvals"]!.GetValue<string>())
+                .RootElement[0].GetProperty("request_id").GetString();
+            using HttpResponseMessage second = await host.PostAsync(
+                $$"""{ "stream": false, "conversation": "{{asked.ContinuationId()}}", "input": [], "agentcore": { "approval": { "request_id": "{{requestId}}", "approved": true } } }""");
+            _ = await hook.WaitForAsync<TurnCompleted>(completed => completed.Scope.TurnIndex == 1).WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+            Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+            Assert.Equal(
+                [(ApprovalState.Asked, ApprovalBy.Human, "conversation_1"), (ApprovalState.Approved, ApprovalBy.Human, "conversation_1")],
+                hook.Of<ApprovalChanged>().Select(changed => (changed.State, changed.By, changed.CallId)));
         }
 
         [Fact]

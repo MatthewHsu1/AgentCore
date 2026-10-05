@@ -1,15 +1,14 @@
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Transcript;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Cut;
 
 namespace AgentCore.Application.Tests.Transcript
 {
     /// <summary>
     /// The words a cut or failed turn of two steps writes: the user's message, step one's words before its tool
-    /// call, the finished pair, then only the shown part of step two, or the fallback line (design section 3; owner
-    /// rulings 2026-09-23).
+    /// call, the finished pair, then only the shown part of step two, or the fallback line.
     /// </summary>
     public sealed class TurnWordsTests
     {
@@ -23,7 +22,6 @@ namespace AgentCore.Application.Tests.Transcript
 
         private const string Fallback = "Sorry, the order service did not answer.";
 
-        // Probe T2_TextStreamAbortInSecondStep_KeepsAllYieldedText.
         [Fact]
         public void Compose_StoppedInStepTwo_KeepsEveryYieldedWordInItsStep()
         {
@@ -36,7 +34,6 @@ namespace AgentCore.Application.Tests.Transcript
             _ = Assert.Single(words[2].Contents.OfType<FunctionResultContent>());
         }
 
-        // Probe T3_TextStreamAbortAfterToolResultBeforeStepTwoText_KeepsStepOneText.
         [Fact]
         public void Compose_StoppedAfterTheToolResultBeforeStepTwoSpoke_KeepsStepOne()
         {
@@ -46,7 +43,6 @@ namespace AgentCore.Application.Tests.Transcript
             _ = Assert.Single(words[1].Contents.OfType<FunctionCallContent>());
         }
 
-        // Probe V5_BargeInInSecondStep_KeepsBothStepsHeardText.
         [Fact]
         public void Compose_HeardEndsInsideStepTwo_KeepsStepOneAndCutsStepTwo()
         {

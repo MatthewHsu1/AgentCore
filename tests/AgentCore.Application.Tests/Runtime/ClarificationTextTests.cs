@@ -1,15 +1,14 @@
-using AgentCore.Application.Runtime;
 using Xunit;
+using AgentCore.Application.Runtime.Clarification;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
-    /// The probe's note (§8), rendered against §4's own <c>description:</c> values so a human can read
+    /// The probe's note, rendered against real <c>description:</c> values so a human can read
     /// the result as English rather than a template.
     /// </summary>
     public sealed class ClarificationTextTests
     {
-        // §4's own value, verbatim: "The model, as printed on the machine."
         private const string AppliesToDescription = "The model, as printed on the machine.";
 
         [Fact]

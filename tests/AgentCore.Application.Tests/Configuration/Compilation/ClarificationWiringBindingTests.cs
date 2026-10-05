@@ -3,13 +3,14 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime;
 using AgentCore.Domain.Knowledge;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Clarification;
+using AgentCore.Application.Runtime.Turn;
 
 namespace AgentCore.Application.Tests.Configuration.Compilation
 {
@@ -211,7 +212,7 @@ namespace AgentCore.Application.Tests.Configuration.Compilation
 
         /// <summary>
         /// A store that answers nothing while <c>model</c> is still in the scope, and names two models
-        /// once the probe has dropped it — the shape §8 exists to resolve.
+        /// once the probe has dropped it.
         /// </summary>
         private sealed class ScopedFakePort : IKnowledgeRetrievalPort
         {

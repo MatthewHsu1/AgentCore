@@ -106,7 +106,7 @@ namespace AgentCore.Application.Tests.State
             IReadOnlyDictionary<string, JsonNode?> first = state.WrittenSlots();
             IReadOnlyDictionary<string, JsonNode?> second = state.WrittenSlots();
 
-            // The declared state schema only ever writes scalars (section 8.3's four writers coerce
+            // The declared state schema only ever writes scalars (the four state writers coerce
             // to boolean/integer/number/string), so a scalar JsonValue is the only value shape this
             // slot can hold today, and a scalar exposes no public mutator. The clone's contract is
             // still checked the way a caller could actually break it without one: two conversations must not
@@ -138,9 +138,8 @@ namespace AgentCore.Application.Tests.State
         public async Task WrittenSlots_ReadWhileTheTurnLoopIsStillWriting_AnswersInsteadOfThrowing()
         {
             // The turn loop is this document's only WRITER, but it is not its only toucher.
-            // ConversationSession.Snapshot reads it off the turn, and AgentCoreAgent.SerializeSessionCoreAsync is
-            // a framework seam any host thread may conversation while a turn is running — an exposure this branch
-            // created, because that seam used to throw NotSupportedException instead of answering.
+            // ConversationSessionStateStore.Snapshot reads it off the turn, and AgentCoreAgent.SerializeSessionCoreAsync is
+            // a framework seam any host thread may call while a turn is running.
             // Enumerating a plain Dictionary mid-write is an InvalidOperationException, and it would
             // surface out of the framework's own serialization API.
             AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(ManySlotsYaml);
@@ -158,7 +157,7 @@ namespace AgentCore.Application.Tests.State
                         while (!written.IsCancellationRequested)
                         {
                             // A torn read is fine and is the accepted price: the snapshot is best effort
-                            // by D5, and the next turn's write corrects it. A throw is not fine.
+                            // by design, and the next turn's write corrects it. A throw is not fine.
                             _ = state.WrittenSlots();
                         }
                     },

@@ -1,8 +1,8 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Runtime;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
+using AgentCore.Application.Runtime.Agents.Graph;
 
 namespace AgentCore.Application.Configuration.Compilation
 {
@@ -46,7 +46,7 @@ namespace AgentCore.Application.Configuration.Compilation
                     throw ConfigurationCompiler.FailBackgroundInGraph(ConfigurationError.AppendPointer(agentsPointer, index), id, entryName);
                 }
 
-                participants.Add(agent);
+                participants.Add(new GraphParticipantAgent(agent));
             }
 
             if (participants.Count == 0)
@@ -66,11 +66,6 @@ namespace AgentCore.Application.Configuration.Compilation
             return new EntryBuild(new GraphFaultAgent(workflow.AsAIAgent(name: entryName), drain: reusesGraphSession), NoStages());
         }
 
-        /// <remarks>
-        /// A sequential graph answers from its last participant. Concurrent aggregates every
-        /// participant, and handoff and group chat both end wherever the conversation took them, so on
-        /// those patterns any participant may legitimately speak last and no filter applies.
-        /// </remarks>
         internal override HashSet<string>? SpokenAuthors(AgentCoreConfiguration configuration, EntryConfiguration entry)
         {
             return entry.Graph is { Pattern: GraphPattern.Sequential, Agents.Count: > 0 } graph

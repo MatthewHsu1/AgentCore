@@ -4,9 +4,12 @@
 // Licensed under the Apache License, Version 2.0. Modified: translated to C#; driven over a scripted
 // engine turn instead of fake VAD/STT/LLM.
 
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Runtime.Cut;
 using AgentCore.AspNetCore.Tests.Fakes;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Voice.Options;
+using AgentCore.AspNetCore.Voice.Session;
+using AgentCore.AspNetCore.Voice.Speech;
+using AgentCore.AspNetCore.Voice.Turns;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -42,9 +45,9 @@ namespace AgentCore.AspNetCore.Tests.Voice
             return _output.DisposeAsync();
         }
 
-        // agent_activity.py:2552, 2774-2783 (B1): a final transcript interrupts the current speech, as audio activity,
-        // and with no report of what was heard the speech cuts its engine turn to the text it forwarded (design
-        // section 3) once the wait runs out; the next reply's turn follows it.
+        // agent_activity.py:2552, 2774-2783: a final transcript interrupts the current speech, as audio activity,
+        // and with no report of what was heard the speech cuts its engine turn to the text it forwarded
+        // once the wait runs out; the next reply's turn follows it.
         [Fact(Timeout = 30_000)]
         public async Task AFinalTranscript_InterruptsTheCurrentSpeechAndTheNextReplyAnswers()
         {
@@ -72,7 +75,7 @@ namespace AgentCore.AspNetCore.Tests.Voice
             Assert.Equal(["Let me think about that.", "The second answer."], _output.Spoken);
         }
 
-        // agent_activity.py:2774-2780 (B4): an uninterruptible speech drops the turn instead of answering it.
+        // agent_activity.py:2774-2780: an uninterruptible speech drops the turn instead of answering it.
         [Fact(Timeout = 30_000)]
         public async Task AFinalTranscriptDuringAnUninterruptibleSpeech_DropsTheTurnAndLogsAWarning()
         {
@@ -101,7 +104,7 @@ namespace AgentCore.AspNetCore.Tests.Voice
         }
 
         // test_agent_session.py::test_interim_transcript_interrupts_only_without_local_vad (VAD-present
-        // case only, :139): an interim prompt only sets state; it never interrupts (plan Q3, B8).
+        // case only, :139): an interim prompt only sets state; it never interrupts.
         [Fact(Timeout = 30_000)]
         public async Task AnInterimTranscript_SetsUserStateSpeakingAndNeverInterruptsTheCurrentSpeech()
         {

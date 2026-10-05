@@ -1,9 +1,10 @@
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Hooks.Notices;
 using AgentCore.Application.Sessions.Memory;
 using AgentCore.Application.Tests.Runtime;
 using AgentCore.TestSupport;
 using AgentCore.Domain;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Sessions.ConversationSessionsFixture;
 
 namespace AgentCore.Application.Tests.Sessions
@@ -44,15 +45,16 @@ namespace AgentCore.Application.Tests.Sessions
         {
             // An idle unload frees the session's resources without ending the conversation: no
             // conversation.ended event, so the conversation stays open in the store for a caller to resume.
-            RecordingConversationObserver observer = new();
+            RecordingHook hook = new();
             FakeTimeProvider clock = Clock();
-            using InMemoryConversationSessions sessions = new(SingleEntrySessionFactories.Of(Factory(observer: observer)), IdleTimeout, clock);
+            using InMemoryConversationSessions sessions = new(SingleEntrySessionFactories.Of(Factory(hook: hook)), IdleTimeout, clock);
             ConversationSession session = await sessions.GetOrOpenAsync(SingleEntrySessionFactories.MainEntry, "conversation-1", null, Token);
 
             clock.Advance(IdleTimeout);
 
             await EventuallyAsync(() => IsDisposed(session));
-            Assert.DoesNotContain(ConversationEventKind.ConversationEnded, observer.Kinds);
+            _ = await hook.WaitForAsync<ConversationUnloaded>().WaitAsync(TimeSpan.FromSeconds(10), Token);
+            Assert.Empty(hook.Of<ConversationEnded>());
         }
 
         [Fact]
@@ -143,7 +145,7 @@ namespace AgentCore.Application.Tests.Sessions
         [Fact]
         public async Task AStuckTurnInOneSessionDoesNotStopOtherSessionsFromExpiring()
         {
-            // Review finding R5-2. Closing a session waits for its running turn, so a close that one session
+            // Closing a session waits for its running turn, so a close that one session
             // cannot finish must hold that session only.
             FakeTimeProvider clock = Clock();
             using HangUntilCancelledChatClient model = new();

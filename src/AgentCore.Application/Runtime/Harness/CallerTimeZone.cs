@@ -1,4 +1,5 @@
 using Microsoft.Agents.AI;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Runtime.Harness
 {

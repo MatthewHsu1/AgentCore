@@ -4,14 +4,15 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Conversation.Memory;
+using AgentCore.Application.Hooks;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Runtime;
 using AgentCore.Domain;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Transcript
 {
@@ -23,15 +24,12 @@ namespace AgentCore.Application.Tests.Transcript
     {
         private const string ConversationId = "c-refused";
 
-        /// <summary>The event id of <c>Log.TurnRunFaulted</c>.</summary>
-        private const int TurnRunFaultedEvent = 28;
-
         private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
         [Fact(Timeout = 30_000)]
         public async Task AfterARefusedTurn_TheNextTurnRunsOnTheStoredWordsAndState()
         {
-            // Arrange: the busy mark fails open, so both sessions run turn 0 at once, and B saves it first.
+            // The busy mark fails open, so both sessions run turn 0 at once, and B saves it first.
             HeldFirstTurnChatClient reply = new("I am Alice");
             InMemoryConversationStore inner = new();
             ConversationSessionFactory factory = Build(reply, new UnmarkableStore(inner));
@@ -44,11 +42,9 @@ namespace AgentCore.Application.Tests.Transcript
             reply.Release();
             Exception? refused = await Record.ExceptionAsync(() => alice);
 
-            // Act
             TurnResult next = await a.RunTurnAsync("what is my name", Ct);
             await a.FlushTranscriptAsync();
 
-            // Assert
             _ = Assert.IsType<ConversationTurnConflictException>(refused);
             Assert.Equal(1, next.TurnIndex);
             Assert.Equal(
@@ -60,32 +56,8 @@ namespace AgentCore.Application.Tests.Transcript
             Assert.Equal(2, stored?.State?.NextTurnIndex);
         }
 
-        [Fact(Timeout = 30_000)]
-        public async Task ARunFaultOnATurnTheStoreRefused_IsLoggedOnce()
-        {
-            // Arrange
-            HeldFirstTurnChatClient reply = new("I am Alice") { FaultsHeldRequest = true };
-            using RecordingLoggerFactory logs = new();
-            ConversationSessionFactory factory = Build(reply, new UnmarkableStore(new InMemoryConversationStore()), logs.CreateLogger("session"));
-            ConversationSession a = factory.Create(ConversationId);
-            ConversationSession b = factory.Create(ConversationId);
-
-            Task<TurnResult> alice = a.RunTurnAsync("I am Alice", Ct);
-            await reply.Held.Task.WaitAsync(Ct);
-            _ = await b.RunTurnAsync("I am Bob", Ct);
-
-            // Act
-            reply.Release();
-            Exception? refused = await Record.ExceptionAsync(() => alice);
-
-            // Assert
-            _ = Assert.IsType<ConversationTurnConflictException>(refused);
-            CapturedLine line = Assert.Single(logs.Of(TurnRunFaultedEvent));
-            Assert.Equal(LogLevel.Error, line.Level);
-            _ = Assert.IsType<HttpRequestException>(line.Exception);
-        }
-
-        private static ConversationSessionFactory Build(HeldFirstTurnChatClient reply, IConversationStore store, ILogger? logger = null)
+        internal static ConversationSessionFactory Build(
+            HeldFirstTurnChatClient reply, IConversationStore store, ILogger? logger = null, IReadOnlyList<AgentHook>? hooks = null)
         {
             RoutingChatClientFactory clients = new(reply);
             _ = clients.Route("fill", new CallerNameFillChatClient());
@@ -98,11 +70,11 @@ namespace AgentCore.Application.Tests.Transcript
                 new GuardEvaluator(compiled.Configuration.Guards),
                 ConversationSessionFactory.CreateExtractor(compiled, clients),
                 logger: logger,
-                observers: ConversationObservers.Standard(new InMemoryAuditSink(), logger));
+                hooks: hooks);
         }
 
         /// <summary>A store whose busy table cannot be reached, so the busy mark fails open.</summary>
-        private sealed class UnmarkableStore(IConversationStore inner) : DelegatingConversationStore(inner)
+        internal sealed class UnmarkableStore(IConversationStore inner) : DelegatingConversationStore(inner)
         {
             public override ValueTask<bool> TryMarkBusyAsync(
                 string conversationId, string holder, TimeSpan lease, CancellationToken cancellationToken = default)

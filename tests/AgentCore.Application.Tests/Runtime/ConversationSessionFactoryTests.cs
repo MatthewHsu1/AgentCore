@@ -1,9 +1,9 @@
 using AgentCore.Application.Configuration.Compilation;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.State;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.TestSupport;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Runtime.ConversationSessionTestSupport;
 
 namespace AgentCore.Application.Tests.Runtime
@@ -45,7 +45,7 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Empty(second.Transcript);
             Assert.NotSame(first.State, second.State);
 
-            // Both conversations share the one compiled agent. T44 and rule 16.
+            // Both conversations share the one compiled agent.
             Assert.Same(first.Compiled, second.Compiled);
         }
 

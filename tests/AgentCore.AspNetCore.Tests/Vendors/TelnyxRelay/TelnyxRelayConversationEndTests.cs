@@ -6,7 +6,6 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Sessions.Memory;
 using AgentCore.Application.Conversation.Memory;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
@@ -17,43 +16,16 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
 {
     /// <summary>
     /// How the chain of one conversation closes when the socket ends.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Section 11, item 6 and T55/T56: every conversation writes hash-chained events ending in
-    /// <c>conversation.ended</c>, and the reason is one member of the closed set
-    /// <see cref="ConversationEndReason"/> names. The turn loop closes its own chain when the stage machine
-    /// reaches a terminal stage, and that is the only ending the core can see. Every other ending is
-    /// the adapter's to write, because only the adapter sees the socket end — which is what
-    /// <see cref="ConversationSession.EndConversation(ConversationEndReason)"/> says in its own remarks.
-    /// </para>
-    /// <para>
-    /// Every test here drives <c>TelnyxRelayConnection.RunAsync</c> over <see cref="FakeWebSocket"/>
-    /// rather than over a real port. The close of a conversation is exactly the moment a real socket stops
-    /// being observable — <see cref="FakeRelayClient"/> aborts its own socket on the way out, so a
-    /// graceful vendor close cannot be scripted over the wire at all — and the fake is what lets a test
-    /// script the vendor's own close frame, a faulting write loop, and a host that stops, each on its
-    /// own. Everything else about the connection is the real thing, including the session factory, the
-    /// store, the observers, and the audit queue <c>AddAgentCore</c> registers.
-    /// </para>
-    /// <para>
-    /// Every test here runs offline against a fake model. There is no Telnyx account, no network conversation,
-    /// and no API key anywhere in this file. That is T59.
-    /// </para>
-    /// </remarks>
     public sealed class TelnyxRelayConversationEndTests
     {
         /// <summary>A document whose first turn moves the machine into a terminal stage.</summary>
-        /// <remarks>
-        /// The transition carries no guard, so one turn is enough to reach <c>close</c> and the turn
-        /// loop closes the chain itself with <c>agent.completed</c>. That is the one ending teardown
-        /// must not write over.
-        /// </remarks>
         private const string TerminalStageYaml =
             """
           apiVersion: agentcore/v1
@@ -134,8 +106,8 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
         [Fact(Timeout = 30_000)]
         public async Task AHostThatStopsUnderALiveConversation_WritesOneConversationEndedThatNamesTheFault()
         {
-            // The caller did not hang up: the process went away underneath them. The closed set of
-            // section 4 holds four endings and this is not one of the other three, so the honest one is
+            // The caller did not hang up: the process went away underneath them. The closed set of endings
+            // holds four and this is not one of the other three, so the honest one is
             // the fault. Recording it as caller.hangup would have a report count a shutdown as a caller
             // choosing to leave.
             using FragmentingChatClient reply = new("hello");
@@ -208,10 +180,10 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
         [Fact(Timeout = 30_000)]
         public async Task AClockThatThrowsWhileTheChainCloses_StillTearsDownAndStillReleasesTheSession()
         {
-            // Section 7.1: teardown never throws out of the request handler. The one input the closing
+            // Teardown never throws out of the request handler. The one input the closing
             // event reads that can throw is the clock, so it is the one a test can make throw. A throw
             // here must cost the chain its last event and nothing else — never the session close behind
-            // it, which is what waits for the words the conversation's last turn still owed store 1.
+            // it, which is what waits for the words the conversation's last turn still owed the transcript store.
             FaultingClock clock = new();
             using FragmentingChatClient reply = new("hello");
             await using RelayConnectionHarness harness = await RelayConnectionHarness.StartAsync(
@@ -238,10 +210,10 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
         {
             // Arrange
             //
-            // Store 1 is written off the turn, so a conversation can end with its last words still in flight.
+            // The transcript store is written off the turn, so a conversation can end with its last words still in flight.
             // The session is the only thing that can wait for them, so once it leaves the store nothing
             // can: the record of that call would lose the turn the caller just had, and no error would
-            // say so. Same shape as the teardown that removed a session without closing its chain.
+            // say so.
             ParkingConversationStore transcript = new();
             using FragmentingChatClient reply = new("your order ships Friday");
             ConversationSessionFactory factory = TranscriptBackedSessions(TelnyxRelayTurnTests.PolicyYaml, reply, transcript);
@@ -269,7 +241,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
             // Assert
             Assert.True(
                 sessions.TranscriptLandedAtClose,
-                "the close returned while store 1 still owed the conversation its last turn.");
+                "the close returned while the message store still owed the conversation its last turn.");
             Assert.Null(await sessions.TryGetAsync(SingleEntrySessionFactories.MainEntry, "conversation-flush", TestContext.Current.CancellationToken));
         }
 
@@ -308,7 +280,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
             await WaitForSessionAsync(harness, "conversation-second");
             Assert.True(
                 sessions.TranscriptLandedAtClose,
-                "the close returned while store 1 still owed its call the last turn.");
+                "the close returned while the message store still owed its call the last turn.");
         }
 
         [Fact(Timeout = 30_000)]
@@ -318,7 +290,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
             //
             // IConversationSessions is a public seam, and the close is the last thing teardown does. The
             // in-memory store never fails, so a store held over the network is the only one that can
-            // fail here — and its failure must not leave the request handler, which section 7.1 forbids.
+            // fail here — and its failure must not leave the request handler.
             EventObservedLoggerProvider capture = new("ConversationCloseFaulted");
             using FragmentingChatClient reply = new("your order ships Friday");
             FaultingConversationSessions sessions = new(
@@ -389,7 +361,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
             }
         }
 
-        /// <summary>The same factory over the memory store, for a test with no store 1 of its own.</summary>
+        /// <summary>The same factory over the memory store, for a test with no transcript store of its own.</summary>
         /// <param name="yaml">The document to compile.</param>
         /// <param name="reply">The model behind every reference in it.</param>
         /// <returns>The factory.</returns>
@@ -398,17 +370,11 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
             return TranscriptBackedSessions(yaml, reply, new InMemoryConversationStore());
         }
 
-        /// <summary>Builds the session factory of one document over a given store 1.</summary>
+        /// <summary>Builds the session factory of one document over a given transcript store.</summary>
         /// <param name="yaml">The document, as YAML.</param>
         /// <param name="reply">The model behind every agent.</param>
         /// <param name="transcript">Where the words of a conversation are written.</param>
         /// <returns>The factory, ready to register over the one <c>AddAgentCore</c> built.</returns>
-        /// <remarks>
-        /// A document that names no providers.conversations compiles onto the memory store, so this is the
-        /// only seam a test has for putting a slow store behind a conversation. It is why the whole factory is
-        /// rebuilt rather than decorated: the store is compiled into the agent, and the factory holds
-        /// the compiled agent.
-        /// </remarks>
         private static ConversationSessionFactory TranscriptBackedSessions(
             string yaml, IChatClient reply, IConversationStore transcript)
         {
@@ -443,11 +409,6 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
         /// <summary>Waits for one connection to finish its own teardown.</summary>
         /// <param name="harness">The running connection.</param>
         /// <returns>A task that completes once teardown has run to its end.</returns>
-        /// <remarks>
-        /// The connection task is awaited through a guard rather than directly, so a teardown that
-        /// throws — which section 7.1 forbids — fails here by name instead of surfacing as whatever
-        /// assertion happened to run next.
-        /// </remarks>
         private static async Task WaitForTeardownAsync(RelayConnectionHarness harness)
         {
             using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(20));
@@ -512,11 +473,6 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
         /// <param name="harness">The connection that has already torn down.</param>
         /// <param name="conversationId">The id of the conversation.</param>
         /// <returns>The events of that conversation, oldest first.</returns>
-        /// <remarks>
-        /// The queue is what keeps the append off the turn, so a reader that wants the rows now asks
-        /// for them now. Nothing here waits on the chain being non-empty: every test that calls this
-        /// has already waited for the teardown that writes the last event.
-        /// </remarks>
         private static async Task<IReadOnlyList<AuditEvent>> ReadChainAsync(
             RelayConnectionHarness harness,
             string conversationId)
@@ -556,13 +512,6 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
     /// <summary>
     /// A clock a test breaks on demand.
     /// </summary>
-    /// <remarks>
-    /// <see cref="TimeProvider.GetUtcNow"/> is the one call <c>ConversationSession.EndConversation</c> makes that can
-    /// throw at all: the reason is a member of a closed set the connection picks itself, and the
-    /// dispatcher behind the event swallows everything an observer raises. Breaking the clock is
-    /// therefore the only way a test can reach the guard that keeps section 7.1's promise — teardown
-    /// never throws out of the request handler.
-    /// </remarks>
     internal sealed class FaultingClock : TimeProvider
     {
         private volatile bool _failing;
@@ -574,10 +523,6 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
         }
 
         /// <inheritdoc />
-        /// <remarks>
-        /// Only this reading fails. The timestamps a turn measures with and the timers the pump's idle
-        /// deadline runs on are left alone, so a broken clock ends nothing but the one event under test.
-        /// </remarks>
         public override DateTimeOffset GetUtcNow()
         {
             return _failing
@@ -587,7 +532,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
     }
 
     /// <summary>
-    /// The live sessions, with a note of what store 1 had done by the time a close returned.
+    /// The live sessions, with a note of what the transcript store had done by the time a close returned.
     /// </summary>
     internal sealed class OrderedConversationSessions(IConversationSessionFactory factory, Func<bool> transcriptLanded)
         : IConversationSessions, IDisposable
@@ -607,7 +552,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
         /// <summary>Gets a task that completes when a session has finished closing.</summary>
         public Task Closed => _closed.Task;
 
-        /// <summary>Gets whether store 1 had written the conversation's words by the time the close returned.</summary>
+        /// <summary>Gets whether the transcript store had written the conversation's words by the time the close returned.</summary>
         public bool? TranscriptLandedAtClose { get; private set; }
 
         /// <inheritdoc />
@@ -634,11 +579,6 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
     /// <summary>Sessions that open normally and fail only when asked to close one.</summary>
     /// <param name="factory">Builds the sessions this holds.</param>
     /// <param name="fault">What the close throws.</param>
-    /// <remarks>
-    /// It throws before its first await rather than from inside an async body, which is the harder of
-    /// the two for teardown to catch: a synchronous throw out of a <see cref="ValueTask"/> method lands
-    /// at the conversation site, not on the returned task.
-    /// </remarks>
     internal sealed class FaultingConversationSessions(IConversationSessionFactory factory, Exception fault) : IConversationSessions, IDisposable
     {
         private readonly InMemoryConversationSessions _inner = new(
@@ -702,11 +642,6 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
         }
 
         /// <inheritdoc />
-        /// <remarks>
-        /// It ignores <paramref name="cancellationToken"/> on purpose. Teardown passes
-        /// <see cref="CancellationToken.None"/> there, so a store that honoured a token would prove
-        /// nothing about the bound teardown puts on the wait itself.
-        /// </remarks>
         public async ValueTask CloseAsync(string entry, string conversationId, CancellationToken cancellationToken = default)
         {
             await _release.Task;

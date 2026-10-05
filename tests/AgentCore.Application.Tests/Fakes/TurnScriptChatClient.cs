@@ -4,8 +4,7 @@ using Microsoft.Extensions.AI;
 namespace AgentCore.Application.Tests.Fakes
 {
     /// <summary>
-    /// A model that answers each call from a script: text in fragments, one tool call, or a fault. Ported from the
-    /// design probes' <c>Script</c> (docs/probes/maf-native-engine/ProviderOwnsWritesProbes.cs).
+    /// A model that answers each call from a script: text in fragments, one tool call, or a fault.
     /// </summary>
     internal sealed class TurnScriptChatClient : IChatClient
     {
@@ -49,6 +48,18 @@ namespace AgentCore.Application.Tests.Fakes
         public static TurnScriptChatClient ToolThenText(string tool, params string[] fragments)
         {
             return new([(tool, false, []), (null, false, fragments)]);
+        }
+
+        /// <summary>Calls each tool in order, one per call, then answers with text.</summary>
+        public static TurnScriptChatClient ToolsThenText(IReadOnlyList<string> tools, params string[] fragments)
+        {
+            return new([.. tools.Select(tool => ((string?)tool, false, Array.Empty<string>())), (null, false, fragments)]);
+        }
+
+        /// <summary>Calls the same tool on every call, never answering with text.</summary>
+        public static TurnScriptChatClient ToolForever(string tool)
+        {
+            return new([(tool, false, [])]);
         }
 
         /// <summary>Calls one tool, then throws.</summary>

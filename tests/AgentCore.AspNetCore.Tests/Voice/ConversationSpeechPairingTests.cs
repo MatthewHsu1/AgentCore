@@ -1,6 +1,7 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Voice.Ports;
+using AgentCore.AspNetCore.Voice.Turns;
 using Xunit;
 
 namespace AgentCore.AspNetCore.Tests.Voice

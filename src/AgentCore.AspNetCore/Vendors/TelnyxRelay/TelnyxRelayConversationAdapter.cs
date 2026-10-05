@@ -1,6 +1,11 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Voice.Options;
+using AgentCore.AspNetCore.Voice.Ports;
+using System.Security.Cryptography;
+using System.Text;
+using AgentCore.Application.Ports;
+using AgentCore.Application.Secrets;
 using Microsoft.AspNetCore.Http;
 
 namespace AgentCore.AspNetCore.Vendors.TelnyxRelay
@@ -8,19 +13,15 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay
     /// <summary>
     /// The Telnyx Conversation Relay as a conversation transport: it owns the socket and speaks Telnyx frames.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// D28 buys the whole speech layer — recognition, turn detection, synthesis, and interruption —
-    /// inside the relay, so <see cref="CarriesText"/> is <see langword="true"/> and both speech roles,
-    /// <c>providers.speech.stt</c> and <c>providers.speech.tts</c>, must name this same vendor.
-    /// </para>
-    /// <para>
-    /// This owns only the route. <c>TelnyxRelayConnection</c> is still what a conversation runs on, and
-    /// <c>TelnyxRelayConversationChannelFactory</c> is still what hands out its two ports.
-    /// </para>
-    /// </remarks>
-    public sealed class TelnyxRelayConversationAdapter : IConversationTransportAdapter
+    /// <param name="secrets">
+    /// Reads the host's secret resolver when the route is built, or <see langword="null"/> to read
+    /// <see cref="KnownSecrets.TelnyxRelayKeyVariable"/> from the environment only.
+    /// </param>
+    public sealed class TelnyxRelayConversationAdapter(Func<ISecretResolverPort?>? secrets = null) : IConversationTransportAdapter
     {
+        /// <summary>The query parameter the socket URL carries the shared key in.</summary>
+        public const string KeyParameter = "key";
+
         /// <summary>The one <c>providers.conversation.kind</c> value this vendor answers to.</summary>
         public const string TelnyxRelayKind = "telnyx-relay";
 
@@ -28,16 +29,39 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay
         public string Kind => TelnyxRelayKind;
 
         /// <inheritdoc/>
-        /// <remarks>The relay's frames carry text: the vendor performs recognition and synthesis itself.</remarks>
         public bool CarriesText => true;
 
         /// <inheritdoc/>
-        public RequestDelegate CreateHandler(ConversationProviderConfiguration configuration)
+        public ConversationRoute CreateRoute(ConversationProviderConfiguration configuration)
         {
             ArgumentNullException.ThrowIfNull(configuration);
 
             TelnyxRelayOptions options = BuildOptions(configuration);
-            return http => TelnyxRelayEndpointRouteBuilderExtensions.HandleAsync(http, options);
+
+            // Telnyx signs no relay connect and sends no auth header, so the caller proves itself with a shared key in
+            // the socket URL: wss://host/v1/{entry}/call?key=…, set in the TeXML verb.
+            Task<byte[]> key = ResolveKeyAsync(secrets?.Invoke());
+            return new ConversationRoute(
+                http => TelnyxRelayEndpointRouteBuilderExtensions.HandleAsync(http, options),
+                http => CarriesKeyAsync(http, key))
+            {
+                Ready = key,
+            };
+        }
+
+        private static async Task<byte[]> ResolveKeyAsync(ISecretResolverPort? resolver)
+        {
+            string key = await resolver.RequireAsync(
+                KnownSecrets.TelnyxRelay, "Telnyx signs no relay socket, so this shared key is the route's only check of its caller.").ConfigureAwait(false);
+            return Encoding.UTF8.GetBytes(key);
+        }
+
+        // Fixed time, so how long a refusal takes says nothing about how much of the key was right.
+        private static async ValueTask<bool> CarriesKeyAsync(HttpContext http, Task<byte[]> key)
+        {
+            byte[] expected = await key.ConfigureAwait(false);
+            byte[] given = Encoding.UTF8.GetBytes(http.Request.Query[KeyParameter].ToString());
+            return CryptographicOperations.FixedTimeEquals(given, expected);
         }
 
         /// <summary>Turns the document's limits into the options the endpoint runs on.</summary>
@@ -47,11 +71,6 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay
         /// A value would be refused at run time by <c>Task.Delay</c>, <c>CancelAfter</c>, or
         /// <c>Task.WaitAsync</c>, or a frame cap is not positive. The pointer names the exact field.
         /// </exception>
-        /// <remarks>
-        /// It throws <see cref="ConfigurationLoadException"/> and not
-        /// <see cref="ArgumentOutOfRangeException"/> because the value came from a document rather than
-        /// from a C# caller, and a reader needs the line to fix rather than a property name.
-        /// </remarks>
         internal static TelnyxRelayOptions BuildOptions(ConversationProviderConfiguration configuration)
         {
             ArgumentNullException.ThrowIfNull(configuration);

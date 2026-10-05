@@ -5,7 +5,6 @@ using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Sessions.Memory;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime.Harness;
@@ -13,6 +12,7 @@ using AgentCore.Domain;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 using static AgentCore.Application.Tests.Sessions.ConversationSessionsFixture;
 
 namespace AgentCore.Application.Tests.Sessions
@@ -179,13 +179,12 @@ namespace AgentCore.Application.Tests.Sessions
         {
             // Every session writes conversation.started as it is built, so a loser built and then thrown away
             // would leave a start in the winner's audit chain that no conversation ever had.
-            RecordingConversationObserver observer = new();
             InMemoryConversationStore store = new();
 
             using GatedSessionFactory phoneFactory = new(
-                BuildFactory(PhoneYaml, PhoneEntry, new ScriptedChatClient("phone reply"), store, _root, observer));
+                BuildFactory(PhoneYaml, PhoneEntry, new ScriptedChatClient("phone reply"), store, _root));
             using GatedSessionFactory chatFactory = new(
-                BuildFactory(ChatYaml, ChatEntry, new ScriptedChatClient("chat reply"), store, _root, observer));
+                BuildFactory(ChatYaml, ChatEntry, new ScriptedChatClient("chat reply"), store, _root));
             chatFactory.Release();
             using InMemoryConversationSessions sessions = new(Owner(phoneFactory, chatFactory), TimeSpan.FromMinutes(30), Clock());
 
@@ -202,7 +201,6 @@ namespace AgentCore.Application.Tests.Sessions
             ConversationSession phone = await phoneOpen;
 
             Assert.Equal(0, chatFactory.Calls);
-            Assert.Single(observer.Kinds, kind => kind == ConversationEventKind.ConversationStarted);
             Assert.Same(phone, await sessions.TryGetAsync(PhoneEntry, "conversation-1", Token));
             Assert.Null(await sessions.TryGetAsync(ChatEntry, "conversation-1", Token));
             Assert.Equal(1, sessions.Count);
@@ -266,8 +264,7 @@ namespace AgentCore.Application.Tests.Sessions
             string entry,
             IChatClient reply,
             IConversationStore? store = null,
-            string? workspaceRoot = null,
-            IConversationObserver? observer = null)
+            string? workspaceRoot = null)
         {
             AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(yaml);
             RoutingChatClientFactory chatClients = new(reply);
@@ -278,7 +275,6 @@ namespace AgentCore.Application.Tests.Sessions
             return new ConversationSessionFactory(
                 compiled,
                 new GuardEvaluator(compiled.Configuration.Guards),
-                observers: observer is null ? null : [observer],
                 workspaceRoot: workspaceRoot);
         }
 

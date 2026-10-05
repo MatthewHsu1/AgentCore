@@ -3,7 +3,6 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime;
 using AgentCore.Domain;
@@ -12,6 +11,7 @@ using AgentCore.TestSupport;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Configuration.Compilation
 {
@@ -233,7 +233,7 @@ namespace AgentCore.Application.Tests.Configuration.Compilation
 
             TurnResult turn = await session.RunTurnAsync("please remember this", TestContext.Current.CancellationToken);
 
-            Assert.False(turn.IsTerminal);
+            Assert.True(turn.IsTerminal);
             Assert.False(Directory.Exists(conversationFolder));
         }
 

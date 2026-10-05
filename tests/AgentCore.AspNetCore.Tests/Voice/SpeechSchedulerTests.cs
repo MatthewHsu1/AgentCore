@@ -1,4 +1,4 @@
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Voice.Speech;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;

@@ -5,7 +5,6 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.TestSupport;
 using Microsoft.Agents.AI;
@@ -13,13 +12,14 @@ using Microsoft.Extensions.AI;
 using Xunit;
 using AgentCore.Domain;
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tests.Runtime.Harness
 {
     /// <summary>
-    /// Harness step: a graph row whose document declares a harness switch keeps one workflow
+    /// A graph row whose document declares a harness switch keeps one workflow
     /// session for the whole conversation, so <c>todos:</c> (and <c>mode:</c>) survive turns and resume.
-    /// A graph row without one still runs every turn fresh, exactly as before.
+    /// A graph row without one still runs every turn fresh.
     /// </summary>
     public sealed class ConversationSessionGraphStateTests
     {

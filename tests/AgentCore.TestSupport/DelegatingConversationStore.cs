@@ -75,6 +75,13 @@ namespace AgentCore.TestSupport
         }
 
         /// <inheritdoc />
+        public virtual ValueTask SaveStateAsync(
+            string conversationId, ConversationSessionState state, CancellationToken cancellationToken = default)
+        {
+            return Inner.SaveStateAsync(conversationId, state, cancellationToken);
+        }
+
+        /// <inheritdoc />
         public virtual ValueTask<IReadOnlyList<ConversationMessage>> AppendAsync(
             string conversationId,
             IReadOnlyList<ConversationMessageDraft> messages,

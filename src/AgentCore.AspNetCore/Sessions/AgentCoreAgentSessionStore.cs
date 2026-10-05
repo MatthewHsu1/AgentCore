@@ -2,6 +2,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Hosting;
+using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.AspNetCore.Sessions
 {
@@ -104,7 +105,7 @@ namespace AgentCore.AspNetCore.Sessions
             ArgumentNullException.ThrowIfNull(agent);
             ArgumentNullException.ThrowIfNull(sessionStoreId);
 
-            // Unknown to store 0: opened under the id itself, not a random one, so this key resolves by
+            // Unknown to the conversation store: opened under the id itself, not a random one, so this key resolves by
             // GetAsync forever after, and MAF's own SaveSessionAsync writes no response row for it at all
             // — a made-up id would need one, and the retention sweep would eventually take it.
             string conversationId = await ResolveConversationIdAsync(sessionStoreId, cancellationToken).ConfigureAwait(false)

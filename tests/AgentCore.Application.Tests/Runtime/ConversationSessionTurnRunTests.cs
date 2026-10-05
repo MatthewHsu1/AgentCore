@@ -3,19 +3,21 @@ using System.Diagnostics.Metrics;
 using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Diagnostics;
-using AgentCore.Application.Runtime;
+using AgentCore.Application.Tests.Audit;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Domain.Audit;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Session;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 using static AgentCore.Application.Tests.Runtime.ConversationSessionCutTestSupport;
 
 namespace AgentCore.Application.Tests.Runtime
 {
     /// <summary>
     /// The <see cref="TurnRun"/> a started turn hands back: how its disposal and its one read hold and free the
-    /// conversation (owner ruling 2026-09-23).
+    /// conversation.
     /// </summary>
     public sealed class ConversationSessionTurnRunTests
     {
@@ -42,7 +44,7 @@ namespace AgentCore.Application.Tests.Runtime
                 () => session.StartTurnAsync(new ChatMessage(ChatRole.User, "three"), origin: null, giveUp.Token));
         }
 
-        // TurnRun remarks: a run disposed unread commits nothing, and its reply can no longer be read.
+        // A run disposed unread commits nothing, and its reply can no longer be read.
         [Fact]
         public async Task ARunDisposedUnread_RefusesToBeRead_AndNeverCallsTheModel()
         {
@@ -67,7 +69,7 @@ namespace AgentCore.Application.Tests.Runtime
         }
 
         // BeginTurn opens the span before the caller asks for the reply, so a run disposed unread still closes it,
-        // with the outcome and the duration a stopped turn gets (audit finding F2, docs/probes/r2/audit/AUDIT.md).
+        // with the outcome and the duration a stopped turn gets.
         [Fact]
         public async Task ARunDisposedUnread_StillEndsItsSpan_WithAnInterruptedOutcomeAndADuration()
         {
@@ -119,7 +121,7 @@ namespace AgentCore.Application.Tests.Runtime
             }
         }
 
-        // Owner ruling: a turn that is refused or dropped for any reason leaves a log line and an audit event.
+        // A turn that is refused or dropped for any reason leaves a log line and an audit event.
         [Fact]
         public async Task ARunDisposedUnread_LeavesATurnRefusedThatSaysItWasDropped()
         {
@@ -131,7 +133,7 @@ namespace AgentCore.Application.Tests.Runtime
             await run.DisposeAsync();
 
             // Assert
-            AuditEvent refused = Assert.Single(sink.EventsOf(session.ConversationId), item => item.Kind == AuditEventKind.TurnRefused);
+            AuditEvent refused = Assert.Single(await session.RowsAsync(sink), item => item.Kind == AuditEventKind.TurnRefused);
             Assert.Equal((0, "dropped"), (refused.TurnIndex, refused.Payload[AuditPayloadKeys.RefusedReason]));
         }
 
@@ -151,7 +153,7 @@ namespace AgentCore.Application.Tests.Runtime
 
             // Assert
             _ = await Assert.ThrowsAsync<ConversationTurnConflictException>(() => starting);
-            AuditEvent refused = Assert.Single(sink.EventsOf(session.ConversationId), item => item.Kind == AuditEventKind.TurnRefused);
+            AuditEvent refused = Assert.Single(await session.RowsAsync(sink), item => item.Kind == AuditEventKind.TurnRefused);
             Assert.Equal(((int?)null, "busy"), (refused.TurnIndex, refused.Payload[AuditPayloadKeys.RefusedReason]));
         }
 

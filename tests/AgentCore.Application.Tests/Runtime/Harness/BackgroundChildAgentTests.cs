@@ -1,6 +1,5 @@
 #pragma warning disable MAAI001 // The context types are evaluation-only in Microsoft.Agents.AI 1.21.0.
 
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Harness;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Fakes;
@@ -13,11 +12,6 @@ namespace AgentCore.Application.Tests.Runtime.Harness
     /// A child session created inside the parent's run carries the parent's conversation id; one created
     /// outside any run carries nothing.
     /// </summary>
-    /// <remarks>
-    /// <c>BackgroundAgentsProvider</c> creates the child session from inside the parent's tool call.
-    /// The test stands in for that with a provider that creates it from inside the parent's
-    /// <c>InvokingAsync</c>, which is the same run context.
-    /// </remarks>
     public sealed class BackgroundChildAgentTests
     {
         [Fact]

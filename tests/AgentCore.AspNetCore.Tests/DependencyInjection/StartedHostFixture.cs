@@ -9,11 +9,6 @@ using Xunit;
 namespace AgentCore.AspNetCore.Tests.DependencyInjection
 {
     /// <summary>Builds a host over one document, which is where the whole boot happens.</summary>
-    /// <remarks>
-    /// Shared by every DI test that only needs a booted host and nothing document-specific — the
-    /// tests that need their own document still write their own YAML and conversation
-    /// <see cref="ConfigureServices"/> or <see cref="BuildAsync"/> directly.
-    /// </remarks>
     internal static class StartedHostFixture
     {
         /// <summary>The one-agent document every test that needs no more than that boots on.</summary>
@@ -35,6 +30,24 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
             agent: only
         """;
 
+        /// <summary>The conversation and speech providers the test documents share.</summary>
+        internal const string SpeechAndConversation =
+            """
+        providers:
+          conversation:   { kind: telnyx-relay }
+          speech:
+            stt: { kind: telnyx-relay }
+            tts: { kind: telnyx-relay }
+        """;
+
+        /// <summary><see cref="SpeechAndConversation"/> plus the single reply model most documents declare.</summary>
+        internal const string MinimalProviders =
+            $$"""
+        {{SpeechAndConversation}}
+          llm:
+            - { kind: openai, model: gpt-4.1-mini, as: reply }
+        """;
+
         /// <summary>Starts a host on one document.</summary>
         /// <param name="yaml">The document to boot.</param>
         /// <param name="configure">The host's own word on the options.</param>
@@ -50,12 +63,6 @@ namespace AgentCore.AspNetCore.Tests.DependencyInjection
         /// <summary>Starts one host, and closes it itself when the start fails.</summary>
         /// <param name="host">The host to start.</param>
         /// <returns>The started host.</returns>
-        /// <remarks>
-        /// A failed start never stops what already started, so disposal is the only cleanup path — and
-        /// it is the one a real host takes too, inside <c>RunAsync</c>'s own finally. StopAsync is
-        /// deliberately not called here: on net10 a host that failed to start throws
-        /// <see cref="ArgumentNullException"/> out of StopAsync when the failure was a constructor.
-        /// </remarks>
         internal static async Task<StartedHost> StartAsync(IHost host)
         {
             try

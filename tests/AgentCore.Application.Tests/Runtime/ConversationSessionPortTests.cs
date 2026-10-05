@@ -1,13 +1,13 @@
 using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Domain;
 using Microsoft.Extensions.AI;
 using Xunit;
+using AgentCore.Application.Runtime.Cut;
 using static AgentCore.Application.Tests.Runtime.ConversationSessionTestSupport;
 
 namespace AgentCore.Application.Tests.Runtime
 {
-    /// <summary>D4: the inbound port.</summary>
+    /// <summary>The inbound port.</summary>
     public sealed class ConversationSessionPortTests
     {
         [Fact]

@@ -1,13 +1,13 @@
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Turn;
 using Microsoft.Extensions.AI;
+using AgentCore.Application.Runtime.Turn.Lifecycle;
 
 namespace AgentCore.Application.Transcript
 {
-    /// <summary>Decides the messages one sealed turn writes, by the Cut rule of design section 3.</summary>
+    /// <summary>Decides the messages one sealed turn writes.</summary>
     internal static class TurnWords
     {
-        /// <summary>Builds the messages of one turn, the user's first.</summary>
+        /// <summary>Builds the messages of one turn: what was said ahead of the user's, then the user's.</summary>
         /// <param name="commit">The turn being sealed.</param>
         /// <param name="staged">Every message the framework staged for the turn, oldest first.</param>
         /// <returns>
@@ -19,17 +19,24 @@ namespace AgentCore.Application.Transcript
         /// </returns>
         public static List<ChatMessage> Compose(TurnCommit commit, List<ChatMessage> staged)
         {
-            List<ChatMessage> words = [commit.User];
+            List<ChatMessage> words = [.. commit.Before, commit.User, .. commit.Carried];
+            IList<ChatMessage> asked = WithoutUnasked(commit, staged);
 
-            // A cancelled or faulted run stages nothing (probes P03, P06), so what the caller saw is the fuller record.
-            IList<ChatMessage> source = commit.Seen?.Messages ?? staged;
+            // A cancelled or faulted run stages nothing, so what the caller saw is the fuller record.
+            IList<ChatMessage> source = commit.Seen?.Messages is { } yielded ? WithoutUnasked(commit, yielded) : asked;
 
             if (commit.CallerFacing)
             {
                 string heard = commit.Reply ?? commit.Cut?.ShownText ?? ReplyText.From(source);
-                if (heard.Length > 0)
+                if (heard.Length > 0 || commit.Files.Count > 0)
                 {
-                    words.Add(new ChatMessage(ChatRole.Assistant, heard));
+                    ChatMessage reply = new(ChatRole.Assistant, heard.Length > 0 ? heard : null);
+                    foreach (FileContent file in commit.Files)
+                    {
+                        reply.Contents.Add(file);
+                    }
+
+                    words.Add(reply);
                 }
 
                 return words;
@@ -37,7 +44,7 @@ namespace AgentCore.Application.Transcript
 
             if (commit.Cut is null && commit.Completed)
             {
-                words.AddRange(staged.Count > 0 ? staged : source);
+                words.AddRange(asked.Count > 0 ? asked : source);
                 return words;
             }
 
@@ -69,7 +76,7 @@ namespace AgentCore.Application.Transcript
 
         /// <summary>
         /// Reads the words a turn's messages say, as the store's verify query rebuilds them from the rows: the text parts
-        /// of every assistant message, in order, with no separator. The turn's <c>replyTextSha256</c> and
+        /// of every assistant message but the <see cref="FrontVoice"/> lines, in order, with no separator. The turn's <c>replyTextSha256</c> and
         /// <c>utteranceUntilInterruptSha256</c> hash this, so a hash and the rows it proves cannot drift apart.
         /// </summary>
         /// <param name="messages">The messages <see cref="Compose"/> built for the turn, or the rows written from them.</param>
@@ -77,9 +84,42 @@ namespace AgentCore.Application.Transcript
         public static string Spoken(IEnumerable<ChatMessage> messages)
         {
             return string.Concat(messages
-                .Where(message => message.Role == ChatRole.Assistant)
+                .Where(FrontVoice.IsAgentReply)
                 .SelectMany(message => message.Contents.OfType<TextContent>())
                 .Select(text => text.Text));
+        }
+
+        private static IList<ChatMessage> WithoutUnasked(TurnCommit commit, IList<ChatMessage> messages)
+        {
+            if (commit.Unasked.Count == 0)
+            {
+                return messages;
+            }
+
+            List<ChatMessage> kept = [];
+            foreach (ChatMessage message in messages)
+            {
+                if (!message.Contents.Any(content => IsUnasked(commit, content)))
+                {
+                    kept.Add(message);
+                    continue;
+                }
+
+                List<AIContent> rest = [.. message.Contents.Where(content => !IsUnasked(commit, content))];
+                if (rest.Count > 0)
+                {
+                    ChatMessage trimmed = message.Clone();
+                    trimmed.Contents = rest;
+                    kept.Add(trimmed);
+                }
+            }
+
+            return kept;
+        }
+
+        private static bool IsUnasked(TurnCommit commit, AIContent content)
+        {
+            return content is ToolApprovalRequestContent { ToolCall: { } call } && commit.Unasked.Contains(call.CallId);
         }
 
         /// <summary>Whether a message still says or does anything once its words are cut.</summary>

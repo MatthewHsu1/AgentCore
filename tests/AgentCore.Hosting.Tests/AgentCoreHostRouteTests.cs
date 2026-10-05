@@ -1,4 +1,7 @@
 using AgentCore.Application.Configuration.Parsing;
+using AgentCore.Application.Hooks;
+using AgentCore.Application.Hooks.Gates;
+using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Endpoints;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -78,7 +81,8 @@ namespace AgentCore.Hosting.Tests
             await using WebApplication app = await StartMappedAsync();
             using HttpClient client = new() { BaseAddress = Address(app) };
 
-            HttpResponseMessage response = await client.GetAsync("/v1/nobody/call", TestContext.Current.CancellationToken);
+            // Without the relay's key the caller is refused before the route reads the entry.
+            HttpResponseMessage response = await client.GetAsync("/v1/nobody/call?key=" + HostingTestHost.RelayKey, TestContext.Current.CancellationToken);
 
             Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
             Assert.Contains(
@@ -87,11 +91,10 @@ namespace AgentCore.Hosting.Tests
         }
 
         [Fact]
-        public async Task ASelectorPicksTheEntryOnARouteThatNamesNone()
+        public async Task AHookPicksTheEntryOnARouteThatNamesNone()
         {
-            await using WebApplication app = await HostingTestHost.BuildAsync(
-                services: services => services.AddSingleton<MainSelector>());
-            _ = app.MapAgentCoreHost("/v1/chat/responses").Responses.SelectEntry<MainSelector>();
+            await using WebApplication app = await HostingTestHost.BuildAsync(configure: options => options.UseHooks(new MainEntry()));
+            _ = app.MapAgentCoreHost("/v1/chat/responses");
             await app.StartAsync(TestContext.Current.CancellationToken);
             using HttpClient client = new() { BaseAddress = Address(app) };
 
@@ -102,7 +105,7 @@ namespace AgentCore.Hosting.Tests
         }
 
         [Fact]
-        public async Task ARouteWithNoEntryParameterAndNoSelectorFailsTheStart()
+        public async Task ARouteWithNoEntryParameterAndNoEntryHookFailsTheStart()
         {
             await using WebApplication app = await HostingTestHost.BuildAsync();
             _ = app.MapAgentCoreHost("/v1/chat/responses");
@@ -111,18 +114,7 @@ namespace AgentCore.Hosting.Tests
                 () => app.StartAsync(TestContext.Current.CancellationToken));
 
             Assert.Contains("/v1/chat/responses", failure.Message, StringComparison.Ordinal);
-        }
-
-        [Fact]
-        public async Task ASelectorTheHostNeverRegisteredFailsTheStart()
-        {
-            await using WebApplication app = await HostingTestHost.BuildAsync();
-            _ = app.MapAgentCoreHost("/v1/chat/responses").Responses.SelectEntry<UnregisteredSelector>();
-
-            ConfigurationLoadException failure = await Assert.ThrowsAsync<ConfigurationLoadException>(
-                () => app.StartAsync(TestContext.Current.CancellationToken));
-
-            Assert.Contains(nameof(UnregisteredSelector), failure.Message, StringComparison.Ordinal);
+            Assert.Contains(nameof(AgentHook.BeforeEntryAsync), failure.Message, StringComparison.Ordinal);
         }
 
         /// <summary>Builds a host, maps every route, and puts it on a real socket.</summary>
@@ -163,20 +155,12 @@ namespace AgentCore.Hosting.Tests
 
 
         /// <summary>Picks the document's one entry for every caller.</summary>
-        private sealed class MainSelector : IEntrySelector
+        private sealed class MainEntry : AgentHook
         {
-            public ValueTask<string?> SelectAsync(HttpContext http, CancellationToken cancellationToken)
+            public override ValueTask BeforeEntryAsync(EntryGate gate, CancellationToken cancellationToken)
             {
-                return ValueTask.FromResult<string?>("main");
-            }
-        }
-
-        /// <summary>A selector no test registers.</summary>
-        private sealed class UnregisteredSelector : IEntrySelector
-        {
-            public ValueTask<string?> SelectAsync(HttpContext http, CancellationToken cancellationToken)
-            {
-                return ValueTask.FromResult<string?>("main");
+                gate.Choose("main");
+                return default;
             }
         }
     }

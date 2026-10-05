@@ -1,10 +1,11 @@
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Hooks;
 using AgentCore.Application.Knowledge;
 using AgentCore.Application.Llm;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Tools.Binding;
-using AgentCore.AspNetCore.Voice;
+using AgentCore.AspNetCore.Voice.Ports;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
@@ -17,8 +18,6 @@ namespace AgentCore.AspNetCore.DependencyInjection
     public sealed class AgentCoreOptions
     {
         private readonly List<Func<AgentCoreStartup, IToolSource>> _toolSources = [];
-
-        private readonly List<IConversationObserver> _observers = [];
 
         /// <summary>Gets the path of the configuration document, or <see langword="null"/>.</summary>
         public string? ConfigurationPath { get; set; }
@@ -103,8 +102,11 @@ namespace AgentCore.AspNetCore.DependencyInjection
         /// <summary>Gets the extra tool sources, in the order the registry asks them.</summary>
         internal IReadOnlyList<Func<AgentCoreStartup, IToolSource>> ToolSources => _toolSources;
 
-        /// <summary>Gets the observers the host registered, in the order it registered them.</summary>
-        internal IReadOnlyList<IConversationObserver> Observers => _observers;
+        /// <summary>
+        /// Gets the host's hooks, in registration order: each registration's type, and how to get its instance (the
+        /// instance itself, or a resolve from the container).
+        /// </summary>
+        internal List<(Type HookType, Func<IServiceProvider?, AgentHook> Create)> HookFactories { get; } = [];
 
         /// <summary>Gets the owner opener the host bound, or <see langword="null"/> for the in-memory default.</summary>
         internal Func<IReadOnlyDictionary<string, IConversationSessionFactory>, IConversationSessions>? ConversationSessions { get; private set; }
@@ -268,19 +270,6 @@ namespace AgentCore.AspNetCore.DependencyInjection
         {
             ArgumentNullException.ThrowIfNull(adapters);
             BlobStores = adapters;
-            return this;
-        }
-
-        /// <summary>Binds the host's own readings of a conversation, beside the three this library keeps.</summary>
-        /// <param name="observers">
-        /// What the host wants told about every conversation. Each one takes every fact, in the order the conversation
-        /// produced it. An empty set is legal and registers nothing.
-        /// </param>
-        /// <returns>These options, so a host chains its conversations.</returns>
-        public AgentCoreOptions UseObservers(params IConversationObserver[] observers)
-        {
-            ArgumentNullException.ThrowIfNull(observers);
-            _observers.AddRange(observers);
             return this;
         }
 
