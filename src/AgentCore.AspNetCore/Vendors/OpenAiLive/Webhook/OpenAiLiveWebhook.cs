@@ -119,7 +119,7 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Webhook
                 return false;
             }
 
-            calls.Run(new OpenAiLiveCall(call, sideband, _ => control.HangupQuietlyAsync(incoming.CallId), logger));
+            calls.Run(new OpenAiLiveCall(call, sideband, _ => control.HangupQuietlyAsync(incoming.CallId), logger, settings.Greeting));
             return true;
         }
 

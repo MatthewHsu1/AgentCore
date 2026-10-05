@@ -68,8 +68,7 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Wire
         /// The event that makes GPT-Live greet the caller instead of waiting for the caller's voice: instructions with no
         /// delegation, from OpenAI's live-conversations guide. A real SIP call without it stayed silent until the caller spoke.
         /// </summary>
-        internal static JsonObject GreetFirst(string eventId) =>
-            SessionFact(eventId, "Begin the conversation now: greet the caller as your instructions say, then pause and listen.");
+        internal static JsonObject GreetFirst(string eventId, string greeting) => SessionFact(eventId, greeting);
 
         /// <summary>
         /// A fact for the whole session, under no delegation, from OpenAI's delegation guide: at most 500 tokens, such as

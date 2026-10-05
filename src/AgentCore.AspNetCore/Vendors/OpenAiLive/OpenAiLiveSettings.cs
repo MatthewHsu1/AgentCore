@@ -6,10 +6,15 @@ using AgentCore.Application.Secrets;
 namespace AgentCore.AspNetCore.Vendors.OpenAiLive
 {
     /// <summary>The <c>providers.conversation.live</c> block, read and checked at boot.</summary>
-    /// <param name="Instructions">GPT-Live's own prompt: tone and greeting.</param>
+    /// <remarks>AgentCore adds no prompt text of its own: every word GPT-Live is told to say comes from this block.</remarks>
+    /// <param name="Instructions">GPT-Live's whole prompt, sent as written.</param>
     /// <param name="Voice">The voice GPT-Live speaks with.</param>
     /// <param name="Model">The GPT-Live model.</param>
-    internal sealed record OpenAiLiveSettings(string Instructions, string Voice, string Model)
+    /// <param name="Greeting">
+    /// The instruction GPT-Live gets once the call is up, such as "Greet the caller as your instructions say", or
+    /// <see langword="null"/>: GPT-Live then stays silent until the caller speaks.
+    /// </param>
+    internal sealed record OpenAiLiveSettings(string Instructions, string Voice, string Model, string? Greeting = null)
     {
         internal const string DefaultVoice = "marin";
 
@@ -30,6 +35,7 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive
             string? instructions = null;
             string? voice = null;
             string? model = null;
+            string? greeting = null;
             foreach (JsonProperty property in configuration.Live.EnumerateObject())
             {
                 switch (property.Name)
@@ -43,17 +49,20 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive
                     case "model":
                         model = Text(property);
                         break;
+                    case "greeting":
+                        greeting = Text(property);
+                        break;
                     default:
                         throw Fail(
                             "/" + property.Name,
-                            $"providers.conversation.live.{property.Name} is not a setting of the openai-live vendor. It reads instructions, voice, and model. "
+                            $"providers.conversation.live.{property.Name} is not a setting of the openai-live vendor. It reads instructions, greeting, voice, and model. "
                             + $"The OpenAI key and the webhook secret come from the secret resolver as '{KnownSecrets.OpenAiApiKeyName}' and '{KnownSecrets.OpenAiWebhookSecretName}'.");
                 }
             }
 
             return string.IsNullOrWhiteSpace(instructions)
                 ? throw Fail("/instructions", "providers.conversation.live.instructions is missing or empty. GPT-Live needs its own prompt.")
-                : new OpenAiLiveSettings(instructions, voice ?? DefaultVoice, model ?? DefaultModel);
+                : new OpenAiLiveSettings(instructions, voice ?? DefaultVoice, model ?? DefaultModel, greeting);
         }
 
         private static string Text(JsonProperty property)

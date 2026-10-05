@@ -16,13 +16,6 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
     {
         private const string Brief = "Earlier summary, for context only.\n\"Ask first.\"";
 
-        // The accept payload a real call accepted, word for word.
-        private const string Strict =
-            "You know no product facts yourself. For any question about products, specifications, orders,"
-            + " parts, or policies, delegate to the backend and wait for its answer. Never guess a fact."
-            + " You cannot end the call yourself: when the caller wants to end or hang up the call, delegate that"
-            + " to the backend, and say goodbye with its answer.";
-
         [Fact(Timeout = 30_000)]
         public async Task AnAcceptedCallIsAcceptedWithItsInstructionsVoiceAndClientDelegationThenAttached()
         {
@@ -31,7 +24,8 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
                 new StallOnCueChatClient(), [hook, new CallDecider(gate => gate.Accept("cw_1_call_" + gate.CallId, Brief))]);
 
             HttpResponseMessage response = await host.PostWebhookAsync(OpenAiLiveHost.IncomingCall("rtc_123"));
-            _ = await host.FirstAttach.Task;
+            FakeSideband sideband = await host.FirstAttach.Task;
+            JsonObject greet = await sideband.WaitForSentAsync(sent => (string?)sent["type"] == "session.instructions.append");
 
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             RecordingLiveControl.Seen accept = Assert.Single(host.Control.Requests);
@@ -39,10 +33,11 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             // A real call refused anything else: "Invalid Live SIP accept payload: session must be the only field."
             Assert.Equal(["session"], accept.Body!.AsObject().Select(field => field.Key));
             JsonNode session = accept.Body["session"]!;
-            Assert.Equal("Be brief.\n\n" + Strict + "\n\n" + Brief, (string?)session["instructions"]);
+            Assert.Equal("Be brief.\n\n" + Brief, (string?)session["instructions"]);
             Assert.Equal("marin", (string?)session["audio"]!["output"]!["voice"]);
             Assert.Equal("gpt-live-1", (string?)session["model"]);
             Assert.Equal("client", (string?)session["delegation"]!["type"]);
+            Assert.Equal("Say hello.", (string?)greet["content"]);
             CallStarted started = await hook.WaitForAsync<CallStarted>();
             Assert.Equal(("rtc_123", "+15550100", "openai-live", "cw_1_call_rtc_123"), (started.CallId, started.From, started.Transport, started.Scope.ConversationId));
         }

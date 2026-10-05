@@ -32,8 +32,6 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             agent: only
         """;
 
-        private const string Greeting = "Begin the conversation now: greet the caller as your instructions say, then pause and listen.";
-
         // RunningLiveCall's clock stands at 2026-10-04 12:00 UTC, a Sunday.
         [Fact(Timeout = 30_000)]
         public async Task TheCallTellsGptLiveTheDateAndTimeBeforeTheGreeting()
@@ -61,6 +59,6 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             Assert.Same(greeting, running.Sideband.Sent[0]);
         }
 
-        private static bool IsGreeting(JsonObject sent) => (string?)sent["content"] == Greeting;
+        private static bool IsGreeting(JsonObject sent) => (string?)sent["content"] == RunningLiveCall.Greeting;
     }
 }

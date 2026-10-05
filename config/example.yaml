@@ -364,6 +364,23 @@ providers:
   #   conversation the media pipe. It carries the audio and owns the route /v1/{entry}/call.
   #   speech      recognition (stt) and synthesis (tts), one role at a time.
   conversation:      { kind: telnyx-relay }
+  # The GPT-Live phone path instead. It speaks for itself, so it needs no speech: block. AgentCore adds
+  # no prompt text of its own: GPT-Live hears only what this block says, plus the host's per-call brief.
+  # Without a "never guess, delegate" paragraph GPT-Live made up product facts in 4 of 6 test calls,
+  # and it cannot hang up, so tell it to pass an end request to the backend.
+  # conversation:
+  #   kind: openai-live
+  #   live:
+  #     instructions: |                    # required: GPT-Live's whole prompt
+  #       You are the phone voice of the backend. Be brief.
+  #       You know no facts yourself. For any question that needs a fact, delegate to the backend and
+  #       wait for its answer. Never guess a fact.
+  #       You cannot end the call yourself. When the caller wants to end or hang up the call, do not
+  #       say goodbye. Delegate it to the backend right away, then speak only the backend's answer.
+  #     greeting: "Greet the caller as your instructions say, then pause and listen."
+  #                                        # optional: without it GPT-Live waits for the caller to speak
+  #     voice: marin                       # optional, default marin
+  #     model: gpt-live-1                  # optional, default gpt-live-1
   speech:
     stt: { kind: telnyx-relay }            # bundled with the relay, so it matches conversation
     tts: { kind: telnyx-relay }            # bundled with the relay, so it matches conversation

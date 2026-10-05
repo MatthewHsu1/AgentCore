@@ -12,9 +12,11 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
 {
     /// <summary>
     /// One live GPT-Live call: reads the sideband, keeps the transcript ledger, and answers each delegation through the
-    /// call core. Talks to the engine only through <see cref="PhoneCall"/>.
+    /// call core. Talks to the engine only through <see cref="PhoneCall"/>. A <see langword="null"/> greeting leaves GPT-Live
+    /// silent until the caller speaks.
     /// </summary>
-    internal sealed class OpenAiLiveCall(PhoneCall call, ILiveSideband sideband, Func<CancellationToken, Task<bool>> hangUp, ILogger logger) : IDisposable
+    internal sealed class OpenAiLiveCall(
+        PhoneCall call, ILiveSideband sideband, Func<CancellationToken, Task<bool>> hangUp, ILogger logger, string? greeting = null) : IDisposable
     {
         internal const string ShutdownCause = "shutdown";
 
@@ -80,7 +82,11 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
                     await SendAsync(OpenAiLiveWire.SessionFact(NextEventId(), clock), cancellationToken).ConfigureAwait(false);
                 }
 
-                await SendAsync(OpenAiLiveWire.GreetFirst(NextEventId()), cancellationToken).ConfigureAwait(false);
+                if (greeting is not null)
+                {
+                    await SendAsync(OpenAiLiveWire.GreetFirst(NextEventId(), greeting), cancellationToken).ConfigureAwait(false);
+                }
+
                 while (true)
                 {
                     receiving ??= sideband.ReceiveAsync(cancellationToken).AsTask();

@@ -1363,7 +1363,7 @@
           "description": "The largest inbound frame the socket accepts. The ceiling is int.MaxValue, which is the largest buffer length the socket can be given."
         },
         "answerSeconds": { "type": "integer", "minimum": 1, "maximum": 60, "description": "How long the call gate gives each hook to accept or reject an offered call, in seconds. Omit it for 5." },
-        "live": { "type": "object", "description": "The openai-live vendor's own settings: instructions, voice, model. Only that adapter reads and checks them." },
+        "live": { "type": "object", "description": "The openai-live vendor's own settings: instructions, greeting, voice, model. Only that adapter reads and checks them." },
         "userAway": {
           "type": ["object", "null"],
           "description": "When the caller counts as away, and what the agent says once they do. Voice conversations only. Omit the key to keep the shipped default (15 s, \"Are you still there?\"); write null to turn the away prompt off.",

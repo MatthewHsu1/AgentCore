@@ -146,7 +146,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
         }
 
         // GPT-Live waits for the caller's voice unless it is told to speak first (OpenAI's live-conversations guide):
-        // a session.instructions.append with no delegation, before anything else.
+        // the configured greeting as a session.instructions.append with no delegation, before anything else.
         [Fact(Timeout = 30_000)]
         public async Task TheCallTellsGptLiveToGreetTheCallerFirst()
         {
@@ -157,7 +157,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             Assert.Same(greet, running.Sideband.Sent[0]);
             Assert.True(greet.ContainsKey("delegation_id"));
             Assert.Null(greet["delegation_id"]);
-            Assert.False(string.IsNullOrWhiteSpace((string?)greet["content"]));
+            Assert.Equal(RunningLiveCall.Greeting, (string?)greet["content"]);
             Assert.False(string.IsNullOrWhiteSpace((string?)greet["event_id"]));
         }
 

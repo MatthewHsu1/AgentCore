@@ -5,7 +5,7 @@ using Xunit;
 
 namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
 {
-    /// <summary>The live: block holds instructions, voice and model, and nothing else.</summary>
+    /// <summary>The live: block holds instructions, greeting, voice and model, and nothing else.</summary>
     public sealed class OpenAiLiveSettingsTests
     {
         [Fact]
@@ -22,10 +22,19 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
                 OpenAiLiveSettings.From(Conversation("live: { instructions: \"Be brief.\", voice: cedar, model: gpt-live-2 }")));
         }
 
+        [Fact]
+        public void AGreetingIsTakenAsWritten()
+        {
+            Assert.Equal(
+                new OpenAiLiveSettings("Be brief.", "marin", "gpt-live-1", "Say hello, then listen."),
+                OpenAiLiveSettings.From(Conversation("live: { instructions: \"Be brief.\", greeting: \"Say hello, then listen.\" }")));
+        }
+
         [Theory]
         [InlineData("live: { voice: marin }", "/providers/conversation/live/instructions")]
         [InlineData("live: { instructions: \"x\", webhookSecret: \"${secret:OPENAI_WEBHOOK_SECRET}\" }", "/providers/conversation/live/webhookSecret")]
         [InlineData("answerSeconds: 5", "/providers/conversation/live")]
+        [InlineData("live: { instructions: \"x\", greeting: \"\" }", "/providers/conversation/live/greeting")]
         public void AWrongBlockFailsWithAPointer(string block, string errorPath)
         {
             ConfigurationLoadException failure = Assert.Throws<ConfigurationLoadException>(() => OpenAiLiveSettings.From(Conversation(block)));

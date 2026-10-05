@@ -17,6 +17,8 @@ namespace AgentCore.AspNetCore.Tests.Fakes
     {
         public static readonly DateTimeOffset Noon = new(2026, 10, 4, 12, 0, 0, TimeSpan.Zero);
 
+        public const string Greeting = "Greet the caller, then pause and listen.";
+
         private RunningLiveCall(PhoneCallHarness harness, FakeTimeProvider time, PhoneCall call, FakeSideband sideband)
         {
             Harness = harness;
@@ -40,7 +42,8 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         public TaskCompletionSource<int> HungUp { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public static async Task<RunningLiveCall> StartAsync(
-            IChatClient model, IReadOnlyList<AgentHook> hooks, string yaml = PhoneCallHarness.OneEntryYaml, ILogger? logger = null, FakeSideband? sideband = null)
+            IChatClient model, IReadOnlyList<AgentHook> hooks, string yaml = PhoneCallHarness.OneEntryYaml, ILogger? logger = null, FakeSideband? sideband = null,
+            string? greeting = Greeting)
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
             FakeTimeProvider time = new(Noon) { Zone = TimeZoneInfo.Utc };
@@ -48,7 +51,7 @@ namespace AgentCore.AspNetCore.Tests.Fakes
             PhoneCall call = (await PhoneCall.AdmitAsync(harness.Host, PhoneCallHarness.Offer(), ct)).Call!;
             await call.StartAsync(ct);
             RunningLiveCall running = new(harness, time, call, sideband ?? new FakeSideband());
-            OpenAiLiveCall live = new(call, running.Sideband, running.HangUpAsync, logger ?? NullLogger.Instance);
+            OpenAiLiveCall live = new(call, running.Sideband, running.HangUpAsync, logger ?? NullLogger.Instance, greeting);
             running.Loop = live.RunAsync(ct);
             return running;
         }

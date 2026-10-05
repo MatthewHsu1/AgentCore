@@ -45,6 +45,7 @@ namespace AgentCore.AspNetCore.Tests.Fakes
             kind: openai-live
             live:
               instructions: "Be brief."
+              greeting: "Say hello."
           llm:
             - { kind: openai, model: gpt-4.1-mini, as: reply }
         entries:
